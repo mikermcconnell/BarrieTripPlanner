@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==================== HELPER FUNCTIONS ====================
+
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns this resource
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Validate that a field is a string with content
+    function isNonEmptyString(field) {
+      return field is string && field.size() > 0;
+    }
+
+    // Validate email format (basic check)
+    function isValidEmail(email) {
+      return email is string && email.matches('.*@.*\\..*');
+    }
+
+    // Validate timestamp is not in the future
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // ==================== USERS COLLECTION ====================
+
+    match /users/{userId} {
+      // Users can only read/write their own profile
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Allow create only if user is creating their own profile
+      allow create: if isAuthenticated()
+        && isOwner(userId)
+        && request.resource.data.uid == userId
+        && isValidEmail(request.resource.data.email);
+
+      // Allow update only for own profile, and can't change uid
+      allow update: if isAuthenticated()
+        && isOwner(userId)
+        && request.resource.data.uid == resource.data.uid;
+
+      // Users cannot delete their own profile (admin only)
+      allow delete: if false;
+
+      // ==================== FAVORITE STOPS ====================
+
+      match /favoriteStops/{stopId} {
+        // User can read their own favorite stops
+        allow read: if isAuthenticated() && isOwner(userId);
+
+        // User can add favorite stops
+        allow create: if isAuthenticated()
+          && isOwner(userId)
+          && isNonEmptyString(request.resource.data.id)
+          && isNonEmptyString(request.resource.data.name);
+
+        // User can update their favorite stops
+        allow update: if isAuthenticated() && isOwner(userId);
+
+        // User can remove favorite stops
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // ==================== FAVORITE ROUTES ====================
+
+      match /favoriteRoutes/{routeId} {
+        // User can read their own favorite routes
+        allow read: if isAuthenticated() && isOwner(userId);
+
+        // User can add favorite routes
+        allow create: if isAuthenticated()
+          && isOwner(userId)
+          && isNonEmptyString(request.resource.data.id);
+
+        // User can update their favorite routes
+        allow update: if isAuthenticated() && isOwner(userId);
+
+        // User can remove favorite routes
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // ==================== TRIP HISTORY ====================
+
+      match /tripHistory/{tripId} {
+        // User can read their own trip history
+        allow read: if isAuthenticated() && isOwner(userId);
+
+        // User can add to trip history
+        allow create: if isAuthenticated()
+          && isOwner(userId)
+          && request.resource.data.from != null
+          && request.resource.data.to != null;
+
+        // User can update trip history entries
+        allow update: if isAuthenticated() && isOwner(userId);
+
+        // User can delete trip history entries
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
+      // ==================== SAVED TRIPS (Future Feature) ====================
+
+      match /savedTrips/{tripId} {
+        // User can read their own saved trips
+        allow read: if isAuthenticated() && isOwner(userId);
+
+        // User can create saved trips
+        allow create: if isAuthenticated()
+          && isOwner(userId)
+          && isNonEmptyString(request.resource.data.name)
+          && request.resource.data.from != null
+          && request.resource.data.to != null;
+
+        // User can update their saved trips
+        allow update: if isAuthenticated() && isOwner(userId);
+
+        // User can delete their saved trips
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+    }
+
+    // ==================== PUBLIC DETOUR FEED ====================
+
+    // Backend worker writes shared detours with Admin SDK.
+    // Client apps can read these publicly; direct client writes are denied.
+    match /publicDetoursActive/{detourId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Public system metadata documents (detour feed health/counters)
+    match /publicSystem/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ==================== DENY ALL OTHER ACCESS ====================
+
+    // Catch-all rule to deny access to any other documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

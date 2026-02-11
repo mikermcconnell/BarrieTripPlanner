@@ -1,0 +1,1696 @@
+/**
+ * Web-specific HomeScreen - Premium UI/UX Design v2.0
+ * Features: Refined header, collapsible route filters, prominent alerts, modern controls
+ */
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useTransit } from '../context/TransitContext';
+import { MAP_CONFIG, ROUTE_COLORS, SHAPE_PROCESSING } from '../config/constants';
+import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
+import StopBottomSheet from '../components/StopBottomSheet';
+import { reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
+import { useTripPlanner } from '../hooks/useTripPlanner';
+import TripBottomSheet from '../components/TripBottomSheet';
+import logger from '../utils/logger';
+import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
+import MapTapPopup from '../components/MapTapPopup';
+
+// Web-only imports
+import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
+import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
+import L from 'leaflet';
+import DetourBadge from '../components/DetourBadge';
+import DetourDebugPanel from '../components/DetourDebugPanel';
+
+// SVG Icons as components - Refined for premium feel
+const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z" fill={color} />
+  </svg>
+);
+
+const StopIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill={color} />
+  </svg>
+);
+
+const RouteIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15 5L13.59 6.41L16.17 9H4V11H16.17L13.59 13.59L15 15L20 10L15 5Z" fill={color} />
+  </svg>
+);
+
+const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 8C9.79 8 8 9.79 8 12C8 14.21 9.79 16 12 16C14.21 16 16 14.21 16 12C16 9.79 14.21 8 12 8ZM20.94 11C20.48 6.83 17.17 3.52 13 3.06V1H11V3.06C6.83 3.52 3.52 6.83 3.06 11H1V13H3.06C3.52 17.17 6.83 20.48 11 20.94V23H13V20.94C17.17 20.48 20.48 17.17 20.94 13H23V11H20.94ZM12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19Z" fill={color} />
+  </svg>
+);
+
+const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill={color} />
+  </svg>
+);
+
+const AlertIcon = ({ size = 16, color = COLORS.warning }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2L1 21H23L12 2ZM12 18C11.45 18 11 17.55 11 17C11 16.45 11.45 16 12 16C12.55 16 13 16.45 13 17C13 17.55 12.55 18 12 18ZM13 14H11V10H13V14Z" fill={color} />
+  </svg>
+);
+
+const DirectionsIcon = ({ size = 20, color = COLORS.white }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M21.71 11.29L12.71 2.29C12.32 1.9 11.69 1.9 11.3 2.29L2.3 11.29C1.91 11.68 1.91 12.31 2.3 12.7L11.3 21.7C11.5 21.9 11.74 22 12 22C12.26 22 12.5 21.9 12.71 21.71L21.71 12.71C22.1 12.32 22.1 11.68 21.71 11.29ZM14 14.5V12H10V15H8V11C8 10.45 8.45 10 9 10H14V7.5L17.5 11L14 14.5Z" fill={color} />
+  </svg>
+);
+
+const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill={color} />
+  </svg>
+);
+
+const ChevronRightIcon = ({ size = 16, color = COLORS.textSecondary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 6L8.59 7.41L13.17 12L8.59 16.59L10 18L16 12L10 6Z" fill={color} />
+  </svg>
+);
+
+const HomeScreen = ({ route }) => {
+  const mapRef = useRef(null);
+  const navigation = useNavigation();
+  const {
+    routes,
+    stops,
+    shapes,
+    processedShapes,
+    shapeOverlapOffsets,
+    routeShapeMapping,
+    routeStopsMapping,
+    vehicles,
+    isLoadingStatic,
+    isLoadingVehicles,
+    staticError,
+    lastVehicleUpdate,
+    loadStaticData,
+    isOffline,
+    serviceAlerts,
+    usingCachedData,
+    routingData,
+    isRoutingReady,
+    activeDetours,
+    getDetoursForRoute,
+    getDetourHistory,
+    hasActiveDetour,
+  } = useTransit();
+
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [selectedStop, setSelectedStop] = useState(null);
+  const [showRoutes, setShowRoutes] = useState(true);
+  const [showStops, setShowStops] = useState(false);
+  const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
+  const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Helper to check if a route has active alerts
+  const getRouteAlerts = useCallback((routeId) => {
+    return serviceAlerts.filter(alert => alert.affectedRoutes?.includes(routeId));
+  }, [serviceAlerts]);
+
+  const hasRouteAlert = useCallback((routeId) => {
+    return getRouteAlerts(routeId).length > 0;
+  }, [getRouteAlerts]);
+
+  // Trip planning — shared hook
+  const trip = useTripPlanner({ routingData, isRoutingReady });
+  const {
+    state: tripState,
+    searchFromAddress,
+    searchToAddress,
+    selectFromSuggestion,
+    selectToSuggestion,
+    swap: swapTripLocations,
+    setFrom: setTripFrom,
+    setTo: setTripTo,
+    selectItinerary: setSelectedItineraryIndex,
+    enterPlanningMode,
+    reset: resetTrip,
+    useCurrentLocation: useCurrentLocationHook,
+    searchTrips,
+  } = trip;
+  // Destructure state for direct access in render
+  const {
+    isTripPlanningMode,
+    from: tripFromLocation,
+    to: tripToLocation,
+    fromText: tripFromText,
+    toText: tripToText,
+    itineraries,
+    selectedIndex: selectedItineraryIndex,
+    isLoading: isTripLoading,
+    error: tripError,
+    hasSearched: hasTripSearched,
+    fromSuggestions,
+    toSuggestions,
+    showFromSuggestions,
+    showToSuggestions,
+  } = tripState;
+
+  // Map tap state for "Choose on Map" feature
+  const [mapTapLocation, setMapTapLocation] = useState(null);
+  const [mapTapAddress, setMapTapAddress] = useState('');
+  const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+  const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
+  const [hoveredRouteId, setHoveredRouteId] = useState(null);
+  const [currentZoom, setCurrentZoom] = useState(() =>
+    Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
+  );
+
+  // Zoom-dependent polyline weight
+  const getPolylineWeight = useCallback((routeId) => {
+    let base;
+    if (currentZoom <= 11) base = 2;
+    else if (currentZoom <= 13) base = 3;
+    else if (currentZoom <= 15) base = 4;
+    else base = 5;
+
+    if (selectedRoute === routeId) base += 1;
+    if (hoveredRouteId === routeId) base += 1;
+    return base;
+  }, [currentZoom, selectedRoute, hoveredRouteId]);
+
+  // Pulse animation for live indicator
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.4,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  // Handle selected stop from navigation params
+  useEffect(() => {
+    if (route?.params?.selectedStopId) {
+      const stop = stops.find((s) => s.id === route.params.selectedStopId);
+      if (stop) {
+        setSelectedStop(stop);
+        mapRef.current?.animateToRegion(
+          {
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          },
+          500
+        );
+      }
+    }
+  }, [route?.params?.selectedStopId, stops]);
+
+  // Handle exit from navigation - reset trip planning mode
+  useEffect(() => {
+    if (route?.params?.exitTripPlanning) {
+      resetTrip();
+      navigation.setParams({ exitTripPlanning: undefined });
+    }
+  }, [route?.params?.exitTripPlanning, navigation, resetTrip]);
+
+  // Auto-enable stops and zoom to route when a route is selected
+  useEffect(() => {
+    if (selectedRoute) {
+      setShowStops(true);
+      // Zoom to route bounds
+      zoomToRoute(selectedRoute);
+    }
+  }, [selectedRoute]);
+
+  // Center map on Barrie
+  const centerOnBarrie = useCallback(() => {
+    mapRef.current?.animateToRegion(MAP_CONFIG.INITIAL_REGION, 500);
+  }, []);
+
+  // Zoom to route bounds
+  const zoomToRoute = useCallback((routeId) => {
+    const shapeIds = routeShapeMapping[routeId] || [];
+    if (shapeIds.length === 0) return;
+
+    // Collect all coordinates from all shapes for this route
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    shapeIds.forEach(shapeId => {
+      const coords = shapes[shapeId] || [];
+      coords.forEach(coord => {
+        minLat = Math.min(minLat, coord.latitude);
+        maxLat = Math.max(maxLat, coord.latitude);
+        minLng = Math.min(minLng, coord.longitude);
+        maxLng = Math.max(maxLng, coord.longitude);
+      });
+    });
+
+    if (minLat < maxLat && minLng < maxLng) {
+      const padding = 0.005; // Small padding around the route
+      mapRef.current?.animateToRegion({
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: (maxLat - minLat) + padding,
+        longitudeDelta: (maxLng - minLng) + padding,
+      }, 500);
+    }
+  }, [routeShapeMapping, shapes]);
+
+  // Handle route selection with zoom
+  const handleRouteSelect = useCallback((routeId) => {
+    if (routeId === selectedRoute) {
+      setSelectedRoute(null);
+      centerOnBarrie();
+    } else {
+      setSelectedRoute(routeId);
+    }
+  }, [selectedRoute, centerOnBarrie]);
+
+  // Get the route color
+  const getRouteColor = useCallback(
+    (routeId) => {
+      const foundRoute = routes.find((r) => r.id === routeId);
+      if (foundRoute?.color) return foundRoute.color;
+      return ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+    },
+    [routes]
+  );
+
+  // Filter vehicles by selected route
+  const displayedVehicles = useMemo(() => {
+    return selectedRoute ? vehicles.filter((v) => v.routeId === selectedRoute) : vehicles;
+  }, [selectedRoute, vehicles]);
+
+  // Get shapes to display (prefer processedShapes for smooth rendering)
+  const displayedShapes = useMemo(() => {
+    const shapeSource = Object.keys(processedShapes).length > 0 ? processedShapes : shapes;
+    const shapesToDisplay = [];
+    if (selectedRoute) {
+      const shapeIds = routeShapeMapping[selectedRoute] || [];
+      shapeIds.forEach((shapeId) => {
+        if (shapeSource[shapeId]) {
+          shapesToDisplay.push({
+            id: shapeId,
+            coordinates: shapeSource[shapeId],
+            color: getRouteColor(selectedRoute),
+            routeId: selectedRoute,
+          });
+        }
+      });
+    } else if (showRoutes) {
+      // Pick only the longest shape per route for clean single-line rendering
+      Object.keys(routeShapeMapping).forEach((routeId) => {
+        const shapeIds = routeShapeMapping[routeId] || [];
+        let longestId = null;
+        let maxPoints = 0;
+        shapeIds.forEach((shapeId) => {
+          const coords = shapeSource[shapeId];
+          if (coords && coords.length > maxPoints) {
+            maxPoints = coords.length;
+            longestId = shapeId;
+          }
+        });
+        if (longestId) {
+          shapesToDisplay.push({
+            id: longestId,
+            coordinates: shapeSource[longestId],
+            color: getRouteColor(routeId),
+            routeId,
+          });
+        }
+      });
+    }
+    return shapesToDisplay;
+  }, [selectedRoute, showRoutes, routeShapeMapping, shapes, processedShapes, getRouteColor]);
+
+  // Get stops to display - using GTFS stop-route mapping for accuracy
+  const displayedStops = useMemo(() => {
+    if (!showStops) return [];
+
+    let filteredStops = [];
+
+    // If a route is selected, show only stops that serve that route (from GTFS data)
+    if (selectedRoute && routeStopsMapping[selectedRoute]) {
+      const routeStopIds = new Set(routeStopsMapping[selectedRoute]);
+      filteredStops = stops.filter(stop => routeStopIds.has(stop.id));
+    } else {
+      // No route selected - use viewport-based filtering
+      // Don't show stops when zoomed out too far
+      if (mapRegion.latitudeDelta > 0.05) return [];
+
+      // Calculate viewport bounds with a small buffer
+      const buffer = mapRegion.latitudeDelta * 0.1;
+      const minLat = mapRegion.latitude - mapRegion.latitudeDelta / 2 - buffer;
+      const maxLat = mapRegion.latitude + mapRegion.latitudeDelta / 2 + buffer;
+      const minLng = mapRegion.longitude - mapRegion.longitudeDelta / 2 - buffer;
+      const maxLng = mapRegion.longitude + mapRegion.longitudeDelta / 2 + buffer;
+
+      // Filter stops by viewport bounds
+      filteredStops = stops.filter(stop =>
+        stop.latitude >= minLat &&
+        stop.latitude <= maxLat &&
+        stop.longitude >= minLng &&
+        stop.longitude <= maxLng
+      );
+    }
+
+    // Limit to 150 stops for performance
+    return filteredStops.slice(0, 150);
+  }, [showStops, mapRegion, stops, selectedRoute, routeStopsMapping]);
+
+  // Get detours to display for selected route
+  const displayedDetours = useMemo(() => {
+    if (!activeDetours || activeDetours.length === 0) return [];
+
+    // If a route is selected, only show detours for that route
+    if (selectedRoute) {
+      return activeDetours.filter(detour => detour.routeId === selectedRoute);
+    }
+
+    // Otherwise show all active detours
+    return activeDetours;
+  }, [activeDetours, selectedRoute]);
+
+  const primaryDisplayedDetour = useMemo(
+    () => (displayedDetours.length > 0 ? displayedDetours[0] : null),
+    [displayedDetours]
+  );
+
+  const detourHistory = useMemo(() => {
+    if (!getDetourHistory) return [];
+    return getDetourHistory(null, 20);
+  }, [getDetourHistory, activeDetours, lastVehicleUpdate]);
+
+  // Check if selected route has an active detour
+  const selectedRouteHasDetour = useMemo(() => {
+    if (!selectedRoute) return false;
+    return hasActiveDetour(selectedRoute);
+  }, [selectedRoute, hasActiveDetour]);
+
+  // Handle map region change
+  const handleRegionChange = (region) => {
+    setMapRegion(region);
+    // Derive zoom from latitudeDelta
+    const zoom = Math.round(Math.log(360 / region.latitudeDelta) / Math.LN2);
+    setCurrentZoom(zoom);
+  };
+
+  // Handle stop press
+  const handleStopPress = (stop) => {
+    setSelectedStop(stop);
+  };
+
+  // Handle map tap for "Choose on Map" feature (works in both normal and trip planning modes)
+  const handleMapPress = async (event) => {
+    const { coordinate } = event.nativeEvent;
+    setMapTapLocation(coordinate);
+    setMapTapAddress('');
+    setIsLoadingAddress(true);
+
+    // Reverse geocode to get address
+    try {
+      const result = await reverseGeocode(coordinate.latitude, coordinate.longitude);
+      setMapTapAddress(result?.shortName || 'Selected location');
+    } catch (error) {
+      console.error('Reverse geocode error:', error);
+      setMapTapAddress('Selected location');
+    } finally {
+      setIsLoadingAddress(false);
+    }
+  };
+
+  // Handle "Directions from here" button
+  const handleDirectionsFrom = () => {
+    if (!mapTapLocation) return;
+    const newFromLocation = { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude };
+    enterPlanningMode();
+    setTripFrom(newFromLocation, mapTapAddress || 'Selected location');
+    setMapTapLocation(null);
+    setMapTapAddress('');
+  };
+
+  // Handle "Directions to here" button
+  const handleDirectionsTo = () => {
+    if (!mapTapLocation) return;
+    const newToLocation = { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude };
+    enterPlanningMode();
+    setTripTo(newToLocation, mapTapAddress || 'Selected location');
+    setMapTapLocation(null);
+    setMapTapAddress('');
+  };
+
+  // Close map tap popup
+  const handleCloseMapTapPopup = () => {
+    setMapTapLocation(null);
+    setMapTapAddress('');
+  };
+
+  // Handle "Trip from here" from stop bottom sheet
+  const handleStopDirectionsFrom = (stopInfo) => {
+    setSelectedStop(null);
+    enterPlanningMode();
+    setTripFrom({ lat: stopInfo.lat, lon: stopInfo.lon }, stopInfo.name || 'Selected stop');
+  };
+
+  // Handle "Trip to here" from stop bottom sheet
+  const handleStopDirectionsTo = (stopInfo) => {
+    setSelectedStop(null);
+    enterPlanningMode();
+    setTripTo({ lat: stopInfo.lat, lon: stopInfo.lon }, stopInfo.name || 'Selected stop');
+  };
+
+  // Format last update time
+  const formatLastUpdate = () => {
+    if (!lastVehicleUpdate) return 'Never';
+    const now = new Date();
+    const diff = Math.floor((now - lastVehicleUpdate) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    return `${Math.floor(diff / 60)}m ago`;
+  };
+
+  // Trip planning functions (thin wrappers around useTripPlanner hook)
+  const enterTripPlanningMode = () => {
+    enterPlanningMode();
+    setSelectedStop(null);
+  };
+
+  const exitTripPlanningMode = () => {
+    resetTrip();
+  };
+
+  const useCurrentLocationForTrip = () => {
+    useCurrentLocationHook(
+      () => new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('No geolocation'));
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+          (err) => reject(err)
+        );
+      })
+    );
+  };
+
+  // Decode polyline string to coordinates
+  const decodePolyline = (encoded) => {
+    const coords = [];
+    let index = 0, lat = 0, lng = 0;
+
+    while (index < encoded.length) {
+      let b, shift = 0, result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      coords.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return coords;
+  };
+
+  // Trip preview mode - hide regular map elements when viewing trip results
+  const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
+
+  // Get trip route coordinates for map display
+  const tripRouteCoordinates = useMemo(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return [];
+
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary) return [];
+
+    const routes = [];
+    selectedItinerary.legs.forEach((leg, index) => {
+      const coords = [];
+
+      if (leg.legGeometry?.points) {
+        // Use encoded polyline if available
+        const decoded = decodePolyline(leg.legGeometry.points);
+        coords.push(...decoded);
+      } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
+        // For transit legs without geometry, use boarding -> intermediate stops -> alighting
+        if (leg.from) {
+          coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+        }
+        leg.intermediateStops.forEach((stop) => {
+          if (stop.lat && stop.lon) {
+            coords.push({ latitude: stop.lat, longitude: stop.lon });
+          }
+        });
+        if (leg.to) {
+          coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+        }
+      } else if (leg.from && leg.to) {
+        // Fallback to straight line
+        coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+        coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      }
+
+      if (coords.length > 0) {
+        routes.push({
+          id: `trip-leg-${index}`,
+          coordinates: coords,
+          color: leg.mode === 'WALK' ? COLORS.grey500 : (leg.route?.color || COLORS.primary),
+          isWalk: leg.mode === 'WALK',
+        });
+      }
+    });
+
+    return routes;
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+
+  // Get trip markers (origin, destination)
+  const tripMarkers = useMemo(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return [];
+
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary || !selectedItinerary.legs) return [];
+
+    const markers = [];
+    const firstLeg = selectedItinerary.legs[0];
+    const lastLeg = selectedItinerary.legs[selectedItinerary.legs.length - 1];
+
+    if (firstLeg?.from) {
+      markers.push({
+        id: 'origin',
+        coordinate: { latitude: firstLeg.from.lat, longitude: firstLeg.from.lon },
+        type: 'origin',
+        title: 'Start',
+      });
+    }
+
+    if (lastLeg?.to) {
+      markers.push({
+        id: 'destination',
+        coordinate: { latitude: lastLeg.to.lat, longitude: lastLeg.to.lon },
+        type: 'destination',
+        title: 'End',
+      });
+    }
+
+    return markers;
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+
+  // Get intermediate stop markers for trip display
+  const intermediateStopMarkers = useMemo(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return [];
+
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary) return [];
+
+    const stopMarkers = [];
+    selectedItinerary.legs.forEach((leg, legIndex) => {
+      // Only show intermediate stops for transit legs
+      if (leg.mode === 'WALK' || !leg.intermediateStops) return;
+
+      leg.intermediateStops.forEach((stop, stopIndex) => {
+        if (stop.lat && stop.lon) {
+          stopMarkers.push({
+            id: `stop-${legIndex}-${stopIndex}`,
+            coordinate: { latitude: stop.lat, longitude: stop.lon },
+            name: stop.name,
+            color: leg.route?.color || COLORS.primary,
+          });
+        }
+      });
+    });
+
+    return stopMarkers;
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+
+  // Get boarding and alighting stop markers for trip display (with labels)
+  const boardingAlightingMarkers = useMemo(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return [];
+
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary) return [];
+
+    const markers = [];
+    selectedItinerary.legs.forEach((leg, legIndex) => {
+      // Only show boarding/alighting for transit legs
+      if (leg.mode === 'WALK') return;
+
+      const routeColor = leg.route?.color || COLORS.primary;
+      const routeName = leg.route?.shortName || '';
+
+      // Boarding stop
+      if (leg.from && leg.from.lat && leg.from.lon) {
+        markers.push({
+          id: `boarding-${legIndex}`,
+          coordinate: { latitude: leg.from.lat, longitude: leg.from.lon },
+          type: 'boarding',
+          stopName: leg.from.name,
+          stopCode: leg.from.stopCode || leg.from.stopId,
+          routeColor,
+          routeName,
+        });
+      }
+
+      // Alighting stop
+      if (leg.to && leg.to.lat && leg.to.lon) {
+        markers.push({
+          id: `alighting-${legIndex}`,
+          coordinate: { latitude: leg.to.lat, longitude: leg.to.lon },
+          type: 'alighting',
+          stopName: leg.to.name,
+          stopCode: leg.to.stopCode || leg.to.stopId,
+          routeColor,
+          routeName,
+        });
+      }
+    });
+
+    return markers;
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+
+  // Vehicles belonging to the specific trips in the selected itinerary
+  const tripVehicles = useMemo(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return [];
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary) return [];
+
+    // Collect specific trip IDs from transit legs
+    const tripIds = new Set();
+    selectedItinerary.legs.forEach(leg => {
+      if (leg.mode !== 'WALK' && leg.tripId) {
+        tripIds.add(leg.tripId);
+      }
+    });
+
+    if (tripIds.size === 0) return [];
+
+    // Filter by exact trip ID first; fall back to route ID if no matches
+    // (GTFS-RT may not always report the same trip ID format)
+    const byTripId = vehicles.filter(v => tripIds.has(v.tripId));
+    if (byTripId.length > 0) return byTripId;
+
+    // Fallback: filter by route IDs (original behavior)
+    const tripRouteIds = new Set();
+    selectedItinerary.legs.forEach(leg => {
+      if (leg.mode !== 'WALK' && leg.route?.id) {
+        tripRouteIds.add(leg.route.id);
+      }
+    });
+    return vehicles.filter(v => tripRouteIds.has(v.routeId));
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles]);
+
+  // Auto-zoom map to fit trip route when itinerary changes
+  useEffect(() => {
+    if (!isTripPlanningMode || itineraries.length === 0) return;
+    const selectedItinerary = itineraries[selectedItineraryIndex];
+    if (!selectedItinerary || !selectedItinerary.legs) return;
+
+    const coords = [];
+    selectedItinerary.legs.forEach(leg => {
+      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      if (leg.legGeometry?.points) {
+        const decoded = decodePolyline(leg.legGeometry.points);
+        coords.push(...decoded);
+      }
+      if (leg.intermediateStops) {
+        leg.intermediateStops.forEach(stop => {
+          if (stop.lat && stop.lon) {
+            coords.push({ latitude: stop.lat, longitude: stop.lon });
+          }
+        });
+      }
+    });
+
+    if (coords.length > 0) {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 120, right: 50 },
+      });
+    }
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+
+  const viewTripDetails = (itinerary) => {
+    navigation.navigate('TripDetails', { itinerary });
+  };
+
+  // Start navigation directly from preview (skip details screen)
+  const startNavigationDirect = (itinerary) => {
+    if (!itinerary || !itinerary.legs || itinerary.legs.length === 0) {
+      logger.warn('Cannot start navigation: No route data available');
+      return;
+    }
+    navigation.navigate('Navigation', { itinerary });
+  };
+
+  if (isLoadingStatic) {
+    return (
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingCard}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingTitle}>Loading Barrie Transit</Text>
+          <Text style={styles.loadingText}>Fetching routes and schedules...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (staticError) {
+    return (
+      <View style={styles.errorContainer}>
+        <View style={styles.errorCard}>
+          <View style={styles.errorIconContainer}>
+            <Text style={styles.errorIcon}>!</Text>
+          </View>
+          <Text style={styles.errorTitle}>Connection Error</Text>
+          <Text style={styles.errorDetail}>{staticError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadStaticData}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Web Map using Leaflet */}
+      <WebMapView
+        ref={mapRef}
+        initialRegion={MAP_CONFIG.INITIAL_REGION}
+        onRegionChangeComplete={handleRegionChange}
+        onPress={handleMapPress}
+      >
+        {/* Regular route shapes - hide when in trip preview mode */}
+        {!isTripPreviewMode && displayedShapes.map((shape) => {
+          const isHovering = hoveredRouteId !== null;
+          const isThisHovered = hoveredRouteId === shape.routeId;
+          const isSelected = selectedRoute === shape.routeId;
+          const hasSelection = selectedRoute !== null;
+
+          // Visual hierarchy: selected = full, others ghost; hover = bright, others dim
+          let opacity, outlineW;
+          if (hasSelection) {
+            opacity = isSelected ? 1.0 : 0.15;
+            outlineW = isSelected ? (currentZoom >= 14 ? 2 : 1.5) : 0;
+          } else if (isHovering) {
+            opacity = isThisHovered ? 0.95 : 0.4;
+            outlineW = currentZoom >= 14 ? 1 : 0.5;
+          } else {
+            opacity = 0.85;
+            outlineW = currentZoom >= 14 ? 1 : 0.5;
+          }
+
+          return (
+            <WebRoutePolyline
+              key={shape.id}
+              coordinates={shape.coordinates}
+              color={shape.color}
+              strokeWidth={getPolylineWeight(shape.routeId)}
+              opacity={opacity}
+              outlineWidth={outlineW}
+              smoothFactor={1.2}
+              onMouseOver={() => setHoveredRouteId(shape.routeId)}
+              onMouseOut={() => setHoveredRouteId(null)}
+            />
+          );
+        })}
+        {/* Regular stops - hide when in trip preview mode */}
+        {!isTripPreviewMode && displayedStops.map((stop) => (
+          <WebStopMarker
+            key={stop.id}
+            stop={stop}
+            onPress={handleStopPress}
+            isSelected={selectedStop?.id === stop.id}
+          />
+        ))}
+        {/* Live bus markers - hide when in trip preview mode */}
+        {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
+          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+        ))}
+        {/* Detour polylines - hide when in trip preview mode */}
+        {!isTripPreviewMode && displayedDetours
+          .filter((detour) => Array.isArray(detour.polyline) && detour.polyline.length >= 2)
+          .map((detour) => (
+          <LeafletPolyline
+            key={detour.id}
+            positions={detour.polyline.map(p => [p.latitude, p.longitude])}
+            pathOptions={{
+              color: COLORS.warning,
+              weight: 4,
+              dashArray: '15, 10',
+              lineCap: 'round',
+              lineJoin: 'round',
+              opacity: 0.9,
+            }}
+          />
+        ))}
+
+        {/* Trip planning route overlay */}
+        {tripRouteCoordinates.map((route) => (
+          <LeafletPolyline
+            key={route.id}
+            positions={route.coordinates.map(c => [c.latitude, c.longitude])}
+            pathOptions={{
+              color: route.color,
+              weight: route.isWalk ? 4 : 6,
+              dashArray: route.isWalk ? '10, 8' : null,
+              lineCap: 'round',
+              lineJoin: 'round',
+              opacity: 1,
+            }}
+          />
+        ))}
+
+        {/* Trip planning intermediate stop markers */}
+        {intermediateStopMarkers.map((marker) => (
+          <Marker
+            key={marker.id}
+            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+            icon={L.divIcon({
+              className: 'intermediate-stop-marker',
+              html: `<div style="background:${marker.color};width:10px;height:10px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
+              iconSize: [10, 10],
+              iconAnchor: [5, 5],
+            })}
+          />
+        ))}
+
+        {/* Trip planning markers (origin/destination) */}
+        {tripMarkers.map((marker) => (
+          <Marker
+            key={marker.id}
+            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+            icon={L.divIcon({
+              className: `trip-marker-${marker.type}`,
+              html: marker.type === 'origin'
+                ? `<div style="background:#4CAF50;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><div style="background:white;width:8px;height:8px;border-radius:50%;"></div></div>`
+                : `<div style="background:#f44336;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><div style="background:white;width:8px;height:8px;border-radius:50%;"></div></div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+            })}
+          />
+        ))}
+
+        {/* Boarding and alighting stop markers with labels */}
+        {boardingAlightingMarkers.map((marker) => (
+          <Marker
+            key={marker.id}
+            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+            icon={L.divIcon({
+              className: `stop-marker-${marker.type}`,
+              html: `
+                <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+                  <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};margin-bottom:4px;white-space:nowrap;max-width:180px;">
+                    <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? '🚏 Board' : '🚏 Exit'} ${marker.routeName ? `Route ${marker.routeName}` : ''}</div>
+                    <div style="font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;">#${marker.stopCode} - ${marker.stopName}</div>
+                  </div>
+                  <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${marker.routeColor};"></div>
+                </div>
+              `,
+              iconSize: [180, 60],
+              iconAnchor: [90, 60],
+            })}
+          />
+        ))}
+
+        {/* Real-time bus positions for trip routes */}
+        {isTripPreviewMode && tripVehicles.map((vehicle) => (
+          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+        ))}
+
+        {/* Map tap marker */}
+        {mapTapLocation && (
+          <Marker
+            position={[mapTapLocation.latitude, mapTapLocation.longitude]}
+            icon={L.divIcon({
+              className: 'map-tap-marker',
+              html: `<div style="background:#1a73e8;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>`,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            })}
+          />
+        )}
+      </WebMapView>
+
+      {/* Map Tap Popup for "Choose on Map" feature */}
+      <MapTapPopup
+        visible={!!mapTapLocation}
+        coordinate={mapTapLocation}
+        address={mapTapAddress}
+        isLoading={isLoadingAddress}
+        onDirectionsFrom={handleDirectionsFrom}
+        onDirectionsTo={handleDirectionsTo}
+        onClose={handleCloseMapTapPopup}
+      />
+
+      {/* Trip Planning Header or Normal Header */}
+      {isTripPlanningMode ? (
+        <TripSearchHeaderWeb
+          fromText={tripFromText}
+          toText={tripToText}
+          onFromChange={searchFromAddress}
+          onToChange={searchToAddress}
+          onFromSelect={selectFromSuggestion}
+          onToSelect={selectToSuggestion}
+          fromSuggestions={fromSuggestions}
+          toSuggestions={toSuggestions}
+          showFromSuggestions={showFromSuggestions}
+          showToSuggestions={showToSuggestions}
+          onSwap={swapTripLocations}
+          onClose={exitTripPlanningMode}
+          onUseCurrentLocation={useCurrentLocationForTrip}
+        />
+      ) : !selectedStop ? (
+        <>
+          {/* Search Bar Header */}
+          <TouchableOpacity
+            style={styles.header}
+            onPress={() => navigation.navigate('Search')}
+            activeOpacity={0.85}
+          >
+            <SearchIcon size={18} color={COLORS.grey500} />
+            <Text style={styles.headerPlaceholder}>Search stops, routes & addresses</Text>
+            <View style={styles.headerRight}>
+              {isOffline ? (
+                <View style={styles.statusBadgeOffline}>
+                  <View style={styles.statusDotOffline} />
+                  <Text style={styles.statusTextOffline}>Offline</Text>
+                </View>
+              ) : (
+                <View style={styles.statusBadgeLive}>
+                  <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
+                  <Text style={styles.statusTextLive}>
+                    {vehicles.length} live
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Center Map Button - Top Right (long-press opens detour debug in dev) */}
+          <TouchableOpacity
+            style={styles.centerButton}
+            onPress={centerOnBarrie}
+            onLongPress={__DEV__ ? () => setShowDetourDebugPanel(true) : undefined}
+          >
+            <CenterIcon size={18} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+
+          {/* Route Filter - Left Side Panel with Alert Indicators */}
+          <View style={styles.filterPanel}>
+            <Text style={styles.filterPanelTitle}>Routes</Text>
+            {serviceAlerts.length > 0 && (
+              <TouchableOpacity
+                style={styles.alertsHeaderChip}
+                onPress={() => navigation.navigate('Alerts')}
+              >
+                <AlertIcon size={12} color={COLORS.warning} />
+                <Text style={styles.alertsHeaderText}>{serviceAlerts.length}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.filterChip, !selectedRoute && styles.filterChipActive]}
+              onPress={() => handleRouteSelect(null)}
+            >
+              <Text style={[styles.filterChipText, !selectedRoute && styles.filterChipTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            {[...routes]
+              .sort((a, b) => {
+                const numA = parseInt(a.shortName, 10);
+                const numB = parseInt(b.shortName, 10);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                  return numB - numA;
+                }
+                return b.shortName.localeCompare(a.shortName);
+              })
+              .map((r) => {
+                const routeColor = getRouteColor(r.id);
+                const isActive = selectedRoute === r.id;
+                const routeAlerts = getRouteAlerts(r.id);
+                const hasAlert = routeAlerts.length > 0;
+                return (
+                  <View key={r.id} style={styles.filterChipWrapper}>
+                    <TouchableOpacity
+                      style={[
+                        styles.filterChip,
+                        isActive && { backgroundColor: routeColor, borderColor: routeColor },
+                        hasAlert && !isActive && styles.filterChipWithAlert,
+                      ]}
+                      onPress={() => handleRouteSelect(r.id)}
+                      onLongPress={() => hasAlert && setExpandedAlertRoute(expandedAlertRoute === r.id ? null : r.id)}
+                    >
+                      <View style={[styles.filterDot, { backgroundColor: isActive ? COLORS.white : routeColor }]} />
+                      <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                        {r.shortName}
+                      </Text>
+                      {hasAlert && (
+                        <View style={[styles.alertIndicator, isActive && styles.alertIndicatorActive]}>
+                          <AlertIcon size={10} color={isActive ? COLORS.white : COLORS.warning} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    {/* Expandable Alert Details */}
+                    {expandedAlertRoute === r.id && hasAlert && (
+                      <TouchableOpacity
+                        style={styles.routeAlertPopup}
+                        onPress={() => navigation.navigate('Alerts')}
+                      >
+                        <Text style={styles.routeAlertTitle} numberOfLines={2}>
+                          {routeAlerts[0].title}
+                        </Text>
+                        <Text style={styles.routeAlertEffect}>{routeAlerts[0].effect}</Text>
+                        <Text style={styles.routeAlertTapHint}>Tap for details</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+          </View>
+        </>
+      ) : null}
+
+      {/* Detour Badge - show when selected route has active detour */}
+      {!isTripPlanningMode && selectedRouteHasDetour && (
+        <View style={styles.detourBadgeContainer}>
+          <DetourBadge
+            routeId={selectedRoute}
+            routeName={routes.find(r => r.id === selectedRoute)?.shortName}
+            detourCount={displayedDetours.length}
+            confidenceLevel={primaryDisplayedDetour?.confidenceLevel}
+            confidenceScore={primaryDisplayedDetour?.confidenceScore}
+            segmentLabel={primaryDisplayedDetour?.segmentLabel}
+            firstDetectedAt={primaryDisplayedDetour?.firstDetectedAt}
+            lastSeenAt={primaryDisplayedDetour?.lastSeenAt}
+            officialAlert={primaryDisplayedDetour?.officialAlert}
+          />
+        </View>
+      )}
+
+      {/* Bottom Action Bar - unified frosted card */}
+      {!isTripPlanningMode && !selectedStop && (
+        <View style={styles.bottomActionBar}>
+          <View style={styles.bottomActionCard}>
+            {/* Stops Toggle */}
+            <TouchableOpacity
+              style={[styles.bottomActionButton, showStops && styles.bottomActionButtonActive]}
+              onPress={() => setShowStops(!showStops)}
+              activeOpacity={0.8}
+            >
+              <StopIcon size={18} color={showStops ? COLORS.white : COLORS.textPrimary} />
+              <Text style={[styles.bottomActionText, showStops && styles.bottomActionTextActive]}>
+                Stops
+              </Text>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.bottomActionDivider} />
+
+            {/* Plan Trip Button - Primary action */}
+            <TouchableOpacity
+              style={styles.planTripButton}
+              onPress={enterTripPlanningMode}
+              activeOpacity={0.8}
+            >
+              <DirectionsIcon size={18} color={COLORS.white} />
+              <Text style={styles.planTripButtonText}>Plan Trip</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Trip Bottom Sheet - show when in trip planning mode AND searching/searched */}
+      {isTripPlanningMode && (hasTripSearched || isTripLoading) && (
+        <TripBottomSheet
+          itineraries={itineraries}
+          selectedIndex={selectedItineraryIndex}
+          onSelectItinerary={setSelectedItineraryIndex}
+          onViewDetails={viewTripDetails}
+          onStartNavigation={startNavigationDirect}
+          isLoading={isTripLoading}
+          error={tripError}
+          hasSearched={hasTripSearched}
+        />
+      )}
+
+      {/* Stop Bottom Sheet - only show when not in trip planning mode */}
+      {!isTripPlanningMode && selectedStop && (
+        <StopBottomSheet
+          stop={selectedStop}
+          onClose={() => setSelectedStop(null)}
+          onDirectionsFrom={handleStopDirectionsFrom}
+          onDirectionsTo={handleStopDirectionsTo}
+        />
+      )}
+
+      {/* Dev-only Detour Debug Panel */}
+      {__DEV__ && (
+        <DetourDebugPanel
+          visible={showDetourDebugPanel}
+          onClose={() => setShowDetourDebugPanel(false)}
+          activeDetours={displayedDetours}
+          detourHistory={detourHistory}
+        />
+      )}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: SPACING.xl,
+  },
+  loadingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xxl,
+    padding: SPACING.xxl,
+    alignItems: 'center',
+    boxShadow: '0 8px 32px rgba(23, 43, 77, 0.12)',
+    minWidth: 300,
+  },
+  loadingTitle: {
+    marginTop: SPACING.lg,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+    letterSpacing: -0.3,
+  },
+  loadingText: {
+    marginTop: SPACING.sm,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+  },
+
+  // Error State
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: SPACING.xl,
+  },
+  errorCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xxl,
+    padding: SPACING.xxl,
+    alignItems: 'center',
+    boxShadow: '0 8px 32px rgba(23, 43, 77, 0.12)',
+    maxWidth: 360,
+  },
+  errorIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.errorSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  errorIcon: {
+    fontSize: 36,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+  },
+  errorTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  errorDetail: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.xl,
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xxl,
+    borderRadius: BORDER_RADIUS.round,
+    minWidth: 160,
+    alignItems: 'center',
+    boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)',
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+
+  // Detour Badge Container - positioned below header
+  detourBadgeContainer: {
+    position: 'absolute',
+    top: 72,
+    right: SPACING.sm + 56, // Right of center button
+    left: 80, // Right of filter panel
+    zIndex: 998,
+  },
+
+  // Search Bar Header
+  header: {
+    position: 'absolute',
+    top: SPACING.sm,
+    left: SPACING.sm,
+    right: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.round,
+    paddingVertical: SPACING.sm + 2,
+    paddingLeft: SPACING.lg,
+    paddingRight: SPACING.sm,
+    boxShadow: '0 2px 12px rgba(23, 43, 77, 0.12)',
+    zIndex: 1000,
+    gap: SPACING.sm,
+    cursor: 'pointer',
+    transition: 'box-shadow 0.2s ease',
+  },
+  headerPlaceholder: {
+    flex: 1,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    letterSpacing: -0.1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusBadgeLive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.successSubtle,
+    paddingVertical: 4,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    gap: 5,
+  },
+  statusDotLive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.success,
+  },
+  statusTextLive: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.success,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  statusBadgeOffline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey200,
+    paddingVertical: 4,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    gap: 4,
+  },
+  statusDotOffline: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.grey500,
+  },
+  statusTextOffline: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.grey600,
+    textTransform: 'uppercase',
+  },
+
+  // Route Filter - Left Side Panel
+  filterPanel: {
+    position: 'absolute',
+    top: 72,
+    left: SPACING.sm,
+    width: 64,
+    maxHeight: 'calc(100% - 170px)',
+    backgroundColor: COLORS.white,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    alignItems: 'center',
+    gap: SPACING.xs,
+    zIndex: 998,
+    boxShadow: '0 4px 20px rgba(23, 43, 77, 0.12)',
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+    overflowY: 'auto',
+    overflowX: 'visible',
+  },
+  filterPanelTitle: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.xs,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.grey100,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    gap: 4,
+    minWidth: 52,
+    minHeight: 32,
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+  },
+  filterDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  filterChipText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+  },
+  filterChipTextActive: {
+    color: COLORS.white,
+  },
+  filterChipWrapper: {
+    position: 'relative',
+  },
+  filterChipWithAlert: {
+    borderColor: COLORS.warning,
+    borderWidth: 1.5,
+  },
+  alertIndicator: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.warningSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+  },
+  alertIndicatorActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  alertsHeaderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.warningSubtle,
+    paddingVertical: 3,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    gap: 3,
+    marginBottom: SPACING.xs,
+  },
+  alertsHeaderText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.warning,
+  },
+  routeAlertPopup: {
+    position: 'absolute',
+    left: 64,
+    top: 0,
+    width: 180,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.sm,
+    boxShadow: '0 4px 16px rgba(23, 43, 77, 0.15)',
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    zIndex: 1001,
+  },
+  routeAlertTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  routeAlertEffect: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.warning,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  routeAlertTapHint: {
+    fontSize: FONT_SIZES.xxs,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+  },
+
+  // Center Map Button - Top Right
+  centerButton: {
+    position: 'absolute',
+    top: 72,
+    right: SPACING.sm,
+    width: 40,
+    height: 40,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    boxShadow: '0 2px 8px rgba(23, 43, 77, 0.10)',
+    zIndex: 999,
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+    cursor: 'pointer',
+  },
+
+  // Bottom Action Bar - unified card
+  bottomActionBar: {
+    position: 'absolute',
+    bottom: SPACING.xl,
+    left: 80,
+    right: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  bottomActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    backdropFilter: 'blur(16px)',
+    borderRadius: BORDER_RADIUS.round,
+    padding: SPACING.xs,
+    boxShadow: '0 4px 24px rgba(23, 43, 77, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(235, 236, 240, 0.8)',
+    gap: SPACING.xs,
+  },
+  bottomActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.round,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.lg,
+    gap: 6,
+  },
+  bottomActionButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  bottomActionText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+  },
+  bottomActionTextActive: {
+    color: COLORS.white,
+  },
+  bottomActionDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: COLORS.grey300,
+  },
+  planTripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.lg + 4,
+    gap: 6,
+    boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+  },
+  planTripButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.white,
+    letterSpacing: -0.2,
+  },
+
+  // Trip Planning Header
+  tripPlanHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    paddingTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.sm,
+    zIndex: 1001,
+    boxShadow: '0 2px 12px rgba(23, 43, 77, 0.1)',
+  },
+  tripPlanHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  tripPlanTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+    letterSpacing: -0.3,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.grey100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tripInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.xxs,
+  },
+  tripInputDot: {
+    width: 22,
+    alignItems: 'center',
+    paddingTop: 10,
+    marginRight: SPACING.xs,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  dotConnector: {
+    width: 2,
+    height: 16,
+    backgroundColor: COLORS.grey300,
+    marginTop: 2,
+  },
+  tripInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tripInput: {
+    flex: 1,
+    backgroundColor: COLORS.grey100,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    outlineWidth: 0,
+  },
+  locationBtn: {
+    marginLeft: SPACING.xs,
+    width: 36,
+    height: 36,
+    backgroundColor: COLORS.primarySubtle,
+    borderRadius: BORDER_RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  suggestionsDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 28,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    marginTop: SPACING.xs,
+    maxHeight: 220,
+    boxShadow: '0 8px 24px rgba(23, 43, 77, 0.15)',
+    zIndex: 1002,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+  },
+  suggestionItem: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey100,
+  },
+  suggestionText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.textPrimary,
+  },
+  suggestionDistance: {
+    fontSize: FONT_SIZES.xxs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  swapBtn: {
+    alignSelf: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.grey100,
+    borderRadius: BORDER_RADIUS.round,
+    marginTop: SPACING.xxs,
+  },
+  swapBtnText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+  },
+
+});
+
+export default HomeScreen;
