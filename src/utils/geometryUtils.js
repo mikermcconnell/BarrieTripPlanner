@@ -19,6 +19,11 @@ const toRadians = (degrees) => degrees * (Math.PI / 180);
  * @param {number} lon2 - Longitude of second point
  * @returns {number} Distance in meters
  */
+export const safeHaversineDistance = (lat1, lon1, lat2, lon2) => {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return Infinity;
+  return haversineDistance(lat1, lon1, lat2, lon2);
+};
+
 export const haversineDistance = (lat1, lon1, lat2, lon2) => {
   const dLat = toRadians(lat2 - lat1);
   const dLon = toRadians(lon2 - lon1);

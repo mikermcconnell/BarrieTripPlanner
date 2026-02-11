@@ -6,7 +6,7 @@
  */
 
 import { ROUTE_COLORS, ROUTING_CONFIG } from '../config/constants';
-import { haversineDistance } from './routingDataService';
+import { haversineDistance } from '../utils/geometryUtils';
 
 /**
  * Build an OTP-compatible itinerary from RAPTOR result

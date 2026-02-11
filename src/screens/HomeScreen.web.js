@@ -9,12 +9,18 @@ import { useTransit } from '../context/TransitContext';
 import { MAP_CONFIG, ROUTE_COLORS, SHAPE_PROCESSING } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
-import { reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
+import { getDistanceFromBarrie } from '../services/locationIQService';
 import { useTripPlanner } from '../hooks/useTripPlanner';
+import { useRouteSelection } from '../hooks/useRouteSelection';
+import { useTripVisualization } from '../hooks/useTripVisualization';
+import { useMapTapPopup } from '../hooks/useMapTapPopup';
 import TripBottomSheet from '../components/TripBottomSheet';
 import logger from '../utils/logger';
+import { getSelectedAddressFromParams, normalizeSelectedRouteId } from '../utils/mapSelection';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
+import { getRepresentativeShapeIds } from '../utils/routeShapeUtils';
+import { decodePolyline } from '../utils/polylineUtils';
 
 // Web-only imports
 import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
@@ -106,7 +112,9 @@ const HomeScreen = ({ route }) => {
     hasActiveDetour,
   } = useTransit();
 
-  const [selectedRoute, setSelectedRoute] = useState(null);
+  const {
+    selectedRoute, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+  } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: false });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
@@ -158,10 +166,17 @@ const HomeScreen = ({ route }) => {
     showToSuggestions,
   } = tripState;
 
-  // Map tap state for "Choose on Map" feature
-  const [mapTapLocation, setMapTapLocation] = useState(null);
-  const [mapTapAddress, setMapTapAddress] = useState('');
-  const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+  const {
+    tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
+    boardingAlightingMarkers, tripVehicles,
+  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
+
+  // Map tap popup
+  const {
+    mapTapLocation, mapTapAddress, isLoadingAddress,
+    handleMapPress, handleDirectionsFrom, handleDirectionsTo,
+    closeMapTapPopup: handleCloseMapTapPopup,
+  } = useMapTapPopup({ enterPlanningMode, setTripFrom, setTripTo });
   const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
@@ -220,6 +235,46 @@ const HomeScreen = ({ route }) => {
     }
   }, [route?.params?.selectedStopId, stops]);
 
+  // Handle selected route from navigation params
+  useEffect(() => {
+    const routeId = normalizeSelectedRouteId(route?.params);
+    if (!routeId) return;
+
+    selectRoute(routeId);
+    setShowStops(true);
+    navigation.setParams({ selectedRouteId: undefined });
+  }, [route?.params?.selectedRouteId, navigation]);
+
+  // Handle selected address/coordinate from navigation params
+  useEffect(() => {
+    const selectedAddress = getSelectedAddressFromParams(route?.params);
+    if (!selectedAddress) return;
+    const { coordinate, label } = selectedAddress;
+
+    setSelectedStop(null);
+    setMapTapLocation({
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+    });
+    setMapTapAddress(label);
+    setIsLoadingAddress(false);
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      500
+    );
+
+    navigation.setParams({
+      selectedCoordinate: undefined,
+      selectedAddressLabel: undefined,
+    });
+  }, [route?.params?.selectedCoordinate, route?.params?.selectedAddressLabel, navigation]);
+
   // Handle exit from navigation - reset trip planning mode
   useEffect(() => {
     if (route?.params?.exitTripPlanning) {
@@ -228,57 +283,12 @@ const HomeScreen = ({ route }) => {
     }
   }, [route?.params?.exitTripPlanning, navigation, resetTrip]);
 
-  // Auto-enable stops and zoom to route when a route is selected
+  // Auto-enable stops when a route is selected
   useEffect(() => {
     if (selectedRoute) {
       setShowStops(true);
-      // Zoom to route bounds
-      zoomToRoute(selectedRoute);
     }
   }, [selectedRoute]);
-
-  // Center map on Barrie
-  const centerOnBarrie = useCallback(() => {
-    mapRef.current?.animateToRegion(MAP_CONFIG.INITIAL_REGION, 500);
-  }, []);
-
-  // Zoom to route bounds
-  const zoomToRoute = useCallback((routeId) => {
-    const shapeIds = routeShapeMapping[routeId] || [];
-    if (shapeIds.length === 0) return;
-
-    // Collect all coordinates from all shapes for this route
-    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-    shapeIds.forEach(shapeId => {
-      const coords = shapes[shapeId] || [];
-      coords.forEach(coord => {
-        minLat = Math.min(minLat, coord.latitude);
-        maxLat = Math.max(maxLat, coord.latitude);
-        minLng = Math.min(minLng, coord.longitude);
-        maxLng = Math.max(maxLng, coord.longitude);
-      });
-    });
-
-    if (minLat < maxLat && minLng < maxLng) {
-      const padding = 0.005; // Small padding around the route
-      mapRef.current?.animateToRegion({
-        latitude: (minLat + maxLat) / 2,
-        longitude: (minLng + maxLng) / 2,
-        latitudeDelta: (maxLat - minLat) + padding,
-        longitudeDelta: (maxLng - minLng) + padding,
-      }, 500);
-    }
-  }, [routeShapeMapping, shapes]);
-
-  // Handle route selection with zoom
-  const handleRouteSelect = useCallback((routeId) => {
-    if (routeId === selectedRoute) {
-      setSelectedRoute(null);
-      centerOnBarrie();
-    } else {
-      setSelectedRoute(routeId);
-    }
-  }, [selectedRoute, centerOnBarrie]);
 
   // Get the route color
   const getRouteColor = useCallback(
@@ -312,26 +322,22 @@ const HomeScreen = ({ route }) => {
         }
       });
     } else if (showRoutes) {
-      // Pick only the longest shape per route for clean single-line rendering
+      // Pick representative branch shapes per route (keeps variants like 8A/8B visible)
       Object.keys(routeShapeMapping).forEach((routeId) => {
         const shapeIds = routeShapeMapping[routeId] || [];
-        let longestId = null;
-        let maxPoints = 0;
-        shapeIds.forEach((shapeId) => {
-          const coords = shapeSource[shapeId];
-          if (coords && coords.length > maxPoints) {
-            maxPoints = coords.length;
-            longestId = shapeId;
-          }
+        const representativeIds = getRepresentativeShapeIds(shapeIds, shapeSource, {
+          maxShapes: 2,
+          precision: 3,
         });
-        if (longestId) {
+
+        representativeIds.forEach((shapeId) => {
           shapesToDisplay.push({
-            id: longestId,
-            coordinates: shapeSource[longestId],
+            id: shapeId,
+            coordinates: shapeSource[shapeId],
             color: getRouteColor(routeId),
             routeId,
           });
-        }
+        });
       });
     }
     return shapesToDisplay;
@@ -414,51 +420,6 @@ const HomeScreen = ({ route }) => {
     setSelectedStop(stop);
   };
 
-  // Handle map tap for "Choose on Map" feature (works in both normal and trip planning modes)
-  const handleMapPress = async (event) => {
-    const { coordinate } = event.nativeEvent;
-    setMapTapLocation(coordinate);
-    setMapTapAddress('');
-    setIsLoadingAddress(true);
-
-    // Reverse geocode to get address
-    try {
-      const result = await reverseGeocode(coordinate.latitude, coordinate.longitude);
-      setMapTapAddress(result?.shortName || 'Selected location');
-    } catch (error) {
-      console.error('Reverse geocode error:', error);
-      setMapTapAddress('Selected location');
-    } finally {
-      setIsLoadingAddress(false);
-    }
-  };
-
-  // Handle "Directions from here" button
-  const handleDirectionsFrom = () => {
-    if (!mapTapLocation) return;
-    const newFromLocation = { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude };
-    enterPlanningMode();
-    setTripFrom(newFromLocation, mapTapAddress || 'Selected location');
-    setMapTapLocation(null);
-    setMapTapAddress('');
-  };
-
-  // Handle "Directions to here" button
-  const handleDirectionsTo = () => {
-    if (!mapTapLocation) return;
-    const newToLocation = { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude };
-    enterPlanningMode();
-    setTripTo(newToLocation, mapTapAddress || 'Selected location');
-    setMapTapLocation(null);
-    setMapTapAddress('');
-  };
-
-  // Close map tap popup
-  const handleCloseMapTapPopup = () => {
-    setMapTapLocation(null);
-    setMapTapAddress('');
-  };
-
   // Handle "Trip from here" from stop bottom sheet
   const handleStopDirectionsFrom = (stopInfo) => {
     setSelectedStop(null);
@@ -504,220 +465,9 @@ const HomeScreen = ({ route }) => {
     );
   };
 
-  // Decode polyline string to coordinates
-  const decodePolyline = (encoded) => {
-    const coords = [];
-    let index = 0, lat = 0, lng = 0;
-
-    while (index < encoded.length) {
-      let b, shift = 0, result = 0;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-      lng += dlng;
-
-      coords.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-    }
-    return coords;
-  };
 
   // Trip preview mode - hide regular map elements when viewing trip results
   const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
-
-  // Get trip route coordinates for map display
-  const tripRouteCoordinates = useMemo(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return [];
-
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary) return [];
-
-    const routes = [];
-    selectedItinerary.legs.forEach((leg, index) => {
-      const coords = [];
-
-      if (leg.legGeometry?.points) {
-        // Use encoded polyline if available
-        const decoded = decodePolyline(leg.legGeometry.points);
-        coords.push(...decoded);
-      } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
-        // For transit legs without geometry, use boarding -> intermediate stops -> alighting
-        if (leg.from) {
-          coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-        }
-        leg.intermediateStops.forEach((stop) => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-        if (leg.to) {
-          coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-        }
-      } else if (leg.from && leg.to) {
-        // Fallback to straight line
-        coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-        coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      }
-
-      if (coords.length > 0) {
-        routes.push({
-          id: `trip-leg-${index}`,
-          coordinates: coords,
-          color: leg.mode === 'WALK' ? COLORS.grey500 : (leg.route?.color || COLORS.primary),
-          isWalk: leg.mode === 'WALK',
-        });
-      }
-    });
-
-    return routes;
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
-
-  // Get trip markers (origin, destination)
-  const tripMarkers = useMemo(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return [];
-
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary || !selectedItinerary.legs) return [];
-
-    const markers = [];
-    const firstLeg = selectedItinerary.legs[0];
-    const lastLeg = selectedItinerary.legs[selectedItinerary.legs.length - 1];
-
-    if (firstLeg?.from) {
-      markers.push({
-        id: 'origin',
-        coordinate: { latitude: firstLeg.from.lat, longitude: firstLeg.from.lon },
-        type: 'origin',
-        title: 'Start',
-      });
-    }
-
-    if (lastLeg?.to) {
-      markers.push({
-        id: 'destination',
-        coordinate: { latitude: lastLeg.to.lat, longitude: lastLeg.to.lon },
-        type: 'destination',
-        title: 'End',
-      });
-    }
-
-    return markers;
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
-
-  // Get intermediate stop markers for trip display
-  const intermediateStopMarkers = useMemo(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return [];
-
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary) return [];
-
-    const stopMarkers = [];
-    selectedItinerary.legs.forEach((leg, legIndex) => {
-      // Only show intermediate stops for transit legs
-      if (leg.mode === 'WALK' || !leg.intermediateStops) return;
-
-      leg.intermediateStops.forEach((stop, stopIndex) => {
-        if (stop.lat && stop.lon) {
-          stopMarkers.push({
-            id: `stop-${legIndex}-${stopIndex}`,
-            coordinate: { latitude: stop.lat, longitude: stop.lon },
-            name: stop.name,
-            color: leg.route?.color || COLORS.primary,
-          });
-        }
-      });
-    });
-
-    return stopMarkers;
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
-
-  // Get boarding and alighting stop markers for trip display (with labels)
-  const boardingAlightingMarkers = useMemo(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return [];
-
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary) return [];
-
-    const markers = [];
-    selectedItinerary.legs.forEach((leg, legIndex) => {
-      // Only show boarding/alighting for transit legs
-      if (leg.mode === 'WALK') return;
-
-      const routeColor = leg.route?.color || COLORS.primary;
-      const routeName = leg.route?.shortName || '';
-
-      // Boarding stop
-      if (leg.from && leg.from.lat && leg.from.lon) {
-        markers.push({
-          id: `boarding-${legIndex}`,
-          coordinate: { latitude: leg.from.lat, longitude: leg.from.lon },
-          type: 'boarding',
-          stopName: leg.from.name,
-          stopCode: leg.from.stopCode || leg.from.stopId,
-          routeColor,
-          routeName,
-        });
-      }
-
-      // Alighting stop
-      if (leg.to && leg.to.lat && leg.to.lon) {
-        markers.push({
-          id: `alighting-${legIndex}`,
-          coordinate: { latitude: leg.to.lat, longitude: leg.to.lon },
-          type: 'alighting',
-          stopName: leg.to.name,
-          stopCode: leg.to.stopCode || leg.to.stopId,
-          routeColor,
-          routeName,
-        });
-      }
-    });
-
-    return markers;
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
-
-  // Vehicles belonging to the specific trips in the selected itinerary
-  const tripVehicles = useMemo(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return [];
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary) return [];
-
-    // Collect specific trip IDs from transit legs
-    const tripIds = new Set();
-    selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && leg.tripId) {
-        tripIds.add(leg.tripId);
-      }
-    });
-
-    if (tripIds.size === 0) return [];
-
-    // Filter by exact trip ID first; fall back to route ID if no matches
-    // (GTFS-RT may not always report the same trip ID format)
-    const byTripId = vehicles.filter(v => tripIds.has(v.tripId));
-    if (byTripId.length > 0) return byTripId;
-
-    // Fallback: filter by route IDs (original behavior)
-    const tripRouteIds = new Set();
-    selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && leg.route?.id) {
-        tripRouteIds.add(leg.route.id);
-      }
-    });
-    return vehicles.filter(v => tripRouteIds.has(v.routeId));
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles]);
 
   // Auto-zoom map to fit trip route when itinerary changes
   useEffect(() => {
@@ -804,8 +554,7 @@ const HomeScreen = ({ route }) => {
         {!isTripPreviewMode && displayedShapes.map((shape) => {
           const isHovering = hoveredRouteId !== null;
           const isThisHovered = hoveredRouteId === shape.routeId;
-          const isSelected = selectedRoute === shape.routeId;
-          const hasSelection = selectedRoute !== null;
+          const isSelected = isRouteSelected(shape.routeId);
 
           // Visual hierarchy: selected = full, others ghost; hover = bright, others dim
           let opacity, outlineW;

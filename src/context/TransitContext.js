@@ -16,6 +16,7 @@ import { publicDetourService } from '../services/firebase/publicDetourService';
 import logger from '../utils/logger';
 
 const TransitContext = createContext(null);
+const AUTO_DETOURS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS === 'true';
 
 export const useTransit = () => {
   const context = useContext(TransitContext);
@@ -361,24 +362,19 @@ export const TransitProvider = ({ children }) => {
     [vehicles]
   );
 
-  // Detour detection hook - processes vehicle positions to detect route deviations
-  const {
-    activeDetours: localActiveDetours,
-    getDetoursForRoute: getLocalDetoursForRoute,
-    getDetourHistory,
-    hasActiveDetour: hasLocalActiveDetour,
-  } = useDetourDetection(
-    vehicles,
-    shapes,
-    tripMapping,
-    routeShapeMapping,
-    stops,
-    routeStopsMapping,
-    serviceAlerts
-  );
-
   // Subscribe to backend shared detour feed (server-side source of truth)
   useEffect(() => {
+    if (!AUTO_DETOURS_ENABLED) {
+      setBackendActiveDetours([]);
+      setDetourFeedMeta(null);
+      setDetourFeedStatus({
+        connected: false,
+        updatedAt: Date.now(),
+        error: 'disabled',
+      });
+      return undefined;
+    }
+
     if (isOffline) {
       setBackendActiveDetours([]);
       setDetourFeedStatus({
@@ -405,6 +401,7 @@ export const TransitProvider = ({ children }) => {
   }, [isOffline]);
 
   const isBackendDetourFeedLive = useMemo(() => {
+    if (!AUTO_DETOURS_ENABLED) return false;
     if (!detourFeedStatus.connected) return false;
     const freshnessWindowMs = REFRESH_INTERVALS.VEHICLE_POSITIONS * 8; // ~2 minutes
     const feedTimestamp = detourFeedMeta?.updatedAt ?? detourFeedStatus.updatedAt;
@@ -412,7 +409,31 @@ export const TransitProvider = ({ children }) => {
     return Date.now() - feedTimestamp <= freshnessWindowMs;
   }, [detourFeedStatus, detourFeedMeta]);
 
-  const activeDetours = isBackendDetourFeedLive ? backendActiveDetours : localActiveDetours;
+  // Optimization B: skip expensive local detection when backend is live
+  // Pass empty array so the hook does no processing when results would be discarded
+  const detourVehicleInput = (AUTO_DETOURS_ENABLED && isBackendDetourFeedLive)
+    ? []
+    : vehicles;
+
+  // Detour detection hook - processes vehicle positions to detect route deviations
+  const {
+    activeDetours: localActiveDetours,
+    getDetoursForRoute: getLocalDetoursForRoute,
+    getDetourHistory,
+    hasActiveDetour: hasLocalActiveDetour,
+  } = useDetourDetection(
+    detourVehicleInput,
+    shapes,
+    tripMapping,
+    routeShapeMapping,
+    stops,
+    routeStopsMapping,
+    serviceAlerts
+  );
+
+  const activeDetours = AUTO_DETOURS_ENABLED
+    ? (isBackendDetourFeedLive ? backendActiveDetours : localActiveDetours)
+    : [];
 
   const getDetoursForRoute = useCallback(
     (routeId, directionId = null) =>
@@ -510,6 +531,7 @@ export const TransitProvider = ({ children }) => {
     detourFeedMeta,
     detourFeedStatus: {
       ...detourFeedStatus,
+      enabled: AUTO_DETOURS_ENABLED,
       usingBackend: isBackendDetourFeedLive,
     },
 

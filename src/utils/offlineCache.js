@@ -25,18 +25,34 @@ export const isOnline = async () => {
 };
 
 /**
- * Save data to cache
+ * Save data to cache.
+ * If storage is full (SQLITE_FULL), clears old cache and retries once.
  */
 export const cacheData = async (key, data) => {
+  const json = JSON.stringify({ data, timestamp: Date.now() });
+
   try {
-    const cacheItem = {
-      data,
-      timestamp: Date.now(),
-    };
-    await AsyncStorage.setItem(key, JSON.stringify(cacheItem));
+    await AsyncStorage.setItem(key, json);
     return { success: true };
   } catch (error) {
-    console.error('Error caching data:', error);
+    // On SQLITE_FULL, clear all transit cache and retry once
+    if (error?.message?.includes('SQLITE_FULL') || error?.code === 13) {
+      console.warn(`Cache full, clearing old data and retrying (${key})`);
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const transitKeys = keys.filter((k) => k.startsWith('@barrie_transit'));
+        if (transitKeys.length > 0) {
+          await AsyncStorage.multiRemove(transitKeys);
+        }
+        await AsyncStorage.setItem(key, json);
+        return { success: true };
+      } catch (retryError) {
+        // Data too large for AsyncStorage — skip caching silently
+        console.warn(`Cache retry failed for ${key}, skipping:`, retryError.message);
+        return { success: false, error: retryError.message };
+      }
+    }
+    console.warn('Error caching data:', error.message);
     return { success: false, error: error.message };
   }
 };

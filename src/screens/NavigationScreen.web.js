@@ -28,6 +28,7 @@ import { useStepProgress } from '../hooks/useStepProgress';
 
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
+import { decodePolyline, extractShapeSegment } from '../utils/polylineUtils';
 
 // Context for route shapes
 import { useTransit } from '../context/TransitContext';
@@ -40,84 +41,6 @@ if (typeof document !== 'undefined' && !document.getElementById('leaflet-css-nav
   link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
   document.head.appendChild(link);
 }
-
-// Decode polyline helper
-const decodePolyline = (encoded) => {
-  if (!encoded) return [];
-  const coords = [];
-  let index = 0, lat = 0, lng = 0;
-
-  while (index < encoded.length) {
-    let b, shift = 0, result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lng += dlng;
-
-    coords.push([lat / 1e5, lng / 1e5]);
-  }
-  return coords;
-};
-
-// Calculate distance between two points (meters)
-const haversineDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-// Find the index of the closest point in a shape to a given location
-const findClosestPointIndex = (shapeCoords, lat, lon) => {
-  let minDist = Infinity;
-  let closestIdx = 0;
-
-  shapeCoords.forEach((coord, idx) => {
-    const dist = haversineDistance(lat, lon, coord.latitude, coord.longitude);
-    if (dist < minDist) {
-      minDist = dist;
-      closestIdx = idx;
-    }
-  });
-
-  return closestIdx;
-};
-
-// Extract a segment of a shape between two points
-const extractShapeSegment = (shapeCoords, fromLat, fromLon, toLat, toLon) => {
-  if (!shapeCoords || shapeCoords.length === 0) return [];
-
-  const startIdx = findClosestPointIndex(shapeCoords, fromLat, fromLon);
-  const endIdx = findClosestPointIndex(shapeCoords, toLat, toLon);
-
-  // Handle both directions (shape might be in reverse order)
-  if (startIdx <= endIdx) {
-    return shapeCoords.slice(startIdx, endIdx + 1);
-  } else {
-    // Reverse direction - take from end to start and reverse
-    return shapeCoords.slice(endIdx, startIdx + 1).reverse();
-  }
-};
 
 // Create marker icons
 const createMarkerIcon = (type) => {
@@ -490,7 +413,7 @@ const NavigationScreen = ({ route }) => {
 
       if (leg.legGeometry?.points) {
         // Use encoded polyline if available (walking legs from walkingService)
-        positions = decodePolyline(leg.legGeometry.points);
+        positions = decodePolyline(leg.legGeometry.points).map(c => [c.latitude, c.longitude]);
       } else if (isTransit && leg.route?.id && leg.from && leg.to) {
         // For transit legs, use actual GTFS route shape
         const routeId = leg.route.id;

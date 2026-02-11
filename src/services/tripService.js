@@ -1,7 +1,7 @@
 import { MAP_CONFIG, OTP_CONFIG, ROUTING_CONFIG } from '../config/constants';
 import { planTripLocal, RoutingError, ROUTING_ERROR_CODES } from './localRouter';
 import { enrichTripPlanWithWalking } from './walkingService';
-import { haversineDistance } from './routingDataService';
+import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
 import logger from '../utils/logger';

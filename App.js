@@ -27,13 +27,16 @@ Sentry.init({
 });
 
 // Configure notification handler (how notifications appear when app is foregrounded)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Only set on native — expo-notifications has limited web support
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 /**
  * NotificationInitializer - Handles push notification setup and listeners
@@ -99,11 +102,11 @@ function NotificationInitializer({ navigationRef }) {
 
     // Cleanup listeners on unmount
     return () => {
-      if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
+      if (notificationListener.current?.remove) {
+        notificationListener.current.remove();
       }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+      if (responseListener.current?.remove) {
+        responseListener.current.remove();
       }
     };
   }, [user]);

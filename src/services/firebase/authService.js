@@ -9,8 +9,8 @@ import {
   sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithCredential,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 import { auth } from '../../config/firebase';
 import { userFirestoreService } from './userFirestoreService';
 
@@ -128,6 +128,50 @@ export const authService = {
       createdAt: firebaseUser.metadata?.creationTime,
       lastLoginAt: firebaseUser.metadata?.lastSignInTime,
     };
+  },
+
+  // Sign in with Google (web uses popup, native not yet supported)
+  async signInWithGoogle() {
+    if (Platform.OS !== 'web') {
+      return {
+        success: false,
+        error: 'Google sign in is currently available on web only.',
+      };
+    }
+
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+
+      // Check if this is a new user — create Firestore profile if needed
+      const existingProfile = await userFirestoreService.getUser(user.uid);
+      if (!existingProfile) {
+        await userFirestoreService.createUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0],
+          photoURL: user.photoURL,
+        });
+      } else {
+        await userFirestoreService.updateLastLogin(user.uid);
+      }
+
+      return {
+        success: true,
+        user: this.formatUser(user),
+      };
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      // User closed the popup
+      if (error.code === 'auth/popup-closed-by-user') {
+        return { success: false, error: null };
+      }
+      return {
+        success: false,
+        error: this.getErrorMessage(error.code),
+      };
+    }
   },
 
   // Get user-friendly error messages

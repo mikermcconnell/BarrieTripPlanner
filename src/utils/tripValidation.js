@@ -5,7 +5,7 @@
  * Returns structured error objects with codes matching errorMessages.js.
  */
 
-import { haversineDistance } from '../services/routingDataService';
+import { haversineDistance } from './geometryUtils';
 
 // Barrie service area bounds (generous to include surrounding areas served)
 const SERVICE_AREA = {

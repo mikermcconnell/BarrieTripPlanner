@@ -1,20 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import ScaleButton from './ScaleButton';
-import { COLORS, SPACING, SHADOWS, FONT_SIZES, BORDER_RADIUS } from '../config/theme';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const HomeScreenControls = ({
     routes,
-    selectedRoutes, // Changed from selectedRoute to Set of selected routes
+    selectedRoutes,
     onRouteSelect,
-    getRouteColor, // pass function
-    showStops,
-    onToggleStops,
-    showRoutes,
-    onToggleRoutes,
-    onCenterMap,
+    getRouteColor,
 }) => {
-    // Sort routes from largest to smallest as requested
+    // Sort routes from largest to smallest
     const sortedRoutes = [...routes].sort((a, b) => {
         const numA = parseInt(a.shortName, 10);
         const numB = parseInt(b.shortName, 10);
@@ -25,137 +21,128 @@ const HomeScreenControls = ({
     });
 
     return (
-        <>
-            {/* Control Floating Buttons (Right Side) */}
-            <View style={styles.controlsContainer}>
-                <ScaleButton
-                    style={[styles.controlButton, showStops && styles.controlButtonActive]}
-                    onPress={onToggleStops}
-                >
-                    <Text style={styles.controlButtonText}>🚏</Text>
-                </ScaleButton>
-
-                <ScaleButton
-                    style={[styles.controlButton, !showRoutes && styles.controlButtonInactive]}
-                    onPress={onToggleRoutes}
-                >
-                    <Text style={styles.controlButtonText}>🚌</Text>
-                </ScaleButton>
-
-                <ScaleButton style={styles.controlButton} onPress={onCenterMap}>
-                    <Text style={styles.controlButtonText}>📍</Text>
-                </ScaleButton>
-            </View>
-
-            {/* Route Sidebar (Left Side) */}
-            <View style={styles.sidebarContainer}>
-                {/* All Routes Button - shows when no routes selected */}
-                <ScaleButton
+        <View style={styles.filterPanel}>
+            <Text style={styles.filterPanelTitle}>Routes</Text>
+            <ScrollView
+                style={styles.chipScroll}
+                contentContainerStyle={styles.chipScrollContent}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+            >
+                {/* All Routes Chip */}
+                <TouchableOpacity
                     style={[
-                        styles.sidebarButton,
-                        selectedRoutes.size === 0 && styles.sidebarButtonActive
+                        styles.filterChip,
+                        selectedRoutes.size === 0 && styles.filterChipAllActive
                     ]}
                     onPress={() => onRouteSelect(null)}
+                    activeOpacity={0.7}
                 >
                     <Text style={[
-                        styles.sidebarButtonText,
-                        selectedRoutes.size === 0 && styles.sidebarButtonTextActive
+                        styles.filterChipText,
+                        selectedRoutes.size === 0 && styles.filterChipTextActive
                     ]}>
                         All
                     </Text>
-                </ScaleButton>
+                </TouchableOpacity>
 
-                {/* Route Buttons - toggle on/off */}
-                {sortedRoutes.map((r) => (
-                    <ScaleButton
-                        key={r.id}
-                        style={[
-                            styles.sidebarButton,
-                            selectedRoutes.has(r.id) && styles.sidebarButtonActive,
-                        ]}
-                        onPress={() => onRouteSelect(r.id)}
-                    >
-                        <View style={[styles.routeDot, { backgroundColor: getRouteColor(r.id) }]} />
-                        <Text
+                {/* Route Chips */}
+                {sortedRoutes.map((r) => {
+                    const routeColor = getRouteColor(r.id);
+                    const isActive = selectedRoutes.has(r.id);
+                    return (
+                        <TouchableOpacity
+                            key={r.id}
                             style={[
-                                styles.sidebarButtonText,
-                                selectedRoutes.has(r.id) && styles.sidebarButtonTextActive
+                                styles.filterChip,
+                                isActive && { backgroundColor: routeColor, borderColor: routeColor },
                             ]}
+                            onPress={() => onRouteSelect(r.id)}
+                            activeOpacity={0.7}
                         >
-                            {r.shortName}
-                        </Text>
-                    </ScaleButton>
-                ))}
-            </View>
-        </>
+                            <View style={[
+                                styles.filterDot,
+                                { backgroundColor: isActive ? COLORS.white : routeColor }
+                            ]} />
+                            <Text style={[
+                                styles.filterChipText,
+                                isActive && styles.filterChipTextActive
+                            ]}>
+                                {r.shortName}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    sidebarContainer: {
+    filterPanel: {
         position: 'absolute',
-        top: 140, // Pushed down to balance with header
-        left: SPACING.md,
-        width: 60, // Fixed width for sidebar
-        flexDirection: 'column', // Vertical stack
-        gap: SPACING.sm,
-        // No background, just floating buttons
-    },
-    sidebarButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24, // Circular
-        backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-        flexDirection: 'row', // Keep row for dot + text (though it might be tight)
-        justifyContent: 'center',
+        top: 64,
+        left: SPACING.sm,
+        width: 64,
+        maxHeight: SCREEN_HEIGHT - 170,
+        backgroundColor: COLORS.white,
+        paddingVertical: SPACING.sm,
+        paddingHorizontal: SPACING.xs,
         alignItems: 'center',
-        ...SHADOWS.small,
+        borderRadius: BORDER_RADIUS.xl,
+        borderWidth: 1,
+        borderColor: COLORS.grey200,
+        ...SHADOWS.medium,
+        zIndex: 998,
     },
-    sidebarButtonActive: {
+    filterPanelTitle: {
+        fontSize: FONT_SIZES.xxs,
+        fontWeight: FONT_WEIGHTS.bold,
+        color: COLORS.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: SPACING.xs,
+    },
+    chipScroll: {
+        flexGrow: 0,
+        flexShrink: 1,
+        width: '100%',
+    },
+    chipScrollContent: {
+        alignItems: 'center',
+        paddingBottom: SPACING.xs,
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: SPACING.xs + 2,
+        paddingHorizontal: SPACING.sm,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.grey100,
+        borderWidth: 1.5,
+        borderColor: 'transparent',
+        marginBottom: SPACING.xs,
+        minWidth: 52,
+        height: 32,
+    },
+    filterChipAllActive: {
         backgroundColor: COLORS.primary,
         borderColor: COLORS.primary,
-        transform: [{ scale: 1.1 }], // Slight pop when active
     },
-    sidebarButtonText: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
+    filterDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 4,
+    },
+    filterChipText: {
+        fontSize: FONT_SIZES.xs,
+        fontWeight: FONT_WEIGHTS.bold,
         color: COLORS.textPrimary,
-        marginLeft: 2, // Space from dot
     },
-    sidebarButtonTextActive: {
+    filterChipTextActive: {
         color: COLORS.white,
-    },
-    routeDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        marginRight: 2,
-    },
-    controlsContainer: {
-        position: 'absolute',
-        bottom: 100,
-        right: SPACING.md,
-        gap: SPACING.sm,
-    },
-    controlButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: COLORS.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...SHADOWS.medium,
-    },
-    controlButtonActive: {
-        backgroundColor: COLORS.primaryLight,
-    },
-    controlButtonInactive: {
-        opacity: 0.5,
-    },
-    controlButtonText: {
-        fontSize: 24,
     },
 });
 

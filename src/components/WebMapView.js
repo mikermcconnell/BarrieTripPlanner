@@ -5,7 +5,6 @@
 import React, { forwardRef, useRef, useImperativeHandle } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet-polylineoffset';
 import logger from '../utils/logger';
 
 // Fix for default marker icons

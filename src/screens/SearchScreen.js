@@ -12,8 +12,13 @@ import {
 import { useTransit } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
+import {
+  buildSelectedAddressParams,
+  buildSelectedRouteParams,
+  buildSelectedStopParams,
+} from '../utils/mapSelection';
 
-const SearchScreen = () => {
+const SearchScreen = ({ navigation }) => {
   const { stops, routes, isLoadingStatic } = useTransit();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState('stops'); // 'stops', 'routes', or 'addresses'
@@ -80,8 +85,23 @@ const SearchScreen = () => {
     );
   }, [searchQuery, searchType, stops, routes, addressResults]);
 
+  const handleSelectStop = (stop) => {
+    navigation.navigate('Map', { screen: 'MapMain', params: buildSelectedStopParams(stop) });
+  };
+
+  const handleSelectRoute = (route) => {
+    navigation.navigate('Map', { screen: 'MapMain', params: buildSelectedRouteParams(route) });
+  };
+
+  const handleSelectAddress = (address) => {
+    navigation.navigate('Map', {
+      screen: 'MapMain',
+      params: buildSelectedAddressParams(address),
+    });
+  };
+
   const renderStopItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectStop(item)}>
       <View style={styles.stopIcon}>
         <Text style={styles.stopIconText}>🚏</Text>
       </View>
@@ -94,7 +114,7 @@ const SearchScreen = () => {
   );
 
   const renderRouteItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectRoute(item)}>
       <View style={[styles.routeIcon, { backgroundColor: item.color || COLORS.primary }]}>
         <Text style={styles.routeIconText}>{item.shortName}</Text>
       </View>
@@ -107,7 +127,7 @@ const SearchScreen = () => {
   );
 
   const renderAddressItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectAddress(item)}>
       <View style={styles.addressIcon}>
         <Text style={styles.addressIconText}>{'\uD83D\uDCCD'}</Text>
       </View>

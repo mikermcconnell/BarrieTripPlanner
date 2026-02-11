@@ -1,52 +1,57 @@
-import React, { memo } from 'react';
-import { View, Text, StyleSheet, Platform, Image } from 'react-native';
+import React, { memo, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import Svg, { Path } from 'react-native-svg';
 import { useAnimatedMarker } from '../hooks/useAnimatedMarker';
-import { COLORS, FONT_SIZES, SHADOWS } from '../config/theme';
 
-const BusMarker = ({ vehicle, color = COLORS.primary, onPress }) => {
-  // Use the animated coordinate hook
+const BUS_ICON_PATH =
+  'M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z';
+
+const MARKER_SIZE = 40;
+const ARROW_WRAPPER_SIZE = 80;
+
+const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
   const animatedCoordinate = useAnimatedMarker(vehicle.coordinate);
+  const [tracked, setTracked] = useState(true);
 
-  // Get route short name for display
-  const routeLabel = vehicle.routeId || '?';
-
-  // Get bearing for direction arrow
-  const rotation = vehicle.bearing || 0;
-  const hasHeading = vehicle.bearing != null;
-
-  // Validate coordinate
   if (!vehicle.coordinate || !vehicle.coordinate.latitude || !vehicle.coordinate.longitude) {
     return null;
   }
+
+  const routeLabel = vehicle.routeId || '?';
+  const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
 
   return (
     <Marker.Animated
       coordinate={animatedCoordinate}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
       onPress={() => onPress?.(vehicle)}
       zIndex={10}
+      tracksViewChanges={tracked}
+      onLayout={() => {
+        // Stop tracking view changes after initial render for performance
+        if (tracked) setTimeout(() => setTracked(false), 500);
+      }}
     >
-      <View style={styles.container}>
-        {/* Direction Arrow - orbits around pill edge */}
-        {hasHeading && (
+      <View style={styles.wrapper}>
+        {/* Direction arrow */}
+        {hasValidBearing && (
           <View
             style={[
-              styles.arrowContainer,
-              {
-                transform: [{ rotate: `${rotation}deg` }],
-              },
+              styles.arrowWrapper,
+              { transform: [{ rotate: `${vehicle.bearing}deg` }] },
             ]}
           >
-            <View style={[styles.directionArrow, { borderBottomColor: color }]} />
+            <View style={[styles.arrow, { borderBottomColor: color }]} />
           </View>
         )}
-        {/* Circle with bus icon and route number */}
+
+        {/* Colored circle with bus icon + route number */}
         <View style={[styles.circle, { backgroundColor: color }]}>
-          <Ionicons name="bus" size={12} color={COLORS.white} />
-          <Text style={styles.routeText}>{routeLabel}</Text>
+          <Svg width={12} height={12} viewBox="0 0 24 24">
+            <Path d={BUS_ICON_PATH} fill="white" />
+          </Svg>
+          <Text style={styles.routeLabel}>{routeLabel}</Text>
         </View>
       </View>
     </Marker.Animated>
@@ -54,22 +59,22 @@ const BusMarker = ({ vehicle, color = COLORS.primary, onPress }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
+    width: ARROW_WRAPPER_SIZE,
+    height: ARROW_WRAPPER_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    width: 80,
-    height: 80,
   },
-  arrowContainer: {
+  arrowWrapper: {
     position: 'absolute',
-    width: 80,
-    height: 80,
+    top: 0,
+    left: 0,
+    width: ARROW_WRAPPER_SIZE,
+    height: ARROW_WRAPPER_SIZE,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 0,
-    zIndex: 1,
   },
-  directionArrow: {
+  arrow: {
     width: 0,
     height: 0,
     borderLeftWidth: 8,
@@ -77,36 +82,45 @@ const styles = StyleSheet.create({
     borderBottomWidth: 14,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
+    // borderBottomColor set dynamically
   },
   circle: {
-    flexDirection: 'column',
+    width: MARKER_SIZE,
+    height: MARKER_SIZE,
+    borderRadius: MARKER_SIZE / 2,
+    borderWidth: 2,
+    borderColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: COLORS.white,
-    ...SHADOWS.medium,
-    zIndex: 2,
+    // Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  routeText: {
-    color: COLORS.white,
+  routeLabel: {
+    color: 'white',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
+    lineHeight: 10,
   },
 });
 
-// Memoize to prevent re-renders unless vehicle data changes
-export default memo(BusMarker, (prev, next) => {
+export const areBusMarkerPropsEqual = (prev, next) => {
+  const prevCoord = prev.vehicle.coordinate || {};
+  const nextCoord = next.vehicle.coordinate || {};
+
   return (
     prev.vehicle.id === next.vehicle.id &&
-    prev.vehicle.latitude === next.vehicle.latitude &&
-    prev.vehicle.longitude === next.vehicle.longitude &&
-    prev.vehicle.bearing === next.vehicle.bearing &&
+    prevCoord.latitude === nextCoord.latitude &&
+    prevCoord.longitude === nextCoord.longitude &&
     prev.vehicle.routeId === next.vehicle.routeId &&
+    prev.vehicle.bearing === next.vehicle.bearing &&
     prev.color === next.color
   );
-});
+};
+
+export default memo(BusMarker, areBusMarkerPropsEqual);

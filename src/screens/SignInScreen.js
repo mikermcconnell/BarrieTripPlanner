@@ -15,10 +15,12 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 const SignInScreen = ({ navigation }) => {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle, sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const handleSignIn = async () => {
@@ -38,6 +40,26 @@ const SignInScreen = ({ navigation }) => {
       navigation.goBack();
     } else {
       setError(result.error || 'Sign in failed');
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError('Enter your email above to reset your password');
+      return;
+    }
+
+    setIsResetLoading(true);
+    setError(null);
+
+    const result = await sendPasswordReset(normalizedEmail);
+    setIsResetLoading(false);
+
+    if (result.success) {
+      Alert.alert('Password reset sent', 'Check your email for reset instructions.');
+    } else {
+      setError(result.error || 'Could not send reset email');
     }
   };
 
@@ -106,21 +128,49 @@ const SignInScreen = ({ navigation }) => {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.forgotPassword}>
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+              disabled={isLoading || isGoogleLoading || isResetLoading}
+            >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          {Platform.OS === 'web' && (
+            <>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-          <TouchableOpacity style={styles.googleButton}>
-            <Text style={styles.googleButtonIcon}>G</Text>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.googleButton, isGoogleLoading && styles.signInButtonDisabled]}
+                onPress={async () => {
+                  setIsGoogleLoading(true);
+                  setError(null);
+                  const result = await signInWithGoogle();
+                  setIsGoogleLoading(false);
+                  if (result.success) {
+                    navigation.goBack();
+                  } else if (result.error) {
+                    setError(result.error);
+                  }
+                }}
+                disabled={isGoogleLoading || isLoading || isResetLoading}
+              >
+                {isGoogleLoading ? (
+                  <ActivityIndicator color={COLORS.textPrimary} />
+                ) : (
+                  <>
+                    <Text style={styles.googleButtonIcon}>G</Text>
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>

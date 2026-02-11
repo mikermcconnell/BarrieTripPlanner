@@ -114,6 +114,7 @@ Deploy updated rules so clients can read:
 ### Client behavior
 
 `TransitContext` now prefers backend detours when the shared feed is live; it falls back to local detector logic if backend feed is unavailable.
+To temporarily disable all auto-detour behavior during testing, set `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=false`.
 
 ## License
 

@@ -15,8 +15,8 @@ import { ROUTING_CONFIG } from '../config/constants';
 import {
   findNearbyStops,
   getDeparturesAfter,
-  haversineDistance,
 } from './routingDataService';
+import { haversineDistance } from '../utils/geometryUtils';
 import { getActiveServicesForDate, formatGTFSDate } from './calendarService';
 import { buildItinerary } from './itineraryBuilder';
 

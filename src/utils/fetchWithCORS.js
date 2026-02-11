@@ -37,8 +37,31 @@ const PUBLIC_PROXIES = [
   'https://corsproxy.io/?',
 ];
 
-// Use local proxy for development - most reliable option
-const CORS_PROXY = LOCAL_PROXY;
+const REQUEST_TIMEOUT_MS = 30000;
+
+const buildProxyUrl = (proxyBase, targetUrl) => `${proxyBase}${encodeURIComponent(targetUrl)}`;
+
+const shouldTryFallbackProxy = (response) => response.status === 429 || response.status >= 500;
+
+const fetchWithTimeout = async (targetUrl, options = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(targetUrl, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your internet connection.');
+    }
+    throw error;
+  }
+};
 
 /**
  * Check if we're running on web platform
@@ -50,6 +73,7 @@ export const isWeb = () => Platform.OS === 'web';
  * Wrap a URL with CORS proxy if running on web
  *
  * @param {string} url - The original URL to fetch
+ * @param {string} proxyBase - Optional proxy base URL override
  * @returns {string} The URL (possibly wrapped with CORS proxy)
  *
  * EXAMPLE:
@@ -57,10 +81,9 @@ export const isWeb = () => Platform.OS === 'web';
  * - On mobile: returns 'http://example.com/data'
  * - On web: returns 'https://corsproxy.io/?http://example.com/data'
  */
-export const wrapWithCORSProxy = (url) => {
+export const wrapWithCORSProxy = (url, proxyBase = LOCAL_PROXY) => {
   if (isWeb()) {
-    // Encode the URL to handle special characters
-    return `${CORS_PROXY}${encodeURIComponent(url)}`;
+    return buildProxyUrl(proxyBase, url);
   }
   return url;
 };
@@ -80,37 +103,53 @@ export const wrapWithCORSProxy = (url) => {
  * const data = await response.json();
  */
 export const fetchWithCORS = async (url, options = {}) => {
-  const finalUrl = wrapWithCORSProxy(url);
-
-  // Add a timeout to prevent hanging requests
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-  try {
-    const response = await fetch(finalUrl, {
-      ...options,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-
-    // Provide helpful error messages
-    if (error.name === 'AbortError') {
-      throw new Error('Request timed out. Please check your internet connection.');
-    }
-
-    if (isWeb() && error.message.includes('Failed to fetch')) {
-      logger.warn(
-        'CORS error on web. The CORS proxy may be down or rate-limited.',
-        'Try testing on a mobile device instead, or use a different CORS proxy.'
-      );
-    }
-
-    throw error;
+  if (!isWeb()) {
+    return fetchWithTimeout(url, options);
   }
+
+  const proxyCandidates = [LOCAL_PROXY, ...PUBLIC_PROXIES];
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let i = 0; i < proxyCandidates.length; i += 1) {
+    const proxyBase = proxyCandidates[i];
+    const finalUrl = wrapWithCORSProxy(url, proxyBase);
+
+    try {
+      const response = await fetchWithTimeout(finalUrl, options);
+
+      // Keep non-server errors as-is (e.g., 400/404 from upstream),
+      // but fallback when proxy is unavailable/rate-limited.
+      if (!shouldTryFallbackProxy(response) || i === proxyCandidates.length - 1) {
+        return response;
+      }
+
+      lastResponse = response;
+      logger.warn(
+        `CORS proxy returned ${response.status}; trying fallback proxy (${i + 2}/${proxyCandidates.length})`
+      );
+    } catch (error) {
+      lastError = error;
+      if (i < proxyCandidates.length - 1) {
+        logger.warn(
+          `CORS proxy request failed; trying fallback proxy (${i + 2}/${proxyCandidates.length})`
+        );
+      }
+    }
+  }
+
+  if (lastResponse) {
+    return lastResponse;
+  }
+
+  if (lastError && isWeb() && lastError.message?.includes('Failed to fetch')) {
+    logger.warn(
+      'All CORS proxies failed on web.',
+      'Start the local proxy or configure a reachable proxy endpoint.'
+    );
+  }
+
+  throw lastError || new Error('Unable to fetch resource through available CORS proxies');
 };
 
 /**

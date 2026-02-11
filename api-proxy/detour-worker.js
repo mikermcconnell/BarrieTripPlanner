@@ -42,6 +42,15 @@ const state = {
   routeEvidence: {},
 };
 
+// Optimization: track what we last published to avoid redundant writes
+let lastPublishedHash = null;
+let lastPublishedIds = new Set();
+
+// Optimization: adaptive polling — slow when idle, fast when detours active
+const POLL_NORMAL_MS = 60000;  // 1 minute when no active detours
+const POLL_ACTIVE_MS = CONFIG.pollMs; // configured interval (default 15s) when detours detected
+let currentPollMs = POLL_NORMAL_MS;
+
 const toRad = (d) => d * (Math.PI / 180);
 const haversine = (lat1, lon1, lat2, lon2) => {
   const dLat = toRad(lat2 - lat1);
@@ -614,30 +623,53 @@ const initFirestore = () => {
 
 const publishDetours = async (detours, logger) => {
   const firestore = initFirestore();
-  const coll = firestore.collection(CONFIG.detourCollection);
-  const existing = await coll.get();
-  const existingIds = new Set(existing.docs.map((doc) => doc.id));
-  const nextIds = new Set(detours.map((d) => d.id));
   const now = Date.now();
+  const auto = detours.filter((d) => d.source === 'auto').length;
+  const official = detours.filter((d) => d.source === 'official').length;
+  const hybrid = detours.filter((d) => d.source === 'hybrid').length;
+
+  // Optimization A: diff before write — build a content hash to detect changes
+  const contentHash = detours
+    .map((d) => `${d.id}:${d.confidenceScore}:${d.source}:${d.status}`)
+    .sort()
+    .join('|');
+
+  if (contentHash === lastPublishedHash) {
+    // Nothing changed — only update the metadata timestamp (1 write instead of N+1)
+    await firestore
+      .collection(CONFIG.metaCollection)
+      .doc(CONFIG.metaDoc)
+      .set(
+        { updatedAt: now, worker: { pollMs: currentPollMs, evidenceWindowMs: CONFIG.evidenceWindowMs } },
+        { merge: true }
+      );
+    snapshot = { ...snapshot, lastTickAt: now };
+    return;
+  }
+
+  // Detour state changed — do full batch write
+  const coll = firestore.collection(CONFIG.detourCollection);
+  const nextIds = new Set(detours.map((d) => d.id));
   const batch = firestore.batch();
 
   detours.forEach((detour) => {
     batch.set(coll.doc(detour.id), { ...detour, updatedAt: now }, { merge: true });
   });
-  existingIds.forEach((id) => {
+
+  // Optimization C: use cached IDs instead of reading full collection
+  lastPublishedIds.forEach((id) => {
     if (!nextIds.has(id)) batch.delete(coll.doc(id));
   });
 
-  const auto = detours.filter((d) => d.source === 'auto').length;
-  const official = detours.filter((d) => d.source === 'official').length;
-  const hybrid = detours.filter((d) => d.source === 'hybrid').length;
   batch.set(
     firestore.collection(CONFIG.metaCollection).doc(CONFIG.metaDoc),
-    { updatedAt: now, detourCount: detours.length, autoCount: auto, officialCount: official, hybridCount: hybrid, worker: { pollMs: CONFIG.pollMs, evidenceWindowMs: CONFIG.evidenceWindowMs } },
+    { updatedAt: now, detourCount: detours.length, autoCount: auto, officialCount: official, hybridCount: hybrid, worker: { pollMs: currentPollMs, evidenceWindowMs: CONFIG.evidenceWindowMs } },
     { merge: true }
   );
 
   await batch.commit();
+  lastPublishedHash = contentHash;
+  lastPublishedIds = nextIds;
   snapshot = {
     ...snapshot,
     lastPublishAt: now,
@@ -667,6 +699,15 @@ const tick = async (logger) => {
     const merged = mergeHybridDetours(autoDetours, alerts);
     await publishDetours(merged, logger);
     snapshot = { ...snapshot, lastTickAt: Date.now(), lastError: null };
+
+    // Optimization D: adaptive polling — speed up when detours are active
+    const desiredPollMs = merged.length > 0 ? POLL_ACTIVE_MS : POLL_NORMAL_MS;
+    if (desiredPollMs !== currentPollMs && timer) {
+      clearInterval(timer);
+      currentPollMs = desiredPollMs;
+      timer = setInterval(() => tick(logger), currentPollMs);
+      logger.info('[detour-worker] poll interval changed to %dms (active detours: %d)', currentPollMs, merged.length);
+    }
   } catch (error) {
     snapshot = { ...snapshot, lastTickAt: Date.now(), lastError: error.message };
     logger.error('[detour-worker] tick failed:', error);
@@ -686,9 +727,10 @@ const startDetourWorker = ({ logger }) => {
     };
   }
 
-  logger.info('[detour-worker] starting poll=%dms window=%dms', CONFIG.pollMs, CONFIG.evidenceWindowMs);
+  currentPollMs = POLL_NORMAL_MS;
+  logger.info('[detour-worker] starting poll=%dms (active=%dms) window=%dms', currentPollMs, POLL_ACTIVE_MS, CONFIG.evidenceWindowMs);
   tick(logger);
-  timer = setInterval(() => tick(logger), CONFIG.pollMs);
+  timer = setInterval(() => tick(logger), currentPollMs);
   return {
     enabled: true,
     getSnapshot: () => snapshot,

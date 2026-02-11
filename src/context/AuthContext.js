@@ -204,6 +204,24 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Sign in with Google
+  const signInWithGoogle = useCallback(async () => {
+    setAuthError(null);
+    try {
+      const result = await authService.signInWithGoogle();
+
+      if (!result.success && result.error) {
+        setAuthError(result.error);
+      }
+
+      return result;
+    } catch (error) {
+      const errorMessage = error.message || 'Google sign in failed';
+      setAuthError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }, []);
+
   // Send password reset email
   const sendPasswordReset = useCallback(async (email) => {
     return await authService.sendPasswordReset(email);
@@ -410,6 +428,7 @@ export const AuthProvider = ({ children }) => {
     // Auth methods
     signIn,
     signUp,
+    signInWithGoogle,
     signOut,
     sendPasswordReset,
 

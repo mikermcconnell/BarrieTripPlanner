@@ -4,8 +4,8 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "proxy": "node proxy-server.js",
     "web:dev": "start cmd /c \"node proxy-server.js\" && expo start --web",
@@ -36,7 +36,6 @@
     "firebase": "^12.8.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
-    "leaflet-polylineoffset": "^1.1.1",
     "protobufjs": "^8.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
