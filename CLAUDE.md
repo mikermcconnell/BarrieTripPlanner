@@ -28,6 +28,32 @@ ALWAYS verify route names against `src/navigation/TabNavigator.js` before using 
 ## GTFS & Transit Data
 Barrie Transit routes may have sub-variants (e.g., Route 8 splits into 8A and 8B). When debugging route display or trip pairing issues, always check for route_id variants in the GTFS data first. Be careful with round-trip pairing — trips must be temporally adjacent, not just directionally opposite.
 
+## Code Organization Rules
+
+### Share Logic, Not Copy It
+- **Pure functions** (math, formatting, validation) go in `src/utils/`. Check if one exists before writing inline.
+- **Feature state** (3+ related `useState` calls) goes in a custom hook in `src/hooks/`. Both `.js` and `.web.js` import the same hook.
+- **Never paste logic into a `.web.js` file.** Extract shared code first, then import in both platform files. Only rendering code should differ.
+
+### What Goes Where
+| `src/utils/` | `src/hooks/` | Screen files (`.js` / `.web.js`) |
+|---|---|---|
+| Pure functions | State + handlers | Platform-specific rendering |
+| Data transforms | Side effects | Map components (MapView vs Leaflet) |
+| Math (haversine, decode) | Feature logic bundles | Coordinate format conversion |
+
+### Key Shared Modules
+- `src/utils/geometryUtils.js` — `haversineDistance` (meters), `safeHaversineDistance` (null-safe). For km, use `haversineDistance(...) / 1000`.
+- `src/utils/polylineUtils.js` — `decodePolyline`, `findClosestPointIndex`, `extractShapeSegment`
+- `src/hooks/useRouteSelection.js` — route toggle/select/zoom (supports single + multi-select)
+- `src/hooks/useTripVisualization.js` — polyline segments, markers, vehicle matching from itineraries
+- `src/hooks/useMapTapPopup.js` — tap-to-get-address popup state and handlers
+
+### Guardrails
+- **500-line screen limit:** If a screen file exceeds 500 lines, extract hooks.
+- **No speculative exports:** Don't build components/exports until something imports them. Delete unused exports immediately.
+- **No inline haversine/polyline:** Always import from the shared utils. Never write a local copy.
+
 ## Development Environment
 - Proxy server needed for GTFS download (CORS): `node proxy-server.js`
 - Web dev: `npm run web:dev` (starts proxy + expo web)

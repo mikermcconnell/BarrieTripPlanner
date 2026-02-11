@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
@@ -13,6 +13,7 @@ const ARROW_WRAPPER_SIZE = 80;
 const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
   const animatedCoordinate = useAnimatedMarker(vehicle.coordinate);
   const [tracked, setTracked] = useState(true);
+  const freezeTimerRef = useRef(null);
 
   if (!vehicle.coordinate || !vehicle.coordinate.latitude || !vehicle.coordinate.longitude) {
     return null;
@@ -20,6 +21,25 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
 
   const routeLabel = vehicle.routeId || '?';
   const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
+  const roundedBearing = hasValidBearing ? Math.round(vehicle.bearing) : null;
+
+  useEffect(() => {
+    // Keep tracking view changes long enough for marker snapshot rendering on Android.
+    // Freezing too early can produce partially rendered marker bitmaps.
+    setTracked(true);
+    if (freezeTimerRef.current) {
+      clearTimeout(freezeTimerRef.current);
+    }
+    freezeTimerRef.current = setTimeout(() => {
+      setTracked(false);
+    }, 1500);
+
+    return () => {
+      if (freezeTimerRef.current) {
+        clearTimeout(freezeTimerRef.current);
+      }
+    };
+  }, [routeLabel, color, roundedBearing]);
 
   return (
     <Marker.Animated
@@ -28,15 +48,12 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
       onPress={() => onPress?.(vehicle)}
       zIndex={10}
       tracksViewChanges={tracked}
-      onLayout={() => {
-        // Stop tracking view changes after initial render for performance
-        if (tracked) setTimeout(() => setTracked(false), 500);
-      }}
     >
-      <View style={styles.wrapper}>
+      <View collapsable={false} style={styles.wrapper}>
         {/* Direction arrow */}
         {hasValidBearing && (
           <View
+            collapsable={false}
             style={[
               styles.arrowWrapper,
               { transform: [{ rotate: `${vehicle.bearing}deg` }] },
@@ -47,7 +64,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
         )}
 
         {/* Colored circle with bus icon + route number */}
-        <View style={[styles.circle, { backgroundColor: color }]}>
+        <View collapsable={false} style={[styles.circle, { backgroundColor: color }]}>
           <Svg width={12} height={12} viewBox="0 0 24 24">
             <Path d={BUS_ICON_PATH} fill="white" />
           </Svg>
@@ -92,7 +109,6 @@ const styles = StyleSheet.create({
     borderColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
     // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -106,6 +122,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
     lineHeight: 10,
+    marginTop: 2,
   },
 });
 
