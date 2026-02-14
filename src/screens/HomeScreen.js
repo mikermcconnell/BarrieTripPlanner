@@ -23,6 +23,7 @@ import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { decodePolyline } from '../utils/polylineUtils';
 import logger from '../utils/logger';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 
 // Native map components
 import BusMarker from '../components/BusMarker';
@@ -38,6 +39,7 @@ import TripSearchHeader from '../components/TripSearchHeader';
 import TripBottomSheet from '../components/TripBottomSheet';
 import MapTapPopup from '../components/MapTapPopup';
 import HomeScreenControls from '../components/HomeScreenControls';
+import FavoriteStopCard from '../components/FavoriteStopCard';
 import Svg, { Path } from 'react-native-svg';
 
 const STADIA_STYLE_URL = 'https://tiles.stadiamaps.com/styles/alidade_smooth.json';
@@ -217,6 +219,16 @@ const HomeScreen = ({ route }) => {
     selectRoute, resetTrip, setSelectedStop, setShowStops,
     hasSelection, showLocation,
   });
+
+  // Search history for recent trips
+  const { addToHistory, getHistory } = useSearchHistory();
+  const recentTrips = getHistory('trips');
+
+  const handleSelectRecentTrip = (trip) => {
+    setTripFrom(trip.from, trip.fromText);
+    setTripTo(trip.to, trip.toText);
+    searchTrips(trip.from, trip.to);
+  };
 
   const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(() =>
@@ -627,6 +639,16 @@ const HomeScreen = ({ route }) => {
         </View>
       )}
 
+      {/* Favorite Stop Quick View */}
+      {!isTripPlanningMode && (
+        <FavoriteStopCard
+          onPress={(stop) => {
+            setSelectedStop(stop);
+            setShowStops(true);
+          }}
+        />
+      )}
+
       {/* Bottom Action Bar - Stops toggle + Plan Trip */}
       {!isTripPlanningMode && (
         <BottomActionBar
@@ -656,6 +678,12 @@ const HomeScreen = ({ route }) => {
             onSelectedTimeChange={setSelectedTime}
             onSearch={() => {
               if (tripFromLocation && tripToLocation) {
+                addToHistory('trips', {
+                  from: tripFromLocation,
+                  to: tripToLocation,
+                  fromText: tripFromText,
+                  toText: tripToText,
+                });
                 searchTrips(tripFromLocation, tripToLocation);
               }
             }}
@@ -670,6 +698,8 @@ const HomeScreen = ({ route }) => {
               isLoading={isTripLoading}
               error={tripError}
               hasSearched={hasTripSearched}
+              recentTrips={recentTrips}
+              onSelectRecentTrip={handleSelectRecentTrip}
               onRetry={() => {
                 if (tripFromLocation && tripToLocation) {
                   searchTrips(tripFromLocation, tripToLocation);

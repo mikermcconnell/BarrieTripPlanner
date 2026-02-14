@@ -177,6 +177,15 @@ export const useTripPlanner = ({
 
       dispatch({ type: SEARCH_SUCCESS, payload: finalItineraries });
 
+      // Track successful trip planning
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('trip_planned', {
+          results_count: finalItineraries.length,
+          time_mode: state.timeMode,
+        });
+      } catch {}
+
       if (onItinerariesReady && finalItineraries.length > 0) {
         onItinerariesReady(finalItineraries[0]);
       }

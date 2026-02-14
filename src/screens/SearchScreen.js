@@ -10,13 +10,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useTransit } from '../context/TransitContext';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
 import {
   buildSelectedAddressParams,
   buildSelectedRouteParams,
   buildSelectedStopParams,
 } from '../utils/mapSelection';
+import { useSearchHistory } from '../hooks/useSearchHistory';
+import { trackEvent } from '../services/analyticsService';
 
 const SearchScreen = ({ navigation }) => {
   const { stops, routes, isLoadingStatic } = useTransit();
@@ -25,6 +27,7 @@ const SearchScreen = ({ navigation }) => {
   const [addressResults, setAddressResults] = useState([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const debounceRef = useRef(null);
+  const { addToHistory, getHistory, clearHistory } = useSearchHistory();
 
   // Debounced address search
   useEffect(() => {
@@ -86,19 +89,30 @@ const SearchScreen = ({ navigation }) => {
   }, [searchQuery, searchType, stops, routes, addressResults]);
 
   const handleSelectStop = (stop) => {
+    addToHistory('stops', stop);
+    trackEvent('stop_viewed', { stop_id: stop.id, stop_name: stop.name });
     navigation.navigate('Map', { screen: 'MapMain', params: buildSelectedStopParams(stop) });
   };
 
   const handleSelectRoute = (route) => {
+    addToHistory('routes', route);
+    trackEvent('route_viewed', { route_id: route.id, route_name: route.shortName });
     navigation.navigate('Map', { screen: 'MapMain', params: buildSelectedRouteParams(route) });
   };
 
   const handleSelectAddress = (address) => {
+    addToHistory('addresses', address);
+    trackEvent('search_performed', { type: 'address' });
     navigation.navigate('Map', {
       screen: 'MapMain',
       params: buildSelectedAddressParams(address),
     });
   };
+
+  // Check if we should show recent items (empty search input)
+  const showRecent = searchQuery.trim() === '' && searchType !== 'addresses';
+  const recentItems = getHistory(searchType);
+  const hasRecent = recentItems.length > 0;
 
   const renderStopItem = ({ item }) => (
     <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectStop(item)}>
@@ -263,6 +277,46 @@ const SearchScreen = ({ navigation }) => {
         style={styles.resultsList}
         contentContainerStyle={styles.resultsContent}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={showRecent && hasRecent ? (
+          <View style={styles.recentSection}>
+            <View style={styles.recentHeader}>
+              <Text style={styles.recentTitle}>Recent</Text>
+              <TouchableOpacity onPress={() => clearHistory(searchType)}>
+                <Text style={styles.recentClear}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            {recentItems.map((item) => {
+              const key = item.id?.toString() || item.displayName;
+              if (searchType === 'stops') {
+                return (
+                  <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectStop(item)}>
+                    <View style={styles.recentIcon}>
+                      <Text style={styles.stopIconText}>🕐</Text>
+                    </View>
+                    <View style={styles.resultContent}>
+                      <Text style={styles.resultTitle}>{item.name}</Text>
+                      <Text style={styles.resultSubtitle}>Stop #{item.code}</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </TouchableOpacity>
+                );
+              }
+              return (
+                <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectRoute(item)}>
+                  <View style={[styles.routeIcon, { backgroundColor: item.color || COLORS.primary }]}>
+                    <Text style={styles.routeIconText}>{item.shortName}</Text>
+                  </View>
+                  <View style={styles.resultContent}>
+                    <Text style={styles.resultTitle}>{item.longName || `Route ${item.shortName}`}</Text>
+                    <Text style={styles.resultSubtitle}>Route {item.shortName}</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={styles.recentDivider} />
+          </View>
+        ) : null}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No results found</Text>
@@ -425,6 +479,42 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: COLORS.grey400,
     marginLeft: SPACING.sm,
+  },
+  recentSection: {
+    marginBottom: SPACING.md,
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  recentTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  recentClear: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  recentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primarySubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  recentDivider: {
+    height: 1,
+    backgroundColor: COLORS.grey200,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   emptyContainer: {
     alignItems: 'center',

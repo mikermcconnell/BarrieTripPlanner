@@ -19,6 +19,7 @@ import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import TripBottomSheet from '../components/TripBottomSheet';
 import logger from '../utils/logger';
+import { useSearchHistory } from '../hooks/useSearchHistory';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { decodePolyline } from '../utils/polylineUtils';
@@ -28,6 +29,7 @@ import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../co
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import DetourBadge from '../components/DetourBadge';
+import FavoriteStopCard from '../components/FavoriteStopCard';
 import DetourDebugPanel from '../components/DetourDebugPanel';
 
 // SVG Icons as components - Refined for premium feel
@@ -211,6 +213,16 @@ const HomeScreen = ({ route }) => {
     selectRoute, resetTrip, setSelectedStop, setShowStops,
     hasSelection, showLocation,
   });
+
+  // Search history for recent trips
+  const { addToHistory, getHistory } = useSearchHistory();
+  const recentTrips = getHistory('trips');
+
+  const handleSelectRecentTrip = (trip) => {
+    setTripFrom(trip.from, trip.fromText);
+    setTripTo(trip.to, trip.toText);
+    searchTrips(trip.from, trip.to);
+  };
 
   const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
@@ -571,6 +583,12 @@ const HomeScreen = ({ route }) => {
           onSelectedTimeChange={setSelectedTime}
           onSearch={() => {
             if (tripFromLocation && tripToLocation) {
+              addToHistory('trips', {
+                from: tripFromLocation,
+                to: tripToLocation,
+                fromText: tripFromText,
+                toText: tripToText,
+              });
               searchTrips(tripFromLocation, tripToLocation);
             }
           }}
@@ -703,6 +721,16 @@ const HomeScreen = ({ route }) => {
         </View>
       )}
 
+      {/* Favorite Stop Quick View */}
+      {!isTripPlanningMode && !selectedStop && (
+        <FavoriteStopCard
+          onPress={(stop) => {
+            setSelectedStop(stop);
+            setShowStops(true);
+          }}
+        />
+      )}
+
       {/* Bottom Action Bar - unified frosted card */}
       {!isTripPlanningMode && !selectedStop && (
         <View style={styles.bottomActionBar}>
@@ -750,6 +778,8 @@ const HomeScreen = ({ route }) => {
             isLoading={isTripLoading}
             error={tripError}
             hasSearched={hasTripSearched}
+            recentTrips={recentTrips}
+            onSelectRecentTrip={handleSelectRecentTrip}
           />
         </SheetErrorBoundary>
       )}

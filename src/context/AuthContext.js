@@ -232,6 +232,7 @@ export const AuthProvider = ({ children }) => {
   // Add favorite stop
   const addFavoriteStop = useCallback(
     async (stop) => {
+      try { const { trackEvent } = require('../services/analyticsService'); trackEvent('favorite_added', { type: 'stop' }); } catch {}
       if (!user) {
         // Fallback to local storage for non-authenticated users
         const newFavorites = {

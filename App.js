@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,10 +6,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
-import { Platform } from 'react-native';
+import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TransitProvider } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import TabNavigator from './src/navigation/TabNavigator';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { COLORS } from './src/config/theme';
 import {
@@ -18,6 +20,18 @@ import {
   addNotificationResponseListener,
 } from './src/services/notificationService';
 import logger from './src/utils/logger';
+
+// Validate critical environment variables in production
+if (!__DEV__) {
+  const requiredVars = [
+    'EXPO_PUBLIC_FIREBASE_API_KEY',
+    'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+  ];
+  const missing = requiredVars.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
 
 // Initialize Sentry for crash reporting (production only)
 const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
@@ -117,8 +131,50 @@ function NotificationInitializer({ navigationRef }) {
   return null; // This component doesn't render anything
 }
 
+const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
+
 export default function App() {
   const navigationRef = useRef();
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+        if (!seen) setShowOnboarding(true);
+      } catch {
+        // If storage fails, skip onboarding
+      } finally {
+        setOnboardingChecked(true);
+      }
+    })();
+  }, []);
+
+  const handleOnboardingComplete = async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    } catch {
+      // Non-critical
+    }
+    setShowOnboarding(false);
+  };
+
+  if (!onboardingChecked) {
+    return (
+      <View style={appStyles.splash}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (showOnboarding) {
+    return (
+      <SafeAreaProvider>
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -138,3 +194,12 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+const appStyles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+  },
+});

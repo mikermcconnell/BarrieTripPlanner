@@ -20,9 +20,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
-// Map components - platform specific
-import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
-import { CUSTOM_MAP_STYLE } from '../config/mapStyle';
+// Map components - MapLibre
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
@@ -46,16 +45,54 @@ import { useStepProgress } from '../hooks/useStepProgress';
 import { enrichItineraryWithWalking } from '../services/walkingService';
 import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
+import RoutePolyline from '../components/RoutePolyline';
+
+const STADIA_STYLE_URL = 'https://tiles.stadiamaps.com/styles/alidade_smooth.json';
+
+// Helper: compute bounds from coordinates array [{latitude, longitude}]
+const computeBounds = (coords) => {
+  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  coords.forEach(c => {
+    minLat = Math.min(minLat, c.latitude || c.lat);
+    maxLat = Math.max(maxLat, c.latitude || c.lat);
+    minLng = Math.min(minLng, c.longitude || c.lon);
+    maxLng = Math.max(maxLng, c.longitude || c.lon);
+  });
+  return {
+    ne: [maxLng, maxLat],
+    sw: [minLng, minLat],
+  };
+};
 
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
   const mapRef = useRef(null);
+  const cameraRef = useRef(null);
 
-  // Enrich itinerary with real walking directions on mount
-  const [itinerary, setItinerary] = useState(route.params.itinerary);
+  const initialItinerary = route.params?.itinerary;
+  const [itinerary, setItinerary] = useState(initialItinerary);
+
+  // Track navigation start
   useEffect(() => {
+    if (initialItinerary) {
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('navigation_started', {
+          leg_count: initialItinerary.legs?.length || 0,
+        });
+      } catch {}
+    }
+  }, []);
+
+  // Guard + enrich: if no itinerary, go back; otherwise fetch walking directions
+  useEffect(() => {
+    if (!initialItinerary) {
+      navigation.goBack();
+      return;
+    }
+
     let cancelled = false;
-    enrichItineraryWithWalking(route.params.itinerary)
+    enrichItineraryWithWalking(initialItinerary)
       .then(enriched => {
         if (!cancelled) {
           logger.log('Walking directions enriched for navigation');
@@ -64,7 +101,9 @@ const NavigationScreen = ({ route }) => {
       })
       .catch(() => {}); // Keep using estimate-based itinerary
     return () => { cancelled = true; };
-  }, []);
+  }, [initialItinerary, navigation]);
+
+  if (!itinerary) return null;
 
   // Get route shapes from TransitContext
   const { shapes, routeShapeMapping } = useTransit();
@@ -142,40 +181,26 @@ const NavigationScreen = ({ route }) => {
   const tripBounds = useMemo(() => {
     if (!itinerary?.legs || itinerary.legs.length === 0) return null;
 
-    let minLat = Infinity, maxLat = -Infinity;
-    let minLon = Infinity, maxLon = -Infinity;
-
+    const points = [];
     itinerary.legs.forEach(leg => {
-      if (leg.from) {
-        minLat = Math.min(minLat, leg.from.lat);
-        maxLat = Math.max(maxLat, leg.from.lat);
-        minLon = Math.min(minLon, leg.from.lon);
-        maxLon = Math.max(maxLon, leg.from.lon);
-      }
-      if (leg.to) {
-        minLat = Math.min(minLat, leg.to.lat);
-        maxLat = Math.max(maxLat, leg.to.lat);
-        minLon = Math.min(minLon, leg.to.lon);
-        maxLon = Math.max(maxLon, leg.to.lon);
-      }
+      if (leg.from) points.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      if (leg.to) points.push({ latitude: leg.to.lat, longitude: leg.to.lon });
     });
 
-    // Add padding to bounds
-    const latPadding = (maxLat - minLat) * 0.15;
-    const lonPadding = (maxLon - minLon) * 0.15;
+    if (points.length === 0) return null;
 
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLon + maxLon) / 2,
-      latitudeDelta: Math.max(0.01, (maxLat - minLat) + latPadding),
-      longitudeDelta: Math.max(0.01, (maxLon - minLon) + lonPadding),
-    };
+    const bounds = computeBounds(points);
+    return bounds;
   }, [itinerary]);
 
   // Fit map to trip bounds on initial load
   useEffect(() => {
-    if (!hasInitializedMap && tripBounds && mapRef.current) {
-      mapRef.current.animateToRegion(tripBounds, 500);
+    if (!hasInitializedMap && tripBounds && cameraRef.current) {
+      cameraRef.current.setCamera({
+        bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
+        padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
+        animationDuration: 500,
+      });
       setHasInitializedMap(true);
     }
   }, [tripBounds, hasInitializedMap]);
@@ -203,19 +228,22 @@ const NavigationScreen = ({ route }) => {
 
   // Center map on user location when in follow mode
   useEffect(() => {
-    if (isFollowMode && userLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 500);
+    if (isFollowMode && userLocation && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [userLocation.longitude, userLocation.latitude],
+        zoomLevel: 17,
+        animationDuration: 500,
+      });
     }
   }, [userLocation, isFollowMode]);
 
   // Handle navigation completion
   useEffect(() => {
     if (isNavigationComplete) {
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('navigation_completed');
+      } catch {}
       Alert.alert(
         'Trip Complete!',
         'You have arrived at your destination.',
@@ -260,14 +288,11 @@ const NavigationScreen = ({ route }) => {
       const isTransit = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
 
       if (leg.legGeometry?.points) {
-        // Use encoded polyline if available (walking legs from walkingService)
         coordinates = decodePolyline(leg.legGeometry.points);
       } else if (isTransit && leg.route?.id && leg.from && leg.to) {
-        // For transit legs, use actual GTFS route shape
         const routeId = leg.route.id;
         const shapeIds = routeShapeMapping[routeId] || [];
 
-        // Try each shape and find the best match
         let bestSegment = [];
         let bestLength = 0;
 
@@ -283,7 +308,6 @@ const NavigationScreen = ({ route }) => {
             leg.to.lon
           );
 
-          // Use the segment with the most points (likely the correct direction)
           if (segment.length > bestLength) {
             bestLength = segment.length;
             bestSegment = segment;
@@ -295,7 +319,6 @@ const NavigationScreen = ({ route }) => {
           { latitude: leg.to.lat, longitude: leg.to.lon },
         ];
       } else if (leg.from && leg.to) {
-        // Fallback to straight line
         coordinates = [
           { latitude: leg.from.lat, longitude: leg.from.lon },
           { latitude: leg.to.lat, longitude: leg.to.lon },
@@ -331,7 +354,7 @@ const NavigationScreen = ({ route }) => {
     if (legs[0]?.from) {
       result.push({
         id: 'origin',
-        coordinate: { latitude: legs[0].from.lat, longitude: legs[0].from.lon },
+        coordinate: [legs[0].from.lon, legs[0].from.lat],
         type: 'origin',
         title: 'Start',
       });
@@ -342,7 +365,7 @@ const NavigationScreen = ({ route }) => {
     if (lastLeg?.to) {
       result.push({
         id: 'destination',
-        coordinate: { latitude: lastLeg.to.lat, longitude: lastLeg.to.lon },
+        coordinate: [lastLeg.to.lon, lastLeg.to.lat],
         type: 'destination',
         title: 'End',
       });
@@ -352,7 +375,7 @@ const NavigationScreen = ({ route }) => {
     if (currentLeg?.to && currentLegIndex < legs.length - 1) {
       result.push({
         id: 'current-destination',
-        coordinate: { latitude: currentLeg.to.lat, longitude: currentLeg.to.lon },
+        coordinate: [currentLeg.to.lon, currentLeg.to.lat],
         type: 'waypoint',
         title: currentLeg.to.name,
       });
@@ -362,7 +385,7 @@ const NavigationScreen = ({ route }) => {
     if (currentTransitLeg?.from && transitStatus === 'waiting') {
       result.push({
         id: 'bus-stop',
-        coordinate: { latitude: currentTransitLeg.from.lat, longitude: currentTransitLeg.from.lon },
+        coordinate: [currentTransitLeg.from.lon, currentTransitLeg.from.lat],
         type: 'bus-stop',
         title: currentTransitLeg.from.name,
       });
@@ -378,10 +401,10 @@ const NavigationScreen = ({ route }) => {
 
     return {
       id: 'tracked-bus',
-      coordinate: {
-        latitude: busProximity.vehicle.coordinate.latitude,
-        longitude: busProximity.vehicle.coordinate.longitude,
-      },
+      coordinate: [
+        busProximity.vehicle.coordinate.longitude,
+        busProximity.vehicle.coordinate.latitude,
+      ],
       color: currentTransitLeg.route?.color || COLORS.primary,
       routeShortName: currentTransitLeg.route?.shortName || '?',
       bearing: busProximity.vehicle.bearing,
@@ -395,10 +418,10 @@ const NavigationScreen = ({ route }) => {
 
     return {
       id: 'next-bus',
-      coordinate: {
-        latitude: nextTransitBusProximity.vehicle.coordinate.latitude,
-        longitude: nextTransitBusProximity.vehicle.coordinate.longitude,
-      },
+      coordinate: [
+        nextTransitBusProximity.vehicle.coordinate.longitude,
+        nextTransitBusProximity.vehicle.coordinate.latitude,
+      ],
       color: nextTransitLeg.route?.color || COLORS.primary,
       routeShortName: nextTransitLeg.route?.shortName || '?',
       bearing: nextTransitBusProximity.vehicle.bearing,
@@ -414,7 +437,6 @@ const NavigationScreen = ({ route }) => {
   const confirmExit = () => {
     setShowExitModal(false);
     stopTracking();
-    // Navigate back to MapMain (home screen) and reset trip planning mode
     navigation.navigate('MapMain', { exitTripPlanning: true });
   };
 
@@ -427,32 +449,34 @@ const NavigationScreen = ({ route }) => {
   const toggleFollowMode = () => {
     setIsFollowMode(!isFollowMode);
     if (!isFollowMode && userLocation) {
-      mapRef.current?.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 500);
+      cameraRef.current?.setCamera({
+        centerCoordinate: [userLocation.longitude, userLocation.latitude],
+        zoomLevel: 17,
+        animationDuration: 500,
+      });
     }
   };
 
   // Jump to current location (one-time, doesn't enable follow mode)
   const jumpToMyLocation = () => {
-    if (userLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 500);
+    if (userLocation && cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: [userLocation.longitude, userLocation.latitude],
+        zoomLevel: 17,
+        animationDuration: 500,
+      });
     }
   };
 
   // Show full trip overview
   const showTripOverview = () => {
-    if (tripBounds && mapRef.current) {
+    if (tripBounds && cameraRef.current) {
       setIsFollowMode(false);
-      mapRef.current.animateToRegion(tripBounds, 500);
+      cameraRef.current.setCamera({
+        bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
+        padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
+        animationDuration: 500,
+      });
     }
   };
 
@@ -477,12 +501,10 @@ const NavigationScreen = ({ route }) => {
 
     let remaining = 0;
 
-    // Add remaining distance in current leg
     if (currentLeg && distanceToDestination) {
       remaining += distanceToDestination;
     }
 
-    // Add distance from all subsequent legs
     for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
       remaining += itinerary.legs[i].distance || 0;
     }
@@ -490,91 +512,112 @@ const NavigationScreen = ({ route }) => {
     return remaining;
   }, [itinerary, currentLegIndex, currentLeg, distanceToDestination]);
 
+  // Initial camera settings
+  const initialCameraCenter = useMemo(() => {
+    if (!itinerary?.legs || itinerary.legs.length === 0) {
+      return [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude];
+    }
+    const first = itinerary.legs[0];
+    if (first?.from) return [first.from.lon, first.from.lat];
+    return [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude];
+  }, [itinerary]);
+
   return (
     <View style={styles.container}>
       {/* Map */}
-      <MapView
-        ref={mapRef}
+      <View
         style={styles.map}
-        provider={PROVIDER_DEFAULT}
-        initialRegion={tripBounds || MAP_CONFIG.INITIAL_REGION}
-        showsUserLocation
-        showsMyLocationButton={false}
-        showsCompass={false}
-        rotateEnabled
-        pitchEnabled={false}
-        customMapStyle={CUSTOM_MAP_STYLE}
-        onPanDrag={() => setIsFollowMode(false)}
+        onTouchStart={() => setIsFollowMode(false)}
       >
-        {/* Route polylines */}
-        {routePolylines.map((route) => (
-          <Polyline
-            key={route.id}
-            coordinates={route.coordinates}
-            strokeColor={route.color}
-            strokeWidth={route.strokeWidth}
-            lineDashPattern={route.lineDashPattern}
-            strokeOpacity={route.opacity}
+        <MapLibreGL.MapView
+          ref={mapRef}
+          style={styles.map}
+          styleURL={STADIA_STYLE_URL}
+          rotateEnabled
+          pitchEnabled={false}
+          attributionPosition={{ bottom: 8, left: 8 }}
+          logoEnabled={false}
+        >
+          <MapLibreGL.Camera
+            ref={cameraRef}
+            defaultSettings={{
+              centerCoordinate: initialCameraCenter,
+              zoomLevel: 14,
+            }}
           />
-        ))}
+          <MapLibreGL.UserLocation visible={true} />
 
-        {/* Markers */}
-        {markers.map((marker) => (
-          <Marker
-            key={marker.id}
-            coordinate={marker.coordinate}
-            title={marker.title}
-          >
-            <View
-              style={[
-                styles.marker,
-                marker.type === 'origin' && styles.markerOrigin,
-                marker.type === 'destination' && styles.markerDestination,
-                marker.type === 'waypoint' && styles.markerWaypoint,
-                marker.type === 'bus-stop' && styles.markerBusStop,
-              ]}
+          {/* Route polylines */}
+          {routePolylines.map((routeLine) => (
+            <RoutePolyline
+              key={routeLine.id}
+              id={`nav-${routeLine.id}`}
+              coordinates={routeLine.coordinates}
+              color={routeLine.color}
+              strokeWidth={routeLine.strokeWidth}
+              lineDashPattern={routeLine.lineDashPattern}
+              opacity={routeLine.opacity}
+            />
+          ))}
+
+          {/* Markers */}
+          {markers.map((marker) => (
+            <MapLibreGL.PointAnnotation
+              key={marker.id}
+              id={`nav-marker-${marker.id}`}
+              coordinate={marker.coordinate}
             >
-              {marker.type === 'bus-stop' ? (
-                <Text style={styles.busStopIcon}>🚏</Text>
-              ) : (
-                <View style={styles.markerInner} />
-              )}
-            </View>
-          </Marker>
-        ))}
-
-        {/* Tracked Bus Marker */}
-        {trackedBusMarker && (
-          <Marker
-            key={trackedBusMarker.id}
-            coordinate={trackedBusMarker.coordinate}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.busMarkerContainer}>
-              <View style={[styles.busMarker, { backgroundColor: trackedBusMarker.color }]}>
-                <Text style={styles.busMarkerText}>{trackedBusMarker.routeShortName}</Text>
+              <View
+                style={[
+                  styles.marker,
+                  marker.type === 'origin' && styles.markerOrigin,
+                  marker.type === 'destination' && styles.markerDestination,
+                  marker.type === 'waypoint' && styles.markerWaypoint,
+                  marker.type === 'bus-stop' && styles.markerBusStop,
+                ]}
+              >
+                {marker.type === 'bus-stop' ? (
+                  <Text style={styles.busStopIcon}>🚏</Text>
+                ) : (
+                  <View style={styles.markerInner} />
+                )}
               </View>
-              <View style={[styles.busMarkerArrow, { borderBottomColor: trackedBusMarker.color }]} />
-            </View>
-          </Marker>
-        )}
+            </MapLibreGL.PointAnnotation>
+          ))}
 
-        {/* Next Bus Marker (shown during walking legs) */}
-        {nextBusMarker && (
-          <Marker
-            key={nextBusMarker.id}
-            coordinate={nextBusMarker.coordinate}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.busMarkerContainer}>
-              <View style={[styles.busMarker, { backgroundColor: nextBusMarker.color }]}>
-                <Text style={styles.busMarkerText}>{nextBusMarker.routeShortName}</Text>
+          {/* Tracked Bus Marker */}
+          {trackedBusMarker && (
+            <MapLibreGL.PointAnnotation
+              id={`nav-${trackedBusMarker.id}`}
+              coordinate={trackedBusMarker.coordinate}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.busMarkerContainer}>
+                <View style={[styles.busMarker, { backgroundColor: trackedBusMarker.color }]}>
+                  <Text style={styles.busMarkerText}>{trackedBusMarker.routeShortName}</Text>
+                </View>
+                <View style={[styles.busMarkerArrow, { borderBottomColor: trackedBusMarker.color }]} />
               </View>
-              <View style={[styles.busMarkerArrow, { borderBottomColor: nextBusMarker.color }]} />
-            </View>
-          </Marker>
-        )}
-      </MapView>
+            </MapLibreGL.PointAnnotation>
+          )}
+
+          {/* Next Bus Marker (shown during walking legs) */}
+          {nextBusMarker && (
+            <MapLibreGL.PointAnnotation
+              id={`nav-${nextBusMarker.id}`}
+              coordinate={nextBusMarker.coordinate}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.busMarkerContainer}>
+                <View style={[styles.busMarker, { backgroundColor: nextBusMarker.color }]}>
+                  <Text style={styles.busMarkerText}>{nextBusMarker.routeShortName}</Text>
+                </View>
+                <View style={[styles.busMarkerArrow, { borderBottomColor: nextBusMarker.color }]} />
+              </View>
+            </MapLibreGL.PointAnnotation>
+          )}
+        </MapLibreGL.MapView>
+      </View>
 
       {/* Navigation Header */}
       <NavigationHeader

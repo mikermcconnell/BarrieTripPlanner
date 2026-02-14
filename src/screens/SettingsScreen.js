@@ -14,6 +14,7 @@ import {
   saveNotificationSettings,
   registerForPushNotifications,
 } from '../services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
@@ -194,6 +195,16 @@ const SettingsScreen = ({ navigation }) => {
               'High Contrast',
               'Improved visibility for map elements',
               () => Alert.alert('Coming Soon', 'This feature is in development'),
+              false
+            )}
+            {renderActionRow(
+              '🎓',
+              'Replay Tutorial',
+              'See the app walkthrough again',
+              async () => {
+                await AsyncStorage.removeItem('@barrie_transit_onboarding_seen');
+                Alert.alert('Tutorial Reset', 'The tutorial will show next time you open the app.');
+              },
               false
             )}
           </>

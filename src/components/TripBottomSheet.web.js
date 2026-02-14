@@ -48,6 +48,8 @@ const TripBottomSheet = ({
   isLoading,
   error,
   hasSearched,
+  recentTrips = [],
+  onSelectRecentTrip,
 }) => {
   // Sheet states: 'peek' (10%), 'default' (42%), 'expanded' (60%)
   const [sheetState, setSheetState] = useState('default');
@@ -104,6 +106,29 @@ const TripBottomSheet = ({
           <EmptyIcon size={48} color={COLORS.grey400} />
           <Text style={styles.emptyTitle}>Plan your trip</Text>
           <Text style={styles.emptySubtext}>Enter your destination above to see available routes</Text>
+          {recentTrips.length > 0 && (
+            <View style={styles.recentSection}>
+              <Text style={styles.recentTitle}>Recent Trips</Text>
+              {recentTrips.slice(0, 5).map((trip, idx) => (
+                <TouchableOpacity
+                  key={`recent-trip-${idx}`}
+                  style={styles.recentTripItem}
+                  onPress={() => onSelectRecentTrip?.(trip)}
+                >
+                  <Text style={styles.recentTripIcon}>🕐</Text>
+                  <View style={styles.recentTripContent}>
+                    <Text style={styles.recentTripText} numberOfLines={1}>
+                      {trip.fromText}
+                    </Text>
+                    <Text style={styles.recentTripArrow}>→</Text>
+                    <Text style={styles.recentTripText} numberOfLines={1}>
+                      {trip.toText}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       );
     }
@@ -243,6 +268,47 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     textAlign: 'center',
+  },
+  recentSection: {
+    width: '100%',
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+  },
+  recentTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+  },
+  recentTripItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey100,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    marginBottom: SPACING.xs,
+    cursor: 'pointer',
+  },
+  recentTripIcon: {
+    fontSize: 16,
+    marginRight: SPACING.sm,
+  },
+  recentTripContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  recentTripText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  recentTripArrow: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   resultsHeader: {
     paddingHorizontal: SPACING.md,
