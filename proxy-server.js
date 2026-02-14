@@ -44,6 +44,13 @@ const LOCATIONIQ_KEY = process.env.LOCATIONIQ_API_KEY || process.env.EXPO_PUBLIC
 const LOCATIONIQ_BASE = 'https://us1.locationiq.com/v1';
 const BARRIE_BOUNDS = '-79.85,44.25,-79.55,44.50';
 
+// Allowed domains for CORS proxy — only transit data sources
+const PROXY_ALLOWED_DOMAINS = [
+  'www.myridebarrie.ca',
+  'myridebarrie.ca',
+  'barrie.ca',
+];
+
 if (!LOCATIONIQ_KEY) {
   console.warn('\nWARNING: No LocationIQ API key found. API proxy routes will not work.');
   console.warn('Set LOCATIONIQ_API_KEY or EXPO_PUBLIC_LOCATIONIQ_API_KEY in .env\n');
@@ -98,6 +105,37 @@ function sendError(res, status, message) {
   res.end(JSON.stringify({ error: message }));
 }
 
+// ─── Simple Rate Limiter ─────────────────────────────────────────
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 60;  // 60 requests per minute per IP
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+
+  if (!record || now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
+    rateLimitMap.set(ip, { windowStart: now, count: 1 });
+    return true;
+  }
+
+  record.count += 1;
+  if (record.count > RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  return true;
+}
+
+// Clean up stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitMap) {
+    if (now - record.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 300000);
+
 // ─── Server ──────────────────────────────────────────────────────
 
 const server = http.createServer((req, res) => {
@@ -107,6 +145,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(204);
     res.end();
     return;
+  }
+
+  const clientIp = req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIp)) {
+    return sendError(res, 429, 'Too many requests');
   }
 
   const parsedUrl = url.parse(req.url, true);
@@ -203,6 +246,17 @@ const server = http.createServer((req, res) => {
 
     if (!targetUrl) {
       return sendError(res, 400, 'Missing url parameter');
+    }
+
+    // Validate target domain against whitelist
+    try {
+      const targetCheck = url.parse(targetUrl);
+      if (!PROXY_ALLOWED_DOMAINS.includes(targetCheck.hostname)) {
+        console.warn(`[${new Date().toLocaleTimeString()}] Blocked proxy request to: ${targetCheck.hostname}`);
+        return sendError(res, 403, 'Domain not allowed');
+      }
+    } catch (e) {
+      return sendError(res, 400, 'Invalid URL');
     }
 
     console.log(`[${new Date().toLocaleTimeString()}] Proxying: ${targetUrl}`);

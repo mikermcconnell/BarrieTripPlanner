@@ -71,9 +71,29 @@ const parseCSVLine = (line) => {
  */
 const downloadGTFSZip = async () => {
   try {
-    // Use fetchWithCORS to handle web browser CORS restrictions
-    const response = await fetchWithCORS(GTFS_URLS.STATIC_ZIP);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    // Retry up to 3 times with exponential backoff for this critical download
+    let response;
+    let lastError;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await fetchWithCORS(GTFS_URLS.STATIC_ZIP);
+        if (response.ok) break;
+        lastError = new Error(`HTTP error! status: ${response.status}`);
+        if (response.status >= 400 && response.status < 500) break; // Don't retry client errors
+      } catch (fetchError) {
+        lastError = fetchError;
+        if (attempt < 2) {
+          const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
+          logger.warn(`GTFS download attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    if (!response || !response.ok) {
+      throw lastError || new Error('GTFS download failed after retries');
+    }
 
     const arrayBuffer = await response.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
