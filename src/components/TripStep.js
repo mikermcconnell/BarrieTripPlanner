@@ -4,6 +4,13 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../con
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { DelayIndicator } from './DelayBadge';
 
+/** Format stop name with stop number when available */
+const formatStopName = (stop) => {
+  if (!stop) return '';
+  const code = stop.stopCode || stop.stopId;
+  return code ? `${stop.name} (#${code})` : stop.name;
+};
+
 const TripStep = ({ leg, isFirst, isLast }) => {
   const startTime = formatTimeFromTimestamp(leg.startTime);
   const endTime = formatTimeFromTimestamp(leg.endTime);
@@ -34,7 +41,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
             {isBus && <DelayIndicator delaySeconds={delaySeconds} isRealtime={isRealtime} />}
           </View>
           <Text style={styles.location} numberOfLines={1}>
-            {leg.from.name}
+            {formatStopName(leg.from)}
           </Text>
         </View>
 
@@ -88,7 +95,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
           <View style={styles.locationRow}>
             <Text style={styles.time}>{endTime}</Text>
             <Text style={styles.location} numberOfLines={1}>
-              {leg.to.name}
+              {formatStopName(leg.to)}
             </Text>
           </View>
         )}

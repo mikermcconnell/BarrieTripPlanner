@@ -641,7 +641,7 @@ const NavigationScreen = ({ route }) => {
             shouldGetOff={busProximity.shouldGetOff}
             onBoardBus={boardBus}
             onAlightBus={alightBus}
-            alightingStopName={currentLeg?.to?.name}
+            alightingStopName={currentLeg?.to ? `${currentLeg.to.name}${currentLeg.to.stopCode ? ` (#${currentLeg.to.stopCode})` : ''}` : undefined}
             scheduledDeparture={currentLeg?.startTime}
             isRealtime={currentLeg?.isRealtime || false}
             delaySeconds={currentLeg?.delaySeconds || 0}

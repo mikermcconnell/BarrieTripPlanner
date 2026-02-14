@@ -16,6 +16,13 @@ import {
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import { formatDuration, formatDistance } from '../../services/tripService';
 
+/** Format stop name with stop number when available */
+const formatStopName = (stop) => {
+  if (!stop) return '';
+  const code = stop.stopCode || stop.stopId;
+  return code ? `${stop.name} (#${code})` : stop.name;
+};
+
 const StepOverviewSheet = ({
   legs,
   currentLegIndex,
@@ -123,8 +130,8 @@ const StepOverviewSheet = ({
                       numberOfLines={1}
                     >
                       {isWalk
-                        ? `Walk to ${leg.to.name}`
-                        : leg.headsign || `Ride to ${leg.to.name}`}
+                        ? `Walk to ${formatStopName(leg.to)}`
+                        : leg.headsign || `Ride to ${formatStopName(leg.to)}`}
                     </Text>
                     <Text style={styles.legSubtitle}>
                       {formatDuration(leg.duration)}
@@ -156,7 +163,7 @@ const StepOverviewSheet = ({
               <Text style={styles.destinationIcon}>📍</Text>
             </View>
             <Text style={styles.destinationText}>
-              {legs[legs.length - 1]?.to?.name || 'Destination'}
+              {formatStopName(legs[legs.length - 1]?.to) || 'Destination'}
             </Text>
           </View>
         </ScrollView>
