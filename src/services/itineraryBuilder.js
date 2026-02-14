@@ -7,6 +7,7 @@
 
 import { ROUTE_COLORS, ROUTING_CONFIG } from '../config/constants';
 import { haversineDistance } from '../utils/geometryUtils';
+import { extractShapeSegment, encodePolyline } from '../utils/polylineUtils';
 
 /**
  * Build an OTP-compatible itinerary from RAPTOR result
@@ -132,6 +133,8 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         headsign: segment.headsign,
         tripId: segment.tripId,
         intermediateStops,
+        shapes: routingData.shapes,
+        tripIndex,
       }));
 
       totalTransitTime += duration;
@@ -174,7 +177,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
   // Merge consecutive transit legs on the same route
   // RAPTOR may split a single ride into multiple segments (different tripIds)
   // but if the route is the same, the passenger stays on the bus — no transfer needed
-  const mergedLegs = mergeSameRouteLegs(legs);
+  const mergedLegs = mergeSameRouteLegs(legs, routingData);
 
   // Add final walk to destination
   if (walkToDestSeconds > 0) {
@@ -245,7 +248,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
  *
  * Also removes any WALK (transfer) legs sandwiched between same-route transit legs.
  */
-const mergeSameRouteLegs = (legs) => {
+const mergeSameRouteLegs = (legs, routingData) => {
   if (legs.length <= 1) return legs;
 
   const merged = [];
@@ -317,6 +320,18 @@ const mergeSameRouteLegs = (legs) => {
       }
     }
 
+    // Rebuild geometry if legs were merged (from/to span changed)
+    if (j > i + 1 && routingData) {
+      mergedLeg.legGeometry = buildTransitLegGeometry({
+        tripId: mergedLeg.tripId,
+        tripIndex: routingData.tripIndex,
+        shapes: routingData.shapes,
+        from: mergedLeg.from,
+        to: mergedLeg.to,
+        intermediateStops: mergedLeg.intermediateStops,
+      });
+    }
+
     merged.push(mergedLeg);
     i = j;
   }
@@ -358,6 +373,38 @@ const buildWalkLeg = ({ startTime, endTime, duration, distance, from, to }) => {
 };
 
 /**
+ * Build geometry for a transit leg using GTFS shape data
+ * Falls back to straight lines through stops if shape data is unavailable
+ */
+const buildTransitLegGeometry = ({ tripId, tripIndex, shapes, from, to, intermediateStops }) => {
+  // Try to get shape data from the trip
+  const trip = tripIndex?.[tripId];
+  const shapeId = trip?.shapeId;
+  const shapeCoords = shapeId ? shapes?.[shapeId] : null;
+
+  if (shapeCoords && shapeCoords.length >= 2) {
+    const segment = extractShapeSegment(shapeCoords, from.lat, from.lon, to.lat, to.lon);
+    if (segment && segment.length >= 2) {
+      return {
+        points: encodePolyline(segment),
+        length: segment.length,
+      };
+    }
+  }
+
+  // Fallback: straight lines through stops
+  const fallbackCoords = [
+    { latitude: from.lat, longitude: from.lon },
+    ...(intermediateStops || []).map(s => ({ latitude: s.lat, longitude: s.lon })),
+    { latitude: to.lat, longitude: to.lon },
+  ];
+  return {
+    points: encodePolyline(fallbackCoords),
+    length: fallbackCoords.length,
+  };
+};
+
+/**
  * Build a transit (bus) leg
  */
 const buildTransitLeg = ({
@@ -370,6 +417,8 @@ const buildTransitLeg = ({
   headsign,
   tripId,
   intermediateStops,
+  shapes,
+  tripIndex,
 }) => ({
   mode: 'BUS',
   startTime,
@@ -386,7 +435,7 @@ const buildTransitLeg = ({
   headsign,
   tripId,
   intermediateStops,
-  legGeometry: null,
+  legGeometry: buildTransitLegGeometry({ tripId, tripIndex, shapes, from, to, intermediateStops }),
   steps: null,
 });
 
@@ -474,41 +523,3 @@ const getRouteInfo = (routingData, routeId) => {
   return null;
 };
 
-/**
- * Build geometry polyline for map display
- * Uses shape data if available, otherwise creates straight lines
- */
-export const buildLegGeometry = (leg, shapes, routeShapeMapping) => {
-  if (leg.mode === 'WALK') {
-    // Simple straight line for walking
-    return {
-      points: encodePolyline([
-        [leg.from.lat, leg.from.lon],
-        [leg.to.lat, leg.to.lon],
-      ]),
-      length: 2,
-    };
-  }
-
-  // For transit, try to use shape data
-  // This is a simplified version - full implementation would slice the shape
-  // between boarding and alighting stops
-  return {
-    points: encodePolyline([
-      [leg.from.lat, leg.from.lon],
-      ...(leg.intermediateStops || []).map((s) => [s.lat, s.lon]),
-      [leg.to.lat, leg.to.lon],
-    ]),
-    length: (leg.intermediateStops?.length || 0) + 2,
-  };
-};
-
-/**
- * Encode coordinates as polyline (simplified version)
- * Full implementation would use Google's polyline encoding algorithm
- */
-const encodePolyline = (coords) => {
-  // For now, just return JSON-encoded coordinates
-  // Real implementation would use proper polyline encoding
-  return JSON.stringify(coords);
-};

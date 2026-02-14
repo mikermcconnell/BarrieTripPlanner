@@ -323,33 +323,17 @@ export const buildStopTimesIndex = (stopTimes) => {
 export const buildRoutingData = (gtfsData) => {
   const { stops, trips, stopTimes, calendar, calendarDates } = gtfsData;
 
-  logger.log('Building routing data structures...');
-  const startTime = Date.now();
-
   // Build all indexes
   const stopDepartures = buildStopDeparturesIndex(stopTimes, trips);
-  logger.log(`  Stop departures index: ${Object.keys(stopDepartures).length} stops`);
-
   const routeStopSequences = buildRouteStopSequences(stopTimes, trips);
-  logger.log(`  Route sequences: ${Object.keys(routeStopSequences).length} routes`);
-
   const transfers = buildTransferGraph(stops);
-  const totalTransfers = Object.values(transfers).reduce((sum, t) => sum + t.length, 0);
-  logger.log(`  Transfer graph: ${totalTransfers} connections`);
-
   const tripIndex = buildTripIndex(trips);
   const stopIndex = buildStopIndex(stops);
   const stopRoutes = buildStopRoutesIndex(stopDepartures);
-
   const serviceCalendar = buildServiceCalendar(calendar, calendarDates);
-  logger.log(`  Service calendar: ${Object.keys(serviceCalendar).length} days`);
 
   // Build stop times index for O(1) lookup during routing
   const stopTimesIndex = buildStopTimesIndex(stopTimes);
-  logger.log(`  Stop times index: ${Object.keys(stopTimesIndex).length} entries`);
-
-  const buildTime = Date.now() - startTime;
-  logger.log(`Routing data built in ${buildTime}ms`);
 
   return {
     stopDepartures,

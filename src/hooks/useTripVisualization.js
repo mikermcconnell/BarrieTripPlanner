@@ -6,7 +6,16 @@
  */
 import { useMemo } from 'react';
 import { COLORS } from '../config/theme';
-import { decodePolyline } from '../utils/polylineUtils';
+import { decodePolyline, findClosestPointIndex } from '../utils/polylineUtils';
+
+/** Snap a lat/lon to the nearest point on a decoded polyline */
+const snapToPolyline = (lat, lon, polylineCoords) => {
+  if (!polylineCoords || polylineCoords.length === 0) {
+    return { latitude: lat, longitude: lon };
+  }
+  const idx = findClosestPointIndex(polylineCoords, lat, lon);
+  return polylineCoords[idx];
+};
 
 export const useTripVisualization = ({
   isTripPlanningMode,
@@ -19,16 +28,27 @@ export const useTripVisualization = ({
       ? itineraries[selectedItineraryIndex] ?? null
       : null;
 
+  // Decoded polyline per leg index (used for snapping stop markers)
+  const decodedLegPolylines = useMemo(() => {
+    if (!selectedItinerary) return [];
+    return selectedItinerary.legs.map((leg) => {
+      if (leg.legGeometry?.points) {
+        return decodePolyline(leg.legGeometry.points);
+      }
+      return [];
+    });
+  }, [selectedItinerary]);
+
   // Decoded polyline segments for each leg
   const tripRouteCoordinates = useMemo(() => {
     if (!selectedItinerary) return [];
 
     const routes = [];
     selectedItinerary.legs.forEach((leg, index) => {
+      const decoded = decodedLegPolylines[index];
       const coords = [];
 
-      if (leg.legGeometry?.points) {
-        const decoded = decodePolyline(leg.legGeometry.points);
+      if (decoded && decoded.length > 0) {
         coords.push(...decoded);
       } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
         if (leg.from) {
@@ -58,7 +78,7 @@ export const useTripVisualization = ({
     });
 
     return routes;
-  }, [selectedItinerary]);
+  }, [selectedItinerary, decodedLegPolylines]);
 
   // Origin + destination markers
   const tripMarkers = useMemo(() => {
@@ -89,7 +109,7 @@ export const useTripVisualization = ({
     return markers;
   }, [selectedItinerary]);
 
-  // Intermediate stop dots along transit legs
+  // Intermediate stop dots along transit legs (snapped to polyline)
   const intermediateStopMarkers = useMemo(() => {
     if (!selectedItinerary) return [];
 
@@ -97,11 +117,13 @@ export const useTripVisualization = ({
     selectedItinerary.legs.forEach((leg, legIndex) => {
       if (leg.mode === 'WALK' || !leg.intermediateStops) return;
 
+      const polyline = decodedLegPolylines[legIndex];
+
       leg.intermediateStops.forEach((stop, stopIndex) => {
         if (stop.lat && stop.lon) {
           stopMarkers.push({
             id: `stop-${legIndex}-${stopIndex}`,
-            coordinate: { latitude: stop.lat, longitude: stop.lon },
+            coordinate: snapToPolyline(stop.lat, stop.lon, polyline),
             name: stop.name,
             color: leg.route?.color || COLORS.primary,
           });
@@ -110,9 +132,9 @@ export const useTripVisualization = ({
     });
 
     return stopMarkers;
-  }, [selectedItinerary]);
+  }, [selectedItinerary, decodedLegPolylines]);
 
-  // Boarding / alighting markers with labels
+  // Boarding / alighting markers with labels (snapped to polyline)
   const boardingAlightingMarkers = useMemo(() => {
     if (!selectedItinerary) return [];
 
@@ -122,11 +144,12 @@ export const useTripVisualization = ({
 
       const routeColor = leg.route?.color || COLORS.primary;
       const routeName = leg.route?.shortName || '';
+      const polyline = decodedLegPolylines[legIndex];
 
       if (leg.from && leg.from.lat && leg.from.lon) {
         markers.push({
           id: `boarding-${legIndex}`,
-          coordinate: { latitude: leg.from.lat, longitude: leg.from.lon },
+          coordinate: snapToPolyline(leg.from.lat, leg.from.lon, polyline),
           type: 'boarding',
           stopName: leg.from.name,
           stopCode: leg.from.stopCode || leg.from.stopId,
@@ -138,7 +161,7 @@ export const useTripVisualization = ({
       if (leg.to && leg.to.lat && leg.to.lon) {
         markers.push({
           id: `alighting-${legIndex}`,
-          coordinate: { latitude: leg.to.lat, longitude: leg.to.lon },
+          coordinate: snapToPolyline(leg.to.lat, leg.to.lon, polyline),
           type: 'alighting',
           stopName: leg.to.name,
           stopCode: leg.to.stopCode || leg.to.stopId,
@@ -149,7 +172,7 @@ export const useTripVisualization = ({
     });
 
     return markers;
-  }, [selectedItinerary]);
+  }, [selectedItinerary, decodedLegPolylines]);
 
   // Vehicles matching the selected itinerary's trips
   const tripVehicles = useMemo(() => {

@@ -87,7 +87,6 @@ export const TransitProvider = ({ children }) => {
     });
 
     setProcessedShapes(processed);
-    logger.log(`Processed ${shapeIds.length} shapes for rendering`);
 
     // Compute overlap offsets
     const offsets = computeOverlapOffsets(
@@ -96,10 +95,6 @@ export const TransitProvider = ({ children }) => {
       SHAPE_PROCESSING.OVERLAP_CORRIDOR_METERS
     );
     setShapeOverlapOffsets(offsets);
-
-    if (Object.keys(offsets).length > 0) {
-      logger.log(`Detected overlap offsets for ${Object.keys(offsets).length} shapes`);
-    }
   }, []);
 
   /**
@@ -136,6 +131,7 @@ export const TransitProvider = ({ children }) => {
             const routing = buildRoutingData(cachedData);
             // Add routes for itinerary building
             routing.routes = cachedData.routes;
+            routing.shapes = cachedData.shapes || {};
             setRoutingData(routing);
             setIsRoutingReady(true);
           } catch (routingError) {
@@ -150,8 +146,6 @@ export const TransitProvider = ({ children }) => {
 
     try {
       const data = await fetchAllStaticData();
-      logger.log('Routes loaded:', data.routes.map(r => r.id).join(', '));
-      logger.log('Route shape mappings:', Object.keys(data.routeShapeMapping).join(', '));
       setRoutes(data.routes);
       setStops(data.stops);
       setShapes(data.shapes);
@@ -168,9 +162,9 @@ export const TransitProvider = ({ children }) => {
         const routing = buildRoutingData(data);
         // Add routes for itinerary building
         routing.routes = data.routes;
+        routing.shapes = data.shapes || {};
         setRoutingData(routing);
         setIsRoutingReady(true);
-        logger.log('Routing data ready for local trip planning');
       } catch (routingError) {
         logger.error('Failed to build routing data:', routingError);
         // Continue without local routing - will fall back to OTP
@@ -201,6 +195,7 @@ export const TransitProvider = ({ children }) => {
           try {
             const routing = buildRoutingData(cachedData);
             routing.routes = cachedData.routes;
+            routing.shapes = cachedData.shapes || {};
             setRoutingData(routing);
             setIsRoutingReady(true);
           } catch (routingError) {
@@ -224,16 +219,7 @@ export const TransitProvider = ({ children }) => {
 
     try {
       const rawVehicles = await fetchVehiclePositions();
-      logger.log('Raw vehicles fetched:', rawVehicles.length);
-      if (rawVehicles.length > 0) {
-        logger.log('Sample vehicle:', JSON.stringify(rawVehicles[0]));
-      }
       const formattedVehicles = formatVehiclesForMap(rawVehicles, tripMapping);
-      logger.log('Formatted vehicles:', formattedVehicles.length);
-      if (formattedVehicles.length > 0) {
-        logger.log('First vehicle coordinate:', JSON.stringify(formattedVehicles[0].coordinate));
-        logger.log('First vehicle routeId:', formattedVehicles[0].routeId);
-      }
       setVehicles(formattedVehicles);
       setLastVehicleUpdate(new Date());
     } catch (error) {
@@ -284,12 +270,6 @@ export const TransitProvider = ({ children }) => {
 
     try {
       const alerts = await fetchServiceAlerts();
-      logger.info(
-        'Service alerts loaded:',
-        alerts.length,
-        'detour-like:',
-        alerts.filter((a) => ['Detour', 'Modified Service', 'No Service', 'Reduced Service'].includes(a.effect)).length
-      );
       setServiceAlerts(alerts);
     } catch (error) {
       logger.error('Failed to load service alerts:', error);

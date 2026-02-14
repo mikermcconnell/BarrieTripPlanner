@@ -41,9 +41,9 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   // Format "leaves in" text
   const getLeavesInText = () => {
     if (isTomorrow) return null; // Show "Tomorrow" badge instead
-    if (minutesUntilDeparture === 0) return 'Leaves now';
-    if (minutesUntilDeparture === 1) return 'Leaves in 1 min';
-    return `Leaves in ${formatMinutes(minutesUntilDeparture)}`;
+    if (minutesUntilDeparture === 0) return 'Leave now';
+    if (minutesUntilDeparture === 1) return 'Leave in 1 min';
+    return `Leave in ${formatMinutes(minutesUntilDeparture)}`;
   };
 
   const leavesInText = getLeavesInText();
@@ -97,8 +97,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         <View style={styles.timeSection}>
           <View style={styles.durationRow}>
             <Text style={styles.duration}>{duration}</Text>
-            {hasRealtimeInfo && (
+            {hasRealtimeInfo ? (
               <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+            ) : (
+              <View style={styles.scheduledBadge}>
+                <Text style={styles.scheduledText}>Scheduled</Text>
+              </View>
             )}
           </View>
           <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
@@ -360,6 +364,17 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
+  },
+  scheduledBadge: {
+    backgroundColor: COLORS.grey200,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 1,
+    borderRadius: BORDER_RADIUS.xs,
+  },
+  scheduledText: {
+    fontSize: 9,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.textSecondary,
   },
 });
 

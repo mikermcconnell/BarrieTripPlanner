@@ -28,6 +28,42 @@ A friendly, approachable mobile app for Barrie Transit riders featuring real-tim
 
 ---
 
+## Privacy & Security Guardrails (Trip Analytics)
+
+**Objective:** Improve transit planning using trip-search patterns while avoiding user-identifiable analytics.
+
+### Data We Can Use for Planning
+- De-identified trip search and itinerary signals (origin area, destination area, time bucket, route option chosen, transfer count, walking time).
+- Aggregated trends only for planning dashboards and reports.
+
+### Data We Must Not Store in Analytics Tables
+- Name, email, phone, account ID, or any direct user identifier.
+- Device advertising ID or persistent device fingerprint.
+- Exact home/work coordinates or exact timestamp traces that can single out a rider.
+- Raw IP addresses in analytics datasets.
+
+### Required De-Identification Rules
+- Generalize locations (zone/grid/stop-cluster), not exact point-level traces.
+- Bucket time (for example 15-30 minute windows) rather than exact timestamps.
+- Suppress low-count cells and rare trip patterns (minimum group size threshold before reporting).
+- Re-test re-identification risk on a scheduled basis and after schema changes.
+
+### Security & Governance Requirements
+- Keep any raw operational logs separate from analytics and short-lived.
+- Strict role-based access for analytics data; log access and changes.
+- Encrypt data in transit and at rest.
+- Define and enforce retention windows (short for raw events, longer for aggregates).
+- If third-party vendors process data, contracts must prohibit re-identification and secondary use.
+
+### Delivery Gate (Must Pass Before Analytics Rollout)
+1. Privacy impact assessment completed for trip analytics flow.
+2. Data dictionary finalized with approved fields only.
+3. De-identification tests passed (including small-cell suppression checks).
+4. Retention and deletion jobs verified in production-like environment.
+5. Access control and audit logging verified.
+
+---
+
 ## Design System (BudgetMe-Inspired)
 
 ### Visual Style
@@ -336,7 +372,7 @@ src/
 | Languages? | English only for MVP |
 | GO Transit integration? | Barrie Transit only |
 | User accounts? | Yes - full accounts |
-| Analytics? | Full usage tracking |
+| Analytics? | De-identified trip analytics only (no user-identifiable analytics) |
 | In-app feedback? | Yes |
 | Off-hours display? | Show next day schedule |
 | Stop tap action? | Bottom sheet with arrivals |

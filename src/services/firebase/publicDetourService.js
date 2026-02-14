@@ -6,6 +6,12 @@ const ACTIVE_COLLECTION = 'publicDetoursActive';
 const META_COLLECTION = 'publicSystem';
 const META_DOC = 'detours';
 
+const isPermissionDeniedError = (error) => {
+  if (!error) return false;
+  if (error.code === 'permission-denied') return true;
+  return typeof error.message === 'string' && error.message.includes('Missing or insufficient permissions');
+};
+
 const normalizeDetourDoc = (snapshotDoc) => {
   const data = snapshotDoc.data() || {};
   return {
@@ -45,11 +51,18 @@ export const publicDetourService = {
         });
       },
       (error) => {
-        logger.error('publicDetourService subscribeToActiveDetours error:', error);
+        if (isPermissionDeniedError(error)) {
+          logger.warn('publicDetourService active detours unavailable (permission denied).');
+          onUpdate([]);
+        } else {
+          logger.error('publicDetourService subscribeToActiveDetours error:', error);
+        }
         onStatus?.({
           connected: false,
           updatedAt: Date.now(),
-          error: error.message || 'detour-feed-error',
+          error: isPermissionDeniedError(error)
+            ? 'detour-feed-permission-denied'
+            : (error.message || 'detour-feed-error'),
         });
       }
     );
@@ -75,11 +88,18 @@ export const publicDetourService = {
         });
       },
       (error) => {
-        logger.error('publicDetourService subscribeToDetourMeta error:', error);
+        if (isPermissionDeniedError(error)) {
+          logger.warn('publicDetourService detour metadata unavailable (permission denied).');
+          onUpdate(null);
+        } else {
+          logger.error('publicDetourService subscribeToDetourMeta error:', error);
+        }
         onStatus?.({
           connected: false,
           updatedAt: Date.now(),
-          error: error.message || 'detour-meta-error',
+          error: isPermissionDeniedError(error)
+            ? 'detour-meta-permission-denied'
+            : (error.message || 'detour-meta-error'),
         });
       }
     );
@@ -87,4 +107,3 @@ export const publicDetourService = {
 };
 
 export default publicDetourService;
-

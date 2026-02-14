@@ -61,6 +61,17 @@ export const useMapTapPopup = ({
     setMapTapAddress('');
   }, [mapTapLocation, mapTapAddress, enterPlanningMode, setTripTo]);
 
+  // Show a location popup at a specific coordinate with a label
+  // (used by navigation param effects to display a pre-geocoded address)
+  const showLocation = useCallback((coordinate, label) => {
+    setMapTapLocation({
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+    });
+    setMapTapAddress(label || 'Selected location');
+    setIsLoadingAddress(false);
+  }, []);
+
   // Dismiss the popup
   const closeMapTapPopup = useCallback(() => {
     setMapTapLocation(null);
@@ -75,5 +86,6 @@ export const useMapTapPopup = ({
     handleDirectionsFrom,
     handleDirectionsTo,
     closeMapTapPopup,
+    showLocation,
   };
 };

@@ -73,6 +73,43 @@ export const findClosestPointIndex = (shapeCoords, lat, lon) => {
  * @param {number} toLon - End longitude
  * @returns {Array<{latitude: number, longitude: number}>} Extracted segment
  */
+/**
+ * Encode coordinates into a Google-encoded polyline string (inverse of decodePolyline)
+ * @param {Array<{latitude: number, longitude: number}>} coords - Coordinates to encode
+ * @returns {string} Encoded polyline string
+ */
+export const encodePolyline = (coords) => {
+  if (!coords || coords.length === 0) return '';
+
+  let encoded = '';
+  let prevLat = 0;
+  let prevLng = 0;
+
+  for (const coord of coords) {
+    const lat = Math.round(coord.latitude * 1e5);
+    const lng = Math.round(coord.longitude * 1e5);
+
+    encoded += encodeSignedValue(lat - prevLat);
+    encoded += encodeSignedValue(lng - prevLng);
+
+    prevLat = lat;
+    prevLng = lng;
+  }
+
+  return encoded;
+};
+
+const encodeSignedValue = (value) => {
+  let v = value < 0 ? ~(value << 1) : (value << 1);
+  let encoded = '';
+  while (v >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+    v >>= 5;
+  }
+  encoded += String.fromCharCode(v + 63);
+  return encoded;
+};
+
 export const extractShapeSegment = (shapeCoords, fromLat, fromLon, toLat, toLon) => {
   if (!shapeCoords || shapeCoords.length === 0) return [];
 

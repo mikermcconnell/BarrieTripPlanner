@@ -1,6 +1,6 @@
 import React, { useMemo, forwardRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
+import MapView, { PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
 import { CUSTOM_MAP_STYLE } from '../config/mapStyle';
 import { MAP_CONFIG, ROUTE_COLORS } from '../config/constants';
 import { COLORS, SHADOWS } from '../config/theme';
@@ -67,7 +67,7 @@ const TransitMapComponent = forwardRef(({
         <MapView
             ref={ref}
             style={styles.map}
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+            provider={PROVIDER_DEFAULT}
             initialRegion={MAP_CONFIG.INITIAL_REGION}
             showsUserLocation
             showsMyLocationButton={false}
@@ -139,7 +139,6 @@ const TransitMapComponent = forwardRef(({
     );
 });
 
-import { Platform } from 'react-native'; // Missing import
 
 const styles = StyleSheet.create({
     map: {

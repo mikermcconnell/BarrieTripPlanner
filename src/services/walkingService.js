@@ -345,7 +345,7 @@ export const enrichItineraryWithWalking = async (itinerary) => {
 export const enrichTripPlanWithWalking = async (tripPlan) => {
   const maxTripDuration = ROUTING_CONFIG.MAX_TRIP_DURATION || 7200; // 2 hours default
   const maxWaitTime = ROUTING_CONFIG.MAX_WAIT_TIME || 3600; // 1 hour default
-  const highWalkThreshold = 800; // meters - flag walks over this
+  const highWalkThreshold = 1000; // meters - flag walks over this (1km)
   const now = Date.now();
 
   // Process itineraries sequentially to respect LocationIQ rate limits

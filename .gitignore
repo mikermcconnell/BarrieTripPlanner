@@ -38,6 +38,7 @@ yarn-error.*
 # EAS build artifacts
 android/
 ios/
+*.apk
 
 # Windows artifacts
 nul

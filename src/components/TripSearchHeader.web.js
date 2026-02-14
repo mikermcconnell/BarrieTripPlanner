@@ -38,6 +38,11 @@ const TripSearchHeaderWeb = ({
   onSwap,
   onClose,
   onUseCurrentLocation,
+  timeMode = 'now',
+  selectedTime,
+  onTimeModeChange,
+  onSelectedTimeChange,
+  onSearch,
 }) => (
   <View style={styles.tripPlanHeader}>
     <View style={styles.tripPlanHeaderTop}>
@@ -131,17 +136,88 @@ const TripSearchHeaderWeb = ({
       </View>
     )}
 
-    {/* Swap Button */}
-    <TouchableOpacity
-      style={styles.swapBtn}
-      onPress={onSwap}
-      accessibilityLabel="Swap origin and destination"
-      accessibilityRole="button"
-    >
-      <Text style={styles.swapBtnText}>Swap</Text>
-    </TouchableOpacity>
+    {/* Swap + Time Row */}
+    <View style={styles.controlsRow}>
+      <TouchableOpacity
+        style={styles.swapBtn}
+        onPress={onSwap}
+        accessibilityLabel="Swap origin and destination"
+        accessibilityRole="button"
+      >
+        <Text style={styles.swapBtnText}>Swap</Text>
+      </TouchableOpacity>
+
+      {/* Time Mode Picker */}
+      <View style={styles.timePickerRow}>
+        <select
+          value={timeMode}
+          onChange={(e) => onTimeModeChange && onTimeModeChange(e.target.value)}
+          style={{
+            height: 34,
+            borderRadius: 8,
+            border: `1px solid ${COLORS.borderLight}`,
+            backgroundColor: COLORS.grey100,
+            color: COLORS.textPrimary,
+            fontSize: 13,
+            paddingLeft: 8,
+            paddingRight: 4,
+            cursor: 'pointer',
+          }}
+          aria-label="Trip time mode"
+        >
+          <option value="now">Depart Now</option>
+          <option value="departAt">Depart At</option>
+          <option value="arriveBy">Arrive By</option>
+        </select>
+
+        {timeMode !== 'now' && (
+          <input
+            type="datetime-local"
+            value={selectedTime ? formatDateTimeLocal(selectedTime) : ''}
+            onChange={(e) => {
+              if (onSelectedTimeChange && e.target.value) {
+                onSelectedTimeChange(new Date(e.target.value));
+              }
+            }}
+            style={{
+              height: 34,
+              borderRadius: 8,
+              border: `1px solid ${COLORS.borderLight}`,
+              backgroundColor: COLORS.grey100,
+              color: COLORS.textPrimary,
+              fontSize: 13,
+              paddingLeft: 8,
+              paddingRight: 8,
+              marginLeft: 6,
+              flex: 1,
+              minWidth: 0,
+            }}
+            aria-label="Select date and time"
+          />
+        )}
+
+        {timeMode !== 'now' && onSearch && (
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={onSearch}
+            accessibilityLabel="Search trips"
+            accessibilityRole="button"
+          >
+            <Text style={styles.searchBtnText}>Search</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   </View>
 );
+
+/** Format Date to datetime-local input value (YYYY-MM-DDTHH:MM) */
+const formatDateTimeLocal = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 const styles = StyleSheet.create({
   tripPlanHeader: {
@@ -251,19 +327,42 @@ const styles = StyleSheet.create({
     color: COLORS.grey500,
     marginLeft: SPACING.sm,
   },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    gap: SPACING.sm,
+  },
   swapBtn: {
-    alignSelf: 'flex-end',
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.grey100,
-    marginTop: SPACING.xs,
-    minHeight: 44,
+    minHeight: 34,
     justifyContent: 'center',
   },
   swapBtnText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  timePickerRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginLeft: 6,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  searchBtnText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
   },
 });

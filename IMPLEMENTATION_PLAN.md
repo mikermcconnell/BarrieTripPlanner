@@ -281,6 +281,7 @@ After each phase, verify:
 5. **Phase 4:** Auth works, favorites persist
 6. **Phase 5:** Notifications received on device
 7. **Phase 6:** Production build installs and runs
+8. **Phase 8:** Detour worker stays healthy, feed freshness checks pass, client consumes backend detours
 
 ---
 
@@ -302,6 +303,10 @@ After each phase, verify:
   - Created SettingsScreen.js for app preferences
   - Integrated offline support into TransitContext
   - Added alert banner to HomeScreen
+- [ ] Phase 8: Always-On Detour Infrastructure (IN PROGRESS)
+  - Deploy single always-on `api-proxy` worker instance
+  - Configure monitoring and freshness alerts
+  - Validate backend detour feed + client failover
 
 ---
 
@@ -331,3 +336,64 @@ After each phase, verify:
 - `src/config/mapStyle.js` (New)
 - `src/components/GlassContainer.js` (New)
 - `src/hooks/useAnimatedMarker.js` (New)
+
+---
+
+## Phase 8: Always-On Detour Infrastructure (NEW - Required for 24/7 Auto-Detours)
+**Goal:** Keep auto-detour detection running continuously, even when no users have the app open.
+
+### Architecture Decision
+- Run `api-proxy` as a long-running Node process (not sleepable/serverless request-only runtime).
+- Enable worker with `DETOUR_WORKER_ENABLED=true`.
+- Keep exactly one active worker instance to avoid duplicate polling/writes.
+- App reads shared detours from Firestore and falls back to local detection only if backend feed is stale/unavailable.
+
+### Required Environment Variables
+- `DETOUR_WORKER_ENABLED=true`
+- `FIREBASE_SERVICE_ACCOUNT_JSON` (or `GOOGLE_APPLICATION_CREDENTIALS`)
+- `LOCATIONIQ_API_KEY`
+- `ALLOWED_ORIGINS`
+- `DETOUR_PROXY_KEY` (recommended for `/api/detours/refresh`)
+- Optional tuning:
+  - `DETOUR_POLL_INTERVAL_MS` (default active poll is 15000 ms)
+  - `DETOUR_EVIDENCE_WINDOW_MS`
+  - `DETOUR_MIN_ROUTE_EVIDENCE`
+  - `DETOUR_MIN_UNIQUE_VEHICLES`
+
+### Deployment Runbook
+1. Deploy `api-proxy` to an always-on host with restart policy enabled.
+2. Configure secrets via host secret manager (never hardcode in repo).
+3. Set worker env vars and start service.
+4. Confirm worker startup in logs (`[detour-worker] starting poll=...`).
+5. Validate endpoints:
+   - `GET /api/health` returns `detourWorkerEnabled: true`
+   - `GET /api/detours` shows `lastTickAt` advancing
+6. Confirm Firestore writes:
+   - `publicDetoursActive/*` updated
+   - `publicSystem/detours` `updatedAt` advancing
+7. Enable client backend usage:
+   - `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true`
+
+### Monitoring & Alerting (Minimum)
+- Uptime check every 1 minute on `GET /api/health`.
+- Freshness check every 1 minute:
+  - alert if `lastTickAt` is stale > 3 minutes
+  - alert if `lastError` is non-null
+- Firestore freshness check:
+  - alert if `publicSystem/detours.updatedAt` is stale > 3 minutes
+- Log retention enabled for incident review.
+
+### Security Controls
+- Keep Firestore public read limited to:
+  - `publicDetoursActive/*`
+  - `publicSystem/*`
+- Deny all client writes to these collections.
+- Protect manual refresh endpoint with `DETOUR_PROXY_KEY`.
+- Restrict CORS via `ALLOWED_ORIGINS` to known app/web origins.
+
+### Go-Live Acceptance Criteria
+1. Worker remains healthy for 7 consecutive days.
+2. Feed freshness stays within threshold (>99% of checks under 3 minutes stale).
+3. Client shows backend detours in normal operation.
+4. If worker is stopped, client fallback to local detection still functions.
+5. Incident runbook documented for restart/credential rotation.

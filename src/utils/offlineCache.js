@@ -6,10 +6,15 @@ const CACHE_KEYS = {
   GTFS_TIMESTAMP: '@barrie_transit_gtfs_timestamp',
   ROUTES: '@barrie_transit_routes_cache',
   STOPS: '@barrie_transit_stops_cache',
+  SHAPES: '@barrie_transit_shapes_cache',
+  MAPPINGS: '@barrie_transit_mappings_cache',
 };
 
 // Cache expiry: 24 hours for GTFS static data
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000;
+
+// Max size per cache key (2 MB) — AsyncStorage/SQLite has a ~6 MB total DB limit
+const MAX_ITEM_BYTES = 2 * 1024 * 1024;
 
 /**
  * Check if device is online
@@ -26,16 +31,25 @@ export const isOnline = async () => {
 
 /**
  * Save data to cache.
- * If storage is full (SQLITE_FULL), clears old cache and retries once.
+ * Skips if serialized data exceeds MAX_ITEM_BYTES to avoid SQLITE_FULL.
+ * If storage is still full, clears old cache and retries once.
  */
 export const cacheData = async (key, data) => {
   const json = JSON.stringify({ data, timestamp: Date.now() });
+
+  // Guard: skip items that are too large for AsyncStorage
+  if (json.length > MAX_ITEM_BYTES) {
+    console.warn(
+      `Cache skip: ${key} is ${formatBytes(json.length)} (limit ${formatBytes(MAX_ITEM_BYTES)})`
+    );
+    return { success: false, error: 'Item too large for cache' };
+  }
 
   try {
     await AsyncStorage.setItem(key, json);
     return { success: true };
   } catch (error) {
-    // On SQLITE_FULL, clear all transit cache and retry once
+    // On SQLITE_FULL, clear old transit cache and retry once
     if (error?.message?.includes('SQLITE_FULL') || error?.code === 13) {
       console.warn(`Cache full, clearing old data and retrying (${key})`);
       try {
@@ -47,7 +61,6 @@ export const cacheData = async (key, data) => {
         await AsyncStorage.setItem(key, json);
         return { success: true };
       } catch (retryError) {
-        // Data too large for AsyncStorage — skip caching silently
         console.warn(`Cache retry failed for ${key}, skipping:`, retryError.message);
         return { success: false, error: retryError.message };
       }
@@ -82,24 +95,38 @@ export const getCachedData = async (key, maxAge = CACHE_EXPIRY_MS) => {
 };
 
 /**
- * Cache GTFS static data
+ * Cache GTFS static data.
+ *
+ * Strategy: split into small, independent keys so no single write
+ * exceeds the SQLite row limit.  stopTimes (66k+ rows) is intentionally
+ * excluded — it's too large for AsyncStorage and re-downloads in seconds.
  */
 export const cacheGTFSData = async (data) => {
   try {
-    // Cache individual components for more granular access
+    // 1. Small essentials — routes, stops (~50 KB each)
     await Promise.all([
       cacheData(CACHE_KEYS.ROUTES, data.routes),
       cacheData(CACHE_KEYS.STOPS, data.stops),
-      cacheData(CACHE_KEYS.GTFS_DATA, {
-        shapes: data.shapes,
-        trips: data.trips,
-        tripMapping: data.tripMapping,
-        routeShapeMapping: data.routeShapeMapping,
-        routeStopsMapping: data.routeStopsMapping,
-        stopTimes: data.stopTimes,
-        calendar: data.calendar,
-      }),
     ]);
+
+    // 2. Mappings — routeShapeMapping, routeStopsMapping, trips, tripMapping, calendar
+    //    These are moderate-size lookup tables (~100-300 KB total)
+    await cacheData(CACHE_KEYS.MAPPINGS, {
+      trips: data.trips,
+      tripMapping: data.tripMapping,
+      routeShapeMapping: data.routeShapeMapping,
+      routeStopsMapping: data.routeStopsMapping,
+      calendar: data.calendar,
+    });
+
+    // 3. Shapes — 38 polylines, moderate (~1-2 MB).
+    //    Cached separately so the size guard can skip it independently.
+    await cacheData(CACHE_KEYS.SHAPES, data.shapes);
+
+    // stopTimes intentionally NOT cached — 66k+ entries would exceed
+    // AsyncStorage limits.  Offline mode will still show routes/stops
+    // on the map; local trip routing requires a fresh GTFS download.
+
     return { success: true };
   } catch (error) {
     console.error('Error caching GTFS data:', error);
@@ -112,19 +139,33 @@ export const cacheGTFSData = async (data) => {
  */
 export const getCachedGTFSData = async () => {
   try {
-    const [routes, stops, gtfsData] = await Promise.all([
+    const [routes, stops, mappings, shapes] = await Promise.all([
       getCachedData(CACHE_KEYS.ROUTES),
       getCachedData(CACHE_KEYS.STOPS),
-      getCachedData(CACHE_KEYS.GTFS_DATA),
+      getCachedData(CACHE_KEYS.MAPPINGS),
+      getCachedData(CACHE_KEYS.SHAPES),
     ]);
 
-    if (!routes || !stops || !gtfsData) return null;
+    // Also try the legacy GTFS_DATA key for backwards compatibility
+    if (!routes || !stops) return null;
 
-    return {
-      routes,
-      stops,
-      ...gtfsData,
-    };
+    if (mappings) {
+      return {
+        routes,
+        stops,
+        shapes: shapes || {},
+        ...mappings,
+        // stopTimes not cached — offline routing unavailable
+      };
+    }
+
+    // Fallback: try reading old single-blob key from before the split
+    const legacyData = await getCachedData(CACHE_KEYS.GTFS_DATA);
+    if (legacyData) {
+      return { routes, stops, ...legacyData };
+    }
+
+    return null;
   } catch (error) {
     console.error('Error getting cached GTFS data:', error);
     return null;
@@ -141,6 +182,8 @@ export const clearCache = async () => {
       CACHE_KEYS.GTFS_TIMESTAMP,
       CACHE_KEYS.ROUTES,
       CACHE_KEYS.STOPS,
+      CACHE_KEYS.SHAPES,
+      CACHE_KEYS.MAPPINGS,
     ]);
     return { success: true };
   } catch (error) {

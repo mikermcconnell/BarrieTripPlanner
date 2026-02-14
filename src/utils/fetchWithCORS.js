@@ -38,10 +38,59 @@ const PUBLIC_PROXIES = [
 ];
 
 const REQUEST_TIMEOUT_MS = 30000;
+const PROXY_COOLDOWN_MS = 90 * 1000;
+const ENABLE_PUBLIC_PROXY_FALLBACKS = process.env.EXPO_PUBLIC_ENABLE_PUBLIC_CORS_PROXIES === 'true';
+const proxyFailureTimestamps = new Map();
 
 const buildProxyUrl = (proxyBase, targetUrl) => `${proxyBase}${encodeURIComponent(targetUrl)}`;
 
-const shouldTryFallbackProxy = (response) => response.status === 429 || response.status >= 500;
+const normalizeProxyBase = (rawValue) => {
+  if (!rawValue || typeof rawValue !== 'string') return null;
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.includes('?url=')) return trimmed;
+  return `${trimmed.replace(/\/+$/, '')}/proxy?url=`;
+};
+
+const getConfiguredProxyBase = () =>
+  normalizeProxyBase(process.env.EXPO_PUBLIC_CORS_PROXY_URL || process.env.EXPO_PUBLIC_API_PROXY_URL);
+
+const unique = (values) => Array.from(new Set(values.filter(Boolean)));
+
+const getProxyCandidates = () => {
+  const configuredProxy = getConfiguredProxyBase();
+  const baseCandidates = unique([configuredProxy, LOCAL_PROXY]);
+  return ENABLE_PUBLIC_PROXY_FALLBACKS
+    ? [...baseCandidates, ...PUBLIC_PROXIES]
+    : baseCandidates;
+};
+
+const shouldTryFallbackProxy = (response) => {
+  if (response.status === 429 || response.status >= 500) return true;
+  // Proxy services often return these when blocked/rate-limited/misconfigured.
+  return [401, 403, 404, 408].includes(response.status);
+};
+
+const markProxyFailure = (proxyBase) => {
+  proxyFailureTimestamps.set(proxyBase, Date.now());
+};
+
+const shouldSkipProxy = (proxyBase) => {
+  const failedAt = proxyFailureTimestamps.get(proxyBase);
+  if (!failedAt) return false;
+  return Date.now() - failedAt < PROXY_COOLDOWN_MS;
+};
+
+const buildWebProxyError = (attemptedCount, lastError, lastResponse) => {
+  const statusInfo = lastResponse ? ` Last proxy status: ${lastResponse.status}.` : '';
+  const causeInfo = lastError?.message ? ` Cause: ${lastError.message}` : '';
+  return new Error(
+    `Unable to fetch web data: no working CORS proxy (${attemptedCount} attempted). ` +
+      `Start the local proxy with "npm run web:dev" or set EXPO_PUBLIC_CORS_PROXY_URL.${statusInfo}${causeInfo}`
+  );
+};
 
 const fetchWithTimeout = async (targetUrl, options = {}) => {
   const controller = new AbortController();
@@ -107,13 +156,19 @@ export const fetchWithCORS = async (url, options = {}) => {
     return fetchWithTimeout(url, options);
   }
 
-  const proxyCandidates = [LOCAL_PROXY, ...PUBLIC_PROXIES];
+  const proxyCandidates = getProxyCandidates();
   let lastError = null;
   let lastResponse = null;
+  let attemptedCount = 0;
 
   for (let i = 0; i < proxyCandidates.length; i += 1) {
     const proxyBase = proxyCandidates[i];
+    if (shouldSkipProxy(proxyBase)) {
+      continue;
+    }
+
     const finalUrl = wrapWithCORSProxy(url, proxyBase);
+    attemptedCount += 1;
 
     try {
       const response = await fetchWithTimeout(finalUrl, options);
@@ -125,17 +180,24 @@ export const fetchWithCORS = async (url, options = {}) => {
       }
 
       lastResponse = response;
+      markProxyFailure(proxyBase);
       logger.warn(
         `CORS proxy returned ${response.status}; trying fallback proxy (${i + 2}/${proxyCandidates.length})`
       );
     } catch (error) {
       lastError = error;
+      markProxyFailure(proxyBase);
       if (i < proxyCandidates.length - 1) {
         logger.warn(
           `CORS proxy request failed; trying fallback proxy (${i + 2}/${proxyCandidates.length})`
         );
       }
     }
+  }
+
+  if (attemptedCount === 0 && proxyCandidates.length > 0) {
+    proxyFailureTimestamps.clear();
+    return fetchWithCORS(url, options);
   }
 
   if (lastResponse) {
@@ -145,8 +207,12 @@ export const fetchWithCORS = async (url, options = {}) => {
   if (lastError && isWeb() && lastError.message?.includes('Failed to fetch')) {
     logger.warn(
       'All CORS proxies failed on web.',
-      'Start the local proxy or configure a reachable proxy endpoint.'
+      'Start the local proxy with "npm run web:dev" or configure EXPO_PUBLIC_CORS_PROXY_URL.'
     );
+  }
+
+  if (isWeb()) {
+    throw buildWebProxyError(attemptedCount, lastError, lastResponse);
   }
 
   throw lastError || new Error('Unable to fetch resource through available CORS proxies');

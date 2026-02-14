@@ -71,7 +71,6 @@ const parseCSVLine = (line) => {
  */
 const downloadGTFSZip = async () => {
   try {
-    logger.log('Downloading GTFS ZIP from:', GTFS_URLS.STATIC_ZIP);
     // Use fetchWithCORS to handle web browser CORS restrictions
     const response = await fetchWithCORS(GTFS_URLS.STATIC_ZIP);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -88,8 +87,6 @@ const downloadGTFSZip = async () => {
         files[fileName] = content;
       }
     }
-
-    logger.log('Extracted files:', Object.keys(files));
 
     // Integrity check: verify expected files exist
     const requiredFiles = ['stops.txt', 'routes.txt', 'trips.txt', 'stop_times.txt'];
@@ -372,14 +369,9 @@ export const fetchAllStaticData = async () => {
     const calendar = files['calendar.txt'] ? parseCalendar(files['calendar.txt']) : [];
     const calendarDates = files['calendar_dates.txt'] ? parseCalendarDates(files['calendar_dates.txt']) : [];
 
-    logger.log(`Parsed: ${routes.length} routes, ${stops.length} stops, ${Object.keys(shapes).length} shapes, ${trips.length} trips, ${stopTimes.length} stop_times`);
-    logger.log(`Calendar: ${calendar.length} service patterns, ${calendarDates.length} exceptions`);
-
     const tripMapping = createTripMapping(trips);
     const routeShapeMapping = createRouteShapeMapping(trips);
     const routeStopsMapping = createRouteStopsMapping(trips, stopTimes);
-
-    logger.log('Route stops mapping created for routes:', Object.keys(routeStopsMapping).join(', '));
 
     return {
       routes,

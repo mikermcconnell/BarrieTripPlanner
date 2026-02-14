@@ -20,11 +20,14 @@ import {
 import logger from './src/utils/logger';
 
 // Initialize Sentry for crash reporting (production only)
-Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
-  enabled: !__DEV__,
-  tracesSampleRate: 0.2,
-});
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    enabled: !__DEV__,
+    tracesSampleRate: 0.2,
+  });
+}
 
 // Configure notification handler (how notifications appear when app is foregrounded)
 // Only set on native — expo-notifications has limited web support

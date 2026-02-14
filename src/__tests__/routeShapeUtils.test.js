@@ -1,4 +1,4 @@
-import { getRepresentativeShapeIds } from '../utils/routeShapeUtils';
+import { getRepresentativeShapeIds, getRepresentativeShapeIdsByDirection } from '../utils/routeShapeUtils';
 
 describe('routeShapeUtils', () => {
   test('returns longest shape when maxShapes=1', () => {
@@ -59,5 +59,41 @@ describe('routeShapeUtils', () => {
     expect(result).toHaveLength(1);
     expect(['forward', 'reverse']).toContain(result[0]);
   });
-});
 
+  test('prefers one representative per direction before filling extras', () => {
+    const shapeSource = {
+      dir0Long: [
+        { latitude: 44.1, longitude: -79.8 },
+        { latitude: 44.11, longitude: -79.79 },
+        { latitude: 44.12, longitude: -79.78 },
+        { latitude: 44.13, longitude: -79.77 },
+      ],
+      dir0Short: [
+        { latitude: 44.1, longitude: -79.8 },
+        { latitude: 44.12, longitude: -79.78 },
+      ],
+      dir1Long: [
+        { latitude: 44.2, longitude: -79.7 },
+        { latitude: 44.19, longitude: -79.71 },
+        { latitude: 44.18, longitude: -79.72 },
+      ],
+    };
+
+    const shapeDirectionMap = {
+      dir0Long: new Set(['0']),
+      dir0Short: new Set(['0']),
+      dir1Long: new Set(['1']),
+    };
+
+    const result = getRepresentativeShapeIdsByDirection(
+      ['dir0Long', 'dir0Short', 'dir1Long'],
+      shapeSource,
+      shapeDirectionMap,
+      { maxShapes: 2, precision: 3 }
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result).toContain('dir0Long');
+    expect(result).toContain('dir1Long');
+  });
+});

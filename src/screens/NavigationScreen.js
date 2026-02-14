@@ -21,7 +21,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 
 // Map components - platform specific
-import MapView, { Polyline, Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { CUSTOM_MAP_STYLE } from '../config/mapStyle';
 import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
@@ -496,7 +496,7 @@ const NavigationScreen = ({ route }) => {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+        provider={PROVIDER_DEFAULT}
         initialRegion={tripBounds || MAP_CONFIG.INITIAL_REGION}
         showsUserLocation
         showsMyLocationButton={false}

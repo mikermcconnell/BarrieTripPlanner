@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"const p=process.argv[1]||'';if(p.endsWith('.js')||p.endsWith('.jsx')){const f=p.replace(/\\.js$/,'.web.js');const fs=require('fs');if(!p.includes('.web.')&&fs.existsSync(f)){console.log('⚠️  REMINDER: Web counterpart exists: '+f+' — make sure to update it too!')}}\" -- \"$CLAUDE_FILE_PATH\""
+            "command": "node -e \"const p=process.argv[1]||'';const fs=require('fs');if(p.includes('.web.')){const native=p.replace(/\\.web\\.js$/,'.js');if(fs.existsSync(native)){console.log('\\u26a0\\ufe0f  REMINDER: Native counterpart exists: '+native+' \\u2014 make sure to update it too!')}}else if(p.endsWith('.js')||p.endsWith('.jsx')){const web=p.replace(/\\.js$/,'.web.js');if(!p.includes('.web.')&&fs.existsSync(web)){console.log('\\u26a0\\ufe0f  REMINDER: Web counterpart exists: '+web+' \\u2014 make sure to update it too!')}}\" -- \"$CLAUDE_FILE_PATH\""
           }
         ]
       }

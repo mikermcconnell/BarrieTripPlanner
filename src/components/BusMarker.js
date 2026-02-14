@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 import { useAnimatedMarker } from '../hooks/useAnimatedMarker';
@@ -14,6 +14,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
   const animatedCoordinate = useAnimatedMarker(vehicle.coordinate);
   const [tracked, setTracked] = useState(true);
   const freezeTimerRef = useRef(null);
+  const isAndroid = Platform.OS === 'android';
 
   if (!vehicle.coordinate || !vehicle.coordinate.latitude || !vehicle.coordinate.longitude) {
     return null;
@@ -21,6 +22,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
 
   const routeLabel = vehicle.routeId || '?';
   const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
+  const showDirectionArrow = hasValidBearing;
   const roundedBearing = hasValidBearing ? Math.round(vehicle.bearing) : null;
 
   useEffect(() => {
@@ -47,20 +49,29 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
       anchor={{ x: 0.5, y: 0.5 }}
       onPress={() => onPress?.(vehicle)}
       zIndex={10}
-      tracksViewChanges={tracked}
+      tracksViewChanges={isAndroid ? true : tracked}
     >
-      <View collapsable={false} style={styles.wrapper}>
-        {/* Direction arrow */}
-        {hasValidBearing && (
-          <View
-            collapsable={false}
-            style={[
-              styles.arrowWrapper,
-              { transform: [{ rotate: `${vehicle.bearing}deg` }] },
-            ]}
+      <View
+        collapsable={false}
+        style={[
+          styles.wrapper,
+          showDirectionArrow ? styles.wrapperWithArrow : styles.wrapperNoArrow,
+        ]}
+      >
+        {/* Direction arrow rendered as SVG for reliable Android bitmap snapshots */}
+        {showDirectionArrow && (
+          <Svg
+            width={ARROW_WRAPPER_SIZE}
+            height={ARROW_WRAPPER_SIZE}
+            viewBox="0 0 80 80"
+            style={styles.arrowSvg}
           >
-            <View style={[styles.arrow, { borderBottomColor: color }]} />
-          </View>
+            <Path
+              d="M40 5 L32 19 L48 19 Z"
+              fill={color}
+              transform={`rotate(${vehicle.bearing}, 40, 40)`}
+            />
+          </Svg>
         )}
 
         {/* Colored circle with bus icon + route number */}
@@ -77,29 +88,22 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
 
 const styles = StyleSheet.create({
   wrapper: {
-    width: ARROW_WRAPPER_SIZE,
-    height: ARROW_WRAPPER_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
-  arrowWrapper: {
+  wrapperWithArrow: {
+    width: ARROW_WRAPPER_SIZE,
+    height: ARROW_WRAPPER_SIZE,
+  },
+  wrapperNoArrow: {
+    width: MARKER_SIZE,
+    height: MARKER_SIZE,
+  },
+  arrowSvg: {
     position: 'absolute',
     top: 0,
     left: 0,
-    width: ARROW_WRAPPER_SIZE,
-    height: ARROW_WRAPPER_SIZE,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  arrow: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 14,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    // borderBottomColor set dynamically
   },
   circle: {
     width: MARKER_SIZE,

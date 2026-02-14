@@ -2,13 +2,13 @@
  * Native-specific HomeScreen (iOS/Android)
  * Web platform uses HomeScreen.web.js instead
  */
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Platform, Animated } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { PROVIDER_GOOGLE, PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
+import MapView, { PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useTransit } from '../context/TransitContext';
-import { MAP_CONFIG, ROUTE_COLORS, SHAPE_PROCESSING } from '../config/constants';
+import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import TripErrorDisplay from '../components/TripErrorDisplay';
@@ -16,12 +16,12 @@ import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
 import { useTripVisualization } from '../hooks/useTripVisualization';
 import { useMapTapPopup } from '../hooks/useMapTapPopup';
+import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
+import { useMapNavigation } from '../hooks/useMapNavigation';
+import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { offsetPath } from '../utils/geometryUtils';
 import { decodePolyline } from '../utils/polylineUtils';
-import { getRepresentativeShapeIds } from '../utils/routeShapeUtils';
 import logger from '../utils/logger';
-import { getSelectedAddressFromParams, normalizeSelectedRouteId } from '../utils/mapSelection';
 
 // Native map components
 import BusMarker from '../components/BusMarker';
@@ -70,6 +70,7 @@ const HomeScreen = ({ route }) => {
     shapeOverlapOffsets,
     routeShapeMapping,
     routeStopsMapping,
+    trips,
     vehicles,
     isLoadingStatic,
     isLoadingVehicles,
@@ -115,6 +116,8 @@ const HomeScreen = ({ route }) => {
     enterPlanningMode,
     reset: resetTrip,
     useCurrentLocation: useCurrentLocationHook,
+    setTimeMode,
+    setSelectedTime,
   } = trip;
   const {
     isTripPlanningMode,
@@ -127,6 +130,8 @@ const HomeScreen = ({ route }) => {
     isLoading: isTripLoading,
     error: tripError,
     hasSearched: hasTripSearched,
+    timeMode,
+    selectedTime,
   } = tripState;
 
   const {
@@ -135,34 +140,25 @@ const HomeScreen = ({ route }) => {
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
 
   // Pulse animation for live indicator
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.4,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
+  const pulseAnim = useMapPulseAnimation();
 
   // Map tap popup
   const {
     mapTapLocation, mapTapAddress, isLoadingAddress,
     handleMapPress, handleDirectionsFrom, handleDirectionsTo, closeMapTapPopup,
+    showLocation,
   } = useMapTapPopup({
     enterPlanningMode, setTripFrom, setTripTo,
     onMapTap: () => setSelectedStop(null),
   });
+
+  // Navigation param effects (selected stop/route/coordinate, exit trip planning)
+  useMapNavigation({
+    route, navigation, stops, mapRef,
+    selectRoute, resetTrip, setSelectedStop, setShowStops,
+    hasSelection, showLocation,
+  });
+
   const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
@@ -180,212 +176,17 @@ const HomeScreen = ({ route }) => {
     return base;
   }, [currentZoom, selectedRoutes]);
 
-  // Handle selected stop from navigation params
-  useEffect(() => {
-    if (route?.params?.selectedStopId) {
-      const stop = stops.find((s) => s.id === route.params.selectedStopId);
-      if (stop) {
-        setSelectedStop(stop);
-        mapRef.current?.animateToRegion(
-          {
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          },
-          500
-        );
-      }
-    }
-  }, [route?.params?.selectedStopId, stops]);
-
-  // Handle selected route from navigation params
-  useEffect(() => {
-    const routeId = normalizeSelectedRouteId(route?.params);
-    if (!routeId) return;
-
-    selectRoute(routeId);
-    setShowStops(true);
-    navigation.setParams({ selectedRouteId: undefined });
-  }, [route?.params?.selectedRouteId, navigation]);
-
-  // Handle selected address/coordinate from navigation params
-  useEffect(() => {
-    const selectedAddress = getSelectedAddressFromParams(route?.params);
-    if (!selectedAddress) return;
-    const { coordinate, label } = selectedAddress;
-
-    setSelectedStop(null);
-    setMapTapLocation({
-      latitude: coordinate.latitude,
-      longitude: coordinate.longitude,
-    });
-    setMapTapAddress(label);
-    setIsLoadingAddress(false);
-
-    mapRef.current?.animateToRegion(
-      {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      500
-    );
-
-    navigation.setParams({
-      selectedCoordinate: undefined,
-      selectedAddressLabel: undefined,
-    });
-  }, [route?.params?.selectedCoordinate, route?.params?.selectedAddressLabel, navigation]);
-
-  // Handle exit from navigation - reset trip planning mode
-  useEffect(() => {
-    if (route?.params?.exitTripPlanning) {
-      resetTrip();
-      // Clear the param to prevent re-triggering
-      navigation.setParams({ exitTripPlanning: undefined });
-    }
-  }, [route?.params?.exitTripPlanning, navigation, resetTrip]);
-
-  // Auto-enable stops when routes are selected
-  useEffect(() => {
-    if (hasSelection) {
-      setShowStops(true);
-    }
-  }, [hasSelection]);
-
-  // Get the route color
-  const getRouteColor = useCallback(
-    (routeId) => {
-      const foundRoute = routes.find((r) => r.id === routeId);
-      if (foundRoute?.color) return foundRoute.color;
-      return ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
-    },
-    [routes]
-  );
-
-  // Filter vehicles by selected routes
-  const displayedVehicles = useMemo(() => {
-    return selectedRoutes.size > 0
-      ? vehicles.filter((v) => selectedRoutes.has(v.routeId))
-      : vehicles;
-  }, [selectedRoutes, vehicles]);
-
-  // Get shapes to display (prefer processedShapes for smooth rendering)
-  const displayedShapes = useMemo(() => {
-    const shapeSource = Object.keys(processedShapes).length > 0 ? processedShapes : shapes;
-    const shapesToDisplay = [];
-
-    if (selectedRoutes.size > 0) {
-      selectedRoutes.forEach(routeId => {
-        const shapeIds = routeShapeMapping[routeId] || [];
-        shapeIds.forEach((shapeId) => {
-          const coords = shapeSource[shapeId];
-          if (coords) {
-            shapesToDisplay.push({
-              id: shapeId,
-              coordinates: coords,
-              color: getRouteColor(routeId),
-              routeId: routeId,
-            });
-          }
-        });
-      });
-    } else if (showRoutes) {
-      // Pick representative branch shapes per route (keeps variants like 8A/8B visible)
-      Object.keys(routeShapeMapping).forEach((routeId) => {
-        const shapeIds = routeShapeMapping[routeId] || [];
-        const representativeIds = getRepresentativeShapeIds(shapeIds, shapeSource, {
-          maxShapes: 2,
-          precision: 3,
-        });
-
-        representativeIds.forEach((shapeId) => {
-          shapesToDisplay.push({
-            id: shapeId,
-            coordinates: shapeSource[shapeId],
-            color: getRouteColor(routeId),
-            routeId,
-          });
-        });
-      });
-    }
-
-    return shapesToDisplay;
-  }, [selectedRoutes, showRoutes, routeShapeMapping, shapes, processedShapes, shapeOverlapOffsets, getRouteColor]);
-
-  // Get stops to display - using GTFS stop-route mapping for accuracy
-  const displayedStops = useMemo(() => {
-    if (!showStops) return [];
-
-    let filteredStops = [];
-
-    // If routes are selected, show only stops that serve those routes (from GTFS data)
-    if (selectedRoutes.size > 0) {
-      // Combine stop IDs from all selected routes
-      const combinedStopIds = new Set();
-      selectedRoutes.forEach(routeId => {
-        const stopIds = routeStopsMapping[routeId] || [];
-        stopIds.forEach(stopId => combinedStopIds.add(stopId));
-      });
-      filteredStops = stops.filter(stop => combinedStopIds.has(stop.id));
-    } else {
-      // No route selected - use viewport-based filtering
-      // Don't show stops when zoomed out too far
-      if (mapRegion.latitudeDelta > 0.05) return [];
-
-      // Calculate viewport bounds with a small buffer
-      const buffer = mapRegion.latitudeDelta * 0.1;
-      const minLat = mapRegion.latitude - mapRegion.latitudeDelta / 2 - buffer;
-      const maxLat = mapRegion.latitude + mapRegion.latitudeDelta / 2 + buffer;
-      const minLng = mapRegion.longitude - mapRegion.longitudeDelta / 2 - buffer;
-      const maxLng = mapRegion.longitude + mapRegion.longitudeDelta / 2 + buffer;
-
-      // Filter stops by viewport bounds
-      filteredStops = stops.filter(stop =>
-        stop.latitude >= minLat &&
-        stop.latitude <= maxLat &&
-        stop.longitude >= minLng &&
-        stop.longitude <= maxLng
-      );
-    }
-
-    // Limit to 150 stops for performance
-    return filteredStops.slice(0, 150);
-  }, [showStops, mapRegion, stops, selectedRoutes, routeStopsMapping]);
-
-  // Get detours to display for selected routes
-  const displayedDetours = useMemo(() => {
-    if (!activeDetours || activeDetours.length === 0) return [];
-
-    // If routes are selected, only show detours for those routes
-    if (selectedRoutes.size > 0) {
-      return activeDetours.filter(detour => selectedRoutes.has(detour.routeId));
-    }
-
-    // Otherwise show all active detours
-    return activeDetours;
-  }, [activeDetours, selectedRoutes]);
-
-  const primaryDisplayedDetour = useMemo(
-    () => (displayedDetours.length > 0 ? displayedDetours[0] : null),
-    [displayedDetours]
-  );
-
-  const detourHistory = useMemo(() => {
-    if (!getDetourHistory) return [];
-    return getDetourHistory(null, 20);
-  }, [getDetourHistory, activeDetours, lastVehicleUpdate]);
-
-  // Check if any selected route has an active detour
-  const selectedRoutesHaveDetour = useMemo(() => {
-    if (selectedRoutes.size === 0) return false;
-    for (const routeId of selectedRoutes) {
-      if (hasActiveDetour(routeId)) return true;
-    }
-    return false;
-  }, [selectedRoutes, hasActiveDetour]);
+  // Displayed entities (vehicles, shapes, stops, detours) based on selection
+  const {
+    getRouteColor, displayedVehicles, displayedShapes, displayedStops,
+    displayedDetours, primaryDisplayedDetour, detourHistory, selectedRoutesHaveDetour,
+  } = useDisplayedEntities({
+    selectedRouteIds: selectedRoutes,
+    vehicles, routes, trips, shapes, processedShapes,
+    routeShapeMapping, routeStopsMapping, stops,
+    showRoutes, showStops, mapRegion,
+    activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
+  });
 
   // Handle map region change
   const handleRegionChange = (region) => {
@@ -525,7 +326,7 @@ const HomeScreen = ({ route }) => {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+        provider={PROVIDER_DEFAULT}
         initialRegion={MAP_CONFIG.INITIAL_REGION}
         showsUserLocation
         showsMyLocationButton={false}
@@ -744,6 +545,15 @@ const HomeScreen = ({ route }) => {
             onClose={exitTripPlanningMode}
             onUseCurrentLocation={useCurrentLocationForTrip}
             isLoading={isTripLoading}
+            timeMode={timeMode}
+            selectedTime={selectedTime}
+            onTimeModeChange={setTimeMode}
+            onSelectedTimeChange={setSelectedTime}
+            onSearch={() => {
+              if (tripFromLocation && tripToLocation) {
+                searchTrips(tripFromLocation, tripToLocation);
+              }
+            }}
           />
           <TripBottomSheet
             itineraries={itineraries}

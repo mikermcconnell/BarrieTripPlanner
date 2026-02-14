@@ -7,8 +7,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Animated } from 'react-native';
-import { useTransit } from '../context/TransitContext';
-import { fetchTripUpdates, getArrivalsForStop } from '../services/arrivalService';
+import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 
@@ -50,37 +49,8 @@ const DirectionsToIcon = ({ size = 20, color = COLORS.error }) => (
 );
 
 const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
-  const { routes, tripMapping } = useTransit();
-  const [arrivals, setArrivals] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
   const [slideAnim] = useState(new Animated.Value(100)); // Start off-screen (100%)
-
-  // Fetch arrivals for this stop
-  const loadArrivals = useCallback(async () => {
-    if (!stop) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const tripUpdates = await fetchTripUpdates();
-      const stopArrivals = getArrivalsForStop(tripUpdates, stop.id, routes, tripMapping);
-      setArrivals(stopArrivals);
-    } catch (err) {
-      console.error('Error loading arrivals:', err);
-      setError('Unable to load arrival times');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [stop, routes, tripMapping]);
-
-  // Load arrivals and set up refresh interval
-  useEffect(() => {
-    loadArrivals();
-    const interval = setInterval(loadArrivals, 30000);
-    return () => clearInterval(interval);
-  }, [loadArrivals]);
 
   // Slide-in animation when component mounts
   useEffect(() => {

@@ -30,6 +30,8 @@ const SHOW_FROM_SUGGESTIONS = 'SHOW_FROM_SUGGESTIONS';
 const SHOW_TO_SUGGESTIONS = 'SHOW_TO_SUGGESTIONS';
 const SET_PLANNING_MODE = 'SET_PLANNING_MODE';
 const SET_ERROR = 'SET_ERROR';
+const SET_TIME_MODE = 'SET_TIME_MODE';
+const SET_DEPARTURE_TIME = 'SET_DEPARTURE_TIME';
 
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
@@ -47,6 +49,8 @@ const initialState = {
   toSuggestions: [],
   showFromSuggestions: false,
   showToSuggestions: false,
+  timeMode: 'now',          // 'now' | 'departAt' | 'arriveBy'
+  selectedTime: null,       // Date object or null (null = use current time)
 };
 
 // ─── Reducer ──────────────────────────────────────────────────────
@@ -106,6 +110,10 @@ function tripReducer(state, action) {
       return { ...state, showToSuggestions: action.payload };
     case SET_ERROR:
       return { ...state, error: action.payload };
+    case SET_TIME_MODE:
+      return { ...state, timeMode: action.payload, selectedTime: action.payload === 'now' ? null : state.selectedTime };
+    case SET_DEPARTURE_TIME:
+      return { ...state, selectedTime: action.payload };
     default:
       return state;
   }
@@ -143,14 +151,15 @@ export const useTripPlanner = ({
     dispatch({ type: SEARCH_START });
 
     try {
+      const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
       const result = await planTripAuto({
         fromLat: from.lat,
         fromLon: from.lon,
         toLat: to.lat,
         toLon: to.lon,
-        date: new Date(),
-        time: new Date(),
-        arriveBy: false,
+        date: tripTime,
+        time: tripTime,
+        arriveBy: state.timeMode === 'arriveBy',
         routingData: isRoutingReady ? routingData : null,
         enrichWalking: false, // Skip walking API calls for preview; enrich on navigation start
       });
@@ -178,7 +187,7 @@ export const useTripPlanner = ({
         : (err.message || 'Could not find routes. Please try again.');
       dispatch({ type: SEARCH_ERROR, payload: message });
     }
-  }, [routingData, isRoutingReady, onItinerariesReady, applyDelays]);
+  }, [routingData, isRoutingReady, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
@@ -268,6 +277,15 @@ export const useTripPlanner = ({
     dispatch({ type: SELECT_ITINERARY, payload: index });
   }, []);
 
+  // ─── Time mode control ──────────────────────────────────────
+  const setTimeMode = useCallback((mode) => {
+    dispatch({ type: SET_TIME_MODE, payload: mode });
+  }, []);
+
+  const setSelectedTime = useCallback((time) => {
+    dispatch({ type: SET_DEPARTURE_TIME, payload: time });
+  }, []);
+
   // ─── Mode control ───────────────────────────────────────────
   const enterPlanningMode = useCallback(() => {
     dispatch({ type: SET_PLANNING_MODE, payload: true });
@@ -314,5 +332,7 @@ export const useTripPlanner = ({
     enterPlanningMode,
     reset,
     useCurrentLocation,
+    setTimeMode,
+    setSelectedTime,
   };
 };

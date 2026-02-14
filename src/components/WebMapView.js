@@ -5,7 +5,6 @@
 import React, { forwardRef, useRef, useImperativeHandle } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import logger from '../utils/logger';
 
 // Fix for default marker icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -44,7 +43,6 @@ if (typeof document !== 'undefined' && !document.getElementById('leaflet-attribu
   document.head.appendChild(style);
 }
 
-logger.log('[WebMapView] Module loaded');
 
 // Convert lat/lng delta to zoom level
 const getZoomFromDelta = (latDelta) => {
@@ -78,7 +76,6 @@ const MapController = forwardRef((props, ref) => {
 const MapClickHandler = ({ onPress }) => {
   useMapEvents({
     click: (e) => {
-      logger.log('[WebMapView] Map clicked at:', e.latlng);
       onPress?.({
         nativeEvent: {
           coordinate: {
@@ -277,8 +274,6 @@ export const WebStopMarker = ({ stop, onPress, isSelected }) => {
 const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete, onPress }, ref) => {
   const controllerRef = useRef(null);
 
-  logger.log('[WebMapView] Rendering with region:', initialRegion);
-
   useImperativeHandle(ref, () => ({
     animateToRegion: (region, duration) => {
       controllerRef.current?.animateToRegion(region, duration);
@@ -296,9 +291,9 @@ const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete
       <MapContainer
         center={center}
         zoom={zoom}
+        zoomControl={false}
         style={{ width: '100%', height: '100%' }}
         whenReady={(mapInstance) => {
-          logger.log('[WebMapView] Map ready');
           mapInstance.target.on('moveend', () => {
             const bounds = mapInstance.target.getBounds();
             const c = mapInstance.target.getCenter();

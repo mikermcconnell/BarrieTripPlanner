@@ -6,20 +6,20 @@ import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTransit } from '../context/TransitContext';
-import { MAP_CONFIG, ROUTE_COLORS, SHAPE_PROCESSING } from '../config/constants';
+import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
-import { getDistanceFromBarrie } from '../services/locationIQService';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
 import { useTripVisualization } from '../hooks/useTripVisualization';
 import { useMapTapPopup } from '../hooks/useMapTapPopup';
+import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
+import { useMapNavigation } from '../hooks/useMapNavigation';
+import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import TripBottomSheet from '../components/TripBottomSheet';
 import logger from '../utils/logger';
-import { getSelectedAddressFromParams, normalizeSelectedRouteId } from '../utils/mapSelection';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
-import { getRepresentativeShapeIds } from '../utils/routeShapeUtils';
 import { decodePolyline } from '../utils/polylineUtils';
 
 // Web-only imports
@@ -91,6 +91,7 @@ const HomeScreen = ({ route }) => {
     routes,
     stops,
     shapes,
+    trips,
     processedShapes,
     shapeOverlapOffsets,
     routeShapeMapping,
@@ -120,7 +121,13 @@ const HomeScreen = ({ route }) => {
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useMapPulseAnimation();
+
+  // Normalize single-select to a Set for shared hooks
+  const selectedRouteIds = useMemo(
+    () => selectedRoute ? new Set([selectedRoute]) : new Set(),
+    [selectedRoute]
+  );
 
   // Helper to check if a route has active alerts
   const getRouteAlerts = useCallback((routeId) => {
@@ -147,6 +154,8 @@ const HomeScreen = ({ route }) => {
     reset: resetTrip,
     useCurrentLocation: useCurrentLocationHook,
     searchTrips,
+    setTimeMode,
+    setSelectedTime,
   } = trip;
   // Destructure state for direct access in render
   const {
@@ -164,6 +173,8 @@ const HomeScreen = ({ route }) => {
     toSuggestions,
     showFromSuggestions,
     showToSuggestions,
+    timeMode,
+    selectedTime,
   } = tripState;
 
   const {
@@ -176,7 +187,16 @@ const HomeScreen = ({ route }) => {
     mapTapLocation, mapTapAddress, isLoadingAddress,
     handleMapPress, handleDirectionsFrom, handleDirectionsTo,
     closeMapTapPopup: handleCloseMapTapPopup,
+    showLocation,
   } = useMapTapPopup({ enterPlanningMode, setTripFrom, setTripTo });
+
+  // Navigation param effects (selected stop/route/coordinate, exit trip planning)
+  useMapNavigation({
+    route, navigation, stops, mapRef,
+    selectRoute, resetTrip, setSelectedStop, setShowStops,
+    hasSelection, showLocation,
+  });
+
   const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
@@ -196,216 +216,18 @@ const HomeScreen = ({ route }) => {
     return base;
   }, [currentZoom, selectedRoute, hoveredRouteId]);
 
-  // Pulse animation for live indicator
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 0.4,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
-
-  // Handle selected stop from navigation params
-  useEffect(() => {
-    if (route?.params?.selectedStopId) {
-      const stop = stops.find((s) => s.id === route.params.selectedStopId);
-      if (stop) {
-        setSelectedStop(stop);
-        mapRef.current?.animateToRegion(
-          {
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          },
-          500
-        );
-      }
-    }
-  }, [route?.params?.selectedStopId, stops]);
-
-  // Handle selected route from navigation params
-  useEffect(() => {
-    const routeId = normalizeSelectedRouteId(route?.params);
-    if (!routeId) return;
-
-    selectRoute(routeId);
-    setShowStops(true);
-    navigation.setParams({ selectedRouteId: undefined });
-  }, [route?.params?.selectedRouteId, navigation]);
-
-  // Handle selected address/coordinate from navigation params
-  useEffect(() => {
-    const selectedAddress = getSelectedAddressFromParams(route?.params);
-    if (!selectedAddress) return;
-    const { coordinate, label } = selectedAddress;
-
-    setSelectedStop(null);
-    setMapTapLocation({
-      latitude: coordinate.latitude,
-      longitude: coordinate.longitude,
-    });
-    setMapTapAddress(label);
-    setIsLoadingAddress(false);
-
-    mapRef.current?.animateToRegion(
-      {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      500
-    );
-
-    navigation.setParams({
-      selectedCoordinate: undefined,
-      selectedAddressLabel: undefined,
-    });
-  }, [route?.params?.selectedCoordinate, route?.params?.selectedAddressLabel, navigation]);
-
-  // Handle exit from navigation - reset trip planning mode
-  useEffect(() => {
-    if (route?.params?.exitTripPlanning) {
-      resetTrip();
-      navigation.setParams({ exitTripPlanning: undefined });
-    }
-  }, [route?.params?.exitTripPlanning, navigation, resetTrip]);
-
-  // Auto-enable stops when a route is selected
-  useEffect(() => {
-    if (selectedRoute) {
-      setShowStops(true);
-    }
-  }, [selectedRoute]);
-
-  // Get the route color
-  const getRouteColor = useCallback(
-    (routeId) => {
-      const foundRoute = routes.find((r) => r.id === routeId);
-      if (foundRoute?.color) return foundRoute.color;
-      return ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
-    },
-    [routes]
-  );
-
-  // Filter vehicles by selected route
-  const displayedVehicles = useMemo(() => {
-    return selectedRoute ? vehicles.filter((v) => v.routeId === selectedRoute) : vehicles;
-  }, [selectedRoute, vehicles]);
-
-  // Get shapes to display (prefer processedShapes for smooth rendering)
-  const displayedShapes = useMemo(() => {
-    const shapeSource = Object.keys(processedShapes).length > 0 ? processedShapes : shapes;
-    const shapesToDisplay = [];
-    if (selectedRoute) {
-      const shapeIds = routeShapeMapping[selectedRoute] || [];
-      shapeIds.forEach((shapeId) => {
-        if (shapeSource[shapeId]) {
-          shapesToDisplay.push({
-            id: shapeId,
-            coordinates: shapeSource[shapeId],
-            color: getRouteColor(selectedRoute),
-            routeId: selectedRoute,
-          });
-        }
-      });
-    } else if (showRoutes) {
-      // Pick representative branch shapes per route (keeps variants like 8A/8B visible)
-      Object.keys(routeShapeMapping).forEach((routeId) => {
-        const shapeIds = routeShapeMapping[routeId] || [];
-        const representativeIds = getRepresentativeShapeIds(shapeIds, shapeSource, {
-          maxShapes: 2,
-          precision: 3,
-        });
-
-        representativeIds.forEach((shapeId) => {
-          shapesToDisplay.push({
-            id: shapeId,
-            coordinates: shapeSource[shapeId],
-            color: getRouteColor(routeId),
-            routeId,
-          });
-        });
-      });
-    }
-    return shapesToDisplay;
-  }, [selectedRoute, showRoutes, routeShapeMapping, shapes, processedShapes, getRouteColor]);
-
-  // Get stops to display - using GTFS stop-route mapping for accuracy
-  const displayedStops = useMemo(() => {
-    if (!showStops) return [];
-
-    let filteredStops = [];
-
-    // If a route is selected, show only stops that serve that route (from GTFS data)
-    if (selectedRoute && routeStopsMapping[selectedRoute]) {
-      const routeStopIds = new Set(routeStopsMapping[selectedRoute]);
-      filteredStops = stops.filter(stop => routeStopIds.has(stop.id));
-    } else {
-      // No route selected - use viewport-based filtering
-      // Don't show stops when zoomed out too far
-      if (mapRegion.latitudeDelta > 0.05) return [];
-
-      // Calculate viewport bounds with a small buffer
-      const buffer = mapRegion.latitudeDelta * 0.1;
-      const minLat = mapRegion.latitude - mapRegion.latitudeDelta / 2 - buffer;
-      const maxLat = mapRegion.latitude + mapRegion.latitudeDelta / 2 + buffer;
-      const minLng = mapRegion.longitude - mapRegion.longitudeDelta / 2 - buffer;
-      const maxLng = mapRegion.longitude + mapRegion.longitudeDelta / 2 + buffer;
-
-      // Filter stops by viewport bounds
-      filteredStops = stops.filter(stop =>
-        stop.latitude >= minLat &&
-        stop.latitude <= maxLat &&
-        stop.longitude >= minLng &&
-        stop.longitude <= maxLng
-      );
-    }
-
-    // Limit to 150 stops for performance
-    return filteredStops.slice(0, 150);
-  }, [showStops, mapRegion, stops, selectedRoute, routeStopsMapping]);
-
-  // Get detours to display for selected route
-  const displayedDetours = useMemo(() => {
-    if (!activeDetours || activeDetours.length === 0) return [];
-
-    // If a route is selected, only show detours for that route
-    if (selectedRoute) {
-      return activeDetours.filter(detour => detour.routeId === selectedRoute);
-    }
-
-    // Otherwise show all active detours
-    return activeDetours;
-  }, [activeDetours, selectedRoute]);
-
-  const primaryDisplayedDetour = useMemo(
-    () => (displayedDetours.length > 0 ? displayedDetours[0] : null),
-    [displayedDetours]
-  );
-
-  const detourHistory = useMemo(() => {
-    if (!getDetourHistory) return [];
-    return getDetourHistory(null, 20);
-  }, [getDetourHistory, activeDetours, lastVehicleUpdate]);
-
-  // Check if selected route has an active detour
-  const selectedRouteHasDetour = useMemo(() => {
-    if (!selectedRoute) return false;
-    return hasActiveDetour(selectedRoute);
-  }, [selectedRoute, hasActiveDetour]);
+  // Displayed entities (vehicles, shapes, stops, detours) based on selection
+  const {
+    getRouteColor, displayedVehicles, displayedShapes, displayedStops,
+    displayedDetours, primaryDisplayedDetour, detourHistory,
+    selectedRoutesHaveDetour: selectedRouteHasDetour,
+  } = useDisplayedEntities({
+    selectedRouteIds: selectedRouteIds,
+    vehicles, routes, trips, shapes, processedShapes,
+    routeShapeMapping, routeStopsMapping, stops,
+    showRoutes, showStops, mapRegion,
+    activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
+  });
 
   // Handle map region change
   const handleRegionChange = (region) => {
@@ -728,6 +550,15 @@ const HomeScreen = ({ route }) => {
           onSwap={swapTripLocations}
           onClose={exitTripPlanningMode}
           onUseCurrentLocation={useCurrentLocationForTrip}
+          timeMode={timeMode}
+          selectedTime={selectedTime}
+          onTimeModeChange={setTimeMode}
+          onSelectedTimeChange={setSelectedTime}
+          onSearch={() => {
+            if (tripFromLocation && tripToLocation) {
+              searchTrips(tripFromLocation, tripToLocation);
+            }
+          }}
         />
       ) : !selectedStop ? (
         <>

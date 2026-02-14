@@ -49,6 +49,49 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
    - Scan the QR code with Expo Go on your phone
    - Or press `a` for Android emulator / `i` for iOS simulator
 
+## Android Emulator Quick Start (Recommended)
+
+When working in Android emulator, use one of these commands instead of manual Metro setup:
+
+- `npm run android:stable`
+  - Most reliable path.
+  - Builds/installs release, then launches.
+  - Does not rely on Metro streaming.
+  - `npm run android` now maps to this stable path.
+
+- `npm run android:stable:launch`
+  - Launch only (skip rebuild).
+  - Use this after a successful `android:stable` if you only want to reopen quickly.
+
+- `npm run android:dev`
+  - Development path with live reload.
+  - Runs recovery, starts Metro on `8084`, starts a local dev proxy on `8083`, then launches the app.
+  - The proxy avoids emulator bundle transfer issues seen with direct Metro streaming.
+
+- `npm run android:dev:direct`
+  - Direct Metro on `8083` without proxy.
+  - Use only if you explicitly want to bypass the proxy.
+
+- `npm run android:recover`
+  - Kills stale Metro/proxy processes and clears adb reverse mappings.
+  - Use this if emulator startup gets stuck on loading/bundling.
+
+- `npm run android:stable:rebuild`
+  - Forces a fresh release rebuild/install, then launches.
+
+### Web Development (CORS Proxy Required)
+
+Barrie GTFS feeds do not expose browser CORS headers, so web mode must use a proxy.
+
+Run web with the local proxy:
+```bash
+npm run web:dev
+```
+
+If you use a deployed proxy instead, set:
+- `EXPO_PUBLIC_CORS_PROXY_URL`
+- or `EXPO_PUBLIC_API_PROXY_URL` (with a `/proxy?url=` endpoint)
+
 ## Project Structure
 
 ```

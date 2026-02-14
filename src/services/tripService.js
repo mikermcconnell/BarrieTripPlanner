@@ -12,7 +12,7 @@ import logger from '../utils/logger';
  */
 const addBasicMetadata = (tripPlan) => {
   const maxTripDuration = ROUTING_CONFIG.MAX_TRIP_DURATION || 7200;
-  const highWalkThreshold = 800;
+  const highWalkThreshold = 1000;
   const now = Date.now();
 
   const withMetadata = tripPlan.itineraries.map((itinerary) => {

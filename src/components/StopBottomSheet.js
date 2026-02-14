@@ -1,8 +1,7 @@
-import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { useTransit } from '../context/TransitContext';
-import { fetchTripUpdates, getArrivalsForStop } from '../services/arrivalService';
+import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
 import Svg, { Path } from 'react-native-svg';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
@@ -34,39 +33,9 @@ const EmptyIcon = ({ size = 48, color = COLORS.grey400 }) => (
 
 const StopBottomSheet = ({ stop, onClose }) => {
   const bottomSheetRef = useRef(null);
-  const { routes, tripMapping } = useTransit();
-  const [arrivals, setArrivals] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
   const snapPoints = useMemo(() => ['30%', '55%', '90%'], []);
-
-  // Fetch arrivals for this stop
-  const loadArrivals = useCallback(async () => {
-    if (!stop) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const tripUpdates = await fetchTripUpdates();
-      const stopArrivals = getArrivalsForStop(tripUpdates, stop.id, routes, tripMapping);
-      setArrivals(stopArrivals);
-    } catch (err) {
-      console.error('Error loading arrivals:', err);
-      setError('Unable to load arrival times');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [stop, routes, tripMapping]);
-
-  useEffect(() => {
-    loadArrivals();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(loadArrivals, 30000);
-    return () => clearInterval(interval);
-  }, [loadArrivals]);
 
   const handleSheetChanges = useCallback(
     (index) => {

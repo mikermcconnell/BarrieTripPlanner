@@ -32,6 +32,19 @@ const MyLocationIcon = ({ size = 20, color = COLORS.primary }) => (
   </Svg>
 );
 
+const TIME_MODES = ['now', 'departAt', 'arriveBy'];
+const TIME_MODE_LABELS = { now: 'Depart Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
+
+const formatTimeDisplay = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m} ${ampm}`;
+};
+
 const TripSearchHeader = ({
   fromText,
   toText,
@@ -43,7 +56,21 @@ const TripSearchHeader = ({
   onClose,
   onUseCurrentLocation,
   isLoading = false,
+  timeMode = 'now',
+  selectedTime,
+  onTimeModeChange,
+  onSelectedTimeChange,
+  onSearch,
 }) => {
+  const cycleTimeMode = () => {
+    if (!onTimeModeChange) return;
+    const idx = TIME_MODES.indexOf(timeMode);
+    const next = TIME_MODES[(idx + 1) % TIME_MODES.length];
+    onTimeModeChange(next);
+    if (next !== 'now' && !selectedTime) {
+      onSelectedTimeChange && onSelectedTimeChange(new Date());
+    }
+  };
   return (
     <View style={styles.container}>
       {/* Header with close button */}
@@ -117,6 +144,31 @@ const TripSearchHeader = ({
         >
           <SwapIcon size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
+      </View>
+
+      {/* Time Mode Row */}
+      <View style={styles.timeRow}>
+        <TouchableOpacity
+          style={styles.timeModeBtn}
+          onPress={cycleTimeMode}
+          accessibilityLabel={`Time mode: ${TIME_MODE_LABELS[timeMode]}. Tap to change.`}
+          accessibilityRole="button"
+        >
+          <Text style={styles.timeModeBtnText}>{TIME_MODE_LABELS[timeMode]}</Text>
+        </TouchableOpacity>
+        {timeMode !== 'now' && selectedTime && (
+          <Text style={styles.timeDisplay}>{formatTimeDisplay(selectedTime)}</Text>
+        )}
+        {timeMode !== 'now' && onSearch && (
+          <TouchableOpacity
+            style={styles.searchBtn}
+            onPress={onSearch}
+            accessibilityLabel="Search trips"
+            accessibilityRole="button"
+          >
+            <Text style={styles.searchBtnText}>Search</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -214,6 +266,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     ...SHADOWS.small,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    gap: SPACING.sm,
+  },
+  timeModeBtn: {
+    backgroundColor: COLORS.grey100,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  timeModeBtnText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  timeDisplay: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  searchBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginLeft: 'auto',
+  },
+  searchBtnText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
 });
 
