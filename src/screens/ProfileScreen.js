@@ -128,22 +128,32 @@ const ProfileScreen = ({ navigation }) => {
         )}
 
         {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{favorites.stops.length}</Text>
-            <Text style={styles.statLabel}>Saved Stops</Text>
+        {favorites.stops.length === 0 && favorites.routes.length === 0 && tripHistory.length === 0 ? (
+          <View style={styles.emptyStatsContainer}>
+            <Text style={styles.emptyStatsIcon}>🚌</Text>
+            <Text style={styles.emptyStatsTitle}>Start exploring!</Text>
+            <Text style={styles.emptyStatsSubtitle}>
+              Save stops and plan trips to see your stats here
+            </Text>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{favorites.routes.length}</Text>
-            <Text style={styles.statLabel}>Saved Routes</Text>
+        ) : (
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{favorites.stops.length}</Text>
+              <Text style={styles.statLabel}>Saved Stops</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{favorites.routes.length}</Text>
+              <Text style={styles.statLabel}>Saved Routes</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{tripHistory.length}</Text>
+              <Text style={styles.statLabel}>Trips Planned</Text>
+            </View>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{tripHistory.length}</Text>
-            <Text style={styles.statLabel}>Trips Planned</Text>
-          </View>
-        </View>
+        )}
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>{menuItems.map(renderMenuItem)}</View>
@@ -152,7 +162,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>{APP_CONFIG.APP_NAME}</Text>
           <Text style={styles.footerVersion}>Version {APP_CONFIG.VERSION}</Text>
-          <Text style={styles.footerCopyright}>© 2025 Barrie Transit</Text>
+          <Text style={styles.footerCopyright}>© 2026 Barrie Transit</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -253,6 +263,30 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
+  },
+  emptyStatsContainer: {
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    alignItems: 'center',
+    ...SHADOWS.small,
+  },
+  emptyStatsIcon: {
+    fontSize: 32,
+    marginBottom: SPACING.sm,
+  },
+  emptyStatsTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  emptyStatsSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   statsContainer: {
     flexDirection: 'row',

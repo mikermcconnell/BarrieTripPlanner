@@ -4,11 +4,12 @@
  */
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTransit } from '../context/TransitContext';
 import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
+import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
 import { useTripVisualization } from '../hooks/useTripVisualization';
@@ -36,9 +37,15 @@ const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
   </svg>
 );
 
-const StopIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+const StopIconFilled = ({ size = 20, color = COLORS.textPrimary }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill={color} />
+  </svg>
+);
+
+const StopIconOutline = ({ size = 20, color = COLORS.textPrimary }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM7 9C7 6.24 9.24 4 12 4C14.76 4 17 6.24 17 9C17 12.18 14.12 16.5 12 19.05C9.92 16.53 7 12.22 7 9ZM12 11.5C13.38 11.5 14.5 10.38 14.5 9C14.5 7.62 13.38 6.5 12 6.5C10.62 6.5 9.5 7.62 9.5 9C9.5 10.38 10.62 11.5 12 11.5Z" fill={color} />
   </svg>
 );
 
@@ -181,6 +188,14 @@ const HomeScreen = ({ route }) => {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
+
+  // Reset trip planner when navigating away from this tab
+  const isFocused = useIsFocused();
+  useEffect(() => {
+    if (!isFocused && isTripPlanningMode) {
+      resetTrip();
+    }
+  }, [isFocused]);
 
   // Map tap popup
   const {
@@ -580,7 +595,7 @@ const HomeScreen = ({ route }) => {
                 <View style={styles.statusBadgeLive}>
                   <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
                   <Text style={styles.statusTextLive}>
-                    {vehicles.length} live
+                    {vehicles.length} buses live
                   </Text>
                 </View>
               )}
@@ -698,7 +713,10 @@ const HomeScreen = ({ route }) => {
               onPress={() => setShowStops(!showStops)}
               activeOpacity={0.8}
             >
-              <StopIcon size={18} color={showStops ? COLORS.white : COLORS.textPrimary} />
+              {showStops
+                ? <StopIconFilled size={18} color={COLORS.white} />
+                : <StopIconOutline size={18} color={COLORS.textPrimary} />
+              }
               <Text style={[styles.bottomActionText, showStops && styles.bottomActionTextActive]}>
                 Stops
               </Text>
@@ -722,26 +740,30 @@ const HomeScreen = ({ route }) => {
 
       {/* Trip Bottom Sheet - show when in trip planning mode AND searching/searched */}
       {isTripPlanningMode && (hasTripSearched || isTripLoading) && (
-        <TripBottomSheet
-          itineraries={itineraries}
-          selectedIndex={selectedItineraryIndex}
-          onSelectItinerary={setSelectedItineraryIndex}
-          onViewDetails={viewTripDetails}
-          onStartNavigation={startNavigationDirect}
-          isLoading={isTripLoading}
-          error={tripError}
-          hasSearched={hasTripSearched}
-        />
+        <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
+          <TripBottomSheet
+            itineraries={itineraries}
+            selectedIndex={selectedItineraryIndex}
+            onSelectItinerary={setSelectedItineraryIndex}
+            onViewDetails={viewTripDetails}
+            onStartNavigation={startNavigationDirect}
+            isLoading={isTripLoading}
+            error={tripError}
+            hasSearched={hasTripSearched}
+          />
+        </SheetErrorBoundary>
       )}
 
       {/* Stop Bottom Sheet - only show when not in trip planning mode */}
       {!isTripPlanningMode && selectedStop && (
-        <StopBottomSheet
-          stop={selectedStop}
-          onClose={() => setSelectedStop(null)}
-          onDirectionsFrom={handleStopDirectionsFrom}
-          onDirectionsTo={handleStopDirectionsTo}
-        />
+        <SheetErrorBoundary fallbackMessage="Stop details failed to load.">
+          <StopBottomSheet
+            stop={selectedStop}
+            onClose={() => setSelectedStop(null)}
+            onDirectionsFrom={handleStopDirectionsFrom}
+            onDirectionsTo={handleStopDirectionsTo}
+          />
+        </SheetErrorBoundary>
       )}
 
       {/* Dev-only Detour Debug Panel */}

@@ -2,15 +2,16 @@
  * Native-specific HomeScreen (iOS/Android)
  * Web platform uses HomeScreen.web.js instead
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import MapView, { PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import { useTransit } from '../context/TransitContext';
 import { MAP_CONFIG } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
+import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import TripErrorDisplay from '../components/TripErrorDisplay';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
@@ -36,9 +37,10 @@ import BottomActionBar from '../components/PlanTripFAB';
 import TripSearchHeader from '../components/TripSearchHeader';
 import TripBottomSheet from '../components/TripBottomSheet';
 import MapTapPopup from '../components/MapTapPopup';
-import { CUSTOM_MAP_STYLE } from '../config/mapStyle';
 import HomeScreenControls from '../components/HomeScreenControls';
 import Svg, { Path } from 'react-native-svg';
+
+const STADIA_STYLE_URL = 'https://tiles.stadiamaps.com/styles/alidade_smooth.json';
 
 // SVG Icons for native (must use react-native-svg, not DOM <svg>)
 const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => (
@@ -59,8 +61,31 @@ const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
   </Svg>
 );
 
+// Helper: convert region {lat, lng, latDelta, lngDelta} to MapLibre camera params
+const regionToCamera = (region) => ({
+  centerCoordinate: [region.longitude, region.latitude],
+  zoomLevel: Math.log2(360 / region.latitudeDelta),
+  animationDuration: 500,
+});
+
+// Helper: compute bounds from coordinates array [{latitude, longitude}]
+const computeBounds = (coords) => {
+  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  coords.forEach(c => {
+    minLat = Math.min(minLat, c.latitude);
+    maxLat = Math.max(maxLat, c.latitude);
+    minLng = Math.min(minLng, c.longitude);
+    maxLng = Math.max(maxLng, c.longitude);
+  });
+  return {
+    ne: [maxLng, maxLat],
+    sw: [minLng, minLat],
+  };
+};
+
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
+  const cameraRef = useRef(null);
   const navigation = useNavigation();
   const {
     routes,
@@ -87,9 +112,35 @@ const HomeScreen = ({ route }) => {
     hasActiveDetour,
   } = useTransit();
 
+  // Wrap mapRef to provide animateToRegion compatibility for hooks
+  const compatMapRef = useRef({
+    animateToRegion: (region, duration = 500) => {
+      cameraRef.current?.setCamera({
+        centerCoordinate: [region.longitude, region.latitude],
+        zoomLevel: Math.log2(360 / region.latitudeDelta),
+        animationDuration: duration,
+      });
+    },
+    fitToCoordinates: (coords, opts = {}) => {
+      if (!coords || coords.length === 0) return;
+      const bounds = computeBounds(coords);
+      const padding = opts.edgePadding || {};
+      cameraRef.current?.setCamera({
+        bounds: { ne: bounds.ne, sw: bounds.sw },
+        padding: {
+          paddingTop: padding.top || 50,
+          paddingRight: padding.right || 50,
+          paddingBottom: padding.bottom || 50,
+          paddingLeft: padding.left || 50,
+        },
+        animationDuration: opts.animated !== false ? 500 : 0,
+      });
+    },
+  });
+
   const {
     selectedRoutes, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
-  } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
+  } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
@@ -139,13 +190,21 @@ const HomeScreen = ({ route }) => {
     boardingAlightingMarkers, tripVehicles,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
 
+  // Reset trip planner when navigating away from this tab
+  const isFocused = useIsFocused();
+  useEffect(() => {
+    if (!isFocused && isTripPlanningMode) {
+      resetTrip();
+    }
+  }, [isFocused]);
+
   // Pulse animation for live indicator
   const pulseAnim = useMapPulseAnimation();
 
   // Map tap popup
   const {
     mapTapLocation, mapTapAddress, isLoadingAddress,
-    handleMapPress, handleDirectionsFrom, handleDirectionsTo, closeMapTapPopup,
+    handleMapPress: handleMapTapPress, handleDirectionsFrom, handleDirectionsTo, closeMapTapPopup,
     showLocation,
   } = useMapTapPopup({
     enterPlanningMode, setTripFrom, setTripTo,
@@ -154,7 +213,7 @@ const HomeScreen = ({ route }) => {
 
   // Navigation param effects (selected stop/route/coordinate, exit trip planning)
   useMapNavigation({
-    route, navigation, stops, mapRef,
+    route, navigation, stops, mapRef: compatMapRef,
     selectRoute, resetTrip, setSelectedStop, setShowStops,
     hasSelection, showLocation,
   });
@@ -188,11 +247,33 @@ const HomeScreen = ({ route }) => {
     activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
   });
 
-  // Handle map region change
-  const handleRegionChange = (region) => {
-    setMapRegion(region);
-    const zoom = Math.round(Math.log(360 / region.latitudeDelta) / Math.LN2);
-    setCurrentZoom(zoom);
+  // Handle map region change (MapLibre onRegionDidChange)
+  const handleRegionChange = (feature) => {
+    const { properties, geometry } = feature;
+    const [lng, lat] = geometry.coordinates;
+    const zoom = properties.zoomLevel;
+
+    // Reconstruct region-like object for existing code
+    const latDelta = 360 / Math.pow(2, zoom);
+    const lngDelta = latDelta; // Approximate
+    setMapRegion({
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    });
+    setCurrentZoom(Math.round(zoom));
+  };
+
+  // Handle map press — MapLibre event format
+  const handleMapPress = (e) => {
+    const [lng, lat] = e.geometry.coordinates;
+    // Convert to react-native-maps compatible format for the hook
+    handleMapTapPress({
+      nativeEvent: {
+        coordinate: { latitude: lat, longitude: lng },
+      },
+    });
   };
 
   // Handle stop press
@@ -219,6 +300,20 @@ const HomeScreen = ({ route }) => {
     resetTrip();
   };
 
+  // Handle "Trip from here" from stop bottom sheet
+  const handleStopDirectionsFrom = (stopInfo) => {
+    setSelectedStop(null);
+    enterPlanningMode();
+    setTripFrom({ lat: stopInfo.lat, lon: stopInfo.lon }, stopInfo.name || 'Selected stop');
+  };
+
+  // Handle "Trip to here" from stop bottom sheet
+  const handleStopDirectionsTo = (stopInfo) => {
+    setSelectedStop(null);
+    enterPlanningMode();
+    setTripTo({ lat: stopInfo.lat, lon: stopInfo.lon }, stopInfo.name || 'Selected stop');
+  };
+
 
   const useCurrentLocationForTrip = () => {
     useCurrentLocationHook(async () => {
@@ -237,11 +332,9 @@ const HomeScreen = ({ route }) => {
       if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
       if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
       if (leg.legGeometry?.points) {
-        // Decode polyline if available
         const decoded = decodePolyline(leg.legGeometry.points);
         coords.push(...decoded);
       }
-      // Include intermediate stops in bounds calculation
       if (leg.intermediateStops) {
         leg.intermediateStops.forEach(stop => {
           if (stop.lat && stop.lon) {
@@ -274,7 +367,7 @@ const HomeScreen = ({ route }) => {
     }
 
     if (coords.length > 0) {
-      mapRef.current?.fitToCoordinates(coords, {
+      compatMapRef.current.fitToCoordinates(coords, {
         edgePadding: { top: 150, right: 50, bottom: 200, left: 50 },
         animated: true,
       });
@@ -323,20 +416,26 @@ const HomeScreen = ({ route }) => {
   // Render native map
   const renderMap = () => {
     return (
-      <MapView
+      <MapLibreGL.MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_DEFAULT}
-        initialRegion={MAP_CONFIG.INITIAL_REGION}
-        showsUserLocation
-        showsMyLocationButton={false}
-        showsCompass
+        styleURL={STADIA_STYLE_URL}
         rotateEnabled
         pitchEnabled={false}
-        onRegionChangeComplete={handleRegionChange}
+        attributionPosition={{ bottom: 8, left: 8 }}
+        logoEnabled={false}
         onPress={handleMapPress}
-        customMapStyle={CUSTOM_MAP_STYLE}
+        onRegionDidChange={handleRegionChange}
       >
+        <MapLibreGL.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude],
+            zoomLevel: Math.log2(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta),
+          }}
+        />
+        <MapLibreGL.UserLocation visible={true} />
+
         {/* Regular transit routes - hide when previewing a trip */}
         {!isTripPreviewMode && displayedShapes.map((shape) => {
           const isSelected = isRouteSelected(shape.routeId);
@@ -350,6 +449,7 @@ const HomeScreen = ({ route }) => {
           return (
             <RoutePolyline
               key={shape.id}
+              id={`route-${shape.id}`}
               coordinates={shape.coordinates}
               color={shape.color}
               strokeWidth={getPolylineWeight(shape.routeId)}
@@ -376,39 +476,42 @@ const HomeScreen = ({ route }) => {
         {!isTripPreviewMode && displayedDetours.map((detour) => (
           <DetourPolyline
             key={detour.id}
+            id={`detour-${detour.id}`}
             coordinates={detour.polyline}
           />
         ))}
 
         {/* Trip planning route overlay */}
-        {tripRouteCoordinates.map((route) => (
-          <Polyline
-            key={route.id}
-            coordinates={route.coordinates}
-            strokeColor={route.color}
-            strokeWidth={route.isWalk ? 3 : 5}
-            lineDashPattern={route.isWalk ? [10, 5] : null}
+        {tripRouteCoordinates.map((tripRoute) => (
+          <RoutePolyline
+            key={tripRoute.id}
+            id={`trip-${tripRoute.id}`}
+            coordinates={tripRoute.coordinates}
+            color={tripRoute.color}
+            strokeWidth={tripRoute.isWalk ? 3 : 5}
+            lineDashPattern={tripRoute.isWalk ? [10, 5] : null}
+            opacity={1}
           />
         ))}
 
         {/* Trip planning intermediate stop markers */}
         {intermediateStopMarkers.map((marker) => (
-          <Marker
+          <MapLibreGL.PointAnnotation
             key={marker.id}
-            coordinate={marker.coordinate}
-            title={marker.name}
+            id={`int-stop-${marker.id}`}
+            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={[styles.intermediateStopMarker, { backgroundColor: marker.color }]} />
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         ))}
 
         {/* Trip planning markers */}
         {tripMarkers.map((marker) => (
-          <Marker
+          <MapLibreGL.PointAnnotation
             key={marker.id}
-            coordinate={marker.coordinate}
-            title={marker.title}
+            id={`trip-marker-${marker.id}`}
+            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
           >
             <View style={[
               styles.tripMarker,
@@ -419,14 +522,15 @@ const HomeScreen = ({ route }) => {
                 marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
               ]} />
             </View>
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         ))}
 
         {/* Boarding and alighting stop markers with labels */}
         {boardingAlightingMarkers.map((marker) => (
-          <Marker
+          <MapLibreGL.PointAnnotation
             key={marker.id}
-            coordinate={marker.coordinate}
+            id={`ba-${marker.id}`}
+            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
             anchor={{ x: 0.5, y: 1 }}
           >
             <View style={styles.stopLabelContainer}>
@@ -440,7 +544,7 @@ const HomeScreen = ({ route }) => {
               </View>
               <View style={[styles.stopLabelPointer, { borderTopColor: marker.routeColor }]} />
             </View>
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         ))}
 
         {/* Real-time bus positions for trip routes */}
@@ -450,17 +554,18 @@ const HomeScreen = ({ route }) => {
 
         {/* Map tap marker - shows where user tapped */}
         {mapTapLocation && (
-          <Marker
-            coordinate={mapTapLocation}
+          <MapLibreGL.PointAnnotation
+            id="map-tap-marker"
+            coordinate={[mapTapLocation.longitude, mapTapLocation.latitude]}
             anchor={{ x: 0.5, y: 1 }}
           >
             <View style={styles.mapTapMarker}>
               <View style={styles.mapTapMarkerPin} />
               <View style={styles.mapTapMarkerDot} />
             </View>
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         )}
-      </MapView>
+      </MapLibreGL.MapView>
     );
   };
 
@@ -480,7 +585,7 @@ const HomeScreen = ({ route }) => {
           <View style={styles.statusBadgeLive}>
             <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
             <Text style={styles.statusTextLive}>
-              {isOffline ? 'Offline' : `${vehicles.length} live`}
+              {isOffline ? 'Offline' : `${vehicles.length} buses live`}
             </Text>
           </View>
         </TouchableOpacity>
@@ -555,27 +660,36 @@ const HomeScreen = ({ route }) => {
               }
             }}
           />
-          <TripBottomSheet
-            itineraries={itineraries}
-            selectedIndex={selectedItineraryIndex}
-            onSelectItinerary={setSelectedItineraryIndex}
-            onViewDetails={viewTripDetails}
-            onStartNavigation={startNavigationDirect}
-            isLoading={isTripLoading}
-            error={tripError}
-            hasSearched={hasTripSearched}
-            onRetry={() => {
-              if (tripFromLocation && tripToLocation) {
-                searchTrips(tripFromLocation, tripToLocation);
-              }
-            }}
-          />
+          <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
+            <TripBottomSheet
+              itineraries={itineraries}
+              selectedIndex={selectedItineraryIndex}
+              onSelectItinerary={setSelectedItineraryIndex}
+              onViewDetails={viewTripDetails}
+              onStartNavigation={startNavigationDirect}
+              isLoading={isTripLoading}
+              error={tripError}
+              hasSearched={hasTripSearched}
+              onRetry={() => {
+                if (tripFromLocation && tripToLocation) {
+                  searchTrips(tripFromLocation, tripToLocation);
+                }
+              }}
+            />
+          </SheetErrorBoundary>
         </>
       )}
 
       {/* Stop Bottom Sheet - only show when not in trip planning mode */}
       {!isTripPlanningMode && selectedStop && (
-        <StopBottomSheet stop={selectedStop} onClose={() => setSelectedStop(null)} />
+        <SheetErrorBoundary fallbackMessage="Stop details failed to load.">
+          <StopBottomSheet
+            stop={selectedStop}
+            onClose={() => setSelectedStop(null)}
+            onDirectionsFrom={handleStopDirectionsFrom}
+            onDirectionsTo={handleStopDirectionsTo}
+          />
+        </SheetErrorBoundary>
       )}
 
       {/* Map Tap Popup - for choosing directions from/to a tapped location */}
