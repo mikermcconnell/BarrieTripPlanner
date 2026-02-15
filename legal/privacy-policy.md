@@ -47,7 +47,10 @@ The App uses the following third-party services:
 | Service | Purpose | Privacy Policy |
 |---------|---------|----------------|
 | Google Firebase | Authentication, data storage, analytics | [Firebase Privacy](https://firebase.google.com/support/privacy) |
+| Sentry | Crash reporting and error tracking | [Sentry Privacy](https://sentry.io/privacy/) |
 | LocationIQ | Address search and walking directions | [LocationIQ Privacy](https://locationiq.com/privacy) |
+| OpenStreetMap | Map tile rendering | [OSM Privacy](https://wiki.osmfoundation.org/wiki/Privacy_Policy) |
+| Expo (Expo Application Services) | Push notifications and over-the-air updates | [Expo Privacy](https://expo.dev/privacy) |
 | Barrie Transit (GTFS) | Public transit schedules and real-time data | Publicly available open data |
 
 ## Your Rights and Choices
