@@ -14,6 +14,8 @@
 
 import { useRef, useCallback, useMemo, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import logger from '../utils/logger';
+import { DETOUR_CONFIG } from '../config/constants';
 import {
   initializeDetourState,
   processVehicleForDetour,
@@ -182,6 +184,7 @@ export const useDetourDetection = (
   const stateRef = useRef(null);
   const isHydratedRef = useRef(false);
   const lastPersistTimeRef = useRef(0);
+  const dismissedDetourIdsRef = useRef(new Set());
   const [stateVersion, setStateVersion] = useState(0);
 
   // Initialize state on first use
@@ -206,7 +209,7 @@ export const useDetourDetection = (
         await AsyncStorage.setItem(DETOUR_STATE_STORAGE_KEY, JSON.stringify(serializableState));
         lastPersistTimeRef.current = now;
       } catch (error) {
-        console.warn('Failed to persist detour detection state:', error);
+        logger.warn('Failed to persist detour detection state:', error);
       }
     },
     []
@@ -224,10 +227,35 @@ export const useDetourDetection = (
         if (raw) {
           const parsed = JSON.parse(raw);
           stateRef.current = normalizeLoadedState(parsed);
+
+          // Confidence-based detour expiry on hydration:
+          // - suspected: expire after SUSPECTED_DETOUR_EXPIRY_MS (1 hour)
+          // - likely / high-confidence: persist (unless past 24-hour max)
+          const hydrateNow = Date.now();
+          const suspectedExpiryMs = DETOUR_CONFIG.SUSPECTED_DETOUR_EXPIRY_MS || DETOUR_CONFIG.DETOUR_EXPIRY_MS || 3600000;
+          const maxRetentionMs = DETOUR_CONFIG.MAX_DETOUR_RETENTION_MS || 86400000;
+          for (const detourId of Object.keys(stateRef.current.activeDetours)) {
+            const detour = stateRef.current.activeDetours[detourId];
+            const age = hydrateNow - (detour.firstDetectedAt || detour.lastSeenAt);
+            const level = detour.confidenceLevel || 'suspected';
+
+            // Absolute cap: expire any detour older than 24 hours
+            if (age > maxRetentionMs) {
+              delete stateRef.current.activeDetours[detourId];
+              continue;
+            }
+            // Only time-expire suspected (low-confidence) detours
+            if (level === 'suspected' && hydrateNow - detour.lastSeenAt > suspectedExpiryMs) {
+              delete stateRef.current.activeDetours[detourId];
+            }
+          }
+          // Clear stale pending paths — breadcrumbs shouldn't carry over across sessions
+          stateRef.current.pendingPaths = {};
+
           cleanupExpiredDetours(stateRef.current);
         }
       } catch (error) {
-        console.warn('Failed to hydrate detour detection state:', error);
+        logger.warn('Failed to hydrate detour detection state:', error);
         stateRef.current = initializeDetourState();
       } finally {
         if (mounted) {
@@ -240,32 +268,52 @@ export const useDetourDetection = (
     hydrateState();
     return () => {
       mounted = false;
-      persistState(true);
+      if (isHydratedRef.current) {
+        persistState(true);
+      }
     };
   }, [persistState]);
 
   // Process all vehicles on each update
   useEffect(() => {
     if (!stateRef.current || !isHydratedRef.current) return;
+    if (!vehicles || vehicles.length === 0) return;
 
     const state = stateRef.current;
     const canProcessVehicles =
-      vehicles &&
-      vehicles.length > 0 &&
       shapes &&
       Object.keys(shapes).length > 0 &&
       routeShapeMapping &&
       Object.keys(routeShapeMapping).length > 0;
 
     if (canProcessVehicles) {
-      // Process each vehicle
       for (const vehicle of vehicles) {
-        // Process for detour detection
-        processVehicleForDetour(vehicle, shapes, tripMapping, routeShapeMapping, state);
-
-        // Also check if this vehicle clears any existing detours
-        checkDetourClearing(vehicle, shapes, routeShapeMapping, state);
+        try {
+          processVehicleForDetour(vehicle, shapes, tripMapping, routeShapeMapping, state);
+          checkDetourClearing(vehicle, shapes, routeShapeMapping, state);
+        } catch (error) {
+          logger.warn('Failed to process vehicle for detour detection:', vehicle?.id, error);
+        }
       }
+
+      // Log every vehicle that is currently off-route after processing
+      const offRouteVehicles = Object.values(state.vehicleTracking).filter((v) => v.isCurrentlyOffRoute);
+      if (offRouteVehicles.length > 0) {
+        const details = offRouteVehicles.map((v) => {
+          const crumbs = v.offRouteBreadcrumbs?.length || 0;
+          const lastCrumb = v.offRouteBreadcrumbs?.[v.offRouteBreadcrumbs.length - 1];
+          const dist = lastCrumb?.offRouteDistanceMeters ? Math.round(lastCrumb.offRouteDistanceMeters) : '?';
+          return `${v.vehicleId}(rt${v.routeId} dir${v.directionId ?? '?'} ${dist}m ${crumbs}crumbs)`;
+        }).join(', ');
+        logger.info('[detour-client] OFF-ROUTE vehicles: ' + details);
+      }
+    } else {
+      logger.info(
+        '[detour-client] skipping: shapes=%d routeShapeMappings=%d vehicles=%d',
+        shapes ? Object.keys(shapes).length : 0,
+        routeShapeMapping ? Object.keys(routeShapeMapping).length : 0,
+        vehicles?.length || 0
+      );
     }
 
     // Correlate with official service alerts (if provided)
@@ -277,7 +325,7 @@ export const useDetourDetection = (
     setStateVersion((version) => version + 1);
   }, [vehicles, shapes, tripMapping, routeShapeMapping, serviceAlerts, persistState]);
 
-  // Cleanup interval for stale data
+  // Cleanup interval for stale data + periodic diagnostic logging
   useEffect(() => {
     const interval = setInterval(() => {
       if (stateRef.current && isHydratedRef.current) {
@@ -285,6 +333,38 @@ export const useDetourDetection = (
         cleanupExpiredDetours(stateRef.current);
         persistState();
         setStateVersion((version) => version + 1);
+
+        // Detailed diagnostic summary every 60s
+        const s = stateRef.current;
+        const trackingCount = Object.keys(s.vehicleTracking).length;
+        const offRouteVehicles = Object.values(s.vehicleTracking).filter((v) => v.isCurrentlyOffRoute);
+        const pendingByRoute = {};
+        Object.entries(s.pendingPaths).forEach(([key, paths]) => {
+          if (paths?.length) pendingByRoute[key] = paths.length;
+        });
+        const activeByRoute = {};
+        Object.entries(s.activeDetours).forEach(([key, det]) => {
+          activeByRoute[key] = `${det.status}/${det.confidenceLevel || '?'}(${det.confirmedByVehicles?.length || 0}veh)`;
+        });
+
+        logger.info(
+          '[detour-client] 60s diagnostic: tracking=%d offRoute=%d pending=%s active=%s',
+          trackingCount,
+          offRouteVehicles.length,
+          Object.keys(pendingByRoute).length > 0
+            ? JSON.stringify(pendingByRoute)
+            : 'none',
+          Object.keys(activeByRoute).length > 0
+            ? JSON.stringify(activeByRoute)
+            : 'none'
+        );
+        if (offRouteVehicles.length > 0) {
+          const details = offRouteVehicles.map((v) => {
+            const crumbs = v.offRouteBreadcrumbs?.length || 0;
+            return `${v.vehicleId}(rt${v.routeId} ${crumbs}crumbs)`;
+          }).join(', ');
+          logger.info('[detour-client] 60s off-route: ' + details);
+        }
       }
     }, 60000); // Every minute
 
@@ -292,7 +372,15 @@ export const useDetourDetection = (
   }, [serviceAlerts, persistState]);
 
   /**
-   * Get all currently active (suspected) detours
+   * Dismiss a detour for this session only (not persisted across restarts)
+   */
+  const dismissDetour = useCallback((detourId) => {
+    dismissedDetourIdsRef.current.add(detourId);
+    setStateVersion((v) => v + 1);
+  }, []);
+
+  /**
+   * Get all currently active (suspected) detours, excluding dismissed ones
    */
   const activeDetours = useMemo(() => {
     if (!stateRef.current) return [];
@@ -302,8 +390,9 @@ export const useDetourDetection = (
       routeStopsMapping
     );
     const officialDetours = buildOfficialDetoursFromAlerts(serviceAlerts, stops);
-    return mergeAutoAndOfficialDetours(autoDetours, officialDetours);
-  }, [stateVersion, vehicles, stops, routeStopsMapping, serviceAlerts]); // Re-compute when inputs change
+    const merged = mergeAutoAndOfficialDetours(autoDetours, officialDetours);
+    return merged.filter((d) => !dismissedDetourIdsRef.current.has(d.id));
+  }, [stateVersion, stops, routeStopsMapping, serviceAlerts]);
 
   /**
    * Get active detours for a specific route
@@ -372,6 +461,7 @@ export const useDetourDetection = (
     getDetoursForRoute,
     getDetourHistory,
     hasActiveDetour,
+    dismissDetour,
     getDebugState,
   };
 };

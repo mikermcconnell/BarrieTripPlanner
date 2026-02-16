@@ -17,6 +17,7 @@ import logger from '../utils/logger';
 
 const TransitContext = createContext(null);
 const AUTO_DETOURS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS === 'true';
+const EMPTY_VEHICLES = []; // Stable reference to avoid re-render loops
 
 export const useTransit = () => {
   const context = useContext(TransitContext);
@@ -389,11 +390,9 @@ export const TransitProvider = ({ children }) => {
     return Date.now() - feedTimestamp <= freshnessWindowMs;
   }, [detourFeedStatus, detourFeedMeta]);
 
-  // Optimization B: skip expensive local detection when backend is live
-  // Pass empty array so the hook does no processing when results would be discarded
-  const detourVehicleInput = (AUTO_DETOURS_ENABLED && isBackendDetourFeedLive)
-    ? []
-    : vehicles;
+  // Always pass real vehicles to local detection when auto-detours are enabled.
+  // The merge logic below combines backend + local results, preferring backend per-route.
+  const detourVehicleInput = AUTO_DETOURS_ENABLED ? vehicles : EMPTY_VEHICLES;
 
   // Detour detection hook - processes vehicle positions to detect route deviations
   const {
@@ -401,6 +400,7 @@ export const TransitProvider = ({ children }) => {
     getDetoursForRoute: getLocalDetoursForRoute,
     getDetourHistory,
     hasActiveDetour: hasLocalActiveDetour,
+    dismissDetour,
   } = useDetourDetection(
     detourVehicleInput,
     shapes,
@@ -411,9 +411,13 @@ export const TransitProvider = ({ children }) => {
     serviceAlerts
   );
 
-  const activeDetours = AUTO_DETOURS_ENABLED
-    ? (isBackendDetourFeedLive ? backendActiveDetours : localActiveDetours)
-    : [];
+  // Merge both detour sources: prefer backend per-route, fill in from local
+  const activeDetours = useMemo(() => {
+    if (!AUTO_DETOURS_ENABLED) return [];
+    const backendRouteIds = new Set(backendActiveDetours.map((d) => d.routeId));
+    const localOnly = localActiveDetours.filter((d) => !backendRouteIds.has(d.routeId));
+    return [...backendActiveDetours, ...localOnly];
+  }, [backendActiveDetours, localActiveDetours]);
 
   const getDetoursForRoute = useCallback(
     (routeId, directionId = null) =>
@@ -509,11 +513,9 @@ export const TransitProvider = ({ children }) => {
     lastVehicleUpdate,
     serviceAlerts,
     detourFeedMeta,
-    detourFeedStatus: {
-      ...detourFeedStatus,
-      enabled: AUTO_DETOURS_ENABLED,
-      usingBackend: isBackendDetourFeedLive,
-    },
+    detourFeedStatus,
+    detourFeedEnabled: AUTO_DETOURS_ENABLED,
+    detourFeedUsingBackend: isBackendDetourFeedLive,
 
     // Loading states
     isLoadingStatic,
@@ -545,11 +547,7 @@ export const TransitProvider = ({ children }) => {
     getDetoursForRoute,
     getDetourHistory,
     hasActiveDetour,
-    // Local fallback detector diagnostics
-    localDetourDetector: {
-      hasActiveDetour: hasLocalActiveDetour,
-      getDetoursForRoute: getLocalDetoursForRoute,
-    },
+    dismissDetour,
   };
 
   return <TransitContext.Provider value={value}>{children}</TransitContext.Provider>;

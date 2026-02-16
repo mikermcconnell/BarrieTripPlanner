@@ -12,9 +12,9 @@ const CONFIG = {
   pollMs: Number(process.env.DETOUR_POLL_INTERVAL_MS || 15000),
   staticRefreshMs: Number(process.env.DETOUR_STATIC_REFRESH_MS || 6 * 60 * 60 * 1000),
   evidenceWindowMs: Number(process.env.DETOUR_EVIDENCE_WINDOW_MS || 30 * 60 * 1000),
-  minRouteEvidence: Number(process.env.DETOUR_MIN_ROUTE_EVIDENCE || 8),
+  minRouteEvidence: Number(process.env.DETOUR_MIN_ROUTE_EVIDENCE || 4),
   minUniqueVehicles: Number(process.env.DETOUR_MIN_UNIQUE_VEHICLES || 2),
-  offRouteThresholdMeters: Number(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || 55),
+  offRouteThresholdMeters: Number(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || 40),
   detourCollection: process.env.DETOUR_COLLECTION || 'publicDetoursActive',
   metaCollection: process.env.DETOUR_META_COLLECTION || 'publicSystem',
   metaDoc: process.env.DETOUR_META_DOC || 'detours',
@@ -474,7 +474,7 @@ const fetchAlerts = async () => {
 
 const getRouteShapes = (routeId) => (staticData.routeShapeMapping[routeId] || []).map((shapeId) => staticData.shapes[shapeId]).filter((shape) => Array.isArray(shape) && shape.length >= 2);
 
-const trackEvidence = (vehicles) => {
+const trackEvidence = (vehicles, logger) => {
   const now = Date.now();
   vehicles.forEach((vehicle) => {
     if (!vehicle.routeId || !vehicle.coordinate) return;
@@ -487,6 +487,14 @@ const trackEvidence = (vehicles) => {
       minDistance = Math.min(minDistance, pointToPolylineDistance(vehicle.coordinate, shape));
     });
     if (minDistance <= CONFIG.offRouteThresholdMeters) return;
+
+    // Log every off-route hit so we can see what's accumulating
+    logger.info(
+      '[detour-worker] OFF-ROUTE vehicle=%s route=%s dir=%s dist=%dm threshold=%dm coord=[%s,%s]',
+      vehicle.id, routeId, vehicle.directionId ?? '?',
+      Math.round(minDistance), CONFIG.offRouteThresholdMeters,
+      vehicle.coordinate.latitude.toFixed(5), vehicle.coordinate.longitude.toFixed(5)
+    );
 
     if (!state.routeEvidence[routeKey]) {
       state.routeEvidence[routeKey] = {
@@ -511,14 +519,35 @@ const trackEvidence = (vehicles) => {
   });
 };
 
-const buildAutoDetours = () => {
+const buildAutoDetours = (logger) => {
   const now = Date.now();
   const detours = [];
   Object.keys(state.routeEvidence).forEach((routeKey) => {
     const evidence = state.routeEvidence[routeKey];
     const uniqueVehicles = new Set(evidence.events.map((event) => event.vehicleId));
-    if (evidence.events.length < CONFIG.minRouteEvidence) return;
-    if (uniqueVehicles.size < CONFIG.minUniqueVehicles) return;
+
+    // Log why each route with evidence is or isn't promoted
+    const vehicleList = Array.from(uniqueVehicles).join(',');
+    if (evidence.events.length < CONFIG.minRouteEvidence) {
+      logger.info(
+        '[detour-worker] NOT-PROMOTED %s: events=%d<%d(min) vehicles=[%s](%d unique)',
+        routeKey, evidence.events.length, CONFIG.minRouteEvidence,
+        vehicleList, uniqueVehicles.size
+      );
+      return;
+    }
+    if (uniqueVehicles.size < CONFIG.minUniqueVehicles) {
+      logger.info(
+        '[detour-worker] NOT-PROMOTED %s: events=%d OK but uniqueVehicles=%d<%d(min) vehicles=[%s]',
+        routeKey, evidence.events.length,
+        uniqueVehicles.size, CONFIG.minUniqueVehicles, vehicleList
+      );
+      return;
+    }
+    logger.info(
+      '[detour-worker] PROMOTED %s: events=%d vehicles=[%s](%d unique) → detour!',
+      routeKey, evidence.events.length, vehicleList, uniqueVehicles.size
+    );
     const recentPoints = evidence.events.slice(-12).map((e) => ({
       latitude: e.point.latitude,
       longitude: e.point.longitude,
@@ -694,8 +723,32 @@ const tick = async (logger) => {
   try {
     await maybeRefreshStatic(logger);
     const [vehicles, alerts] = await Promise.all([fetchVehicles(staticData.tripMapping), fetchAlerts()]);
-    trackEvidence(vehicles);
-    const autoDetours = buildAutoDetours();
+
+    // Diagnostic: count vehicles with loaded shapes and off-route hits
+    const routesWithShapes = Object.keys(staticData.routeShapeMapping).length;
+    const offRouteBefore = Object.keys(state.routeEvidence).length;
+
+    trackEvidence(vehicles, logger);
+
+    const offRouteAfter = Object.keys(state.routeEvidence).length;
+    const evidenceSummary = Object.entries(state.routeEvidence)
+      .map(([key, ev]) => {
+        const unique = new Set(ev.events.map((e) => e.vehicleId)).size;
+        return `${key}(${ev.events.length}ev/${unique}veh)`;
+      })
+      .join(', ');
+
+    logger.info(
+      '[detour-worker] tick vehicles=%d routesWithShapes=%d offRouteKeys=%d→%d alerts=%d evidence=[%s]',
+      vehicles.length,
+      routesWithShapes,
+      offRouteBefore,
+      offRouteAfter,
+      alerts.length,
+      evidenceSummary || 'none'
+    );
+
+    const autoDetours = buildAutoDetours(logger);
     const merged = mergeHybridDetours(autoDetours, alerts);
     await publishDetours(merged, logger);
     snapshot = { ...snapshot, lastTickAt: Date.now(), lastError: null };
