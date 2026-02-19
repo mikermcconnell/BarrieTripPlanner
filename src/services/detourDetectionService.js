@@ -22,12 +22,42 @@ const DEFAULT_CONFIDENCE_THRESHOLDS = {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
+const normalizeRouteId = (routeId) => {
+  if (routeId === null || routeId === undefined) return null;
+  const normalized = String(routeId).trim().toUpperCase();
+  return normalized || null;
+};
+
+const getBaseRouteId = (routeId) => {
+  const normalized = normalizeRouteId(routeId);
+  if (!normalized) return null;
+  const match = normalized.match(/\d+/);
+  if (!match) return null;
+  return String(parseInt(match[0], 10));
+};
+
+const getRouteOverride = (routeId) => {
+  const overrides = DETOUR_CONFIG.ROUTE_OVERRIDES || {};
+  const normalizedRouteId = normalizeRouteId(routeId);
+  if (normalizedRouteId && overrides[normalizedRouteId]) {
+    return overrides[normalizedRouteId];
+  }
+
+  // Fallback: branch IDs like 2A/2B inherit base route tuning from "2".
+  const baseRouteId = getBaseRouteId(routeId);
+  if (baseRouteId && overrides[baseRouteId]) {
+    return overrides[baseRouteId];
+  }
+
+  return {};
+};
+
 /**
  * Resolve route-specific detection settings by merging global defaults
  * with optional per-route overrides from constants.
  */
 export const resolveRouteDetourConfig = (routeId) => {
-  const overrides = DETOUR_CONFIG.ROUTE_OVERRIDES?.[routeId] || {};
+  const overrides = getRouteOverride(routeId);
   return {
     OFF_ROUTE_THRESHOLD_METERS:
       overrides.OFF_ROUTE_THRESHOLD_METERS ?? DETOUR_CONFIG.OFF_ROUTE_THRESHOLD_METERS,
@@ -35,7 +65,9 @@ export const resolveRouteDetourConfig = (routeId) => {
     PATH_OVERLAP_PERCENTAGE:
       overrides.PATH_OVERLAP_PERCENTAGE ?? DETOUR_CONFIG.PATH_OVERLAP_PERCENTAGE,
     MIN_OFF_ROUTE_POINTS: overrides.MIN_OFF_ROUTE_POINTS ?? DETOUR_CONFIG.MIN_OFF_ROUTE_POINTS,
-    DETOUR_EXPIRY_MS: overrides.DETOUR_EXPIRY_MS ?? DETOUR_CONFIG.DETOUR_EXPIRY_MS,
+    SUSPECTED_DETOUR_EXPIRY_MS:
+      overrides.SUSPECTED_DETOUR_EXPIRY_MS ?? overrides.DETOUR_EXPIRY_MS ??
+      DETOUR_CONFIG.SUSPECTED_DETOUR_EXPIRY_MS ?? DETOUR_CONFIG.DETOUR_EXPIRY_MS,
     MIN_OFF_ROUTE_DURATION_MS:
       overrides.MIN_OFF_ROUTE_DURATION_MS ?? DETOUR_CONFIG.MIN_OFF_ROUTE_DURATION_MS,
     PENDING_PATH_EXPIRY_MS:
@@ -59,12 +91,12 @@ const getUniqueVehicleCount = (detour) => {
 
 const calculateConfidenceScore = (detour) => {
   const uniqueVehicles = getUniqueVehicleCount(detour);
-  let score = 45;
+  let score = 40;
 
-  if (uniqueVehicles >= 2) score = 60;
-  if (uniqueVehicles >= 3) score = 72;
-  if (uniqueVehicles >= 4) score = 82;
-  if (uniqueVehicles >= 5) score = 90;
+  if (uniqueVehicles >= 2) score = 65;
+  if (uniqueVehicles >= 3) score = 75;
+  if (uniqueVehicles >= 4) score = 85;
+  if (uniqueVehicles >= 5) score = 92;
 
   const now = Date.now();
   const ageMs = now - (detour.lastSeenAt || now);
@@ -238,14 +270,24 @@ export const processVehicleForDetour = (
       tracking.offRouteBreadcrumbs = [];
     }
 
-    // Add breadcrumb
-    tracking.offRouteBreadcrumbs.push({
-      latitude: vehicle.coordinate.latitude,
-      longitude: vehicle.coordinate.longitude,
-      timestamp: now,
-      matchedShapeId: nearestMatch.bestMatch?.shapeId || null,
-      offRouteDistanceMeters: nearestMatch.minDistanceMeters,
-    });
+    // Add breadcrumb — skip if within 10m of previous (GPS jitter filter)
+    const lastCrumb = tracking.offRouteBreadcrumbs[tracking.offRouteBreadcrumbs.length - 1];
+    const crumbDistance = lastCrumb
+      ? haversineDistance(
+          lastCrumb.latitude, lastCrumb.longitude,
+          vehicle.coordinate.latitude, vehicle.coordinate.longitude
+        )
+      : Infinity;
+
+    if (crumbDistance >= 10) {
+      tracking.offRouteBreadcrumbs.push({
+        latitude: vehicle.coordinate.latitude,
+        longitude: vehicle.coordinate.longitude,
+        timestamp: now,
+        matchedShapeId: nearestMatch.bestMatch?.shapeId || null,
+        offRouteDistanceMeters: nearestMatch.minDistanceMeters,
+      });
+    }
 
     tracking.lastMatchedShapeId = nearestMatch.bestMatch?.shapeId || null;
     tracking.lastUpdateTime = now;
@@ -292,6 +334,16 @@ const processCompletedOffRoutePath = (tracking, routeKey, state, routeConfig) =>
   // Simplify the path to reduce noise
   const simplifiedPath = simplifyPath(offRouteBreadcrumbs);
 
+  // Minimum path distance filter — reject GPS noise clusters shorter than 150m
+  const totalDistance = simplifiedPath.reduce((sum, point, i) => {
+    if (i === 0) return 0;
+    return sum + haversineDistance(
+      simplifiedPath[i - 1].latitude, simplifiedPath[i - 1].longitude,
+      point.latitude, point.longitude
+    );
+  }, 0);
+  if (totalDistance < 150) return null;
+
   // Initialize pending paths for this route if needed
   if (!state.pendingPaths[routeKey]) {
     state.pendingPaths[routeKey] = [];
@@ -312,23 +364,50 @@ const processCompletedOffRoutePath = (tracking, routeKey, state, routeConfig) =>
     );
 
     if (overlap) {
-      // Found a match - create or update a suspected detour
-      const detour = createOrUpdateDetour(
-        routeKey,
-        simplifiedPath,
-        pendingPath,
-        vehicleId,
-        tracking,
-        state,
-        routeConfig
-      );
+      // Require 3 unique vehicles before promoting to active detour
+      const matchedVehicles = pendingPath.matchedVehicles || [pendingPath.vehicleId];
+      if (!matchedVehicles.includes(vehicleId)) {
+        matchedVehicles.push(vehicleId);
+      }
+      const matchCount = matchedVehicles.length;
 
-      // Remove the matched pending path
-      state.pendingPaths[routeKey] = state.pendingPaths[routeKey].filter(
-        (p) => p !== pendingPath
-      );
+      if (matchCount >= 2) {
+        // 2+ vehicles confirmed — create or update a suspected detour
+        const detour = createOrUpdateDetour(
+          routeKey,
+          simplifiedPath,
+          pendingPath,
+          vehicleId,
+          tracking,
+          state,
+          routeConfig
+        );
 
-      return detour;
+        // Add all matched vehicles to the detour
+        for (const vid of matchedVehicles) {
+          const already = detour.confirmedByVehicles.some((e) => e.vehicleId === vid);
+          if (!already) {
+            detour.confirmedByVehicles.push({ vehicleId: vid, timestamp: now });
+          }
+        }
+        updateDetourConfidence(detour);
+
+        // Remove the matched pending path
+        state.pendingPaths[routeKey] = state.pendingPaths[routeKey].filter(
+          (p) => p !== pendingPath
+        );
+
+        return detour;
+      }
+
+      // matchCount === 1: only 1 vehicle so far, update pending path
+      pendingPath.matchedVehicles = matchedVehicles;
+      pendingPath.matchCount = matchCount;
+      if (simplifiedPath.length > pendingPath.path.length) {
+        pendingPath.path = simplifiedPath;
+      }
+      pendingPath.timestamp = now;
+      return null;
     }
   }
 
@@ -339,6 +418,8 @@ const processCompletedOffRoutePath = (tracking, routeKey, state, routeConfig) =>
     timestamp: now,
     routeId: tracking.routeId,
     directionId: tracking.directionId,
+    matchedVehicles: [vehicleId],
+    matchCount: 1,
   });
 
   return null;
@@ -408,6 +489,7 @@ const createOrUpdateDetour = (routeKey, newPath, matchedPending, vehicleId, trac
     alertCorrelation: 'none',
     affectedStops: [],
     segmentLabel: null,
+    clearingEvidence: [],
   };
 
   updateDetourConfidence(detour);
@@ -422,21 +504,40 @@ const getLongerPath = (path1, path2) =>
   path1.length >= path2.length ? path1 : path2;
 
 /**
- * Check if a detour should be cleared because vehicles are following the normal route
- * Call this when a vehicle successfully traverses the detour area on the normal route
+ * Get the number of on-route vehicles needed to clear a detour,
+ * capped at the number of vehicles that confirmed it (so a 2-bus route
+ * can never require 3+ clearing vehicles).
+ */
+const getClearingThreshold = (detour) => {
+  const thresholds = DETOUR_CONFIG.CLEARING_THRESHOLDS || { suspected: 2, likely: 3, highConfidence: 4 };
+  const level = detour.confidenceLevel || 'suspected';
+  let required;
+  if (level === 'high-confidence') required = thresholds.highConfidence || 4;
+  else if (level === 'likely') required = thresholds.likely || 3;
+  else required = thresholds.suspected || 2;
+
+  // Cap at evidence count so a 2-bus route can clear with 2 on-route vehicles
+  const evidenceCount = detour.evidenceCount || getUniqueVehicleCount(detour);
+  return Math.min(required, evidenceCount);
+};
+
+/**
+ * Check if a detour should be cleared because vehicles are following the normal route.
+ * Uses evidence-based clearing: accumulates unique on-route vehicles within a time
+ * window and only clears when the threshold is met.
  */
 export const checkDetourClearing = (vehicle, shapes, routeShapeMapping, state) => {
   if (!vehicle || !vehicle.routeId) return;
 
   const routeKey = getRouteKey(vehicle.routeId, vehicle.directionId);
   const routeConfig = resolveRouteDetourConfig(vehicle.routeId);
+  const now = Date.now();
+  const evidenceWindowMs = DETOUR_CONFIG.CLEARING_EVIDENCE_WINDOW_MS || 1800000;
 
-  // Find active detours for this route
   for (const detourId of Object.keys(state.activeDetours)) {
     const detour = state.activeDetours[detourId];
     if (detour.routeKey !== routeKey || detour.status !== 'suspected') continue;
 
-    // Check if vehicle is near the detour area but on the normal route
     const routePolylines = getRoutePolylines(vehicle.routeId, shapes, routeShapeMapping);
     if (routePolylines.length === 0) continue;
 
@@ -444,20 +545,45 @@ export const checkDetourClearing = (vehicle, shapes, routeShapeMapping, state) =
     const isOnRoute = nearestMatch.minDistanceMeters <= routeConfig.OFF_ROUTE_THRESHOLD_METERS;
 
     if (isOnRoute && detour.centroid) {
-      // Check if vehicle is near the detour centroid (point-to-point distance)
       const distToCentroid = haversineDistance(
         vehicle.coordinate.latitude,
         vehicle.coordinate.longitude,
         detour.centroid.latitude,
         detour.centroid.longitude
       );
+
       if (distToCentroid < routeConfig.CORRIDOR_WIDTH_METERS * 3) {
-        // Vehicle is near detour area but on normal route - potential clearing
-        // Mark detour as cleared
-        detour.status = 'cleared';
-        detour.clearedAt = Date.now();
-        detour.clearedByVehicle = vehicle.id;
-        updateDetourConfidence(detour);
+        // Initialize clearing evidence if missing (backward compat)
+        if (!Array.isArray(detour.clearingEvidence)) {
+          detour.clearingEvidence = [];
+        }
+
+        // Remove expired evidence entries
+        detour.clearingEvidence = detour.clearingEvidence.filter(
+          (e) => now - e.timestamp < evidenceWindowMs
+        );
+
+        // Add this vehicle if not already present in the window (dedupe by vehicleId)
+        const alreadyRecorded = detour.clearingEvidence.some(
+          (e) => e.vehicleId === vehicle.id
+        );
+        if (!alreadyRecorded) {
+          detour.clearingEvidence.push({ vehicleId: vehicle.id, timestamp: now });
+        }
+
+        // Count unique vehicles in evidence window
+        const uniqueClearingVehicles = new Set(
+          detour.clearingEvidence.map((e) => e.vehicleId)
+        ).size;
+
+        const threshold = getClearingThreshold(detour);
+        if (uniqueClearingVehicles >= threshold) {
+          detour.status = 'cleared';
+          detour.clearedAt = now;
+          detour.clearedByVehicle = vehicle.id;
+          detour.clearedByEvidenceCount = uniqueClearingVehicles;
+          updateDetourConfidence(detour);
+        }
       }
     }
   }
@@ -492,22 +618,35 @@ export const cleanupExpiredDetours = (state) => {
   const now = Date.now();
   const clearedRetentionMs = DETOUR_CONFIG.CLEARED_DETOUR_RETENTION_MS ?? 300000;
 
+  const maxRetentionMs = DETOUR_CONFIG.MAX_DETOUR_RETENTION_MS || 86400000;
+
   // Clean up expired active detours
   for (const detourId of Object.keys(state.activeDetours)) {
     const detour = state.activeDetours[detourId];
     const routeConfig = resolveRouteDetourConfig(detour.routeId);
-    if (
-      detour.status === 'suspected' &&
-      now - detour.lastSeenAt > routeConfig.DETOUR_EXPIRY_MS
-    ) {
-      archiveDetour(state, detour, 'expired');
-      delete state.activeDetours[detourId];
-    } else if (
-      detour.status === 'cleared' &&
-      now - detour.clearedAt > clearedRetentionMs
-    ) {
+
+    if (detour.status === 'cleared' && now - detour.clearedAt > clearedRetentionMs) {
       archiveDetour(state, detour, 'cleared');
       delete state.activeDetours[detourId];
+      continue;
+    }
+
+    if (detour.status === 'suspected') {
+      // Absolute cap: all detours expire after MAX_DETOUR_RETENTION_MS
+      const age = now - (detour.firstDetectedAt || detour.lastSeenAt);
+      if (age > maxRetentionMs) {
+        archiveDetour(state, detour, 'expired_max_retention');
+        delete state.activeDetours[detourId];
+        continue;
+      }
+
+      // Confidence-tiered expiry: only suspected (low-confidence) detours time-expire
+      const level = detour.confidenceLevel || 'suspected';
+      if (level === 'suspected' && now - detour.lastSeenAt > routeConfig.SUSPECTED_DETOUR_EXPIRY_MS) {
+        archiveDetour(state, detour, 'expired');
+        delete state.activeDetours[detourId];
+      }
+      // likely / high-confidence detours persist until cleared by evidence or max retention
     }
   }
 
@@ -673,11 +812,21 @@ export const getActiveDetours = (state) => {
  * Get active detours for a specific route
  */
 export const getDetoursForRoute = (state, routeId, directionId = null) => {
+  const normalizedRouteId = normalizeRouteId(routeId);
+  const normalizedDirectionId =
+    directionId === null || directionId === undefined ? null : String(directionId);
   return Object.values(state.activeDetours)
     .filter((d) => {
     if (d.status !== 'suspected') return false;
-    if (d.routeId !== routeId) return false;
-    if (directionId !== null && d.directionId !== directionId) return false;
+    if (normalizeRouteId(d.routeId) !== normalizedRouteId) return false;
+    if (
+      normalizedDirectionId !== null &&
+      d.directionId !== null &&
+      d.directionId !== undefined &&
+      String(d.directionId) !== normalizedDirectionId
+    ) {
+      return false;
+    }
     return true;
   })
     .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));

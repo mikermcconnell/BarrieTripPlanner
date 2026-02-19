@@ -1,39 +1,28 @@
 /**
  * FavoriteStopCard — Shows next departures from user's top favorited stop.
- * Native version — uses react-native-svg for icons.
- * Only activates polling when the Map tab is focused.
+ * Native version — positioned full-width above bottom action bar.
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext';
-import { useStopArrivals } from '../hooks/useStopArrivals';
+import { useFavoriteStop } from '../hooks/useFavoriteStop';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
 const FavoriteStopCard = ({ onPress }) => {
-  const { favorites } = useAuth();
-  const isFocused = useIsFocused();
+  const { favoriteStop, nextArrivals, isLoading, isVisible } = useFavoriteStop();
 
-  // Only use the first favorited stop
-  const favoriteStop = favorites.stops.length > 0 ? favorites.stops[0] : null;
-
-  // Only poll when focused AND we have a favorite stop
-  const stop = isFocused && favoriteStop ? favoriteStop : null;
-  const { arrivals, isLoading } = useStopArrivals(stop);
-
-  if (!favoriteStop || (!isLoading && arrivals.length === 0)) return null;
-
-  const nextArrivals = arrivals.slice(0, 2);
+  if (!isVisible) return null;
 
   return (
     <TouchableOpacity
       style={styles.container}
       onPress={() => onPress?.(favoriteStop)}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`Next departures from ${favoriteStop.name}`}
     >
       <View style={styles.header}>
         <Text style={styles.stopName} numberOfLines={1}>
-          ⭐ {favoriteStop.name}
+          {favoriteStop.name}
         </Text>
         {favoriteStop.code && (
           <Text style={styles.stopCode}>#{favoriteStop.code}</Text>

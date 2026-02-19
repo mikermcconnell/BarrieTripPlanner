@@ -130,7 +130,7 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
           return `Next stop: ${currentLeg.to.name}`;
         }
         const stopsLeft = busProximity?.stopsUntilAlighting;
-        if (stopsLeft !== null && stopsLeft > 0) {
+        if (typeof stopsLeft === 'number' && stopsLeft > 0) {
           return `${stopsLeft} stop${stopsLeft !== 1 ? 's' : ''} until ${currentLeg.to.name}`;
         }
         return `Riding to ${currentLeg.to.name}`;
@@ -138,8 +138,9 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
 
       // Waiting for bus
       if (!busProximity?.hasArrived) {
-        if (busProximity?.stopsAway !== null && busProximity.stopsAway > 0) {
-          return `Bus is ${busProximity.stopsAway} stop${busProximity.stopsAway !== 1 ? 's' : ''} away`;
+        const stopsAway = busProximity?.stopsAway;
+        if (typeof stopsAway === 'number' && stopsAway > 0) {
+          return `Bus is ${stopsAway} stop${stopsAway !== 1 ? 's' : ''} away`;
         }
         if (busProximity?.isTracking) {
           return 'Bus is approaching...';

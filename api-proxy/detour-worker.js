@@ -15,12 +15,17 @@ const CONFIG = {
   minRouteEvidence: Number(process.env.DETOUR_MIN_ROUTE_EVIDENCE || 4),
   minUniqueVehicles: Number(process.env.DETOUR_MIN_UNIQUE_VEHICLES || 2),
   offRouteThresholdMeters: Number(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || 40),
+  overlapCorridorMeters: Number(process.env.DETOUR_OVERLAP_CORRIDOR_METERS || 60),
+  overlapThreshold: Number(process.env.DETOUR_OVERLAP_THRESHOLD || 0.65),
+  minVehiclePathPoints: Number(process.env.DETOUR_MIN_VEHICLE_PATH_POINTS || 3),
+  minVehicleOffRouteMs: Number(process.env.DETOUR_MIN_VEHICLE_OFF_ROUTE_MS || 45000),
+  minVehiclePathMeters: Number(process.env.DETOUR_MIN_VEHICLE_PATH_METERS || 150),
   detourCollection: process.env.DETOUR_COLLECTION || 'publicDetoursActive',
   metaCollection: process.env.DETOUR_META_COLLECTION || 'publicSystem',
   metaDoc: process.env.DETOUR_META_DOC || 'detours',
 };
 
-const DETOUR_ALERT_EFFECTS = new Set(['Detour', 'Modified Service', 'No Service', 'Reduced Service']);
+const DETOUR_ALERT_EFFECTS = new Set(['Detour', 'Stop Moved']);
 
 let db = null;
 let staticData = null;
@@ -84,6 +89,44 @@ const pointToPolylineDistance = (point, polyline) => {
   return min;
 };
 
+const pathDistanceMeters = (path) => {
+  if (!Array.isArray(path) || path.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < path.length; i += 1) {
+    total += haversine(
+      path[i - 1].latitude,
+      path[i - 1].longitude,
+      path[i].latitude,
+      path[i].longitude
+    );
+  }
+  return total;
+};
+
+const pathsOverlap = (path1, path2, corridorWidthMeters, overlapThreshold) => {
+  if (!Array.isArray(path1) || !Array.isArray(path2) || path1.length < 2 || path2.length < 2) {
+    return false;
+  }
+
+  let path1NearPath2 = 0;
+  for (const point of path1) {
+    if (pointToPolylineDistance(point, path2) <= corridorWidthMeters) {
+      path1NearPath2 += 1;
+    }
+  }
+
+  let path2NearPath1 = 0;
+  for (const point of path2) {
+    if (pointToPolylineDistance(point, path1) <= corridorWidthMeters) {
+      path2NearPath1 += 1;
+    }
+  }
+
+  const overlap1 = path1NearPath2 / path1.length;
+  const overlap2 = path2NearPath1 / path2.length;
+  return overlap1 >= overlapThreshold && overlap2 >= overlapThreshold;
+};
+
 const parseCSVLine = (line) => {
   const values = [];
   let current = '';
@@ -122,11 +165,21 @@ const parseCSV = (text) => {
 };
 
 const canonicalRouteId = (value) => {
-  if (!value || typeof value !== 'string') return null;
-  const trimmed = value.trim();
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim().toUpperCase();
   if (!trimmed) return null;
-  const match = trimmed.match(/\d+/);
-  return match ? String(parseInt(match[0], 10)) : trimmed;
+
+  if (/^[A-Z0-9]+$/.test(trimmed)) return trimmed;
+
+  const tokenMatch = trimmed.match(/\d+[A-Z]?/);
+  if (tokenMatch) {
+    const token = tokenMatch[0];
+    const normalized = token.replace(/^0+(\d)/, '$1');
+    return normalized || token;
+  }
+
+  const compact = trimmed.replace(/[^A-Z0-9]/g, '');
+  return compact || null;
 };
 
 const decodeVarint = (buffer, offset) => {
@@ -519,43 +572,139 @@ const trackEvidence = (vehicles, logger) => {
   });
 };
 
+const buildVehiclePathEvidence = (events = []) => {
+  const byVehicle = new Map();
+  events.forEach((event) => {
+    if (!event?.vehicleId || !event?.point) return;
+    if (!byVehicle.has(event.vehicleId)) byVehicle.set(event.vehicleId, []);
+    byVehicle.get(event.vehicleId).push(event);
+  });
+
+  const candidates = [];
+  byVehicle.forEach((vehicleEvents, vehicleId) => {
+    const sorted = vehicleEvents.slice().sort((a, b) => a.ts - b.ts);
+    const path = sorted
+      .map((event) => ({
+        latitude: event.point.latitude,
+        longitude: event.point.longitude,
+        timestamp: event.ts,
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.latitude) &&
+          Number.isFinite(point.longitude)
+      );
+
+    if (path.length < CONFIG.minVehiclePathPoints) return;
+
+    const firstTs = sorted[0].ts;
+    const lastTs = sorted[sorted.length - 1].ts;
+    const durationMs = Math.max(0, lastTs - firstTs);
+    if (durationMs < CONFIG.minVehicleOffRouteMs) return;
+
+    const totalDistanceMeters = pathDistanceMeters(path);
+    if (totalDistanceMeters < CONFIG.minVehiclePathMeters) return;
+
+    candidates.push({
+      vehicleId,
+      events: sorted,
+      path,
+      eventCount: sorted.length,
+      firstTs,
+      lastTs,
+      durationMs,
+      totalDistanceMeters,
+    });
+  });
+
+  return candidates;
+};
+
+const getBestOverlapCluster = (candidates = []) => {
+  let bestCluster = [];
+  for (const reference of candidates) {
+    const cluster = [reference];
+    for (const candidate of candidates) {
+      if (candidate.vehicleId === reference.vehicleId) continue;
+      const overlaps = pathsOverlap(
+        reference.path,
+        candidate.path,
+        CONFIG.overlapCorridorMeters,
+        CONFIG.overlapThreshold
+      );
+      if (overlaps) cluster.push(candidate);
+    }
+    if (cluster.length > bestCluster.length) bestCluster = cluster;
+  }
+  return bestCluster;
+};
+
 const buildAutoDetours = (logger) => {
   const now = Date.now();
   const detours = [];
   Object.keys(state.routeEvidence).forEach((routeKey) => {
     const evidence = state.routeEvidence[routeKey];
-    const uniqueVehicles = new Set(evidence.events.map((event) => event.vehicleId));
+    const candidates = buildVehiclePathEvidence(evidence.events);
+    const candidateVehicles = new Set(candidates.map((candidate) => candidate.vehicleId));
+    const candidateVehicleList = Array.from(candidateVehicles).join(',');
 
-    // Log why each route with evidence is or isn't promoted
-    const vehicleList = Array.from(uniqueVehicles).join(',');
-    if (evidence.events.length < CONFIG.minRouteEvidence) {
+    if (candidates.length < CONFIG.minUniqueVehicles) {
       logger.info(
-        '[detour-worker] NOT-PROMOTED %s: events=%d<%d(min) vehicles=[%s](%d unique)',
-        routeKey, evidence.events.length, CONFIG.minRouteEvidence,
-        vehicleList, uniqueVehicles.size
+        '[detour-worker] NOT-PROMOTED %s: qualifyingVehicles=%d<%d(min) vehicles=[%s]',
+        routeKey,
+        candidates.length,
+        CONFIG.minUniqueVehicles,
+        candidateVehicleList
       );
       return;
     }
-    if (uniqueVehicles.size < CONFIG.minUniqueVehicles) {
+
+    const overlapCluster = getBestOverlapCluster(candidates);
+    const overlapVehicles = new Set(overlapCluster.map((candidate) => candidate.vehicleId));
+    const overlapVehicleList = Array.from(overlapVehicles).join(',');
+    if (overlapCluster.length < CONFIG.minUniqueVehicles) {
       logger.info(
-        '[detour-worker] NOT-PROMOTED %s: events=%d OK but uniqueVehicles=%d<%d(min) vehicles=[%s]',
+        '[detour-worker] NOT-PROMOTED %s: overlapVehicles=%d<%d(min) candidates=[%s]',
         routeKey, evidence.events.length,
-        uniqueVehicles.size, CONFIG.minUniqueVehicles, vehicleList
+        overlapCluster.length, CONFIG.minUniqueVehicles, overlapVehicleList
       );
       return;
     }
-    logger.info(
-      '[detour-worker] PROMOTED %s: events=%d vehicles=[%s](%d unique) → detour!',
-      routeKey, evidence.events.length, vehicleList, uniqueVehicles.size
+
+    const matchedEvidenceCount = overlapCluster.reduce(
+      (sum, candidate) => sum + candidate.eventCount,
+      0
     );
-    const recentPoints = evidence.events.slice(-12).map((e) => ({
-      latitude: e.point.latitude,
-      longitude: e.point.longitude,
-      timestamp: e.ts,
-    }));
-    const first = evidence.events[0];
-    const last = evidence.events[evidence.events.length - 1];
-    const score = Math.min(95, 60 + uniqueVehicles.size * 8 + Math.floor(evidence.events.length / 2));
+    if (matchedEvidenceCount < CONFIG.minRouteEvidence) {
+      logger.info(
+        '[detour-worker] NOT-PROMOTED %s: overlapEvents=%d<%d(min) overlapVehicles=[%s]',
+        routeKey,
+        matchedEvidenceCount,
+        CONFIG.minRouteEvidence,
+        overlapVehicleList
+      );
+      return;
+    }
+
+    const representative = overlapCluster
+      .slice()
+      .sort((a, b) => b.totalDistanceMeters - a.totalDistanceMeters)[0];
+    const firstDetectedAt = overlapCluster.reduce(
+      (minTs, candidate) => Math.min(minTs, candidate.firstTs),
+      now
+    );
+    const lastSeenAt = overlapCluster.reduce(
+      (maxTs, candidate) => Math.max(maxTs, candidate.lastTs),
+      0
+    );
+    const uniqueVehicles = overlapVehicles.size;
+    const score = Math.min(95, 58 + uniqueVehicles * 10 + Math.floor(matchedEvidenceCount / 2));
+
+    logger.info(
+      '[detour-worker] PROMOTED %s: overlapEvents=%d overlapVehicles=[%s](%d unique) → detour',
+      routeKey, matchedEvidenceCount, overlapVehicleList, uniqueVehicles
+    );
+
     detours.push({
       id: `server_auto_${routeKey}`,
       routeId: evidence.routeId,
@@ -565,11 +714,11 @@ const buildAutoDetours = (logger) => {
       source: 'auto',
       confidenceScore: score,
       confidenceLevel: score >= 85 ? 'high-confidence' : score >= 70 ? 'likely' : 'suspected',
-      evidenceCount: uniqueVehicles.size,
-      firstDetectedAt: first.ts,
-      lastSeenAt: last.ts,
-      segmentLabel: `Off-route evidence (${evidence.events.length} points)`,
-      polyline: recentPoints,
+      evidenceCount: uniqueVehicles,
+      firstDetectedAt,
+      lastSeenAt,
+      segmentLabel: `Off-route overlap (${matchedEvidenceCount} points, ${uniqueVehicles} buses)`,
+      polyline: representative.path.slice(-24),
       officialAlert: { matched: false },
       alertCorrelation: 'none',
       affectedStops: [],
@@ -798,4 +947,3 @@ const startDetourWorker = ({ logger }) => {
 };
 
 module.exports = { startDetourWorker };
-

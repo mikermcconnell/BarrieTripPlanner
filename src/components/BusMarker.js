@@ -1,64 +1,60 @@
-import React, { memo, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Marker } from 'react-native-maps';
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import Svg, { Path } from 'react-native-svg';
-import { useAnimatedMarker } from '../hooks/useAnimatedMarker';
+import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 
 const BUS_ICON_PATH =
   'M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z';
 
 const MARKER_SIZE = 40;
 const ARROW_WRAPPER_SIZE = 80;
+const markerDebugState = new Map();
 
-const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
-  const animatedCoordinate = useAnimatedMarker(vehicle.coordinate);
-  const [tracked, setTracked] = useState(true);
-  const freezeTimerRef = useRef(null);
-  const isAndroid = Platform.OS === 'android';
+const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp }) => {
+  const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle);
 
-  if (!vehicle.coordinate || !vehicle.coordinate.latitude || !vehicle.coordinate.longitude) {
+  if (!latitude || !longitude) {
     return null;
   }
 
-  const routeLabel = vehicle.routeId || '?';
+  const routeLabel = routeLabelProp || vehicle.routeId || '?';
   const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
   const showDirectionArrow = hasValidBearing;
-  const roundedBearing = hasValidBearing ? Math.round(vehicle.bearing) : null;
 
-  useEffect(() => {
-    // Keep tracking view changes long enough for marker snapshot rendering on Android.
-    // Freezing too early can produce partially rendered marker bitmaps.
-    setTracked(true);
-    if (freezeTimerRef.current) {
-      clearTimeout(freezeTimerRef.current);
-    }
-    freezeTimerRef.current = setTimeout(() => {
-      setTracked(false);
-    }, 1500);
-
-    return () => {
-      if (freezeTimerRef.current) {
-        clearTimeout(freezeTimerRef.current);
+  if (__DEV__) {
+    const raw = String(vehicle.routeId || '').trim();
+    if (/^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(raw)) {
+      const signature = `${raw}|${String(routeLabel)}|${String(routeLabelProp || '')}`;
+      if (markerDebugState.get(vehicle.id) !== signature) {
+        markerDebugState.set(vehicle.id, signature);
+        console.info(
+          '[route-label-debug][native-marker] bus=%s raw=%s prop=%s rendered=%s',
+          vehicle.id,
+          raw || '-',
+          routeLabelProp || '-',
+          routeLabel
+        );
       }
-    };
-  }, [routeLabel, color, roundedBearing]);
+    }
+  }
 
   return (
-    <Marker.Animated
-      coordinate={animatedCoordinate}
+    <MapLibreGL.MarkerView
+      id={`bus-${vehicle.id}`}
+      coordinate={[longitude, latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
-      onPress={() => onPress?.(vehicle)}
-      zIndex={10}
-      tracksViewChanges={isAndroid ? true : tracked}
     >
       <View
         collapsable={false}
         style={[
           styles.wrapper,
           showDirectionArrow ? styles.wrapperWithArrow : styles.wrapperNoArrow,
+          scale !== 1 && { transform: [{ scale }] },
         ]}
+        onTouchEnd={() => onPress?.(vehicle)}
       >
-        {/* Direction arrow rendered as SVG for reliable Android bitmap snapshots */}
+        {/* Direction arrow rendered as SVG */}
         {showDirectionArrow && (
           <Svg
             width={ARROW_WRAPPER_SIZE}
@@ -69,7 +65,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
             <Path
               d="M40 5 L32 19 L48 19 Z"
               fill={color}
-              transform={`rotate(${vehicle.bearing}, 40, 40)`}
+              transform={`rotate(${bearing}, 40, 40)`}
             />
           </Svg>
         )}
@@ -82,7 +78,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress }) => {
           <Text style={styles.routeLabel}>{routeLabel}</Text>
         </View>
       </View>
-    </Marker.Animated>
+    </MapLibreGL.MarkerView>
   );
 };
 
@@ -125,8 +121,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
-    lineHeight: 10,
-    marginTop: 2,
+    lineHeight: 12,
+    marginTop: 1,
+    textAlign: 'center',
   },
 });
 
@@ -140,8 +137,9 @@ export const areBusMarkerPropsEqual = (prev, next) => {
     prevCoord.longitude === nextCoord.longitude &&
     prev.vehicle.routeId === next.vehicle.routeId &&
     prev.vehicle.bearing === next.vehicle.bearing &&
-    prev.color === next.color
+    prev.color === next.color &&
+    prev.routeLabel === next.routeLabel
   );
 };
 
-export default memo(BusMarker, areBusMarkerPropsEqual);
+export default BusMarker;

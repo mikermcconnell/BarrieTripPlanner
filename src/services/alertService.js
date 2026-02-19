@@ -242,22 +242,29 @@ const parseTripDescriptor = (buffer) => {
 };
 
 const normalizeRouteId = (routeId) => {
-  if (!routeId || typeof routeId !== 'string') return null;
-  const trimmed = routeId.trim();
+  if (routeId === null || routeId === undefined) return null;
+  const trimmed = String(routeId).trim().toUpperCase();
   if (!trimmed) return null;
 
-  // If route IDs arrive as decorated strings (e.g. "Route 8", "BT-08"),
-  // keep a numeric canonical form for route matching.
-  const digitMatch = trimmed.match(/\d+/);
-  if (!digitMatch) return trimmed;
-  return String(parseInt(digitMatch[0], 10));
+  // Prefer direct branch-preserving IDs (e.g. 2A, 8B, 100).
+  if (/^[A-Z0-9]+$/.test(trimmed)) return trimmed;
+
+  // Fallback for decorated forms (e.g. "Route 8A", "BT-08B").
+  const tokenMatch = trimmed.match(/\d+[A-Z]?/);
+  if (tokenMatch) {
+    const token = tokenMatch[0];
+    const normalized = token.replace(/^0+(\d)/, '$1');
+    return normalized || token;
+  }
+
+  const compact = trimmed.replace(/[^A-Z0-9]/g, '');
+  return compact || null;
 };
 
 const getNormalizedRouteIds = (informedEntities = []) => {
   const ids = new Set();
   for (const entity of informedEntities) {
     if (!entity?.routeId) continue;
-    ids.add(entity.routeId);
     const normalized = normalizeRouteId(entity.routeId);
     if (normalized) ids.add(normalized);
   }

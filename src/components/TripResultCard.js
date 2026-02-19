@@ -112,7 +112,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         <View style={styles.routeSection}>
           <View style={styles.routeSummary}>
             {itinerary.legs.map((leg, index) => (
-              <React.Fragment key={index}>
+              <React.Fragment key={`leg-${leg.mode}-${leg.from?.name || index}-${leg.startTime || index}`}>
                 {index > 0 && <View style={styles.connector} />}
                 {leg.mode === 'WALK' ? (
                   <View style={styles.walkIcon}>
@@ -155,18 +155,22 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               <TouchableOpacity
                 style={styles.detailsButton}
                 onPress={() => onViewDetails && onViewDetails(itinerary)}
+                accessibilityRole="button"
+                accessibilityLabel="View trip details"
               >
                 <Text style={styles.detailsButtonText}>Details</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.goButton}
                 onPress={() => onStartNavigation(itinerary)}
+                accessibilityRole="button"
+                accessibilityLabel="Start navigation"
               >
                 <Text style={styles.goButtonText}>Go</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.stepsButton} onPress={onPress}>
+            <TouchableOpacity style={styles.stepsButton} onPress={onPress} accessibilityRole="button" accessibilityLabel="Select this trip option">
               <Text style={styles.stepsButtonText}>Select</Text>
             </TouchableOpacity>
           )}

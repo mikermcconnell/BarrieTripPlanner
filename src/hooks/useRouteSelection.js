@@ -4,7 +4,7 @@
  * Manages route selection state, map zoom/center actions, and
  * auto-zoom behavior for both single-select (web) and multi-select (native) modes.
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { MAP_CONFIG } from '../config/constants';
 
 export const useRouteSelection = ({
@@ -57,17 +57,15 @@ export const useRouteSelection = ({
     }
   }, [routeShapeMapping, shapes]);
 
-  // Toggle route selection
+  // Toggle route selection (no auto-zoom — user controls the camera)
   const handleRouteSelect = useCallback((routeId) => {
     if (routeId === null) {
       setSelectedRoutes(new Set());
-      centerOnBarrie();
     } else if (multiSelect) {
       setSelectedRoutes(prev => {
         const newSet = new Set(prev);
         if (newSet.has(routeId)) {
           newSet.delete(routeId);
-          if (newSet.size === 0) centerOnBarrie();
         } else {
           newSet.add(routeId);
         }
@@ -77,13 +75,12 @@ export const useRouteSelection = ({
       // Single-select toggle
       setSelectedRoutes(prev => {
         if (prev.has(routeId)) {
-          centerOnBarrie();
           return new Set();
         }
         return new Set([routeId]);
       });
     }
-  }, [multiSelect, centerOnBarrie]);
+  }, [multiSelect]);
 
   // Programmatically set selection (e.g., from navigation params)
   const selectRoute = useCallback((routeId) => {
@@ -99,13 +96,6 @@ export const useRouteSelection = ({
     (routeId) => selectedRoutes.has(routeId),
     [selectedRoutes]
   );
-
-  // Auto-zoom to selected routes when selection changes
-  useEffect(() => {
-    if (selectedRoutes.size > 0) {
-      zoomToRoutes(selectedRoutes);
-    }
-  }, [selectedRoutes]);
 
   return {
     selectedRoutes,

@@ -12,6 +12,8 @@
  * Data format: Array of [lat, lon, houseNumber, street, fullAddress]
  */
 
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { haversineDistance as haversineMeters } from '../utils/geometryUtils';
 
@@ -45,8 +47,11 @@ export async function initLocalGeocoding() {
   if (addresses) return; // Already loaded
 
   try {
-    // Dynamic import of the bundled JSON
-    const data = require('../data/barrie-addresses.json');
+    // Load from raw asset to avoid Hermes array literal size limit
+    const asset = Asset.fromModule(require('../../assets/barrie-addresses.dat'));
+    await asset.downloadAsync();
+    const json = await FileSystem.readAsStringAsync(asset.localUri);
+    const data = JSON.parse(json);
     addresses = data;
 
     buildSpatialGrid();

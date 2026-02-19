@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import { MAP_CONFIG } from '../config/constants';
+import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -47,7 +47,6 @@ import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import RoutePolyline from '../components/RoutePolyline';
 
-const STADIA_STYLE_URL = 'https://tiles.stadiamaps.com/styles/alidade_smooth.json';
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
 const computeBounds = (coords) => {
@@ -243,6 +242,10 @@ const NavigationScreen = ({ route }) => {
       try {
         const { trackEvent } = require('../services/analyticsService');
         trackEvent('navigation_completed');
+      } catch {}
+      try {
+        const { maybeRequestReview } = require('../services/reviewService');
+        maybeRequestReview();
       } catch {}
       Alert.alert(
         'Trip Complete!',
@@ -532,7 +535,7 @@ const NavigationScreen = ({ route }) => {
         <MapLibreGL.MapView
           ref={mapRef}
           style={styles.map}
-          styleURL={STADIA_STYLE_URL}
+          mapStyle={OSM_MAP_STYLE}
           rotateEnabled
           pitchEnabled={false}
           attributionPosition={{ bottom: 8, left: 8 }}

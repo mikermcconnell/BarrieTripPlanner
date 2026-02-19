@@ -29,7 +29,7 @@ import {
 
 const DETOUR_STATE_STORAGE_KEY = '@barrie_transit_detour_state_v2';
 const STATE_PERSIST_INTERVAL_MS = 10000;
-const DETOUR_ALERT_EFFECTS = new Set(['Detour', 'Modified Service', 'No Service', 'Reduced Service']);
+const OFFICIAL_DETOUR_EFFECTS = new Set(['Detour', 'Stop Moved']);
 
 const normalizeLoadedState = (rawState) => {
   const initialState = initializeDetourState();
@@ -63,12 +63,10 @@ const buildStopLookup = (stops = []) => {
 };
 
 const canonicalizeRouteId = (routeId) => {
-  if (!routeId || typeof routeId !== 'string') return null;
-  const trimmed = routeId.trim();
+  if (routeId === null || routeId === undefined) return null;
+  const trimmed = String(routeId).trim().toUpperCase();
   if (!trimmed) return null;
-  const digitMatch = trimmed.match(/\d+/);
-  if (!digitMatch) return trimmed;
-  return String(parseInt(digitMatch[0], 10));
+  return trimmed;
 };
 
 const buildOfficialDetoursFromAlerts = (serviceAlerts = [], stops = []) => {
@@ -77,7 +75,7 @@ const buildOfficialDetoursFromAlerts = (serviceAlerts = [], stops = []) => {
   const officialDetours = [];
 
   for (const alert of serviceAlerts) {
-    if (!DETOUR_ALERT_EFFECTS.has(alert.effect)) continue;
+    if (!OFFICIAL_DETOUR_EFFECTS.has(alert.effect)) continue;
     if (!Array.isArray(alert.affectedRoutes) || alert.affectedRoutes.length === 0) continue;
 
     const firstPeriod = Array.isArray(alert.activePeriods) && alert.activePeriods.length > 0
@@ -141,12 +139,15 @@ const buildOfficialDetoursFromAlerts = (serviceAlerts = [], stops = []) => {
 
 const mergeAutoAndOfficialDetours = (autoDetours = [], officialDetours = []) => {
   const merged = [...autoDetours];
-  const autoByRoute = new Set(autoDetours.map((detour) => detour.routeId));
+  const autoByRoute = new Set(
+    autoDetours.map((detour) => canonicalizeRouteId(detour.routeId)).filter(Boolean)
+  );
 
   // If a route already has auto detection, keep the auto detour as primary source.
   // Otherwise add the official alert as an active detour indicator.
   for (const officialDetour of officialDetours) {
-    if (!autoByRoute.has(officialDetour.routeId)) {
+    const routeId = canonicalizeRouteId(officialDetour.routeId);
+    if (!autoByRoute.has(routeId)) {
       merged.push(officialDetour);
     }
   }
@@ -401,9 +402,17 @@ export const useDetourDetection = (
    * @returns {Array} Array of detour objects for the route
    */
   const getDetoursForRoute = useCallback((routeId, directionId = null) => {
+    const normalizedRouteId = canonicalizeRouteId(routeId);
+    const normalizedDirectionId =
+      directionId === null || directionId === undefined ? null : String(directionId);
     return activeDetours.filter((detour) => {
-      if (detour.routeId !== routeId) return false;
-      if (directionId !== null && detour.directionId !== null && detour.directionId !== directionId) {
+      if (canonicalizeRouteId(detour.routeId) !== normalizedRouteId) return false;
+      if (
+        normalizedDirectionId !== null &&
+        detour.directionId !== null &&
+        detour.directionId !== undefined &&
+        String(detour.directionId) !== normalizedDirectionId
+      ) {
         return false;
       }
       return detour.status === 'suspected';
@@ -428,9 +437,17 @@ export const useDetourDetection = (
    * @returns {boolean} True if route has active detours
    */
   const hasActiveDetour = useCallback((routeId, directionId = null) => {
+    const normalizedRouteId = canonicalizeRouteId(routeId);
+    const normalizedDirectionId =
+      directionId === null || directionId === undefined ? null : String(directionId);
     return activeDetours.some((detour) => {
-      if (detour.routeId !== routeId) return false;
-      if (directionId !== null && detour.directionId !== null && detour.directionId !== directionId) {
+      if (canonicalizeRouteId(detour.routeId) !== normalizedRouteId) return false;
+      if (
+        normalizedDirectionId !== null &&
+        detour.directionId !== null &&
+        detour.directionId !== undefined &&
+        String(detour.directionId) !== normalizedDirectionId
+      ) {
         return false;
       }
       return detour.status === 'suspected';

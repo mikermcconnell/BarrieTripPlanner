@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Barrie Transit",
+    "name": "My Barrie Transit",
     "slug": "barrie-transit-planner",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,6 +31,7 @@
       }
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -69,7 +70,8 @@
           "organization": "barrie-transit",
           "project": "barrie-transit-planner"
         }
-      ]
+      ],
+      "@maplibre/maplibre-react-native"
     ],
     "extra": {
       "eas": {

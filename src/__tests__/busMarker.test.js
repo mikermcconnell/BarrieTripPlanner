@@ -6,20 +6,14 @@ jest.mock('react-native', () => ({
   },
 }));
 
-jest.mock('react-native-maps', () => ({
-  Marker: {
-    Animated: 'MarkerAnimated',
-  },
+jest.mock('@maplibre/maplibre-react-native', () => ({
+  PointAnnotation: 'PointAnnotation',
 }));
 
 jest.mock('react-native-svg', () => ({
   __esModule: true,
   default: 'Svg',
   Path: 'Path',
-}));
-
-jest.mock('../hooks/useAnimatedMarker', () => ({
-  useAnimatedMarker: (coordinate) => coordinate,
 }));
 
 const { areBusMarkerPropsEqual } = require('../components/BusMarker');

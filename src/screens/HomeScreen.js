@@ -2,13 +2,14 @@
  * Native-specific HomeScreen (iOS/Android)
  * Web platform uses HomeScreen.web.js instead
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import { useTransit } from '../context/TransitContext';
-import { MAP_CONFIG } from '../config/constants';
+import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
@@ -22,6 +23,7 @@ import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { decodePolyline } from '../utils/polylineUtils';
+import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 
@@ -32,6 +34,7 @@ import StopMarker from '../components/StopMarker';
 import DetourPolyline from '../components/DetourPolyline';
 import DetourBadge from '../components/DetourBadge';
 import DetourDebugPanel from '../components/DetourDebugPanel';
+import PulsingSpinner from '../components/PulsingSpinner';
 
 // Trip planning components
 import BottomActionBar from '../components/PlanTripFAB';
@@ -40,28 +43,12 @@ import TripBottomSheet from '../components/TripBottomSheet';
 import MapTapPopup from '../components/MapTapPopup';
 import HomeScreenControls from '../components/HomeScreenControls';
 import FavoriteStopCard from '../components/FavoriteStopCard';
-import Svg, { Path } from 'react-native-svg';
+import Icon from '../components/Icon';
 
-const STADIA_STYLE_URL = 'https://tiles.stadiamaps.com/styles/alidade_smooth.json';
 
-// SVG Icons for native (must use react-native-svg, not DOM <svg>)
-const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z"
-      fill={color}
-    />
-  </Svg>
-);
-
-const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M12 8C9.79 8 8 9.79 8 12C8 14.21 9.79 16 12 16C14.21 16 16 14.21 16 12C16 9.79 14.21 8 12 8ZM20.94 11C20.48 6.83 17.17 3.52 13 3.06V1H11V3.06C6.83 3.52 3.52 6.83 3.06 11H1V13H3.06C3.52 17.17 6.83 20.48 11 20.94V23H13V20.94C17.17 20.48 20.48 17.17 20.94 13H23V11H20.94ZM12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19Z"
-      fill={color}
-    />
-  </Svg>
-);
+// SVG Icons for native replaced with Lucide Icons
+const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => <Icon name="Search" size={size} color={color} />;
+const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="LocateFixed" size={size} color={color} />;
 
 // Helper: convert region {lat, lng, latDelta, lngDelta} to MapLibre camera params
 const regionToCamera = (region) => ({
@@ -98,6 +85,7 @@ const HomeScreen = ({ route }) => {
     routeShapeMapping,
     routeStopsMapping,
     trips,
+    tripMapping,
     vehicles,
     isLoadingStatic,
     isLoadingVehicles,
@@ -112,6 +100,7 @@ const HomeScreen = ({ route }) => {
     getDetoursForRoute,
     getDetourHistory,
     hasActiveDetour,
+    dismissDetour,
   } = useTransit();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -147,13 +136,17 @@ const HomeScreen = ({ route }) => {
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
     routingData,
     isRoutingReady,
     applyDelays: applyDelaysToItineraries,
-    onItinerariesReady: (itinerary) => fitMapToItinerary(itinerary),
+    onItinerariesReady: (itinerary) => {
+      setUserHasInteracted(false);
+      fitMapToItinerary(itinerary);
+    },
   });
   const {
     state: tripState,
@@ -259,11 +252,43 @@ const HomeScreen = ({ route }) => {
     activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
   });
 
+  // Stable camera default settings — prevent re-centering on every re-render
+  const cameraDefaultSettings = useMemo(() => ({
+    centerCoordinate: [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude],
+    zoomLevel: Math.log2(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta),
+  }), []);
+
+  const getRouteLabel = useCallback((vehicle) => {
+    return getVehicleRouteLabel(vehicle, routes, tripMapping);
+  }, [routes, tripMapping]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (!Array.isArray(displayedVehicles) || displayedVehicles.length === 0) return;
+
+    const interesting = displayedVehicles.filter((v) =>
+      /^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(String(v.routeId || '').trim())
+    );
+    if (interesting.length === 0) return;
+
+    const lines = interesting.slice(0, 12).map((vehicle) => {
+      const resolved = resolveVehicleRouteLabel(vehicle, routes, tripMapping);
+      return `${vehicle.id} raw=${vehicle.routeId || '-'} trip=${vehicle.tripId || '-'} map=${resolved.mappedRouteId || '-'} label=${resolved.label} source=${resolved.source}`;
+    });
+
+    logger.info('[route-label-debug][native] %s', lines.join(' | '));
+  }, [displayedVehicles, routes, tripMapping]);
+
   // Handle map region change (MapLibre onRegionDidChange)
   const handleRegionChange = (feature) => {
     const { properties, geometry } = feature;
     const [lng, lat] = geometry.coordinates;
     const zoom = properties.zoomLevel;
+
+    // Detect user-initiated map moves (pan/zoom by touch)
+    if (properties.isUserInteraction) {
+      setUserHasInteracted(true);
+    }
 
     // Reconstruct region-like object for existing code
     const latDelta = 360 / Math.pow(2, zoom);
@@ -356,28 +381,6 @@ const HomeScreen = ({ route }) => {
       }
     });
 
-    // Include real-time vehicle positions for trip routes
-    const tripRouteIds = new Set();
-    itinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && leg.route?.id) {
-        tripRouteIds.add(leg.route.id);
-      }
-    });
-    if (tripRouteIds.size > 0) {
-      vehicles.forEach(v => {
-        if (
-          tripRouteIds.has(v.routeId) &&
-          v.coordinate?.latitude &&
-          v.coordinate?.longitude
-        ) {
-          coords.push({
-            latitude: v.coordinate.latitude,
-            longitude: v.coordinate.longitude,
-          });
-        }
-      });
-    }
-
     if (coords.length > 0) {
       compatMapRef.current.fitToCoordinates(coords, {
         edgePadding: { top: 150, right: 50, bottom: 200, left: 50 },
@@ -404,7 +407,7 @@ const HomeScreen = ({ route }) => {
   if (isLoadingStatic) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <PulsingSpinner size={60} />
         <Text style={styles.loadingText}>Loading transit data...</Text>
       </View>
     );
@@ -415,7 +418,7 @@ const HomeScreen = ({ route }) => {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Failed to load transit data</Text>
         <Text style={styles.errorDetail}>{staticError}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadStaticData}>
+        <TouchableOpacity style={styles.retryButton} onPress={loadStaticData} accessibilityRole="button" accessibilityLabel="Retry loading transit data">
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -431,7 +434,7 @@ const HomeScreen = ({ route }) => {
       <MapLibreGL.MapView
         ref={mapRef}
         style={styles.map}
-        styleURL={STADIA_STYLE_URL}
+        mapStyle={OSM_MAP_STYLE}
         rotateEnabled
         pitchEnabled={false}
         attributionPosition={{ bottom: 8, left: 8 }}
@@ -441,10 +444,7 @@ const HomeScreen = ({ route }) => {
       >
         <MapLibreGL.Camera
           ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude],
-            zoomLevel: Math.log2(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta),
-          }}
+          defaultSettings={cameraDefaultSettings}
         />
         <MapLibreGL.UserLocation visible={true} />
 
@@ -481,17 +481,26 @@ const HomeScreen = ({ route }) => {
         ))}
         {/* Vehicles - hide when previewing a trip */}
         {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
 
         {/* Detour polylines - hide when previewing a trip */}
-        {!isTripPreviewMode && displayedDetours.map((detour) => (
-          <DetourPolyline
-            key={detour.id}
-            id={`detour-${detour.id}`}
-            coordinates={detour.polyline}
-          />
-        ))}
+        {!isTripPreviewMode && displayedDetours
+          .filter((detour) => Array.isArray(detour.polyline) && detour.polyline.length >= 2)
+          .map((detour) => (
+            <DetourPolyline
+              key={detour.id}
+              id={`detour-${detour.id}`}
+              coordinates={detour.polyline}
+              confidenceLevel={detour.confidenceLevel}
+              confidenceScore={detour.confidenceScore}
+              firstDetectedAt={detour.firstDetectedAt}
+              confirmedByVehicles={detour.confirmedByVehicles}
+              affectedStops={detour.affectedStops}
+              segmentLabel={detour.segmentLabel}
+              onDismiss={() => dismissDetour(detour.id)}
+            />
+          ))}
 
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((tripRoute) => (
@@ -561,7 +570,7 @@ const HomeScreen = ({ route }) => {
 
         {/* Real-time bus positions for trip routes */}
         {isTripPreviewMode && tripVehicles.map((vehicle) => (
-          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
 
         {/* Map tap marker - shows where user tapped */}
@@ -621,6 +630,7 @@ const HomeScreen = ({ route }) => {
           selectedRoutes={selectedRoutes}
           onRouteSelect={handleRouteSelect}
           getRouteColor={getRouteColor}
+          hasActiveDetour={hasActiveDetour}
         />
       )}
 
@@ -746,6 +756,8 @@ const HomeScreen = ({ route }) => {
   );
 };
 
+const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -797,7 +809,7 @@ const styles = StyleSheet.create({
   // Search Bar Header
   searchBar: {
     position: 'absolute',
-    top: SPACING.sm,
+    top: SPACING.sm + STATUS_BAR_OFFSET,
     left: SPACING.sm,
     right: SPACING.sm,
     flexDirection: 'row',
@@ -841,7 +853,7 @@ const styles = StyleSheet.create({
   // Center Map Button
   centerButton: {
     position: 'absolute',
-    top: 64,
+    top: 64 + STATUS_BAR_OFFSET,
     right: SPACING.sm,
     width: 44,
     height: 44,
@@ -857,7 +869,7 @@ const styles = StyleSheet.create({
   // Detour badge container - positioned below search bar, right of filter panel
   detourBadgeContainer: {
     position: 'absolute',
-    top: 72,
+    top: 72 + STATUS_BAR_OFFSET,
     left: 80,
     right: SPACING.md,
     zIndex: 997,

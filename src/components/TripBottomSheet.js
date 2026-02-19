@@ -89,6 +89,8 @@ const TripBottomSheet = ({
                   key={`recent-trip-${idx}`}
                   style={styles.recentTripItem}
                   onPress={() => onSelectRecentTrip?.(trip)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Recent trip: ${trip.fromText} to ${trip.toText}`}
                 >
                   <Text style={styles.recentTripIcon}>🕐</Text>
                   <View style={styles.recentTripContent}>

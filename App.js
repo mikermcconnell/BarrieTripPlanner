@@ -8,12 +8,20 @@ import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
 import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
+import {
+  Nunito_400Regular,
+  Nunito_500Medium,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+} from '@expo-google-fonts/nunito';
 import { TransitProvider } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { COLORS } from './src/config/theme';
+import { ONBOARDING_KEY } from './src/config/constants';
 import {
   registerForPushNotifications,
   addNotificationReceivedListener,
@@ -131,12 +139,30 @@ function NotificationInitializer({ navigationRef }) {
   return null; // This component doesn't render anything
 }
 
-const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
+const linking = {
+  prefixes: ['barrie-transit://'],
+  config: {
+    screens: {
+      Map: {
+        screens: {
+          MapMain: 'stop/:stopId',
+        },
+      },
+    },
+  },
+};
 
 export default function App() {
   const navigationRef = useRef();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const [fontsLoaded] = useFonts({
+    Nunito_400Regular,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+  });
 
   useEffect(() => {
     (async () => {
@@ -160,7 +186,7 @@ export default function App() {
     setShowOnboarding(false);
   };
 
-  if (!onboardingChecked) {
+  if (!onboardingChecked || !fontsLoaded) {
     return (
       <View style={appStyles.splash}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -182,7 +208,7 @@ export default function App() {
         <ErrorBoundary fallbackMessage="Something went wrong with Barrie Transit. Please restart the app.">
           <AuthProvider>
             <TransitProvider>
-              <NavigationContainer ref={navigationRef}>
+              <NavigationContainer ref={navigationRef} linking={linking}>
                 <StatusBar style="dark" backgroundColor={COLORS.surface} />
                 <NotificationInitializer navigationRef={navigationRef} />
                 <TabNavigator />

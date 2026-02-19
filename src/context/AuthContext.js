@@ -52,6 +52,12 @@ export const AuthProvider = ({ children }) => {
         // Set up real-time listeners for user data
         setupRealtimeListeners(firebaseUser.uid);
 
+        // Track analytics user properties
+        try {
+          const { setAnalyticsUserProperties } = require('../services/analyticsService');
+          setAnalyticsUserProperties({ has_account: 'true' });
+        } catch {}
+
         // Cache user locally for offline access (encrypted on native)
         await secureSet(STORAGE_KEYS.USER, JSON.stringify(firebaseUser));
       } else {

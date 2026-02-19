@@ -1,55 +1,12 @@
-import React, { useMemo, forwardRef } from 'react';
+import React, { useMemo, forwardRef, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { PROVIDER_DEFAULT, Polyline, Marker } from 'react-native-maps';
-import { CUSTOM_MAP_STYLE } from '../config/mapStyle';
-import { MAP_CONFIG, ROUTE_COLORS } from '../config/constants';
+import MapLibreGL from '@maplibre/maplibre-react-native';
+import { MAP_CONFIG, ROUTE_COLORS, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SHADOWS } from '../config/theme';
 
 // Components
 import BusMarker from './BusMarker';
 import RoutePolyline from './RoutePolyline';
-import StopMarker from './StopMarker';
-
-const TransitMap = forwardRef(({
-    routes,
-    shapes,
-    routeShapeMapping,
-    vehicles,
-    stops, // displayed stops
-    selectedRoute,
-    selectedStop,
-    showRoutes = true,
-    onRegionChange,
-    onStopPress,
-    // Trip Planning Props
-    isTripPlanningMode,
-    tripRouteCoordinates = [],
-    tripMarkers = [],
-    mapRegion,
-}, ref) => {
-
-    // Helper to get route color
-    const getRouteColor = (routeId) => {
-        const foundRoute = routes.find((r) => r.id === routeId);
-        if (foundRoute?.color) return foundRoute.color;
-        return ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
-    };
-
-    // Get shapes to display (Moved logic here or kept in parent? Parent passed specific shapes?
-    // To keep this component dumb, parent should pass 'displayedShapes'.
-    // But for now, let's keep the logic here to simplify the refactor speed, reusing the memo logic)
-
-    // Actually, to make this pure, let's re-implement the memoized logic inside or accept it as props.
-    // Accepted 'displayedShapes' as a prop would be cleaner, but let's recalculate here for now to avoid prop drilling hell
-    // Wait, I will copy the useMemo logic from HomeScreen to here? No, better to extract it to a hook or just keep it in HomeScreen and pass 'displayedShapes'.
-    // Let's assume HomeScreen passes 'displayedShapes' to avoid logic duplication.
-
-    // REVISION: I will compute displayedShapes inside HomeScreen and pass it down.
-    // So I'll just accept 'displayedShapes' prop.
-},
-    // Wait, I can't write the implementation yet without deciding on the props API.
-    // Let's write the file ASSUMING props are passed ready-to-render.
-);
 
 const TransitMapComponent = forwardRef(({
     displayedShapes,
@@ -61,41 +18,112 @@ const TransitMapComponent = forwardRef(({
     selectedStop,
     onRegionChange,
     onStopPress,
-    getRouteColor, // Pass this function down or map colors beforehand. passing function is easier.
+    getRouteColor,
 }, ref) => {
+    const cameraRef = useRef(null);
+
+    const cameraDefaultSettings = useMemo(() => ({
+        centerCoordinate: [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude],
+        zoomLevel: Math.log2(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta),
+    }), []);
+
+    const stopsGeoJson = useMemo(() => ({
+        type: 'FeatureCollection',
+        features: displayedStops.map((stop) => ({
+            type: 'Feature',
+            id: stop.id,
+            geometry: {
+                type: 'Point',
+                coordinates: [stop.longitude, stop.latitude],
+            },
+            properties: {
+                id: stop.id,
+                name: stop.name || '',
+                isSelected: selectedStop?.id === stop.id ? 1 : 0,
+            },
+        })),
+    }), [displayedStops, selectedStop]);
+
+    const handleStopPress = (e) => {
+        const feature = e?.features?.[0];
+        if (feature?.properties?.id) {
+            const stop = displayedStops.find((s) => s.id === feature.properties.id);
+            if (stop) onStopPress?.(stop);
+        }
+    };
+
     return (
-        <MapView
+        <MapLibreGL.MapView
             ref={ref}
             style={styles.map}
-            provider={PROVIDER_DEFAULT}
-            initialRegion={MAP_CONFIG.INITIAL_REGION}
-            showsUserLocation
-            showsMyLocationButton={false}
-            showsCompass
+            mapStyle={OSM_MAP_STYLE}
             rotateEnabled
             pitchEnabled={false}
-            onRegionChangeComplete={onRegionChange}
-            customMapStyle={CUSTOM_MAP_STYLE}
+            attributionPosition={{ bottom: 8, left: 8 }}
+            logoEnabled={false}
+            onRegionDidChange={onRegionChange}
         >
+            <MapLibreGL.Camera
+                ref={cameraRef}
+                defaultSettings={cameraDefaultSettings}
+            />
+            <MapLibreGL.UserLocation visible={true} />
+
+            {/* --- Line layers first (rendered below annotations) --- */}
+
             {/* Route Shapes */}
             {displayedShapes.map((shape) => (
                 <RoutePolyline
                     key={shape.id}
+                    id={`transit-route-${shape.id}`}
                     coordinates={shape.coordinates}
                     color={shape.color}
-                    strokeWidth={selectedRoute === shape.routeId ? 4 : 3}
+                    strokeWidth={selectedRoute === shape.routeId ? 8 : 6}
                 />
             ))}
 
-            {/* Stops */}
-            {displayedStops.map((stop) => (
-                <StopMarker
-                    key={stop.id}
-                    stop={stop}
-                    onPress={onStopPress}
-                    isSelected={selectedStop?.id === stop.id}
+            {/* Trip Planning Route Overlay */}
+            {tripRouteCoordinates.map((route) => (
+                <RoutePolyline
+                    key={route.id}
+                    id={`transit-trip-${route.id}`}
+                    coordinates={route.coordinates}
+                    color={route.color}
+                    strokeWidth={route.isWalk ? 6 : 10}
+                    lineDashPattern={route.isWalk ? [10, 5] : null}
+                    opacity={1}
                 />
             ))}
+
+            {/* --- Point layers (rendered above line layers) --- */}
+
+            {/* Stops — CircleLayer with high z-index to render above route lines */}
+            <MapLibreGL.ShapeSource
+                id="stops-source"
+                shape={stopsGeoJson}
+                onPress={handleStopPress}
+                hitbox={{ width: 20, height: 20 }}
+            >
+                {/* White border ring — layerIndex ensures it renders above all route polylines */}
+                <MapLibreGL.CircleLayer
+                    id="stops-border"
+                    layerIndex={200}
+                    style={{
+                        circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 9, 6],
+                        circleColor: COLORS.white,
+                    }}
+                />
+                {/* Colored fill */}
+                <MapLibreGL.CircleLayer
+                    id="stops-fill"
+                    layerIndex={201}
+                    aboveLayerID="stops-border"
+                    style={{
+                        circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 6, 4],
+                        circleColor: ['case', ['==', ['get', 'isSelected'], 1], COLORS.accent, COLORS.primary],
+                    }}
+                />
+            </MapLibreGL.ShapeSource>
 
             {/* Vehicles */}
             {displayedVehicles.map((vehicle) => (
@@ -106,23 +134,12 @@ const TransitMapComponent = forwardRef(({
                 />
             ))}
 
-            {/* Trip Planning Route Overlay */}
-            {tripRouteCoordinates.map((route) => (
-                <Polyline
-                    key={route.id}
-                    coordinates={route.coordinates}
-                    strokeColor={route.color}
-                    strokeWidth={route.isWalk ? 3 : 5}
-                    lineDashPattern={route.isWalk ? [10, 5] : null}
-                />
-            ))}
-
             {/* Trip Planning Markers */}
             {tripMarkers.map((marker) => (
-                <Marker
+                <MapLibreGL.PointAnnotation
                     key={marker.id}
-                    coordinate={marker.coordinate}
-                    title={marker.title}
+                    id={`transit-marker-${marker.id}`}
+                    coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
                 >
                     <View style={[
                         styles.tripMarker,
@@ -133,9 +150,9 @@ const TransitMapComponent = forwardRef(({
                             marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
                         ]} />
                     </View>
-                </Marker>
+                </MapLibreGL.PointAnnotation>
             ))}
-        </MapView>
+        </MapLibreGL.MapView>
     );
 });
 

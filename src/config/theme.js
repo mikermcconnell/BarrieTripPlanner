@@ -1,5 +1,7 @@
 // Barrie Transit Theme - Enterprise-grade design system
 // Design spec: BudgetMe-inspired with green (#4CAF50) as primary accent
+import { FONT_FAMILIES } from './fonts';
+
 export const COLORS = {
   // Primary brand colors (BudgetMe Green - per PROJECT_PLAN.md)
   primary: '#4CAF50',
@@ -71,6 +73,8 @@ export const COLORS = {
   glassWhite: 'rgba(255, 255, 255, 0.95)',
   glassDark: 'rgba(23, 43, 77, 0.8)',
 };
+
+export { FONT_FAMILIES };
 
 export const SPACING = {
   xxs: 2,
@@ -227,49 +231,52 @@ export const commonStyles = {
   buttonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     letterSpacing: 0.3,
   },
   buttonTextSecondary: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     letterSpacing: 0.3,
   },
   title: {
     fontSize: FONT_SIZES.xxxl,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontFamily: FONT_FAMILIES.bold,
     color: COLORS.textPrimary,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: FONT_SIZES.xl,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   heading: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   bodyText: {
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textPrimary,
     lineHeight: FONT_SIZES.md * LINE_HEIGHTS.normal,
   },
   bodyTextSmall: {
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     lineHeight: FONT_SIZES.sm * LINE_HEIGHTS.normal,
   },
   caption: {
     fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     letterSpacing: 0.2,
   },
   label: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -282,7 +289,7 @@ export const commonStyles = {
   },
   badgeText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.primary,
   },
   divider: {
@@ -316,7 +323,7 @@ export const commonStyles = {
   },
   chipText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   chipTextActive: {

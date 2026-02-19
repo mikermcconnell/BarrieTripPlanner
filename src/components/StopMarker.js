@@ -1,22 +1,18 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Marker } from 'react-native-maps';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS } from '../config/theme';
 
 const StopMarker = ({ stop, onPress, isSelected = false }) => {
   return (
-    <Marker
-      coordinate={{
-        latitude: stop.latitude,
-        longitude: stop.longitude,
-      }}
+    <MapLibreGL.PointAnnotation
+      id={`stop-${stop.id}`}
+      coordinate={[stop.longitude, stop.latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
-      onPress={() => onPress?.(stop)}
-      zIndex={1} // Lower than buses (zIndex=10) so buses render on top
+      onSelected={() => onPress?.(stop)}
     >
       <View style={[styles.marker, isSelected && styles.markerSelected]} />
-    </Marker>
+    </MapLibreGL.PointAnnotation>
   );
 };
 

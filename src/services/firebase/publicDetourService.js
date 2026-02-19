@@ -14,14 +14,17 @@ const isPermissionDeniedError = (error) => {
 
 const normalizeDetourDoc = (snapshotDoc) => {
   const data = snapshotDoc.data() || {};
+  const routeId =
+    data.routeId === null || data.routeId === undefined ? null : String(data.routeId).trim().toUpperCase();
+  const directionId =
+    data.directionId === null || data.directionId === undefined
+      ? null
+      : String(data.directionId).trim();
   return {
     id: snapshotDoc.id,
     ...data,
-    routeId: data.routeId ? String(data.routeId) : null,
-    directionId:
-      data.directionId === null || data.directionId === undefined
-        ? null
-        : String(data.directionId),
+    routeId,
+    directionId,
     firstDetectedAt:
       typeof data.firstDetectedAt === 'number'
         ? data.firstDetectedAt

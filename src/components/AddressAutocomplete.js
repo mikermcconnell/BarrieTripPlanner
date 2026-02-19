@@ -58,6 +58,7 @@ const AddressAutocomplete = ({
   // Track the last search to avoid duplicate requests
   const lastSearchRef = useRef('');
   const debounceTimerRef = useRef(null);
+  const isFocusedRef = useRef(false);
 
   /**
    * Debounced search function
@@ -100,7 +101,7 @@ const AddressAutocomplete = ({
         });
 
         setSuggestions(sortedResults);
-        setShowDropdown(sortedResults.length > 0);
+        setShowDropdown(isFocusedRef.current && sortedResults.length > 0);
       } catch (error) {
         console.error('Autocomplete search error:', error);
         setSuggestions([]);
@@ -111,29 +112,36 @@ const AddressAutocomplete = ({
     }, LOCATIONIQ_CONFIG.DEBOUNCE_MS);
   }, []);
 
-  // Trigger search when value changes
+  // Cleanup timer on unmount
   useEffect(() => {
-    debouncedSearch(value);
-
-    // Cleanup timer on unmount
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [value, debouncedSearch]);
+  }, []);
 
   /**
    * Handle text input change
    */
   const handleChangeText = (text) => {
     onChangeText(text);
+    debouncedSearch(text);
   };
 
   /**
    * Handle suggestion selection
    */
   const handleSelect = (item) => {
+    // Cancel pending searches so a selection doesn't immediately reopen dropdown
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    // Mark this value as already searched to avoid duplicate lookup on same text
+    lastSearchRef.current = item.shortName;
+
     // Update the text input
     onChangeText(item.shortName);
 
@@ -156,6 +164,8 @@ const AddressAutocomplete = ({
    * Handle input focus
    */
   const handleFocus = () => {
+    isFocusedRef.current = true;
+
     // Show dropdown if we have suggestions
     if (suggestions.length > 0) {
       setShowDropdown(true);
@@ -166,6 +176,8 @@ const AddressAutocomplete = ({
    * Handle input blur
    */
   const handleBlur = () => {
+    isFocusedRef.current = false;
+
     // Delay hiding dropdown to allow tap on suggestion
     setTimeout(() => {
       setShowDropdown(false);

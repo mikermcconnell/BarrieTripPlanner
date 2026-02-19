@@ -2,7 +2,7 @@
  * Web-only map component using Leaflet
  * This component should ONLY be imported on web platform
  */
-import React, { forwardRef, useRef, useImperativeHandle } from 'react';
+import React, { forwardRef, useRef, useImperativeHandle, useMemo } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -22,6 +22,9 @@ if (typeof document !== 'undefined' && !document.getElementById('leaflet-css')) 
   link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
   document.head.appendChild(link);
 }
+
+import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
+import { ANIMATION } from '../config/constants';
 
 // Inject custom attribution styling
 if (typeof document !== 'undefined' && !document.getElementById('leaflet-attribution-css')) {
@@ -48,6 +51,7 @@ if (typeof document !== 'undefined' && !document.getElementById('leaflet-attribu
 const getZoomFromDelta = (latDelta) => {
   return Math.round(Math.log(360 / latDelta) / Math.LN2);
 };
+const webMarkerDebugState = new Map();
 
 // Map controller for ref methods
 const MapController = forwardRef((props, ref) => {
@@ -90,14 +94,12 @@ const MapClickHandler = ({ onPress }) => {
 };
 
 // Create compact pill bus icon with route number and direction arrow
-const createBusIcon = (color, routeId, bearing = null) => {
+const createBusIcon = (color, routeId, bearing = null, scale = 1) => {
   const routeLabel = routeId || '?';
 
   // Check if we have valid bearing data (not null/undefined and not the default 0 fallback)
   const hasValidBearing = bearing !== null && bearing !== undefined;
 
-  // Direction arrow - uses a rotating wrapper to orbit around the pill edge
-  // Wrapper is full-size, centered, and rotates. Arrow is positioned at top of wrapper.
   const arrowHtml = hasValidBearing ? `
     <div style="
       position: absolute;
@@ -127,7 +129,7 @@ const createBusIcon = (color, routeId, bearing = null) => {
   return L.divIcon({
     className: 'bus-icon',
     html: `
-      <div style="position: relative; width: 80px; height: 80px; overflow: visible;">
+      <div style="position: relative; width: 80px; height: 80px; overflow: visible; transform: scale(${scale}); transition: transform 0.1s ease-out;">
         ${arrowHtml}
         <div style="
           position: absolute;
@@ -166,7 +168,7 @@ const createStopIcon = (isSelected) => {
     className: 'stop-icon',
     html: `<div style="background:${isSelected ? '#1a73e8' : 'white'};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${isSelected ? 'white' : '#1a73e8'};box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
     iconSize: [size, size],
-    iconAnchor: [size/2, size/2],
+    iconAnchor: [size / 2, size / 2],
   });
 };
 
@@ -174,10 +176,10 @@ const createStopIcon = (isSelected) => {
 export const WebRoutePolyline = ({
   coordinates,
   color,
-  strokeWidth = 3,
+  strokeWidth = 6,
   opacity = 0.85,
-  outlineWidth = 0,
-  outlineColor,
+  outlineWidth = 2,
+  outlineColor = '#000000',
   offset = 0,
   smoothFactor = 1.5,
   lineCap = 'round',
@@ -237,17 +239,56 @@ const darkenColorHex = (hex, factor = 0.3) => {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 };
 
-// Web Bus Marker
-export const WebBusMarker = ({ vehicle, color }) => {
+// Web Bus Marker — uses animated position/bearing for smooth interpolation
+export const WebBusMarker = ({ vehicle, color, routeLabel: routeLabelProp }) => {
   if (!vehicle.coordinate?.latitude || !vehicle.coordinate?.longitude) return null;
+  const label = routeLabelProp || vehicle.routeId;
+
+  const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle);
+
+  // Memoize icon — only recreate when bearing crosses threshold or color/label changes
+  const lastIconRef = useRef({ bearing: null, color: null, label: null, icon: null });
+  const icon = useMemo(() => {
+    const prev = lastIconRef.current;
+    const bearingChanged = prev.bearing === null ||
+      Math.abs(bearing - prev.bearing) >= ANIMATION.BUS_BEARING_THRESHOLD_DEG;
+    const otherChanged = prev.color !== color || prev.label !== label;
+
+    if (!bearingChanged && !otherChanged && prev.icon) {
+      return prev.icon;
+    }
+
+    const newIcon = createBusIcon(color, label, bearing, scale);
+    lastIconRef.current = { bearing, color, label, icon: newIcon };
+    return newIcon;
+  }, [bearing, color, label, scale]);
+
+  if (__DEV__) {
+    const raw = String(vehicle.routeId || '').trim();
+    if (/^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(raw)) {
+      const signature = `${raw}|${String(label)}|${String(routeLabelProp || '')}`;
+      if (webMarkerDebugState.get(vehicle.id) !== signature) {
+        webMarkerDebugState.set(vehicle.id, signature);
+        console.info(
+          '[route-label-debug][web-marker] bus=%s raw=%s prop=%s rendered=%s',
+          vehicle.id,
+          raw || '-',
+          routeLabelProp || '-',
+          label || '-'
+        );
+      }
+    }
+  }
+
+  if (!latitude || !longitude) return null;
 
   return (
     <Marker
-      position={[vehicle.coordinate.latitude, vehicle.coordinate.longitude]}
-      icon={createBusIcon(color, vehicle.routeId, vehicle.bearing)}
+      position={[latitude, longitude]}
+      icon={icon}
     >
       <Popup>
-        <strong>Route {vehicle.routeId}</strong><br/>
+        <strong>Route {label}</strong><br />
         {vehicle.label && `Bus ${vehicle.label}`}
       </Popup>
     </Marker>
@@ -263,7 +304,7 @@ export const WebStopMarker = ({ stop, onPress, isSelected }) => {
       eventHandlers={{ click: () => onPress?.(stop) }}
     >
       <Popup>
-        <strong>{stop.name}</strong><br/>
+        <strong>{stop.name}</strong><br />
         Stop #{stop.code}
       </Popup>
     </Marker>
@@ -271,7 +312,7 @@ export const WebStopMarker = ({ stop, onPress, isSelected }) => {
 };
 
 // Main Web Map Component
-const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete, onPress }, ref) => {
+const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete, onPress, onUserInteraction }, ref) => {
   const controllerRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
@@ -303,6 +344,10 @@ const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete
               latitudeDelta: bounds.getNorth() - bounds.getSouth(),
               longitudeDelta: bounds.getEast() - bounds.getWest(),
             });
+          });
+          // Detect user-initiated drag (not programmatic flyTo/fitBounds)
+          mapInstance.target.on('dragend', () => {
+            onUserInteraction?.();
           });
         }}
       >

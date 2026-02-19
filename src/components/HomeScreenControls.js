@@ -1,14 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
 const HomeScreenControls = ({
     routes,
     selectedRoutes,
     onRouteSelect,
     getRouteColor,
+    hasActiveDetour,
 }) => {
     // Sort routes from largest to smallest
     const sortedRoutes = [...routes].sort((a, b) => {
@@ -50,27 +53,32 @@ const HomeScreenControls = ({
                 {sortedRoutes.map((r) => {
                     const routeColor = getRouteColor(r.id);
                     const isActive = selectedRoutes.has(r.id);
+                    const routeHasDetour = hasActiveDetour && hasActiveDetour(r.id);
                     return (
-                        <TouchableOpacity
-                            key={r.id}
-                            style={[
-                                styles.filterChip,
-                                isActive && { backgroundColor: routeColor, borderColor: routeColor },
-                            ]}
-                            onPress={() => onRouteSelect(r.id)}
-                            activeOpacity={0.7}
-                        >
-                            <View style={[
-                                styles.filterDot,
-                                { backgroundColor: isActive ? COLORS.white : routeColor }
-                            ]} />
-                            <Text style={[
-                                styles.filterChipText,
-                                isActive && styles.filterChipTextActive
-                            ]}>
-                                {r.shortName}
-                            </Text>
-                        </TouchableOpacity>
+                        <View key={r.id} style={styles.chipWrapper}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.filterChip,
+                                    isActive && { backgroundColor: routeColor, borderColor: routeColor },
+                                ]}
+                                onPress={() => onRouteSelect(r.id)}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[
+                                    styles.filterDot,
+                                    { backgroundColor: isActive ? COLORS.white : routeColor }
+                                ]} />
+                                <Text style={[
+                                    styles.filterChipText,
+                                    isActive && styles.filterChipTextActive
+                                ]}>
+                                    {r.shortName}
+                                </Text>
+                            </TouchableOpacity>
+                            {routeHasDetour && (
+                                <View style={styles.detourDot} />
+                            )}
+                        </View>
                     );
                 })}
             </ScrollView>
@@ -81,7 +89,7 @@ const HomeScreenControls = ({
 const styles = StyleSheet.create({
     filterPanel: {
         position: 'absolute',
-        top: 64,
+        top: 64 + STATUS_BAR_OFFSET,
         left: SPACING.sm,
         width: 64,
         maxHeight: SCREEN_HEIGHT - 170,
@@ -143,6 +151,20 @@ const styles = StyleSheet.create({
     },
     filterChipTextActive: {
         color: COLORS.white,
+    },
+    chipWrapper: {
+        position: 'relative',
+    },
+    detourDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#FF991F',
+        borderWidth: 1.5,
+        borderColor: COLORS.white,
     },
 });
 

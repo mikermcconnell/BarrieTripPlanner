@@ -53,7 +53,7 @@ export const trackEvent = (eventName, params) => {
         // Silent — never block UI
       }
     }
-  });
+  }).catch(() => {});
 };
 
 /**
@@ -71,5 +71,5 @@ export const setAnalyticsUserProperties = (properties) => {
         // Silent
       }
     }
-  });
+  }).catch(() => {});
 };

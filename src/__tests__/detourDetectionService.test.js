@@ -7,8 +7,10 @@ const {
   initializeDetourState,
   checkVehicleOffRoute,
   processVehicleForDetour,
+  checkDetourClearing,
   correlateDetoursWithServiceAlerts,
   enrichDetourWithRouteContext,
+  resolveRouteDetourConfig,
   getActiveDetours,
   getDetoursForRoute,
   getDetourHistory,
@@ -48,6 +50,17 @@ const mockTripMapping = {
 };
 
 describe('detourDetectionService', () => {
+  describe('resolveRouteDetourConfig', () => {
+    test('applies base route override to branch route IDs', () => {
+      const branchConfig = resolveRouteDetourConfig('2A');
+      const baseConfig = resolveRouteDetourConfig('2');
+
+      expect(branchConfig.OFF_ROUTE_THRESHOLD_METERS).toBe(baseConfig.OFF_ROUTE_THRESHOLD_METERS);
+      expect(branchConfig.CORRIDOR_WIDTH_METERS).toBe(baseConfig.CORRIDOR_WIDTH_METERS);
+      expect(branchConfig.PATH_OVERLAP_PERCENTAGE).toBe(baseConfig.PATH_OVERLAP_PERCENTAGE);
+    });
+  });
+
   describe('initializeDetourState', () => {
     test('creates empty state structure', () => {
       const state = initializeDetourState();
@@ -275,7 +288,7 @@ describe('detourDetectionService', () => {
         lastUpdateTime: Date.now(),
       };
 
-      // Bus 2 returns to route - should create suspected detour
+      // Bus 2 returns to route - should NOW create detour (2 vehicles is enough)
       const result = processVehicleForDetour({
         id: 'bus_2',
         routeId: '1',
@@ -284,11 +297,11 @@ describe('detourDetectionService', () => {
         coordinate: { latitude: 44.41, longitude: -79.69 },
       }, mockShapes, mockTripMapping, mockRouteShapeMapping, state);
 
-      // Should have created a suspected detour
+      // Should have created a suspected detour with 2 vehicles
       expect(result).not.toBeNull();
       expect(result.status).toBe('suspected');
       expect(result.routeId).toBe('1');
-      expect(result.confirmedByVehicles.length).toBe(2);
+      expect(result.confirmedByVehicles.length).toBeGreaterThanOrEqual(2);
       expect(result.confidenceScore).toBeGreaterThan(0);
       expect(['suspected', 'likely', 'high-confidence']).toContain(result.confidenceLevel);
       expect(Object.keys(state.activeDetours).length).toBe(1);
@@ -308,6 +321,7 @@ describe('detourDetectionService', () => {
         confirmedByVehicles: [
           { vehicleId: 'bus_1', timestamp: Date.now() - 60000 },
           { vehicleId: 'bus_2', timestamp: Date.now() - 30000 },
+          { vehicleId: 'bus_3', timestamp: Date.now() - 15000 },
         ],
         firstDetectedAt: Date.now() - 60000,
         lastSeenAt: Date.now() - 10000,
@@ -456,24 +470,39 @@ describe('detourDetectionService', () => {
   });
 
   describe('cleanupExpiredDetours', () => {
-    test('removes expired detours', () => {
+    test('removes expired suspected detours but keeps likely detours', () => {
       const state = initializeDetourState();
-      const oneHourAgo = Date.now() - 3700000; // More than 1 hour ago
+      const threeHoursAgo = Date.now() - 10900000; // More than 3 hours ago
 
-      state.activeDetours['detour_old'] = {
-        id: 'detour_old',
+      state.activeDetours['detour_old_suspected'] = {
+        id: 'detour_old_suspected',
         status: 'suspected',
-        lastSeenAt: oneHourAgo,
+        confidenceLevel: 'suspected',
+        lastSeenAt: threeHoursAgo,
+        firstDetectedAt: threeHoursAgo,
+      };
+      state.activeDetours['detour_old_likely'] = {
+        id: 'detour_old_likely',
+        status: 'suspected',
+        confidenceLevel: 'likely',
+        lastSeenAt: threeHoursAgo,
+        firstDetectedAt: threeHoursAgo,
       };
       state.activeDetours['detour_recent'] = {
         id: 'detour_recent',
         status: 'suspected',
+        confidenceLevel: 'suspected',
         lastSeenAt: Date.now(),
+        firstDetectedAt: Date.now(),
       };
 
       cleanupExpiredDetours(state);
 
-      expect(state.activeDetours['detour_old']).toBeUndefined();
+      // Suspected + old → expired
+      expect(state.activeDetours['detour_old_suspected']).toBeUndefined();
+      // Likely + old → survives (persists until cleared or 24h max)
+      expect(state.activeDetours['detour_old_likely']).toBeDefined();
+      // Recent → survives
       expect(state.activeDetours['detour_recent']).toBeDefined();
     });
 
@@ -508,16 +537,18 @@ describe('detourDetectionService', () => {
 
     test('archives detours into history when cleaned up', () => {
       const state = initializeDetourState();
-      const oldTimestamp = Date.now() - 3700000;
+      const oldTimestamp = Date.now() - 10900000; // More than 3 hours ago
       state.activeDetours['detour_old'] = {
         id: 'detour_old',
         status: 'suspected',
+        confidenceLevel: 'suspected',
         routeId: '1',
         directionId: '0',
         routeKey: '1_0',
         polyline: mockRouteShape,
         confirmedByVehicles: [{ vehicleId: 'bus_1', timestamp: oldTimestamp }],
         lastSeenAt: oldTimestamp,
+        firstDetectedAt: oldTimestamp,
       };
 
       cleanupExpiredDetours(state);
@@ -526,6 +557,199 @@ describe('detourDetectionService', () => {
       expect(history.length).toBe(1);
       expect(history[0].id).toBe('detour_old');
       expect(history[0].archiveReason).toBe('expired');
+    });
+  });
+
+  describe('evidence-based clearing', () => {
+    // Detour centroid must be within CORRIDOR_WIDTH * 3 = 150m of the route
+    // Route is at longitude -79.69; at lat 44.395, 0.001° lon ≈ 80m
+    // So centroid at -79.6888 is ~95m from route — within the 150m clearing radius
+    const nearRouteCentroid = { latitude: 44.395, longitude: -79.6888 };
+
+    test('1 on-route vehicle does not clear suspected detour, 2nd does', () => {
+      const state = initializeDetourState();
+      const now = Date.now();
+
+      state.activeDetours['detour_1'] = {
+        id: 'detour_1',
+        status: 'suspected',
+        routeId: '1',
+        directionId: '0',
+        routeKey: '1_0',
+        polyline: [
+          { latitude: 44.39, longitude: -79.6888 },
+          { latitude: 44.40, longitude: -79.6888 },
+        ],
+        centroid: nearRouteCentroid,
+        confirmedByVehicles: [
+          { vehicleId: 'bus_1', timestamp: now - 60000 },
+          { vehicleId: 'bus_2', timestamp: now - 30000 },
+        ],
+        firstDetectedAt: now - 60000,
+        lastSeenAt: now,
+        evidenceCount: 2,
+        confidenceScore: 65,
+        confidenceLevel: 'suspected',
+        clearingEvidence: [],
+      };
+
+      // 1st on-route vehicle near detour centroid
+      checkDetourClearing({
+        id: 'bus_clear_1',
+        routeId: '1',
+        directionId: '0',
+        coordinate: { latitude: 44.395, longitude: -79.69 }, // on route, near centroid
+      }, mockShapes, mockRouteShapeMapping, state);
+
+      // Should still be suspected (need 2 clearing vehicles for suspected tier)
+      expect(state.activeDetours['detour_1'].status).toBe('suspected');
+      expect(state.activeDetours['detour_1'].clearingEvidence.length).toBe(1);
+
+      // 2nd on-route vehicle
+      checkDetourClearing({
+        id: 'bus_clear_2',
+        routeId: '1',
+        directionId: '0',
+        coordinate: { latitude: 44.395, longitude: -79.69 },
+      }, mockShapes, mockRouteShapeMapping, state);
+
+      // Now should be cleared
+      expect(state.activeDetours['detour_1'].status).toBe('cleared');
+      expect(state.activeDetours['detour_1'].clearedByEvidenceCount).toBe(2);
+    });
+
+    test('same vehicle does not count twice as clearing evidence', () => {
+      const state = initializeDetourState();
+      const now = Date.now();
+
+      state.activeDetours['detour_1'] = {
+        id: 'detour_1',
+        status: 'suspected',
+        routeId: '1',
+        directionId: '0',
+        routeKey: '1_0',
+        polyline: [
+          { latitude: 44.39, longitude: -79.6888 },
+          { latitude: 44.40, longitude: -79.6888 },
+        ],
+        centroid: nearRouteCentroid,
+        confirmedByVehicles: [
+          { vehicleId: 'bus_1', timestamp: now - 60000 },
+          { vehicleId: 'bus_2', timestamp: now - 30000 },
+        ],
+        firstDetectedAt: now - 60000,
+        lastSeenAt: now,
+        evidenceCount: 2,
+        confidenceScore: 65,
+        confidenceLevel: 'suspected',
+        clearingEvidence: [],
+      };
+
+      // Same vehicle passes three times
+      for (let i = 0; i < 3; i++) {
+        checkDetourClearing({
+          id: 'bus_same',
+          routeId: '1',
+          directionId: '0',
+          coordinate: { latitude: 44.395, longitude: -79.69 },
+        }, mockShapes, mockRouteShapeMapping, state);
+      }
+
+      // Should not be cleared — only 1 unique vehicle
+      expect(state.activeDetours['detour_1'].status).toBe('suspected');
+      expect(state.activeDetours['detour_1'].clearingEvidence.length).toBe(1);
+    });
+  });
+
+  describe('confidence-tiered expiry', () => {
+    test('high-confidence detours persist past 1-hour mark', () => {
+      const state = initializeDetourState();
+      const twoHoursAgo = Date.now() - 7200000;
+
+      state.activeDetours['detour_hc'] = {
+        id: 'detour_hc',
+        status: 'suspected',
+        confidenceLevel: 'high-confidence',
+        routeId: '1',
+        lastSeenAt: twoHoursAgo,
+        firstDetectedAt: twoHoursAgo,
+      };
+
+      cleanupExpiredDetours(state);
+
+      // high-confidence should survive past 1 hour
+      expect(state.activeDetours['detour_hc']).toBeDefined();
+    });
+
+    test('all detours expire at 24-hour max retention', () => {
+      const state = initializeDetourState();
+      const twentyFiveHoursAgo = Date.now() - 90000000; // 25 hours
+
+      state.activeDetours['detour_zombie'] = {
+        id: 'detour_zombie',
+        status: 'suspected',
+        confidenceLevel: 'high-confidence',
+        routeId: '1',
+        lastSeenAt: twentyFiveHoursAgo,
+        firstDetectedAt: twentyFiveHoursAgo,
+      };
+
+      cleanupExpiredDetours(state);
+
+      // Should be archived even though high-confidence
+      expect(state.activeDetours['detour_zombie']).toBeUndefined();
+      const history = getDetourHistory(state);
+      expect(history.length).toBe(1);
+      expect(history[0].archiveReason).toBe('expired_max_retention');
+    });
+  });
+
+  describe('clearing threshold capping', () => {
+    test('clearing threshold is capped at evidence count for 2-bus routes', () => {
+      const state = initializeDetourState();
+      const now = Date.now();
+
+      // Detour confirmed by only 2 vehicles but scored as "likely" (e.g. with alert boost)
+      state.activeDetours['detour_likely_2bus'] = {
+        id: 'detour_likely_2bus',
+        status: 'suspected',
+        routeId: '1',
+        directionId: '0',
+        routeKey: '1_0',
+        polyline: [
+          { latitude: 44.39, longitude: -79.6888 },
+          { latitude: 44.40, longitude: -79.6888 },
+        ],
+        centroid: { latitude: 44.395, longitude: -79.6888 },
+        confirmedByVehicles: [
+          { vehicleId: 'bus_1', timestamp: now - 60000 },
+          { vehicleId: 'bus_2', timestamp: now - 30000 },
+        ],
+        firstDetectedAt: now - 60000,
+        lastSeenAt: now,
+        evidenceCount: 2,
+        confidenceScore: 72,
+        confidenceLevel: 'likely', // normally needs 3 clearing vehicles
+        clearingEvidence: [],
+      };
+
+      // Provide 2 on-route vehicles (capped threshold: min(3, 2) = 2)
+      checkDetourClearing({
+        id: 'bus_c1',
+        routeId: '1',
+        directionId: '0',
+        coordinate: { latitude: 44.395, longitude: -79.69 },
+      }, mockShapes, mockRouteShapeMapping, state);
+
+      checkDetourClearing({
+        id: 'bus_c2',
+        routeId: '1',
+        directionId: '0',
+        coordinate: { latitude: 44.395, longitude: -79.69 },
+      }, mockShapes, mockRouteShapeMapping, state);
+
+      // Should clear with 2 vehicles despite "likely" normally requiring 3
+      expect(state.activeDetours['detour_likely_2bus'].status).toBe('cleared');
     });
   });
 });

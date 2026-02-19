@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Barrie Transit GTFS Data URLs
 // Source: https://www.transit.land/feeds/f-dpzk-barrietransit
 export const GTFS_URLS = {
@@ -8,6 +10,40 @@ export const GTFS_URLS = {
   VEHICLE_POSITIONS: 'https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb',
   TRIP_UPDATES: 'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb',
   SERVICE_ALERTS: 'https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb',
+};
+
+// MapLibre style — muted light basemap (CartoDB Positron)
+// Free, no API key required, clean desaturated look
+export const OSM_MAP_STYLE = {
+  version: 8,
+  sources: {
+    'carto-light': {
+      type: 'raster',
+      tiles: [
+        'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+        'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+        'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+      ],
+      tileSize: 256,
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: {
+        'background-color': '#f2f0eb',
+      },
+    },
+    {
+      id: 'carto-light-layer',
+      type: 'raster',
+      source: 'carto-light',
+      minzoom: 0,
+      maxzoom: 20,
+    },
+  ],
 };
 
 // Map configuration
@@ -56,6 +92,8 @@ export const APP_CONFIG = {
   SUPPORT_EMAIL: 'support@barrietransit.app',
 };
 
+export const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
+
 // LocationIQ Configuration (Free tier: 5,000 requests/day)
 // Get your API key at: https://locationiq.com/
 // OpenTripPlanner Configuration
@@ -69,7 +107,8 @@ export const LOCATIONIQ_CONFIG = {
   API_KEY: process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || '',
   BASE_URL: 'https://us1.locationiq.com/v1',
   // When set, API calls route through this proxy (hides API key server-side)
-  PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL || '',
+  // Proxy is only needed for web (CORS); native apps call LocationIQ directly
+  PROXY_URL: Platform.OS === 'web' ? (process.env.EXPO_PUBLIC_API_PROXY_URL || '') : '',
 
   // Barrie bounding box to prioritize local results
   // Format: minLon, minLat, maxLon, maxLat
@@ -100,9 +139,25 @@ export const DETOUR_CONFIG = {
   PATH_OVERLAP_PERCENTAGE: 0.70,
 
   // Minimum number of GPS breadcrumbs before considering it a valid off-route path
-  MIN_OFF_ROUTE_POINTS: 5,
+  MIN_OFF_ROUTE_POINTS: 3,
 
-  // How long to keep suspected detours active without confirmation (milliseconds)
+  // How long to keep low-confidence (suspected) detours before expiry (milliseconds)
+  SUSPECTED_DETOUR_EXPIRY_MS: 10800000, // 3 hours (longer for low-frequency routes)
+
+  // Absolute cap for ALL detours regardless of confidence (prevents zombies)
+  MAX_DETOUR_RETENTION_MS: 86400000, // 24 hours
+
+  // Window for accumulating clearing evidence (milliseconds)
+  CLEARING_EVIDENCE_WINDOW_MS: 1800000, // 30 minutes
+
+  // On-route vehicles needed to clear a detour, by confidence tier
+  CLEARING_THRESHOLDS: {
+    suspected: 2,
+    likely: 3,
+    highConfidence: 4,
+  },
+
+  // Legacy alias — kept for backward compatibility with per-route overrides
   DETOUR_EXPIRY_MS: 3600000, // 1 hour
 
   // Minimum time a vehicle must be off-route to start tracking (milliseconds)
@@ -173,10 +228,10 @@ export const DETOUR_CONFIG = {
       MIN_OFF_ROUTE_DURATION_MS: 35000,
     },
     '7': {
-      OFF_ROUTE_THRESHOLD_METERS: 55,
-      CORRIDOR_WIDTH_METERS: 55,
-      PATH_OVERLAP_PERCENTAGE: 0.68,
-      MIN_OFF_ROUTE_DURATION_MS: 40000,
+      OFF_ROUTE_THRESHOLD_METERS: 65,
+      CORRIDOR_WIDTH_METERS: 60,
+      PATH_OVERLAP_PERCENTAGE: 0.75,
+      MIN_OFF_ROUTE_DURATION_MS: 60000,
     },
     '8': {
       OFF_ROUTE_THRESHOLD_METERS: 58,
@@ -265,6 +320,13 @@ export const SHAPE_PROCESSING = {
 };
 
 // Trip UI Configuration
+// Bus marker animation configuration
+export const ANIMATION = {
+  BUS_POSITION_DURATION_MS: 2000,   // interpolation duration
+  BUS_BEARING_THRESHOLD_DEG: 2,     // min bearing change to re-render icon (web)
+  BUS_PULSE_DURATION_MS: 400,       // scale pulse duration on new position
+};
+
 export const TRIP_UI_CONFIG = {
   // Walk distance considered "high" — triggers warning label (meters)
   HIGH_WALK_THRESHOLD: 800,

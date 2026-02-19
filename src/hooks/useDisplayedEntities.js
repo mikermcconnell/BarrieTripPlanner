@@ -11,6 +11,12 @@ import { useMemo, useCallback } from 'react';
 import { ROUTE_COLORS } from '../config/constants';
 import { getRepresentativeShapeIdsByDirection } from '../utils/routeShapeUtils';
 
+const normalizeRouteId = (routeId) => {
+  if (routeId === null || routeId === undefined) return null;
+  const normalized = String(routeId).trim().toUpperCase();
+  return normalized || null;
+};
+
 export const useDisplayedEntities = ({
   selectedRouteIds,
   vehicles,
@@ -147,7 +153,12 @@ export const useDisplayedEntities = ({
     if (!activeDetours || activeDetours.length === 0) return [];
 
     if (selectedRouteIds.size > 0) {
-      return activeDetours.filter(detour => selectedRouteIds.has(detour.routeId));
+      const selectedNormalized = new Set(
+        Array.from(selectedRouteIds)
+          .map((routeId) => normalizeRouteId(routeId))
+          .filter(Boolean)
+      );
+      return activeDetours.filter((detour) => selectedNormalized.has(normalizeRouteId(detour.routeId)));
     }
 
     return activeDetours;

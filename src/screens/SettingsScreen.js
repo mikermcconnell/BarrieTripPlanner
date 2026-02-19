@@ -17,7 +17,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
-import { APP_CONFIG } from '../config/constants';
+import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
 
 const SettingsScreen = ({ navigation }) => {
   const [notificationSettings, setNotificationSettings] = useState({
@@ -202,7 +202,7 @@ const SettingsScreen = ({ navigation }) => {
               'Replay Tutorial',
               'See the app walkthrough again',
               async () => {
-                await AsyncStorage.removeItem('@barrie_transit_onboarding_seen');
+                await AsyncStorage.removeItem(ONBOARDING_KEY);
                 Alert.alert('Tutorial Reset', 'The tutorial will show next time you open the app.');
               },
               false

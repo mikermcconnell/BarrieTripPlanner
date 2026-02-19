@@ -19,6 +19,12 @@ const TransitContext = createContext(null);
 const AUTO_DETOURS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS === 'true';
 const EMPTY_VEHICLES = []; // Stable reference to avoid re-render loops
 
+const normalizeRouteId = (routeId) => {
+  if (routeId === null || routeId === undefined) return null;
+  const normalized = String(routeId).trim().toUpperCase();
+  return normalized || null;
+};
+
 export const useTransit = () => {
   const context = useContext(TransitContext);
   if (!context) {
@@ -414,26 +420,64 @@ export const TransitProvider = ({ children }) => {
   // Merge both detour sources: prefer backend per-route, fill in from local
   const activeDetours = useMemo(() => {
     if (!AUTO_DETOURS_ENABLED) return [];
-    const backendRouteIds = new Set(backendActiveDetours.map((d) => d.routeId));
-    const localOnly = localActiveDetours.filter((d) => !backendRouteIds.has(d.routeId));
-    return [...backendActiveDetours, ...localOnly];
-  }, [backendActiveDetours, localActiveDetours]);
+    if (!isBackendDetourFeedLive) {
+      return localActiveDetours;
+    }
+
+    const backendByRoute = new Map();
+    backendActiveDetours.forEach((detour) => {
+      const routeId = normalizeRouteId(detour.routeId);
+      if (!routeId) return;
+      const list = backendByRoute.get(routeId) || [];
+      list.push(detour);
+      backendByRoute.set(routeId, list);
+    });
+
+    const merged = [...backendActiveDetours];
+    localActiveDetours.forEach((detour) => {
+      const routeId = normalizeRouteId(detour.routeId);
+      if (!routeId) {
+        merged.push(detour);
+        return;
+      }
+
+      const backendRouteDetours = backendByRoute.get(routeId) || [];
+      if (backendRouteDetours.length === 0) {
+        merged.push(detour);
+        return;
+      }
+
+      const backendHasDrawablePolyline = backendRouteDetours.some(
+        (item) => Array.isArray(item.polyline) && item.polyline.length >= 2
+      );
+      const localHasDrawablePolyline = Array.isArray(detour.polyline) && detour.polyline.length >= 2;
+      if (!backendHasDrawablePolyline && localHasDrawablePolyline) {
+        merged.push(detour);
+      }
+    });
+
+    return merged;
+  }, [backendActiveDetours, localActiveDetours, isBackendDetourFeedLive]);
 
   const getDetoursForRoute = useCallback(
-    (routeId, directionId = null) =>
-      activeDetours.filter((detour) => {
+    (routeId, directionId = null) => {
+      const normalizedRouteId = normalizeRouteId(routeId);
+      const normalizedDirectionId =
+        directionId === null || directionId === undefined ? null : String(directionId);
+      return activeDetours.filter((detour) => {
         if (detour.status !== 'suspected') return false;
-        if (detour.routeId !== routeId) return false;
+        if (normalizeRouteId(detour.routeId) !== normalizedRouteId) return false;
         if (
-          directionId !== null &&
+          normalizedDirectionId !== null &&
           detour.directionId !== null &&
           detour.directionId !== undefined &&
-          String(detour.directionId) !== String(directionId)
+          String(detour.directionId) !== normalizedDirectionId
         ) {
           return false;
         }
         return true;
-      }),
+      });
+    },
     [activeDetours]
   );
 

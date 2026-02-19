@@ -61,6 +61,8 @@ const DelayBadge = ({ delaySeconds, isRealtime, compact = false }) => {
         compact && styles.containerCompact,
         { backgroundColor: colors.background },
       ]}
+      accessibilityLabel={`Delay status: ${text}`}
+      accessibilityLiveRegion="polite"
     >
       {/* Real-time indicator dot */}
       <View style={[styles.dot, { backgroundColor: colors.text }]} />

@@ -20,7 +20,7 @@ const ArrivalRow = ({ arrival, routeColor }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} accessibilityLabel={`Route ${arrival.routeShortName}, ${arrival.headsign || 'Unknown'}, ${getTimeDisplay()}${isRealtime ? ', real-time' : ', scheduled'}`} accessibilityLiveRegion="polite">
       <View style={[styles.routeBadge, { backgroundColor: routeColor || COLORS.primary }]}>
         <Text style={styles.routeText}>{arrival.routeShortName}</Text>
       </View>

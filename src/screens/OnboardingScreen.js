@@ -61,7 +61,7 @@ const OnboardingScreen = ({ onComplete }) => {
   };
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
+    if (viewableItems.length > 0 && viewableItems[0].index != null) {
       setCurrentIndex(viewableItems[0].index);
     }
   }).current;

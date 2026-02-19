@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import logger from './logger';
 
 const CACHE_KEYS = {
   GTFS_DATA: '@barrie_transit_gtfs_cache',
@@ -24,7 +25,7 @@ export const isOnline = async () => {
     const state = await NetInfo.fetch();
     return state.isConnected && state.isInternetReachable;
   } catch (error) {
-    console.error('Error checking network status:', error);
+    logger.error('Error checking network status:', error);
     return true; // Assume online if check fails
   }
 };
@@ -39,7 +40,7 @@ export const cacheData = async (key, data) => {
 
   // Guard: skip items that are too large for AsyncStorage
   if (json.length > MAX_ITEM_BYTES) {
-    console.warn(
+    logger.warn(
       `Cache skip: ${key} is ${formatBytes(json.length)} (limit ${formatBytes(MAX_ITEM_BYTES)})`
     );
     return { success: false, error: 'Item too large for cache' };
@@ -51,7 +52,7 @@ export const cacheData = async (key, data) => {
   } catch (error) {
     // On SQLITE_FULL, clear old transit cache and retry once
     if (error?.message?.includes('SQLITE_FULL') || error?.code === 13) {
-      console.warn(`Cache full, clearing old data and retrying (${key})`);
+      logger.warn(`Cache full, clearing old data and retrying (${key})`);
       try {
         const keys = await AsyncStorage.getAllKeys();
         const transitKeys = keys.filter((k) => k.startsWith('@barrie_transit'));
@@ -61,11 +62,11 @@ export const cacheData = async (key, data) => {
         await AsyncStorage.setItem(key, json);
         return { success: true };
       } catch (retryError) {
-        console.warn(`Cache retry failed for ${key}, skipping:`, retryError.message);
+        logger.warn(`Cache retry failed for ${key}, skipping:`, retryError.message);
         return { success: false, error: retryError.message };
       }
     }
-    console.warn('Error caching data:', error.message);
+    logger.warn('Error caching data:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -89,7 +90,7 @@ export const getCachedData = async (key, maxAge = CACHE_EXPIRY_MS) => {
 
     return cacheItem.data;
   } catch (error) {
-    console.error('Error getting cached data:', error);
+    logger.error('Error getting cached data:', error);
     return null;
   }
 };
@@ -129,7 +130,7 @@ export const cacheGTFSData = async (data) => {
 
     return { success: true };
   } catch (error) {
-    console.error('Error caching GTFS data:', error);
+    logger.error('Error caching GTFS data:', error);
     return { success: false, error: error.message };
   }
 };
@@ -167,7 +168,7 @@ export const getCachedGTFSData = async () => {
 
     return null;
   } catch (error) {
-    console.error('Error getting cached GTFS data:', error);
+    logger.error('Error getting cached GTFS data:', error);
     return null;
   }
 };
@@ -187,7 +188,7 @@ export const clearCache = async () => {
     ]);
     return { success: true };
   } catch (error) {
-    console.error('Error clearing cache:', error);
+    logger.error('Error clearing cache:', error);
     return { success: false, error: error.message };
   }
 };
@@ -214,7 +215,7 @@ export const getCacheSize = async () => {
       sizeFormatted: formatBytes(totalSize),
     };
   } catch (error) {
-    console.error('Error getting cache size:', error);
+    logger.error('Error getting cache size:', error);
     return { keys: 0, sizeBytes: 0, sizeFormatted: '0 B' };
   }
 };

@@ -4,7 +4,7 @@
  * Stores last 10 items per category (stops, routes, addresses, trips).
  * Both .js and .web.js screens import this same hook.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import logger from '../utils/logger';
 
@@ -55,59 +55,40 @@ export const useSearchHistory = () => {
     })();
   }, []);
 
-  // Persist helper
-  const persist = useCallback(async (updated) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (error) {
-      logger.error('Failed to save search history:', error);
+  // Persist on history changes (skip initial load)
+  const isInitialLoad = useRef(true);
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
     }
-  }, []);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history)).catch((error) => {
+      logger.error('Failed to save search history:', error);
+    });
+  }, [history]);
 
-  /**
-   * Add an item to search history.
-   * @param {'stops'|'routes'|'addresses'|'trips'} type
-   * @param {object} item — the item data to store
-   */
   const addToHistory = useCallback((type, item) => {
     if (!item || !EMPTY_HISTORY.hasOwnProperty(type)) return;
-
     setHistory((prev) => {
       const deduped = deduplicateItem(prev[type], item, type);
-      const updated = {
+      return {
         ...prev,
         [type]: [item, ...deduped].slice(0, MAX_ITEMS_PER_TYPE),
       };
-      persist(updated);
-      return updated;
     });
-  }, [persist]);
+  }, []);
 
-  /**
-   * Get history for a specific type.
-   * @param {'stops'|'routes'|'addresses'|'trips'} type
-   * @returns {Array}
-   */
   const getHistory = useCallback((type) => {
     return history[type] || [];
   }, [history]);
 
-  /**
-   * Clear history for a specific type, or all if no type given.
-   * @param {'stops'|'routes'|'addresses'|'trips'} [type]
-   */
-  const clearHistory = useCallback(async (type) => {
+  const clearHistory = useCallback((type) => {
     if (type) {
-      setHistory((prev) => {
-        const updated = { ...prev, [type]: [] };
-        persist(updated);
-        return updated;
-      });
+      setHistory((prev) => ({ ...prev, [type]: [] }));
     } else {
       setHistory(EMPTY_HISTORY);
-      persist(EMPTY_HISTORY);
     }
-  }, [persist]);
+  }, []);
 
   return {
     history,

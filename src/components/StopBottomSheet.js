@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Alert } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
 import Svg, { Path } from 'react-native-svg';
+import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 
 // SVG Icons
@@ -31,7 +32,26 @@ const EmptyIcon = ({ size = 48, color = COLORS.grey400 }) => (
   </Svg>
 );
 
-const StopBottomSheet = ({ stop, onClose }) => {
+const ShareIcon = ({ size = 18, color = COLORS.primary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M18 16.08C17.24 16.08 16.56 16.38 16.04 16.85L8.91 12.7C8.96 12.47 9 12.24 9 12C9 11.76 8.96 11.53 8.91 11.3L15.96 7.19C16.5 7.69 17.21 8 18 8C19.66 8 21 6.66 21 5C21 3.34 19.66 2 18 2C16.34 2 15 3.34 15 5C15 5.24 15.04 5.47 15.09 5.7L8.04 9.81C7.5 9.31 6.79 9 6 9C4.34 9 3 10.34 3 12C3 13.66 4.34 15 6 15C6.79 15 7.5 14.69 8.04 14.19L15.16 18.35C15.11 18.56 15.08 18.78 15.08 19C15.08 20.61 16.39 21.92 18 21.92C19.61 21.92 20.92 20.61 20.92 19C20.92 17.39 19.61 16.08 18 16.08Z" fill={color}/>
+  </Svg>
+);
+
+// Direction button icons
+const DirectionsFromIcon = ({ size = 18, color = COLORS.success }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill={color}/>
+  </Svg>
+);
+
+const DirectionsToIcon = ({ size = 18, color = COLORS.error }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20ZM12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10Z" fill={color}/>
+  </Svg>
+);
+
+const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
   const bottomSheetRef = useRef(null);
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
@@ -45,6 +65,34 @@ const StopBottomSheet = ({ stop, onClose }) => {
     },
     [onClose]
   );
+
+  const handleDirectionsFrom = useCallback(() => {
+    if (onDirectionsFrom && stop) {
+      onDirectionsFrom({
+        lat: stop.latitude,
+        lon: stop.longitude,
+        name: stop.name,
+      });
+    }
+  }, [onDirectionsFrom, stop]);
+
+  const handleDirectionsTo = useCallback(() => {
+    if (onDirectionsTo && stop) {
+      onDirectionsTo({
+        lat: stop.latitude,
+        lon: stop.longitude,
+        name: stop.name,
+      });
+    }
+  }, [onDirectionsTo, stop]);
+
+  const handleShare = useCallback(async () => {
+    if (!stop) return;
+    const result = await shareStop(stop);
+    if (result.copied) {
+      Alert.alert('Link Copied', 'Stop details copied to clipboard.');
+    }
+  }, [stop]);
 
   if (!stop) return null;
 
@@ -73,8 +121,38 @@ const StopBottomSheet = ({ stop, onClose }) => {
             </View>
           </View>
         </View>
-        <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <CloseIcon size={20} color={COLORS.textSecondary} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share stop details">
+            <ShareIcon size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close stop details">
+            <CloseIcon size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Direction Buttons */}
+      <View style={styles.directionsContainer}>
+        <TouchableOpacity
+          style={[styles.directionButton, styles.fromButton]}
+          onPress={handleDirectionsFrom}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Plan trip from ${stop.name}`}
+        >
+          <DirectionsFromIcon size={18} color={COLORS.success} />
+          <Text style={styles.directionButtonText}>Trip from here</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.directionButton, styles.toButton]}
+          onPress={handleDirectionsTo}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Plan trip to ${stop.name}`}
+        >
+          <DirectionsToIcon size={18} color={COLORS.error} />
+          <Text style={styles.directionButtonText}>Trip to here</Text>
         </TouchableOpacity>
       </View>
 
@@ -94,7 +172,7 @@ const StopBottomSheet = ({ stop, onClose }) => {
             </View>
             <Text style={styles.errorTitle}>Connection Error</Text>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadArrivals}>
+            <TouchableOpacity style={styles.retryButton} onPress={loadArrivals} accessibilityRole="button" accessibilityLabel="Retry loading arrivals">
               <RefreshIcon size={18} color={COLORS.white} />
               <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
@@ -199,6 +277,19 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.textSecondary,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  shareButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primarySubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   closeButton: {
     width: 36,
     height: 36,
@@ -209,6 +300,36 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: SPACING.xxl,
+  },
+
+  // Direction Buttons
+  directionsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  directionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: SPACING.sm,
+  },
+  fromButton: {
+    backgroundColor: COLORS.successSubtle,
+  },
+  toButton: {
+    backgroundColor: COLORS.errorSubtle,
+  },
+  directionButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
   },
 
   // Loading State

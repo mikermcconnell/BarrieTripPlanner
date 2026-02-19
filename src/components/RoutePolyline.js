@@ -1,5 +1,5 @@
 import React from 'react';
-import { Polyline } from 'react-native-maps';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS } from '../config/theme';
 import { darkenColor } from '../utils/geometryUtils';
 
@@ -25,28 +25,45 @@ const hexToRgba = (hexColor, opacity = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
+let idCounter = 0;
+
 const RoutePolyline = ({
   coordinates,
   color = COLORS.primary,
-  strokeWidth = 3,
+  strokeWidth = 6,
   lineDashPattern = null,
   lineCap = 'round',
   lineJoin = 'round',
   opacity = 0.85,
-  outlineWidth = 0,
-  outlineColor,
+  outlineWidth = 2,
+  outlineColor = '#000000',
+  id,
 }) => {
-  const formattedCoordinates = coordinates.map((coord) => ({
-    latitude: coord.latitude,
-    longitude: coord.longitude,
-  }));
+  const formattedCoordinates = coordinates.map((coord) => [
+    coord.longitude,
+    coord.latitude,
+  ]);
 
   if (formattedCoordinates.length < 2) {
     return null;
   }
 
+  const sourceId = id || `route-polyline-${++idCounter}`;
+
+  const geoJson = {
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: formattedCoordinates,
+    },
+  };
+
   const normalizedFill = normalizeHexColor(color);
   const fillColor = hexToRgba(normalizedFill, opacity);
+
+  const dashArray = lineDashPattern
+    ? lineDashPattern.map((v) => v / strokeWidth)
+    : undefined;
 
   if (outlineWidth > 0) {
     const resolvedOutlineColor = normalizeHexColor(
@@ -56,39 +73,45 @@ const RoutePolyline = ({
     const outlineFill = hexToRgba(resolvedOutlineColor, opacity);
 
     return (
-      <>
-        <Polyline
-          coordinates={formattedCoordinates}
-          strokeColor={outlineFill}
-          strokeWidth={strokeWidth + outlineWidth * 2}
-          lineDashPattern={lineDashPattern}
-          lineCap={lineCap}
-          lineJoin={lineJoin}
-          zIndex={1}
+      <MapLibreGL.ShapeSource id={`${sourceId}-src`} shape={geoJson}>
+        <MapLibreGL.LineLayer
+          id={`${sourceId}-outline`}
+          style={{
+            lineColor: outlineFill,
+            lineWidth: strokeWidth + outlineWidth * 2,
+            lineCap: lineCap,
+            lineJoin: lineJoin,
+            ...(dashArray ? { lineDasharray: dashArray } : {}),
+          }}
         />
-        <Polyline
-          coordinates={formattedCoordinates}
-          strokeColor={fillColor}
-          strokeWidth={strokeWidth}
-          lineDashPattern={lineDashPattern}
-          lineCap={lineCap}
-          lineJoin={lineJoin}
-          zIndex={2}
+        <MapLibreGL.LineLayer
+          id={`${sourceId}-fill`}
+          style={{
+            lineColor: fillColor,
+            lineWidth: strokeWidth,
+            lineCap: lineCap,
+            lineJoin: lineJoin,
+            ...(dashArray ? { lineDasharray: dashArray } : {}),
+          }}
+          aboveLayerID={`${sourceId}-outline`}
         />
-      </>
+      </MapLibreGL.ShapeSource>
     );
   }
 
   return (
-    <Polyline
-      coordinates={formattedCoordinates}
-      strokeColor={fillColor}
-      strokeWidth={strokeWidth}
-      lineDashPattern={lineDashPattern}
-      lineCap={lineCap}
-      lineJoin={lineJoin}
-      zIndex={2}
-    />
+    <MapLibreGL.ShapeSource id={`${sourceId}-src`} shape={geoJson}>
+      <MapLibreGL.LineLayer
+        id={`${sourceId}-fill`}
+        style={{
+          lineColor: fillColor,
+          lineWidth: strokeWidth,
+          lineCap: lineCap,
+          lineJoin: lineJoin,
+          ...(dashArray ? { lineDasharray: dashArray } : {}),
+        }}
+      />
+    </MapLibreGL.ShapeSource>
   );
 };
 

@@ -251,11 +251,18 @@ const useWebLocation = () => {
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
 
-  // Enrich itinerary with real walking directions on mount
-  const [itinerary, setItinerary] = useState(route.params.itinerary);
+  const initialItinerary = route.params?.itinerary;
+  const [itinerary, setItinerary] = useState(initialItinerary);
+
+  // Guard + enrich: if no itinerary, go back; otherwise fetch walking directions
   useEffect(() => {
+    if (!initialItinerary) {
+      navigation.goBack();
+      return;
+    }
+
     let cancelled = false;
-    enrichItineraryWithWalking(route.params.itinerary)
+    enrichItineraryWithWalking(initialItinerary)
       .then(enriched => {
         if (!cancelled) {
           logger.log('Walking directions enriched for navigation');
@@ -264,7 +271,9 @@ const NavigationScreen = ({ route }) => {
       })
       .catch(() => {}); // Keep using estimate-based itinerary
     return () => { cancelled = true; };
-  }, []);
+  }, [initialItinerary, navigation]);
+
+  if (!itinerary) return null;
 
   // Get route shapes from TransitContext
   const { shapes, routeShapeMapping } = useTransit();

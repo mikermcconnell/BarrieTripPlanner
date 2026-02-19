@@ -1,35 +1,28 @@
 /**
  * FavoriteStopCard.web.js — Shows next departures from user's top favorited stop.
- * Web version — uses absolute positioning suitable for Leaflet map overlay.
+ * Web version — positioned bottom-right for Leaflet map overlay.
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext';
-import { useStopArrivals } from '../hooks/useStopArrivals';
+import { useFavoriteStop } from '../hooks/useFavoriteStop';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 
 const FavoriteStopCard = ({ onPress }) => {
-  const { favorites } = useAuth();
-  const isFocused = useIsFocused();
+  const { favoriteStop, nextArrivals, isLoading, isVisible } = useFavoriteStop();
 
-  const favoriteStop = favorites.stops.length > 0 ? favorites.stops[0] : null;
-  const stop = isFocused && favoriteStop ? favoriteStop : null;
-  const { arrivals, isLoading } = useStopArrivals(stop);
-
-  if (!favoriteStop || (!isLoading && arrivals.length === 0)) return null;
-
-  const nextArrivals = arrivals.slice(0, 2);
+  if (!isVisible) return null;
 
   return (
     <TouchableOpacity
       style={styles.container}
       onPress={() => onPress?.(favoriteStop)}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`Next departures from ${favoriteStop.name}`}
     >
       <View style={styles.header}>
         <Text style={styles.stopName} numberOfLines={1}>
-          ⭐ {favoriteStop.name}
+          {favoriteStop.name}
         </Text>
         {favoriteStop.code && (
           <Text style={styles.stopCode}>#{favoriteStop.code}</Text>

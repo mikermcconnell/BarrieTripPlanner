@@ -23,12 +23,14 @@ import { useSearchHistory } from '../hooks/useSearchHistory';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { decodePolyline } from '../utils/polylineUtils';
+import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 
 // Web-only imports
 import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import DetourBadge from '../components/DetourBadge';
+import DetourPolyline from '../components/DetourPolyline';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import DetourDebugPanel from '../components/DetourDebugPanel';
 
@@ -101,6 +103,7 @@ const HomeScreen = ({ route }) => {
     stops,
     shapes,
     trips,
+    tripMapping,
     processedShapes,
     shapeOverlapOffsets,
     routeShapeMapping,
@@ -120,6 +123,7 @@ const HomeScreen = ({ route }) => {
     getDetoursForRoute,
     getDetourHistory,
     hasActiveDetour,
+    dismissDetour,
   } = useTransit();
 
   const {
@@ -129,6 +133,7 @@ const HomeScreen = ({ route }) => {
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
+  const [userHasInteracted, setUserHasInteracted] = useState(false);
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
   const pulseAnim = useMapPulseAnimation();
 
@@ -147,8 +152,15 @@ const HomeScreen = ({ route }) => {
     return getRouteAlerts(routeId).length > 0;
   }, [getRouteAlerts]);
 
-  // Trip planning — shared hook
-  const trip = useTripPlanner({ routingData, isRoutingReady });
+  // Trip planning — shared hook (with onItinerariesReady for initial zoom)
+  const trip = useTripPlanner({
+    routingData,
+    isRoutingReady,
+    onItinerariesReady: (itinerary) => {
+      setUserHasInteracted(false);
+      fitMapToItinerary(itinerary);
+    },
+  });
   const {
     state: tripState,
     searchFromAddress,
@@ -233,13 +245,13 @@ const HomeScreen = ({ route }) => {
   // Zoom-dependent polyline weight
   const getPolylineWeight = useCallback((routeId) => {
     let base;
-    if (currentZoom <= 11) base = 2;
-    else if (currentZoom <= 13) base = 3;
-    else if (currentZoom <= 15) base = 4;
-    else base = 5;
+    if (currentZoom <= 11) base = 4;
+    else if (currentZoom <= 13) base = 6;
+    else if (currentZoom <= 15) base = 8;
+    else base = 10;
 
-    if (selectedRoute === routeId) base += 1;
-    if (hoveredRouteId === routeId) base += 1;
+    if (selectedRoute === routeId) base += 2;
+    if (hoveredRouteId === routeId) base += 2;
     return base;
   }, [currentZoom, selectedRoute, hoveredRouteId]);
 
@@ -255,6 +267,28 @@ const HomeScreen = ({ route }) => {
     showRoutes, showStops, mapRegion,
     activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
   });
+
+  // Build vehicle routeId → display label lookup
+  const getRouteLabel = useCallback((vehicle) => {
+    return getVehicleRouteLabel(vehicle, routes, tripMapping);
+  }, [routes, tripMapping]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (!Array.isArray(displayedVehicles) || displayedVehicles.length === 0) return;
+
+    const interesting = displayedVehicles.filter((v) =>
+      /^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(String(v.routeId || '').trim())
+    );
+    if (interesting.length === 0) return;
+
+    const lines = interesting.slice(0, 12).map((vehicle) => {
+      const resolved = resolveVehicleRouteLabel(vehicle, routes, tripMapping);
+      return `${vehicle.id} raw=${vehicle.routeId || '-'} trip=${vehicle.tripId || '-'} map=${resolved.mappedRouteId || '-'} label=${resolved.label} source=${resolved.source}`;
+    });
+
+    logger.info('[route-label-debug][web] %s', lines.join(' | '));
+  }, [displayedVehicles, routes, tripMapping]);
 
   // Handle map region change
   const handleRegionChange = (region) => {
@@ -318,14 +352,12 @@ const HomeScreen = ({ route }) => {
   // Trip preview mode - hide regular map elements when viewing trip results
   const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
 
-  // Auto-zoom map to fit trip route when itinerary changes
-  useEffect(() => {
-    if (!isTripPlanningMode || itineraries.length === 0) return;
-    const selectedItinerary = itineraries[selectedItineraryIndex];
-    if (!selectedItinerary || !selectedItinerary.legs) return;
+  // Fit map to itinerary bounds (called once via onItinerariesReady, not on every switch)
+  const fitMapToItinerary = useCallback((itinerary) => {
+    if (!itinerary || !itinerary.legs) return;
 
     const coords = [];
-    selectedItinerary.legs.forEach(leg => {
+    itinerary.legs.forEach(leg => {
       if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
       if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
       if (leg.legGeometry?.points) {
@@ -346,7 +378,7 @@ const HomeScreen = ({ route }) => {
         edgePadding: { top: 120, right: 50 },
       });
     }
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex]);
+  }, []);
 
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
@@ -382,7 +414,7 @@ const HomeScreen = ({ route }) => {
           </View>
           <Text style={styles.errorTitle}>Connection Error</Text>
           <Text style={styles.errorDetail}>{staticError}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadStaticData}>
+          <TouchableOpacity style={styles.retryButton} onPress={loadStaticData} accessibilityRole="button" accessibilityLabel="Retry loading transit data">
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -398,6 +430,7 @@ const HomeScreen = ({ route }) => {
         initialRegion={MAP_CONFIG.INITIAL_REGION}
         onRegionChangeComplete={handleRegionChange}
         onPress={handleMapPress}
+        onUserInteraction={() => setUserHasInteracted(true)}
       >
         {/* Regular route shapes - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedShapes.map((shape) => {
@@ -409,13 +442,13 @@ const HomeScreen = ({ route }) => {
           let opacity, outlineW;
           if (hasSelection) {
             opacity = isSelected ? 1.0 : 0.15;
-            outlineW = isSelected ? (currentZoom >= 14 ? 2 : 1.5) : 0;
+            outlineW = isSelected ? (currentZoom >= 14 ? 4 : 3) : 0;
           } else if (isHovering) {
             opacity = isThisHovered ? 0.95 : 0.4;
-            outlineW = currentZoom >= 14 ? 1 : 0.5;
+            outlineW = currentZoom >= 14 ? 2 : 1;
           } else {
             opacity = 0.85;
-            outlineW = currentZoom >= 14 ? 1 : 0.5;
+            outlineW = currentZoom >= 14 ? 2 : 1;
           }
 
           return (
@@ -443,23 +476,22 @@ const HomeScreen = ({ route }) => {
         ))}
         {/* Live bus markers - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
         {/* Detour polylines - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedDetours
           .filter((detour) => Array.isArray(detour.polyline) && detour.polyline.length >= 2)
           .map((detour) => (
-          <LeafletPolyline
+          <DetourPolyline
             key={detour.id}
-            positions={detour.polyline.map(p => [p.latitude, p.longitude])}
-            pathOptions={{
-              color: COLORS.warning,
-              weight: 4,
-              dashArray: '15, 10',
-              lineCap: 'round',
-              lineJoin: 'round',
-              opacity: 0.9,
-            }}
+            coordinates={detour.polyline}
+            confidenceLevel={detour.confidenceLevel}
+            confidenceScore={detour.confidenceScore}
+            firstDetectedAt={detour.firstDetectedAt}
+            confirmedByVehicles={detour.confirmedByVehicles}
+            affectedStops={detour.affectedStops}
+            segmentLabel={detour.segmentLabel}
+            onDismiss={() => dismissDetour(detour.id)}
           />
         ))}
 
@@ -533,7 +565,7 @@ const HomeScreen = ({ route }) => {
 
         {/* Real-time bus positions for trip routes */}
         {isTripPreviewMode && tripVehicles.map((vehicle) => (
-          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} />
+          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
 
         {/* Map tap marker */}
@@ -663,6 +695,7 @@ const HomeScreen = ({ route }) => {
                 const isActive = selectedRoute === r.id;
                 const routeAlerts = getRouteAlerts(r.id);
                 const hasAlert = routeAlerts.length > 0;
+                const routeHasDetour = hasActiveDetour(r.id);
                 return (
                   <View key={r.id} style={styles.filterChipWrapper}>
                     <TouchableOpacity
@@ -684,6 +717,9 @@ const HomeScreen = ({ route }) => {
                         </View>
                       )}
                     </TouchableOpacity>
+                    {routeHasDetour && !hasAlert && (
+                      <View style={styles.detourDot} />
+                    )}
                     {/* Expandable Alert Details */}
                     {expandedAlertRoute === r.id && hasAlert && (
                       <TouchableOpacity
@@ -1046,6 +1082,17 @@ const styles = StyleSheet.create({
   },
   filterChipWrapper: {
     position: 'relative',
+  },
+  detourDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF991F',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
   },
   filterChipWithAlert: {
     borderColor: COLORS.warning,

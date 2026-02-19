@@ -4,7 +4,7 @@
  */
 
 import { StyleSheet, Platform } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS, TOUCH_TARGET } from '../config/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, SHADOWS, TOUCH_TARGET } from '../config/theme';
 
 /**
  * Common screen container styles
@@ -63,7 +63,7 @@ export const headerStyles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
     letterSpacing: -0.2,
   },
@@ -92,12 +92,13 @@ export const pageHeaderStyles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: FONT_SIZES.xxxl,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontFamily: FONT_FAMILIES.bold,
     color: COLORS.textPrimary,
     letterSpacing: -0.5,
   },
   headerSubtitle: {
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -127,12 +128,13 @@ export const loadingStyles = StyleSheet.create({
   },
   title: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
   },
   text: {
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
@@ -168,17 +170,18 @@ export const errorStyles = StyleSheet.create({
   },
   icon: {
     fontSize: 32,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontFamily: FONT_FAMILIES.bold,
     color: COLORS.error,
   },
   title: {
     fontSize: FONT_SIZES.xl,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontFamily: FONT_FAMILIES.bold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
   text: {
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     textAlign: 'center',
     marginBottom: SPACING.xl,
@@ -195,7 +198,7 @@ export const errorStyles = StyleSheet.create({
   retryButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
   },
 });
 
@@ -223,12 +226,13 @@ export const emptyStyles = StyleSheet.create({
   },
   title: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
   },
   text: {
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
@@ -265,11 +269,12 @@ export const cardStyles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   cardSubtitle: {
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
@@ -313,12 +318,13 @@ export const listItemStyles = StyleSheet.create({
   },
   title: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
     marginBottom: 2,
   },
   subtitle: {
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
   },
   chevron: {
@@ -334,7 +340,7 @@ export const listItemStyles = StyleSheet.create({
   },
   badgeText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.primary,
   },
 });
@@ -360,7 +366,7 @@ export const buttonStyles = StyleSheet.create({
   primaryText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     letterSpacing: 0.3,
   },
   secondary: {
@@ -377,7 +383,7 @@ export const buttonStyles = StyleSheet.create({
   secondaryText: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     letterSpacing: 0.3,
   },
   outline: {
@@ -396,7 +402,7 @@ export const buttonStyles = StyleSheet.create({
   outlineText: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     letterSpacing: 0.3,
   },
   ghost: {
@@ -413,7 +419,7 @@ export const buttonStyles = StyleSheet.create({
   ghostText: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
   },
   iconButton: {
     width: TOUCH_TARGET.comfortable,
@@ -435,7 +441,7 @@ export const formStyles = StyleSheet.create({
   },
   label: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
     textTransform: 'uppercase',
@@ -446,6 +452,7 @@ export const formStyles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textPrimary,
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -464,11 +471,13 @@ export const formStyles = StyleSheet.create({
   },
   helperText: {
     fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
   errorText: {
     fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.error,
     marginTop: SPACING.xs,
   },
@@ -484,6 +493,7 @@ export const formStyles = StyleSheet.create({
   errorContainerText: {
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     flex: 1,
   },
 });
@@ -506,17 +516,18 @@ export const footerStyles = StyleSheet.create({
   },
   text: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
     marginBottom: 2,
   },
   subtext: {
     fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.regular,
     color: COLORS.grey500,
   },
   link: {
     color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
   },
 });
 
@@ -536,14 +547,14 @@ export const sectionStyles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   sectionAction: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.primary,
   },
   sectionContent: {
@@ -563,7 +574,7 @@ export const badgeStyles = StyleSheet.create({
   },
   badgeText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.primary,
   },
   badgeSuccess: {
@@ -601,7 +612,7 @@ export const badgeStyles = StyleSheet.create({
   },
   chipText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   chipTextActive: {

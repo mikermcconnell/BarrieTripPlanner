@@ -3,7 +3,6 @@
  *
  * Export all custom hooks for easy importing.
  */
-export { useAnimatedMarker } from './useAnimatedMarker';
 export { useNavigationLocation } from './useNavigationLocation';
 export { useBusProximity } from './useBusProximity';
 export { useStepProgress } from './useStepProgress';
@@ -16,3 +15,4 @@ export { useMapPulseAnimation } from './useMapPulseAnimation';
 export { useMapNavigation } from './useMapNavigation';
 export { useDisplayedEntities } from './useDisplayedEntities';
 export { useStopArrivals } from './useStopArrivals';
+export { useAnimatedBusPosition } from './useAnimatedBusPosition';

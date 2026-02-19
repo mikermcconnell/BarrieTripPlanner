@@ -301,7 +301,7 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
       bearing: vehicle.bearing,
       speed: vehicle.speed || 0,
       tripId: vehicle.tripId,
-      routeId: vehicle.routeId || tripInfo.routeId,
+      routeId: tripInfo.routeId || vehicle.routeId,
       directionId: tripInfo.directionId ?? null, // Include direction for detour detection
       headsign: tripInfo.headsign || 'Unknown',
       vehicleLabel: vehicle.vehicleLabel,

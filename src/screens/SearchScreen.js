@@ -115,7 +115,7 @@ const SearchScreen = ({ navigation }) => {
   const hasRecent = recentItems.length > 0;
 
   const renderStopItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectStop(item)}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectStop(item)} accessibilityRole="button" accessibilityLabel={`${item.name}, Stop #${item.code}`}>
       <View style={styles.stopIcon}>
         <Text style={styles.stopIconText}>🚏</Text>
       </View>
@@ -128,7 +128,7 @@ const SearchScreen = ({ navigation }) => {
   );
 
   const renderRouteItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectRoute(item)}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectRoute(item)} accessibilityRole="button" accessibilityLabel={`Route ${item.shortName}, ${item.longName || ''}`}>
       <View style={[styles.routeIcon, { backgroundColor: item.color || COLORS.primary }]}>
         <Text style={styles.routeIconText}>{item.shortName}</Text>
       </View>
@@ -141,7 +141,7 @@ const SearchScreen = ({ navigation }) => {
   );
 
   const renderAddressItem = ({ item }) => (
-    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectAddress(item)}>
+    <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectAddress(item)} accessibilityRole="button" accessibilityLabel={item.shortName || item.displayName}>
       <View style={styles.addressIcon}>
         <Text style={styles.addressIconText}>{'\uD83D\uDCCD'}</Text>
       </View>
@@ -208,9 +208,10 @@ const SearchScreen = ({ navigation }) => {
             onChangeText={setSearchQuery}
             autoCapitalize="none"
             autoCorrect={false}
+            accessibilityLabel={`Search ${searchType}`}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityRole="button" accessibilityLabel="Clear search">
               <Text style={styles.clearButton}>✕</Text>
             </TouchableOpacity>
           )}
@@ -222,6 +223,9 @@ const SearchScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'stops' && styles.toggleButtonActive]}
           onPress={() => setSearchType('stops')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search stops"
+          accessibilityState={{ selected: searchType === 'stops' }}
         >
           <Text
             style={[styles.toggleButtonText, searchType === 'stops' && styles.toggleButtonTextActive]}
@@ -232,6 +236,9 @@ const SearchScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'routes' && styles.toggleButtonActive]}
           onPress={() => setSearchType('routes')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search routes"
+          accessibilityState={{ selected: searchType === 'routes' }}
         >
           <Text
             style={[
@@ -245,6 +252,9 @@ const SearchScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[styles.toggleButton, searchType === 'addresses' && styles.toggleButtonActive]}
           onPress={() => setSearchType('addresses')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search addresses"
+          accessibilityState={{ selected: searchType === 'addresses' }}
         >
           <Text
             style={[
@@ -281,7 +291,7 @@ const SearchScreen = ({ navigation }) => {
           <View style={styles.recentSection}>
             <View style={styles.recentHeader}>
               <Text style={styles.recentTitle}>Recent</Text>
-              <TouchableOpacity onPress={() => clearHistory(searchType)}>
+              <TouchableOpacity onPress={() => clearHistory(searchType)} accessibilityRole="button" accessibilityLabel="Clear search history">
                 <Text style={styles.recentClear}>Clear</Text>
               </TouchableOpacity>
             </View>
@@ -289,7 +299,7 @@ const SearchScreen = ({ navigation }) => {
               const key = item.id?.toString() || item.displayName;
               if (searchType === 'stops') {
                 return (
-                  <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectStop(item)}>
+                  <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectStop(item)} accessibilityRole="button" accessibilityLabel={`Recent: ${item.name}, Stop #${item.code}`}>
                     <View style={styles.recentIcon}>
                       <Text style={styles.stopIconText}>🕐</Text>
                     </View>
@@ -302,7 +312,7 @@ const SearchScreen = ({ navigation }) => {
                 );
               }
               return (
-                <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectRoute(item)}>
+                <TouchableOpacity key={`recent-${key}`} style={styles.resultItem} onPress={() => handleSelectRoute(item)} accessibilityRole="button" accessibilityLabel={`Recent: Route ${item.shortName}, ${item.longName || ''}`}>
                   <View style={[styles.routeIcon, { backgroundColor: item.color || COLORS.primary }]}>
                     <Text style={styles.routeIconText}>{item.shortName}</Text>
                   </View>
