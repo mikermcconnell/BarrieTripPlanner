@@ -7,7 +7,7 @@ export const REFRESH_INTERVALS = {};
 export const ROUTE_COLORS = {};
 export const APP_CONFIG = {};
 export const OTP_CONFIG = {
-  BASE_URL: 'http://localhost:8080/otp/routers/default',
+  BASE_URL: '',
   TIMEOUT_MS: 15000,
   USE_MOCK_IN_DEV: false,
 };

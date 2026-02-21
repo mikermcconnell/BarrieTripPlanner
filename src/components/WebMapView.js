@@ -52,7 +52,7 @@ const getZoomFromDelta = (latDelta) => {
   return Math.round(Math.log(360 / latDelta) / Math.LN2);
 };
 const webMarkerDebugState = new Map();
-const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // Map controller for ref methods
 const MapController = forwardRef((props, ref) => {

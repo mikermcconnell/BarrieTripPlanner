@@ -2,6 +2,26 @@ const { getDb } = require('./firebaseAdmin');
 
 const COLLECTION = 'transitNews';
 const knownNewsIds = new Set();
+let hydratePromise = null;
+
+async function hydrateKnownNewsIds(db) {
+  if (hydratePromise) {
+    await hydratePromise;
+    return;
+  }
+
+  hydratePromise = (async () => {
+    try {
+      const snapshot = await db.collection(COLLECTION).where('archivedAt', '==', null).get();
+      snapshot.forEach((doc) => knownNewsIds.add(doc.id));
+      console.log(`[newsPublisher] Hydrated ${knownNewsIds.size} active news IDs`);
+    } catch (err) {
+      console.error('[newsPublisher] Failed to hydrate known IDs:', err.message);
+    }
+  })();
+
+  await hydratePromise;
+}
 
 /**
  * Publish fetched news items to Firestore. Returns array of newly detected items.
@@ -13,6 +33,7 @@ async function publishNews(items) {
     console.warn('[newsPublisher] Firestore not configured — skipping publish');
     return [];
   }
+  await hydrateKnownNewsIds(db);
 
   const currentIds = new Set(items.map((item) => item.id));
   const newItems = [];

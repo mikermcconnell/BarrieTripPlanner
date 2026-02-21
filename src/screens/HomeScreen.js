@@ -46,7 +46,7 @@ import Icon from '../components/Icon';
 // SVG Icons for native replaced with Lucide Icons
 const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => <Icon name="Search" size={size} color={color} />;
 const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="Map" size={size} color={color} />;
-const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // Helper: convert region {lat, lng, latDelta, lngDelta} to MapLibre camera params
 const regionToCamera = (region) => ({

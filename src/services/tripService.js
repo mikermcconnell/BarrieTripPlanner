@@ -107,6 +107,13 @@ export const planTrip = async ({
   maxWalkDistance = 1000,
   numItineraries = 3,
 }) => {
+  if (!OTP_CONFIG.BASE_URL) {
+    throw new TripPlanningError(
+      TRIP_ERROR_CODES.OTP_UNAVAILABLE,
+      'Trip planning backend is not configured'
+    );
+  }
+
   const dateStr = formatDate(date);
   const timeStr = formatTime(time);
 

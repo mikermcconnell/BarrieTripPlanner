@@ -39,6 +39,7 @@ yarn-error.*
 android/
 ios/
 *.apk
+*.aab
 
 # Windows artifacts
 nul
@@ -51,6 +52,7 @@ emulator_*.png
 
 # Build artifacts and temp files
 .expo-export-debug/
+.expo-export-debug-*/
 tmp-bundle-*.js
 tmp-bundle-*.hbc
 tmp-hermes-*.log

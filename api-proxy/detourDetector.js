@@ -1,6 +1,9 @@
 const { pointToPolylineDistance } = require('./geometry');
 
-const OFF_ROUTE_THRESHOLD_METERS = 5; // TESTING: lowered from 75 to trigger detours via GPS jitter
+const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '75');
+const OFF_ROUTE_THRESHOLD_METERS = Number.isFinite(configuredThreshold) && configuredThreshold > 0
+  ? configuredThreshold
+  : 75;
 const CONSECUTIVE_READINGS_REQUIRED = 3;
 const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
 let MIN_VEHICLES_FOR_DETOUR = 1;

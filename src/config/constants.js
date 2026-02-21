@@ -98,7 +98,7 @@ export const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
 // Get your API key at: https://locationiq.com/
 // OpenTripPlanner Configuration
 export const OTP_CONFIG = {
-  BASE_URL: process.env.EXPO_PUBLIC_OTP_URL || 'http://localhost:8080/otp/routers/default',
+  BASE_URL: process.env.EXPO_PUBLIC_OTP_URL || '',
   TIMEOUT_MS: 15000,
   USE_MOCK_IN_DEV: __DEV__, // Only use mock data in development
 };
@@ -109,6 +109,8 @@ export const LOCATIONIQ_CONFIG = {
   // When set, API calls route through this proxy (hides API key server-side)
   // Proxy is only needed for web (CORS); native apps call LocationIQ directly
   PROXY_URL: Platform.OS === 'web' ? (process.env.EXPO_PUBLIC_API_PROXY_URL || '') : '',
+  // Optional auth token for hardened API proxy deployments
+  PROXY_TOKEN: process.env.EXPO_PUBLIC_API_PROXY_TOKEN || '',
 
   // Barrie bounding box to prioritize local results
   // Format: minLon, minLat, maxLon, maxLat

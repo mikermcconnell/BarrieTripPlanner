@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run app test suite
+        run: npm test -- --runInBand
+
+      - name: Run platform parity check
+        run: npm run check:parity
+
+      - name: Install api-proxy dependencies
+        run: npm --prefix api-proxy ci
+
+      - name: Run api-proxy tests
+        run: npm --prefix api-proxy test

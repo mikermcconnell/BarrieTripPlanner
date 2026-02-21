@@ -1,6 +1,7 @@
 const admin = require('firebase-admin');
 
 let db = null;
+let auth = null;
 let initialized = false;
 
 function initFirebase() {
@@ -18,6 +19,7 @@ function initFirebase() {
       return;
     }
     db = admin.firestore();
+    auth = admin.auth();
   } catch (err) {
     console.error('[firebaseAdmin] Initialization failed:', err.message);
   }
@@ -28,4 +30,9 @@ function getDb() {
   return db;
 }
 
-module.exports = { getDb };
+function getAuth() {
+  if (!initialized) initFirebase();
+  return auth;
+}
+
+module.exports = { getDb, getAuth };

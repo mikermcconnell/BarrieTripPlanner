@@ -22,10 +22,15 @@ const firebaseConfig = {
 
 // Initialize Firebase (prevent re-initialization)
 let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApps()[0];
+try {
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApps()[0];
+  }
+} catch (error) {
+  console.error('Firebase initialization failed:', error);
+  app = initializeApp({ apiKey: 'invalid', projectId: 'invalid', appId: 'invalid' });
 }
 
 // Initialize Auth with platform-specific persistence

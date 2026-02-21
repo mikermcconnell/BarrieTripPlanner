@@ -45,6 +45,11 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
    npm start
    ```
 
+   For full feature parity in development, copy `.env.example` to `.env` and fill required values:
+   - `EXPO_PUBLIC_API_PROXY_URL`
+   - `EXPO_PUBLIC_FIREBASE_*`
+   - Optional fallback OTP backend: `EXPO_PUBLIC_OTP_URL`
+
 4. **Open the app:**
    - Scan the QR code with Expo Go on your phone
    - Or press `a` for Android emulator / `i` for iOS simulator
@@ -91,6 +96,11 @@ npm run web:dev
 If you use a deployed proxy instead, set:
 - `EXPO_PUBLIC_CORS_PROXY_URL`
 - or `EXPO_PUBLIC_API_PROXY_URL` (with a `/proxy?url=` endpoint)
+- Optional hardened proxy token headers:
+  - `EXPO_PUBLIC_CORS_PROXY_TOKEN`
+  - `EXPO_PUBLIC_API_PROXY_TOKEN`
+
+Hosted web builds do not auto-fallback to `localhost`; configure one of the proxy URLs above.
 
 ## Project Structure
 
@@ -140,13 +150,16 @@ The app can now consume a shared Firestore detour feed produced by the backend w
    - `DETOUR_WORKER_ENABLED=true`
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
    - `LOCATIONIQ_API_KEY=...` (still required for existing proxy routes)
+   - `REQUIRE_API_AUTH=true`
+   - `API_PROXY_TOKEN=...` (or `API_PROXY_TOKENS=token1,token2`)
+   - Optional Firebase auth mode: `REQUIRE_FIREBASE_AUTH=true`
 3. Start backend:
    ```bash
    npm start
    ```
 4. Verify worker status:
    - `GET /api/health`
-   - `GET /api/detours`
+   - `GET /api/detour-status`
 
 ### Firestore rules
 

@@ -8,6 +8,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyB4u2cJOxaqHUH6LY_yFFpQd1Tn-ET8dbs",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "barrie-transit-trip-plan-cc84e.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "barrie-transit-trip-plan-cc84e",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "barrie-transit-trip-plan-cc84e.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "648843426695",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
+        "EXPO_PUBLIC_LOCATIONIQ_API_KEY": "pk.3a198732709f4febb9aec689359650cb",
+        "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "android": {
@@ -18,6 +27,15 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyB4u2cJOxaqHUH6LY_yFFpQd1Tn-ET8dbs",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "barrie-transit-trip-plan-cc84e.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "barrie-transit-trip-plan-cc84e",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "barrie-transit-trip-plan-cc84e.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "648843426695",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
+        "EXPO_PUBLIC_LOCATIONIQ_API_KEY": "pk.3a198732709f4febb9aec689359650cb",
+        "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "android": {
@@ -27,6 +45,15 @@
     "production": {
       "channel": "production",
       "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyB4u2cJOxaqHUH6LY_yFFpQd1Tn-ET8dbs",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "barrie-transit-trip-plan-cc84e.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "barrie-transit-trip-plan-cc84e",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "barrie-transit-trip-plan-cc84e.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "648843426695",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
+        "EXPO_PUBLIC_LOCATIONIQ_API_KEY": "pk.3a198732709f4febb9aec689359650cb",
+        "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "android": {

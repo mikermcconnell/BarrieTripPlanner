@@ -85,6 +85,7 @@ const styles = StyleSheet.create({
     chipScrollContent: {
         flexDirection: 'row',
         flexWrap: 'wrap',
+        justifyContent: 'center',
         gap: SPACING.xs,
         paddingBottom: SPACING.xs,
     },

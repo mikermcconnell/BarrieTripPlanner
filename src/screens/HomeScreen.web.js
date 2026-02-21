@@ -30,7 +30,7 @@ import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../co
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
-const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // SVG Icons as components - Refined for premium feel
 const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (

@@ -40,6 +40,7 @@ const PUBLIC_PROXIES = [
 const REQUEST_TIMEOUT_MS = 30000;
 const PROXY_COOLDOWN_MS = 90 * 1000;
 const ENABLE_PUBLIC_PROXY_FALLBACKS = process.env.EXPO_PUBLIC_ENABLE_PUBLIC_CORS_PROXIES === 'true';
+const CORS_PROXY_TOKEN = process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN || '';
 const proxyFailureTimestamps = new Map();
 
 const buildProxyUrl = (proxyBase, targetUrl) => `${proxyBase}${encodeURIComponent(targetUrl)}`;
@@ -59,12 +60,34 @@ const getConfiguredProxyBase = () =>
 
 const unique = (values) => Array.from(new Set(values.filter(Boolean)));
 
+const isLocalWebHost = () => {
+  if (!isWeb()) return false;
+  if (typeof window === 'undefined' || !window.location) return true;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+};
+
 const getProxyCandidates = () => {
   const configuredProxy = getConfiguredProxyBase();
-  const baseCandidates = unique([configuredProxy, LOCAL_PROXY]);
+  const localProxy = isLocalWebHost() ? LOCAL_PROXY : null;
+  const baseCandidates = unique([configuredProxy, localProxy]);
   return ENABLE_PUBLIC_PROXY_FALLBACKS
     ? [...baseCandidates, ...PUBLIC_PROXIES]
     : baseCandidates;
+};
+
+const isPublicProxy = (proxyBase) => PUBLIC_PROXIES.includes(proxyBase);
+
+const withProxyAuthHeaders = (proxyBase, options = {}) => {
+  if (!CORS_PROXY_TOKEN || isPublicProxy(proxyBase)) return options;
+  return {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'x-api-token': CORS_PROXY_TOKEN,
+      'x-client-id': 'barrie-transit-web',
+    },
+  };
 };
 
 const shouldTryFallbackProxy = (response) => {
@@ -157,6 +180,11 @@ export const fetchWithCORS = async (url, options = {}) => {
   }
 
   const proxyCandidates = getProxyCandidates();
+  if (proxyCandidates.length === 0) {
+    throw new Error(
+      'Web data proxy is not configured. Set EXPO_PUBLIC_CORS_PROXY_URL for hosted web deployments.'
+    );
+  }
   let lastError = null;
   let lastResponse = null;
   let attemptedCount = 0;
@@ -171,7 +199,7 @@ export const fetchWithCORS = async (url, options = {}) => {
     attemptedCount += 1;
 
     try {
-      const response = await fetchWithTimeout(finalUrl, options);
+      const response = await fetchWithTimeout(finalUrl, withProxyAuthHeaders(proxyBase, options));
 
       // Keep non-server errors as-is (e.g., 400/404 from upstream),
       // but fallback when proxy is unavailable/rate-limited.

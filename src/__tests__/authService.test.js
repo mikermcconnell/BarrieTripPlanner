@@ -1,11 +1,22 @@
-const loadAuthService = ({ os = 'web', existingProfile = null } = {}) => {
+const loadAuthService = ({
+  os = 'web',
+  existingProfile = null,
+  nativeGoogleSignInError = null,
+  nativeGoogleSignInResult = { data: { idToken: 'native-id-token' } },
+} = {}) => {
   jest.resetModules();
 
   const signInWithPopup = jest.fn();
+  const signInWithCredential = jest.fn();
   const GoogleAuthProvider = jest.fn(() => ({ provider: 'google' }));
+  GoogleAuthProvider.credential = jest.fn((token) => ({ token }));
   const getUser = jest.fn().mockResolvedValue(existingProfile);
   const createUser = jest.fn().mockResolvedValue(undefined);
   const updateLastLogin = jest.fn().mockResolvedValue(undefined);
+  const nativeConfigure = jest.fn();
+  const nativeSignIn = nativeGoogleSignInError
+    ? jest.fn().mockRejectedValue(nativeGoogleSignInError)
+    : jest.fn().mockResolvedValue(nativeGoogleSignInResult);
 
   jest.doMock('react-native', () => ({
     Platform: { OS: os },
@@ -21,6 +32,7 @@ const loadAuthService = ({ os = 'web', existingProfile = null } = {}) => {
     sendEmailVerification: jest.fn(),
     GoogleAuthProvider,
     signInWithPopup,
+    signInWithCredential,
   }));
 
   jest.doMock('../config/firebase', () => ({
@@ -34,16 +46,25 @@ const loadAuthService = ({ os = 'web', existingProfile = null } = {}) => {
       updateLastLogin,
     },
   }));
+  jest.doMock('@react-native-google-signin/google-signin', () => ({
+    GoogleSignin: {
+      configure: nativeConfigure,
+      signIn: nativeSignIn,
+    },
+  }));
 
   const module = require('../services/firebase/authService');
 
   return {
     authService: module.authService,
     signInWithPopup,
+    signInWithCredential,
     GoogleAuthProvider,
     getUser,
     createUser,
     updateLastLogin,
+    nativeConfigure,
+    nativeSignIn,
   };
 };
 
@@ -66,14 +87,30 @@ describe('authService.signInWithGoogle', () => {
     jest.clearAllMocks();
   });
 
-  test('returns a web-only error on native platforms', async () => {
-    const { authService, signInWithPopup } = loadAuthService({ os: 'android' });
+  test('supports native Google sign in when running on Android/iOS', async () => {
+    const {
+      authService,
+      signInWithPopup,
+      signInWithCredential,
+      nativeConfigure,
+      nativeSignIn,
+      createUser,
+    } = loadAuthService({ os: 'android' });
+    signInWithCredential.mockResolvedValue({
+      user: createFirebaseUser({ uid: 'native-user' }),
+    });
 
     const result = await authService.signInWithGoogle();
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Google sign in is currently available on web only.',
+    expect(result.success).toBe(true);
+    expect(nativeConfigure).toHaveBeenCalledTimes(1);
+    expect(nativeSignIn).toHaveBeenCalledTimes(1);
+    expect(signInWithCredential).toHaveBeenCalledTimes(1);
+    expect(createUser).toHaveBeenCalledWith({
+      uid: 'native-user',
+      email: 'mike@example.com',
+      displayName: 'Mike',
+      photoURL: null,
     });
     expect(signInWithPopup).not.toHaveBeenCalled();
   });

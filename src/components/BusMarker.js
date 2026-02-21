@@ -10,7 +10,7 @@ const BUS_ICON_PATH =
 const MARKER_SIZE = 40;
 const ARROW_WRAPPER_SIZE = 80;
 const markerDebugState = new Map();
-const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp }) => {
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle);
