@@ -137,40 +137,36 @@ const SignInScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {Platform.OS === 'web' && (
-            <>
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.dividerLine} />
-              </View>
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-              <TouchableOpacity
-                style={[styles.googleButton, isGoogleLoading && styles.signInButtonDisabled]}
-                onPress={async () => {
-                  setIsGoogleLoading(true);
-                  setError(null);
-                  const result = await signInWithGoogle();
-                  setIsGoogleLoading(false);
-                  if (result.success) {
-                    navigation.goBack();
-                  } else if (result.error) {
-                    setError(result.error);
-                  }
-                }}
-                disabled={isGoogleLoading || isLoading || isResetLoading}
-              >
-                {isGoogleLoading ? (
-                  <ActivityIndicator color={COLORS.textPrimary} />
-                ) : (
-                  <>
-                    <Text style={styles.googleButtonIcon}>G</Text>
-                    <Text style={styles.googleButtonText}>Continue with Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity
+            style={[styles.googleButton, isGoogleLoading && styles.signInButtonDisabled]}
+            onPress={async () => {
+              setIsGoogleLoading(true);
+              setError(null);
+              const result = await signInWithGoogle();
+              setIsGoogleLoading(false);
+              if (result.success) {
+                navigation.goBack();
+              } else if (result.error) {
+                setError(result.error);
+              }
+            }}
+            disabled={isGoogleLoading || isLoading || isResetLoading}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator color={COLORS.textPrimary} />
+            ) : (
+              <>
+                <Text style={styles.googleButtonIcon}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>

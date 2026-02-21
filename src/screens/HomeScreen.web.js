@@ -29,10 +29,8 @@ import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLa
 import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
-import DetourBadge from '../components/DetourBadge';
-import DetourPolyline from '../components/DetourPolyline';
 import FavoriteStopCard from '../components/FavoriteStopCard';
-import DetourDebugPanel from '../components/DetourDebugPanel';
+const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // SVG Icons as components - Refined for premium feel
 const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
@@ -116,14 +114,10 @@ const HomeScreen = ({ route }) => {
     loadStaticData,
     isOffline,
     serviceAlerts,
+    isRouteDetouring,
     usingCachedData,
     routingData,
     isRoutingReady,
-    activeDetours,
-    getDetoursForRoute,
-    getDetourHistory,
-    hasActiveDetour,
-    dismissDetour,
   } = useTransit();
 
   const {
@@ -236,7 +230,6 @@ const HomeScreen = ({ route }) => {
     searchTrips(trip.from, trip.to);
   };
 
-  const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
@@ -258,14 +251,11 @@ const HomeScreen = ({ route }) => {
   // Displayed entities (vehicles, shapes, stops, detours) based on selection
   const {
     getRouteColor, displayedVehicles, displayedShapes, displayedStops,
-    displayedDetours, primaryDisplayedDetour, detourHistory,
-    selectedRoutesHaveDetour: selectedRouteHasDetour,
   } = useDisplayedEntities({
     selectedRouteIds: selectedRouteIds,
     vehicles, routes, trips, shapes, processedShapes,
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
-    activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
   });
 
   // Build vehicle routeId → display label lookup
@@ -274,7 +264,7 @@ const HomeScreen = ({ route }) => {
   }, [routes, tripMapping]);
 
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!ROUTE_LABEL_DEBUG) return;
     if (!Array.isArray(displayedVehicles) || displayedVehicles.length === 0) return;
 
     const interesting = displayedVehicles.filter((v) =>
@@ -478,23 +468,6 @@ const HomeScreen = ({ route }) => {
         {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
           <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
-        {/* Detour polylines - hide when in trip preview mode */}
-        {!isTripPreviewMode && displayedDetours
-          .filter((detour) => Array.isArray(detour.polyline) && detour.polyline.length >= 2)
-          .map((detour) => (
-          <DetourPolyline
-            key={detour.id}
-            coordinates={detour.polyline}
-            confidenceLevel={detour.confidenceLevel}
-            confidenceScore={detour.confidenceScore}
-            firstDetectedAt={detour.firstDetectedAt}
-            confirmedByVehicles={detour.confirmedByVehicles}
-            affectedStops={detour.affectedStops}
-            segmentLabel={detour.segmentLabel}
-            onDismiss={() => dismissDetour(detour.id)}
-          />
-        ))}
-
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((route) => (
           <LeafletPolyline
@@ -652,11 +625,10 @@ const HomeScreen = ({ route }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Center Map Button - Top Right (long-press opens detour debug in dev) */}
+          {/* Center Map Button - Top Right */}
           <TouchableOpacity
             style={styles.centerButton}
             onPress={centerOnBarrie}
-            onLongPress={__DEV__ ? () => setShowDetourDebugPanel(true) : undefined}
           >
             <CenterIcon size={18} color={COLORS.textPrimary} />
           </TouchableOpacity>
@@ -695,7 +667,6 @@ const HomeScreen = ({ route }) => {
                 const isActive = selectedRoute === r.id;
                 const routeAlerts = getRouteAlerts(r.id);
                 const hasAlert = routeAlerts.length > 0;
-                const routeHasDetour = hasActiveDetour(r.id);
                 return (
                   <View key={r.id} style={styles.filterChipWrapper}>
                     <TouchableOpacity
@@ -711,15 +682,15 @@ const HomeScreen = ({ route }) => {
                       <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
                         {r.shortName}
                       </Text>
+                      {isRouteDetouring(r.id) && (
+                        <View style={[styles.detourIndicator, isActive && styles.detourIndicatorActive]} />
+                      )}
                       {hasAlert && (
                         <View style={[styles.alertIndicator, isActive && styles.alertIndicatorActive]}>
                           <AlertIcon size={10} color={isActive ? COLORS.white : COLORS.warning} />
                         </View>
                       )}
                     </TouchableOpacity>
-                    {routeHasDetour && !hasAlert && (
-                      <View style={styles.detourDot} />
-                    )}
                     {/* Expandable Alert Details */}
                     {expandedAlertRoute === r.id && hasAlert && (
                       <TouchableOpacity
@@ -739,23 +710,6 @@ const HomeScreen = ({ route }) => {
           </View>
         </>
       ) : null}
-
-      {/* Detour Badge - show when selected route has active detour */}
-      {!isTripPlanningMode && selectedRouteHasDetour && (
-        <View style={styles.detourBadgeContainer}>
-          <DetourBadge
-            routeId={selectedRoute}
-            routeName={routes.find(r => r.id === selectedRoute)?.shortName}
-            detourCount={displayedDetours.length}
-            confidenceLevel={primaryDisplayedDetour?.confidenceLevel}
-            confidenceScore={primaryDisplayedDetour?.confidenceScore}
-            segmentLabel={primaryDisplayedDetour?.segmentLabel}
-            firstDetectedAt={primaryDisplayedDetour?.firstDetectedAt}
-            lastSeenAt={primaryDisplayedDetour?.lastSeenAt}
-            officialAlert={primaryDisplayedDetour?.officialAlert}
-          />
-        </View>
-      )}
 
       {/* Favorite Stop Quick View */}
       {!isTripPlanningMode && !selectedStop && (
@@ -832,15 +786,6 @@ const HomeScreen = ({ route }) => {
         </SheetErrorBoundary>
       )}
 
-      {/* Dev-only Detour Debug Panel */}
-      {__DEV__ && (
-        <DetourDebugPanel
-          visible={showDetourDebugPanel}
-          onClose={() => setShowDetourDebugPanel(false)}
-          activeDetours={displayedDetours}
-          detourHistory={detourHistory}
-        />
-      )}
     </View>
   );
 };
@@ -936,15 +881,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semibold,
-  },
-
-  // Detour Badge Container - positioned below header
-  detourBadgeContainer: {
-    position: 'absolute',
-    top: 72,
-    right: SPACING.sm + 56, // Right of center button
-    left: 80, // Right of filter panel
-    zIndex: 998,
   },
 
   // Search Bar Header
@@ -1083,17 +1019,6 @@ const styles = StyleSheet.create({
   filterChipWrapper: {
     position: 'relative',
   },
-  detourDot: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF991F',
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
-  },
   filterChipWithAlert: {
     borderColor: COLORS.warning,
     borderWidth: 1.5,
@@ -1113,6 +1038,16 @@ const styles = StyleSheet.create({
   },
   alertIndicatorActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  detourIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF8C00',
+    marginLeft: 4,
+  },
+  detourIndicatorActive: {
+    backgroundColor: 'white',
   },
   alertsHeaderChip: {
     flexDirection: 'row',
@@ -1162,11 +1097,11 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Center Map Button - Top Right
+  // Center Map Button - Bottom Left
   centerButton: {
     position: 'absolute',
-    top: 72,
-    right: SPACING.sm,
+    bottom: SPACING.xl,
+    left: SPACING.sm,
     width: 40,
     height: 40,
     borderRadius: BORDER_RADIUS.round,

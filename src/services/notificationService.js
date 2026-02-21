@@ -68,6 +68,11 @@ export const registerForPushNotifications = async () => {
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
       });
+
+      await Notifications.setNotificationChannelAsync('news', {
+        name: 'Transit News',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
     }
 
     return { success: true, token };
@@ -201,6 +206,7 @@ export const getNotificationSettings = async () => {
       serviceAlerts: true,
       tripReminders: true,
       nearbyAlerts: false,
+      transitNews: true,
     };
   } catch (error) {
     logger.error('Error getting notification settings:', error);
@@ -208,6 +214,7 @@ export const getNotificationSettings = async () => {
       serviceAlerts: true,
       tripReminders: true,
       nearbyAlerts: false,
+      transitNews: true,
     };
   }
 };

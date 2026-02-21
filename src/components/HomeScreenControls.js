@@ -1,9 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
 const HomeScreenControls = ({
@@ -11,7 +10,7 @@ const HomeScreenControls = ({
     selectedRoutes,
     onRouteSelect,
     getRouteColor,
-    hasActiveDetour,
+    isRouteDetouring,
 }) => {
     // Sort routes from largest to smallest
     const sortedRoutes = [...routes].sort((a, b) => {
@@ -24,14 +23,8 @@ const HomeScreenControls = ({
     });
 
     return (
-        <View style={styles.filterPanel}>
-            <Text style={styles.filterPanelTitle}>Routes</Text>
-            <ScrollView
-                style={styles.chipScroll}
-                contentContainerStyle={styles.chipScrollContent}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-            >
+        <View style={styles.filterContainer}>
+            <View style={styles.chipScrollContent}>
                 {/* All Routes Chip */}
                 <TouchableOpacity
                     style={[
@@ -53,7 +46,6 @@ const HomeScreenControls = ({
                 {sortedRoutes.map((r) => {
                     const routeColor = getRouteColor(r.id);
                     const isActive = selectedRoutes.has(r.id);
-                    const routeHasDetour = hasActiveDetour && hasActiveDetour(r.id);
                     return (
                         <View key={r.id} style={styles.chipWrapper}>
                             <TouchableOpacity
@@ -64,90 +56,59 @@ const HomeScreenControls = ({
                                 onPress={() => onRouteSelect(r.id)}
                                 activeOpacity={0.7}
                             >
-                                <View style={[
-                                    styles.filterDot,
-                                    { backgroundColor: isActive ? COLORS.white : routeColor }
-                                ]} />
                                 <Text style={[
                                     styles.filterChipText,
-                                    isActive && styles.filterChipTextActive
+                                    { color: isActive ? COLORS.white : routeColor }
                                 ]}>
                                     {r.shortName}
                                 </Text>
                             </TouchableOpacity>
-                            {routeHasDetour && (
+                            {isRouteDetouring?.(r.id) && (
                                 <View style={styles.detourDot} />
                             )}
                         </View>
                     );
                 })}
-            </ScrollView>
+            </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    filterPanel: {
+    filterContainer: {
         position: 'absolute',
-        top: 64 + STATUS_BAR_OFFSET,
+        top: 76 + STATUS_BAR_OFFSET, // Tucked elegantly under the search bar
         left: SPACING.sm,
-        width: 64,
-        maxHeight: SCREEN_HEIGHT - 170,
-        backgroundColor: COLORS.white,
-        paddingVertical: SPACING.sm,
-        paddingHorizontal: SPACING.xs,
-        alignItems: 'center',
-        borderRadius: BORDER_RADIUS.xl,
-        borderWidth: 1,
-        borderColor: COLORS.grey200,
-        ...SHADOWS.medium,
+        right: SPACING.sm, // Full width — map controls moved to bottom-left
         zIndex: 998,
     },
-    filterPanelTitle: {
-        fontSize: FONT_SIZES.xxs,
-        fontWeight: FONT_WEIGHTS.bold,
-        color: COLORS.textSecondary,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: SPACING.xs,
-    },
-    chipScroll: {
-        flexGrow: 0,
-        flexShrink: 1,
-        width: '100%',
-    },
     chipScrollContent: {
-        alignItems: 'center',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: SPACING.xs,
         paddingBottom: SPACING.xs,
     },
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: SPACING.xs + 2,
-        paddingHorizontal: SPACING.sm,
-        borderRadius: BORDER_RADIUS.sm,
-        backgroundColor: COLORS.grey100,
+        paddingVertical: 6,
+        paddingHorizontal: SPACING.sm + 4,
+        borderRadius: BORDER_RADIUS.xl,
+        backgroundColor: COLORS.white,
         borderWidth: 1.5,
-        borderColor: 'transparent',
-        marginBottom: SPACING.xs,
-        minWidth: 52,
-        height: 32,
+        borderColor: COLORS.grey200,
+        ...SHADOWS.small,
+        height: 36,
+        minWidth: 50,
     },
     filterChipAllActive: {
         backgroundColor: COLORS.primary,
         borderColor: COLORS.primary,
     },
-    filterDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: 4,
-    },
     filterChipText: {
-        fontSize: FONT_SIZES.xs,
+        fontSize: FONT_SIZES.sm,
         fontWeight: FONT_WEIGHTS.bold,
-        color: COLORS.textPrimary,
     },
     filterChipTextActive: {
         color: COLORS.white,
@@ -162,9 +123,9 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#FF991F',
-        borderWidth: 1.5,
-        borderColor: COLORS.white,
+        backgroundColor: '#FF8C00',
+        borderWidth: 1,
+        borderColor: 'white',
     },
 });
 

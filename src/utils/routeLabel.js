@@ -1,3 +1,5 @@
+const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+
 /**
  * Resolve a rider-facing route label for a live vehicle.
  *
@@ -11,7 +13,7 @@ export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {})
   const rawTripId = vehicle?.tripId ? String(vehicle.tripId).trim() : '';
   const normalize = (value) => String(value || '').trim().toUpperCase();
   const hasBranchSuffix = (value) => /[A-Z]$/.test(normalize(value));
-  const debugRoutes = /^(2|2A|2B|7|7A|7B)$/i.test(rawRouteId);
+  const debugRoutes = ROUTE_LABEL_DEBUG && /^(2|2A|2B|7|7A|7B)$/i.test(rawRouteId);
 
   if (!rawRouteId && !rawTripId) {
     return {

@@ -52,6 +52,7 @@ const getZoomFromDelta = (latDelta) => {
   return Math.round(Math.log(360 / latDelta) / Math.LN2);
 };
 const webMarkerDebugState = new Map();
+const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // Map controller for ref methods
 const MapController = forwardRef((props, ref) => {
@@ -145,8 +146,8 @@ const createBusIcon = (color, routeId, bearing = null, scale = 1) => {
           height: 40px;
           background: ${color};
           border-radius: 50%;
-          border: 2px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
           z-index: 2;
         ">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
@@ -263,7 +264,7 @@ export const WebBusMarker = ({ vehicle, color, routeLabel: routeLabelProp }) => 
     return newIcon;
   }, [bearing, color, label, scale]);
 
-  if (__DEV__) {
+  if (ROUTE_LABEL_DEBUG) {
     const raw = String(vehicle.routeId || '').trim();
     if (/^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(raw)) {
       const signature = `${raw}|${String(label)}|${String(routeLabelProp || '')}`;

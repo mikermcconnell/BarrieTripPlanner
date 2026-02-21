@@ -39,6 +39,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "transitNews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archivedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "publishedAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

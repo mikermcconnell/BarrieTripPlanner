@@ -128,6 +128,23 @@ export const userFirestoreService = {
     }
   },
 
+  // Update subscribed routes for news notifications
+  async updateSubscribedRoutes(uid, routes) {
+    try {
+      const userRef = doc(db, COLLECTION, uid);
+
+      await updateDoc(userRef, {
+        subscribedRoutes: routes,
+        updatedAt: serverTimestamp(),
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating subscribed routes:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Convert Firestore document to user object
   docToUser(doc) {
     const data = doc.data();

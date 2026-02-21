@@ -103,7 +103,7 @@ const TripSearchHeader = ({
           <View style={styles.fieldIndicator}>
             <View style={styles.toDot} />
           </View>
-          <View style={[styles.fieldWrapper, { zIndex: 1 }]}>
+          <View style={[styles.fieldWrapper, { zIndex: 1, paddingRight: 40 }]}>
             <AddressAutocomplete
               value={toText}
               onChangeText={onToChange}

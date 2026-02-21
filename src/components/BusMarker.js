@@ -10,6 +10,7 @@ const BUS_ICON_PATH =
 const MARKER_SIZE = 40;
 const ARROW_WRAPPER_SIZE = 80;
 const markerDebugState = new Map();
+const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp }) => {
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle);
@@ -22,7 +23,7 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabel
   const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
   const showDirectionArrow = hasValidBearing;
 
-  if (__DEV__) {
+  if (ROUTE_LABEL_DEBUG) {
     const raw = String(vehicle.routeId || '').trim();
     if (/^(2|2A|2B|7|7A|7B|12|12A|12B)$/i.test(raw)) {
       const signature = `${raw}|${String(routeLabel)}|${String(routeLabelProp || '')}`;
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     width: MARKER_SIZE,
     height: MARKER_SIZE,
     borderRadius: MARKER_SIZE / 2,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',

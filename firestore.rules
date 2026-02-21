@@ -126,7 +126,25 @@ service cloud.firestore {
       }
     }
 
-    // ==================== PUBLIC DETOUR FEED ====================
+    // ==================== ACTIVE DETOURS (V2) ====================
+
+    // Server-side detour detection writes via Admin SDK.
+    // All app users can read; direct client writes denied.
+    match /activeDetours/{routeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ==================== TRANSIT NEWS ====================
+
+    // Backend news worker writes via Admin SDK.
+    // All app users can read; direct client writes denied.
+    match /transitNews/{newsId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ==================== PUBLIC DETOUR FEED (Legacy) ====================
 
     // Backend worker writes shared detours with Admin SDK.
     // Client apps can read these publicly; direct client writes are denied.

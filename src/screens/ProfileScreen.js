@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
+import Icon from '../components/Icon';
 
 const ProfileScreen = ({ navigation }) => {
   const { user, isAuthenticated, favorites, tripHistory, signOut } = useAuth();
@@ -31,42 +32,49 @@ const ProfileScreen = ({ navigation }) => {
   const menuItems = [
     {
       id: 'favorites',
-      icon: '⭐',
+      icon: 'Star',
       title: 'Favorites',
       subtitle: `${favorites.stops.length} stops, ${favorites.routes.length} routes`,
       onPress: () => navigation.navigate('Favorites'),
     },
     {
       id: 'history',
-      icon: '🕐',
+      icon: 'Clock',
       title: 'Trip History',
       subtitle: `${tripHistory.length} recent trips`,
       onPress: () => Alert.alert('Coming Soon', 'Trip history details coming soon'),
     },
     {
       id: 'alerts',
-      icon: '🚨',
+      icon: 'Warning',
       title: 'Service Alerts',
       subtitle: 'View current alerts',
       onPress: () => navigation.getParent()?.navigate('Map', { screen: 'Alerts' }),
     },
     {
+      id: 'news',
+      icon: 'Map',
+      title: 'Transit News',
+      subtitle: 'Latest updates',
+      onPress: () => navigation.navigate('News'),
+    },
+    {
       id: 'settings',
-      icon: '⚙️',
+      icon: 'Settings',
       title: 'Settings',
       subtitle: 'App preferences',
       onPress: () => navigation.navigate('Settings'),
     },
     {
       id: 'help',
-      icon: '❓',
+      icon: 'Search',
       title: 'Help & Support',
       subtitle: 'FAQ and contact',
       onPress: () => Alert.alert('Help', `For support, contact us at ${APP_CONFIG.SUPPORT_EMAIL}`),
     },
     {
       id: 'about',
-      icon: 'ℹ️',
+      icon: 'Map',
       title: 'About',
       subtitle: `Version ${APP_CONFIG.VERSION}`,
       onPress: () => Alert.alert(APP_CONFIG.APP_NAME, `Version ${APP_CONFIG.VERSION}\n\nMade for Barrie Transit riders.`),
@@ -76,7 +84,7 @@ const ProfileScreen = ({ navigation }) => {
   const renderMenuItem = (item) => (
     <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.onPress}>
       <View style={styles.menuIcon}>
-        <Text style={styles.menuIconText}>{item.icon}</Text>
+        <Icon name={item.icon} size={22} color={COLORS.primary} />
       </View>
       <View style={styles.menuContent}>
         <Text style={styles.menuTitle}>{item.title}</Text>
@@ -96,11 +104,15 @@ const ProfileScreen = ({ navigation }) => {
         {/* User Card */}
         {isAuthenticated ? (
           <View style={styles.userCard}>
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>
-                {user.displayName?.charAt(0)?.toUpperCase() || '👤'}
-              </Text>
-            </View>
+            {user.displayName ? (
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>
+                  {user.displayName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            ) : (
+              <Icon name="User" size={64} color={COLORS.primary} />
+            )}
             <View style={styles.userContent}>
               <Text style={styles.userName}>{user.displayName}</Text>
               <Text style={styles.userEmail}>{user.email}</Text>
@@ -111,9 +123,7 @@ const ProfileScreen = ({ navigation }) => {
           </View>
         ) : (
           <View style={styles.loginCard}>
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>👤</Text>
-            </View>
+            <Icon name="User" size={64} color={COLORS.primary} />
             <View style={styles.loginContent}>
               <Text style={styles.loginTitle}>Sign in to Barrie Transit</Text>
               <Text style={styles.loginSubtitle}>Save favorites and sync across devices</Text>
@@ -130,7 +140,7 @@ const ProfileScreen = ({ navigation }) => {
         {/* Quick Stats */}
         {favorites.stops.length === 0 && favorites.routes.length === 0 && tripHistory.length === 0 ? (
           <View style={styles.emptyStatsContainer}>
-            <Text style={styles.emptyStatsIcon}>🚌</Text>
+            <Icon name="Bus" size={48} color={COLORS.primary} />
             <Text style={styles.emptyStatsTitle}>Start exploring!</Text>
             <Text style={styles.emptyStatsSubtitle}>
               Save stops and plan trips to see your stats here

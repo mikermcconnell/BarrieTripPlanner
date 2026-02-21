@@ -27,6 +27,7 @@ import {
   addNotificationReceivedListener,
   addNotificationResponseListener,
 } from './src/services/notificationService';
+import { userFirestoreService } from './src/services/firebase/userFirestoreService';
 import logger from './src/utils/logger';
 
 // Validate critical environment variables in production
@@ -80,11 +81,8 @@ function NotificationInitializer({ navigationRef }) {
         if (result.success) {
           logger.log('Push token registered:', result.token);
 
-          // If user is authenticated, you could store the token in Firestore here
-          // This would be used for server-triggered push notifications
           if (user && result.token) {
-            // Future: Store token in Firestore for backend push notifications
-            // await storeTokenInFirestore(user.uid, result.token);
+            await userFirestoreService.updatePushToken(user.uid, result.token);
           }
         } else {
           logger.log('Push notification registration failed:', result.error);
@@ -117,6 +115,9 @@ function NotificationInitializer({ navigationRef }) {
           case 'service_alert':
             // Navigate to Alerts screen within the Map stack
             navigationRef.current.navigate('Map', { screen: 'Alerts' });
+            break;
+          case 'transit_news':
+            navigationRef.current.navigate('Profile', { screen: 'News' });
             break;
           default:
             // Default: just open the app (already handled by tapping)

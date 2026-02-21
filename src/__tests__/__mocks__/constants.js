@@ -1,36 +1,6 @@
 /**
  * Mock constants for Jest tests
- * Only includes the constants needed for detour detection tests
  */
-
-export const DETOUR_CONFIG = {
-  OFF_ROUTE_THRESHOLD_METERS: 50,
-  CORRIDOR_WIDTH_METERS: 50,
-  PATH_OVERLAP_PERCENTAGE: 0.70,
-  MIN_OFF_ROUTE_POINTS: 3,
-  SUSPECTED_DETOUR_EXPIRY_MS: 10800000, // 3 hours
-  MAX_DETOUR_RETENTION_MS: 86400000, // 24 hours
-  CLEARING_EVIDENCE_WINDOW_MS: 1800000, // 30 minutes
-  CLEARING_THRESHOLDS: {
-    suspected: 2,
-    likely: 3,
-    highConfidence: 4,
-  },
-  DETOUR_EXPIRY_MS: 3600000, // 1 hour (legacy alias)
-  MIN_OFF_ROUTE_DURATION_MS: 30000, // 30 seconds
-  PENDING_PATH_EXPIRY_MS: 1800000, // 30 minutes
-  CLEARED_DETOUR_RETENTION_MS: 300000, // 5 minutes
-  CONFIDENCE_THRESHOLDS: {
-    likely: 70,
-    high: 85,
-  },
-  STOP_MATCH_RADIUS_METERS: 120,
-  MAX_AFFECTED_STOPS: 6,
-  DETOUR_HISTORY_LIMIT: 100,
-  ROUTE_OVERRIDES: {},
-};
-
-// Other constants can be added as needed for testing
 export const GTFS_URLS = {};
 export const MAP_CONFIG = {};
 export const REFRESH_INTERVALS = {};

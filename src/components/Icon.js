@@ -1,32 +1,43 @@
 import React from 'react';
-import ArrowUpDownIcon from 'lucide-react-native/dist/esm/icons/arrow-up-down.js';
-import LocateFixedIcon from 'lucide-react-native/dist/esm/icons/locate-fixed.js';
-import MapIcon from 'lucide-react-native/dist/esm/icons/map.js';
-import MapPinIcon from 'lucide-react-native/dist/esm/icons/map-pin.js';
-import NavigationIcon from 'lucide-react-native/dist/esm/icons/navigation.js';
-import SearchIcon from 'lucide-react-native/dist/esm/icons/search.js';
-import UserIcon from 'lucide-react-native/dist/esm/icons/user.js';
-import XIcon from 'lucide-react-native/dist/esm/icons/x.js';
+import {
+    Route,
+    Pin as MapPin,
+    Map as MapIcon,
+    Bus,
+    Search,
+    User,
+    Add,
+    Settings,
+    Star,
+    Clock,
+    Warning
+} from './CartoonIcons';
 import { COLORS } from '../config/theme';
 
 /**
- * Centralized Icon component that wraps lucide-react-native.
+ * Centralized Icon component that wraps our custom Cartoon SVGs.
  * Allows passing a string `name` to render the corresponding icon.
- * Ensures consistent styling, stroke weights, and colors across the app.
+ * Ensures consistent styling and colors across the app.
  *
  * @example
  * <Icon name="Search" color={COLORS.primary} size={24} />
  */
 const Icon = ({ name, color = COLORS.textPrimary, size = 24, strokeWidth = 2, ...rest }) => {
+    // We map legacy Lucide names to our new custom cartoon SVGs to avoid 
+    // needing to touch any other files in the codebase!
     const iconMap = {
-        ArrowUpDown: ArrowUpDownIcon,
-        LocateFixed: LocateFixedIcon,
+        ArrowUpDown: Route, // For the trip direction button
+        LocateFixed: MapPin, // For the "Locate Me" button
         Map: MapIcon,
-        MapPin: MapPinIcon,
-        Navigation: NavigationIcon,
-        Search: SearchIcon,
-        User: UserIcon,
-        X: XIcon,
+        MapPin: MapPin,
+        Navigation: Bus, // The main Trip FAB icon
+        Search: Search,
+        User: User,
+        Settings: Settings,
+        Star: Star,
+        Clock: Clock,
+        Warning: Warning,
+        X: Add // We can rotate the "Add" (plus) icon 45deg to create an X!
     };
 
     const IconComponent = iconMap[name];
@@ -36,7 +47,12 @@ const Icon = ({ name, color = COLORS.textPrimary, size = 24, strokeWidth = 2, ..
         return null;
     }
 
-    return <IconComponent color={color} size={size} strokeWidth={strokeWidth} {...rest} />;
+    const { fill, ...safeRest } = rest;
+
+    // Apply a 45deg rotation if it's the X icon using the Add SVG
+    const rotationStyle = name === 'X' ? { transform: [{ rotate: '45deg' }] } : {};
+
+    return <IconComponent color={color} size={size} style={rotationStyle} {...safeRest} />;
 };
 
 export default Icon;

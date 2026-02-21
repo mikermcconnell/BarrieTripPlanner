@@ -1,21 +1,15 @@
 /**
  * useDisplayedEntities Hook
  *
- * Computes displayed vehicles, shapes, stops, and detour-related memos
- * based on the current route selection. Works with both multi-select (native)
- * and single-select (web) by accepting a normalized Set of route IDs.
+ * Computes displayed vehicles, shapes, and stops based on the current
+ * route selection. Works with both multi-select (native) and single-select
+ * (web) by accepting a normalized Set of route IDs.
  *
  * Shared between native and web HomeScreens.
  */
 import { useMemo, useCallback } from 'react';
 import { ROUTE_COLORS } from '../config/constants';
 import { getRepresentativeShapeIdsByDirection } from '../utils/routeShapeUtils';
-
-const normalizeRouteId = (routeId) => {
-  if (routeId === null || routeId === undefined) return null;
-  const normalized = String(routeId).trim().toUpperCase();
-  return normalized || null;
-};
 
 export const useDisplayedEntities = ({
   selectedRouteIds,
@@ -30,17 +24,26 @@ export const useDisplayedEntities = ({
   showRoutes,
   showStops,
   mapRegion,
-  activeDetours,
-  getDetourHistory,
-  hasActiveDetour,
-  lastVehicleUpdate,
 }) => {
   // Get the route color
   const getRouteColor = useCallback(
     (routeId) => {
+      let color = ROUTE_COLORS.DEFAULT;
       const foundRoute = routes.find((r) => r.id === routeId);
-      if (foundRoute?.color) return foundRoute.color;
-      return ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+
+      if (foundRoute?.color) {
+        color = foundRoute.color;
+      } else if (ROUTE_COLORS[routeId]) {
+        color = ROUTE_COLORS[routeId];
+      }
+
+      // Soften pure black or extremely dark colors to reduce map clutter
+      // GTFS often uses 000000 for unspecified/default black lines
+      if (color.toUpperCase() === '#000000' || color.toUpperCase() === 'BLACK') {
+        return '#475569'; // Slate-600
+      }
+
+      return color;
     },
     [routes]
   );
@@ -148,50 +151,11 @@ export const useDisplayedEntities = ({
     return filteredStops.slice(0, 150);
   }, [showStops, mapRegion, stops, selectedRouteIds, routeStopsMapping]);
 
-  // Get detours to display for selected routes
-  const displayedDetours = useMemo(() => {
-    if (!activeDetours || activeDetours.length === 0) return [];
-
-    if (selectedRouteIds.size > 0) {
-      const selectedNormalized = new Set(
-        Array.from(selectedRouteIds)
-          .map((routeId) => normalizeRouteId(routeId))
-          .filter(Boolean)
-      );
-      return activeDetours.filter((detour) => selectedNormalized.has(normalizeRouteId(detour.routeId)));
-    }
-
-    return activeDetours;
-  }, [activeDetours, selectedRouteIds]);
-
-  const primaryDisplayedDetour = useMemo(
-    () => (displayedDetours.length > 0 ? displayedDetours[0] : null),
-    [displayedDetours]
-  );
-
-  const detourHistory = useMemo(() => {
-    if (!getDetourHistory) return [];
-    return getDetourHistory(null, 20);
-  }, [getDetourHistory, activeDetours, lastVehicleUpdate]);
-
-  // Check if any selected route has an active detour
-  const selectedRoutesHaveDetour = useMemo(() => {
-    if (selectedRouteIds.size === 0) return false;
-    for (const routeId of selectedRouteIds) {
-      if (hasActiveDetour(routeId)) return true;
-    }
-    return false;
-  }, [selectedRouteIds, hasActiveDetour]);
-
   return {
     getRouteColor,
     displayedVehicles,
     shapeDirectionMap,
     displayedShapes,
     displayedStops,
-    displayedDetours,
-    primaryDisplayedDetour,
-    detourHistory,
-    selectedRoutesHaveDetour,
   };
 };

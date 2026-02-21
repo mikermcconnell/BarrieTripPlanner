@@ -18,6 +18,7 @@ import SignUpScreen from '../screens/SignUpScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import AlertsScreen from '../screens/AlertsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import NewsScreen from '../screens/NewsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -69,6 +70,7 @@ const ProfileStack = () => (
     <Stack.Screen name="SignUp" component={SignUpScreen} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="News" component={NewsScreen} />
   </Stack.Navigator>
 );
 

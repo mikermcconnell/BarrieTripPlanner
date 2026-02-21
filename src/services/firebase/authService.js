@@ -9,6 +9,7 @@ import {
   sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import { auth } from '../../config/firebase';
@@ -130,18 +131,29 @@ export const authService = {
     };
   },
 
-  // Sign in with Google (web uses popup, native not yet supported)
+  // Sign in with Google (web uses popup, native uses @react-native-google-signin)
   async signInWithGoogle() {
-    if (Platform.OS !== 'web') {
-      return {
-        success: false,
-        error: 'Google sign in is currently available on web only.',
-      };
-    }
-
     try {
-      const provider = new GoogleAuthProvider();
-      const userCredential = await signInWithPopup(auth, provider);
+      let userCredential;
+
+      if (Platform.OS === 'web') {
+        const provider = new GoogleAuthProvider();
+        userCredential = await signInWithPopup(auth, provider);
+      } else {
+        // Native: use @react-native-google-signin
+        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+        GoogleSignin.configure({
+          webClientId: '648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com',
+        });
+        const signInResult = await GoogleSignin.signIn();
+        const idToken = signInResult.data?.idToken;
+        if (!idToken) {
+          return { success: false, error: 'Failed to get Google credentials.' };
+        }
+        const credential = GoogleAuthProvider.credential(idToken);
+        userCredential = await signInWithCredential(auth, credential);
+      }
+
       const user = userCredential.user;
 
       // Check if this is a new user — create Firestore profile if needed
@@ -163,8 +175,8 @@ export const authService = {
       };
     } catch (error) {
       console.error('Google sign in error:', error);
-      // User closed the popup
-      if (error.code === 'auth/popup-closed-by-user') {
+      // User cancelled
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'SIGN_IN_CANCELLED') {
         return { success: false, error: null };
       }
       return {

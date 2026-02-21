@@ -11,20 +11,20 @@
  *   GET /api/walking-directions?from=lat,lon&to=lat,lon — Walking directions
  *
  * Environment variables:
- *   LOCATIONIQ_API_KEY — Required. Your LocationIQ API key.
- *   PORT              — Optional. Defaults to 3001.
- *   ALLOWED_ORIGINS   — Optional. Comma-separated list of allowed CORS origins.
+ *   LOCATIONIQ_API_KEY      — Required. Your LocationIQ API key.
+ *   PORT                    — Optional. Defaults to 3001.
+ *   ALLOWED_ORIGINS         — Optional. Comma-separated list of allowed CORS origins.
+ *   DETOUR_WORKER_ENABLED   — Optional. Set to "true" to enable server-side detour detection.
+ *   FIREBASE_SERVICE_ACCOUNT_JSON — Required for detour worker. JSON string of Firebase credentials.
  */
 
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { startDetourWorker } = require('./detour-worker');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.LOCATIONIQ_API_KEY;
 const BASE_URL = 'https://us1.locationiq.com/v1';
-const DETOUR_PROXY_KEY = process.env.DETOUR_PROXY_KEY || null;
 const hasLocationIQKey = Boolean(API_KEY);
 
 // Barrie bounding box
@@ -61,8 +61,6 @@ const limiter = rateLimit({
   message: { error: 'Too many requests, please try again later' },
 });
 app.use('/api/', limiter);
-
-const detourWorker = startDetourWorker({ logger: console });
 
 // ─── Helper ───────────────────────────────────────────────────────
 
@@ -174,33 +172,54 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    detourWorkerEnabled: detourWorker.enabled,
   });
 });
 
-// Shared detour feed diagnostics
-app.get('/api/detours', (_req, res) => {
-  res.json(detourWorker.getSnapshot());
+// ─── Detour Worker ───────────────────────────────────────────
+
+let detourWorker = null;
+if (process.env.DETOUR_WORKER_ENABLED === 'true') {
+  detourWorker = require('./detourWorker');
+}
+
+// Detour detection status
+app.get('/api/detour-status', (_req, res) => {
+  if (!detourWorker) {
+    return res.json({ enabled: false });
+  }
+  res.json({ enabled: true, ...detourWorker.getStatus() });
 });
 
-// Force refresh detour computation (protected by optional key)
-app.post('/api/detours/refresh', async (req, res) => {
-  const provided = req.headers['x-detour-key'];
-  if (DETOUR_PROXY_KEY && provided !== DETOUR_PROXY_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  try {
-    await detourWorker.forceTick();
-    return res.json({ success: true, snapshot: detourWorker.getSnapshot() });
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Refresh failed' });
-  }
-});
+// ─── News Worker ─────────────────────────────────────────────
 
-// ─── Start ────────────────────────────────────────────────────────
+let newsWorker = null;
+if (process.env.NEWS_WORKER_ENABLED === 'true') {
+  newsWorker = require('./newsWorker');
+}
+
+app.get('/api/news-status', (_req, res) => {
+  if (!newsWorker) {
+    return res.json({ enabled: false });
+  }
+  res.json({ enabled: true, ...newsWorker.getStatus() });
+});
 
 app.listen(PORT, () => {
   console.log(`API proxy running on port ${PORT}`);
+  if (detourWorker) {
+    detourWorker.start();
+  }
+  if (newsWorker) {
+    newsWorker.start();
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received — shutting down');
+  if (detourWorker) detourWorker.stop();
+  if (newsWorker) newsWorker.stop();
+  process.exit(0);
 });
 
 module.exports = app;

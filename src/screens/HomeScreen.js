@@ -31,9 +31,6 @@ import { useSearchHistory } from '../hooks/useSearchHistory';
 import BusMarker from '../components/BusMarker';
 import RoutePolyline from '../components/RoutePolyline';
 import StopMarker from '../components/StopMarker';
-import DetourPolyline from '../components/DetourPolyline';
-import DetourBadge from '../components/DetourBadge';
-import DetourDebugPanel from '../components/DetourDebugPanel';
 import PulsingSpinner from '../components/PulsingSpinner';
 
 // Trip planning components
@@ -48,7 +45,8 @@ import Icon from '../components/Icon';
 
 // SVG Icons for native replaced with Lucide Icons
 const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => <Icon name="Search" size={size} color={color} />;
-const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="LocateFixed" size={size} color={color} />;
+const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="Map" size={size} color={color} />;
+const ROUTE_LABEL_DEBUG = __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // Helper: convert region {lat, lng, latDelta, lngDelta} to MapLibre camera params
 const regionToCamera = (region) => ({
@@ -96,11 +94,7 @@ const HomeScreen = ({ route }) => {
     usingCachedData,
     routingData,
     isRoutingReady,
-    activeDetours,
-    getDetoursForRoute,
-    getDetourHistory,
-    hasActiveDetour,
-    dismissDetour,
+    isRouteDetouring,
   } = useTransit();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -223,7 +217,6 @@ const HomeScreen = ({ route }) => {
     searchTrips(trip.from, trip.to);
   };
 
-  const [showDetourDebugPanel, setShowDetourDebugPanel] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
   );
@@ -243,13 +236,11 @@ const HomeScreen = ({ route }) => {
   // Displayed entities (vehicles, shapes, stops, detours) based on selection
   const {
     getRouteColor, displayedVehicles, displayedShapes, displayedStops,
-    displayedDetours, primaryDisplayedDetour, detourHistory, selectedRoutesHaveDetour,
   } = useDisplayedEntities({
     selectedRouteIds: selectedRoutes,
     vehicles, routes, trips, shapes, processedShapes,
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
-    activeDetours, getDetourHistory, hasActiveDetour, lastVehicleUpdate,
   });
 
   // Stable camera default settings — prevent re-centering on every re-render
@@ -263,7 +254,7 @@ const HomeScreen = ({ route }) => {
   }, [routes, tripMapping]);
 
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!ROUTE_LABEL_DEBUG) return;
     if (!Array.isArray(displayedVehicles) || displayedVehicles.length === 0) return;
 
     const interesting = displayedVehicles.filter((v) =>
@@ -484,24 +475,6 @@ const HomeScreen = ({ route }) => {
           <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
         ))}
 
-        {/* Detour polylines - hide when previewing a trip */}
-        {!isTripPreviewMode && displayedDetours
-          .filter((detour) => Array.isArray(detour.polyline) && detour.polyline.length >= 2)
-          .map((detour) => (
-            <DetourPolyline
-              key={detour.id}
-              id={`detour-${detour.id}`}
-              coordinates={detour.polyline}
-              confidenceLevel={detour.confidenceLevel}
-              confidenceScore={detour.confidenceScore}
-              firstDetectedAt={detour.firstDetectedAt}
-              confirmedByVehicles={detour.confirmedByVehicles}
-              affectedStops={detour.affectedStops}
-              segmentLabel={detour.segmentLabel}
-              onDismiss={() => dismissDetour(detour.id)}
-            />
-          ))}
-
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((tripRoute) => (
           <RoutePolyline
@@ -612,41 +585,35 @@ const HomeScreen = ({ route }) => {
         </TouchableOpacity>
       )}
 
-      {/* Center Map Button - top right */}
+      {/* Map Controls (Top Right) */}
       {!isTripPlanningMode && (
-        <TouchableOpacity
-          style={styles.centerButton}
-          onPress={centerOnBarrie}
-          activeOpacity={0.7}
-        >
-          <CenterIcon size={18} color={COLORS.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.mapControls}>
+          <TouchableOpacity
+            style={styles.mapControlButton}
+            onPress={centerOnBarrie}
+            activeOpacity={0.7}
+          >
+            <CenterIcon size={18} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.mapControlButton, showStops && styles.mapControlButtonActive]}
+            onPress={() => setShowStops(!showStops)}
+            activeOpacity={0.7}
+          >
+            <Icon name="MapPin" size={18} color={showStops ? COLORS.white : COLORS.textPrimary} fill={showStops ? COLORS.primary : 'none'} />
+          </TouchableOpacity>
+        </View>
       )}
 
-      {/* Route Filter Panel */}
+      {/* Route Filter Panel (Horizontal below search) */}
       {!isTripPlanningMode && (
         <HomeScreenControls
           routes={routes}
           selectedRoutes={selectedRoutes}
           onRouteSelect={handleRouteSelect}
           getRouteColor={getRouteColor}
-          hasActiveDetour={hasActiveDetour}
+          isRouteDetouring={isRouteDetouring}
         />
-      )}
-
-      {/* Detour Badge - show when selected routes have active detours */}
-      {!isTripPlanningMode && selectedRoutesHaveDetour && (
-        <View style={styles.detourBadgeContainer}>
-          <DetourBadge
-            detourCount={displayedDetours.length}
-            confidenceLevel={primaryDisplayedDetour?.confidenceLevel}
-            confidenceScore={primaryDisplayedDetour?.confidenceScore}
-            segmentLabel={primaryDisplayedDetour?.segmentLabel}
-            firstDetectedAt={primaryDisplayedDetour?.firstDetectedAt}
-            lastSeenAt={primaryDisplayedDetour?.lastSeenAt}
-            officialAlert={primaryDisplayedDetour?.officialAlert}
-          />
-        </View>
       )}
 
       {/* Favorite Stop Quick View */}
@@ -659,12 +626,10 @@ const HomeScreen = ({ route }) => {
         />
       )}
 
-      {/* Bottom Action Bar - Stops toggle + Plan Trip */}
+      {/* Primary Action Button */}
       {!isTripPlanningMode && (
         <BottomActionBar
           onPlanTrip={enterTripPlanningMode}
-          showStops={showStops}
-          onToggleStops={() => setShowStops(!showStops)}
         />
       )}
 
@@ -743,15 +708,6 @@ const HomeScreen = ({ route }) => {
         onClose={closeMapTapPopup}
       />
 
-      {/* Dev-only Detour Debug Panel */}
-      {__DEV__ && (
-        <DetourDebugPanel
-          visible={showDetourDebugPanel}
-          onClose={() => setShowDetourDebugPanel(false)}
-          activeDetours={displayedDetours}
-          detourHistory={detourHistory}
-        />
-      )}
     </View>
   );
 };
@@ -850,29 +806,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  // Center Map Button
-  centerButton: {
+  // Map Controls (Right Side)
+  mapControls: {
     position: 'absolute',
-    top: 64 + STATUS_BAR_OFFSET,
-    right: SPACING.sm,
+    bottom: 32,
+    left: SPACING.sm,
+    flexDirection: 'column',
+    gap: SPACING.sm,
+    zIndex: 999,
+  },
+  mapControlButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 999,
     borderWidth: 1,
     borderColor: COLORS.grey200,
     ...SHADOWS.small,
   },
-  // Detour badge container - positioned below search bar, right of filter panel
-  detourBadgeContainer: {
-    position: 'absolute',
-    top: 72 + STATUS_BAR_OFFSET,
-    left: 80,
-    right: SPACING.md,
-    zIndex: 997,
+  mapControlButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   // Trip planning markers
   tripMarker: {

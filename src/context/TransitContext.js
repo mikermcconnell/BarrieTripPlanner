@@ -1,29 +1,21 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAllStaticData } from '../services/gtfsService';
 import { fetchVehiclePositions, formatVehiclesForMap } from '../services/realtimeService';
 import { buildRoutingData } from '../services/routingDataService';
 import { fetchServiceAlerts } from '../services/alertService';
 import { REFRESH_INTERVALS, SHAPE_PROCESSING } from '../config/constants';
-import { processShapeForRendering, computeOverlapOffsets } from '../utils/geometryUtils';
+import { processShapeForRendering } from '../utils/geometryUtils';
 import {
   isOnline,
   getCachedGTFSData,
   cacheGTFSData,
   addNetworkListener,
 } from '../utils/offlineCache';
-import { useDetourDetection } from '../hooks/useDetourDetection';
-import { publicDetourService } from '../services/firebase/publicDetourService';
+import { subscribeToActiveDetours } from '../services/firebase/detourService';
+import { subscribeToTransitNews } from '../services/firebase/newsService';
 import logger from '../utils/logger';
 
 const TransitContext = createContext(null);
-const AUTO_DETOURS_ENABLED = process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS === 'true';
-const EMPTY_VEHICLES = []; // Stable reference to avoid re-render loops
-
-const normalizeRouteId = (routeId) => {
-  if (routeId === null || routeId === undefined) return null;
-  const normalized = String(routeId).trim().toUpperCase();
-  return normalized || null;
-};
 
 export const useTransit = () => {
   const context = useContext(TransitContext);
@@ -61,13 +53,12 @@ export const TransitProvider = ({ children }) => {
   const [staticError, setStaticError] = useState(null);
   const [vehicleError, setVehicleError] = useState(null);
   const [serviceAlerts, setServiceAlerts] = useState([]);
-  const [backendActiveDetours, setBackendActiveDetours] = useState([]);
-  const [detourFeedMeta, setDetourFeedMeta] = useState(null);
-  const [detourFeedStatus, setDetourFeedStatus] = useState({
-    connected: false,
-    updatedAt: null,
-    error: null,
-  });
+
+  // Detour detection (server-side, via Firestore)
+  const [activeDetours, setActiveDetours] = useState({});
+
+  // Transit news (server-side, via Firestore)
+  const [transitNews, setTransitNews] = useState([]);
 
   // Offline state
   const [isOffline, setIsOffline] = useState(false);
@@ -76,32 +67,56 @@ export const TransitProvider = ({ children }) => {
   // Refs for intervals
   const vehicleIntervalRef = useRef(null);
   const serviceAlertIntervalRef = useRef(null);
+  const shapeProcessingJobRef = useRef(0);
 
   /**
-   * Process raw shapes through the rendering pipeline and compute overlap offsets
+   * Process raw shapes through the rendering pipeline without blocking the UI thread.
    */
-  const processAndStoreShapes = useCallback((rawShapes, rsMapping) => {
+  const processAndStoreShapes = useCallback((rawShapes) => {
     const options = {
       dpTolerance: SHAPE_PROCESSING.DP_TOLERANCE_METERS,
       splineTension: SHAPE_PROCESSING.SPLINE_TENSION,
       splineSegments: SHAPE_PROCESSING.SPLINE_SEGMENTS_PER_PAIR,
     };
 
-    const processed = {};
-    const shapeIds = Object.keys(rawShapes);
-    shapeIds.forEach(shapeId => {
-      processed[shapeId] = processShapeForRendering(rawShapes[shapeId], options);
-    });
+    const shapeIds = Object.keys(rawShapes || {});
+    const jobId = ++shapeProcessingJobRef.current;
 
-    setProcessedShapes(processed);
+    if (shapeIds.length === 0) {
+      setProcessedShapes({});
+      setShapeOverlapOffsets({});
+      return;
+    }
 
-    // Compute overlap offsets
-    const offsets = computeOverlapOffsets(
-      rawShapes,
-      rsMapping,
-      SHAPE_PROCESSING.OVERLAP_CORRIDOR_METERS
-    );
-    setShapeOverlapOffsets(offsets);
+    // Overlap offsets are currently unused by rendering; skip expensive graph scan.
+    setShapeOverlapOffsets({});
+
+    // Process shapes in small batches to keep the JS thread responsive on Android.
+    void (async () => {
+      try {
+        const processed = {};
+        const batchSize = 10;
+
+        for (let i = 0; i < shapeIds.length; i++) {
+          if (shapeProcessingJobRef.current !== jobId) {
+            return;
+          }
+
+          const shapeId = shapeIds[i];
+          processed[shapeId] = processShapeForRendering(rawShapes[shapeId], options);
+
+          if ((i + 1) % batchSize === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
+
+        if (shapeProcessingJobRef.current === jobId) {
+          setProcessedShapes(processed);
+        }
+      } catch (error) {
+        logger.error('Failed to process map shapes:', error);
+      }
+    })();
   }, []);
 
   /**
@@ -130,7 +145,7 @@ export const TransitProvider = ({ children }) => {
         setUsingCachedData(true);
 
         // Process shapes for rendering
-        processAndStoreShapes(cachedData.shapes || {}, cachedData.routeShapeMapping || {});
+        processAndStoreShapes(cachedData.shapes || {});
 
         // Build routing data from cached data if available
         if (cachedData.stopTimes && cachedData.calendar) {
@@ -162,7 +177,7 @@ export const TransitProvider = ({ children }) => {
       setRouteStopsMapping(data.routeStopsMapping || {});
 
       // Process shapes for rendering
-      processAndStoreShapes(data.shapes, data.routeShapeMapping);
+      processAndStoreShapes(data.shapes);
 
       // Build routing data structures for RAPTOR
       try {
@@ -195,7 +210,7 @@ export const TransitProvider = ({ children }) => {
         setUsingCachedData(true);
 
         // Process shapes for rendering
-        processAndStoreShapes(cachedData.shapes || {}, cachedData.routeShapeMapping || {});
+        processAndStoreShapes(cachedData.shapes || {});
 
         // Try to build routing data from cached data
         if (cachedData.stopTimes && cachedData.calendar) {
@@ -349,142 +364,28 @@ export const TransitProvider = ({ children }) => {
     [vehicles]
   );
 
-  // Subscribe to backend shared detour feed (server-side source of truth)
-  useEffect(() => {
-    if (!AUTO_DETOURS_ENABLED) {
-      setBackendActiveDetours([]);
-      setDetourFeedMeta(null);
-      setDetourFeedStatus({
-        connected: false,
-        updatedAt: Date.now(),
-        error: 'disabled',
-      });
-      return undefined;
-    }
-
-    if (isOffline) {
-      setBackendActiveDetours([]);
-      setDetourFeedStatus({
-        connected: false,
-        updatedAt: Date.now(),
-        error: 'offline',
-      });
-      return undefined;
-    }
-
-    const unsubscribeDetours = publicDetourService.subscribeToActiveDetours(
-      (detours) => setBackendActiveDetours(detours),
-      (status) => setDetourFeedStatus((prev) => ({ ...prev, ...status }))
-    );
-    const unsubscribeMeta = publicDetourService.subscribeToDetourMeta(
-      (meta) => setDetourFeedMeta(meta),
-      (status) => setDetourFeedStatus((prev) => ({ ...prev, ...status }))
-    );
-
-    return () => {
-      if (unsubscribeDetours) unsubscribeDetours();
-      if (unsubscribeMeta) unsubscribeMeta();
-    };
-  }, [isOffline]);
-
-  const isBackendDetourFeedLive = useMemo(() => {
-    if (!AUTO_DETOURS_ENABLED) return false;
-    if (!detourFeedStatus.connected) return false;
-    const freshnessWindowMs = REFRESH_INTERVALS.VEHICLE_POSITIONS * 8; // ~2 minutes
-    const feedTimestamp = detourFeedMeta?.updatedAt ?? detourFeedStatus.updatedAt;
-    if (!feedTimestamp) return false;
-    return Date.now() - feedTimestamp <= freshnessWindowMs;
-  }, [detourFeedStatus, detourFeedMeta]);
-
-  // Always pass real vehicles to local detection when auto-detours are enabled.
-  // The merge logic below combines backend + local results, preferring backend per-route.
-  const detourVehicleInput = AUTO_DETOURS_ENABLED ? vehicles : EMPTY_VEHICLES;
-
-  // Detour detection hook - processes vehicle positions to detect route deviations
-  const {
-    activeDetours: localActiveDetours,
-    getDetoursForRoute: getLocalDetoursForRoute,
-    getDetourHistory,
-    hasActiveDetour: hasLocalActiveDetour,
-    dismissDetour,
-  } = useDetourDetection(
-    detourVehicleInput,
-    shapes,
-    tripMapping,
-    routeShapeMapping,
-    stops,
-    routeStopsMapping,
-    serviceAlerts
-  );
-
-  // Merge both detour sources: prefer backend per-route, fill in from local
-  const activeDetours = useMemo(() => {
-    if (!AUTO_DETOURS_ENABLED) return [];
-    if (!isBackendDetourFeedLive) {
-      return localActiveDetours;
-    }
-
-    const backendByRoute = new Map();
-    backendActiveDetours.forEach((detour) => {
-      const routeId = normalizeRouteId(detour.routeId);
-      if (!routeId) return;
-      const list = backendByRoute.get(routeId) || [];
-      list.push(detour);
-      backendByRoute.set(routeId, list);
-    });
-
-    const merged = [...backendActiveDetours];
-    localActiveDetours.forEach((detour) => {
-      const routeId = normalizeRouteId(detour.routeId);
-      if (!routeId) {
-        merged.push(detour);
-        return;
-      }
-
-      const backendRouteDetours = backendByRoute.get(routeId) || [];
-      if (backendRouteDetours.length === 0) {
-        merged.push(detour);
-        return;
-      }
-
-      const backendHasDrawablePolyline = backendRouteDetours.some(
-        (item) => Array.isArray(item.polyline) && item.polyline.length >= 2
-      );
-      const localHasDrawablePolyline = Array.isArray(detour.polyline) && detour.polyline.length >= 2;
-      if (!backendHasDrawablePolyline && localHasDrawablePolyline) {
-        merged.push(detour);
-      }
-    });
-
-    return merged;
-  }, [backendActiveDetours, localActiveDetours, isBackendDetourFeedLive]);
-
-  const getDetoursForRoute = useCallback(
-    (routeId, directionId = null) => {
-      const normalizedRouteId = normalizeRouteId(routeId);
-      const normalizedDirectionId =
-        directionId === null || directionId === undefined ? null : String(directionId);
-      return activeDetours.filter((detour) => {
-        if (detour.status !== 'suspected') return false;
-        if (normalizeRouteId(detour.routeId) !== normalizedRouteId) return false;
-        if (
-          normalizedDirectionId !== null &&
-          detour.directionId !== null &&
-          detour.directionId !== undefined &&
-          String(detour.directionId) !== normalizedDirectionId
-        ) {
-          return false;
-        }
-        return true;
-      });
-    },
+  const isRouteDetouring = useCallback(
+    (routeId) => Boolean(activeDetours[routeId]),
     [activeDetours]
   );
 
-  const hasActiveDetour = useCallback(
-    (routeId, directionId = null) => getDetoursForRoute(routeId, directionId).length > 0,
-    [getDetoursForRoute]
-  );
+  // Subscribe to active detours (public collection, no auth required)
+  useEffect(() => {
+    const unsubscribe = subscribeToActiveDetours(
+      (detourMap) => setActiveDetours(detourMap),
+      (error) => logger.error('Detour subscription error:', error)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Subscribe to transit news (public collection, no auth required)
+  useEffect(() => {
+    const unsubscribe = subscribeToTransitNews(
+      (news) => setTransitNews(news),
+      (error) => logger.error('News subscription error:', error)
+    );
+    return () => unsubscribe();
+  }, []);
 
   // Load static data on mount
   useEffect(() => {
@@ -556,10 +457,9 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
-    detourFeedMeta,
-    detourFeedStatus,
-    detourFeedEnabled: AUTO_DETOURS_ENABLED,
-    detourFeedUsingBackend: isBackendDetourFeedLive,
+    activeDetours,
+    isRouteDetouring,
+    transitNews,
 
     // Loading states
     isLoadingStatic,
@@ -585,13 +485,6 @@ export const TransitProvider = ({ children }) => {
     getStopById,
     getShapesForRoute,
     getVehiclesForRoute,
-
-    // Detour detection
-    activeDetours,
-    getDetoursForRoute,
-    getDetourHistory,
-    hasActiveDetour,
-    dismissDetour,
   };
 
   return <TransitContext.Provider value={value}>{children}</TransitContext.Provider>;

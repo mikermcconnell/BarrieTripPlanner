@@ -16,22 +16,32 @@ import {
 } from '../services/notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
+import { useAuth } from '../context/AuthContext';
+import { useTransit } from '../context/TransitContext';
+import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
 
 const SettingsScreen = ({ navigation }) => {
+  const { user, isAuthenticated } = useAuth();
+  const { routes } = useTransit();
   const [notificationSettings, setNotificationSettings] = useState({
     serviceAlerts: true,
     tripReminders: true,
     nearbyAlerts: false,
+    transitNews: true,
   });
+  const [subscribedRoutes, setSubscribedRoutes] = useState([]);
   const [cacheInfo, setCacheInfo] = useState({ sizeFormatted: 'Calculating...' });
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadSettings();
     loadCacheInfo();
-  }, []);
+    if (isAuthenticated && user) {
+      loadSubscribedRoutes();
+    }
+  }, [isAuthenticated, user]);
 
   const loadSettings = async () => {
     const settings = await getNotificationSettings();
@@ -41,6 +51,23 @@ const SettingsScreen = ({ navigation }) => {
   const loadCacheInfo = async () => {
     const info = await getCacheSize();
     setCacheInfo(info);
+  };
+
+  const loadSubscribedRoutes = async () => {
+    if (!user) return;
+    const userData = await userFirestoreService.getUser(user.uid);
+    if (userData?.subscribedRoutes) {
+      setSubscribedRoutes(userData.subscribedRoutes);
+    }
+  };
+
+  const handleRouteToggle = async (routeId) => {
+    if (!user) return;
+    const updated = subscribedRoutes.includes(routeId)
+      ? subscribedRoutes.filter((r) => r !== routeId)
+      : [...subscribedRoutes, routeId];
+    setSubscribedRoutes(updated);
+    await userFirestoreService.updateSubscribedRoutes(user.uid, updated);
   };
 
   const handleNotificationToggle = async (key) => {
@@ -148,6 +175,12 @@ const SettingsScreen = ({ navigation }) => {
               notificationSettings.nearbyAlerts,
               () => handleNotificationToggle('nearbyAlerts')
             )}
+            {renderToggleRow(
+              'Transit News',
+              'Get notified about transit news updates',
+              notificationSettings.transitNews,
+              () => handleNotificationToggle('transitNews')
+            )}
             <TouchableOpacity
               style={styles.enableButton}
               onPress={handleEnableNotifications}
@@ -158,6 +191,41 @@ const SettingsScreen = ({ navigation }) => {
               </Text>
             </TouchableOpacity>
           </>
+        )}
+
+        {isAuthenticated && renderSection(
+          'Route Subscriptions',
+          <View style={styles.routeChipsContainer}>
+            <Text style={styles.routeChipsHint}>
+              {subscribedRoutes.length === 0
+                ? 'No routes selected — you will receive all transit news'
+                : `Receiving news for ${subscribedRoutes.length} route${subscribedRoutes.length !== 1 ? 's' : ''}`}
+            </Text>
+            <View style={styles.routeChipsRow}>
+              {routes.map((route) => {
+                const isSelected = subscribedRoutes.includes(route.id);
+                return (
+                  <TouchableOpacity
+                    key={route.id}
+                    style={[
+                      styles.routeChip,
+                      isSelected && styles.routeChipSelected,
+                    ]}
+                    onPress={() => handleRouteToggle(route.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.routeChipText,
+                        isSelected && styles.routeChipTextSelected,
+                      ]}
+                    >
+                      {route.shortName || route.id}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         )}
 
         {renderSection(
@@ -367,6 +435,39 @@ const styles = StyleSheet.create({
   chevron: {
     fontSize: 20,
     color: COLORS.grey400,
+  },
+  routeChipsContainer: {
+    padding: SPACING.md,
+  },
+  routeChipsHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  routeChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  routeChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.grey300,
+    backgroundColor: COLORS.surface,
+  },
+  routeChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  routeChipText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  routeChipTextSelected: {
+    color: COLORS.white,
   },
   footer: {
     alignItems: 'center',
