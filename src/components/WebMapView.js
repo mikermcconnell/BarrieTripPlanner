@@ -185,6 +185,7 @@ export const WebRoutePolyline = ({
   smoothFactor = 1.5,
   lineCap = 'round',
   lineJoin = 'round',
+  dashArray = null,
   onMouseOver,
   onMouseOut,
   interactive = true,
@@ -200,6 +201,7 @@ export const WebRoutePolyline = ({
     lineJoin,
     interactive,
     ...(offset !== 0 && { offset }),
+    ...(dashArray != null && { dashArray }),
   };
 
   const eventHandlers = {};

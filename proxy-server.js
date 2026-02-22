@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 3001;
+const HOST = process.env.PROXY_HOST || '127.0.0.1';
 
 // ─── Load .env file ──────────────────────────────────────────────
 const envPath = path.join(__dirname, '.env');
@@ -40,7 +41,7 @@ if (fs.existsSync(envPath)) {
 }
 
 // ─── LocationIQ Config ───────────────────────────────────────────
-const LOCATIONIQ_KEY = process.env.LOCATIONIQ_API_KEY || process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || '';
+const LOCATIONIQ_KEY = process.env.LOCATIONIQ_API_KEY || '';
 const LOCATIONIQ_BASE = 'https://us1.locationiq.com/v1';
 const BARRIE_BOUNDS = '-79.85,44.25,-79.55,44.50';
 
@@ -53,7 +54,7 @@ const PROXY_ALLOWED_DOMAINS = [
 
 if (!LOCATIONIQ_KEY) {
   console.warn('\nWARNING: No LocationIQ API key found. API proxy routes will not work.');
-  console.warn('Set LOCATIONIQ_API_KEY or EXPO_PUBLIC_LOCATIONIQ_API_KEY in .env\n');
+  console.warn('Set LOCATIONIQ_API_KEY in .env\n');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -103,6 +104,49 @@ function proxyToLocationIQ(targetUrl, res) {
 function sendError(res, status, message) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: message }));
+}
+
+function normalizeQuery(value) {
+  const query = String(value || '').trim();
+  if (query.length < 2) {
+    throw new Error('Query parameter "q" is required (min 2 chars)');
+  }
+  if (query.length > 120) {
+    throw new Error('Query parameter "q" is too long (max 120 chars)');
+  }
+  return query;
+}
+
+function parseLatLon(value, fieldName) {
+  const parsed = Number.parseFloat(String(value));
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`"${fieldName}" must be a valid number`);
+  }
+  return parsed;
+}
+
+function validateLatitude(value, fieldName) {
+  if (value < -90 || value > 90) {
+    throw new Error(`"${fieldName}" must be between -90 and 90`);
+  }
+}
+
+function validateLongitude(value, fieldName) {
+  if (value < -180 || value > 180) {
+    throw new Error(`"${fieldName}" must be between -180 and 180`);
+  }
+}
+
+function parseCoordinatePair(value, fieldName) {
+  const parts = String(value).split(',').map((part) => part.trim());
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`"${fieldName}" must use "lat,lon" format`);
+  }
+  const lat = parseLatLon(parts[0], `${fieldName}.lat`);
+  const lon = parseLatLon(parts[1], `${fieldName}.lon`);
+  validateLatitude(lat, `${fieldName}.lat`);
+  validateLongitude(lon, `${fieldName}.lon`);
+  return { lat, lon };
 }
 
 // ─── Simple Rate Limiter ─────────────────────────────────────────
@@ -165,9 +209,14 @@ const server = http.createServer((req, res) => {
 
   // Autocomplete
   if (parsedUrl.pathname === '/api/autocomplete') {
-    const { q } = parsedUrl.query;
-    if (!q || q.trim().length < 2) {
-      return sendError(res, 400, 'Query parameter "q" is required (min 2 chars)');
+    if (!LOCATIONIQ_KEY) {
+      return sendError(res, 503, 'LocationIQ proxy is not configured');
+    }
+    let q;
+    try {
+      q = normalizeQuery(parsedUrl.query.q);
+    } catch (error) {
+      return sendError(res, 400, error.message);
     }
     const params = new URLSearchParams({
       key: LOCATIONIQ_KEY,
@@ -185,9 +234,14 @@ const server = http.createServer((req, res) => {
 
   // Forward geocode
   if (parsedUrl.pathname === '/api/geocode') {
-    const { q } = parsedUrl.query;
-    if (!q || q.trim().length < 2) {
-      return sendError(res, 400, 'Query parameter "q" is required');
+    if (!LOCATIONIQ_KEY) {
+      return sendError(res, 503, 'LocationIQ proxy is not configured');
+    }
+    let q;
+    try {
+      q = normalizeQuery(parsedUrl.query.q);
+    } catch (error) {
+      return sendError(res, 400, error.message);
     }
     const params = new URLSearchParams({
       key: LOCATIONIQ_KEY,
@@ -205,14 +259,26 @@ const server = http.createServer((req, res) => {
 
   // Reverse geocode
   if (parsedUrl.pathname === '/api/reverse-geocode') {
-    const { lat, lon } = parsedUrl.query;
-    if (!lat || !lon) {
+    if (!LOCATIONIQ_KEY) {
+      return sendError(res, 503, 'LocationIQ proxy is not configured');
+    }
+    if (parsedUrl.query.lat == null || parsedUrl.query.lon == null) {
       return sendError(res, 400, 'Parameters "lat" and "lon" are required');
+    }
+    let lat;
+    let lon;
+    try {
+      lat = parseLatLon(parsedUrl.query.lat, 'lat');
+      lon = parseLatLon(parsedUrl.query.lon, 'lon');
+      validateLatitude(lat, 'lat');
+      validateLongitude(lon, 'lon');
+    } catch (error) {
+      return sendError(res, 400, error.message);
     }
     const params = new URLSearchParams({
       key: LOCATIONIQ_KEY,
-      lat,
-      lon,
+      lat: String(lat),
+      lon: String(lon),
       format: 'json',
       addressdetails: '1',
     });
@@ -222,14 +288,23 @@ const server = http.createServer((req, res) => {
 
   // Walking directions
   if (parsedUrl.pathname === '/api/walking-directions') {
+    if (!LOCATIONIQ_KEY) {
+      return sendError(res, 503, 'LocationIQ proxy is not configured');
+    }
     const { from, to } = parsedUrl.query;
     if (!from || !to) {
       return sendError(res, 400, 'Parameters "from" and "to" are required (format: lat,lon)');
     }
+    let fromCoord;
+    let toCoord;
+    try {
+      fromCoord = parseCoordinatePair(from, 'from');
+      toCoord = parseCoordinatePair(to, 'to');
+    } catch (error) {
+      return sendError(res, 400, error.message);
+    }
     // LocationIQ Directions uses lon,lat order
-    const [fromLat, fromLon] = from.split(',');
-    const [toLat, toLon] = to.split(',');
-    const coords = `${fromLon},${fromLat};${toLon},${toLat}`;
+    const coords = `${fromCoord.lon},${fromCoord.lat};${toCoord.lon},${toCoord.lat}`;
     const params = new URLSearchParams({
       key: LOCATIONIQ_KEY,
       steps: 'true',
@@ -335,8 +410,8 @@ server.on('error', (error) => {
   process.exit(1);
 });
 
-server.listen(PORT, () => {
-  console.log(`\nBarrie Transit Dev Server running at http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`\nBarrie Transit Dev Server running at http://${HOST}:${PORT}`);
   console.log(`\nEndpoints:`);
   console.log(`  GET /proxy?url=<encoded-url>              - CORS proxy (GTFS feeds)`);
   console.log(`  GET /api/autocomplete?q=...               - LocationIQ autocomplete`);

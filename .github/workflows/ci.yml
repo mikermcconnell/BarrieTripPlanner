@@ -22,14 +22,23 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
+      - name: Validate Expo project health
+        run: npx expo-doctor
+
       - name: Run app test suite
         run: npm test -- --runInBand
 
       - name: Run platform parity check
         run: npm run check:parity
 
+      - name: Audit root production dependencies
+        run: npm audit --omit=dev
+
       - name: Install api-proxy dependencies
         run: npm --prefix api-proxy ci
 
       - name: Run api-proxy tests
         run: npm --prefix api-proxy test
+
+      - name: Audit api-proxy production dependencies
+        run: npm --prefix api-proxy audit --omit=dev

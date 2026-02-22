@@ -30,15 +30,44 @@ import {
 import { userFirestoreService } from './src/services/firebase/userFirestoreService';
 import logger from './src/utils/logger';
 
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+const IS_TEST = process.env.NODE_ENV === 'test';
+
 // Validate critical environment variables in production
-if (!__DEV__) {
+if (!IS_DEV && !IS_TEST) {
   const requiredVars = [
     'EXPO_PUBLIC_FIREBASE_API_KEY',
     'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
   ];
   const missing = requiredVars.filter(key => !process.env[key]);
   if (missing.length > 0) {
-    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+
+  const forbiddenPublicVars = [];
+  if (process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY) {
+    forbiddenPublicVars.push('EXPO_PUBLIC_LOCATIONIQ_API_KEY');
+  }
+  if (process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ === 'true') {
+    forbiddenPublicVars.push('EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=true');
+  }
+  if (process.env.EXPO_PUBLIC_API_PROXY_TOKEN) {
+    forbiddenPublicVars.push('EXPO_PUBLIC_API_PROXY_TOKEN');
+  }
+  if (process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN) {
+    forbiddenPublicVars.push('EXPO_PUBLIC_CORS_PROXY_TOKEN');
+  }
+  if (forbiddenPublicVars.length > 0) {
+    throw new Error(
+      `Insecure production env detected: ${forbiddenPublicVars.join(', ')}. ` +
+      'Use server-side proxy auth and Firebase Bearer tokens for public builds.'
+    );
+  }
+
+  if (!process.env.EXPO_PUBLIC_API_PROXY_URL) {
+    console.warn(
+      'EXPO_PUBLIC_API_PROXY_URL is not set. Geocoding and walking directions may be unavailable until proxy URL is configured.'
+    );
   }
 }
 
@@ -47,7 +76,7 @@ const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    enabled: !__DEV__,
+    enabled: !IS_DEV,
     tracesSampleRate: 0.2,
   });
 }

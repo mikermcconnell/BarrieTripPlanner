@@ -30,6 +30,7 @@ const Icon = ({ name, color = COLORS.textPrimary, size = 24, strokeWidth = 2, ..
         LocateFixed: MapPin, // For the "Locate Me" button
         Map: MapIcon,
         MapPin: MapPin,
+        Bus: Bus, // ProfileScreen uses name="Bus"
         Navigation: Bus, // The main Trip FAB icon
         Search: Search,
         User: User,

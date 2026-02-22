@@ -26,6 +26,13 @@ const formatTimeDisplay = (date) => {
   return `${h12}:${m} ${ampm}`;
 };
 
+const formatDateTimeLocal = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const TripSearchHeader = ({
   fromText,
   toText,
@@ -37,12 +44,23 @@ const TripSearchHeader = ({
   onClose,
   onUseCurrentLocation,
   isLoading = false,
+  fromSuggestions = [],
+  toSuggestions = [],
+  showFromSuggestions = false,
+  showToSuggestions = false,
   timeMode = 'now',
   selectedTime,
   onTimeModeChange,
   onSelectedTimeChange,
   onSearch,
 }) => {
+  void isLoading;
+  void fromSuggestions;
+  void toSuggestions;
+  void showFromSuggestions;
+  void showToSuggestions;
+  void formatDateTimeLocal;
+
   const cycleTimeMode = () => {
     if (!onTimeModeChange) return;
     const idx = TIME_MODES.indexOf(timeMode);

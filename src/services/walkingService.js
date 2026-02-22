@@ -14,6 +14,7 @@ import { LOCATIONIQ_CONFIG, ROUTING_CONFIG } from '../config/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { haversineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
+import { getApiProxyRequestOptions } from './proxyAuth';
 
 const CACHE_PREFIX = 'walk_directions_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -52,6 +53,9 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
 
   try {
     let response;
+    const canUseDirectLocationIQ = Boolean(
+      LOCATIONIQ_CONFIG.ALLOW_DIRECT && LOCATIONIQ_CONFIG.API_KEY
+    );
 
     if (LOCATIONIQ_CONFIG.PROXY_URL) {
       // Route through proxy (API key stays server-side)
@@ -60,17 +64,18 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
         to: `${toLat},${toLon}`,
       });
       const proxyUrl = `${LOCATIONIQ_CONFIG.PROXY_URL}/api/walking-directions?${proxyParams}`;
+      const proxyOptions = await getApiProxyRequestOptions(LOCATIONIQ_CONFIG.PROXY_TOKEN || '');
 
       await waitForRateLimit();
-      response = await fetch(proxyUrl);
+      response = await fetch(proxyUrl, proxyOptions);
 
       if (response.status === 429) {
         logger.warn('Walking directions rate limit hit, retrying after delay...');
         await new Promise((resolve) => setTimeout(resolve, 1000));
         lastRequestTime = Date.now();
-        response = await fetch(proxyUrl);
+        response = await fetch(proxyUrl, proxyOptions);
       }
-    } else {
+    } else if (canUseDirectLocationIQ) {
       // Direct call (native app or dev without proxy)
       const url = `${LOCATIONIQ_CONFIG.BASE_URL}/directions/walking/${fromLon},${fromLat};${toLon},${toLat}`;
       const params = new URLSearchParams({
@@ -89,6 +94,9 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
         lastRequestTime = Date.now();
         response = await fetch(`${url}?${params}`);
       }
+    } else {
+      logger.warn('Walking directions proxy is not configured; using estimated walking leg');
+      return getFallbackDirections(fromLat, fromLon, toLat, toLon);
     }
 
     if (!response.ok) {

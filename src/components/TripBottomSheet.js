@@ -48,6 +48,7 @@ const TripBottomSheet = ({
   const handleSheetChanges = useCallback((index) => {
     // Could handle sheet state changes here if needed
   }, []);
+  const handleKeyDown = useCallback(() => {}, []);
 
   const renderContent = () => {
     if (isLoading) {
@@ -153,6 +154,7 @@ const TripBottomSheet = ({
       onChange={handleSheetChanges}
       backgroundStyle={styles.background}
       handleIndicatorStyle={styles.handleIndicator}
+      onAnimate={handleKeyDown}
     >
       <BottomSheetScrollView contentContainerStyle={styles.content}>
         {renderContent()}

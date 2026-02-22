@@ -1,7 +1,7 @@
 const { getStaticData } = require('./gtfsLoader');
 const { fetchVehicles, errors: fetchErrors } = require('./vehicleFetcher');
 const { processVehicles, clearVehicleState, getState } = require('./detourDetector');
-const { publishDetours, getLastPublishedIds } = require('./detourPublisher');
+const { publishDetours } = require('./detourPublisher');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
@@ -40,12 +40,25 @@ async function tick() {
     const tripObj = Object.fromEntries(data.tripMapping);
     const vehicles = await fetchVehicles(tripObj);
 
-    const prevKeys = detourKeys(getState().detours || {});
+    const prevSnapshot = getState();
+    const prevKeys = detourKeys(prevSnapshot.detours || {});
+    const prevStates = prevSnapshot.detourStates || {};
+
     const activeDetours = processVehicles(vehicles, data.shapes, data.routeShapeMapping);
     const currKeys = detourKeys(activeDetours);
+    const currStates = {};
+    for (const [k, v] of Object.entries(activeDetours)) {
+      currStates[k] = v.state || 'active';
+    }
 
     for (const k of currKeys) {
-      if (!prevKeys.has(k)) addEvent(`Route ${k}: detour detected`);
+      if (!prevKeys.has(k)) {
+        addEvent(`Route ${k}: detour detected`);
+      } else if (prevStates[k] === 'active' && currStates[k] === 'clear-pending') {
+        addEvent(`Route ${k}: detour clear-pending`);
+      } else if (prevStates[k] === 'clear-pending' && currStates[k] === 'active') {
+        addEvent(`Route ${k}: detour reactivated`);
+      }
     }
     for (const k of prevKeys) {
       if (!currKeys.has(k)) addEvent(`Route ${k}: detour cleared`);
@@ -91,7 +104,11 @@ function getStatus() {
   const state = getState();
   const detourSummary = {};
   for (const [routeId, d] of Object.entries(state.detours || {})) {
-    detourSummary[routeId] = { vehicleCount: d.vehicleCount, detectedAt: d.detectedAt };
+    detourSummary[routeId] = {
+      vehicleCount: d.vehicleCount,
+      detectedAt: d.detectedAt,
+      state: d.state || 'active',
+    };
   }
   return {
     running,

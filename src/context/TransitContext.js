@@ -369,6 +369,11 @@ export const TransitProvider = ({ children }) => {
     [activeDetours]
   );
 
+  const getRouteDetour = useCallback(
+    (routeId) => activeDetours[routeId] ?? null,
+    [activeDetours]
+  );
+
   // Subscribe to active detours (public collection, no auth required)
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
@@ -459,6 +464,7 @@ export const TransitProvider = ({ children }) => {
     serviceAlerts,
     activeDetours,
     isRouteDetouring,
+    getRouteDetour,
     transitNews,
 
     // Loading states

@@ -18,6 +18,7 @@ import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { haversineDistance as haversineMeters } from '../utils/geometryUtils';
 
 const { BARRIE_CENTER } = LOCATIONIQ_CONFIG;
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
 // Grid cell size in degrees (~220m at Barrie's latitude)
 const GRID_CELL_SIZE = 0.002;
@@ -57,10 +58,10 @@ export async function initLocalGeocoding() {
     buildSpatialGrid();
     buildStreetIndex();
 
-    if (__DEV__) console.log(`[LocalGeocoding] Loaded ${addresses.length} addresses`);
+    if (IS_DEV) console.log(`[LocalGeocoding] Loaded ${addresses.length} addresses`);
     dataReadyResolve(true);
   } catch (err) {
-    if (__DEV__) console.warn('[LocalGeocoding] Failed to load address data:', err.message);
+    if (IS_DEV) console.warn('[LocalGeocoding] Failed to load address data:', err.message);
     dataReadyResolve(false);
   }
 }

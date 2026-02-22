@@ -58,9 +58,11 @@ const DirectionsToIcon = ({ size = 20, color = COLORS.error }) => (
 const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
   const [slideAnim] = useState(new Animated.Value(100)); // Start off-screen (100%)
+  const handleSheetChanges = useCallback(() => {}, []);
 
   // Slide-in animation when component mounts
   useEffect(() => {
+    handleSheetChanges(1);
     Animated.spring(slideAnim, {
       toValue: 0,
       useNativeDriver: true,
@@ -76,9 +78,10 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
       duration: 250,
       useNativeDriver: true,
     }).start(() => {
+      handleSheetChanges(-1);
       onClose?.();
     });
-  }, [onClose, slideAnim]);
+  }, [onClose, slideAnim, handleSheetChanges]);
 
   // Handle directions from this stop
   const handleDirectionsFrom = useCallback(() => {

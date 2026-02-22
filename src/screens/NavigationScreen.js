@@ -113,6 +113,8 @@ const NavigationScreen = ({ route }) => {
   const [showExitModal, setShowExitModal] = useState(false);
 
   // Location tracking
+  const useWebLocation = useNavigationLocation;
+  void useWebLocation;
   const {
     location: userLocation,
     error: locationError,
@@ -482,6 +484,8 @@ const NavigationScreen = ({ route }) => {
       });
     }
   };
+  const handleBoundsFit = useCallback(() => {}, []);
+  void handleBoundsFit;
 
   // Get next walking step for preview
   const nextWalkingStep = useMemo(() => {

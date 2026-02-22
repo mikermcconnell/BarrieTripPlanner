@@ -48,11 +48,13 @@ const TripBottomSheet = ({
   isLoading,
   error,
   hasSearched,
+  onRetry,
   recentTrips = [],
   onSelectRecentTrip,
 }) => {
   // Sheet states: 'peek' (10%), 'default' (42%), 'expanded' (60%)
   const [sheetState, setSheetState] = useState('default');
+  const handleSheetChanges = useCallback((_nextState) => {}, []);
 
   const getSheetHeight = () => {
     switch (sheetState) {
@@ -63,10 +65,17 @@ const TripBottomSheet = ({
   };
 
   const toggleSheet = useCallback(() => {
-    if (sheetState === 'peek') setSheetState('default');
-    else if (sheetState === 'default') setSheetState('expanded');
-    else setSheetState('default');
-  }, [sheetState]);
+    if (sheetState === 'peek') {
+      setSheetState('default');
+      handleSheetChanges('default');
+    } else if (sheetState === 'default') {
+      setSheetState('expanded');
+      handleSheetChanges('expanded');
+    } else {
+      setSheetState('default');
+      handleSheetChanges('default');
+    }
+  }, [sheetState, handleSheetChanges]);
 
   // Keyboard support: Escape to collapse, Enter/Space to toggle
   useEffect(() => {
@@ -96,6 +105,16 @@ const TripBottomSheet = ({
           <ErrorIcon size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>No routes found</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
+          {onRetry && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={onRetry}
+              accessibilityRole="button"
+              accessibilityLabel="Retry trip search"
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -258,6 +277,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
   emptyTitle: {
     fontSize: FONT_SIZES.lg,

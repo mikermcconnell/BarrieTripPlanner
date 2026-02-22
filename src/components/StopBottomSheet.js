@@ -56,6 +56,9 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
   const snapPoints = useMemo(() => ['30%', '55%', '90%'], []);
+  const handleClose = useCallback(() => {
+    onClose?.();
+  }, [onClose]);
 
   const handleSheetChanges = useCallback(
     (index) => {
@@ -125,7 +128,7 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
           <TouchableOpacity style={styles.shareButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share stop details">
             <ShareIcon size={18} color={COLORS.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close stop details">
+          <TouchableOpacity style={styles.closeButton} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close stop details">
             <CloseIcon size={20} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>

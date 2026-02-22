@@ -38,12 +38,15 @@ const TripSearchHeaderWeb = ({
   onSwap,
   onClose,
   onUseCurrentLocation,
+  isLoading = false,
   timeMode = 'now',
   selectedTime,
   onTimeModeChange,
   onSelectedTimeChange,
   onSearch,
-}) => (
+}) => {
+  void isLoading;
+  return (
   <View style={styles.tripPlanHeader}>
     <View style={styles.tripPlanHeaderTop}>
       <Text style={styles.tripPlanTitle}>Plan Your Trip</Text>
@@ -209,7 +212,18 @@ const TripSearchHeaderWeb = ({
       </View>
     </View>
   </View>
-);
+  );
+};
+
+const formatTimeDisplay = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m} ${ampm}`;
+};
 
 /** Format Date to datetime-local input value (YYYY-MM-DDTHH:MM) */
 const formatDateTimeLocal = (date) => {

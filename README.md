@@ -23,22 +23,14 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
    npm install
    ```
 
-2. **Configure Google Maps API Key (Android only):**
+2. **Configure Android Firebase services file:**
 
-   For Android, you need a Google Maps API key. Get one from the [Google Cloud Console](https://console.cloud.google.com/google/maps-apis).
+   Android builds require `google-services.json`.
 
-   Edit `app.json` and replace `YOUR_GOOGLE_MAPS_API_KEY` with your actual key:
-   ```json
-   "android": {
-     "config": {
-       "googleMaps": {
-         "apiKey": "YOUR_ACTUAL_API_KEY"
-       }
-     }
-   }
-   ```
+   - Local/dev: place the file at `./google-services.json`
+   - EAS cloud builds: set `GOOGLE_SERVICES_JSON` as an EAS file secret (preferred)
 
-   **Note:** iOS uses Apple Maps by default in Expo Go, so no API key is needed for iOS development.
+   `app.config.js` loads `GOOGLE_SERVICES_JSON` automatically when present.
 
 3. **Start the development server:**
    ```bash
@@ -47,8 +39,11 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
 
    For full feature parity in development, copy `.env.example` to `.env` and fill required values:
    - `EXPO_PUBLIC_API_PROXY_URL`
+   - `LOCATIONIQ_API_KEY` (for local `proxy-server.js` / `api-proxy`)
    - `EXPO_PUBLIC_FIREBASE_*`
    - Optional fallback OTP backend: `EXPO_PUBLIC_OTP_URL`
+   - Keep `EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=false` for production/public builds
+   - Keep `EXPO_PUBLIC_API_PROXY_TOKEN` empty for production/public builds
 
 4. **Open the app:**
    - Scan the QR code with Expo Go on your phone
@@ -99,8 +94,10 @@ If you use a deployed proxy instead, set:
 - Optional hardened proxy token headers:
   - `EXPO_PUBLIC_CORS_PROXY_TOKEN`
   - `EXPO_PUBLIC_API_PROXY_TOKEN`
+  - Use token headers only for internal/non-public clients; public production should use Firebase Bearer auth.
 
 Hosted web builds do not auto-fallback to `localhost`; configure one of the proxy URLs above.
+For public clients, do not ship `EXPO_PUBLIC_LOCATIONIQ_API_KEY` in app builds.
 
 ## Project Structure
 
@@ -148,11 +145,15 @@ The app can now consume a shared Firestore detour feed produced by the backend w
    ```
 2. Set environment variables:
    - `DETOUR_WORKER_ENABLED=true`
+   - `DETOUR_HISTORY_ENABLED=true` (default true)
+   - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
    - `LOCATIONIQ_API_KEY=...` (still required for existing proxy routes)
    - `REQUIRE_API_AUTH=true`
-   - `API_PROXY_TOKEN=...` (or `API_PROXY_TOKENS=token1,token2`)
-   - Optional Firebase auth mode: `REQUIRE_FIREBASE_AUTH=true`
+   - `REQUIRE_FIREBASE_AUTH=true` (recommended/required for production)
+   - `ALLOW_SHARED_TOKEN_AUTH=false` (recommended/required for production)
+   - `ALLOWED_ORIGINS=...` (required for browser clients)
+   - Optional non-production token auth: `API_PROXY_TOKEN=...` (or `API_PROXY_TOKENS=token1,token2`)
 3. Start backend:
    ```bash
    npm start
@@ -160,12 +161,21 @@ The app can now consume a shared Firestore detour feed produced by the backend w
 4. Verify worker status:
    - `GET /api/health`
    - `GET /api/detour-status`
+   - `GET /api/detour-logs?limit=100`
+     - Optional filters: `routeId`, `eventType` (comma-separated), `start`, `end`
+     - Log event types: `DETOUR_DETECTED`, `DETOUR_UPDATED`, `DETOUR_CLEARED`
 
 ### Firestore rules
 
 Deploy updated rules so clients can read:
-- `publicDetoursActive/*`
-- `publicSystem/*`
+- `activeDetours/*`
+- `detourHistory/*`
+
+### EAS Android Firebase file
+
+- `app.config.js` resolves `android.googleServicesFile` from `GOOGLE_SERVICES_JSON` when present.
+- For reproducible cloud builds, set `GOOGLE_SERVICES_JSON` as an EAS file secret (pointing to `google-services.json`).
+- Production EAS builds also require `EXPO_PUBLIC_API_PROXY_URL` and reject insecure env vars (`EXPO_PUBLIC_LOCATIONIQ_API_KEY`, direct LocationIQ mode, and public proxy tokens).
 
 ### Client behavior
 

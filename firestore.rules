@@ -135,6 +135,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Persistent detour event history written by backend worker.
+    // Public read enables clients/admin tools to inspect timeline history.
+    match /detourHistory/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ==================== TRANSIT NEWS ====================
 
     // Backend news worker writes via Admin SDK.

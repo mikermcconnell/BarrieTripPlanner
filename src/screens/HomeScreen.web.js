@@ -20,6 +20,7 @@ import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import TripBottomSheet from '../components/TripBottomSheet';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
+import { useDetourOverlays } from '../hooks/useDetourOverlays';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { decodePolyline } from '../utils/polylineUtils';
@@ -30,6 +31,7 @@ import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../co
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
+import DetourOverlay from '../components/DetourOverlay.web';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
 // SVG Icons as components - Refined for premium feel
@@ -115,6 +117,7 @@ const HomeScreen = ({ route }) => {
     isOffline,
     serviceAlerts,
     isRouteDetouring,
+    activeDetours,
     usingCachedData,
     routingData,
     isRoutingReady,
@@ -136,6 +139,8 @@ const HomeScreen = ({ route }) => {
     () => selectedRoute ? new Set([selectedRoute]) : new Set(),
     [selectedRoute]
   );
+
+  const { detourOverlays } = useDetourOverlays({ selectedRouteIds, activeDetours });
 
   // Helper to check if a route has active alerts
   const getRouteAlerts = useCallback((routeId) => {
@@ -208,10 +213,12 @@ const HomeScreen = ({ route }) => {
   // Map tap popup
   const {
     mapTapLocation, mapTapAddress, isLoadingAddress,
-    handleMapPress, handleDirectionsFrom, handleDirectionsTo,
-    closeMapTapPopup: handleCloseMapTapPopup,
+    handleMapPress: handleMapTapPress, handleDirectionsFrom, handleDirectionsTo,
+    closeMapTapPopup,
     showLocation,
   } = useMapTapPopup({ enterPlanningMode, setTripFrom, setTripTo });
+  const handleMapPress = handleMapTapPress;
+  const handleCloseMapTapPopup = closeMapTapPopup;
 
   // Navigation param effects (selected stop/route/coordinate, exit trip planning)
   useMapNavigation({
@@ -455,6 +462,10 @@ const HomeScreen = ({ route }) => {
             />
           );
         })}
+        {/* Detour geometry overlays — above route polylines */}
+        {!isTripPreviewMode && detourOverlays.map((overlay) => (
+          <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
+        ))}
         {/* Regular stops - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedStops.map((stop) => (
           <WebStopMarker

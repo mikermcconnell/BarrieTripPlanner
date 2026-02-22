@@ -19,6 +19,14 @@ export function subscribeToActiveDetours(onUpdate, onError) {
           detectedAt: data.detectedAt?.toDate?.()?.toISOString() ?? null,
           lastSeenAt: data.lastSeenAt?.toDate?.()?.toISOString() ?? null,
           vehicleCount: data.vehicleCount ?? 0,
+          state: data.state ?? 'active',
+          skippedSegmentPolyline: data.skippedSegmentPolyline ?? null,
+          inferredDetourPolyline: data.inferredDetourPolyline ?? null,
+          entryPoint: data.entryPoint ?? null,
+          exitPoint: data.exitPoint ?? null,
+          confidence: data.confidence ?? null,
+          evidencePointCount: data.evidencePointCount ?? null,
+          lastEvidenceAt: data.lastEvidenceAt ?? null,
         };
       });
       onUpdate(detourMap);

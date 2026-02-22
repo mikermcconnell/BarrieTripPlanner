@@ -25,6 +25,7 @@ import {
 import { haversineDistance } from '../utils/geometryUtils';
 import { retryFetch } from '../utils/retryFetch';
 import logger from '../utils/logger';
+import { getApiProxyRequestOptions } from './proxyAuth';
 
 // Initialize local geocoding on module load
 initLocalGeocoding();
@@ -54,20 +55,13 @@ function setCache(cache, key, data) {
   cache.set(key, { data, time: Date.now() });
 }
 
-const { API_KEY, BASE_URL, PROXY_URL, BARRIE_BOUNDS, BARRIE_CENTER, MAX_RESULTS } = LOCATIONIQ_CONFIG;
+const { API_KEY, BASE_URL, PROXY_URL, BARRIE_BOUNDS, BARRIE_CENTER, MAX_RESULTS, ALLOW_DIRECT } = LOCATIONIQ_CONFIG;
 const PROXY_TOKEN = LOCATIONIQ_CONFIG.PROXY_TOKEN || '';
 
-const getProxyRequestOptions = () => {
-  const headers = {};
-  if (PROXY_TOKEN) {
-    headers['x-api-token'] = PROXY_TOKEN;
-    headers['x-client-id'] = 'barrie-transit-app';
-  }
-  return Object.keys(headers).length > 0 ? { headers } : {};
-};
+const canUseDirectLocationIQ = () => Boolean(ALLOW_DIRECT && API_KEY);
 
-const assertDirectApiKeyConfigured = () => {
-  if (!PROXY_URL && !API_KEY) {
+const assertLocationServiceConfigured = () => {
+  if (!PROXY_URL && !canUseDirectLocationIQ()) {
     const err = new Error('Location service is not configured');
     err.code = 'SERVICE_UNAVAILABLE';
     throw err;
@@ -84,14 +78,15 @@ const _apiAutocomplete = async (query) => {
   }
 
   try {
-    assertDirectApiKeyConfigured();
+    assertLocationServiceConfigured();
     let response;
     if (PROXY_URL) {
       // Route through proxy (API key stays server-side)
       const params = new URLSearchParams({ q: query });
+      const proxyOptions = await getApiProxyRequestOptions(PROXY_TOKEN);
       response = await retryFetch(`${PROXY_URL}/api/autocomplete?${params}`, {
         maxRetries: 2,
-        ...getProxyRequestOptions(),
+        ...proxyOptions,
       });
     } else {
       // Direct call (native app or dev without proxy)
@@ -149,13 +144,14 @@ const _apiGeocode = async (address) => {
   }
 
   try {
-    assertDirectApiKeyConfigured();
+    assertLocationServiceConfigured();
     let response;
     if (PROXY_URL) {
       const params = new URLSearchParams({ q: address });
+      const proxyOptions = await getApiProxyRequestOptions(PROXY_TOKEN);
       response = await retryFetch(`${PROXY_URL}/api/geocode?${params}`, {
         maxRetries: 2,
-        ...getProxyRequestOptions(),
+        ...proxyOptions,
       });
     } else {
       const params = new URLSearchParams({
@@ -200,13 +196,14 @@ const _apiGeocode = async (address) => {
  */
 const _apiReverseGeocode = async (lat, lon) => {
   try {
-    assertDirectApiKeyConfigured();
+    assertLocationServiceConfigured();
     let response;
     if (PROXY_URL) {
       const params = new URLSearchParams({ lat: lat.toString(), lon: lon.toString() });
+      const proxyOptions = await getApiProxyRequestOptions(PROXY_TOKEN);
       response = await retryFetch(`${PROXY_URL}/api/reverse-geocode?${params}`, {
         maxRetries: 2,
-        ...getProxyRequestOptions(),
+        ...proxyOptions,
       });
     } else {
       const params = new URLSearchParams({

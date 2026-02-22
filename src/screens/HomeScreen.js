@@ -26,11 +26,13 @@ import { decodePolyline } from '../utils/polylineUtils';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
+import { useDetourOverlays } from '../hooks/useDetourOverlays';
 
 // Native map components
 import BusMarker from '../components/BusMarker';
 import RoutePolyline from '../components/RoutePolyline';
 import StopMarker from '../components/StopMarker';
+import DetourOverlay from '../components/DetourOverlay';
 import PulsingSpinner from '../components/PulsingSpinner';
 
 // Trip planning components
@@ -95,6 +97,7 @@ const HomeScreen = ({ route }) => {
     routingData,
     isRoutingReady,
     isRouteDetouring,
+    activeDetours,
   } = useTransit();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -199,6 +202,7 @@ const HomeScreen = ({ route }) => {
     enterPlanningMode, setTripFrom, setTripTo,
     onMapTap: () => setSelectedStop(null),
   });
+  const handleCloseMapTapPopup = closeMapTapPopup;
 
   // Navigation param effects (selected stop/route/coordinate, exit trip planning)
   useMapNavigation({
@@ -242,6 +246,8 @@ const HomeScreen = ({ route }) => {
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
   });
+
+  const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
   // Stable camera default settings — prevent re-centering on every re-render
   const cameraDefaultSettings = useMemo(() => ({
@@ -461,6 +467,10 @@ const HomeScreen = ({ route }) => {
             />
           );
         })}
+        {/* Detour geometry overlays — above route polylines */}
+        {!isTripPreviewMode && detourOverlays.map((overlay) => (
+          <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
+        ))}
         {/* Regular stops - hide when previewing a trip */}
         {!isTripPreviewMode && displayedStops.map((stop) => (
           <StopMarker
@@ -705,7 +715,7 @@ const HomeScreen = ({ route }) => {
         isLoading={isLoadingAddress}
         onDirectionsFrom={handleDirectionsFrom}
         onDirectionsTo={handleDirectionsTo}
-        onClose={closeMapTapPopup}
+        onClose={handleCloseMapTapPopup}
       />
 
     </View>

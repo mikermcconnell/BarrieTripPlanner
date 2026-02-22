@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 // Barrie Transit GTFS Data URLs
 // Source: https://www.transit.land/feeds/f-dpzk-barrietransit
 export const GTFS_URLS = {
@@ -93,6 +91,7 @@ export const APP_CONFIG = {
 };
 
 export const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
 // LocationIQ Configuration (Free tier: 5,000 requests/day)
 // Get your API key at: https://locationiq.com/
@@ -100,15 +99,17 @@ export const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';
 export const OTP_CONFIG = {
   BASE_URL: process.env.EXPO_PUBLIC_OTP_URL || '',
   TIMEOUT_MS: 15000,
-  USE_MOCK_IN_DEV: __DEV__, // Only use mock data in development
+  USE_MOCK_IN_DEV: IS_DEV, // Only use mock data in development
 };
 
 export const LOCATIONIQ_CONFIG = {
+  // Optional direct key (development fallback only; avoid in public client builds)
   API_KEY: process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || '',
   BASE_URL: 'https://us1.locationiq.com/v1',
-  // When set, API calls route through this proxy (hides API key server-side)
-  // Proxy is only needed for web (CORS); native apps call LocationIQ directly
-  PROXY_URL: Platform.OS === 'web' ? (process.env.EXPO_PUBLIC_API_PROXY_URL || '') : '',
+  // Shared API proxy URL for all platforms (web + native)
+  PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL || '',
+  // Allow direct client->LocationIQ calls (development fallback only)
+  ALLOW_DIRECT: process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ === 'true',
   // Optional auth token for hardened API proxy deployments
   PROXY_TOKEN: process.env.EXPO_PUBLIC_API_PROXY_TOKEN || '',
 

@@ -5,9 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import TripStep from '../components/TripStep';
 import FareInfoPanel from '../components/FareInfoPanel';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';

@@ -311,7 +311,9 @@ const NavigationScreen = ({ route }) => {
     completeLeg,
     boardBus,
     alightBus,
+    resetNavigation,
   } = useStepProgress(itinerary, userLocation, null); // Pass null initially, update below
+  void resetNavigation;
 
   // Get current transit leg
   const currentTransitLeg = useMemo(() => {
