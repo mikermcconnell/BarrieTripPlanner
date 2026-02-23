@@ -28,6 +28,10 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
+jest.mock('@maplibre/maplibre-react-native', () => ({
+  PointAnnotation: 'PointAnnotation',
+}));
+
 jest.mock('../components/RoutePolyline', () => MockRoutePolyline);
 
 jest.mock('../components/WebMapView', () => ({
@@ -40,12 +44,15 @@ jest.mock('leaflet', () => ({
   Icon: { Default: { prototype: {}, mergeOptions: jest.fn() } },
 }));
 
+const MockCircleMarker = (props) => React.createElement('div', { 'data-mock': 'CircleMarker' });
+
 jest.mock('react-leaflet', () => ({
   MapContainer: 'MapContainer',
   TileLayer: 'TileLayer',
   Polyline: 'Polyline',
   Marker: 'Marker',
   Popup: 'Popup',
+  CircleMarker: MockCircleMarker,
   useMap: jest.fn(),
   useMapEvents: jest.fn(),
 }));
@@ -278,9 +285,12 @@ describe('DetourOverlay component rendering', () => {
     routeId: '8A',
     skippedSegmentPolyline: SAMPLE_POLYLINE,
     inferredDetourPolyline: LONG_POLYLINE,
+    entryPoint: { latitude: 44.38, longitude: -79.69 },
+    exitPoint: { latitude: 44.39, longitude: -79.68 },
     opacity: 1.0,
     skippedColor: '#ef4444',
     detourColor: '#f97316',
+    markerBorderColor: '#f97316',
     state: 'active',
   };
 
@@ -343,6 +353,28 @@ describe('DetourOverlay component rendering', () => {
       const polylines = inst.root.findAllByType(MockRoutePolyline);
       expect(polylines).toHaveLength(0);
     });
+
+    test('renders PointAnnotation markers for entry/exit', () => {
+      const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
+      const annotations = inst.root.findAllByType('PointAnnotation');
+      expect(annotations).toHaveLength(2);
+      const entry = annotations.find((a) => a.props.id === 'detour-entry-8A');
+      const exit = annotations.find((a) => a.props.id === 'detour-exit-8A');
+      expect(entry).toBeDefined();
+      expect(exit).toBeDefined();
+      expect(entry.props.coordinate).toEqual([-79.69, 44.38]);
+      expect(exit.props.coordinate).toEqual([-79.68, 44.39]);
+    });
+
+    test('no markers when entryPoint/exitPoint are null', () => {
+      const inst = renderComponent(DetourOverlayNative, {
+        ...OVERLAY_ACTIVE,
+        entryPoint: null,
+        exitPoint: null,
+      });
+      const annotations = inst.root.findAllByType('PointAnnotation');
+      expect(annotations).toHaveLength(0);
+    });
   });
 
   describe('web DetourOverlay', () => {
@@ -381,6 +413,32 @@ describe('DetourOverlay component rendering', () => {
       const polylines = inst.root.findAllByType(MockWebRoutePolyline);
       const skipped = polylines.find((p) => p.props.dashArray === '10, 8');
       expect(skipped.props.outlineWidth).toBe(0);
+    });
+
+    test('renders CircleMarker for entry/exit', () => {
+      const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
+      const markers = inst.root.findAllByType(MockCircleMarker);
+      expect(markers).toHaveLength(2);
+      const centers = markers.map((m) => m.props.center);
+      expect(centers).toContainEqual([44.38, -79.69]);
+      expect(centers).toContainEqual([44.39, -79.68]);
+      markers.forEach((m) => {
+        expect(m.props.radius).toBe(7);
+        expect(m.props.interactive).toBe(false);
+        expect(m.props.pathOptions.fillColor).toBe('#ffffff');
+        expect(m.props.pathOptions.color).toBe('#f97316');
+        expect(m.props.pathOptions.weight).toBe(3);
+      });
+    });
+
+    test('no markers when entryPoint/exitPoint are null', () => {
+      const inst = renderComponent(DetourOverlayWeb, {
+        ...OVERLAY_ACTIVE,
+        entryPoint: null,
+        exitPoint: null,
+      });
+      const markers = inst.root.findAllByType(MockCircleMarker);
+      expect(markers).toHaveLength(0);
     });
   });
 });

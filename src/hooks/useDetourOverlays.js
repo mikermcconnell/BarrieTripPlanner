@@ -14,6 +14,7 @@ const ENABLED = process.env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI === 'true';
 const DETOUR_COLORS = {
   SKIPPED: '#ef4444',  // red — the normal segment being bypassed
   DETOUR: '#f97316',   // orange — the inferred detour path
+  MARKER_BORDER: '#f97316', // orange border for entry/exit markers
 };
 
 /**
@@ -38,9 +39,12 @@ export function deriveDetourOverlays({ selectedRouteIds, activeDetours, enabled 
       state: detour.state ?? 'active',
       skippedSegmentPolyline: detour.skippedSegmentPolyline ?? null,
       inferredDetourPolyline: detour.inferredDetourPolyline ?? null,
+      entryPoint: detour.entryPoint ?? null,
+      exitPoint: detour.exitPoint ?? null,
       opacity: detour.state === 'clear-pending' ? 0.45 : 1.0,
       skippedColor: DETOUR_COLORS.SKIPPED,
       detourColor: DETOUR_COLORS.DETOUR,
+      markerBorderColor: DETOUR_COLORS.MARKER_BORDER,
     });
   });
 

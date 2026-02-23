@@ -4,19 +4,24 @@
  * Renders detour geometry on the Leaflet web map:
  * - Red dashed line for the skipped normal-route segment
  * - Orange line for the inferred detour path
+ * - White circle markers at entry/exit points
  *
  * Accepts pre-computed props from useDetourOverlays hook.
  */
 import React from 'react';
+import { CircleMarker } from 'react-leaflet';
 import { WebRoutePolyline } from './WebMapView';
 
 const DetourOverlay = ({
   routeId,
   skippedSegmentPolyline,
   inferredDetourPolyline,
+  entryPoint,
+  exitPoint,
   opacity,
   skippedColor,
   detourColor,
+  markerBorderColor,
 }) => (
   <>
     {skippedSegmentPolyline?.length >= 2 && (
@@ -37,6 +42,34 @@ const DetourOverlay = ({
         strokeWidth={5}
         opacity={opacity}
         outlineWidth={1.5}
+        interactive={false}
+      />
+    )}
+    {entryPoint && (
+      <CircleMarker
+        center={[entryPoint.latitude, entryPoint.longitude]}
+        radius={7}
+        pathOptions={{
+          fillColor: '#ffffff',
+          fillOpacity: opacity,
+          color: markerBorderColor,
+          weight: 3,
+          opacity,
+        }}
+        interactive={false}
+      />
+    )}
+    {exitPoint && (
+      <CircleMarker
+        center={[exitPoint.latitude, exitPoint.longitude]}
+        radius={7}
+        pathOptions={{
+          fillColor: '#ffffff',
+          fillOpacity: opacity,
+          color: markerBorderColor,
+          weight: 3,
+          opacity,
+        }}
         interactive={false}
       />
     )}

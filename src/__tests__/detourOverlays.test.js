@@ -129,6 +129,41 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].opacity).toBe(1.0);
   });
 
+  test('includes entryPoint and exitPoint when present', () => {
+    const entry = { latitude: 44.38, longitude: -79.69 };
+    const exit = { latitude: 44.39, longitude: -79.68 };
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['1']),
+      activeDetours: {
+        '1': {
+          state: 'active',
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          entryPoint: entry,
+          exitPoint: exit,
+        },
+      },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].entryPoint).toBe(entry);
+    expect(result[0].exitPoint).toBe(exit);
+    expect(result[0].markerBorderColor).toBe('#f97316');
+  });
+
+  test('defaults entryPoint and exitPoint to null when absent', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['1']),
+      activeDetours: {
+        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+      },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].entryPoint).toBeNull();
+    expect(result[0].exitPoint).toBeNull();
+    expect(result[0].markerBorderColor).toBe('#f97316');
+  });
+
   test('only returns overlays for selected routes, not all detouring routes', () => {
     const result = deriveDetourOverlays({
       enabled: true,
