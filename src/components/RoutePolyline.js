@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS } from '../config/theme';
 import { darkenColor } from '../utils/geometryUtils';
@@ -6,8 +6,8 @@ import { darkenColor } from '../utils/geometryUtils';
 const normalizeHexColor = (color, fallback = COLORS.primary) => {
   if (typeof color !== 'string' || color.trim().length === 0) return fallback;
   const raw = color.trim();
-  if (raw.startsWith('#')) return raw;
-  return `#${raw}`;
+  const normalized = raw.startsWith('#') ? raw : `#${raw}`;
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized : fallback;
 };
 
 const hexToRgba = (hexColor, opacity = 1) => {
@@ -27,7 +27,7 @@ const hexToRgba = (hexColor, opacity = 1) => {
 
 let idCounter = 0;
 
-const RoutePolyline = ({
+const RoutePolylineComponent = ({
   coordinates,
   color = COLORS.primary,
   strokeWidth = 6,
@@ -39,10 +39,13 @@ const RoutePolyline = ({
   outlineColor = '#000000',
   id,
 }) => {
-  const formattedCoordinates = coordinates.map((coord) => [
-    coord.longitude,
-    coord.latitude,
-  ]);
+  const formattedCoordinates = Array.isArray(coordinates)
+    ? coordinates
+        .filter((coord) =>
+          Number.isFinite(coord?.longitude) && Number.isFinite(coord?.latitude)
+        )
+        .map((coord) => [coord.longitude, coord.latitude])
+    : [];
 
   if (formattedCoordinates.length < 2) {
     return null;
@@ -114,5 +117,30 @@ const RoutePolyline = ({
     </MapLibreGL.ShapeSource>
   );
 };
+
+const areLineDashPatternsEqual = (prevPattern, nextPattern) => {
+  if (prevPattern === nextPattern) return true;
+  if (!Array.isArray(prevPattern) || !Array.isArray(nextPattern)) return false;
+  if (prevPattern.length !== nextPattern.length) return false;
+  for (let i = 0; i < prevPattern.length; i += 1) {
+    if (prevPattern[i] !== nextPattern[i]) return false;
+  }
+  return true;
+};
+
+const areRoutePolylinePropsEqual = (prev, next) => (
+  prev.id === next.id &&
+  prev.coordinates === next.coordinates &&
+  prev.color === next.color &&
+  prev.strokeWidth === next.strokeWidth &&
+  prev.lineCap === next.lineCap &&
+  prev.lineJoin === next.lineJoin &&
+  prev.opacity === next.opacity &&
+  prev.outlineWidth === next.outlineWidth &&
+  prev.outlineColor === next.outlineColor &&
+  areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)
+);
+
+const RoutePolyline = memo(RoutePolylineComponent, areRoutePolylinePropsEqual);
 
 export default RoutePolyline;

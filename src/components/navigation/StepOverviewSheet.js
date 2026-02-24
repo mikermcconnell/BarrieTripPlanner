@@ -51,9 +51,6 @@ const StepOverviewSheet = ({
       {/* Toggle Header */}
       <TouchableOpacity style={styles.toggleHeader} onPress={toggleExpanded}>
         <View style={styles.handleBar} />
-        <Text style={styles.toggleText}>
-          {isExpanded ? '▼ Hide steps' : '▲ View all steps'}
-        </Text>
       </TouchableOpacity>
 
       {/* Expandable Content */}
@@ -105,9 +102,9 @@ const StepOverviewSheet = ({
                 <View style={styles.legContent}>
                   <View style={styles.legHeader}>
                     <Text style={styles.legIcon}>
-                      {isWalk ? '🚶' : '🚌'}
+                      {isWalk ? '🚶' : leg.isOnDemand ? '📞' : '🚌'}
                     </Text>
-                    {!isWalk && leg.route && (
+                    {!isWalk && !leg.isOnDemand && leg.route && (
                       <View
                         style={[
                           styles.routeBadge,
@@ -117,6 +114,16 @@ const StepOverviewSheet = ({
                         <Text style={styles.routeBadgeText}>
                           {leg.route.shortName || '?'}
                         </Text>
+                      </View>
+                    )}
+                    {leg.isOnDemand && (
+                      <View
+                        style={[
+                          styles.routeBadge,
+                          { backgroundColor: leg.zoneColor || COLORS.primary },
+                        ]}
+                      >
+                        <Text style={styles.routeBadgeText}>OD</Text>
                       </View>
                     )}
                   </View>
@@ -131,12 +138,16 @@ const StepOverviewSheet = ({
                     >
                       {isWalk
                         ? `Walk to ${formatStopName(leg.to)}`
+                        : leg.isOnDemand
+                        ? `On-demand to ${formatStopName(leg.to)}`
                         : leg.headsign || `Ride to ${formatStopName(leg.to)}`}
                     </Text>
                     <Text style={styles.legSubtitle}>
                       {formatDuration(leg.duration)}
                       {isWalk
                         ? ` • ${formatDistance(leg.distance)}`
+                        : leg.isOnDemand
+                        ? ` • ${leg.zoneName || 'Zone'}`
                         : leg.intermediateStops
                         ? ` • ${leg.intermediateStops.length} stops`
                         : ''}
@@ -181,9 +192,7 @@ const styles = StyleSheet.create({
   },
   toggleHeader: {
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    paddingVertical: SPACING.xs,
   },
   handleBar: {
     width: 40,
@@ -191,11 +200,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.grey300,
     borderRadius: 2,
     marginBottom: SPACING.xs,
-  },
-  toggleText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: '600',
   },
   content: {
     overflow: 'hidden',

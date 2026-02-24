@@ -60,12 +60,14 @@ const MapController = forwardRef((props, ref) => {
 
   useImperativeHandle(ref, () => ({
     animateToRegion: (region, duration = 500) => {
+      map.stop(); // Cancel any in-progress flyTo animation
       map.flyTo([region.latitude, region.longitude], getZoomFromDelta(region.latitudeDelta), {
         duration: duration / 1000,
       });
     },
     fitToCoordinates: (coords, options = {}) => {
       if (!coords || coords.length === 0) return;
+      map.stop(); // Cancel any in-progress animation
       const bounds = L.latLngBounds(coords.map(c => [c.latitude, c.longitude]));
       const padding = options.edgePadding
         ? [options.edgePadding.top || 50, options.edgePadding.right || 50]
@@ -165,11 +167,13 @@ const createBusIcon = (color, routeId, bearing = null, scale = 1) => {
 // Create stop icon
 const createStopIcon = (isSelected) => {
   const size = isSelected ? 16 : 12;
+  const hitArea = 24; // Larger click target
+  const offset = (hitArea - size) / 2;
   return L.divIcon({
-    className: 'stop-icon',
-    html: `<div style="background:${isSelected ? '#1a73e8' : 'white'};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${isSelected ? 'white' : '#1a73e8'};box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    className: '', // Avoid default leaflet-div-icon styling
+    html: `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${isSelected ? '#1a73e8' : 'white'};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${isSelected ? 'white' : '#1a73e8'};box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div></div>`,
+    iconSize: [hitArea, hitArea],
+    iconAnchor: [hitArea / 2, hitArea / 2],
   });
 };
 
@@ -304,7 +308,8 @@ export const WebStopMarker = ({ stop, onPress, isSelected }) => {
     <Marker
       position={[stop.latitude, stop.longitude]}
       icon={createStopIcon(isSelected)}
-      eventHandlers={{ click: () => onPress?.(stop) }}
+      zIndexOffset={isSelected ? 1000 : 500}
+      eventHandlers={{ click: (e) => { L.DomEvent.stopPropagation(e); onPress?.(stop); } }}
     >
       <Popup>
         <strong>{stop.name}</strong><br />
@@ -348,7 +353,10 @@ const WebMapView = forwardRef(({ initialRegion, children, onRegionChangeComplete
               longitudeDelta: bounds.getEast() - bounds.getWest(),
             });
           });
-          // Detect user-initiated drag (not programmatic flyTo/fitBounds)
+          // Detect user-initiated drag — cancel any programmatic animation
+          mapInstance.target.on('dragstart', () => {
+            mapInstance.target.stop();
+          });
           mapInstance.target.on('dragend', () => {
             onUserInteraction?.();
           });

@@ -29,7 +29,7 @@ import { Platform } from 'react-native';
 import logger from './logger';
 
 // Local CORS proxy for web development (run: node proxy-server.js)
-const LOCAL_PROXY = 'http://localhost:3001/proxy?url=';
+const LOCAL_PROXY = 'http://127.0.0.1:3001/proxy?url=';
 
 // Public CORS proxies (fallback if local proxy not running)
 const PUBLIC_PROXIES = [

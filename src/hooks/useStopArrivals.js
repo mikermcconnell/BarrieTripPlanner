@@ -5,11 +5,11 @@
  * Shared between native and web StopBottomSheet components.
  */
 import { useState, useCallback, useEffect } from 'react';
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 import { fetchTripUpdates, getArrivalsForStop } from '../services/arrivalService';
 
 export const useStopArrivals = (stop) => {
-  const { routes, tripMapping } = useTransit();
+  const { routes, tripMapping } = useTransitStatic();
   const [arrivals, setArrivals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);

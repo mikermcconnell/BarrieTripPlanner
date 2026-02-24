@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS } from '../config/theme';
 
-const StopMarker = ({ stop, onPress, isSelected = false }) => {
+const StopMarkerComponent = ({ stop, onPress, isSelected = false }) => {
   return (
     <MapLibreGL.PointAnnotation
       id={`stop-${stop.id}`}
@@ -15,6 +15,15 @@ const StopMarker = ({ stop, onPress, isSelected = false }) => {
     </MapLibreGL.PointAnnotation>
   );
 };
+
+const areStopMarkerPropsEqual = (prev, next) => (
+  prev.stop.id === next.stop.id &&
+  prev.stop.latitude === next.stop.latitude &&
+  prev.stop.longitude === next.stop.longitude &&
+  prev.isSelected === next.isSelected
+);
+
+const StopMarker = memo(StopMarkerComponent, areStopMarkerPropsEqual);
 
 const styles = StyleSheet.create({
   marker: {

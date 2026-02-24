@@ -15,7 +15,7 @@ import { planTripAuto, TripPlanningError } from '../services/tripService';
 import { reverseGeocode } from '../services/locationIQService';
 import logger from '../utils/logger';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 import TripCard from '../components/TripCard';
 import TripErrorDisplay from '../components/TripErrorDisplay';
 import TimePicker from '../components/TimePicker';
@@ -24,13 +24,13 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/t
 import { MAP_CONFIG } from '../config/constants';
 
 const TripPlannerScreen = ({ navigation }) => {
-  const { routingData, isRoutingReady } = useTransit();
+  const { ensureRoutingData } = useTransitStatic();
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
   const [fromLocation, setFromLocation] = useState(null);
   const [toLocation, setToLocation] = useState(null);
   const [departureTime, setDepartureTime] = useState(new Date());
-  const [timeMode, setTimeMode] = useState('depart');
+  const [timeMode, setTimeMode] = useState('now');
   const [itineraries, setItineraries] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -89,6 +89,16 @@ const TripPlannerScreen = ({ navigation }) => {
     setItineraries([]);
 
     try {
+      // Lazily build routing data on first trip search
+      let routing = null;
+      if (ensureRoutingData) {
+        try {
+          routing = await ensureRoutingData();
+        } catch {
+          // Continue without local routing — OTP fallback
+        }
+      }
+
       // Use entered locations or default to downtown Barrie for demo
       const from = fromLocation || {
         lat: MAP_CONFIG.INITIAL_REGION.latitude,
@@ -99,15 +109,18 @@ const TripPlannerScreen = ({ navigation }) => {
         lon: MAP_CONFIG.DOWNTOWN_TERMINAL.longitude + 0.01,
       };
 
+      // "Leave Now" uses the current time at search time, not the stored value
+      const searchTime = timeMode === 'now' ? new Date() : departureTime;
+
       const result = await planTripAuto({
         fromLat: from.lat,
         fromLon: from.lon,
         toLat: to.lat,
         toLon: to.lon,
-        date: departureTime,
-        time: departureTime,
+        date: searchTime,
+        time: searchTime,
         arriveBy: timeMode === 'arrive',
-        routingData: isRoutingReady ? routingData : null,
+        routingData: routing,
         enrichWalking: false, // Skip walking API calls for preview; enrich on navigation start
       });
 
@@ -135,7 +148,7 @@ const TripPlannerScreen = ({ navigation }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [fromLocation, toLocation, fromText, toText, departureTime, timeMode, routingData, isRoutingReady]);
+  }, [fromLocation, toLocation, fromText, toText, departureTime, timeMode, ensureRoutingData]);
 
   // Handle time change
   const handleTimeChange = (time, mode) => {

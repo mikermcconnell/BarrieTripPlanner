@@ -72,6 +72,11 @@ const TripBottomSheet = ({
           <ErrorIcon size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>No routes found</Text>
           <Text style={styles.errorSubtext}>{typeof error === 'string' ? error : error.message}</Text>
+          {onRetry && (
+            <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.7}>
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -208,6 +213,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
   emptyTitle: {
     fontSize: FONT_SIZES.lg,

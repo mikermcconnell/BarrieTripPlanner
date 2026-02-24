@@ -25,6 +25,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
 
   // Get transit legs for display
   const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
+  const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
 
   // Get delay info from first transit leg
   const firstTransitLeg = transitLegs[0];
@@ -118,6 +119,10 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                   <View style={styles.walkIcon}>
                     <Text style={styles.walkIconText}>🚶</Text>
                   </View>
+                ) : leg.isOnDemand ? (
+                  <View style={[styles.busIcon, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+                    <Text style={styles.busIconText}>📞</Text>
+                  </View>
                 ) : (
                   <View
                     style={[styles.busIcon, { backgroundColor: leg.route?.color || COLORS.primary }]}
@@ -139,6 +144,15 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             )}
           </View>
         </View>
+
+        {/* On-demand booking note */}
+        {onDemandLeg && (
+          <View style={styles.onDemandNote}>
+            <Text style={styles.onDemandNoteText}>
+              📞 Call {onDemandLeg.bookingPhone || 'transit'} to book
+            </Text>
+          </View>
+        )}
 
         {/* Right: Leaves In + Action Buttons */}
         <View style={styles.rightSection}>
@@ -379,6 +393,18 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.textSecondary,
+  },
+  onDemandNote: {
+    backgroundColor: COLORS.primarySubtle,
+    paddingVertical: SPACING.xxs,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.xs,
+    marginRight: SPACING.sm,
+  },
+  onDemandNoteText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
   },
 });
 

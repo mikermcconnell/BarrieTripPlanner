@@ -58,7 +58,9 @@ const AddressAutocomplete = ({
   // Track the last search to avoid duplicate requests
   const lastSearchRef = useRef('');
   const debounceTimerRef = useRef(null);
+  const blurTimerRef = useRef(null);
   const isFocusedRef = useRef(false);
+  const requestSeqRef = useRef(0);
 
   /**
    * Debounced search function
@@ -74,6 +76,7 @@ const AddressAutocomplete = ({
 
     // Don't search for very short queries
     if (!searchText || searchText.trim().length < 3) {
+      requestSeqRef.current += 1;
       setSuggestions([]);
       setShowDropdown(false);
       return;
@@ -86,12 +89,14 @@ const AddressAutocomplete = ({
 
     // Set a timer to search after debounce delay
     debounceTimerRef.current = setTimeout(async () => {
+      const requestSeq = ++requestSeqRef.current;
       lastSearchRef.current = searchText;
       setIsLoading(true);
       setSearchError(null);
 
       try {
         const results = await autocompleteAddress(searchText);
+        if (requestSeq !== requestSeqRef.current) return;
 
         // Sort results by distance from Barrie (closest first)
         const sortedResults = results.sort((a, b) => {
@@ -103,11 +108,14 @@ const AddressAutocomplete = ({
         setSuggestions(sortedResults);
         setShowDropdown(isFocusedRef.current && sortedResults.length > 0);
       } catch (error) {
+        if (requestSeq !== requestSeqRef.current) return;
         console.error('Autocomplete search error:', error);
         setSuggestions([]);
         setSearchError(error.message || 'Address search unavailable');
       } finally {
-        setIsLoading(false);
+        if (requestSeq === requestSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     }, LOCATIONIQ_CONFIG.DEBOUNCE_MS);
   }, []);
@@ -118,6 +126,10 @@ const AddressAutocomplete = ({
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      if (blurTimerRef.current) {
+        clearTimeout(blurTimerRef.current);
+      }
+      requestSeqRef.current += 1;
     };
   }, []);
 
@@ -138,6 +150,11 @@ const AddressAutocomplete = ({
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    requestSeqRef.current += 1;
 
     // Mark this value as already searched to avoid duplicate lookup on same text
     lastSearchRef.current = item.shortName;
@@ -179,8 +196,12 @@ const AddressAutocomplete = ({
     isFocusedRef.current = false;
 
     // Delay hiding dropdown to allow tap on suggestion
-    setTimeout(() => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+    }
+    blurTimerRef.current = setTimeout(() => {
       setShowDropdown(false);
+      blurTimerRef.current = null;
     }, 200);
   };
 

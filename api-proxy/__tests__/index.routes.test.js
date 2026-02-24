@@ -187,4 +187,31 @@ describe('api-proxy route hardening', () => {
     expect(response.status).toBe(200);
     expect(response.body.enabled).toBe(false);
   });
+
+  test('baseline-status requires auth', async () => {
+    const app = require('../index');
+    const response = await request(app).get('/api/baseline-status');
+    expect(response.status).toBe(401);
+  });
+
+  test('baseline-status returns status for authorized requests', async () => {
+    const app = require('../index');
+    const response = await request(app)
+      .get('/api/baseline-status')
+      .set('x-api-token', 'test-proxy-token');
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('loaded');
+  });
+
+  test('baseline/set requires auth', async () => {
+    const app = require('../index');
+    const response = await request(app).post('/api/baseline/set');
+    expect(response.status).toBe(401);
+  });
+
+  test('baseline/clear requires auth', async () => {
+    const app = require('../index');
+    const response = await request(app).post('/api/baseline/clear');
+    expect(response.status).toBe(401);
+  });
 });

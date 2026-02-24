@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import TripResultCard from './TripResultCard';
+import TripErrorDisplay from './TripErrorDisplay';
 import FareCard from './FareCard';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 
@@ -100,11 +101,16 @@ const TripBottomSheet = ({
     }
 
     if (error) {
+      // Rich error display for TripPlanningError objects with code
+      if (error.code) {
+        return <TripErrorDisplay error={error} onRetry={onRetry} />;
+      }
+      // Legacy string error handling
       return (
         <View style={styles.centerContainer} accessibilityRole="alert">
           <ErrorIcon size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>No routes found</Text>
-          <Text style={styles.errorSubtext}>{error}</Text>
+          <Text style={styles.errorSubtext}>{typeof error === 'string' ? error : error.message}</Text>
           {onRetry && (
             <TouchableOpacity
               style={styles.retryButton}

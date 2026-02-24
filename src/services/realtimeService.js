@@ -271,7 +271,12 @@ export const fetchVehiclePositions = async () => {
 
     // Extract and clean vehicle data
     return entities
-      .filter((entity) => entity.vehicle && entity.vehicle.latitude && entity.vehicle.longitude)
+      .filter(
+        (entity) =>
+          entity.vehicle &&
+          Number.isFinite(entity.vehicle.latitude) &&
+          Number.isFinite(entity.vehicle.longitude)
+      )
       .map((entity) => ({
         id: entity.id,
         ...entity.vehicle,

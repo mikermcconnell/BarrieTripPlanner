@@ -11,11 +11,17 @@
 
 const shapes = new Map();
 shapes.set('shape-1', [
-  { latitude: 44.39, longitude: -79.70 },
-  { latitude: 44.39, longitude: -79.69 },
-  { latitude: 44.39, longitude: -79.68 },
-  { latitude: 44.39, longitude: -79.67 },
-  { latitude: 44.39, longitude: -79.66 },
+  { latitude: 44.39, longitude: -79.700 },
+  { latitude: 44.39, longitude: -79.698 },
+  { latitude: 44.39, longitude: -79.696 },
+  { latitude: 44.39, longitude: -79.694 },
+  { latitude: 44.39, longitude: -79.692 },
+  { latitude: 44.39, longitude: -79.690 },
+  { latitude: 44.39, longitude: -79.688 },
+  { latitude: 44.39, longitude: -79.686 },
+  { latitude: 44.39, longitude: -79.684 },
+  { latitude: 44.39, longitude: -79.682 },
+  { latitude: 44.39, longitude: -79.680 },
 ]);
 
 const routeShapeMapping = new Map();
@@ -23,6 +29,12 @@ routeShapeMapping.set('route-1', ['shape-1']);
 
 const OFF_ROUTE_COORD = { latitude: 44.395, longitude: -79.695 };
 const ON_ROUTE_COORD = { latitude: 44.39, longitude: -79.695 };
+
+// Zone-specific coordinates for clearing tests
+const OFF_ROUTE_WEST = { latitude: 44.395, longitude: -79.698 };
+const OFF_ROUTE_MID = { latitude: 44.395, longitude: -79.690 };
+const OFF_ROUTE_EAST = { latitude: 44.395, longitude: -79.682 };
+const ON_ROUTE_IN_ZONE = { latitude: 44.39, longitude: -79.690 };
 
 function makeVehicle(overrides = {}) {
   return {
@@ -183,6 +195,15 @@ describe('state transitions: active → clear-pending → cleared', () => {
   let mockDb;
   const realDateNow = Date.now;
 
+  // Helper: confirm detour with spread evidence so zone is computed
+  function confirmDetourWithZone(vehicleId = 'bus-1') {
+    for (let i = 0; i < 3; i++) {
+      processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_WEST })], shapes, routeShapeMapping);
+    }
+    processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_MID })], shapes, routeShapeMapping);
+    return processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_EAST })], shapes, routeShapeMapping);
+  }
+
   beforeEach(() => {
     mockDb = makeFirestoreMock();
     jest.resetModules();
@@ -205,16 +226,14 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('active → clear-pending writes DETOUR_UPDATED with state changedField', async () => {
     const BASE_TIME = realDateNow();
-    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_COORD });
+    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
 
-    // Confirm detour
+    // Confirm detour with zone
     Date.now = () => BASE_TIME;
-    for (let i = 0; i < 3; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
-    let activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
+    let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Advance past grace, enter clear-pending
+    // Advance past grace, enter clear-pending via on-route in zone
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
     for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
       activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
@@ -231,15 +250,13 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('finalized clear writes DETOUR_CLEARED and removes Firestore document', async () => {
     const BASE_TIME = realDateNow();
-    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_COORD });
+    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
 
     Date.now = () => BASE_TIME;
-    for (let i = 0; i < 3; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
-    let activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
+    let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Enter clear-pending
+    // Enter clear-pending via on-route in zone
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
     for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
       activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
@@ -266,15 +283,14 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('reactivation from clear-pending writes DETOUR_UPDATED with state restored', async () => {
     const BASE_TIME = realDateNow();
-    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_COORD });
+    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
+    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_MID });
 
     Date.now = () => BASE_TIME;
-    for (let i = 0; i < 3; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
-    let activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
+    let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Enter clear-pending
+    // Enter clear-pending via on-route in zone
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
     for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
       activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);

@@ -1,6 +1,7 @@
 import { MAP_CONFIG, OTP_CONFIG, ROUTING_CONFIG } from '../config/constants';
 import { planTripLocal, RoutingError, ROUTING_ERROR_CODES } from './localRouter';
 import { enrichTripPlanWithWalking } from './walkingService';
+import { analyzeZoneInvolvement, buildZoneAwareTrip, estimateOnDemandDuration } from './onDemandRouter';
 import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
@@ -79,6 +80,8 @@ export const TRIP_ERROR_CODES = {
   NO_DATA: 'NO_DATA',
   NO_SERVICE: 'NO_SERVICE',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
+  ZONE_NO_SERVICE: 'ZONE_NO_SERVICE',
+  ZONE_NO_HUB_STOPS: 'ZONE_NO_HUB_STOPS',
 };
 
 // Custom error class for trip planning errors
@@ -639,6 +642,30 @@ function setCachedTrip(key, data) {
 }
 
 /**
+ * Build a single ON_DEMAND leg for zone-based trips
+ */
+const buildOnDemandLeg = ({ zone, from, to, estimatedDuration, startTime }) => ({
+  mode: 'ON_DEMAND',
+  startTime: startTime,
+  endTime: startTime + estimatedDuration * 1000,
+  duration: estimatedDuration,
+  distance: haversineDistance(from.lat, from.lon, to.lat, to.lon) * 1.3,
+  from: { name: from.name || 'Pickup', lat: from.lat, lon: from.lon },
+  to: { name: to.name || 'Drop-off', lat: to.lat, lon: to.lon },
+  route: null,
+  headsign: null,
+  tripId: null,
+  intermediateStops: [],
+  legGeometry: null,
+  steps: [],
+  zoneName: zone.name,
+  zoneId: zone.id,
+  zoneColor: zone.color,
+  bookingPhone: zone.bookingPhone,
+  isOnDemand: true,
+});
+
+/**
  * Plan a trip using the best available method
  * Tries local router first, falls back to OTP if needed
  *
@@ -646,7 +673,7 @@ function setCachedTrip(key, data) {
  * @returns {Promise<Object>} Trip plan results
  */
 export const planTripAuto = async (params) => {
-  const { routingData, ...otpParams } = params;
+  const { routingData, onDemandZones, stops: contextStops, ...otpParams } = params;
 
   // Validate inputs before routing
   const validation = validateTripInputs({
@@ -660,10 +687,73 @@ export const planTripAuto = async (params) => {
     );
   }
 
-  // Check cache before routing
+  // ─── On-demand zone analysis ────────────────────────────────────
+  let zoneTrip = null;
+  let zoneAnalysis = null;
+  const featureEnabled = typeof process !== 'undefined' &&
+    process.env?.EXPO_PUBLIC_ENABLE_TOD_ZONES !== 'false';
+
+  if (featureEnabled && onDemandZones && Object.keys(onDemandZones).length > 0) {
+    zoneAnalysis = analyzeZoneInvolvement({
+      fromLat: params.fromLat,
+      fromLon: params.fromLon,
+      toLat: params.toLat,
+      toLon: params.toLon,
+      onDemandZones,
+      stops: contextStops,
+      departureTime: params.date || new Date(),
+    });
+
+    if (zoneAnalysis.needsOnDemand) {
+      zoneTrip = buildZoneAwareTrip(zoneAnalysis);
+
+      // Both in same zone — single ON_DEMAND leg, no RAPTOR needed
+      if (zoneTrip.sameZone) {
+        const duration = estimateOnDemandDuration(
+          params.fromLat, params.fromLon,
+          params.toLat, params.toLon
+        );
+        const now = Date.now();
+        const leg = buildOnDemandLeg({
+          zone: zoneTrip.zone,
+          from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
+          to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
+          estimatedDuration: duration,
+          startTime: now,
+        });
+        return {
+          from: { name: 'Origin', lat: params.fromLat, lon: params.fromLon },
+          to: { name: 'Destination', lat: params.toLat, lon: params.toLon },
+          itineraries: [{
+            id: 'on-demand-direct',
+            duration: duration,
+            startTime: now,
+            endTime: now + duration * 1000,
+            walkTime: 0,
+            transitTime: 0,
+            waitingTime: 0,
+            walkDistance: 0,
+            transfers: 0,
+            legs: [leg],
+            isOnDemand: true,
+          }],
+        };
+      }
+
+      // Adjust origin/dest for RAPTOR routing via hub stops
+      if (zoneTrip.raptorFrom) {
+        params = { ...params, fromLat: zoneTrip.raptorFrom.lat, fromLon: zoneTrip.raptorFrom.lon };
+      }
+      if (zoneTrip.raptorTo) {
+        params = { ...params, toLat: zoneTrip.raptorTo.lat, toLon: zoneTrip.raptorTo.lon };
+      }
+    }
+  }
+
+  // Check cache before routing (use adjusted coordinates if zone-modified)
   const cacheKey = getTripCacheKey(params.fromLat, params.fromLon, params.toLat, params.toLon);
   const cached = getCachedTrip(cacheKey);
-  if (cached) {
+  if (cached && !zoneTrip) {
     return cached;
   }
 
@@ -673,19 +763,88 @@ export const planTripAuto = async (params) => {
   if (routingData) {
     try {
       result = await planTripWithLocalRouter(params);
-      setCachedTrip(cacheKey, result);
-      return result;
     } catch (error) {
       logger.warn('Local router failed, trying OTP:', error.message);
+      result = null;
       // Fall through to OTP
     }
   }
 
-  // Fall back to OTP
-  result = await planTrip(otpParams);
+  // Fall back to OTP if local router wasn't used or failed
+  if (!result) {
+    result = await planTrip(otpParams);
+  }
+
+  // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
+  if (zoneTrip && !zoneTrip.sameZone) {
+    result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, params);
+  }
+
   setCachedTrip(cacheKey, result);
   return result;
 };
+
+/**
+ * Splice ON_DEMAND legs onto the beginning/end of each itinerary
+ */
+function spliceOnDemandLegs(tripPlan, zoneTrip, zoneAnalysis, params) {
+  if (!tripPlan?.itineraries) return tripPlan;
+
+  const itineraries = tripPlan.itineraries.map((itinerary) => {
+    const legs = [...itinerary.legs];
+    let totalDuration = itinerary.duration;
+
+    // Prepend ON_DEMAND leg (origin in zone → hub stop)
+    if (zoneTrip.prependLeg) {
+      const { zone, hubStop } = zoneTrip.prependLeg;
+      const firstLeg = legs[0];
+      const startTime = firstLeg ? firstLeg.startTime : Date.now();
+      const duration = estimateOnDemandDuration(
+        params.fromLat, params.fromLon,
+        hubStop.latitude, hubStop.longitude
+      );
+      const odLeg = buildOnDemandLeg({
+        zone,
+        from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
+        to: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
+        estimatedDuration: duration,
+        startTime: startTime - duration * 1000,
+      });
+      legs.unshift(odLeg);
+      totalDuration += duration;
+    }
+
+    // Append ON_DEMAND leg (hub stop → destination in zone)
+    if (zoneTrip.appendLeg) {
+      const { zone, hubStop } = zoneTrip.appendLeg;
+      const lastLeg = legs[legs.length - 1];
+      const startTime = lastLeg ? lastLeg.endTime : Date.now();
+      const duration = estimateOnDemandDuration(
+        hubStop.latitude, hubStop.longitude,
+        params.toLat, params.toLon
+      );
+      const odLeg = buildOnDemandLeg({
+        zone,
+        from: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
+        to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
+        estimatedDuration: duration,
+        startTime,
+      });
+      legs.push(odLeg);
+      totalDuration += duration;
+    }
+
+    return {
+      ...itinerary,
+      legs,
+      duration: totalDuration,
+      startTime: legs[0].startTime,
+      endTime: legs[legs.length - 1].endTime,
+    };
+  });
+
+  return { ...tripPlan, itineraries };
+}
 
 /**
  * Format a number of minutes to human readable string

@@ -2,11 +2,11 @@
  * Web-specific HomeScreen - Premium UI/UX Design v2.0
  * Features: Refined header, collapsible route filters, prominent alerts, modern controls
  */
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { useTransit } from '../context/TransitContext';
-import { MAP_CONFIG } from '../config/constants';
+import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
+import { MAP_CONFIG, PERFORMANCE_BUDGETS } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
@@ -32,7 +32,14 @@ import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import DetourOverlay from '../components/DetourOverlay.web';
+import { useZoneOverlays } from '../hooks/useZoneOverlays';
+import ZoneOverlay from '../components/ZoneOverlay.web';
+import ZoneInfoSheet from '../components/ZoneInfoSheet.web';
+import HomeScreenControls from '../components/HomeScreenControls';
+import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
 // SVG Icons as components - Refined for premium feel
 const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
@@ -108,39 +115,40 @@ const HomeScreen = ({ route }) => {
     shapeOverlapOffsets,
     routeShapeMapping,
     routeStopsMapping,
-    vehicles,
     isLoadingStatic,
-    isLoadingVehicles,
     staticError,
-    lastVehicleUpdate,
     loadStaticData,
     isOffline,
+    usingCachedData,
+    ensureRoutingData,
+  } = useTransitStatic();
+  const {
+    vehicles,
+    lastVehicleUpdate,
     serviceAlerts,
     isRouteDetouring,
     activeDetours,
-    usingCachedData,
-    routingData,
-    isRoutingReady,
-  } = useTransit();
+    onDemandZones,
+  } = useTransitRealtime();
 
   const {
-    selectedRoute, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
-  } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: false });
+    selectedRoutes, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+  } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const perfRef = useRef({ lastWarnTs: 0 });
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
+  const [showZones, setShowZones] = useState(true);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [whereToText, setWhereToText] = useState('');
   const pulseAnim = useMapPulseAnimation();
 
-  // Normalize single-select to a Set for shared hooks
-  const selectedRouteIds = useMemo(
-    () => selectedRoute ? new Set([selectedRoute]) : new Set(),
-    [selectedRoute]
-  );
+  const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
-  const { detourOverlays } = useDetourOverlays({ selectedRouteIds, activeDetours });
+  const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
 
   // Helper to check if a route has active alerts
   const getRouteAlerts = useCallback((routeId) => {
@@ -153,8 +161,9 @@ const HomeScreen = ({ route }) => {
 
   // Trip planning — shared hook (with onItinerariesReady for initial zoom)
   const trip = useTripPlanner({
-    routingData,
-    isRoutingReady,
+    ensureRoutingData,
+    onDemandZones,
+    stops,
     onItinerariesReady: (itinerary) => {
       setUserHasInteracted(false);
       fitMapToItinerary(itinerary);
@@ -250,16 +259,16 @@ const HomeScreen = ({ route }) => {
     else if (currentZoom <= 15) base = 8;
     else base = 10;
 
-    if (selectedRoute === routeId) base += 2;
+    if (selectedRoutes.has(routeId)) base += 2;
     if (hoveredRouteId === routeId) base += 2;
     return base;
-  }, [currentZoom, selectedRoute, hoveredRouteId]);
+  }, [currentZoom, selectedRoutes, hoveredRouteId]);
 
   // Displayed entities (vehicles, shapes, stops, detours) based on selection
   const {
     getRouteColor, displayedVehicles, displayedShapes, displayedStops,
   } = useDisplayedEntities({
-    selectedRouteIds: selectedRouteIds,
+    selectedRouteIds: selectedRoutes,
     vehicles, routes, trips, shapes, processedShapes,
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
@@ -287,12 +296,56 @@ const HomeScreen = ({ route }) => {
     logger.info('[route-label-debug][web] %s', lines.join(' | '));
   }, [displayedVehicles, routes, tripMapping]);
 
+  useEffect(() => {
+    if (!PERF_DEBUG) return;
+    const nowTs = Date.now();
+    if (nowTs - perfRef.current.lastWarnTs < 2000) return;
+
+    if (displayedVehicles.length > PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_VEHICLES) {
+      logger.warn(
+        '[perf][home-map-web] Visible vehicles=%d (budget=%d)',
+        displayedVehicles.length,
+        PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_VEHICLES
+      );
+      perfRef.current.lastWarnTs = nowTs;
+      return;
+    }
+
+    if (displayedStops.length > PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_STOPS) {
+      logger.warn(
+        '[perf][home-map-web] Visible stops=%d (budget=%d)',
+        displayedStops.length,
+        PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_STOPS
+      );
+      perfRef.current.lastWarnTs = nowTs;
+    }
+  }, [displayedVehicles.length, displayedStops.length]);
+
   // Handle map region change
   const handleRegionChange = (region) => {
+    const start =
+      typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
+        ? global.performance.now()
+        : Date.now();
     setMapRegion(region);
     // Derive zoom from latitudeDelta
     const zoom = Math.round(Math.log(360 / region.latitudeDelta) / Math.LN2);
     setCurrentZoom(zoom);
+
+    if (!PERF_DEBUG) return;
+    const duration =
+      (typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
+        ? global.performance.now()
+        : Date.now()) - start;
+    const nowTs = Date.now();
+    if (duration > PERFORMANCE_BUDGETS.MAP_REGION_HANDLER_MS && nowTs - perfRef.current.lastWarnTs > 2000) {
+      logger.warn(
+        '[perf][home-map-web] Slow region handler=%dms (budget=%dms)',
+        Math.round(duration),
+        PERFORMANCE_BUDGETS.MAP_REGION_HANDLER_MS
+      );
+      perfRef.current.lastWarnTs = nowTs;
+    }
   };
 
   // Handle stop press
@@ -331,6 +384,27 @@ const HomeScreen = ({ route }) => {
 
   const exitTripPlanningMode = () => {
     resetTrip();
+    setWhereToText('');
+  };
+
+  // Handle "Where to?" address selection — open trip planner with destination + current location
+  const handleWhereToSelect = (address) => {
+    setWhereToText('');
+    enterPlanningMode();
+    setSelectedStop(null);
+    setTripTo({ lat: address.lat, lon: address.lon }, address.shortName || address.displayName);
+    useCurrentLocationForTrip();
+  };
+
+  const handleZonePress = (zoneId) => {
+    const zone = onDemandZones?.[zoneId];
+    if (zone) setSelectedZone(zone);
+  };
+
+  const handleZoneDirectionsToHub = (hubStop) => {
+    setSelectedZone(null);
+    enterPlanningMode();
+    setTripTo({ lat: hubStop.latitude, lon: hubStop.longitude }, hubStop.name || 'Hub Stop');
   };
 
   const useCurrentLocationForTrip = () => {
@@ -390,19 +464,7 @@ const HomeScreen = ({ route }) => {
     navigation.navigate('Navigation', { itinerary });
   };
 
-  if (isLoadingStatic) {
-    return (
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingTitle}>Loading Barrie Transit</Text>
-          <Text style={styles.loadingText}>Fetching routes and schedules...</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (staticError) {
+  if (staticError && routes.length === 0) {
     return (
       <View style={styles.errorContainer}>
         <View style={styles.errorCard}>
@@ -466,6 +528,16 @@ const HomeScreen = ({ route }) => {
         {!isTripPreviewMode && detourOverlays.map((overlay) => (
           <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
         ))}
+        {/* On-demand zone overlays */}
+        {!isTripPreviewMode && zoneOverlays.map((zone) => (
+          <ZoneOverlay
+            key={`zone-${zone.id}`}
+            id={zone.id}
+            coordinates={zone.coordinates}
+            color={zone.color}
+            onPress={handleZonePress}
+          />
+        ))}
         {/* Regular stops - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedStops.map((stop) => (
           <WebStopMarker
@@ -486,8 +558,8 @@ const HomeScreen = ({ route }) => {
             positions={route.coordinates.map(c => [c.latitude, c.longitude])}
             pathOptions={{
               color: route.color,
-              weight: route.isWalk ? 4 : 6,
-              dashArray: route.isWalk ? '10, 8' : null,
+              weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
+              dashArray: route.isWalk ? '10, 8' : route.isOnDemand ? '12, 6' : null,
               lineCap: 'round',
               lineJoin: 'round',
               opacity: 1,
@@ -566,6 +638,14 @@ const HomeScreen = ({ route }) => {
         )}
       </WebMapView>
 
+      {/* Inline loading indicator while transit data loads */}
+      {isLoadingStatic && (
+        <View style={styles.loadingBanner}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingBannerText}>Loading transit data...</Text>
+        </View>
+      )}
+
       {/* Map Tap Popup for "Choose on Map" feature */}
       <MapTapPopup
         visible={!!mapTapLocation}
@@ -611,30 +691,40 @@ const HomeScreen = ({ route }) => {
         />
       ) : !selectedStop ? (
         <>
-          {/* Search Bar Header */}
-          <TouchableOpacity
-            style={styles.header}
-            onPress={() => navigation.navigate('Search')}
-            activeOpacity={0.85}
-          >
-            <SearchIcon size={18} color={COLORS.grey500} />
-            <Text style={styles.headerPlaceholder}>Search stops, routes & addresses</Text>
-            <View style={styles.headerRight}>
-              {isOffline ? (
-                <View style={styles.statusBadgeOffline}>
-                  <View style={styles.statusDotOffline} />
-                  <Text style={styles.statusTextOffline}>Offline</Text>
+          {/* Where to? Search Bar with autocomplete */}
+          <View style={styles.header}>
+            <AddressAutocomplete
+              value={whereToText}
+              onChangeText={setWhereToText}
+              onSelect={handleWhereToSelect}
+              placeholder="Where to?"
+              icon={<SearchIcon size={18} color={COLORS.grey500} />}
+              style={styles.whereToAutocomplete}
+              inputStyle={styles.whereToInput}
+              rightIcon={
+                <View style={styles.headerRight}>
+                  {isOffline ? (
+                    <View style={styles.statusBadgeOffline}>
+                      <View style={styles.statusDotOffline} />
+                      <Text style={styles.statusTextOffline}>Offline</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.statusBadgeLive}>
+                      <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
+                      <Text style={styles.statusTextLive}>
+                        {vehicles.length} buses live
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              ) : (
-                <View style={styles.statusBadgeLive}>
-                  <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
-                  <Text style={styles.statusTextLive}>
-                    {vehicles.length} buses live
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+              }
+            />
+          </View>
+
+          {/* Post-trip survey nudge */}
+          <SurveyNudgeBanner
+            onTakeSurvey={() => navigation.getParent()?.navigate('Profile', { screen: 'Survey', params: { trigger: 'post_trip' } })}
+          />
 
           {/* Center Map Button - Top Right */}
           <TouchableOpacity
@@ -656,11 +746,22 @@ const HomeScreen = ({ route }) => {
                 <Text style={styles.alertsHeaderText}>{serviceAlerts.length}</Text>
               </TouchableOpacity>
             )}
+            {/* Zones Toggle */}
+            {Object.keys(onDemandZones || {}).length > 0 && (
+              <TouchableOpacity
+                style={[styles.filterChip, showZones && styles.filterChipActive]}
+                onPress={() => setShowZones(z => !z)}
+              >
+                <Text style={[styles.filterChipText, showZones && styles.filterChipTextActive]}>
+                  Zones
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={[styles.filterChip, !selectedRoute && styles.filterChipActive]}
+              style={[styles.filterChip, selectedRoutes.size === 0 && styles.filterChipActive]}
               onPress={() => handleRouteSelect(null)}
             >
-              <Text style={[styles.filterChipText, !selectedRoute && styles.filterChipTextActive]}>
+              <Text style={[styles.filterChipText, selectedRoutes.size === 0 && styles.filterChipTextActive]}>
                 All
               </Text>
             </TouchableOpacity>
@@ -675,7 +776,7 @@ const HomeScreen = ({ route }) => {
               })
               .map((r) => {
                 const routeColor = getRouteColor(r.id);
-                const isActive = selectedRoute === r.id;
+                const isActive = selectedRoutes.has(r.id);
                 const routeAlerts = getRouteAlerts(r.id);
                 const hasAlert = routeAlerts.length > 0;
                 return (
@@ -760,15 +861,15 @@ const HomeScreen = ({ route }) => {
               onPress={enterTripPlanningMode}
               activeOpacity={0.8}
             >
-              <DirectionsIcon size={18} color={COLORS.white} />
+              <DirectionsIcon size={27} color={COLORS.white} />
               <Text style={styles.planTripButtonText}>Plan Trip</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* Trip Bottom Sheet - show when in trip planning mode AND searching/searched */}
-      {isTripPlanningMode && (hasTripSearched || isTripLoading) && (
+      {/* Trip Bottom Sheet - show whenever in trip planning mode (matches native) */}
+      {isTripPlanningMode && (
         <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
           <TripBottomSheet
             itineraries={itineraries}
@@ -781,6 +882,11 @@ const HomeScreen = ({ route }) => {
             hasSearched={hasTripSearched}
             recentTrips={recentTrips}
             onSelectRecentTrip={handleSelectRecentTrip}
+            onRetry={() => {
+              if (tripFromLocation && tripToLocation) {
+                searchTrips(tripFromLocation, tripToLocation);
+              }
+            }}
           />
         </SheetErrorBoundary>
       )}
@@ -797,6 +903,15 @@ const HomeScreen = ({ route }) => {
         </SheetErrorBoundary>
       )}
 
+      {/* Zone Info Sheet */}
+      {!isTripPlanningMode && selectedZone && (
+        <ZoneInfoSheet
+          zone={selectedZone}
+          onClose={() => setSelectedZone(null)}
+          onDirectionsToHub={handleZoneDirectionsToHub}
+        />
+      )}
+
     </View>
   );
 };
@@ -807,35 +922,25 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // Loading State
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  // Loading banner (inline on map)
+  loadingBanner: {
+    position: 'absolute',
+    top: 72,
+    alignSelf: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
-    padding: SPACING.xl,
+    backgroundColor: COLORS.white,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    gap: SPACING.xs,
+    zIndex: 1001,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
   },
-  loadingCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.xxl,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    boxShadow: '0 8px 32px rgba(23, 43, 77, 0.12)',
-    minWidth: 300,
-  },
-  loadingTitle: {
-    marginTop: SPACING.lg,
-    fontSize: FONT_SIZES.xl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.textPrimary,
-    letterSpacing: -0.3,
-  },
-  loadingText: {
-    marginTop: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+  loadingBannerText: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
-
   // Error State
   errorContainer: {
     flex: 1,
@@ -900,24 +1005,20 @@ const styles = StyleSheet.create({
     top: SPACING.sm,
     left: SPACING.sm,
     right: SPACING.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
+    zIndex: 1000,
+  },
+  whereToAutocomplete: {
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingLeft: SPACING.lg,
+    paddingVertical: 2,
+    paddingLeft: SPACING.sm,
     paddingRight: SPACING.sm,
     boxShadow: '0 2px 12px rgba(23, 43, 77, 0.12)',
-    zIndex: 1000,
-    gap: SPACING.sm,
-    cursor: 'pointer',
-    transition: 'box-shadow 0.2s ease',
   },
-  headerPlaceholder: {
-    flex: 1,
+  whereToInput: {
+    backgroundColor: 'transparent',
+    height: 40,
     fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    letterSpacing: -0.1,
   },
   headerRight: {
     flexDirection: 'row',
@@ -972,12 +1073,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 72,
     left: SPACING.sm,
-    width: 64,
+    width: 130,
     maxHeight: 'calc(100% - 170px)',
     backgroundColor: COLORS.white,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.xs,
-    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: SPACING.xs,
     zIndex: 998,
     boxShadow: '0 4px 20px rgba(23, 43, 77, 0.12)',
@@ -988,6 +1091,8 @@ const styles = StyleSheet.create({
     overflowX: 'visible',
   },
   filterPanelTitle: {
+    width: '100%',
+    textAlign: 'center',
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textSecondary,
@@ -1000,14 +1105,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.grey100,
     borderWidth: 1.5,
     borderColor: 'transparent',
-    gap: 4,
-    minWidth: 52,
-    minHeight: 32,
+    gap: 3,
+    minWidth: 48,
+    minHeight: 30,
   },
   filterChipActive: {
     backgroundColor: COLORS.primary,

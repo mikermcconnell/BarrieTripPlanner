@@ -33,6 +33,7 @@ const fs = require('fs');
 const path = require('path');
 const { getAuth } = require('./firebaseAdmin');
 const { getDetourHistory, HISTORY_MAX_LIMIT } = require('./detourPublisher');
+const surveyRoutes = require('./surveyRoutes');
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -124,8 +125,8 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Token, X-Client-Id');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Token, X-Client-Id, X-Device-Id, X-Admin-Key');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -133,6 +134,8 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+app.use(express.json());
 
 function sanitizeClientKey(raw) {
   if (!raw) return '';
@@ -198,6 +201,9 @@ const limiter = rateLimit({
   },
 });
 app.use('/api/', limiter);
+
+// ─── Survey Routes ────────────────────────────────────────────
+app.use('/api/survey', surveyRoutes);
 
 // ─── Helper ───────────────────────────────────────────────────────
 
@@ -609,6 +615,89 @@ app.get('/api/detour-rollout-health', async (req, res) => {
   });
 });
 
+// ─── Baseline Shape Management ────────────────────────────────
+
+const {
+  getBaselineData,
+  setBaseline,
+  clearBaseline,
+  getBaselineStatus,
+  logShapeDivergence: baselineLogDivergence,
+} = require('./baselineManager');
+
+app.get('/api/baseline-status', async (_req, res) => {
+  try {
+    const status = getBaselineStatus();
+
+    // If baseline is loaded, show divergence summary from live GTFS
+    let divergence = null;
+    if (status.loaded) {
+      try {
+        const { getStaticData } = require('./gtfsLoader');
+        const liveData = await getStaticData();
+        const baselineMapping = (await getBaselineData(liveData)).routeShapeMapping;
+        const liveMapping = liveData.routeShapeMapping;
+
+        const added = [];
+        const removed = [];
+        for (const [routeId, liveShapeIds] of liveMapping) {
+          const baseIds = baselineMapping.get(routeId);
+          if (!baseIds) {
+            added.push({ routeId, shapeCount: liveShapeIds.length });
+            continue;
+          }
+          const baseSet = new Set(baseIds);
+          const liveSet = new Set(liveShapeIds);
+          const addedShapes = liveShapeIds.filter((id) => !baseSet.has(id));
+          const removedShapes = baseIds.filter((id) => !liveSet.has(id));
+          if (addedShapes.length > 0) added.push({ routeId, shapes: addedShapes });
+          if (removedShapes.length > 0) removed.push({ routeId, shapes: removedShapes });
+        }
+        for (const routeId of baselineMapping.keys()) {
+          if (!liveMapping.has(routeId)) removed.push({ routeId, note: 'route removed from live' });
+        }
+
+        divergence = {
+          hasChanges: added.length > 0 || removed.length > 0,
+          added,
+          removed,
+        };
+      } catch (_err) {
+        divergence = { error: 'Could not load live GTFS for comparison' };
+      }
+    }
+
+    res.json({ ...status, divergence });
+  } catch (err) {
+    console.error('[baseline-status] Failed:', err.message);
+    res.status(500).json({ error: 'Failed to retrieve baseline status' });
+  }
+});
+
+app.post('/api/baseline/set', async (_req, res) => {
+  try {
+    const { getStaticData, forceRefresh } = require('./gtfsLoader');
+    await forceRefresh();
+    const liveData = await getStaticData();
+    await setBaseline(liveData);
+    const status = getBaselineStatus();
+    res.json({ ok: true, message: 'Baseline set from current GTFS', ...status });
+  } catch (err) {
+    console.error('[baseline/set] Failed:', err.message);
+    res.status(500).json({ error: 'Failed to set baseline', details: err.message });
+  }
+});
+
+app.post('/api/baseline/clear', async (_req, res) => {
+  try {
+    await clearBaseline();
+    res.json({ ok: true, message: 'Baseline cleared. Will auto-reinit from live GTFS on next tick.' });
+  } catch (err) {
+    console.error('[baseline/clear] Failed:', err.message);
+    res.status(500).json({ error: 'Failed to clear baseline', details: err.message });
+  }
+});
+
 // ─── News Worker ─────────────────────────────────────────────
 
 let newsWorker = null;
@@ -654,6 +743,11 @@ module.exports = app;
 
 try {
   const { onRequest } = require('firebase-functions/v2/https');
+
+  // Start background workers in Cloud Functions mode (require.main !== module)
+  if (detourWorker) detourWorker.start();
+  if (newsWorker) newsWorker.start();
+
   module.exports.apiProxy = onRequest(
     {
       region: 'us-central1',
@@ -661,6 +755,7 @@ try {
       secrets: ['LOCATIONIQ_API_KEY'],
       timeoutSeconds: 60,
       memory: '512MiB',
+      minInstances: 1,
     },
     app
   );

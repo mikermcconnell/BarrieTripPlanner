@@ -8,7 +8,7 @@
  * rendering (Leaflet vs react-native-maps).
  */
 
-import { useReducer, useCallback, useRef } from 'react';
+import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { planTripAuto, TripPlanningError } from '../services/tripService';
 import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
 import { validateTripInputs } from '../utils/tripValidation';
@@ -123,20 +123,22 @@ function tripReducer(state, action) {
 
 /**
  * @param {Object} options
- * @param {Object|null} options.routingData - RAPTOR routing data from TransitContext
- * @param {boolean} options.isRoutingReady - Whether local routing data is loaded
+ * @param {Function} [options.ensureRoutingData] - Async function that lazily builds and returns routing data
  * @param {Function} [options.onItinerariesReady] - Callback after successful search (e.g. fit map bounds)
  * @param {Function} [options.applyDelays] - Optional function to apply real-time delays to itineraries
  */
 export const useTripPlanner = ({
-  routingData,
-  isRoutingReady,
+  ensureRoutingData,
   onItinerariesReady,
   applyDelays,
+  onDemandZones,
+  stops,
 } = {}) => {
   const [state, dispatch] = useReducer(tripReducer, initialState);
   const fromDebounceRef = useRef(null);
   const toDebounceRef = useRef(null);
+  const fromRequestSeqRef = useRef(0);
+  const toRequestSeqRef = useRef(0);
 
   // ─── Search ──────────────────────────────────────────────────
   const searchTrips = useCallback(async (from, to) => {
@@ -151,6 +153,16 @@ export const useTripPlanner = ({
     dispatch({ type: SEARCH_START });
 
     try {
+      // Lazily build routing data on first trip search
+      let routing = null;
+      if (ensureRoutingData) {
+        try {
+          routing = await ensureRoutingData();
+        } catch {
+          // Continue without local routing — OTP fallback
+        }
+      }
+
       const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
       const result = await planTripAuto({
         fromLat: from.lat,
@@ -160,8 +172,10 @@ export const useTripPlanner = ({
         date: tripTime,
         time: tripTime,
         arriveBy: state.timeMode === 'arriveBy',
-        routingData: isRoutingReady ? routingData : null,
+        routingData: routing,
         enrichWalking: false, // Skip walking API calls for preview; enrich on navigation start
+        onDemandZones,
+        stops,
       });
 
       let finalItineraries = result.itineraries;
@@ -191,25 +205,30 @@ export const useTripPlanner = ({
       }
     } catch (err) {
       console.error('Error searching trips:', err);
-      const message = err instanceof TripPlanningError
-        ? err.message
-        : (err.message || 'Could not find routes. Please try again.');
-      dispatch({ type: SEARCH_ERROR, payload: message });
+      if (err instanceof TripPlanningError) {
+        // Preserve full error object so TripErrorDisplay can render rich UI
+        dispatch({ type: SEARCH_ERROR, payload: err });
+      } else {
+        dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
+      }
     }
-  }, [routingData, isRoutingReady, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime]);
+  }, [ensureRoutingData, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime, onDemandZones, stops]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
     dispatch({ type: SET_FROM_TEXT, payload: text });
     if (fromDebounceRef.current) clearTimeout(fromDebounceRef.current);
     if (text.length < 3) {
+      fromRequestSeqRef.current += 1;
       dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
       return;
     }
     fromDebounceRef.current = setTimeout(async () => {
+      const requestSeq = ++fromRequestSeqRef.current;
       try {
         const results = await autocompleteAddress(text);
+        if (requestSeq !== fromRequestSeqRef.current) return;
         const sorted = results.sort(
           (a, b) => getDistanceFromBarrie(a.lat, a.lon) - getDistanceFromBarrie(b.lat, b.lon)
         );
@@ -225,13 +244,16 @@ export const useTripPlanner = ({
     dispatch({ type: SET_TO_TEXT, payload: text });
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
     if (text.length < 3) {
+      toRequestSeqRef.current += 1;
       dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });
       return;
     }
     toDebounceRef.current = setTimeout(async () => {
+      const requestSeq = ++toRequestSeqRef.current;
       try {
         const results = await autocompleteAddress(text);
+        if (requestSeq !== toRequestSeqRef.current) return;
         const sorted = results.sort(
           (a, b) => getDistanceFromBarrie(a.lat, a.lon) - getDistanceFromBarrie(b.lat, b.lon)
         );
@@ -246,6 +268,7 @@ export const useTripPlanner = ({
   // ─── Suggestion selection ────────────────────────────────────
   const selectFromSuggestion = useCallback((item) => {
     const loc = { lat: item.lat, lon: item.lon };
+    fromRequestSeqRef.current += 1;
     dispatch({ type: SET_FROM_TEXT, payload: item.shortName });
     dispatch({ type: SET_FROM, payload: loc });
     dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
@@ -256,6 +279,7 @@ export const useTripPlanner = ({
 
   const selectToSuggestion = useCallback((item) => {
     const loc = { lat: item.lat, lon: item.lon };
+    toRequestSeqRef.current += 1;
     dispatch({ type: SET_TO_TEXT, payload: item.shortName });
     dispatch({ type: SET_TO, payload: loc });
     dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
@@ -281,6 +305,14 @@ export const useTripPlanner = ({
     if (state.from && location) searchTrips(state.from, location);
   }, [state.from, searchTrips]);
 
+  const setFromText = useCallback((text) => {
+    dispatch({ type: SET_FROM_TEXT, payload: text });
+  }, []);
+
+  const setToText = useCallback((text) => {
+    dispatch({ type: SET_TO_TEXT, payload: text });
+  }, []);
+
   // ─── Select itinerary ────────────────────────────────────────
   const selectItinerary = useCallback((index) => {
     dispatch({ type: SELECT_ITINERARY, payload: index });
@@ -303,7 +335,18 @@ export const useTripPlanner = ({
   const reset = useCallback(() => {
     if (fromDebounceRef.current) clearTimeout(fromDebounceRef.current);
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
+    fromRequestSeqRef.current += 1;
+    toRequestSeqRef.current += 1;
     dispatch({ type: RESET });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (fromDebounceRef.current) clearTimeout(fromDebounceRef.current);
+      if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
+      fromRequestSeqRef.current += 1;
+      toRequestSeqRef.current += 1;
+    };
   }, []);
 
   // ─── Use current location ───────────────────────────────────
@@ -337,6 +380,8 @@ export const useTripPlanner = ({
     swap,
     setFrom,
     setTo,
+    setFromText,
+    setToText,
     selectItinerary,
     enterPlanningMode,
     reset,

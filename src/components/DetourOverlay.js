@@ -13,6 +13,9 @@ import { View, StyleSheet } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import RoutePolyline from './RoutePolyline';
 
+const hasFiniteCoordinate = (point) =>
+  Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+
 const styles = StyleSheet.create({
   marker: {
     width: 14,
@@ -56,7 +59,7 @@ const DetourOverlay = ({
         outlineWidth={1.5}
       />
     )}
-    {entryPoint && (
+    {hasFiniteCoordinate(entryPoint) && (
       <MapLibreGL.PointAnnotation
         id={`detour-entry-${routeId}`}
         coordinate={[entryPoint.longitude, entryPoint.latitude]}
@@ -64,7 +67,7 @@ const DetourOverlay = ({
         <View style={[styles.marker, { borderColor: markerBorderColor, opacity }]} />
       </MapLibreGL.PointAnnotation>
     )}
-    {exitPoint && (
+    {hasFiniteCoordinate(exitPoint) && (
       <MapLibreGL.PointAnnotation
         id={`detour-exit-${routeId}`}
         coordinate={[exitPoint.longitude, exitPoint.latitude]}

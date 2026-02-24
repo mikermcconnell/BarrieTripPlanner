@@ -3,17 +3,16 @@
  * Web platform uses HomeScreen.web.js instead
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
-import { useTransit } from '../context/TransitContext';
-import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
+import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
+import { MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
-import TripErrorDisplay from '../components/TripErrorDisplay';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
 import { useTripVisualization } from '../hooks/useTripVisualization';
@@ -27,11 +26,13 @@ import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLa
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
+import { useZoneOverlays } from '../hooks/useZoneOverlays';
+import ZoneOverlay from '../components/ZoneOverlay';
+import ZoneInfoSheet from '../components/ZoneInfoSheet';
 
 // Native map components
 import BusMarker from '../components/BusMarker';
 import RoutePolyline from '../components/RoutePolyline';
-import StopMarker from '../components/StopMarker';
 import DetourOverlay from '../components/DetourOverlay';
 import PulsingSpinner from '../components/PulsingSpinner';
 
@@ -43,19 +44,15 @@ import MapTapPopup from '../components/MapTapPopup';
 import HomeScreenControls from '../components/HomeScreenControls';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
+import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 
 // SVG Icons for native replaced with Lucide Icons
 const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => <Icon name="Search" size={size} color={color} />;
 const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="Map" size={size} color={color} />;
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
-
-// Helper: convert region {lat, lng, latDelta, lngDelta} to MapLibre camera params
-const regionToCamera = (region) => ({
-  centerCoordinate: [region.longitude, region.latitude],
-  zoomLevel: Math.log2(360 / region.latitudeDelta),
-  animationDuration: 500,
-});
+const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
 const computeBounds = (coords) => {
@@ -72,6 +69,21 @@ const computeBounds = (coords) => {
   };
 };
 
+const hasMeaningfulRegionChange = (prevRegion, nextRegion) => {
+  if (!prevRegion || !nextRegion) return true;
+
+  const latThreshold = Math.max(nextRegion.latitudeDelta * 0.04, 0.0005);
+  const lngThreshold = Math.max(nextRegion.longitudeDelta * 0.04, 0.0005);
+  const deltaThreshold = Math.max(nextRegion.latitudeDelta * 0.08, 0.0007);
+
+  return (
+    Math.abs(prevRegion.latitude - nextRegion.latitude) > latThreshold ||
+    Math.abs(prevRegion.longitude - nextRegion.longitude) > lngThreshold ||
+    Math.abs(prevRegion.latitudeDelta - nextRegion.latitudeDelta) > deltaThreshold ||
+    Math.abs(prevRegion.longitudeDelta - nextRegion.longitudeDelta) > deltaThreshold
+  );
+};
+
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
@@ -81,24 +93,23 @@ const HomeScreen = ({ route }) => {
     stops,
     shapes,
     processedShapes,
-    shapeOverlapOffsets,
     routeShapeMapping,
     routeStopsMapping,
     trips,
     tripMapping,
-    vehicles,
     isLoadingStatic,
-    isLoadingVehicles,
     staticError,
-    lastVehicleUpdate,
     loadStaticData,
     isOffline,
-    usingCachedData,
-    routingData,
-    isRoutingReady,
+    ensureRoutingData,
+  } = useTransitStatic();
+  const {
+    vehicles,
     isRouteDetouring,
     activeDetours,
-  } = useTransit();
+    serviceAlerts,
+    onDemandZones,
+  } = useTransitRealtime();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
   const compatMapRef = useRef({
@@ -132,29 +143,38 @@ const HomeScreen = ({ route }) => {
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
+  const [showZones, setShowZones] = useState(true);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [whereToText, setWhereToText] = useState('');
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
-  const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const mapRegionRef = useRef(MAP_CONFIG.INITIAL_REGION);
+  const perfRef = useRef({
+    lastRegionWarnTs: 0,
+    lastRegionEventTs: 0,
+    longRegionHandlers: 0,
+  });
+  const suppressNextMapTapRef = useRef(false);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
-    routingData,
-    isRoutingReady,
+    ensureRoutingData,
     applyDelays: applyDelaysToItineraries,
+    onDemandZones,
+    stops,
     onItinerariesReady: (itinerary) => {
-      setUserHasInteracted(false);
       fitMapToItinerary(itinerary);
     },
   });
   const {
     state: tripState,
     searchTrips,
-    searchFromAddress,
-    searchToAddress,
     selectFromSuggestion,
     selectToSuggestion,
     swap: swapTripLocations,
     setFrom: setTripFrom,
     setTo: setTripTo,
+    setFromText: setTripFromText,
+    setToText: setTripToText,
     selectItinerary: setSelectedItineraryIndex,
     enterPlanningMode,
     reset: resetTrip,
@@ -249,6 +269,46 @@ const HomeScreen = ({ route }) => {
 
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
+  const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
+
+  const displayedStopsById = useMemo(() => {
+    const map = new Map();
+    displayedStops.forEach((stop) => {
+      map.set(String(stop.id), stop);
+    });
+    return map;
+  }, [displayedStops]);
+
+  const stopsGeoJson = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: displayedStops.map((stop) => ({
+      type: 'Feature',
+      id: String(stop.id),
+      geometry: {
+        type: 'Point',
+        coordinates: [stop.longitude, stop.latitude],
+      },
+      properties: {
+        id: String(stop.id),
+        isSelected: selectedStop?.id === stop.id ? 1 : 0,
+      },
+    })),
+  }), [displayedStops, selectedStop]);
+
+  const handleStopLayerPress = useCallback((event) => {
+    const stopFeature = event?.features?.[0];
+    const stopId = stopFeature?.properties?.id;
+    if (!stopId) return;
+    const stop = displayedStopsById.get(String(stopId));
+    if (stop) {
+      suppressNextMapTapRef.current = true;
+      setTimeout(() => {
+        suppressNextMapTapRef.current = false;
+      }, 0);
+      setSelectedStop(stop);
+    }
+  }, [displayedStopsById]);
+
   // Stable camera default settings — prevent re-centering on every re-render
   const cameraDefaultSettings = useMemo(() => ({
     centerCoordinate: [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude],
@@ -276,31 +336,127 @@ const HomeScreen = ({ route }) => {
     logger.info('[route-label-debug][native] %s', lines.join(' | '));
   }, [displayedVehicles, routes, tripMapping]);
 
-  // Handle map region change (MapLibre onRegionDidChange)
-  const handleRegionChange = (feature) => {
-    const { properties, geometry } = feature;
-    const [lng, lat] = geometry.coordinates;
-    const zoom = properties.zoomLevel;
+  useEffect(() => {
+    if (!PERF_DEBUG) return;
+    const nowTs = Date.now();
+    const perf = perfRef.current;
+    if (nowTs - perf.lastRegionWarnTs < 2000) return;
 
-    // Detect user-initiated map moves (pan/zoom by touch)
-    if (properties.isUserInteraction) {
-      setUserHasInteracted(true);
+    if (displayedVehicles.length > PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_VEHICLES) {
+      logger.warn(
+        '[perf][home-map] Visible vehicles=%d (budget=%d)',
+        displayedVehicles.length,
+        PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_VEHICLES
+      );
+      perf.lastRegionWarnTs = nowTs;
+      return;
     }
+
+    if (displayedStops.length > PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_STOPS) {
+      logger.warn(
+        '[perf][home-map] Visible stops=%d (budget=%d)',
+        displayedStops.length,
+        PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_STOPS
+      );
+      perf.lastRegionWarnTs = nowTs;
+      return;
+    }
+
+    if (displayedShapes.length > PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_SHAPES) {
+      logger.warn(
+        '[perf][home-map] Visible shapes=%d (budget=%d)',
+        displayedShapes.length,
+        PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_SHAPES
+      );
+      perf.lastRegionWarnTs = nowTs;
+    }
+  }, [displayedVehicles.length, displayedStops.length, displayedShapes.length]);
+
+  // Handle map region change (MapLibre onRegionDidChange)
+  const handleRegionChange = useCallback((feature) => {
+    const handlerStart =
+      typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
+        ? global.performance.now()
+        : Date.now();
+    const perf = perfRef.current;
+    const nowTs = Date.now();
+
+    if (PERF_DEBUG && perf.lastRegionEventTs > 0) {
+      const gapMs = nowTs - perf.lastRegionEventTs;
+      if (gapMs > 40 && nowTs - perf.lastRegionWarnTs > 2000) {
+        logger.warn(
+          '[perf][home-map] Region event gap=%dms (target < 34ms, ~30fps)',
+          gapMs
+        );
+        perf.lastRegionWarnTs = nowTs;
+      }
+    }
+    perf.lastRegionEventTs = nowTs;
+
+    const properties = feature?.properties;
+    const geometry = feature?.geometry;
+    const coordinates = geometry?.coordinates;
+    if (!properties || !Array.isArray(coordinates) || coordinates.length < 2) return;
+
+    const [lng, lat] = coordinates;
+    const zoom = Number(properties.zoomLevel);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) return;
 
     // Reconstruct region-like object for existing code
     const latDelta = 360 / Math.pow(2, zoom);
-    const lngDelta = latDelta; // Approximate
-    setMapRegion({
+    const nextRegion = {
       latitude: lat,
       longitude: lng,
       latitudeDelta: latDelta,
-      longitudeDelta: lngDelta,
-    });
-    setCurrentZoom(Math.round(zoom));
-  };
+      longitudeDelta: latDelta, // Approximate
+    };
+
+    mapRegionRef.current = nextRegion;
+
+    const roundedZoom = Math.round(zoom);
+    setCurrentZoom((prevZoom) => (prevZoom === roundedZoom ? prevZoom : roundedZoom));
+
+    // Region state is only needed for viewport stop filtering.
+    if (!showStops || selectedRoutes.size > 0) return;
+
+    setMapRegion((prevRegion) =>
+      hasMeaningfulRegionChange(prevRegion, nextRegion) ? nextRegion : prevRegion
+    );
+
+    const handlerEnd =
+      typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
+        ? global.performance.now()
+        : Date.now();
+    const handlerMs = handlerEnd - handlerStart;
+    if (PERF_DEBUG && handlerMs > PERFORMANCE_BUDGETS.MAP_REGION_HANDLER_MS && nowTs - perf.lastRegionWarnTs > 2000) {
+      perf.longRegionHandlers += 1;
+      logger.warn(
+        '[perf][home-map] Slow region handler=%dms (budget=%dms) shapes=%d stops=%d vehicles=%d count=%d',
+        Math.round(handlerMs),
+        PERFORMANCE_BUDGETS.MAP_REGION_HANDLER_MS,
+        displayedShapes.length,
+        displayedStops.length,
+        displayedVehicles.length,
+        perf.longRegionHandlers
+      );
+      perf.lastRegionWarnTs = nowTs;
+    }
+  }, [showStops, selectedRoutes, displayedShapes.length, displayedStops.length, displayedVehicles.length]);
+
+  useEffect(() => {
+    if (!showStops || selectedRoutes.size > 0) return;
+    const latestRegion = mapRegionRef.current;
+    setMapRegion((prevRegion) =>
+      hasMeaningfulRegionChange(prevRegion, latestRegion) ? latestRegion : prevRegion
+    );
+  }, [showStops, selectedRoutes]);
 
   // Handle map press — MapLibre event format
-  const handleMapPress = (e) => {
+  const handleMapPress = useCallback((e) => {
+    if (suppressNextMapTapRef.current) {
+      suppressNextMapTapRef.current = false;
+      return;
+    }
     const [lng, lat] = e.geometry.coordinates;
     // Convert to react-native-maps compatible format for the hook
     handleMapTapPress({
@@ -308,21 +464,7 @@ const HomeScreen = ({ route }) => {
         coordinate: { latitude: lat, longitude: lng },
       },
     });
-  };
-
-  // Handle stop press
-  const handleStopPress = (stop) => {
-    setSelectedStop(stop);
-  };
-
-  // Format last update time
-  const formatLastUpdate = () => {
-    if (!lastVehicleUpdate) return 'Never';
-    const now = new Date();
-    const diff = Math.floor((now - lastVehicleUpdate) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    return `${Math.floor(diff / 60)}m ago`;
-  };
+  }, [handleMapTapPress]);
 
   // Trip planning functions (thin wrappers around useTripPlanner hook)
   const enterTripPlanningMode = () => {
@@ -332,6 +474,27 @@ const HomeScreen = ({ route }) => {
 
   const exitTripPlanningMode = () => {
     resetTrip();
+    setWhereToText('');
+  };
+
+  // Handle "Where to?" address selection — open trip planner with destination + current location
+  const handleWhereToSelect = (address) => {
+    setWhereToText('');
+    enterPlanningMode();
+    setSelectedStop(null);
+    setTripTo({ lat: address.lat, lon: address.lon }, address.shortName || address.displayName);
+    useCurrentLocationForTrip();
+  };
+
+  const handleZonePress = (zoneId) => {
+    const zone = onDemandZones?.[zoneId];
+    if (zone) setSelectedZone(zone);
+  };
+
+  const handleZoneDirectionsToHub = (hubStop) => {
+    setSelectedZone(null);
+    enterPlanningMode();
+    setTripTo({ lat: hubStop.latitude, lon: hubStop.longitude }, hubStop.name || 'Hub Stop');
   };
 
   // Handle "Trip from here" from stop bottom sheet
@@ -401,16 +564,208 @@ const HomeScreen = ({ route }) => {
   };
 
 
-  if (isLoadingStatic) {
-    return (
-      <View style={styles.loadingContainer}>
-        <PulsingSpinner size={60} />
-        <Text style={styles.loadingText}>Loading transit data...</Text>
-      </View>
-    );
-  }
+  // Check if we're in trip preview mode (showing a selected trip on map)
+  const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
 
-  if (staticError) {
+  const mapViewNode = useMemo(() => (
+    <MapLibreGL.MapView
+      ref={mapRef}
+      style={styles.map}
+      mapStyle={OSM_MAP_STYLE}
+      rotateEnabled
+      pitchEnabled={false}
+      attributionPosition={{ bottom: 8, left: 8 }}
+      logoEnabled={false}
+      onPress={handleMapPress}
+      onRegionDidChange={handleRegionChange}
+    >
+      <MapLibreGL.Camera
+        ref={cameraRef}
+        defaultSettings={cameraDefaultSettings}
+      />
+      <MapLibreGL.UserLocation visible={true} />
+
+      {/* Regular transit routes - hide when previewing a trip */}
+      {!isTripPreviewMode && displayedShapes.map((shape) => {
+        const isSelected = isRouteSelected(shape.routeId);
+
+        // Visual hierarchy: selected = full, others ghost
+        const opacity = hasSelection ? (isSelected ? 1.0 : 0.15) : 0.85;
+        const outlineW = hasSelection
+          ? (isSelected ? (currentZoom >= 14 ? 2 : 1.5) : 0)
+          : (currentZoom >= 14 ? 1 : 0.5);
+
+        return (
+          <RoutePolyline
+            key={shape.id}
+            id={`route-${shape.id}`}
+            coordinates={shape.coordinates}
+            color={shape.color}
+            strokeWidth={getPolylineWeight(shape.routeId)}
+            opacity={opacity}
+            outlineWidth={outlineW}
+          />
+        );
+      })}
+      {/* Detour geometry overlays — above route polylines */}
+      {!isTripPreviewMode && detourOverlays.map((overlay) => (
+        <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
+      ))}
+      {/* On-demand zone overlays */}
+      {!isTripPreviewMode && zoneOverlays.map((zone) => (
+        <ZoneOverlay
+          key={`zone-${zone.id}`}
+          id={zone.id}
+          coordinates={zone.coordinates}
+          color={zone.color}
+          onPress={handleZonePress}
+        />
+      ))}
+      {/* Regular stops rendered as layers for better zoom/pan performance */}
+      {!isTripPreviewMode && displayedStops.length > 0 && (
+        <MapLibreGL.ShapeSource
+          id="home-stops-source"
+          shape={stopsGeoJson}
+          onPress={handleStopLayerPress}
+          hitbox={{ width: 20, height: 20 }}
+        >
+          <MapLibreGL.CircleLayer
+            id="home-stops-border"
+            layerIndex={220}
+            style={{
+              circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 9, 6],
+              circleColor: COLORS.white,
+            }}
+          />
+          <MapLibreGL.CircleLayer
+            id="home-stops-fill"
+            layerIndex={221}
+            aboveLayerID="home-stops-border"
+            style={{
+              circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 6, 4],
+              circleColor: ['case', ['==', ['get', 'isSelected'], 1], COLORS.accent, COLORS.primary],
+            }}
+          />
+        </MapLibreGL.ShapeSource>
+      )}
+      {/* Vehicles - hide when previewing a trip */}
+      {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
+        <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+      ))}
+
+      {/* Trip planning route overlay */}
+      {tripRouteCoordinates.map((tripRoute) => (
+        <RoutePolyline
+          key={tripRoute.id}
+          id={`trip-${tripRoute.id}`}
+          coordinates={tripRoute.coordinates}
+          color={tripRoute.color}
+          strokeWidth={tripRoute.isWalk ? 3 : tripRoute.isOnDemand ? 4 : 5}
+          lineDashPattern={tripRoute.isWalk ? [10, 5] : tripRoute.isOnDemand ? [12, 6] : null}
+          opacity={1}
+        />
+      ))}
+
+      {/* Trip planning intermediate stop markers */}
+      {intermediateStopMarkers.map((marker) => (
+        <MapLibreGL.PointAnnotation
+          key={marker.id}
+          id={`int-stop-${marker.id}`}
+          coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View style={[styles.intermediateStopMarker, { backgroundColor: marker.color }]} />
+        </MapLibreGL.PointAnnotation>
+      ))}
+
+      {/* Trip planning markers */}
+      {tripMarkers.map((marker) => (
+        <MapLibreGL.PointAnnotation
+          key={marker.id}
+          id={`trip-marker-${marker.id}`}
+          coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+        >
+          <View style={[
+            styles.tripMarker,
+            marker.type === 'origin' ? styles.tripMarkerOrigin : styles.tripMarkerDestination
+          ]}>
+            <View style={[
+              styles.tripMarkerInner,
+              marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
+            ]} />
+          </View>
+        </MapLibreGL.PointAnnotation>
+      ))}
+
+      {/* Boarding and alighting stop markers with labels */}
+      {boardingAlightingMarkers.map((marker) => (
+        <MapLibreGL.PointAnnotation
+          key={marker.id}
+          id={`ba-${marker.id}`}
+          coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <View style={styles.stopLabelContainer}>
+            <View style={[styles.stopLabelBubble, { borderColor: marker.routeColor }]}>
+              <Text style={[styles.stopLabelType, { color: marker.routeColor }]}>
+                {marker.type === 'boarding' ? '🚏 Board' : '🚏 Exit'} {marker.routeName ? `Route ${marker.routeName}` : ''}
+              </Text>
+              <Text style={styles.stopLabelName} numberOfLines={1}>
+                #{marker.stopCode} - {marker.stopName}
+              </Text>
+            </View>
+            <View style={[styles.stopLabelPointer, { borderTopColor: marker.routeColor }]} />
+          </View>
+        </MapLibreGL.PointAnnotation>
+      ))}
+
+      {/* Real-time bus positions for trip routes */}
+      {isTripPreviewMode && tripVehicles.map((vehicle) => (
+        <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+      ))}
+
+      {/* Map tap marker - shows where user tapped */}
+      {mapTapLocation && (
+        <MapLibreGL.PointAnnotation
+          id="map-tap-marker"
+          coordinate={[mapTapLocation.longitude, mapTapLocation.latitude]}
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <View style={styles.mapTapMarker}>
+            <View style={styles.mapTapMarkerPin} />
+            <View style={styles.mapTapMarkerDot} />
+          </View>
+        </MapLibreGL.PointAnnotation>
+      )}
+    </MapLibreGL.MapView>
+  ), [
+    handleMapPress,
+    handleRegionChange,
+    cameraDefaultSettings,
+    isTripPreviewMode,
+    displayedShapes,
+    isRouteSelected,
+    hasSelection,
+    currentZoom,
+    getPolylineWeight,
+    detourOverlays,
+    zoneOverlays,
+    handleZonePress,
+    displayedStops.length,
+    stopsGeoJson,
+    handleStopLayerPress,
+    displayedVehicles,
+    getRouteColor,
+    getRouteLabel,
+    tripRouteCoordinates,
+    intermediateStopMarkers,
+    tripMarkers,
+    boardingAlightingMarkers,
+    tripVehicles,
+    mapTapLocation,
+  ]);
+
+  if (staticError && routes.length === 0) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Failed to load transit data</Text>
@@ -422,177 +777,46 @@ const HomeScreen = ({ route }) => {
     );
   }
 
-  // Check if we're in trip preview mode (showing a selected trip on map)
-  const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
-
-  // Render native map
-  const renderMap = () => {
-    return (
-      <MapLibreGL.MapView
-        ref={mapRef}
-        style={styles.map}
-        mapStyle={OSM_MAP_STYLE}
-        rotateEnabled
-        pitchEnabled={false}
-        attributionPosition={{ bottom: 8, left: 8 }}
-        logoEnabled={false}
-        onPress={handleMapPress}
-        onRegionDidChange={handleRegionChange}
-      >
-        <MapLibreGL.Camera
-          ref={cameraRef}
-          defaultSettings={cameraDefaultSettings}
-        />
-        <MapLibreGL.UserLocation visible={true} />
-
-        {/* Regular transit routes - hide when previewing a trip */}
-        {!isTripPreviewMode && displayedShapes.map((shape) => {
-          const isSelected = isRouteSelected(shape.routeId);
-
-          // Visual hierarchy: selected = full, others ghost
-          const opacity = hasSelection ? (isSelected ? 1.0 : 0.15) : 0.85;
-          const outlineW = hasSelection
-            ? (isSelected ? (currentZoom >= 14 ? 2 : 1.5) : 0)
-            : (currentZoom >= 14 ? 1 : 0.5);
-
-          return (
-            <RoutePolyline
-              key={shape.id}
-              id={`route-${shape.id}`}
-              coordinates={shape.coordinates}
-              color={shape.color}
-              strokeWidth={getPolylineWeight(shape.routeId)}
-              opacity={opacity}
-              outlineWidth={outlineW}
-            />
-          );
-        })}
-        {/* Detour geometry overlays — above route polylines */}
-        {!isTripPreviewMode && detourOverlays.map((overlay) => (
-          <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
-        ))}
-        {/* Regular stops - hide when previewing a trip */}
-        {!isTripPreviewMode && displayedStops.map((stop) => (
-          <StopMarker
-            key={stop.id}
-            stop={stop}
-            onPress={handleStopPress}
-            isSelected={selectedStop?.id === stop.id}
-          />
-        ))}
-        {/* Vehicles - hide when previewing a trip */}
-        {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
-        ))}
-
-        {/* Trip planning route overlay */}
-        {tripRouteCoordinates.map((tripRoute) => (
-          <RoutePolyline
-            key={tripRoute.id}
-            id={`trip-${tripRoute.id}`}
-            coordinates={tripRoute.coordinates}
-            color={tripRoute.color}
-            strokeWidth={tripRoute.isWalk ? 3 : 5}
-            lineDashPattern={tripRoute.isWalk ? [10, 5] : null}
-            opacity={1}
-          />
-        ))}
-
-        {/* Trip planning intermediate stop markers */}
-        {intermediateStopMarkers.map((marker) => (
-          <MapLibreGL.PointAnnotation
-            key={marker.id}
-            id={`int-stop-${marker.id}`}
-            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={[styles.intermediateStopMarker, { backgroundColor: marker.color }]} />
-          </MapLibreGL.PointAnnotation>
-        ))}
-
-        {/* Trip planning markers */}
-        {tripMarkers.map((marker) => (
-          <MapLibreGL.PointAnnotation
-            key={marker.id}
-            id={`trip-marker-${marker.id}`}
-            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
-          >
-            <View style={[
-              styles.tripMarker,
-              marker.type === 'origin' ? styles.tripMarkerOrigin : styles.tripMarkerDestination
-            ]}>
-              <View style={[
-                styles.tripMarkerInner,
-                marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
-              ]} />
-            </View>
-          </MapLibreGL.PointAnnotation>
-        ))}
-
-        {/* Boarding and alighting stop markers with labels */}
-        {boardingAlightingMarkers.map((marker) => (
-          <MapLibreGL.PointAnnotation
-            key={marker.id}
-            id={`ba-${marker.id}`}
-            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
-            anchor={{ x: 0.5, y: 1 }}
-          >
-            <View style={styles.stopLabelContainer}>
-              <View style={[styles.stopLabelBubble, { borderColor: marker.routeColor }]}>
-                <Text style={[styles.stopLabelType, { color: marker.routeColor }]}>
-                  {marker.type === 'boarding' ? '🚏 Board' : '🚏 Exit'} {marker.routeName ? `Route ${marker.routeName}` : ''}
-                </Text>
-                <Text style={styles.stopLabelName} numberOfLines={1}>
-                  #{marker.stopCode} - {marker.stopName}
-                </Text>
-              </View>
-              <View style={[styles.stopLabelPointer, { borderTopColor: marker.routeColor }]} />
-            </View>
-          </MapLibreGL.PointAnnotation>
-        ))}
-
-        {/* Real-time bus positions for trip routes */}
-        {isTripPreviewMode && tripVehicles.map((vehicle) => (
-          <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
-        ))}
-
-        {/* Map tap marker - shows where user tapped */}
-        {mapTapLocation && (
-          <MapLibreGL.PointAnnotation
-            id="map-tap-marker"
-            coordinate={[mapTapLocation.longitude, mapTapLocation.latitude]}
-            anchor={{ x: 0.5, y: 1 }}
-          >
-            <View style={styles.mapTapMarker}>
-              <View style={styles.mapTapMarkerPin} />
-              <View style={styles.mapTapMarkerDot} />
-            </View>
-          </MapLibreGL.PointAnnotation>
-        )}
-      </MapLibreGL.MapView>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      {renderMap()}
+      {mapViewNode}
 
-      {/* Search Bar Header - hide in trip planning mode */}
+      {/* Inline loading indicator while transit data loads */}
+      {isLoadingStatic && (
+        <View style={styles.loadingBanner}>
+          <PulsingSpinner size={18} />
+          <Text style={styles.loadingBannerText}>Loading transit data...</Text>
+        </View>
+      )}
+
+      {/* Where to? Search Bar - hide in trip planning mode */}
       {!isTripPlanningMode && (
-        <TouchableOpacity
-          style={styles.searchBar}
-          onPress={() => navigation.navigate('Search')}
-          activeOpacity={0.85}
-        >
-          <SearchIcon size={18} color={COLORS.grey500} />
-          <Text style={styles.searchBarPlaceholder}>Search stops, routes & addresses</Text>
-          <View style={styles.statusBadgeLive}>
-            <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
-            <Text style={styles.statusTextLive}>
-              {isOffline ? 'Offline' : `${vehicles.length} buses live`}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.searchBar}>
+          <AddressAutocomplete
+            value={whereToText}
+            onChangeText={setWhereToText}
+            onSelect={handleWhereToSelect}
+            placeholder="Where to?"
+            icon={<SearchIcon size={18} color={COLORS.grey500} />}
+            style={styles.whereToAutocomplete}
+            inputStyle={styles.whereToInput}
+            rightIcon={
+              <View style={styles.statusBadgeLive}>
+                <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
+                <Text style={styles.statusTextLive}>
+                  {isOffline ? 'Offline' : `${vehicles.length} buses live`}
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      )}
+
+      {/* Post-trip survey nudge */}
+      {!isTripPlanningMode && (
+        <SurveyNudgeBanner
+          onTakeSurvey={() => navigation.getParent()?.navigate('Profile', { screen: 'Survey', params: { trigger: 'post_trip' } })}
+        />
       )}
 
       {/* Map Controls (Top Right) */}
@@ -623,6 +847,11 @@ const HomeScreen = ({ route }) => {
           onRouteSelect={handleRouteSelect}
           getRouteColor={getRouteColor}
           isRouteDetouring={isRouteDetouring}
+          serviceAlerts={serviceAlerts}
+          onAlertPress={() => navigation.navigate('Alerts')}
+          showZones={showZones}
+          onToggleZones={() => setShowZones(z => !z)}
+          zoneCount={Object.keys(onDemandZones || {}).length}
         />
       )}
 
@@ -649,8 +878,8 @@ const HomeScreen = ({ route }) => {
           <TripSearchHeader
             fromText={tripFromText}
             toText={tripToText}
-            onFromChange={searchFromAddress}
-            onToChange={searchToAddress}
+            onFromChange={setTripFromText}
+            onToChange={setTripToText}
             onFromSelect={selectFromSuggestion}
             onToSelect={selectToSuggestion}
             onSwap={swapTripLocations}
@@ -718,6 +947,15 @@ const HomeScreen = ({ route }) => {
         onClose={handleCloseMapTapPopup}
       />
 
+      {/* Zone Info Sheet */}
+      {!isTripPlanningMode && selectedZone && (
+        <ZoneInfoSheet
+          zone={selectedZone}
+          onClose={() => setSelectedZone(null)}
+          onDirectionsToHub={handleZoneDirectionsToHub}
+        />
+      )}
+
     </View>
   );
 };
@@ -731,15 +969,22 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  loadingBanner: {
+    position: 'absolute',
+    top: SPACING.sm + STATUS_BAR_OFFSET + 56,
+    alignSelf: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    gap: SPACING.xs,
+    zIndex: 1001,
+    ...SHADOWS.small,
   },
-  loadingText: {
-    marginTop: SPACING.md,
-    fontSize: FONT_SIZES.md,
+  loadingBannerText: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
   errorContainer: {
@@ -778,21 +1023,20 @@ const styles = StyleSheet.create({
     top: SPACING.sm + STATUS_BAR_OFFSET,
     left: SPACING.sm,
     right: SPACING.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
+    zIndex: 1000,
+  },
+  whereToAutocomplete: {
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingLeft: SPACING.lg,
+    paddingVertical: 2,
+    paddingLeft: SPACING.sm,
     paddingRight: SPACING.sm,
-    gap: SPACING.sm,
-    zIndex: 1000,
     ...SHADOWS.medium,
   },
-  searchBarPlaceholder: {
-    flex: 1,
+  whereToInput: {
+    backgroundColor: 'transparent',
+    height: 40,
     fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
   },
   statusBadgeLive: {
     flexDirection: 'row',

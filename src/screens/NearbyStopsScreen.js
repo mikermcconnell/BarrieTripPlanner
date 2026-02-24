@@ -10,13 +10,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 import { getNearbyStops } from '../services/arrivalService';
 import { formatDistance, formatMinutes } from '../services/tripService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 const NearbyStopsScreen = ({ navigation }) => {
-  const { stops, isLoadingStatic } = useTransit();
+  const { stops, isLoadingStatic } = useTransitStatic();
   const [nearbyStops, setNearbyStops] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

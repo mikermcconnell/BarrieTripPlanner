@@ -17,14 +17,14 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { useAuth } from '../context/AuthContext';
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
 
 const SettingsScreen = ({ navigation }) => {
   const { user, isAuthenticated } = useAuth();
-  const { routes } = useTransit();
+  const { routes } = useTransitStatic();
   const [notificationSettings, setNotificationSettings] = useState({
     serviceAlerts: true,
     tripReminders: true,

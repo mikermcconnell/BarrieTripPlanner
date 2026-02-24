@@ -6,6 +6,7 @@
  */
 
 import { haversineDistance } from './geometryUtils';
+import { findContainingZone } from './zoneUtils';
 
 // Barrie service area bounds (generous to include surrounding areas served)
 const SERVICE_AREA = {
@@ -85,7 +86,7 @@ const isInServiceArea = (lat, lon) => {
  * @param {string} [params.toText] - Text input for destination
  * @returns {ValidationResult}
  */
-export const validateTripInputs = ({ from, to, fromText, toText } = {}) => {
+export const validateTripInputs = ({ from, to, fromText, toText, onDemandZones } = {}) => {
   // Check that both locations are set
   if (!from || from.lat == null || from.lon == null) {
     return {
@@ -120,8 +121,9 @@ export const validateTripInputs = ({ from, to, fromText, toText } = {}) => {
     };
   }
 
-  // Check service area for origin
-  if (!isInServiceArea(from.lat, from.lon)) {
+  // Check service area for origin (skip if inside an on-demand zone)
+  const originInZone = onDemandZones ? findContainingZone(from.lat, from.lon, onDemandZones) : null;
+  if (!originInZone && !isInServiceArea(from.lat, from.lon)) {
     return {
       valid: false,
       errorCode: 'OUTSIDE_SERVICE_AREA',
@@ -129,8 +131,9 @@ export const validateTripInputs = ({ from, to, fromText, toText } = {}) => {
     };
   }
 
-  // Check service area for destination
-  if (!isInServiceArea(to.lat, to.lon)) {
+  // Check service area for destination (skip if inside an on-demand zone)
+  const destInZone = onDemandZones ? findContainingZone(to.lat, to.lon, onDemandZones) : null;
+  if (!destInZone && !isInServiceArea(to.lat, to.lon)) {
     return {
       valid: false,
       errorCode: 'OUTSIDE_SERVICE_AREA',

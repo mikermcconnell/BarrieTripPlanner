@@ -1,122 +1,215 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS, TOUCH_TARGET } from '../config/theme';
 
-const TimePicker = ({ value, onChange, mode = 'depart' }) => {
-  const [showPicker, setShowPicker] = useState(false);
-  const [selectedMode, setSelectedMode] = useState(mode); // 'depart' or 'arrive'
+const MODES = [
+  { key: 'now', label: 'Leave Now' },
+  { key: 'depart', label: 'Depart At' },
+  { key: 'arrive', label: 'Arrive By' },
+];
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+const QUICK_OFFSETS = [
+  { label: '+15m', minutes: 15 },
+  { label: '+30m', minutes: 30 },
+  { label: '+1h', minutes: 60 },
+];
 
-  const formatDate = (date) => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+const formatTime = (date) => {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    }
-    return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-  };
+const isToday = (date) => date.toDateString() === new Date().toDateString();
 
-  const quickOptions = [
-    { label: 'Now', getValue: () => new Date() },
-    { label: '+15 min', getValue: () => new Date(Date.now() + 15 * 60 * 1000) },
-    { label: '+30 min', getValue: () => new Date(Date.now() + 30 * 60 * 1000) },
-    { label: '+1 hour', getValue: () => new Date(Date.now() + 60 * 60 * 1000) },
-  ];
+const isTomorrow = (date) => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return date.toDateString() === tomorrow.toDateString();
+};
 
-  const handleQuickSelect = (option) => {
-    onChange(option.getValue(), selectedMode);
-    setShowPicker(false);
-  };
+const dayLabel = (date) => {
+  if (isToday(date)) return 'Today';
+  if (isTomorrow(date)) return 'Tomorrow';
+  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const TimePicker = ({ value, onChange, mode = 'now' }) => {
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [customHour, setCustomHour] = useState(value.getHours());
+  const [customMinute, setCustomMinute] = useState(value.getMinutes());
 
   const handleModeChange = (newMode) => {
-    setSelectedMode(newMode);
-    onChange(value, newMode);
+    if (newMode === 'now') {
+      onChange(new Date(), 'now');
+    } else {
+      onChange(value, newMode);
+    }
   };
+
+  const handleQuickSelect = (minutes) => {
+    const newTime = new Date(Date.now() + minutes * 60 * 1000);
+    onChange(newTime, mode);
+  };
+
+  const handleDayToggle = (day) => {
+    const newDate = new Date(value);
+    const today = new Date();
+    if (day === 'today') {
+      newDate.setFullYear(today.getFullYear(), today.getMonth(), today.getDate());
+    } else {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      newDate.setFullYear(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+    }
+    onChange(newDate, mode);
+  };
+
+  const openCustomPicker = () => {
+    setCustomHour(value.getHours());
+    setCustomMinute(value.getMinutes());
+    setShowCustomPicker(true);
+  };
+
+  const handleCustomDone = () => {
+    const newDate = new Date(value);
+    newDate.setHours(customHour, customMinute, 0, 0);
+    onChange(newDate, mode);
+    setShowCustomPicker(false);
+  };
+
+  const adjustHour = (delta) => {
+    setCustomHour((prev) => (prev + delta + 24) % 24);
+  };
+
+  const adjustMinute = (delta) => {
+    // Step by 5 minutes; carry overflow into the hour
+    const next = customMinute + delta * 5;
+    if (next >= 60) {
+      setCustomMinute(next % 60);
+      setCustomHour((prev) => (prev + 1) % 24);
+    } else if (next < 0) {
+      setCustomMinute(next + 60);
+      setCustomHour((prev) => (prev - 1 + 24) % 24);
+    } else {
+      setCustomMinute(next);
+    }
+  };
+
+  const formatHour12 = (h) => String(h % 12 || 12);
+  const formatMinute = (m) => String(m).padStart(2, '0');
+  const getAmPm = (h) => (h < 12 ? 'AM' : 'PM');
+  const toggleAmPm = () => setCustomHour((prev) => (prev + 12) % 24);
+
+  const showTimeOptions = mode === 'depart' || mode === 'arrive';
+  const selectedDay = isToday(value) ? 'today' : isTomorrow(value) ? 'tomorrow' : null;
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.button} onPress={() => setShowPicker(true)}>
-        <View style={styles.modeIndicator}>
-          <Text style={styles.modeText}>{selectedMode === 'depart' ? 'Depart' : 'Arrive'}</Text>
-        </View>
-        <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>{formatTime(value)}</Text>
-          <Text style={styles.dateText}>{formatDate(value)}</Text>
-        </View>
-        <Text style={styles.chevron}>▼</Text>
-      </TouchableOpacity>
+      {/* Three-segment control */}
+      <View style={styles.segmentedControl}>
+        {MODES.map(({ key, label }) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.segment, mode === key && styles.segmentActive]}
+            onPress={() => handleModeChange(key)}
+          >
+            <Text style={[styles.segmentText, mode === key && styles.segmentTextActive]}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      <Modal visible={showPicker} transparent animationType="slide">
+      {/* Expandable time options for Depart At / Arrive By */}
+      {showTimeOptions && (
+        <View style={styles.timeOptions}>
+          {/* Quick offset chips (depart only) + Custom */}
+          <View style={styles.chipRow}>
+            {mode === 'depart' && QUICK_OFFSETS.map(({ label, minutes }) => (
+              <TouchableOpacity
+                key={label}
+                style={styles.chip}
+                onPress={() => handleQuickSelect(minutes)}
+              >
+                <Text style={styles.chipText}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.chipCustom} onPress={openCustomPicker}>
+              <Text style={styles.chipCustomText}>Set time...</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Today / Tomorrow toggle */}
+          <View style={styles.dayToggle}>
+            <TouchableOpacity
+              style={[styles.dayButton, selectedDay === 'today' && styles.dayButtonActive]}
+              onPress={() => handleDayToggle('today')}
+            >
+              <Text style={[styles.dayButtonText, selectedDay === 'today' && styles.dayButtonTextActive]}>
+                Today
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dayButton, selectedDay === 'tomorrow' && styles.dayButtonActive]}
+              onPress={() => handleDayToggle('tomorrow')}
+            >
+              <Text style={[styles.dayButtonText, selectedDay === 'tomorrow' && styles.dayButtonTextActive]}>
+                Tomorrow
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Selected time summary */}
+          <Text style={styles.timeSummary}>
+            {mode === 'depart' ? 'Departing' : 'Arriving'} at{' '}
+            {formatTime(value)}, {dayLabel(value)}
+          </Text>
+        </View>
+      )}
+
+      {/* Custom time picker modal */}
+      <Modal visible={showCustomPicker} transparent animationType="fade">
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowPicker(false)}
+          onPress={() => setShowCustomPicker(false)}
         >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Time</Text>
-              <TouchableOpacity onPress={() => setShowPicker(false)}>
-                <Text style={styles.closeButton}>Done</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Set Time</Text>
 
-            {/* Depart/Arrive Toggle */}
-            <View style={styles.modeToggle}>
-              <TouchableOpacity
-                style={[styles.modeButton, selectedMode === 'depart' && styles.modeButtonActive]}
-                onPress={() => handleModeChange('depart')}
-              >
-                <Text
-                  style={[
-                    styles.modeButtonText,
-                    selectedMode === 'depart' && styles.modeButtonTextActive,
-                  ]}
-                >
-                  Depart at
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modeButton, selectedMode === 'arrive' && styles.modeButtonActive]}
-                onPress={() => handleModeChange('arrive')}
-              >
-                <Text
-                  style={[
-                    styles.modeButtonText,
-                    selectedMode === 'arrive' && styles.modeButtonTextActive,
-                  ]}
-                >
-                  Arrive by
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quick Options */}
-            <View style={styles.quickOptions}>
-              {quickOptions.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.quickOption}
-                  onPress={() => handleQuickSelect(option)}
-                >
-                  <Text style={styles.quickOptionText}>{option.label}</Text>
+            <View style={styles.timeWheel}>
+              {/* Hour column */}
+              <View style={styles.wheelColumn}>
+                <TouchableOpacity style={styles.wheelArrow} onPress={() => adjustHour(1)}>
+                  <Text style={styles.wheelArrowText}>&#x25B2;</Text>
                 </TouchableOpacity>
-              ))}
+                <Text style={styles.wheelValue}>{formatHour12(customHour)}</Text>
+                <TouchableOpacity style={styles.wheelArrow} onPress={() => adjustHour(-1)}>
+                  <Text style={styles.wheelArrowText}>&#x25BC;</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.wheelColon}>:</Text>
+
+              {/* Minute column */}
+              <View style={styles.wheelColumn}>
+                <TouchableOpacity style={styles.wheelArrow} onPress={() => adjustMinute(1)}>
+                  <Text style={styles.wheelArrowText}>&#x25B2;</Text>
+                </TouchableOpacity>
+                <Text style={styles.wheelValue}>{formatMinute(customMinute)}</Text>
+                <TouchableOpacity style={styles.wheelArrow} onPress={() => adjustMinute(-1)}>
+                  <Text style={styles.wheelArrowText}>&#x25BC;</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* AM/PM toggle */}
+              <TouchableOpacity style={styles.ampmButton} onPress={toggleAmPm}>
+                <Text style={styles.ampmText}>{getAmPm(customHour)}</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Current Selection */}
-            <View style={styles.currentSelection}>
-              <Text style={styles.currentLabel}>Selected:</Text>
-              <Text style={styles.currentValue}>
-                {formatTime(value)} - {formatDate(value)}
-              </Text>
-            </View>
+            <TouchableOpacity style={styles.doneButton} onPress={handleCustomDone}>
+              <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -128,128 +221,185 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: SPACING.sm,
   },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  modeIndicator: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    marginRight: SPACING.sm,
-  },
-  modeText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '600',
-  },
-  timeContainer: {
-    flex: 1,
-  },
-  timeText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  dateText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  chevron: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: BORDER_RADIUS.xl,
-    borderTopRightRadius: BORDER_RADIUS.xl,
-    padding: SPACING.md,
-    paddingBottom: SPACING.xl,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  modalTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  closeButton: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  modeToggle: {
+
+  // Segmented control
+  segmentedControl: {
     flexDirection: 'row',
     backgroundColor: COLORS.grey100,
     borderRadius: BORDER_RADIUS.md,
-    padding: 4,
-    marginBottom: SPACING.md,
+    padding: 3,
   },
-  modeButton: {
+  segment: {
     flex: 1,
     paddingVertical: SPACING.sm,
+    minHeight: TOUCH_TARGET.min,
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: BORDER_RADIUS.sm,
   },
-  modeButtonActive: {
+  segmentActive: {
     backgroundColor: COLORS.surface,
     ...SHADOWS.small,
   },
-  modeButtonText: {
-    fontSize: FONT_SIZES.md,
+  segmentText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
     color: COLORS.textSecondary,
   },
-  modeButtonTextActive: {
+  segmentTextActive: {
     color: COLORS.textPrimary,
     fontWeight: '600',
   },
-  quickOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
+
+  // Expandable time options
+  timeOptions: {
+    marginTop: SPACING.sm,
   },
-  quickOption: {
+  chipRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  chip: {
     backgroundColor: COLORS.grey100,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
   },
-  quickOptionText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  currentSelection: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-  },
-  currentLabel: {
+  chipText: {
     fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  chipCustom: {
+    backgroundColor: COLORS.primarySubtle,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  chipCustomText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+    color: COLORS.primary,
+  },
+
+  // Day toggle
+  dayToggle: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  dayButton: {
+    paddingVertical: SPACING.xs + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  dayButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  dayButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
     color: COLORS.textSecondary,
   },
-  currentValue: {
+  dayButtonTextActive: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+
+  // Time summary
+  timeSummary: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingTop: SPACING.xs,
+  },
+
+  // Custom picker modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    width: 280,
+    ...SHADOWS.large,
+  },
+  modalTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '600',
     color: COLORS.textPrimary,
-    marginTop: 4,
+    marginBottom: SPACING.lg,
+  },
+
+  // Time wheel
+  timeWheel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  wheelColumn: {
+    alignItems: 'center',
+    width: 60,
+  },
+  wheelArrow: {
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  wheelArrowText: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.textSecondary,
+  },
+  wheelValue: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    minWidth: 50,
+    textAlign: 'center',
+  },
+  wheelColon: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginHorizontal: SPACING.xs,
+    paddingBottom: 2,
+  },
+  ampmButton: {
+    backgroundColor: COLORS.grey100,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginLeft: SPACING.md,
+  },
+  ampmText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+
+  // Done button
+  doneButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xxl,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
   },
 });
 

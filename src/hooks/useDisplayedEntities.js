@@ -25,14 +25,28 @@ export const useDisplayedEntities = ({
   showStops,
   mapRegion,
 }) => {
+  const isValidHexColor = (value) =>
+    typeof value === 'string' && /^#?[0-9a-fA-F]{6}$/.test(value.trim());
+
+  const routeColorById = useMemo(() => {
+    const map = new Map();
+    routes.forEach((route) => {
+      if (route?.id && isValidHexColor(route?.color)) {
+        const raw = String(route.color).trim();
+        map.set(route.id, raw.startsWith('#') ? raw : `#${raw}`);
+      }
+    });
+    return map;
+  }, [routes]);
+
   // Get the route color
   const getRouteColor = useCallback(
     (routeId) => {
       let color = ROUTE_COLORS.DEFAULT;
-      const foundRoute = routes.find((r) => r.id === routeId);
+      const mappedColor = routeColorById.get(routeId);
 
-      if (foundRoute?.color) {
-        color = foundRoute.color;
+      if (mappedColor) {
+        color = mappedColor;
       } else if (ROUTE_COLORS[routeId]) {
         color = ROUTE_COLORS[routeId];
       }
@@ -45,7 +59,7 @@ export const useDisplayedEntities = ({
 
       return color;
     },
-    [routes]
+    [routeColorById]
   );
 
   // Filter vehicles by selected routes
@@ -81,11 +95,13 @@ export const useDisplayedEntities = ({
         const shapeIds = routeShapeMapping[routeId] || [];
         shapeIds.forEach((shapeId) => {
           if (shapeSource[shapeId]) {
+            const renderedShapeId = `${routeId}:${shapeId}`;
             shapesToDisplay.push({
-              id: shapeId,
+              id: renderedShapeId,
               coordinates: shapeSource[shapeId],
               color: getRouteColor(routeId),
               routeId,
+              shapeId,
             });
           }
         });
@@ -104,11 +120,13 @@ export const useDisplayedEntities = ({
         );
 
         representativeIds.forEach((shapeId) => {
+          const renderedShapeId = `${routeId}:${shapeId}`;
           shapesToDisplay.push({
-            id: shapeId,
+            id: renderedShapeId,
             coordinates: shapeSource[shapeId],
             color: getRouteColor(routeId),
             routeId,
+            shapeId,
           });
         });
       });

@@ -41,40 +41,53 @@ export const AuthProvider = ({ children }) => {
 
   // Listen to Firebase auth state changes
   useEffect(() => {
-    const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-
-        // Load user profile from Firestore
-        const profile = await userFirestoreService.getUser(firebaseUser.uid);
-        setUserProfile(profile);
-
-        // Set up real-time listeners for user data
-        setupRealtimeListeners(firebaseUser.uid);
-
-        // Track analytics user properties
+    let isMounted = true;
+    const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
+      void (async () => {
         try {
-          const { setAnalyticsUserProperties } = require('../services/analyticsService');
-          setAnalyticsUserProperties({ has_account: 'true' });
-        } catch {}
+          if (firebaseUser) {
+            setUser(firebaseUser);
 
-        // Cache user locally for offline access (encrypted on native)
-        await secureSet(STORAGE_KEYS.USER, JSON.stringify(firebaseUser));
-      } else {
-        setUser(null);
-        setUserProfile(null);
+            // Load user profile from Firestore
+            const profile = await userFirestoreService.getUser(firebaseUser.uid);
+            setUserProfile(profile);
 
-        // Clean up listeners
-        cleanupListeners();
+            // Set up real-time listeners for user data
+            setupRealtimeListeners(firebaseUser.uid);
 
-        // Try to load cached data for offline mode
-        await loadCachedData();
-      }
+            // Track analytics user properties
+            try {
+              const { setAnalyticsUserProperties } = require('../services/analyticsService');
+              setAnalyticsUserProperties({ has_account: 'true' });
+            } catch {}
 
-      setIsLoading(false);
+            // Cache user locally for offline access (encrypted on native)
+            await secureSet(STORAGE_KEYS.USER, JSON.stringify(firebaseUser));
+          } else {
+            setUser(null);
+            setUserProfile(null);
+
+            // Clean up listeners
+            cleanupListeners();
+
+            // Try to load cached data for offline mode
+            await loadCachedData();
+          }
+        } catch (error) {
+          logger.error('Auth bootstrap error:', error);
+          if (isMounted) {
+            setAuthError(error?.message || 'Authentication initialization failed');
+          }
+        } finally {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        }
+      })();
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
       cleanupListeners();
     };

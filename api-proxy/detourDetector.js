@@ -1,5 +1,5 @@
 const { pointToPolylineDistance } = require('./geometry');
-const { buildGeometry } = require('./detourGeometry');
+const { buildGeometry, findClosestShapePoint, findAnchors, MIN_EVIDENCE_FOR_GEOMETRY } = require('./detourGeometry');
 
 const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '75');
 const OFF_ROUTE_THRESHOLD_METERS = Number.isFinite(configuredThreshold) && configuredThreshold > 0
@@ -30,6 +30,14 @@ const DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE =
     ? configuredClearConsecutive
     : 6;
 
+const configuredNoVehicleTimeoutMs = Number.parseFloat(
+  process.env.DETOUR_NO_VEHICLE_TIMEOUT_MS || String(30 * 60 * 1000)
+);
+const DETOUR_NO_VEHICLE_TIMEOUT_MS =
+  Number.isFinite(configuredNoVehicleTimeoutMs) && configuredNoVehicleTimeoutMs > 0
+    ? configuredNoVehicleTimeoutMs
+    : 30 * 60 * 1000;
+
 const CONSECUTIVE_READINGS_REQUIRED = 3;
 const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
 let MIN_VEHICLES_FOR_DETOUR = 1;
@@ -57,8 +65,67 @@ function clearVehicleState() {
   detourEvidence.clear();
 }
 
+// Seed a detour from persisted state (e.g. Firestore) so detours
+// survive worker restarts without being immediately cleared.
+function seedActiveDetour(routeId, detectedAtMs, lastEvidenceAtMs, seedVehicleCount) {
+  if (activeDetours.has(routeId)) return;
+  activeDetours.set(routeId, {
+    detectedAt: new Date(detectedAtMs),
+    lastSeenAt: new Date(lastEvidenceAtMs),
+    triggerVehicleId: null,
+    vehiclesOffRoute: new Set(),
+    state: 'active',
+    clearPendingAt: null,
+    lastOffRouteEvidenceAt: lastEvidenceAtMs,
+    seedVehicleCount: seedVehicleCount || 0,
+  });
+}
+
+function isInDetourZoneCore(coordinate, detour, shapes) {
+  if (!detour.detourZone) return false;
+  const polyline = shapes.get(detour.detourZone.shapeId);
+  if (!polyline || polyline.length < 2) return false;
+  const result = findClosestShapePoint(coordinate, polyline);
+  if (!result) return false;
+  // Reject if vehicle is far from the zone's shape (e.g. on a different shape variant)
+  if (result.distanceMeters > ON_ROUTE_CLEAR_THRESHOLD_METERS * 3) return false;
+  return result.index >= detour.detourZone.coreStart && result.index <= detour.detourZone.coreEnd;
+}
+
 function processVehicles(vehicles, shapes, routeShapeMapping) {
   const now = Date.now();
+
+  // Compute detour zones from current evidence before processing vehicles
+  for (const [routeId, detour] of activeDetours) {
+    const evidence = detourEvidence.get(routeId);
+    if (!evidence || evidence.points.length < MIN_EVIDENCE_FOR_GEOMETRY) {
+      detour.detourZone = null;
+      continue;
+    }
+    const shapeIds = routeShapeMapping.get(routeId);
+    if (!shapeIds || shapeIds.length === 0) {
+      detour.detourZone = null;
+      continue;
+    }
+    const anchors = findAnchors(evidence.points, shapes, shapeIds);
+    if (!anchors) {
+      detour.detourZone = null;
+      continue;
+    }
+    const span = anchors.exitIndex - anchors.entryIndex;
+    if (span < 2) {
+      detour.detourZone = null;
+      continue;
+    }
+    const shrink = Math.max(1, Math.floor(span * 0.25));
+    detour.detourZone = {
+      shapeId: anchors.shapeId,
+      entryIndex: anchors.entryIndex,
+      exitIndex: anchors.exitIndex,
+      coreStart: anchors.entryIndex + shrink,
+      coreEnd: anchors.exitIndex - shrink,
+    };
+  }
 
   // Track which vehicles we've seen this tick
   const seenVehicles = new Set();
@@ -90,8 +157,12 @@ function processVehicles(vehicles, shapes, routeShapeMapping) {
 
     // Update route if changed
     if (state.routeId !== routeId) {
-      // Vehicle switched routes — remove from old route's detour
-      removeVehicleFromDetour(id, state.routeId, now);
+      // Vehicle switched routes — remove from old route's vehiclesOffRoute
+      // but do NOT trigger clear-pending (stale ≠ on-route evidence)
+      const oldDetour = activeDetours.get(state.routeId);
+      if (oldDetour) {
+        oldDetour.vehiclesOffRoute.delete(id);
+      }
       state.routeId = routeId;
       state.consecutiveOffRoute = 0;
       state.consecutiveOnRoute = 0;
@@ -109,20 +180,36 @@ function processVehicles(vehicles, shapes, routeShapeMapping) {
     } else if (minDist <= ON_ROUTE_CLEAR_THRESHOLD_METERS) {
       // Vehicle is within the tighter clearing threshold
       state.consecutiveOffRoute = 0;
-      state.consecutiveOnRoute++;
       const detour = activeDetours.get(routeId);
       if (detour && detour.vehiclesOffRoute.has(id)) {
-        maybeRemoveVehicleFromDetour(id, routeId, state.consecutiveOnRoute, now);
+        // Zone-aware clearing: only count on-route readings inside the detour zone core
+        if (detour.detourZone) {
+          if (isInDetourZoneCore(coordinate, detour, shapes)) {
+            state.consecutiveOnRoute++;
+            maybeRemoveVehicleFromDetour(id, routeId, state.consecutiveOnRoute, now);
+          } else {
+            state.consecutiveOnRoute = 0;
+          }
+        } else {
+          // No zone data yet — block on-route clearing, rely on no-vehicle timeout
+          state.consecutiveOnRoute = 0;
+        }
+      } else {
+        state.consecutiveOnRoute++;
       }
     } else {
       // Dead band (ON_ROUTE_CLEAR < minDist <= OFF_ROUTE) — hold current counts
     }
   }
 
-  // Prune stale vehicles
+  // Prune stale vehicles — remove from vehiclesOffRoute but do NOT
+  // trigger clear-pending (vehicle disappearing ≠ on-route evidence)
   for (const [vehicleId, state] of vehicleState) {
     if (now - state.lastCheckedAt > STALE_VEHICLE_TIMEOUT_MS) {
-      removeVehicleFromDetour(vehicleId, state.routeId, now);
+      const detour = activeDetours.get(state.routeId);
+      if (detour) {
+        detour.vehiclesOffRoute.delete(vehicleId);
+      }
       vehicleState.delete(vehicleId);
     }
   }
@@ -142,11 +229,15 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now) {
       vehiclesOffRoute: new Set(),
       state: 'active',
       clearPendingAt: null,
+      lastOffRouteEvidenceAt: now || Date.now(),
     };
     activeDetours.set(routeId, detour);
   }
   detour.vehiclesOffRoute.add(vehicleId);
   detour.lastSeenAt = new Date();
+  detour.lastOffRouteEvidenceAt = now || Date.now();
+  // Clear seed vehicle count — real vehicles now take precedence
+  detour.seedVehicleCount = 0;
   // If a vehicle returns off-route during clear-pending, reactivate
   if (detour.state === 'clear-pending') {
     detour.state = 'active';
@@ -180,20 +271,6 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now) {
   }
 }
 
-// Hard removal — used for route-switch and stale prune.
-// Transitions to clear-pending instead of instant delete to respect grace period.
-function removeVehicleFromDetour(vehicleId, routeId, now) {
-  const detour = activeDetours.get(routeId);
-  if (!detour) return;
-  detour.vehiclesOffRoute.delete(vehicleId);
-  if (detour.vehiclesOffRoute.size < MIN_VEHICLES_FOR_DETOUR) {
-    if (detour.state !== 'clear-pending') {
-      detour.state = 'clear-pending';
-      detour.clearPendingAt = now || Date.now();
-    }
-  }
-}
-
 // Soft removal — used when a vehicle sustains on-route readings.
 // Respects consecutive on-route threshold and grace period.
 function maybeRemoveVehicleFromDetour(vehicleId, routeId, consecutiveOnRoute, now) {
@@ -221,9 +298,21 @@ function maybeRemoveVehicleFromDetour(vehicleId, routeId, consecutiveOnRoute, no
   }
 }
 
-// Runs at end of each tick to finalize or hold clear-pending detours.
+// Runs at end of each tick to finalize or hold clear-pending detours,
+// and to transition active detours with no vehicles to clear-pending
+// after the no-vehicle timeout.
 function tickClearPending(now) {
   for (const [routeId, detour] of activeDetours) {
+    // Active detour with no vehicles — check no-vehicle timeout
+    if (detour.state === 'active' && detour.vehiclesOffRoute.size < MIN_VEHICLES_FOR_DETOUR) {
+      const lastEvidence = detour.lastOffRouteEvidenceAt || detour.detectedAt.getTime();
+      if (now - lastEvidence >= DETOUR_NO_VEHICLE_TIMEOUT_MS) {
+        detour.state = 'clear-pending';
+        detour.clearPendingAt = now;
+      }
+      continue;
+    }
+
     if (detour.state !== 'clear-pending') continue;
 
     // If vehicles came back off-route, reactivate
@@ -252,22 +341,20 @@ function getActiveDetours(shapes, routeShapeMapping) {
   const now = Date.now();
   const result = {};
   for (const [routeId, detour] of activeDetours) {
-    if (detour.vehiclesOffRoute.size >= MIN_VEHICLES_FOR_DETOUR ||
-        detour.state === 'clear-pending') {
-      const snapshot = { ...detour };
-      if (shapes && routeShapeMapping) {
-        const evidence = detourEvidence.get(routeId);
-        const detectedAtMs = detour.detectedAt instanceof Date
-          ? detour.detectedAt.getTime()
-          : Number(detour.detectedAt);
-        snapshot.geometry = buildGeometry(
-          routeId, evidence, shapes, routeShapeMapping, now, detectedAtMs
-        );
-      } else {
-        snapshot.geometry = null;
-      }
-      result[routeId] = snapshot;
+    const snapshot = { ...detour };
+    delete snapshot.detourZone; // internal zone indices — not for Firestore
+    if (shapes && routeShapeMapping) {
+      const evidence = detourEvidence.get(routeId);
+      const detectedAtMs = detour.detectedAt instanceof Date
+        ? detour.detectedAt.getTime()
+        : Number(detour.detectedAt);
+      snapshot.geometry = buildGeometry(
+        routeId, evidence, shapes, routeShapeMapping, now, detectedAtMs
+      );
+    } else {
+      snapshot.geometry = null;
     }
+    result[routeId] = snapshot;
   }
   return result;
 }
@@ -324,6 +411,7 @@ function getRawDetourEvidence() {
 module.exports = {
   processVehicles,
   clearVehicleState,
+  seedActiveDetour,
   getActiveDetours,
   getState,
   getDetourEvidence,
@@ -335,5 +423,6 @@ module.exports = {
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_MIN_ACTIVE_MS,
+  DETOUR_NO_VEHICLE_TIMEOUT_MS,
   EVIDENCE_WINDOW_MS,
 };

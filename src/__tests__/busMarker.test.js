@@ -14,7 +14,7 @@ jest.mock('react-native-svg', () => ({
   __esModule: true,
   default: 'Svg',
   Path: 'Path',
-}));
+}), { virtual: true });
 
 const { areBusMarkerPropsEqual } = require('../components/BusMarker');
 

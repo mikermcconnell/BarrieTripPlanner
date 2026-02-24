@@ -137,14 +137,21 @@ const downloadGTFSZip = async () => {
  * @returns {Array<Object>} Array of route objects
  */
 const parseRoutes = (content) => {
+  const normalizeGtfsHexColor = (value) => {
+    if (!value) return null;
+    const stripped = String(value).trim().replace(/^#/, '');
+    if (!/^[0-9a-fA-F]{6}$/.test(stripped)) return null;
+    return `#${stripped.toUpperCase()}`;
+  };
+
   const routes = parseCSV(content);
   return routes.map((route) => ({
     id: route.route_id,
-    shortName: route.route_short_name || route.route_id,
+    shortName: (route.route_short_name || route.route_id || '').trim(),
     longName: route.route_long_name || '',
     type: parseInt(route.route_type || '3', 10),
-    color: route.route_color ? `#${route.route_color}` : null,
-    textColor: route.route_text_color ? `#${route.route_text_color}` : null,
+    color: normalizeGtfsHexColor(route.route_color),
+    textColor: normalizeGtfsHexColor(route.route_text_color),
   }));
 };
 

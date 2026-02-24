@@ -1,0 +1,19 @@
+name: Survey Daily Digest
+
+on:
+  schedule:
+    # Run daily at 7:00 AM ET (12:00 UTC)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger survey digest
+        run: |
+          curl -s -f -X POST \
+            "${{ secrets.API_PROXY_URL }}/api/survey/send-digest" \
+            -H "Content-Type: application/json" \
+            -H "x-api-token: ${{ secrets.API_PROXY_TOKEN }}" \
+            -H "x-admin-key: ${{ secrets.SURVEY_ADMIN_API_KEY }}"

@@ -62,6 +62,11 @@ proxy_bundle.*
 proxy_headers.*
 .tmp-metro-proxy.js
 
+# Release signing
+*.keystore
+!android/app/debug.keystore
+keystore.properties
+
 # Service account keys (Google Play, Firebase, etc.)
 *service-account*.json
 google-play-service-account.json

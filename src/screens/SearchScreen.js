@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
 import {
@@ -21,12 +21,13 @@ import { useSearchHistory } from '../hooks/useSearchHistory';
 import { trackEvent } from '../services/analyticsService';
 
 const SearchScreen = ({ navigation }) => {
-  const { stops, routes, isLoadingStatic } = useTransit();
+  const { stops, routes, isLoadingStatic } = useTransitStatic();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState('stops'); // 'stops', 'routes', or 'addresses'
   const [addressResults, setAddressResults] = useState([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const debounceRef = useRef(null);
+  const addressRequestSeqRef = useRef(0);
   const { addToHistory, getHistory, clearHistory } = useSearchHistory();
 
   // Debounced address search
@@ -37,6 +38,7 @@ const SearchScreen = ({ navigation }) => {
 
     const query = searchQuery.trim();
     if (query.length < 3) {
+      addressRequestSeqRef.current += 1;
       setAddressResults([]);
       setAddressLoading(false);
       return;
@@ -44,18 +46,26 @@ const SearchScreen = ({ navigation }) => {
 
     setAddressLoading(true);
     debounceRef.current = setTimeout(async () => {
+      const requestSeq = ++addressRequestSeqRef.current;
       try {
         const results = await autocompleteAddress(query);
-        setAddressResults(results);
+        if (requestSeq === addressRequestSeqRef.current) {
+          setAddressResults(results);
+        }
       } catch {
-        setAddressResults([]);
+        if (requestSeq === addressRequestSeqRef.current) {
+          setAddressResults([]);
+        }
       } finally {
-        setAddressLoading(false);
+        if (requestSeq === addressRequestSeqRef.current) {
+          setAddressLoading(false);
+        }
       }
     }, 300);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      addressRequestSeqRef.current += 1;
     };
   }, [searchQuery, searchType]);
 

@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
 import Icon from '../components/Icon';
+import SurveyTeaser from '../components/survey/SurveyTeaser';
 
 const ProfileScreen = ({ navigation }) => {
   const { user, isAuthenticated, favorites, tripHistory, signOut } = useAuth();
@@ -57,6 +58,13 @@ const ProfileScreen = ({ navigation }) => {
       title: 'Transit News',
       subtitle: 'Latest updates',
       onPress: () => navigation.navigate('News'),
+    },
+    {
+      id: 'survey',
+      icon: 'Star',
+      title: 'Share Feedback',
+      subtitle: 'Help improve transit',
+      onPress: () => navigation.navigate('Survey'),
     },
     {
       id: 'settings',
@@ -164,6 +172,11 @@ const ProfileScreen = ({ navigation }) => {
             </View>
           </View>
         )}
+
+        {/* Survey Teaser */}
+        <SurveyTeaser
+          onPress={() => navigation.navigate('Survey')}
+        />
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>{menuItems.map(renderMenuItem)}</View>

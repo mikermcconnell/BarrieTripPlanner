@@ -18,9 +18,12 @@
     "web:dev": "concurrently -k -n proxy,expo \"node proxy-server.js\" \"expo start --web\"",
     "fetch-addresses": "node scripts/fetchBarrieAddresses.js",
     "dev:android": "expo start --dev-client",
+    "postinstall": "patch-package",
     "test": "jest",
     "test:watch": "jest --watch",
-    "check:parity": "node scripts/check-platform-parity.js"
+    "check:parity": "node scripts/check-platform-parity.js",
+    "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
+    "build:release:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Apk"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",
@@ -61,7 +64,7 @@
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.12.1",
+    "react-native-svg": "^15.15.3",
     "react-native-web": "^0.21.0",
     "react-native-worklets": "0.5.1"
   },
@@ -71,6 +74,7 @@
     "babel-jest": "^29.7.0",
     "concurrently": "^9.2.1",
     "jest": "~29.7.0",
+    "patch-package": "^8.0.1",
     "react-test-renderer": "^19.1.0"
   },
   "overrides": {

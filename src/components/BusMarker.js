@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import Svg, { Path } from 'react-native-svg';
-import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 
 const BUS_ICON_PATH =
   'M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z';
@@ -12,10 +11,12 @@ const ARROW_WRAPPER_SIZE = 80;
 const markerDebugState = new Map();
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
-const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp }) => {
-  const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle);
+const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp }) => {
+  const latitude = vehicle?.coordinate?.latitude;
+  const longitude = vehicle?.coordinate?.longitude;
+  const bearing = vehicle?.bearing ?? 0;
 
-  if (!latitude || !longitude) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;
   }
 
@@ -51,7 +52,6 @@ const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabel
         style={[
           styles.wrapper,
           showDirectionArrow ? styles.wrapperWithArrow : styles.wrapperNoArrow,
-          scale !== 1 && { transform: [{ scale }] },
         ]}
         onTouchEnd={() => onPress?.(vehicle)}
       >
@@ -142,5 +142,7 @@ export const areBusMarkerPropsEqual = (prev, next) => {
     prev.routeLabel === next.routeLabel
   );
 };
+
+const BusMarker = memo(BusMarkerComponent, areBusMarkerPropsEqual);
 
 export default BusMarker;

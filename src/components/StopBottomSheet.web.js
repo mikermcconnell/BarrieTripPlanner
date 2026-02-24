@@ -154,18 +154,12 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
               <Text style={styles.stopCode}>Stop #{stop.code}</Text>
             </View>
           </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.shareButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share stop details">
-              <ShareIcon size={16} color={COLORS.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close stop details">
-              <CloseIcon size={20} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.closeButton} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close stop details">
+            <CloseIcon size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Direction Buttons */}
+        {/* Actions */}
         <View style={styles.directionsContainer}>
           <TouchableOpacity
             style={[styles.directionButton, styles.fromButton]}
@@ -187,6 +181,10 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
           >
             <DirectionsToIcon size={18} color={COLORS.error} />
             <Text style={styles.directionButtonText}>Trip to here</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare} accessibilityRole="button" accessibilityLabel="Share stop details">
+            <ShareIcon size={16} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
@@ -317,25 +315,20 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  shareButton: {
-    width: 36,
-    height: 36,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.primarySubtle,
-    justifyContent: 'center',
-    alignItems: 'center',
-    cursor: 'pointer',
-  },
   closeButton: {
     width: 36,
     height: 36,
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.grey100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    cursor: 'pointer',
+  },
+  shareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primarySubtle,
     justifyContent: 'center',
     alignItems: 'center',
     cursor: 'pointer',

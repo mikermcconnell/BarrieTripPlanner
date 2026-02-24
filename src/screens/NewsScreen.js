@@ -8,7 +8,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTransit } from '../context/TransitContext';
+import { useTransitRealtime } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 function formatDate(timestamp) {
@@ -25,7 +25,7 @@ function formatDate(timestamp) {
 }
 
 const NewsScreen = ({ navigation }) => {
-  const { transitNews } = useTransit();
+  const { transitNews } = useTransitRealtime();
   const [expandedId, setExpandedId] = useState(null);
 
   const renderNewsItem = ({ item }) => {

@@ -195,6 +195,14 @@ export const ANIMATION = {
   BUS_PULSE_DURATION_MS: 400,       // scale pulse duration on new position
 };
 
+// UI performance budgets for interaction-heavy screens.
+export const PERFORMANCE_BUDGETS = {
+  MAP_REGION_HANDLER_MS: 12,
+  MAP_MAX_VISIBLE_VEHICLES: 110,
+  MAP_MAX_VISIBLE_STOPS: 150,
+  MAP_MAX_VISIBLE_SHAPES: 120,
+};
+
 export const TRIP_UI_CONFIG = {
   // Walk distance considered "high" — triggers warning label (meters)
   HIGH_WALK_THRESHOLD: 800,

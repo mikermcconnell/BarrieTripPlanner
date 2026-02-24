@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const appJson = require('./app.base.json');
+const packageJson = require('./package.json');
 
 function hasValue(value) {
   return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
@@ -13,6 +14,7 @@ function resolveGoogleServicesFile(config) {
 }
 
 module.exports = ({ config }) => {
+  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || packageJson.version;
   const mergedConfig = {
     ...(appJson?.expo || {}),
     ...(config || {}),
@@ -60,6 +62,13 @@ module.exports = ({ config }) => {
   if (!resolvedConfig.android) {
     resolvedConfig.android = {};
   }
+
+  // Single source of truth: package.json version controls Expo version/runtime.
+  if (hasValue(appVersion)) {
+    resolvedConfig.version = String(appVersion).trim();
+  }
+
+  resolvedConfig.runtimeVersion = { policy: 'appVersion' };
 
   if (googleServicesFile) {
     resolvedConfig.android.googleServicesFile = googleServicesFile;

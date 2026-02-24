@@ -17,8 +17,10 @@ import {
   TouchableOpacity,
   Text,
   Alert,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
@@ -32,9 +34,10 @@ import BusProximityCard from '../components/navigation/BusProximityCard';
 import NavigationProgressBar from '../components/navigation/NavigationProgressBar';
 import StepOverviewSheet from '../components/navigation/StepOverviewSheet';
 import ExitConfirmationModal from '../components/navigation/ExitConfirmationModal';
+import DestinationBanner from '../components/navigation/DestinationBanner';
 
 // Context for route shapes
-import { useTransit } from '../context/TransitContext';
+import { useTransitStatic } from '../context/TransitContext';
 
 // Hooks
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
@@ -105,7 +108,7 @@ const NavigationScreen = ({ route }) => {
   if (!itinerary) return null;
 
   // Get route shapes from TransitContext
-  const { shapes, routeShapeMapping } = useTransit();
+  const { shapes, routeShapeMapping } = useTransitStatic();
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
@@ -156,6 +159,7 @@ const NavigationScreen = ({ route }) => {
 
   const isWalkingLeg = currentLeg?.mode === 'WALK';
   const isTransitLeg = currentLeg?.mode === 'BUS' || currentLeg?.mode === 'TRANSIT';
+  const isOnDemandLeg = currentLeg?.isOnDemand === true;
 
   // Get next transit leg (for bus tracking during walking legs)
   const nextTransitLeg = useMemo(() => {
@@ -166,6 +170,14 @@ const NavigationScreen = ({ route }) => {
     }
     return null;
   }, [itinerary, currentLegIndex, isWalkingLeg]);
+
+  const isLastWalkingLeg = useMemo(() => {
+    if (!isWalkingLeg || !itinerary?.legs) return false;
+    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
+      if (itinerary.legs[i].mode === 'BUS' || itinerary.legs[i].mode === 'TRANSIT') return false;
+    }
+    return true;
+  }, [isWalkingLeg, itinerary, currentLegIndex]);
 
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
@@ -249,6 +261,8 @@ const NavigationScreen = ({ route }) => {
         const { maybeRequestReview } = require('../services/reviewService');
         maybeRequestReview();
       } catch {}
+      // Set nudge flag for post-trip survey banner on HomeScreen
+      AsyncStorage.setItem('@barrie_transit_show_survey_nudge', 'true').catch(() => {});
       Alert.alert(
         'Trip Complete!',
         'You have arrived at your destination.',
@@ -340,9 +354,11 @@ const NavigationScreen = ({ route }) => {
           ? COLORS.grey400
           : isWalk
           ? COLORS.grey600
+          : leg.isOnDemand
+          ? (leg.zoneColor || COLORS.primary)
           : (leg.route?.color || COLORS.primary),
         strokeWidth: isCurrentLeg ? 5 : 3,
-        lineDashPattern: isWalk ? [10, 5] : null,
+        lineDashPattern: isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null,
         opacity: isCompletedLeg ? 0.5 : 1,
       };
     });
@@ -486,14 +502,6 @@ const NavigationScreen = ({ route }) => {
   };
   const handleBoundsFit = useCallback(() => {}, []);
   void handleBoundsFit;
-
-  // Get next walking step for preview
-  const nextWalkingStep = useMemo(() => {
-    if (!currentLeg || currentLeg.mode !== 'WALK') return null;
-    const steps = currentLeg.steps || [];
-    return steps[currentStepIndex + 1] || null;
-  }, [currentLeg, currentStepIndex]);
-
 
   // Get final destination name for header
   const finalDestination = useMemo(() => {
@@ -663,14 +671,20 @@ const NavigationScreen = ({ route }) => {
 
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
+        {/* Destination Banner */}
+        <DestinationBanner
+          currentLeg={currentLeg}
+          nextTransitLeg={nextTransitLeg}
+          distanceRemaining={distanceToDestination}
+          totalLegDistance={currentLeg?.distance || 0}
+          isLastWalkingLeg={isLastWalkingLeg}
+        />
+
         {/* Walking Instruction Card */}
         {isWalkingLeg && (
           <WalkingInstructionCard
             currentStep={currentWalkingStep}
-            nextStep={nextWalkingStep}
-            distanceRemaining={distanceToDestination}
-            totalLegDistance={currentLeg?.distance || 0}
-            nextTransitLeg={nextTransitLeg}
+            onNextStep={advanceLeg}
           />
         )}
 
@@ -696,6 +710,50 @@ const NavigationScreen = ({ route }) => {
             isRealtime={currentLeg?.isRealtime || false}
             delaySeconds={currentLeg?.delaySeconds || 0}
           />
+        )}
+
+        {/* On-Demand Zone Card */}
+        {isOnDemandLeg && (
+          <View style={[styles.onDemandCard, { borderLeftColor: currentLeg.zoneColor || COLORS.primary }]}>
+            <View style={styles.onDemandCardHeader}>
+              <Text style={styles.onDemandCardIcon}>📞</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.onDemandCardTitle}>
+                  {currentLeg.zoneName || 'On-Demand Zone'}
+                </Text>
+                <Text style={styles.onDemandCardSubtitle}>
+                  Call to book your ride
+                </Text>
+              </View>
+            </View>
+            {currentLeg.to?.name && (
+              <Text style={styles.onDemandCardDetail}>
+                Your driver will take you to {currentLeg.to.name}
+              </Text>
+            )}
+            <View style={styles.onDemandCardActions}>
+              {currentLeg.bookingPhone && (
+                <TouchableOpacity
+                  style={[styles.onDemandPhoneButton, { backgroundColor: currentLeg.zoneColor || COLORS.primary }]}
+                  onPress={() => Linking.openURL(`tel:${currentLeg.bookingPhone}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Call ${currentLeg.bookingPhone} to book ride`}
+                >
+                  <Text style={styles.onDemandPhoneButtonText}>
+                    Call {currentLeg.bookingPhone}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.onDemandCompleteButton}
+                onPress={completeLeg}
+                accessibilityRole="button"
+                accessibilityLabel="Mark on-demand ride as complete"
+              >
+                <Text style={styles.onDemandCompleteButtonText}>Ride Complete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {/* Progress Bar */}
@@ -848,6 +906,66 @@ const styles = StyleSheet.create({
     borderRightColor: 'transparent',
     transform: [{ rotate: '180deg' }],
     marginTop: -2,
+  },
+  onDemandCard: {
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderLeftWidth: 4,
+    ...SHADOWS.medium,
+  },
+  onDemandCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  onDemandCardIcon: {
+    fontSize: 28,
+    marginRight: SPACING.sm,
+  },
+  onDemandCardTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  onDemandCardSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  onDemandCardDetail: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+  },
+  onDemandCardActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  onDemandPhoneButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+  },
+  onDemandPhoneButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  onDemandCompleteButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    backgroundColor: COLORS.grey200,
+  },
+  onDemandCompleteButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,

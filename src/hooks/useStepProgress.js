@@ -106,6 +106,13 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
       return { type: 'boarding', label: `Board ${currentLeg.route?.shortName || 'Bus'}` };
     }
 
+    if (currentLeg.isOnDemand) {
+      return {
+        type: 'on_demand',
+        label: `On-demand to ${currentLeg.to?.name || 'hub stop'}`,
+      };
+    }
+
     return { type: 'unknown', label: 'Continue' };
   }, [currentLeg, legStatus, transitStatus, busProximity]);
 

@@ -446,6 +446,53 @@ export const offsetPath = (path, offsetMeters) => {
   return result;
 };
 
+/**
+ * Ray-casting point-in-ring test for a single ring.
+ * Ring is an array of [lng, lat] pairs (GeoJSON coordinate order).
+ * @param {number} lat - Point latitude
+ * @param {number} lon - Point longitude
+ * @param {Array} ring - Array of [lng, lat] coordinate pairs
+ * @returns {boolean}
+ */
+export const pointInRing = (lat, lon, ring) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][1]; // lat
+    const yi = ring[i][0]; // lng
+    const xj = ring[j][1]; // lat
+    const yj = ring[j][0]; // lng
+
+    const intersect =
+      yi > lon !== yj > lon &&
+      lat < ((xj - xi) * (lon - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+/**
+ * Point-in-polygon test supporting GeoJSON polygons with holes.
+ * Coordinates use GeoJSON order: [lng, lat].
+ * The first ring is the outer boundary; subsequent rings are holes.
+ * @param {number} lat - Point latitude
+ * @param {number} lon - Point longitude
+ * @param {Array} coordinates - GeoJSON polygon coordinates array (array of rings)
+ * @returns {boolean}
+ */
+export const pointInPolygon = (lat, lon, coordinates) => {
+  if (!coordinates || coordinates.length === 0) return false;
+
+  // Must be inside the outer ring
+  if (!pointInRing(lat, lon, coordinates[0])) return false;
+
+  // Must NOT be inside any hole
+  for (let i = 1; i < coordinates.length; i++) {
+    if (pointInRing(lat, lon, coordinates[i])) return false;
+  }
+
+  return true;
+};
+
 export const simplifyPath = (path, minDistanceMeters = 20) => {
   if (!path || path.length <= 2) {
     return path;

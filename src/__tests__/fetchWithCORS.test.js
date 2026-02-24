@@ -1,4 +1,4 @@
-const LOCAL_PROXY = 'http://localhost:3001/proxy?url=';
+const LOCAL_PROXY = 'http://127.0.0.1:3001/proxy?url=';
 const ALL_ORIGINS_PROXY = 'https://api.allorigins.win/raw?url=';
 const CUSTOM_PROXY = 'https://proxy.example.com/proxy?url=';
 

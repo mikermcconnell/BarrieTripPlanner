@@ -6,14 +6,14 @@
  * Also tracks user's position during the ride to alert when to get off.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useTransit } from '../context/TransitContext';
+import { useTransitRealtime } from '../context/TransitContext';
 import { safeHaversineDistance as calculateDistance } from '../utils/geometryUtils';
 
 // Threshold for considering arrival at a stop (meters)
 const STOP_ARRIVAL_THRESHOLD = 50;
 
 export const useBusProximity = (transitLeg, isActive = true, userLocation = null, isUserOnBoard = false) => {
-  const { vehicles, loadVehiclePositions } = useTransit();
+  const { vehicles, loadVehiclePositions } = useTransitRealtime();
   const [proximity, setProximity] = useState({
     vehicle: null,
     stopsAway: null,

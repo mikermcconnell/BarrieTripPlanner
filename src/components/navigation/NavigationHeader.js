@@ -19,6 +19,7 @@ const calculateETA = (distanceMeters, mode = 'WALK') => {
     WALK: 83.3,    // 5 km/h
     BUS: 333.3,    // 20 km/h average with stops
     TRANSIT: 333.3,
+    ON_DEMAND: 416.7, // 25 km/h average
   };
 
   const speedMpm = speeds[mode] || speeds.WALK;
@@ -57,6 +58,8 @@ const NavigationHeader = ({
       case 'alighting':
       case 'alighting_soon':
         return '🚪';
+      case 'on_demand':
+        return '📞';
       case 'complete':
         return '🎉';
       default:
@@ -79,6 +82,8 @@ const NavigationHeader = ({
         return COLORS.error;
       case 'alighting_soon':
         return COLORS.warning;
+      case 'on_demand':
+        return COLORS.secondary;
       case 'complete':
         return COLORS.success;
       default:
@@ -101,6 +106,8 @@ const NavigationHeader = ({
         return 'GET OFF AT';
       case 'alighting_soon':
         return 'NEXT STOP';
+      case 'on_demand':
+        return 'ON-DEMAND RIDE TO';
       case 'complete':
         return 'ARRIVED AT';
       default:

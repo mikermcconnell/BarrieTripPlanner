@@ -71,8 +71,11 @@ export const useTripVisualization = ({
         routes.push({
           id: `trip-leg-${index}`,
           coordinates: coords,
-          color: leg.mode === 'WALK' ? COLORS.grey500 : (leg.route?.color || COLORS.primary),
+          color: leg.mode === 'WALK' ? COLORS.grey500
+            : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
+            : (leg.route?.color || COLORS.primary),
           isWalk: leg.mode === 'WALK',
+          isOnDemand: !!leg.isOnDemand,
         });
       }
     });
@@ -115,7 +118,7 @@ export const useTripVisualization = ({
 
     const stopMarkers = [];
     selectedItinerary.legs.forEach((leg, legIndex) => {
-      if (leg.mode === 'WALK' || !leg.intermediateStops) return;
+      if (leg.mode === 'WALK' || leg.isOnDemand || !leg.intermediateStops) return;
 
       const polyline = decodedLegPolylines[legIndex];
 
@@ -140,7 +143,7 @@ export const useTripVisualization = ({
 
     const markers = [];
     selectedItinerary.legs.forEach((leg, legIndex) => {
-      if (leg.mode === 'WALK') return;
+      if (leg.mode === 'WALK' || leg.isOnDemand) return;
 
       const routeColor = leg.route?.color || COLORS.primary;
       const routeName = leg.route?.shortName || '';
@@ -180,7 +183,7 @@ export const useTripVisualization = ({
 
     const tripIds = new Set();
     selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && leg.tripId) {
+      if (leg.mode !== 'WALK' && !leg.isOnDemand && leg.tripId) {
         tripIds.add(leg.tripId);
       }
     });
@@ -193,7 +196,7 @@ export const useTripVisualization = ({
     // Fallback: filter by route IDs
     const tripRouteIds = new Set();
     selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && leg.route?.id) {
+      if (leg.mode !== 'WALK' && !leg.isOnDemand && leg.route?.id) {
         tripRouteIds.add(leg.route.id);
       }
     });

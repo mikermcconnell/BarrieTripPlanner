@@ -1,10 +1,25 @@
 const { getStaticData } = require('./gtfsLoader');
 const { fetchVehicles, errors: fetchErrors } = require('./vehicleFetcher');
-const { processVehicles, clearVehicleState, getState } = require('./detourDetector');
+const { processVehicles, getState, seedActiveDetour } = require('./detourDetector');
 const { publishDetours } = require('./detourPublisher');
+const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
+const { getDb } = require('./firebaseAdmin');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
+
+function toMillis(value) {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.toDate === 'function') {
+    const dateValue = value.toDate();
+    return dateValue instanceof Date ? dateValue.getTime() : null;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 let interval = null;
 let running = false;
@@ -14,6 +29,7 @@ let lastDetourPublishAt = null;
 let consecutiveFailureCount = 0;
 let lastGtfsRefresh = null;
 let tickInProgress = false;
+let firstTick = true;
 let publishFailures = 0;
 const recentEvents = [];
 
@@ -33,8 +49,39 @@ async function tick() {
   try {
     const data = await getStaticData();
     if (data.lastRefresh !== lastGtfsRefresh) {
-      if (lastGtfsRefresh !== null) clearVehicleState();
+      if (lastGtfsRefresh !== null) logShapeDivergence(data);
       lastGtfsRefresh = data.lastRefresh;
+    }
+
+    const baseline = await getBaselineData(data);
+
+    // On first tick, seed detector from Firestore so detours survive restarts
+    if (firstTick) {
+      try {
+        const db = getDb();
+        if (db) {
+          const snapshot = await db.collection('activeDetours').get();
+          let seeded = 0;
+          snapshot.forEach((doc) => {
+            const d = doc.data() || {};
+            const routeId = d.routeId || doc.id;
+            const detectedAtMs = toMillis(d.detectedAt);
+            const lastEvidenceAtMs = toMillis(d.updatedAt) || detectedAtMs;
+            if (detectedAtMs && lastEvidenceAtMs) {
+              const vehicleCount = typeof d.vehicleCount === 'number' ? d.vehicleCount : 0;
+              seedActiveDetour(routeId, detectedAtMs, lastEvidenceAtMs, vehicleCount);
+              seeded++;
+            }
+          });
+          if (seeded > 0) {
+            console.log(`[detourWorker] Seeded ${seeded} active detours from Firestore`);
+          }
+        }
+        firstTick = false;
+      } catch (err) {
+        console.error('[detourWorker] Failed to seed detours from Firestore:', err.message);
+        // firstTick remains true — will retry on next tick
+      }
     }
 
     const tripObj = Object.fromEntries(data.tripMapping);
@@ -44,7 +91,7 @@ async function tick() {
     const prevKeys = detourKeys(prevSnapshot.detours || {});
     const prevStates = prevSnapshot.detourStates || {};
 
-    const activeDetours = processVehicles(vehicles, data.shapes, data.routeShapeMapping);
+    const activeDetours = processVehicles(vehicles, baseline.shapes, baseline.routeShapeMapping);
     const currKeys = detourKeys(activeDetours);
     const currStates = {};
     for (const [k, v] of Object.entries(activeDetours)) {
@@ -118,6 +165,7 @@ function getStatus() {
     consecutiveFailureCount,
     lastGtfsRefresh: lastGtfsRefresh ? new Date(lastGtfsRefresh).toISOString() : null,
     activeDetours: detourSummary,
+    baseline: getBaselineStatus(),
     recentEvents: [...recentEvents],
     errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures },
   };

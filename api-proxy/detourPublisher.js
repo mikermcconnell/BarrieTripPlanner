@@ -310,9 +310,9 @@ async function publishDetours(activeDetours) {
       detectedAt: toDate(detour.detectedAt, now),
       updatedAt: now,
       triggerVehicleId: detour.triggerVehicleId || null,
-      vehicleCount: detour.vehiclesOffRoute
+      vehicleCount: detour.vehiclesOffRoute && detour.vehiclesOffRoute.size > 0
         ? detour.vehiclesOffRoute.size
-        : normalizeVehicleCount(detour.vehicleCount),
+        : normalizeVehicleCount(detour.seedVehicleCount || detour.vehicleCount),
       state: detour.state || 'active',
     };
 

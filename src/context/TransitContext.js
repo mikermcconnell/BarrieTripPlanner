@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { fetchAllStaticData } from '../services/gtfsService';
 import { fetchVehiclePositions, formatVehiclesForMap } from '../services/realtimeService';
 import { buildRoutingData } from '../services/routingDataService';
@@ -13,14 +13,33 @@ import {
 } from '../utils/offlineCache';
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
 import { subscribeToTransitNews } from '../services/firebase/newsService';
+import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import logger from '../utils/logger';
 
 const TransitContext = createContext(null);
+const TransitStaticContext = createContext(null);
+const TransitRealtimeContext = createContext(null);
 
 export const useTransit = () => {
   const context = useContext(TransitContext);
   if (!context) {
     throw new Error('useTransit must be used within a TransitProvider');
+  }
+  return context;
+};
+
+export const useTransitStatic = () => {
+  const context = useContext(TransitStaticContext);
+  if (!context) {
+    throw new Error('useTransitStatic must be used within a TransitProvider');
+  }
+  return context;
+};
+
+export const useTransitRealtime = () => {
+  const context = useContext(TransitRealtimeContext);
+  if (!context) {
+    throw new Error('useTransitRealtime must be used within a TransitProvider');
   }
   return context;
 };
@@ -60,6 +79,9 @@ export const TransitProvider = ({ children }) => {
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
 
+  // On-demand zones (server-side, via Firestore)
+  const [onDemandZones, setOnDemandZones] = useState({});
+
   // Offline state
   const [isOffline, setIsOffline] = useState(false);
   const [usingCachedData, setUsingCachedData] = useState(false);
@@ -68,6 +90,11 @@ export const TransitProvider = ({ children }) => {
   const vehicleIntervalRef = useRef(null);
   const serviceAlertIntervalRef = useRef(null);
   const shapeProcessingJobRef = useRef(0);
+
+  // Refs for deferred routing and cache-first strategy
+  const gtfsDataRef = useRef(null);
+  const routingDataRef = useRef(null);
+  const routingBuildPromiseRef = useRef(null);
 
   /**
    * Process raw shapes through the rendering pipeline without blocking the UI thread.
@@ -97,7 +124,7 @@ export const TransitProvider = ({ children }) => {
         const processed = {};
         const batchSize = 10;
 
-        for (let i = 0; i < shapeIds.length; i++) {
+        for (let i = 0; i < shapeIds.length; i += 1) {
           if (shapeProcessingJobRef.current !== jobId) {
             return;
           }
@@ -120,117 +147,133 @@ export const TransitProvider = ({ children }) => {
   }, []);
 
   /**
-   * Load static GTFS data with offline caching support
+   * Apply parsed GTFS data to state (shared by cache-first and network paths)
+   */
+  const applyStaticData = useCallback((data) => {
+    setRoutes(data.routes || []);
+    setStops(data.stops || []);
+    setShapes(data.shapes || {});
+    setTrips(data.trips || []);
+    setTripMapping(data.tripMapping || {});
+    setRouteShapeMapping(data.routeShapeMapping || {});
+    setRouteStopsMapping(data.routeStopsMapping || {});
+  }, []);
+
+  /**
+   * Load static GTFS data with cache-first strategy.
+   *
+   * Priority order:
+   * 1. Load from cache instantly (map renders immediately)
+   * 2. Background-refresh from network if online
+   * 3. First launch (no cache): download from network
+   *
+   * Routing data is NOT built here — it's deferred to ensureRoutingData()
+   * and only constructed when the user first requests a trip plan.
    */
   const loadStaticData = useCallback(async () => {
     setIsLoadingStatic(true);
     setStaticError(null);
     setUsingCachedData(false);
-    setIsRoutingReady(false);
 
     const online = await isOnline();
     setIsOffline(!online);
 
-    // Try to load from cache first if offline
-    if (!online) {
-      const cachedData = await getCachedGTFSData();
-      if (cachedData) {
-        setRoutes(cachedData.routes);
-        setStops(cachedData.stops);
-        setShapes(cachedData.shapes || {});
-        setTrips(cachedData.trips || []);
-        setTripMapping(cachedData.tripMapping || {});
-        setRouteShapeMapping(cachedData.routeShapeMapping || {});
-        setRouteStopsMapping(cachedData.routeStopsMapping || {});
-        setUsingCachedData(true);
+    // Phase 1: Try cache first for instant map display
+    const cachedData = await getCachedGTFSData();
+    if (cachedData) {
+      applyStaticData(cachedData);
+      setUsingCachedData(true);
+      processAndStoreShapes(cachedData.shapes || {});
+      setIsLoadingStatic(false); // Map can render now
 
-        // Process shapes for rendering
-        processAndStoreShapes(cachedData.shapes || {});
-
-        // Build routing data from cached data if available
-        if (cachedData.stopTimes && cachedData.calendar) {
-          try {
-            const routing = buildRoutingData(cachedData);
-            // Add routes for itinerary building
-            routing.routes = cachedData.routes;
-            routing.shapes = cachedData.shapes || {};
-            setRoutingData(routing);
-            setIsRoutingReady(true);
-          } catch (routingError) {
-            logger.warn('Failed to build routing data from cache:', routingError);
-          }
+      // Phase 2: Background refresh if online
+      if (online) {
+        try {
+          const data = await fetchAllStaticData();
+          gtfsDataRef.current = data;
+          applyStaticData(data);
+          setUsingCachedData(false);
+          processAndStoreShapes(data.shapes);
+          // Invalidate stale routing so next trip plan rebuilds
+          routingDataRef.current = null;
+          setRoutingData(null);
+          setIsRoutingReady(false);
+          await cacheGTFSData(data);
+        } catch (error) {
+          // Silent fail — cached data is already displayed
+          logger.warn('Background GTFS refresh failed:', error);
         }
-
-        setIsLoadingStatic(false);
-        return;
       }
+      return;
     }
 
+    // No cache available
+    if (!online) {
+      setStaticError('No internet connection and no cached data available');
+      setIsLoadingStatic(false);
+      return;
+    }
+
+    // First launch: must download
     try {
       const data = await fetchAllStaticData();
-      setRoutes(data.routes);
-      setStops(data.stops);
-      setShapes(data.shapes);
-      setTrips(data.trips);
-      setTripMapping(data.tripMapping);
-      setRouteShapeMapping(data.routeShapeMapping);
-      setRouteStopsMapping(data.routeStopsMapping || {});
-
-      // Process shapes for rendering
+      gtfsDataRef.current = data;
+      applyStaticData(data);
       processAndStoreShapes(data.shapes);
-
-      // Build routing data structures for RAPTOR
-      try {
-        const routing = buildRoutingData(data);
-        // Add routes for itinerary building
-        routing.routes = data.routes;
-        routing.shapes = data.shapes || {};
-        setRoutingData(routing);
-        setIsRoutingReady(true);
-      } catch (routingError) {
-        logger.error('Failed to build routing data:', routingError);
-        // Continue without local routing - will fall back to OTP
-      }
-
-      // Cache the data for offline use
       await cacheGTFSData(data);
     } catch (error) {
       logger.error('Failed to load static data:', error);
-
-      // Try to use cached data as fallback
-      const cachedData = await getCachedGTFSData();
-      if (cachedData) {
-        setRoutes(cachedData.routes);
-        setStops(cachedData.stops);
-        setShapes(cachedData.shapes || {});
-        setTrips(cachedData.trips || []);
-        setTripMapping(cachedData.tripMapping || {});
-        setRouteShapeMapping(cachedData.routeShapeMapping || {});
-        setRouteStopsMapping(cachedData.routeStopsMapping || {});
-        setUsingCachedData(true);
-
-        // Process shapes for rendering
-        processAndStoreShapes(cachedData.shapes || {});
-
-        // Try to build routing data from cached data
-        if (cachedData.stopTimes && cachedData.calendar) {
-          try {
-            const routing = buildRoutingData(cachedData);
-            routing.routes = cachedData.routes;
-            routing.shapes = cachedData.shapes || {};
-            setRoutingData(routing);
-            setIsRoutingReady(true);
-          } catch (routingError) {
-            logger.warn('Failed to build routing data from cache:', routingError);
-          }
-        }
-      } else {
-        setStaticError(error.message || 'Failed to load transit data');
-      }
+      setStaticError(error.message || 'Failed to load transit data');
     } finally {
       setIsLoadingStatic(false);
     }
-  }, []);
+  }, [applyStaticData, processAndStoreShapes]);
+
+  /**
+   * Lazily build routing data on first trip plan request.
+   * Returns the RAPTOR routing structures, fetching fresh GTFS if needed
+   * (cache doesn't include stopTimes which are required for routing).
+   */
+  const ensureRoutingData = useCallback(async () => {
+    // Already built
+    if (routingDataRef.current) return routingDataRef.current;
+
+    // If a build is already in progress, share the same promise
+    if (routingBuildPromiseRef.current) {
+      return routingBuildPromiseRef.current;
+    }
+
+    const buildPromise = (async () => {
+      try {
+        let data = gtfsDataRef.current;
+
+        // Cache doesn't include stopTimes — fetch fresh if needed
+        if (!data?.stopTimes) {
+          data = await fetchAllStaticData();
+          gtfsDataRef.current = data;
+          applyStaticData(data);
+          processAndStoreShapes(data.shapes);
+          await cacheGTFSData(data);
+        }
+
+        const routing = buildRoutingData(data);
+        routing.routes = data.routes;
+        routing.shapes = data.shapes || {};
+        routingDataRef.current = routing;
+        setRoutingData(routing);
+        setIsRoutingReady(true);
+        return routing;
+      } catch (error) {
+        logger.error('Failed to build routing data:', error);
+        return null;
+      } finally {
+        routingBuildPromiseRef.current = null;
+      }
+    })();
+
+    routingBuildPromiseRef.current = buildPromise;
+    return buildPromise;
+  }, [applyStaticData, processAndStoreShapes]);
 
   /**
    * Load vehicle positions
@@ -256,15 +299,12 @@ export const TransitProvider = ({ children }) => {
    * Start automatic vehicle position updates
    */
   const startVehicleUpdates = useCallback(() => {
-    // Clear existing interval
     if (vehicleIntervalRef.current) {
       clearInterval(vehicleIntervalRef.current);
     }
 
-    // Load immediately
     loadVehiclePositions();
 
-    // Set up interval
     vehicleIntervalRef.current = setInterval(
       loadVehiclePositions,
       REFRESH_INTERVALS.VEHICLE_POSITIONS
@@ -320,29 +360,16 @@ export const TransitProvider = ({ children }) => {
     }
   }, []);
 
-  /**
-   * Get route by ID
-   */
   const getRouteById = useCallback(
-    (routeId) => {
-      return routes.find((route) => route.id === routeId);
-    },
+    (routeId) => routes.find((route) => route.id === routeId),
     [routes]
   );
 
-  /**
-   * Get stop by ID
-   */
   const getStopById = useCallback(
-    (stopId) => {
-      return stops.find((stop) => stop.id === stopId);
-    },
+    (stopId) => stops.find((stop) => stop.id === stopId),
     [stops]
   );
 
-  /**
-   * Get shapes for a route
-   */
   const getShapesForRoute = useCallback(
     (routeId) => {
       const shapeIds = routeShapeMapping[routeId] || [];
@@ -354,13 +381,8 @@ export const TransitProvider = ({ children }) => {
     [routeShapeMapping, shapes]
   );
 
-  /**
-   * Get vehicles for a specific route
-   */
   const getVehiclesForRoute = useCallback(
-    (routeId) => {
-      return vehicles.filter((vehicle) => vehicle.routeId === routeId);
-    },
+    (routeId) => vehicles.filter((vehicle) => vehicle.routeId === routeId),
     [vehicles]
   );
 
@@ -388,6 +410,15 @@ export const TransitProvider = ({ children }) => {
     const unsubscribe = subscribeToTransitNews(
       (news) => setTransitNews(news),
       (error) => logger.error('News subscription error:', error)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Subscribe to on-demand zones (public collection, no auth required)
+  useEffect(() => {
+    const unsubscribe = subscribeToOnDemandZones(
+      (zoneMap) => setOnDemandZones(zoneMap),
+      (error) => logger.error('Zone subscription error:', error)
     );
     return () => unsubscribe();
   }, []);
@@ -429,7 +460,6 @@ export const TransitProvider = ({ children }) => {
         setServiceAlerts([]);
       }
 
-      // Reload data when coming back online
       if (wasOffline && !nowOffline) {
         loadStaticData();
       }
@@ -442,8 +472,7 @@ export const TransitProvider = ({ children }) => {
     };
   }, [isOffline, loadStaticData]);
 
-  const value = {
-    // Static data
+  const staticValue = useMemo(() => ({
     routes,
     stops,
     shapes,
@@ -453,12 +482,41 @@ export const TransitProvider = ({ children }) => {
     tripMapping,
     routeShapeMapping,
     routeStopsMapping,
-
-    // Routing data (for RAPTOR algorithm)
     routingData,
     isRoutingReady,
+    ensureRoutingData,
+    isLoadingStatic,
+    staticError,
+    isOffline,
+    usingCachedData,
+    loadStaticData,
+    getRouteById,
+    getStopById,
+    getShapesForRoute,
+  }), [
+    routes,
+    stops,
+    shapes,
+    processedShapes,
+    shapeOverlapOffsets,
+    trips,
+    tripMapping,
+    routeShapeMapping,
+    routeStopsMapping,
+    routingData,
+    isRoutingReady,
+    ensureRoutingData,
+    isLoadingStatic,
+    staticError,
+    isOffline,
+    usingCachedData,
+    loadStaticData,
+    getRouteById,
+    getStopById,
+    getShapesForRoute,
+  ]);
 
-    // Real-time data
+  const realtimeValue = useMemo(() => ({
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
@@ -466,34 +524,50 @@ export const TransitProvider = ({ children }) => {
     isRouteDetouring,
     getRouteDetour,
     transitNews,
-
-    // Loading states
-    isLoadingStatic,
+    onDemandZones,
     isLoadingVehicles,
-    staticError,
     vehicleError,
-
-    // Offline state
-    isOffline,
-    usingCachedData,
-
-    // Actions
-    loadStaticData,
     loadVehiclePositions,
     loadServiceAlerts,
     startVehicleUpdates,
     stopVehicleUpdates,
     startServiceAlertUpdates,
     stopServiceAlertUpdates,
-
-    // Helpers
-    getRouteById,
-    getStopById,
-    getShapesForRoute,
     getVehiclesForRoute,
-  };
+  }), [
+    vehicles,
+    lastVehicleUpdate,
+    serviceAlerts,
+    activeDetours,
+    isRouteDetouring,
+    getRouteDetour,
+    transitNews,
+    onDemandZones,
+    isLoadingVehicles,
+    vehicleError,
+    loadVehiclePositions,
+    loadServiceAlerts,
+    startVehicleUpdates,
+    stopVehicleUpdates,
+    startServiceAlertUpdates,
+    stopServiceAlertUpdates,
+    getVehiclesForRoute,
+  ]);
 
-  return <TransitContext.Provider value={value}>{children}</TransitContext.Provider>;
+  const mergedValue = useMemo(
+    () => ({ ...staticValue, ...realtimeValue }),
+    [staticValue, realtimeValue]
+  );
+
+  return (
+    <TransitStaticContext.Provider value={staticValue}>
+      <TransitRealtimeContext.Provider value={realtimeValue}>
+        <TransitContext.Provider value={mergedValue}>
+          {children}
+        </TransitContext.Provider>
+      </TransitRealtimeContext.Provider>
+    </TransitStaticContext.Provider>
+  );
 };
 
 export default TransitContext;
