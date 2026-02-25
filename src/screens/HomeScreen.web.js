@@ -202,6 +202,8 @@ const HomeScreen = ({ route }) => {
     toSuggestions,
     showFromSuggestions,
     showToSuggestions,
+    isTypingFrom,
+    isTypingTo,
     timeMode,
     selectedTime,
   } = tripState;
@@ -670,6 +672,8 @@ const HomeScreen = ({ route }) => {
           toSuggestions={toSuggestions}
           showFromSuggestions={showFromSuggestions}
           showToSuggestions={showToSuggestions}
+          isTypingFrom={isTypingFrom}
+          isTypingTo={isTypingTo}
           onSwap={swapTripLocations}
           onClose={exitTripPlanningMode}
           onUseCurrentLocation={useCurrentLocationForTrip}

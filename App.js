@@ -17,6 +17,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { TransitProvider } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -300,19 +301,21 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ErrorBoundary fallbackMessage="Something went wrong with Barrie Transit. Please restart the app.">
-          <AuthProvider>
-            <TransitProvider>
-              <NavigationContainer ref={navigationRef} linking={linking}>
-                <StatusBar style="dark" backgroundColor={COLORS.surface} />
-                <NotificationInitializer navigationRef={navigationRef} />
-                <TabNavigator />
-              </NavigationContainer>
-            </TransitProvider>
-          </AuthProvider>
-        </ErrorBoundary>
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <ErrorBoundary fallbackMessage="Something went wrong with Barrie Transit. Please restart the app.">
+            <AuthProvider>
+              <TransitProvider>
+                <NavigationContainer ref={navigationRef} linking={linking}>
+                  <StatusBar style="dark" backgroundColor={COLORS.surface} />
+                  <NotificationInitializer navigationRef={navigationRef} />
+                  <TabNavigator />
+                </NavigationContainer>
+              </TransitProvider>
+            </AuthProvider>
+          </ErrorBoundary>
+        </SafeAreaProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
 
@@ -35,6 +35,8 @@ const TripSearchHeaderWeb = ({
   toSuggestions,
   showFromSuggestions,
   showToSuggestions,
+  isTypingFrom = false,
+  isTypingTo = false,
   onSwap,
   onClose,
   onUseCurrentLocation,
@@ -104,6 +106,13 @@ const TripSearchHeaderWeb = ({
       </View>
     )}
 
+    {isTypingFrom && fromSuggestions.length === 0 && (
+      <View style={styles.typingIndicator}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+        <Text style={styles.typingText}>Searching...</Text>
+      </View>
+    )}
+
     {/* To Field */}
     <View style={styles.tripInputRow}>
       <View style={styles.tripInputDot}>
@@ -136,6 +145,13 @@ const TripSearchHeaderWeb = ({
             </Text>
           </TouchableOpacity>
         ))}
+      </View>
+    )}
+
+    {isTypingTo && toSuggestions.length === 0 && (
+      <View style={styles.typingIndicator}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+        <Text style={styles.typingText}>Searching...</Text>
       </View>
     )}
 
@@ -378,6 +394,17 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  typingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
 });
 

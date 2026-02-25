@@ -35,6 +35,7 @@ import NavigationProgressBar from '../components/navigation/NavigationProgressBa
 import StepOverviewSheet from '../components/navigation/StepOverviewSheet';
 import ExitConfirmationModal from '../components/navigation/ExitConfirmationModal';
 import DestinationBanner from '../components/navigation/DestinationBanner';
+import PulsingSpinner from '../components/PulsingSpinner';
 
 // Context for route shapes
 import { useTransitStatic } from '../context/TransitContext';
@@ -125,6 +126,14 @@ const NavigationScreen = ({ route }) => {
     startTracking,
     stopTracking,
   } = useNavigationLocation();
+
+  const [isAcquiringGPS, setIsAcquiringGPS] = useState(true);
+
+  useEffect(() => {
+    if (userLocation) {
+      setIsAcquiringGPS(false);
+    }
+  }, [userLocation]);
 
   // Step progress management (defined first so we can use isUserOnBoard)
   const {
@@ -634,6 +643,17 @@ const NavigationScreen = ({ route }) => {
         </MapLibreGL.MapView>
       </View>
 
+      {/* GPS Acquisition Overlay */}
+      {isAcquiringGPS && (
+        <View style={styles.gpsOverlay}>
+          <View style={styles.gpsCard}>
+            <PulsingSpinner size={28} />
+            <Text style={styles.gpsText}>Acquiring GPS signal...</Text>
+            <Text style={styles.gpsSubtext}>Move to an open area for better signal</Text>
+          </View>
+        </View>
+      )}
+
       {/* Navigation Header */}
       <NavigationHeader
         instruction={instructionText}
@@ -966,6 +986,33 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
+  },
+  gpsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  gpsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    maxWidth: 280,
+    ...SHADOWS.large,
+  },
+  gpsText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginTop: SPACING.md,
+  },
+  gpsSubtext: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,

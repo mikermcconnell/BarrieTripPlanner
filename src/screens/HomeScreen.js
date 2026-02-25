@@ -35,6 +35,7 @@ import BusMarker from '../components/BusMarker';
 import RoutePolyline from '../components/RoutePolyline';
 import DetourOverlay from '../components/DetourOverlay';
 import PulsingSpinner from '../components/PulsingSpinner';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 
 // Trip planning components
 import BottomActionBar from '../components/PlanTripFAB';
@@ -193,6 +194,10 @@ const HomeScreen = ({ route }) => {
     isLoading: isTripLoading,
     error: tripError,
     hasSearched: hasTripSearched,
+    isTypingFrom,
+    isTypingTo,
+    fromSuggestions,
+    toSuggestions,
     timeMode,
     selectedTime,
   } = tripState;
@@ -783,9 +788,18 @@ const HomeScreen = ({ route }) => {
 
       {/* Inline loading indicator while transit data loads */}
       {isLoadingStatic && (
-        <View style={styles.loadingBanner}>
-          <PulsingSpinner size={18} />
-          <Text style={styles.loadingBannerText}>Loading transit data...</Text>
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <PulsingSpinner size={24} />
+            <View style={styles.loadingCardContent}>
+              <Text style={styles.loadingCardTitle}>Loading transit data...</Text>
+              <View style={styles.loadingSkeletonRow}>
+                <LoadingSkeleton width={120} height={12} style={{ marginRight: SPACING.sm }} />
+                <LoadingSkeleton width={80} height={12} />
+              </View>
+              <LoadingSkeleton width={200} height={8} style={{ marginTop: SPACING.xs }} />
+            </View>
+          </View>
         </View>
       )}
 
@@ -886,6 +900,10 @@ const HomeScreen = ({ route }) => {
             onClose={exitTripPlanningMode}
             onUseCurrentLocation={useCurrentLocationForTrip}
             isLoading={isTripLoading}
+            isTypingFrom={isTypingFrom}
+            isTypingTo={isTypingTo}
+            fromSuggestions={fromSuggestions}
+            toSuggestions={toSuggestions}
             timeMode={timeMode}
             selectedTime={selectedTime}
             onTimeModeChange={setTimeMode}
@@ -969,23 +987,33 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  loadingBanner: {
+  loadingOverlay: {
     position: 'absolute',
-    top: SPACING.sm + STATUS_BAR_OFFSET + 56,
-    alignSelf: 'center',
+    top: 140,
+    left: SPACING.md,
+    right: SPACING.md,
+    zIndex: 10,
+  },
+  loadingCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.round,
-    gap: SPACING.xs,
-    zIndex: 1001,
-    ...SHADOWS.small,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.medium,
   },
-  loadingBannerText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+  loadingCardContent: {
+    flex: 1,
+    marginLeft: SPACING.md,
+  },
+  loadingCardTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  loadingSkeletonRow: {
+    flexDirection: 'row',
   },
   errorContainer: {
     flex: 1,

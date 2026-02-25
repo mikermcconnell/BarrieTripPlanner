@@ -48,10 +48,10 @@ const TabIcon = ({ name, focused, color }) => {
 
 // Map Stack Navigator (includes trip details for integrated trip planning)
 const MapStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
     <Stack.Screen name="MapMain" component={HomeScreen} />
-    <Stack.Screen name="NearbyStops" component={NearbyStopsScreen} />
-    <Stack.Screen name="Alerts" component={AlertsScreen} />
+    <Stack.Screen name="NearbyStops" component={NearbyStopsScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="Alerts" component={AlertsScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
     <Stack.Screen
       name="Navigation"
@@ -59,6 +59,7 @@ const MapStack = () => (
       options={{
         presentation: 'fullScreenModal',
         gestureEnabled: false,
+        animation: 'fade',
       }}
     />
   </Stack.Navigator>
@@ -66,10 +67,10 @@ const MapStack = () => (
 
 // Profile Stack Navigator
 const ProfileStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
     <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-    <Stack.Screen name="SignIn" component={SignInScreen} />
-    <Stack.Screen name="SignUp" component={SignUpScreen} />
+    <Stack.Screen name="SignIn" component={SignInScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="SignUp" component={SignUpScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="News" component={NewsScreen} />

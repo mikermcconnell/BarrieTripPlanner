@@ -282,10 +282,10 @@ const SearchScreen = ({ navigation }) => {
         <Text style={styles.resultsCount}>{getResultsLabel()}</Text>
       </View>
 
-      {/* Loading indicator for address search */}
       {searchType === 'addresses' && addressLoading && (
-        <View style={styles.loadingRow}>
+        <View style={styles.searchingIndicator}>
           <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.searchingText}>Searching addresses...</Text>
         </View>
       )}
 
@@ -478,9 +478,16 @@ const styles = StyleSheet.create({
   addressIconText: {
     fontSize: 20,
   },
-  loadingRow: {
+  searchingIndicator: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
+  },
+  searchingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   resultContent: {
     flex: 1,

@@ -74,6 +74,68 @@ export const COLORS = {
   glassDark: 'rgba(23, 43, 77, 0.8)',
 };
 
+export const COLORS_DARK = {
+  primary: '#66BB6A',
+  primaryLight: '#81C784',
+  primaryDark: '#4CAF50',
+  primarySubtle: '#1B3A1D',
+
+  secondary: '#42A5F5',
+  secondaryLight: '#64B5F6',
+  secondaryDark: '#1E88E5',
+  secondarySubtle: '#0D2744',
+
+  accent: '#FFB74D',
+  accentLight: '#FFCC02',
+  accentDark: '#FFA726',
+  accentSubtle: '#3D2E0A',
+
+  success: '#66BB6A',
+  successSubtle: '#1B3A1D',
+  warning: '#FFB74D',
+  warningSubtle: '#3D2E0A',
+  error: '#EF5350',
+  errorSubtle: '#3D1414',
+  info: '#42A5F5',
+  infoSubtle: '#0D2744',
+
+  white: '#FFFFFF',
+  black: '#E0E0E0',
+  grey50: '#1A1A1A',
+  grey100: '#212121',
+  grey200: '#2C2C2C',
+  grey300: '#383838',
+  grey400: '#5C5C5C',
+  grey500: '#8A8A8A',
+  grey600: '#AAAAAA',
+  grey700: '#C0C0C0',
+  grey800: '#D6D6D6',
+  grey900: '#EEEEEE',
+
+  background: '#121212',
+  surface: '#1E1E1E',
+  surfaceElevated: '#252525',
+  surfaceHover: '#2C2C2C',
+  surfacePressed: '#333333',
+
+  textPrimary: '#EEEEEE',
+  textSecondary: '#AAAAAA',
+  textDisabled: '#666666',
+  textInverse: '#121212',
+  textBrand: '#66BB6A',
+
+  border: '#383838',
+  borderLight: '#2C2C2C',
+  borderFocus: '#66BB6A',
+
+  realtime: '#66BB6A',
+  scheduled: '#8A8A8A',
+  delayed: '#EF5350',
+
+  glassWhite: 'rgba(30, 30, 30, 0.95)',
+  glassDark: 'rgba(238, 238, 238, 0.8)',
+};
+
 export { FONT_FAMILIES };
 
 export const SPACING = {

@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Text, Animated } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, Animated, ActivityIndicator } from 'react-native';
 import Icon from './Icon';
 import AddressAutocomplete from './AddressAutocomplete';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
@@ -48,6 +48,8 @@ const TripSearchHeader = ({
   toSuggestions = [],
   showFromSuggestions = false,
   showToSuggestions = false,
+  isTypingFrom = false,
+  isTypingTo = false,
   timeMode = 'now',
   selectedTime,
   onTimeModeChange,
@@ -55,8 +57,6 @@ const TripSearchHeader = ({
   onSearch,
 }) => {
   void isLoading;
-  void fromSuggestions;
-  void toSuggestions;
   void showFromSuggestions;
   void showToSuggestions;
   void formatDateTimeLocal;
@@ -116,6 +116,13 @@ const TripSearchHeader = ({
           </View>
         </View>
 
+        {isTypingFrom && fromSuggestions.length === 0 && (
+          <View style={styles.typingIndicator}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.typingText}>Searching...</Text>
+          </View>
+        )}
+
         {/* To field */}
         <View style={styles.fieldRow}>
           <View style={styles.fieldIndicator}>
@@ -133,6 +140,13 @@ const TripSearchHeader = ({
             />
           </View>
         </View>
+
+        {isTypingTo && toSuggestions.length === 0 && (
+          <View style={styles.typingIndicator}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.typingText}>Searching...</Text>
+          </View>
+        )}
 
         {/* Swap button */}
         <TouchableOpacity
@@ -299,6 +313,17 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
+  },
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  typingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
 });
 

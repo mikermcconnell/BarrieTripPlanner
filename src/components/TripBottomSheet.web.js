@@ -196,7 +196,7 @@ const TripBottomSheet = ({
   };
 
   return (
-    <View style={[styles.container, { height: getSheetHeight() }]}>
+    <View style={[styles.container, { height: getSheetHeight(), transition: 'height 0.3s ease-in-out' }]}>
       {/* Handle bar / header */}
       <TouchableOpacity
         style={styles.handleContainer}
@@ -235,6 +235,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: BORDER_RADIUS.xxl,
     ...SHADOWS.elevated,
     zIndex: 1000,
+    overflow: 'hidden',
   },
   handleContainer: {
     alignItems: 'center',

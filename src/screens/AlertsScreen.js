@@ -8,11 +8,18 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
+  LayoutAnimation,
+  UIManager,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchServiceAlerts } from '../services/alertService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { getSeverityIcon, getSeverityColor, formatAlertPeriod } from '../utils/alertHelpers';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const AlertsScreen = ({ navigation }) => {
   const [alerts, setAlerts] = useState([]);
@@ -51,7 +58,14 @@ const AlertsScreen = ({ navigation }) => {
     return (
       <TouchableOpacity
         style={[styles.alertCard, { borderLeftColor: severityColor }]}
-        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        onPress={() => {
+          LayoutAnimation.configureNext(LayoutAnimation.create(
+            250,
+            LayoutAnimation.Types.easeInEaseOut,
+            LayoutAnimation.Properties.opacity,
+          ));
+          setExpandedId(isExpanded ? null : item.id);
+        }}
         activeOpacity={0.7}
       >
         <View style={styles.alertHeader}>
@@ -66,7 +80,7 @@ const AlertsScreen = ({ navigation }) => {
               </View>
             )}
           </View>
-          <Text style={styles.chevron}>{isExpanded ? '▼' : '▶'}</Text>
+          <Text style={[styles.chevron, isExpanded && styles.chevronExpanded]}>▶</Text>
         </View>
 
         {isExpanded && (
@@ -290,6 +304,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.grey400,
     marginLeft: SPACING.sm,
+  },
+  chevronExpanded: {
+    transform: [{ rotate: '90deg' }],
   },
   alertDetails: {
     padding: SPACING.md,

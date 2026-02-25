@@ -32,6 +32,8 @@ const SET_PLANNING_MODE = 'SET_PLANNING_MODE';
 const SET_ERROR = 'SET_ERROR';
 const SET_TIME_MODE = 'SET_TIME_MODE';
 const SET_DEPARTURE_TIME = 'SET_DEPARTURE_TIME';
+const SET_FROM_TYPING = 'SET_FROM_TYPING';
+const SET_TO_TYPING = 'SET_TO_TYPING';
 
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
@@ -49,6 +51,8 @@ const initialState = {
   toSuggestions: [],
   showFromSuggestions: false,
   showToSuggestions: false,
+  isTypingFrom: false,
+  isTypingTo: false,
   timeMode: 'now',          // 'now' | 'departAt' | 'arriveBy'
   selectedTime: null,       // Date object or null (null = use current time)
 };
@@ -114,6 +118,10 @@ function tripReducer(state, action) {
       return { ...state, timeMode: action.payload, selectedTime: action.payload === 'now' ? null : state.selectedTime };
     case SET_DEPARTURE_TIME:
       return { ...state, selectedTime: action.payload };
+    case SET_FROM_TYPING:
+      return { ...state, isTypingFrom: action.payload };
+    case SET_TO_TYPING:
+      return { ...state, isTypingTo: action.payload };
     default:
       return state;
   }
@@ -222,8 +230,10 @@ export const useTripPlanner = ({
       fromRequestSeqRef.current += 1;
       dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
+      dispatch({ type: SET_FROM_TYPING, payload: false });
       return;
     }
+    dispatch({ type: SET_FROM_TYPING, payload: true });
     fromDebounceRef.current = setTimeout(async () => {
       const requestSeq = ++fromRequestSeqRef.current;
       try {
@@ -234,8 +244,9 @@ export const useTripPlanner = ({
         );
         dispatch({ type: SET_FROM_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: sorted.length > 0 });
+        dispatch({ type: SET_FROM_TYPING, payload: false });
       } catch {
-        // Silently fail — user can still manually select
+        dispatch({ type: SET_FROM_TYPING, payload: false });
       }
     }, 300);
   }, []);
@@ -247,8 +258,10 @@ export const useTripPlanner = ({
       toRequestSeqRef.current += 1;
       dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });
+      dispatch({ type: SET_TO_TYPING, payload: false });
       return;
     }
+    dispatch({ type: SET_TO_TYPING, payload: true });
     toDebounceRef.current = setTimeout(async () => {
       const requestSeq = ++toRequestSeqRef.current;
       try {
@@ -259,8 +272,9 @@ export const useTripPlanner = ({
         );
         dispatch({ type: SET_TO_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_TO_SUGGESTIONS, payload: sorted.length > 0 });
+        dispatch({ type: SET_TO_TYPING, payload: false });
       } catch {
-        // Silently fail
+        dispatch({ type: SET_TO_TYPING, payload: false });
       }
     }, 300);
   }, []);

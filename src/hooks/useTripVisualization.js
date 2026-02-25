@@ -179,7 +179,7 @@ export const useTripVisualization = ({
 
   // Vehicles matching the selected itinerary's trips
   const tripVehicles = useMemo(() => {
-    if (!selectedItinerary) return [];
+    if (!selectedItinerary || vehicles.length === 0) return [];
 
     const tripIds = new Set();
     selectedItinerary.legs.forEach(leg => {
