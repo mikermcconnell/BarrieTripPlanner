@@ -278,3 +278,18 @@ describe('buildGeometry', () => {
     }
   });
 });
+
+describe('longitude-scaled projection', () => {
+  it('findClosestShapePoint projects correctly on diagonal segments', () => {
+    // Diagonal segment: SW to NE
+    const diagonal = [
+      { latitude: 44.380, longitude: -79.710 },
+      { latitude: 44.400, longitude: -79.680 },
+    ];
+    // Point is very close to the midpoint of the segment
+    const point = { latitude: 44.390, longitude: -79.695 };
+    const result = findClosestShapePoint(point, diagonal);
+    // The projected point should be very close (within 5m)
+    expect(result.distanceMeters).toBeLessThan(5);
+  });
+});

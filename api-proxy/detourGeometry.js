@@ -49,8 +49,12 @@ function findClosestShapePoint(coord, polyline) {
       projLat = p1.latitude;
       projLon = p1.longitude;
     } else {
+      // Scale longitude by cos(lat) for accurate projection
+      const cosLat = Math.cos(((p1.latitude + p2.latitude) / 2) * Math.PI / 180);
+      const sdx = dx * cosLat;
+      const sdy = dy;
       const t = Math.max(0, Math.min(1,
-        ((coord.longitude - p1.longitude) * dx + (coord.latitude - p1.latitude) * dy) / lenSq
+        ((coord.longitude - p1.longitude) * cosLat * sdx + (coord.latitude - p1.latitude) * sdy) / (sdx * sdx + sdy * sdy)
       ));
       projLat = p1.latitude + t * dy;
       projLon = p1.longitude + t * dx;

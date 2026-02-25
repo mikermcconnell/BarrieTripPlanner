@@ -26,7 +26,11 @@ const pointToSegmentDistance = (point, segmentStart, segmentEnd) => {
   if (dx === 0 && dy === 0) {
     return haversineDistance(y, x, y1, x1);
   }
-  const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
+  // Scale longitude by cos(lat) so the dot product works in equal-area units
+  const cosLat = Math.cos(toRadians((y1 + y2) / 2));
+  const sdx = dx * cosLat;
+  const sdy = dy;
+  const t = Math.max(0, Math.min(1, ((x - x1) * cosLat * sdx + (y - y1) * sdy) / (sdx * sdx + sdy * sdy)));
   const closestX = x1 + t * dx;
   const closestY = y1 + t * dy;
   return haversineDistance(y, x, closestY, closestX);
