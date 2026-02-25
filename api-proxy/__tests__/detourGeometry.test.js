@@ -119,9 +119,9 @@ describe('extractSkippedSegment', () => {
 
   test('extracts correct slice between indices', () => {
     const result = extractSkippedSegment(testPolyline, 1, 3);
-    expect(result.length).toBe(4); // indices 1, 2, 3, 4 (exitIndex+1 inclusive)
+    expect(result.length).toBe(3); // indices 1, 2, 3 (inclusive)
     expect(result[0].longitude).toBeCloseTo(-79.69);
-    expect(result[result.length - 1].longitude).toBeCloseTo(-79.66);
+    expect(result[result.length - 1].longitude).toBeCloseTo(-79.67);
   });
 
   test('clamps to polyline bounds', () => {
@@ -276,6 +276,49 @@ describe('buildGeometry', () => {
       expect(result.exitPoint).toHaveProperty('latitude');
       expect(result.exitPoint).toHaveProperty('longitude');
     }
+  });
+});
+
+describe('spatial anchor computation', () => {
+  it('uses spatial min/max shape indices, not temporal first/last points', () => {
+    // Shape segments: 0->1 (-79.70 to -79.69), 1->2 (-79.69 to -79.68),
+    //                 2->3 (-79.68 to -79.67), 3->4 (-79.67 to -79.66)
+    // Evidence: temporally first point is near shape segment 2 (lon -79.675),
+    // temporally last point is near shape segment 0 (lon -79.695).
+    // Old code would use temporal first/last, giving entry=seg2, exit=seg0 (swapped).
+    // New code should use spatial min/max: entry=seg0, exit=seg2.
+    const points = [
+      { latitude: 44.395, longitude: -79.675, timestampMs: 1000, vehicleId: 'b1' },
+      { latitude: 44.395, longitude: -79.685, timestampMs: 2000, vehicleId: 'b1' },
+      { latitude: 44.395, longitude: -79.695, timestampMs: 3000, vehicleId: 'b1' },
+    ];
+    const result = findAnchors(points, shapes, ['shape-1']);
+    expect(result).not.toBeNull();
+    // entryIndex should always be <= exitIndex regardless of temporal order
+    expect(result.entryIndex).toBeLessThanOrEqual(result.exitIndex);
+    // Spatial: -79.695 projects to segment 0, -79.675 projects to segment 2
+    // So min index should be 0, max index should be 2
+    expect(result.entryIndex).toBe(0);  // segment nearest -79.695
+    expect(result.exitIndex).toBe(2);   // segment nearest -79.675
+    // swapped should always be false with the new spatial approach
+    expect(result.swapped).toBe(false);
+  });
+});
+
+describe('extractSkippedSegment bounds', () => {
+  it('does not include extra point beyond exitIndex', () => {
+    const poly = [
+      { latitude: 44.39, longitude: -79.700 },
+      { latitude: 44.39, longitude: -79.698 },
+      { latitude: 44.39, longitude: -79.696 },
+      { latitude: 44.39, longitude: -79.694 },
+      { latitude: 44.39, longitude: -79.692 },
+    ];
+    // Extract indices 1 through 3 (inclusive) -> should be 3 points
+    const segment = extractSkippedSegment(poly, 1, 3);
+    expect(segment).toHaveLength(3);
+    expect(segment[0].longitude).toBeCloseTo(-79.698, 3);
+    expect(segment[2].longitude).toBeCloseTo(-79.694, 3);
   });
 });
 

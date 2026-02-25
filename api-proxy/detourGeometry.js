@@ -73,49 +73,54 @@ function findClosestShapePoint(coord, polyline) {
 
 /**
  * Find entry/exit anchor indices on the best-matching shape for the evidence points.
- * Uses earliest evidence as entry anchor, latest as exit anchor.
- * Picks the shape that minimizes the combined entry+exit distance.
+ * Projects ALL evidence points onto each candidate shape and uses min/max shape indices,
+ * which is stable even for ongoing detours where the "exit" is just the bus's current position.
+ * Picks the shape that minimizes the total projection distance across all evidence points.
  */
 function findAnchors(evidencePoints, shapes, shapeIds) {
   if (!evidencePoints || evidencePoints.length === 0) return null;
   if (!shapeIds || shapeIds.length === 0) return null;
 
-  const entryPoint = evidencePoints[0];
-  const exitPoint = evidencePoints[evidencePoints.length - 1];
-
   let bestShapeId = null;
-  let bestEntryIndex = 0;
-  let bestExitIndex = 0;
+  let bestMinIndex = 0;
+  let bestMaxIndex = 0;
   let bestTotalDist = Infinity;
 
   for (const shapeId of shapeIds) {
     const polyline = shapes.get(shapeId);
     if (!polyline || polyline.length < 2) continue;
 
-    const entryCsp = findClosestShapePoint(entryPoint, polyline);
-    const exitCsp = findClosestShapePoint(exitPoint, polyline);
-    if (!entryCsp || !exitCsp) continue;
+    // Project ALL evidence points onto this shape, track min/max index and total distance
+    let minIdx = Infinity;
+    let maxIdx = -Infinity;
+    let totalDist = 0;
 
-    const totalDist = entryCsp.distanceMeters + exitCsp.distanceMeters;
+    for (const pt of evidencePoints) {
+      const csp = findClosestShapePoint(pt, polyline);
+      if (!csp) continue;
+      if (csp.index < minIdx) minIdx = csp.index;
+      if (csp.index > maxIdx) maxIdx = csp.index;
+      totalDist += csp.distanceMeters;
+    }
+
+    if (minIdx === Infinity || maxIdx === -Infinity) continue;
+
     if (totalDist < bestTotalDist) {
       bestTotalDist = totalDist;
       bestShapeId = shapeId;
-      bestEntryIndex = entryCsp.index;
-      bestExitIndex = exitCsp.index;
+      bestMinIndex = minIdx;
+      bestMaxIndex = maxIdx;
     }
   }
 
   if (!bestShapeId) return null;
 
-  // Normalize so entryIndex <= exitIndex for consistent segment extraction.
-  // Track whether we swapped for correct entry/exit point labeling.
-  let swapped = false;
-  if (bestEntryIndex > bestExitIndex) {
-    [bestEntryIndex, bestExitIndex] = [bestExitIndex, bestEntryIndex];
-    swapped = true;
-  }
-
-  return { shapeId: bestShapeId, entryIndex: bestEntryIndex, exitIndex: bestExitIndex, swapped };
+  return {
+    shapeId: bestShapeId,
+    entryIndex: bestMinIndex,
+    exitIndex: bestMaxIndex,
+    swapped: false,
+  };
 }
 
 /**
@@ -124,7 +129,7 @@ function findAnchors(evidencePoints, shapes, shapeIds) {
 function extractSkippedSegment(polyline, entryIndex, exitIndex) {
   if (!polyline || polyline.length === 0) return [];
   const start = Math.max(0, entryIndex);
-  const end = Math.min(polyline.length - 1, exitIndex + 1);
+  const end = Math.min(polyline.length - 1, exitIndex);
   return polyline.slice(start, end + 1).map(p => ({
     latitude: p.latitude,
     longitude: p.longitude,
@@ -220,18 +225,16 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
   const confidence = scoreConfidence(points, detectedAtMs, now);
 
   // Entry/exit points as lat/lon for Firestore.
-  // If anchors were swapped (reverse traversal), un-swap the labels so entry = where vehicle
-  // first left the route (earliest evidence) and exit = where it rejoined (latest evidence).
+  // With spatial anchors, entryIndex is always the min shape index and exitIndex the max,
+  // so no swap logic is needed.
   const entryIdx = anchors.entryIndex;
-  const exitIdx = Math.min(anchors.exitIndex + 1, polyline.length - 1);
-  const rawEntry = polyline[entryIdx]
+  const exitIdx = Math.min(anchors.exitIndex, polyline.length - 1);
+  const entryPoint = polyline[entryIdx]
     ? { latitude: polyline[entryIdx].latitude, longitude: polyline[entryIdx].longitude }
     : null;
-  const rawExit = polyline[exitIdx]
+  const exitPoint = polyline[exitIdx]
     ? { latitude: polyline[exitIdx].latitude, longitude: polyline[exitIdx].longitude }
     : null;
-  const entryPoint = anchors.swapped ? rawExit : rawEntry;
-  const exitPoint = anchors.swapped ? rawEntry : rawExit;
 
   return {
     skippedSegmentPolyline: skippedSegmentPolyline.length >= 2 ? skippedSegmentPolyline : null,
