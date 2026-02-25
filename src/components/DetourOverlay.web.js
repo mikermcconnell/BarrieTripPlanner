@@ -12,6 +12,9 @@ import React from 'react';
 import { CircleMarker } from 'react-leaflet';
 import { WebRoutePolyline } from './WebMapView';
 
+const hasFiniteCoordinate = (point) =>
+  Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+
 const DetourOverlay = ({
   routeId,
   skippedSegmentPolyline,
@@ -45,29 +48,29 @@ const DetourOverlay = ({
         interactive={false}
       />
     )}
-    {entryPoint && (
+    {hasFiniteCoordinate(entryPoint) && (
       <CircleMarker
         center={[entryPoint.latitude, entryPoint.longitude]}
-        radius={7}
+        radius={8}
         pathOptions={{
-          fillColor: '#ffffff',
+          fillColor: markerBorderColor,
           fillOpacity: opacity,
-          color: markerBorderColor,
-          weight: 3,
+          color: '#ffffff',
+          weight: 2,
           opacity,
         }}
         interactive={false}
       />
     )}
-    {exitPoint && (
+    {hasFiniteCoordinate(exitPoint) && (
       <CircleMarker
         center={[exitPoint.latitude, exitPoint.longitude]}
-        radius={7}
+        radius={6}
         pathOptions={{
           fillColor: '#ffffff',
           fillOpacity: opacity,
           color: markerBorderColor,
-          weight: 3,
+          weight: 2,
           opacity,
         }}
         interactive={false}

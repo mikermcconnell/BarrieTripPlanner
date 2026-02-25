@@ -17,12 +17,18 @@ const hasFiniteCoordinate = (point) =>
   Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
 
 const styles = StyleSheet.create({
-  marker: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#ffffff',
+  entryMarker: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 3,
+  },
+  exitMarker: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
   },
 });
 
@@ -64,7 +70,7 @@ const DetourOverlay = ({
         id={`detour-entry-${routeId}`}
         coordinate={[entryPoint.longitude, entryPoint.latitude]}
       >
-        <View style={[styles.marker, { borderColor: markerBorderColor, opacity }]} />
+        <View style={[styles.entryMarker, { backgroundColor: markerBorderColor, borderColor: '#ffffff', opacity }]} />
       </MapLibreGL.PointAnnotation>
     )}
     {hasFiniteCoordinate(exitPoint) && (
@@ -72,7 +78,7 @@ const DetourOverlay = ({
         id={`detour-exit-${routeId}`}
         coordinate={[exitPoint.longitude, exitPoint.latitude]}
       >
-        <View style={[styles.marker, { borderColor: markerBorderColor, opacity }]} />
+        <View style={[styles.exitMarker, { borderColor: markerBorderColor, opacity }]} />
       </MapLibreGL.PointAnnotation>
     )}
   </>

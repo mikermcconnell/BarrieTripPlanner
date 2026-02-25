@@ -422,13 +422,20 @@ describe('DetourOverlay component rendering', () => {
       const centers = markers.map((m) => m.props.center);
       expect(centers).toContainEqual([44.38, -79.69]);
       expect(centers).toContainEqual([44.39, -79.68]);
-      markers.forEach((m) => {
-        expect(m.props.radius).toBe(7);
-        expect(m.props.interactive).toBe(false);
-        expect(m.props.pathOptions.fillColor).toBe('#ffffff');
-        expect(m.props.pathOptions.color).toBe('#f97316');
-        expect(m.props.pathOptions.weight).toBe(3);
-      });
+      // Entry marker: larger, filled with route color, white border
+      const entry = markers.find((m) => m.props.center[0] === 44.38);
+      expect(entry.props.radius).toBe(8);
+      expect(entry.props.interactive).toBe(false);
+      expect(entry.props.pathOptions.fillColor).toBe('#f97316');
+      expect(entry.props.pathOptions.color).toBe('#ffffff');
+      expect(entry.props.pathOptions.weight).toBe(2);
+      // Exit marker: smaller, white fill, route color border
+      const exit = markers.find((m) => m.props.center[0] === 44.39);
+      expect(exit.props.radius).toBe(6);
+      expect(exit.props.interactive).toBe(false);
+      expect(exit.props.pathOptions.fillColor).toBe('#ffffff');
+      expect(exit.props.pathOptions.color).toBe('#f97316');
+      expect(exit.props.pathOptions.weight).toBe(2);
     });
 
     test('no markers when entryPoint/exitPoint are null', () => {
