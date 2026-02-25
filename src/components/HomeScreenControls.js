@@ -121,7 +121,11 @@ const HomeScreenControls = ({
                                 </Text>
                             </TouchableOpacity>
                             {isRouteDetouring?.(r.id) && (
-                                <View style={styles.detourDot} />
+                                <View
+                                    accessible={true}
+                                    accessibilityLabel={`Route ${r.shortName} is on detour`}
+                                    style={styles.detourDot}
+                                />
                             )}
                             {hasAlert && (
                                 <View style={[styles.alertDot, isActive && styles.alertDotActive]} />
