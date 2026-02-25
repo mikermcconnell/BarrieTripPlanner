@@ -22,10 +22,15 @@ const DETOUR_COLORS = {
  */
 export function deriveDetourOverlays({ selectedRouteIds, activeDetours, enabled }) {
   if (!enabled) return [];
-  if (!selectedRouteIds || selectedRouteIds.size === 0) return [];
 
   const overlays = [];
-  selectedRouteIds.forEach((routeId) => {
+
+  // When no routes selected, show ALL active detours
+  const routeIds = (selectedRouteIds && selectedRouteIds.size > 0)
+    ? selectedRouteIds
+    : new Set(Object.keys(activeDetours));
+
+  routeIds.forEach((routeId) => {
     const detour = activeDetours[routeId];
     if (!detour) return;
 

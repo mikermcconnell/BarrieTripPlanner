@@ -31,22 +31,24 @@ describe('deriveDetourOverlays', () => {
     expect(result).toEqual([]);
   });
 
-  test('returns empty array when no routes selected', () => {
+  test('returns all active detours when no routes selected (empty Set)', () => {
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: new Set(),
       activeDetours: { '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE } },
     });
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('1');
   });
 
-  test('returns empty array when selectedRouteIds is null/undefined', () => {
+  test('returns all active detours when selectedRouteIds is null', () => {
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: null,
       activeDetours: { '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE } },
     });
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('1');
   });
 
   test('skips routes with no geometry', () => {
@@ -350,5 +352,53 @@ describe('context helpers: getRouteDetour / isRouteDetouring', () => {
         expect(detour).toBeNull();
       }
     });
+  });
+});
+
+// ────────────────────────────────────────────────────
+// 4. all-routes view (no selection = show everything)
+// ────────────────────────────────────────────────────
+describe('all-routes view', () => {
+  it('returns overlays for all active detours when no routes are selected', () => {
+    const result = deriveDetourOverlays({
+      selectedRouteIds: new Set(),
+      activeDetours: {
+        '8A': {
+          state: 'active',
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.70 },
+            { latitude: 44.39, longitude: -79.69 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.395, longitude: -79.70 },
+            { latitude: 44.395, longitude: -79.69 },
+          ],
+          entryPoint: { latitude: 44.39, longitude: -79.70 },
+          exitPoint: { latitude: 44.39, longitude: -79.69 },
+        },
+      },
+      enabled: true,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('8A');
+  });
+
+  it('returns overlays for multiple detours when no routes selected', () => {
+    const makeDetour = () => ({
+      state: 'active',
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+      ],
+      inferredDetourPolyline: null,
+      entryPoint: null,
+      exitPoint: null,
+    });
+    const result = deriveDetourOverlays({
+      selectedRouteIds: new Set(),
+      activeDetours: { '8A': makeDetour(), '8B': makeDetour(), '2A': makeDetour() },
+      enabled: true,
+    });
+    expect(result).toHaveLength(3);
   });
 });

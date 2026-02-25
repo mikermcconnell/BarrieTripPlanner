@@ -15,6 +15,7 @@ import { subscribeToActiveDetours } from '../services/firebase/detourService';
 import { subscribeToTransitNews } from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import logger from '../utils/logger';
+import { showLocalNotification } from '../services/notificationService';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -75,6 +76,7 @@ export const TransitProvider = ({ children }) => {
 
   // Detour detection (server-side, via Firestore)
   const [activeDetours, setActiveDetours] = useState({});
+  const prevDetourIdsRef = useRef(new Set());
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
@@ -88,6 +90,7 @@ export const TransitProvider = ({ children }) => {
 
   // Refs for intervals
   const vehicleIntervalRef = useRef(null);
+  const prevVehiclesRef = useRef([]);
   const serviceAlertIntervalRef = useRef(null);
   const shapeProcessingJobRef = useRef(0);
 
@@ -276,6 +279,36 @@ export const TransitProvider = ({ children }) => {
   }, [applyStaticData, processAndStoreShapes]);
 
   /**
+   * Diff new vehicles against previous snapshot to preserve object references
+   * for unchanged vehicles, allowing React.memo in BusMarker to skip re-renders.
+   */
+  const diffVehicles = useCallback((newVehicles, prevVehicles) => {
+    if (prevVehicles.length === 0) return newVehicles;
+
+    const prevMap = new Map(prevVehicles.map(v => [v.id, v]));
+    let hasChanges = false;
+
+    const merged = newVehicles.map(v => {
+      const prev = prevMap.get(v.id);
+      if (prev &&
+          prev.coordinate?.latitude === v.coordinate?.latitude &&
+          prev.coordinate?.longitude === v.coordinate?.longitude &&
+          prev.bearing === v.bearing &&
+          prev.routeId === v.routeId) {
+        return prev; // Same reference — React.memo skips re-render
+      }
+      hasChanges = true;
+      return v;
+    });
+
+    if (!hasChanges && merged.length === prevVehicles.length) {
+      return prevVehicles; // Identical — skip setState entirely
+    }
+
+    return merged;
+  }, []);
+
+  /**
    * Load vehicle positions
    */
   const loadVehiclePositions = useCallback(async () => {
@@ -285,7 +318,11 @@ export const TransitProvider = ({ children }) => {
     try {
       const rawVehicles = await fetchVehiclePositions();
       const formattedVehicles = formatVehiclesForMap(rawVehicles, tripMapping);
-      setVehicles(formattedVehicles);
+      const diffed = diffVehicles(formattedVehicles, prevVehiclesRef.current);
+      if (diffed !== prevVehiclesRef.current) {
+        prevVehiclesRef.current = diffed;
+        setVehicles(diffed);
+      }
       setLastVehicleUpdate(new Date());
     } catch (error) {
       logger.error('Failed to load vehicle positions:', error);
@@ -293,7 +330,7 @@ export const TransitProvider = ({ children }) => {
     } finally {
       setIsLoadingVehicles(false);
     }
-  }, [tripMapping]);
+  }, [tripMapping, diffVehicles]);
 
   /**
    * Start automatic vehicle position updates
@@ -399,7 +436,22 @@ export const TransitProvider = ({ children }) => {
   // Subscribe to active detours (public collection, no auth required)
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
-      (detourMap) => setActiveDetours(detourMap),
+      (detourMap) => {
+        // Notify on newly detected detours
+        const newIds = Object.keys(detourMap);
+        const prevIds = prevDetourIdsRef.current;
+        for (const routeId of newIds) {
+          if (!prevIds.has(routeId)) {
+            showLocalNotification({
+              title: 'Route ' + routeId + ' Detour',
+              body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
+              data: { type: 'detour_alert', routeId },
+            }).catch(() => {}); // fire-and-forget
+          }
+        }
+        prevDetourIdsRef.current = new Set(newIds);
+        setActiveDetours(detourMap);
+      },
       (error) => logger.error('Detour subscription error:', error)
     );
     return () => unsubscribe();
