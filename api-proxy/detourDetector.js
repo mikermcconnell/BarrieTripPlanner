@@ -92,7 +92,7 @@ function isInDetourZoneCore(coordinate, detour, shapes) {
   return result.index >= detour.detourZone.coreStart && result.index <= detour.detourZone.coreEnd;
 }
 
-function processVehicles(vehicles, shapes, routeShapeMapping) {
+function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping) {
   const now = Date.now();
 
   // Compute detour zones from current evidence before processing vehicles
@@ -139,13 +139,26 @@ function processVehicles(vehicles, shapes, routeShapeMapping) {
     const shapeIds = routeShapeMapping.get(routeId);
     if (!shapeIds || shapeIds.length === 0) continue;
 
-    // Find minimum distance across all shapes for this route
+    // Prefer trip-specific shape when available
     let minDist = Infinity;
-    for (const shapeId of shapeIds) {
-      const polyline = shapes.get(shapeId);
-      if (!polyline || polyline.length === 0) continue;
-      const dist = pointToPolylineDistance(coordinate, polyline);
-      if (dist < minDist) minDist = dist;
+    const tripData = vehicle.tripId && tripMapping ? tripMapping.get(vehicle.tripId) : null;
+    const tripShapeId = tripData?.shapeId ?? null;
+
+    if (tripShapeId) {
+      const polyline = shapes.get(tripShapeId);
+      if (polyline && polyline.length > 0) {
+        minDist = pointToPolylineDistance(coordinate, polyline);
+      }
+    }
+
+    // Fall back to all shapes only when trip-specific shape unavailable
+    if (minDist === Infinity) {
+      for (const shapeId of shapeIds) {
+        const polyline = shapes.get(shapeId);
+        if (!polyline || polyline.length === 0) continue;
+        const dist = pointToPolylineDistance(coordinate, polyline);
+        if (dist < minDist) minDist = dist;
+      }
     }
 
     // Get or create vehicle state

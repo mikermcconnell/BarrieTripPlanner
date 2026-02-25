@@ -91,7 +91,7 @@ async function tick() {
     const prevKeys = detourKeys(prevSnapshot.detours || {});
     const prevStates = prevSnapshot.detourStates || {};
 
-    const activeDetours = processVehicles(vehicles, baseline.shapes, baseline.routeShapeMapping);
+    const activeDetours = processVehicles(vehicles, baseline.shapes, baseline.routeShapeMapping, data.tripMapping);
     const currKeys = detourKeys(activeDetours);
     const currStates = {};
     for (const [k, v] of Object.entries(activeDetours)) {

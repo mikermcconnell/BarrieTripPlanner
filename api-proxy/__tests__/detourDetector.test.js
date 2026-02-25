@@ -942,3 +942,89 @@ describe('zone-aware clearing', () => {
     }
   });
 });
+
+describe('trip-aware shape resolution', () => {
+  const multiShapes = new Map([
+    ['shape-main', [
+      { latitude: 44.39, longitude: -79.700 },
+      { latitude: 44.39, longitude: -79.698 },
+      { latitude: 44.39, longitude: -79.696 },
+      { latitude: 44.39, longitude: -79.694 },
+      { latitude: 44.39, longitude: -79.692 },
+      { latitude: 44.39, longitude: -79.690 },
+    ]],
+    ['shape-variant-north', [
+      { latitude: 44.395, longitude: -79.700 },
+      { latitude: 44.395, longitude: -79.698 },
+      { latitude: 44.395, longitude: -79.696 },
+      { latitude: 44.395, longitude: -79.694 },
+      { latitude: 44.395, longitude: -79.692 },
+      { latitude: 44.395, longitude: -79.690 },
+    ]],
+    ['shape-variant-south', [
+      { latitude: 44.385, longitude: -79.700 },
+      { latitude: 44.385, longitude: -79.698 },
+      { latitude: 44.385, longitude: -79.696 },
+    ]],
+  ]);
+  const multiRouteMapping = new Map([
+    ['route-8', ['shape-main', 'shape-variant-north', 'shape-variant-south']],
+  ]);
+  const tripMapping = new Map([
+    ['trip-100', { routeId: 'route-8', shapeId: 'shape-main' }],
+  ]);
+
+  const offRouteForAssignedShape = { latitude: 44.395, longitude: -79.695 };
+
+  it('detects detour when bus is near a non-assigned shape variant', () => {
+    clearVehicleState();
+    const vehicle = {
+      id: 'bus-trip-aware',
+      routeId: 'route-8',
+      tripId: 'trip-100',
+      coordinate: offRouteForAssignedShape,
+    };
+
+    for (let i = 0; i < 3; i++) {
+      processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
+    }
+
+    const state = getState();
+    expect(state.activeDetourCount).toBe(1);
+    expect(state.detours['route-8']).toBeDefined();
+  });
+
+  it('falls back to all shapes when tripId is missing', () => {
+    clearVehicleState();
+    const vehicle = {
+      id: 'bus-no-trip',
+      routeId: 'route-8',
+      tripId: null,
+      coordinate: offRouteForAssignedShape,
+    };
+
+    for (let i = 0; i < 3; i++) {
+      processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
+    }
+
+    const state = getState();
+    expect(state.activeDetourCount).toBe(0);
+  });
+
+  it('falls back to all shapes when tripId is not in mapping', () => {
+    clearVehicleState();
+    const vehicle = {
+      id: 'bus-unknown-trip',
+      routeId: 'route-8',
+      tripId: 'trip-unknown',
+      coordinate: offRouteForAssignedShape,
+    };
+
+    for (let i = 0; i < 3; i++) {
+      processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
+    }
+
+    const state = getState();
+    expect(state.activeDetourCount).toBe(0);
+  });
+});
