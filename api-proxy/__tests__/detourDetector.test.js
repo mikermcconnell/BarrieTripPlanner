@@ -5,6 +5,7 @@ const {
   getActiveDetours,
   getState,
   getDetourEvidence,
+  CONSECUTIVE_READINGS_REQUIRED,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
@@ -69,15 +70,15 @@ function runTicks(vehicles, n) {
   return result;
 }
 
-// Helper: confirm a detour by running 3 off-route ticks
+// Helper: confirm a detour by running CONSECUTIVE_READINGS_REQUIRED off-route ticks
 function confirmDetour(vehicle) {
-  return runTicks([vehicle || makeVehicle({ coordinate: OFF_ROUTE_COORD })], 3);
+  return runTicks([vehicle || makeVehicle({ coordinate: OFF_ROUTE_COORD })], CONSECUTIVE_READINGS_REQUIRED);
 }
 
 // Helper: confirm a detour with spread evidence so zone is computed (3 evidence points)
 function confirmDetourWithZone(vehicleId = 'bus-1') {
-  // 3 ticks at west end → confirms detour (1 evidence point)
-  runTicks([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_WEST })], 3);
+  // N ticks at west end → confirms detour (1 evidence point)
+  runTicks([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_WEST })], CONSECUTIVE_READINGS_REQUIRED);
   // 1 tick at middle → 2nd evidence point
   processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_MID })], shapes, routeShapeMapping);
   // 1 tick at east end → 3rd evidence point (zone can now be computed)
@@ -88,20 +89,18 @@ beforeEach(() => {
   clearVehicleState();
 });
 
-describe('3-reading confirmation', () => {
-  test('detour only appears after 3 consecutive off-route ticks', () => {
+describe('consecutive-reading confirmation', () => {
+  test(`detour only appears after ${CONSECUTIVE_READINGS_REQUIRED} consecutive off-route ticks`, () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
 
-    // Tick 1: off-route — no detour yet
-    let result = processVehicles([offVehicle], shapes, routeShapeMapping);
-    expect(Object.keys(result)).toHaveLength(0);
+    // All ticks before the threshold — no detour yet
+    for (let i = 1; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
+      const result = processVehicles([offVehicle], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+    }
 
-    // Tick 2: still off-route — no detour yet
-    result = processVehicles([offVehicle], shapes, routeShapeMapping);
-    expect(Object.keys(result)).toHaveLength(0);
-
-    // Tick 3: still off-route — detour should now appear
-    result = processVehicles([offVehicle], shapes, routeShapeMapping);
+    // Final tick at threshold — detour should now appear
+    const result = processVehicles([offVehicle], shapes, routeShapeMapping);
     expect(Object.keys(result)).toHaveLength(1);
     expect(result['route-1']).toBeDefined();
     expect(result['route-1'].triggerVehicleId).toBe('bus-1');
@@ -227,8 +226,8 @@ describe('hysteresis clearing', () => {
       let result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
       expect(result['route-1'].state).toBe('clear-pending');
 
-      // Vehicle goes off-route again — needs 3 ticks to re-add to detour
-      result = runTicks([offVehicle], 3);
+      // Vehicle goes off-route again — needs full confirmation ticks to re-add to detour
+      result = runTicks([offVehicle], CONSECUTIVE_READINGS_REQUIRED);
       expect(Object.keys(result)).toHaveLength(1);
       expect(result['route-1'].state).toBe('active');
     } finally {
@@ -367,7 +366,7 @@ describe('stale vehicle pruning', () => {
       // bus-2 appears off-route on same route — detour stays active
       Date.now = () => BASE_TIME + 7 * 60 * 1000;
       let result;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
         result = processVehicles([bus2], shapes, routeShapeMapping);
       }
       expect(Object.keys(result)).toHaveLength(1);
@@ -396,12 +395,13 @@ describe('skip vehicles with no routeId', () => {
 });
 
 describe('clearVehicleState', () => {
-  test('resets consecutive off-route counts so detour requires fresh 3 ticks', () => {
+  test('resets consecutive off-route counts so detour requires fresh confirmation ticks', () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
 
-    // Build up 2 consecutive off-route readings (not yet a detour)
-    processVehicles([offVehicle], shapes, routeShapeMapping);
-    processVehicles([offVehicle], shapes, routeShapeMapping);
+    // Build up readings just below the threshold (not yet a detour)
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+      processVehicles([offVehicle], shapes, routeShapeMapping);
+    }
 
     // Clear state — should reset the consecutive counter
     clearVehicleState();
@@ -410,8 +410,10 @@ describe('clearVehicleState', () => {
     const result = processVehicles([offVehicle], shapes, routeShapeMapping);
     expect(Object.keys(result)).toHaveLength(0);
 
-    // Need 2 more ticks (total 3 from fresh start) to trigger
-    processVehicles([offVehicle], shapes, routeShapeMapping);
+    // Need full threshold from fresh start to trigger
+    for (let i = 1; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+      processVehicles([offVehicle], shapes, routeShapeMapping);
+    }
     const result2 = processVehicles([offVehicle], shapes, routeShapeMapping);
     expect(Object.keys(result2)).toHaveLength(1);
     expect(result2['route-1']).toBeDefined();
@@ -423,8 +425,8 @@ describe('multiple vehicles on same route', () => {
     const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
     const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
 
-    // 3 ticks with both vehicles off-route
-    const result = runTicks([bus1, bus2], 3);
+    // Confirm off-route for both vehicles
+    const result = runTicks([bus1, bus2], CONSECUTIVE_READINGS_REQUIRED);
 
     expect(Object.keys(result)).toHaveLength(1);
     expect(result['route-1'].vehiclesOffRoute.size).toBe(2);
@@ -435,7 +437,7 @@ describe('multiple vehicles on same route', () => {
     runTicks([
       makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST }),
       makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST }),
-    ], 3);
+    ], CONSECUTIVE_READINGS_REQUIRED);
     processVehicles([
       makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_MID }),
       makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_MID }),
@@ -467,7 +469,7 @@ describe('multiple vehicles on same route', () => {
       runTicks([
         makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST }),
         makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST }),
-      ], 3);
+      ], CONSECUTIVE_READINGS_REQUIRED);
       processVehicles([
         makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_MID }),
         makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_MID }),
@@ -569,19 +571,21 @@ describe('intermittent off-route readings', () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
     const onVehicle = makeVehicle({ coordinate: ON_ROUTE_COORD });
 
-    // 2 off-route readings
-    processVehicles([offVehicle], shapes, routeShapeMapping);
-    processVehicles([offVehicle], shapes, routeShapeMapping);
+    // Build up readings just below the threshold
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+      processVehicles([offVehicle], shapes, routeShapeMapping);
+    }
 
     // 1 on-route reading — resets off-route counter
     processVehicles([onVehicle], shapes, routeShapeMapping);
 
-    // 2 more off-route readings — should still not trigger (only 2, not 3)
-    processVehicles([offVehicle], shapes, routeShapeMapping);
-    const result = processVehicles([offVehicle], shapes, routeShapeMapping);
-    expect(Object.keys(result)).toHaveLength(0);
+    // Off-route readings after reset — below threshold, should not trigger
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+      const result = processVehicles([offVehicle], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+    }
 
-    // 3rd consecutive off-route after reset — NOW triggers
+    // Final consecutive off-route after reset — NOW triggers
     const result2 = processVehicles([offVehicle], shapes, routeShapeMapping);
     expect(Object.keys(result2)).toHaveLength(1);
   });
@@ -643,8 +647,8 @@ describe('evidence capture', () => {
 
   test('evidence accumulates across multiple ticks', () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    confirmDetour(offVehicle); // 1 point on tick 3
-    // 3 more ticks — each adds 1 evidence point (consecutiveOffRoute >= 3)
+    confirmDetour(offVehicle); // 1 point on the confirming tick
+    // 3 more ticks — each adds 1 evidence point (consecutiveOffRoute >= threshold)
     runTicks([offVehicle], 3);
 
     const evidence = getDetourEvidence();
@@ -654,10 +658,10 @@ describe('evidence capture', () => {
   test('evidence from multiple vehicles is captured', () => {
     const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
     const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
-    runTicks([bus1, bus2], 3);
+    runTicks([bus1, bus2], CONSECUTIVE_READINGS_REQUIRED);
 
     const evidence = getDetourEvidence();
-    // Each vehicle hits threshold on tick 3, contributing 1 point each = 2 total
+    // Each vehicle hits threshold on the confirming tick, contributing 1 point each = 2 total
     expect(evidence['route-1'].pointCount).toBe(2);
   });
 
@@ -985,7 +989,7 @@ describe('trip-aware shape resolution', () => {
       coordinate: offRouteForAssignedShape,
     };
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
       processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
     }
 
@@ -1003,7 +1007,7 @@ describe('trip-aware shape resolution', () => {
       coordinate: offRouteForAssignedShape,
     };
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
       processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
     }
 
@@ -1020,7 +1024,7 @@ describe('trip-aware shape resolution', () => {
       coordinate: offRouteForAssignedShape,
     };
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
       processVehicles([vehicle], multiShapes, multiRouteMapping, tripMapping);
     }
 

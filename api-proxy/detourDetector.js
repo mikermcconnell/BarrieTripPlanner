@@ -38,7 +38,11 @@ const DETOUR_NO_VEHICLE_TIMEOUT_MS =
     ? configuredNoVehicleTimeoutMs
     : 30 * 60 * 1000;
 
-const CONSECUTIVE_READINGS_REQUIRED = 3;
+const configuredConsecutiveReadings = Number.parseInt(process.env.DETOUR_CONSECUTIVE_READINGS || '4', 10);
+const CONSECUTIVE_READINGS_REQUIRED =
+  Number.isFinite(configuredConsecutiveReadings) && configuredConsecutiveReadings > 0
+    ? configuredConsecutiveReadings
+    : 4;
 const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
 let MIN_VEHICLES_FOR_DETOUR = 1;
 

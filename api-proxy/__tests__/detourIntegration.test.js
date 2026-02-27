@@ -96,7 +96,7 @@ function makeFirestoreMock() {
 // ─── Pipeline smoke tests ────────────────────────────────────────────────────
 
 describe('detector → publisher: full pipeline', () => {
-  let processVehicles, clearVehicleState;
+  let processVehicles, clearVehicleState, CONSECUTIVE_READINGS_REQUIRED;
   let publishDetours;
   let mockDb;
 
@@ -108,6 +108,7 @@ describe('detector → publisher: full pipeline', () => {
     const detector = require('../detourDetector');
     processVehicles = detector.processVehicles;
     clearVehicleState = detector.clearVehicleState;
+    CONSECUTIVE_READINGS_REQUIRED = detector.CONSECUTIVE_READINGS_REQUIRED;
     publishDetours = require('../detourPublisher').publishDetours;
 
     clearVehicleState();
@@ -117,11 +118,12 @@ describe('detector → publisher: full pipeline', () => {
     jest.restoreAllMocks();
   });
 
-  test('3 off-route ticks produce a Firestore document with correct shape', async () => {
+  test('off-route ticks produce a Firestore document with correct shape', async () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
 
-    processVehicles([offVehicle], shapes, routeShapeMapping);
-    processVehicles([offVehicle], shapes, routeShapeMapping);
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+      processVehicles([offVehicle], shapes, routeShapeMapping);
+    }
     const activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
 
     expect(Object.keys(activeDetours)).toHaveLength(1);
@@ -141,7 +143,7 @@ describe('detector → publisher: full pipeline', () => {
 
   test('publisher writes DETOUR_DETECTED history event on first publish', async () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    for (let i = 0; i < 2; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
     const activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
 
     await publishDetours(activeDetours);
@@ -177,7 +179,7 @@ describe('detector → publisher: full pipeline', () => {
     const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
     const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
 
-    for (let i = 0; i < 3; i++) processVehicles([bus1, bus2], shapes, routeShapeMapping);
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) processVehicles([bus1, bus2], shapes, routeShapeMapping);
     const activeDetours = processVehicles([bus1, bus2], shapes, routeShapeMapping);
 
     await publishDetours(activeDetours);
@@ -190,14 +192,14 @@ describe('detector → publisher: full pipeline', () => {
 // ─── State transition history events ─────────────────────────────────────────
 
 describe('state transitions: active → clear-pending → cleared', () => {
-  let processVehicles, clearVehicleState, DETOUR_CLEAR_GRACE_MS, DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
+  let processVehicles, clearVehicleState, CONSECUTIVE_READINGS_REQUIRED, DETOUR_CLEAR_GRACE_MS, DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
   let publishDetours;
   let mockDb;
   const realDateNow = Date.now;
 
   // Helper: confirm detour with spread evidence so zone is computed
   function confirmDetourWithZone(vehicleId = 'bus-1') {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
       processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_WEST })], shapes, routeShapeMapping);
     }
     processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_MID })], shapes, routeShapeMapping);
@@ -212,6 +214,7 @@ describe('state transitions: active → clear-pending → cleared', () => {
     const detector = require('../detourDetector');
     processVehicles = detector.processVehicles;
     clearVehicleState = detector.clearVehicleState;
+    CONSECUTIVE_READINGS_REQUIRED = detector.CONSECUTIVE_READINGS_REQUIRED;
     DETOUR_CLEAR_GRACE_MS = detector.DETOUR_CLEAR_GRACE_MS;
     DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE = detector.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
     publishDetours = require('../detourPublisher').publishDetours;
@@ -299,7 +302,7 @@ describe('state transitions: active → clear-pending → cleared', () => {
     await publishDetours(activeDetours);
 
     // Reactivate: vehicle goes off-route again
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
       activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
     }
     expect(activeDetours['route-1'].state).toBe('active');
