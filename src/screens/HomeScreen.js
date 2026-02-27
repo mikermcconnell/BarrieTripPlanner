@@ -47,6 +47,9 @@ import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import DetourBanner from '../components/DetourBanner';
+import DetourDetailsSheet from '../components/DetourDetailsSheet';
+import { useAffectedStops } from '../hooks/useAffectedStops';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -110,6 +113,7 @@ const HomeScreen = ({ route }) => {
     activeDetours,
     serviceAlerts,
     onDemandZones,
+    getRouteDetour,
   } = useTransitRealtime();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -155,6 +159,7 @@ const HomeScreen = ({ route }) => {
     longRegionHandlers: 0,
   });
   const suppressNextMapTapRef = useRef(false);
+  const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
@@ -273,6 +278,15 @@ const HomeScreen = ({ route }) => {
   });
 
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
+
+  const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
+  const { affectedStops } = useAffectedStops({
+    routeId: detourSheetRouteId,
+    entryPoint: selectedDetour?.entryPoint,
+    exitPoint: selectedDetour?.exitPoint,
+    stops,
+    routeStopsMapping,
+  });
 
   const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
 
@@ -833,6 +847,15 @@ const HomeScreen = ({ route }) => {
         />
       )}
 
+      {/* Detour Banner */}
+      {!isTripPlanningMode && (
+        <DetourBanner
+          activeDetours={activeDetours}
+          onPress={setDetourSheetRouteId}
+          alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+        />
+      )}
+
       {/* Map Controls (Top Right) */}
       {!isTripPlanningMode && (
         <View style={styles.mapControls}>
@@ -952,6 +975,30 @@ const HomeScreen = ({ route }) => {
             onDirectionsTo={handleStopDirectionsTo}
           />
         </SheetErrorBoundary>
+      )}
+
+      {/* Detour Details Sheet */}
+      {detourSheetRouteId && selectedDetour && (
+        <DetourDetailsSheet
+          routeId={detourSheetRouteId}
+          detour={selectedDetour}
+          affectedStops={affectedStops}
+          onClose={() => setDetourSheetRouteId(null)}
+          onViewOnMap={() => {
+            if (selectedDetour.entryPoint && selectedDetour.exitPoint) {
+              const entry = selectedDetour.entryPoint;
+              const exit = selectedDetour.exitPoint;
+              compatMapRef.current?.fitToCoordinates(
+                [
+                  { latitude: entry.latitude || entry.lat, longitude: entry.longitude || entry.lon },
+                  { latitude: exit.latitude || exit.lat, longitude: exit.longitude || exit.lon },
+                ],
+                { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
+              );
+            }
+            setDetourSheetRouteId(null);
+          }}
+        />
       )}
 
       {/* Map Tap Popup - for choosing directions from/to a tapped location */}

@@ -38,6 +38,9 @@ import ZoneInfoSheet from '../components/ZoneInfoSheet.web';
 import HomeScreenControls from '../components/HomeScreenControls';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import DetourBanner from '../components/DetourBanner';
+import DetourDetailsSheet from '../components/DetourDetailsSheet';
+import { useAffectedStops } from '../hooks/useAffectedStops';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
@@ -129,6 +132,7 @@ const HomeScreen = ({ route }) => {
     isRouteDetouring,
     activeDetours,
     onDemandZones,
+    getRouteDetour,
   } = useTransitRealtime();
 
   const {
@@ -144,9 +148,19 @@ const HomeScreen = ({ route }) => {
   const [showZones, setShowZones] = useState(true);
   const [selectedZone, setSelectedZone] = useState(null);
   const [whereToText, setWhereToText] = useState('');
+  const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const pulseAnim = useMapPulseAnimation();
 
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
+
+  const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
+  const { affectedStops } = useAffectedStops({
+    routeId: detourSheetRouteId,
+    entryPoint: selectedDetour?.entryPoint,
+    exitPoint: selectedDetour?.exitPoint,
+    stops,
+    routeStopsMapping,
+  });
 
   const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
 
@@ -730,6 +744,13 @@ const HomeScreen = ({ route }) => {
             onTakeSurvey={() => navigation.getParent()?.navigate('Profile', { screen: 'Survey', params: { trigger: 'post_trip' } })}
           />
 
+          {/* Detour Banner */}
+          <DetourBanner
+            activeDetours={activeDetours}
+            onPress={setDetourSheetRouteId}
+            alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+          />
+
           {/* Center Map Button - Top Right */}
           <TouchableOpacity
             style={styles.centerButton}
@@ -905,6 +926,34 @@ const HomeScreen = ({ route }) => {
             onDirectionsTo={handleStopDirectionsTo}
           />
         </SheetErrorBoundary>
+      )}
+
+      {/* Detour Details Sheet */}
+      {detourSheetRouteId && selectedDetour && (
+        <DetourDetailsSheet
+          routeId={detourSheetRouteId}
+          detour={selectedDetour}
+          affectedStops={affectedStops}
+          onClose={() => setDetourSheetRouteId(null)}
+          onViewOnMap={() => {
+            if (selectedDetour.entryPoint && selectedDetour.exitPoint) {
+              const entry = selectedDetour.entryPoint;
+              const exit = selectedDetour.exitPoint;
+              const lat1 = entry.latitude || entry.lat;
+              const lon1 = entry.longitude || entry.lon;
+              const lat2 = exit.latitude || exit.lat;
+              const lon2 = exit.longitude || exit.lon;
+              mapRef.current?.fitToCoordinates(
+                [
+                  { latitude: lat1, longitude: lon1 },
+                  { latitude: lat2, longitude: lon2 },
+                ],
+                { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
+              );
+            }
+            setDetourSheetRouteId(null);
+          }}
+        />
       )}
 
       {/* Zone Info Sheet */}
