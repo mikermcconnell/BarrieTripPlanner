@@ -32,13 +32,13 @@ GTFS-RT Feed (vehicle positions)
         │
         ▼
 ┌─────────────────────┐
-│  detourWorker.js     │  30s poll interval, seeds from Firestore on restart
+│  detourWorker.js     │  30s tick interval (hardcoded), seeds from Firestore on restart
 │  (api-proxy/Railway) │
 └────────┬────────────┘
          │
          ▼
 ┌─────────────────────┐
-│  detourDetector.js   │  State machine: pending → active → clear-pending → cleared
+│  detourDetector.js   │  State machine: (accumulating) → active → clear-pending → cleared
 │  (core algorithm)    │  Per-vehicle tracking with consecutive reading thresholds
 └────────┬────────────┘
          │
@@ -61,20 +61,58 @@ GTFS-RT Feed (vehicle positions)
 └─────────────────────┘
 ```
 
+### Firestore Document Schema
+
+#### `activeDetours` collection
+
+One document per active detour, keyed by route ID (e.g., `"8A"`, `"1"`).
+
+| Field | Type | Description |
+|---|---|---|
+| `routeId` | String | Route identifier (also the document ID) |
+| `detectedAt` | Timestamp | When the detour was first detected |
+| `lastSeenAt` | Timestamp | When off-route evidence was last observed (throttled, updates every 5min) |
+| `updatedAt` | Timestamp | When the Firestore document was last written |
+| `triggerVehicleId` | String \| null | Vehicle that triggered initial detection |
+| `vehicleCount` | Number | Count of vehicles currently off-route |
+| `state` | String | `"active"` or `"clear-pending"` (documents are deleted when cleared, not updated to `"cleared"`) |
+| `skippedSegmentPolyline` | String \| null | Encoded polyline of the route segment being skipped |
+| `inferredDetourPolyline` | String \| null | Encoded polyline of the inferred detour path |
+| `entryPoint` | `{ lat, lon }` \| null | Where vehicles leave the published route |
+| `exitPoint` | `{ lat, lon }` \| null | Where vehicles rejoin the published route |
+| `confidence` | String \| null | `"low"`, `"medium"`, or `"high"` |
+| `evidencePointCount` | Number \| null | GPS evidence points collected |
+| `lastEvidenceAt` | Timestamp \| null | When the most recent evidence point was recorded |
+
+Documents are created on detection, updated each publish cycle, and deleted on clearing.
+
+#### `detourHistory` collection
+
+One document per event. Auto-generated IDs: `{timestamp}-{routeId}-{eventType}-{random}`.
+
+Three event types:
+- **`DETOUR_DETECTED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `vehicleCount`, `confidence`, `evidencePointCount`, `source`
+- **`DETOUR_UPDATED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `previousTriggerVehicleId`, `vehicleCount`, `previousVehicleCount`, `changedFields[]`, `source` (note: no `confidence`/`evidencePointCount` — those are tracked via `changedFields`)
+- **`DETOUR_CLEARED`** — `routeId`, `occurredAt`, `detectedAt`, `clearedAt`, `durationMs`, `triggerVehicleId`, `previousVehicleCount`, `source`
+
+All history events include `source: "detour-worker-v2"`.
+
 ---
 
 ## 3. Current State (as of 2026-02-27)
 
 ### What riders see today: Nothing yet
-Both client feature flags are **off** (`false`). The detection is running server-side, but riders don't see anything in the app. The map overlay component exists in code but is behind a feature flag.
+The client feature flag `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` is **off** (`false`). The detection is running server-side, but riders don't see anything in the app. The map overlay component exists in code but is behind the feature flag.
+
+Note: The detour Firestore subscription in `TransitContext.js` runs unconditionally — only the map overlay rendering is gated by a feature flag.
 
 ### What's built (backend — complete)
 - Detection worker running on Railway, polling every 30s
-- Detection algorithm with consecutive readings, zone-aware clearing, hysteresis dead band
+- Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
 - Debug endpoints: `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
-- 312 tests across 23 suites
+- 143 tests across 6 suites
 
 ### What's built (frontend — partially complete)
 - `DetourOverlay` component (native + web) — draws skipped segment + inferred path on the map
@@ -83,14 +121,18 @@ Both client feature flags are **off** (`false`). The detection is running server
 - Wired into TransitContext and HomeScreen (both platforms)
 
 ### What's missing to go public
-These are the remaining pieces before riders see detours on the map:
 
-1. **Turn on the feature flags** — Flip `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` and `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` to `true`. This alone would show the map overlay, but without the banner or details, riders might not notice or understand it.
+**Deploy steps:**
+1. **Turn on the feature flag** — Set `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` to `true`. This alone would show the map overlay, but without the banner or details, riders might not notice or understand it.
+
+**Build work:**
 2. **DetourBanner** — A notification banner on the main map: "Route 1 is currently on detour." This is how riders find out. Without it, they'd have to visually spot the overlay.
 3. **DetourDetailsSheet** — Tap the banner or overlay → bottom sheet with: which stops are skipped, where the bus is going instead, when the detour started.
 4. **useAffectedStops hook** — Figures out which stops fall within the detoured segment. Powers the details sheet.
-5. **Push notifications** (should have) — Alert riders who have favorited a route when a new detour is detected.
-6. **Accessibility** (should have) — Screen reader announcements for detour events.
+
+**Should-haves:**
+5. **Push notifications** — Alert riders who have favorited a route when a new detour is detected.
+6. **Accessibility** — Screen reader announcements for detour events.
 
 ### Known Issues (Fixed 2026-02-27)
 - **Flapping detours** — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
@@ -105,9 +147,10 @@ The feature is "done" when a rider can open the app and know a detour is happeni
 - [ ] Rider opens the map and sees a visual overlay on any route that's currently detoured
 - [ ] A banner on the map screen tells the rider which route is affected ("Route 1 is on detour")
 - [ ] Tapping the banner/overlay shows which stops are skipped
-- [ ] Detours are detected within 5 minutes of buses deviating
-- [ ] Detours clear within 10 minutes of buses returning to route
-- [ ] False positive rate < 10% over a 7-day window
+- [ ] Detours are detected within 5 minutes of buses deviating (math: 4 readings × 30s = 2min minimum; 5min target provides margin for GPS jitter)
+- [ ] For established detours (>10min old): clear within 5 minutes of all buses returning to route (math: 6 readings × 30s = 3min + 1 tick)
+- [ ] Minimum visibility: detours stay shown for at least 10 minutes after detection, even if buses return to route quickly (grace period prevents flicker)
+- [ ] False positive rate < 10% over a 7-day window (measured via `/api/detour-logs` — count DETECTED events that clear within 5 minutes as false positives)
 
 ### Should Have
 - [ ] Push notifications for favorited routes with active detours
@@ -123,44 +166,81 @@ The feature is "done" when a rider can open the app and know a detour is happeni
 
 ## 5. Configuration Reference
 
-All env vars for the detour system, set in Railway (production) or `.env` (local):
+All env vars for the detour system, set in Railway (production) or `.env` (local).
 
 ### Detection Tuning
 | Variable | Default | Description |
 |---|---|---|
 | `DETOUR_WORKER_ENABLED` | `false` | Master switch for the detection worker |
-| `DETOUR_POLL_INTERVAL_MS` | `15000` | How often to poll GTFS-RT (ms) |
-| `DETOUR_STATIC_REFRESH_MS` | `21600000` | How often to refresh static GTFS shapes (6h) |
 | `DETOUR_OFF_ROUTE_THRESHOLD_METERS` | `75` | Distance from shape to count as "off route" |
-| `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming (4 = 2min at 30s) |
-| `DETOUR_EVIDENCE_WINDOW_MS` | `1800000` | Time window for geometry evidence (30min) |
-| `DETOUR_MIN_ROUTE_EVIDENCE` | `8` | Minimum data points for geometry building |
-| `DETOUR_MIN_UNIQUE_VEHICLES` | `2` | Minimum vehicles for geometry (not detection) |
+| `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming (4 × 30s = 2min) |
+| `DETOUR_EVIDENCE_WINDOW_MS` | `900000` | Time window for geometry evidence points (15min) |
+| `DETOUR_NO_VEHICLE_TIMEOUT_MS` | `1800000` | Time before detour with no vehicles enters clear-pending (30min) |
 
 ### Clearing Tuning
 | Variable | Default | Description |
 |---|---|---|
-| `DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS` | `40` | Tighter threshold for "back on route" |
-| `DETOUR_CLEAR_GRACE_MS` | `600000` | Minimum age before clear-pending (10min) |
-| `DETOUR_MIN_ACTIVE_MS` | `300000` | Minimum age before clearing considered (5min) |
-| `DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE` | `6` | On-route ticks before clearing per vehicle |
+| `DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS` | `40` | Tighter threshold for "back on route" (hysteresis: 40m to clear vs 75m to detect) |
+| `DETOUR_CLEAR_GRACE_MS` | `600000` | Minimum detour age before vehicles can be cleared from the off-route set (10min). Prevents flicker on short-lived detours. |
+| `DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE` | `6` | On-route ticks before clearing per vehicle (6 × 30s = 3min) |
 
 ### Publishing & History
 | Variable | Default | Description |
 |---|---|---|
-| `DETOUR_GEOMETRY_WRITE_THROTTLE_MS` | `120000` | Min ms between Firestore geometry writes per route |
+| `DETOUR_GEOMETRY_WRITE_THROTTLE_MS` | `120000` | Min ms between Firestore geometry writes per route (2min) |
 | `DETOUR_HISTORY_ENABLED` | `true` | Enable detour event history in Firestore |
 | `DETOUR_HISTORY_RETENTION_DAYS` | `30` | Days to retain history (<=0 disables pruning) |
 
 ### Client Feature Flags
 | Variable | Default | Description |
 |---|---|---|
-| `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` | `false` | Enable detour detection subscription in client |
 | `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` | `false` | Show detour geometry overlay on map |
+
+### Hardcoded Constants (not env-configurable)
+| Constant | Value | File | Description |
+|---|---|---|---|
+| `TICK_INTERVAL` | `30000` | detourWorker.js | Detection poll interval (30s) |
+| `STALE_VEHICLE_TIMEOUT_MS` | `300000` | detourDetector.js | Remove vehicle from state after 5min of no data |
+| `MIN_EVIDENCE_FOR_GEOMETRY` | `3` | detourGeometry.js | Min evidence points to build geometry |
+| `HIGH_CONFIDENCE_VEHICLES` | `2` | detourGeometry.js | Unique vehicles needed for "high" confidence |
+| `HIGH_CONFIDENCE_POINTS` | `10` | detourGeometry.js | Evidence points needed for "high" confidence |
+| `DP_TOLERANCE_METERS` | `25` | detourGeometry.js | Douglas-Peucker simplification tolerance |
 
 ---
 
-## 6. Rollout Plan
+## 6. Failure Modes & Resilience
+
+| Scenario | Behavior |
+|---|---|
+| **GTFS-RT feed unavailable** | Fetch retries once (2s delay), then fails tick. `consecutiveFailureCount` increments. Detours persist in-memory. Worker retries next tick (30s), no backoff. |
+| **Vehicle disappears from feed** | Removed from state after 5min (`STALE_VEHICLE_TIMEOUT_MS`). Does NOT clear the detour — absence of data is not evidence of return. |
+| **All vehicles on route go offline** | Detour enters `clear-pending` after 30min without evidence (`DETOUR_NO_VEHICLE_TIMEOUT_MS`). Can reactivate if a vehicle returns off-route. |
+| **Firestore write fails** | Error logged, publish skipped for that tick. Detection state machine continues in-memory. Retries next tick. |
+| **Firestore unreachable at startup** | First-tick Firestore seed skipped. Worker begins fresh. Detours re-detected as vehicles appear. |
+| **Worker restarts** | Seeds active detours from Firestore on first tick, preserving state across deploys. |
+
+---
+
+## 7. Debug Endpoints
+
+### `GET /api/detour-status`
+Overview of the detection system. Returns:
+- `enabled`, `running`, `tickCount`, `lastSuccessfulTick`
+- `consecutiveFailureCount`, `errors.fetchFailures`, `errors.publishFailures`
+- `activeDetours` — map of route IDs → `{ vehicleCount, detectedAt, state }`
+- `baseline` — `{ loaded, loadedAt, source, routeCount, shapeCount }`
+- `recentEvents` — last 20 events (human-readable strings)
+- `evidenceSummary` — per-route `{ pointCount, oldestMs, newestMs }`
+
+### `GET /api/detour-debug?routeId=8`
+Raw evidence points for a specific route. Returns lat/lon/timestamp/vehicleId for each point (max 200). Without `routeId`, returns summary counts only (safe for production).
+
+### `GET /api/detour-logs?limit=50&routeId=&eventType=&start=&end=`
+Queries `detourHistory` collection with optional filters. Returns event log entries (DETECTED, UPDATED, CLEARED) in reverse chronological order.
+
+---
+
+## 8. Rollout Plan
 
 **Stage 1: Internal Testing** (current)
 - Detection worker running in production, geometry overlays behind feature flag
@@ -168,8 +248,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 - Tuning thresholds based on real Barrie Transit data
 
 **Stage 2: Soft Launch**
-- Enable `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` for all users
 - Build and ship DetourBanner + DetourDetailsSheet
+- Enable `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` for all users
 - Monitor user-facing accuracy for 2 weeks
 
 **Stage 3: Full Launch**
@@ -179,13 +259,42 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 
 ---
 
-## 7. Key Files
+## 9. Local Development
+
+To run the detour detection system locally:
+
+1. Set env vars in `api-proxy/.env`:
+   ```
+   DETOUR_WORKER_ENABLED=true
+   ```
+   (Plus your Firebase credentials — see existing `api-proxy/.env` for required keys)
+
+2. Start the proxy server:
+   ```
+   cd api-proxy && node index.js
+   ```
+
+3. Verify it's running:
+   ```
+   curl http://localhost:3001/api/detour-status
+   ```
+   Look for `"running": true` and `tickCount` incrementing.
+
+4. To see detour overlays in the client, also set in your root `.env`:
+   ```
+   EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI=true
+   ```
+
+---
+
+## 10. Key Files
 
 ### Server (api-proxy/)
 - `detourWorker.js` — Worker orchestrator, 30s tick loop, Firestore seeding
 - `detourDetector.js` — Core detection algorithm, state machine, vehicle tracking
 - `detourGeometry.js` — Skipped segment + inferred path computation
 - `detourPublisher.js` — Firestore publisher with write throttling
+- `baselineManager.js` — Persists baseline route shapes to Firestore; detects shape changes between GTFS updates
 
 ### Client (src/)
 - `services/firebase/detourService.js` — Firestore listener for activeDetours
@@ -193,8 +302,10 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 - `components/DetourOverlay.js` / `.web.js` — Map overlay components
 - `context/TransitContext.js` — Integrates detour state into app context
 
-### Tests
-- `api-proxy/__tests__/detourDetector.test.js` — 54 unit tests
-- `api-proxy/__tests__/detourIntegration.test.js` — Pipeline + state transition tests
-- `src/__tests__/detourOverlays.test.js` — Client overlay tests
-- `src/__tests__/detourIntegration.test.js` — End-to-end client tests
+### Tests (143 test cases across 6 files)
+- `api-proxy/__tests__/detourDetector.test.js` — 45 tests: detection logic, hysteresis, multi-vehicle
+- `api-proxy/__tests__/detourGeometry.test.js` — 27 tests: shape analysis, simplification, confidence
+- `api-proxy/__tests__/detourPublisher.test.js` — 14 tests: snapshots, throttling, history events
+- `api-proxy/__tests__/detourIntegration.test.js` — 9 tests: full pipeline, state transitions
+- `src/__tests__/detourOverlays.test.js` — 25 tests: overlay derivation, state filtering
+- `src/__tests__/detourIntegration.test.js` — 23 tests: Firestore → context → rendering

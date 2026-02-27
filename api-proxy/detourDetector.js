@@ -18,12 +18,6 @@ const DETOUR_CLEAR_GRACE_MS =
     ? configuredClearGraceMs
     : 600_000;
 
-const configuredMinActiveMs = Number.parseFloat(process.env.DETOUR_MIN_ACTIVE_MS || '300000');
-const DETOUR_MIN_ACTIVE_MS =
-  Number.isFinite(configuredMinActiveMs) && configuredMinActiveMs >= 0
-    ? configuredMinActiveMs
-    : 300_000;
-
 const configuredClearConsecutive = Number.parseInt(process.env.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE || '6', 10);
 const DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE =
   Number.isFinite(configuredClearConsecutive) && configuredClearConsecutive > 0
@@ -439,7 +433,6 @@ module.exports = {
   CONSECUTIVE_READINGS_REQUIRED,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
-  DETOUR_MIN_ACTIVE_MS,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
   EVIDENCE_WINDOW_MS,
 };
