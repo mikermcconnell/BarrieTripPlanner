@@ -5,17 +5,23 @@
 
 ---
 
-## 1. What It Does
+## 1. Purpose
 
-Automatically detects when Barrie Transit buses deviate from their published routes (construction, road closures, events) and notifies riders in real time. No manual input from transit staff required.
+**Riders open the app, look at the main map, and immediately see when a bus route is on detour.** No checking Twitter, no calling transit, no wondering why the bus didn't show up at their stop. The map shows it.
 
-**How it works:**
-1. A server-side worker (api-proxy on Railway) polls GTFS-RT vehicle positions every 30 seconds
-2. Each vehicle's GPS position is compared against its route's published shape geometry
-3. When multiple consecutive off-route readings are observed, a detour is confirmed
-4. Detour geometry (skipped segment + inferred path) is computed and published to Firestore
-5. Clients subscribe to the `activeDetours` Firestore collection for real-time updates
-6. Map overlays show affected route segments; riders on affected routes are notified
+This is the core rider-facing goal:
+- A highlighted overlay on the map showing which part of the route is detoured
+- A banner telling riders "Route 1 is currently on detour"
+- Details showing which stops are skipped and where buses are actually going
+
+The system detects detours automatically by watching real-time GPS positions — no manual input from transit staff required.
+
+**How it works under the hood:**
+1. A server-side worker polls GTFS-RT vehicle positions every 30 seconds
+2. Each vehicle's GPS is compared against its route's published shape
+3. When consecutive off-route readings are observed, a detour is confirmed
+4. Detour geometry (skipped segment + inferred path) is published to Firestore
+5. The app subscribes in real time and shows the detour on the main map
 
 ---
 
@@ -59,23 +65,32 @@ GTFS-RT Feed (vehicle positions)
 
 ## 3. Current State (as of 2026-02-27)
 
-### Built and Deployed
-- **Server-side detection** — Running on Railway, polling every 30s
-- **Detection algorithm** — Consecutive off-route readings, zone-aware clearing, hysteresis dead band (40m–75m), trip-aware shape resolution
-- **Firestore publishing** — Active detours + geometry with write throttling
-- **Detour history** — Event logging with 30-day retention and pruning
-- **API endpoints** — `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
-- **Client overlay** — `DetourOverlay` component (native + web) showing skipped segments and inferred paths
-- **Feature flags** — `EXPO_PUBLIC_ENABLE_AUTO_DETOURS`, `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI`
-- **Tests** — 312 tests across 23 suites (detector, integration, geometry, overlays)
+### What riders see today: Nothing yet
+Both client feature flags are **off** (`false`). The detection is running server-side, but riders don't see anything in the app. The map overlay component exists in code but is behind a feature flag.
 
-### Not Yet Built
-- **DetourBanner** — In-app notification banner when a user's route has an active detour
-- **DetourDetailsSheet** — Bottom sheet showing detour details, affected stops, ETA impact
-- **useAffectedStops hook** — Determines which stops are skipped by a detour
-- **Push notifications** — Firebase Cloud Messaging for detour alerts (favorited routes)
-- **Accessibility** — Screen reader announcements for new detours
-- **Analytics** — Detection accuracy metrics, false positive tracking
+### What's built (backend — complete)
+- Detection worker running on Railway, polling every 30s
+- Detection algorithm with consecutive readings, zone-aware clearing, hysteresis dead band
+- Firestore publishing (active detours + geometry) with write throttling
+- Detour history event logging (30-day retention)
+- Debug endpoints: `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
+- 312 tests across 23 suites
+
+### What's built (frontend — partially complete)
+- `DetourOverlay` component (native + web) — draws skipped segment + inferred path on the map
+- `useDetourOverlays` hook — transforms Firestore data for map rendering
+- `detourService.js` — Firestore real-time listener for activeDetours
+- Wired into TransitContext and HomeScreen (both platforms)
+
+### What's missing to go public
+These are the remaining pieces before riders see detours on the map:
+
+1. **Turn on the feature flags** — Flip `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` and `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` to `true`. This alone would show the map overlay, but without the banner or details, riders might not notice or understand it.
+2. **DetourBanner** — A notification banner on the main map: "Route 1 is currently on detour." This is how riders find out. Without it, they'd have to visually spot the overlay.
+3. **DetourDetailsSheet** — Tap the banner or overlay → bottom sheet with: which stops are skipped, where the bus is going instead, when the detour started.
+4. **useAffectedStops hook** — Figures out which stops fall within the detoured segment. Powers the details sheet.
+5. **Push notifications** (should have) — Alert riders who have favorited a route when a new detour is detected.
+6. **Accessibility** (should have) — Screen reader announcements for detour events.
 
 ### Known Issues (Fixed 2026-02-27)
 - **Flapping detours** — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
@@ -84,25 +99,25 @@ GTFS-RT Feed (vehicle positions)
 
 ## 4. Definition of Success
 
-The feature is "done" when:
+The feature is "done" when a rider can open the app and know a detour is happening without any other source of information.
 
 ### Must Have (MVP)
-- [ ] Real detours are detected within 5 minutes of buses deviating
-- [ ] False positive rate < 10% over a 7-day window (no flapping)
+- [ ] Rider opens the map and sees a visual overlay on any route that's currently detoured
+- [ ] A banner on the map screen tells the rider which route is affected ("Route 1 is on detour")
+- [ ] Tapping the banner/overlay shows which stops are skipped
+- [ ] Detours are detected within 5 minutes of buses deviating
 - [ ] Detours clear within 10 minutes of buses returning to route
-- [ ] Users see detour overlay on affected routes in the map view
-- [ ] Users on an affected route see an in-app banner notification
-- [ ] Detour details show which stops are affected/skipped
+- [ ] False positive rate < 10% over a 7-day window
 
 ### Should Have
 - [ ] Push notifications for favorited routes with active detours
-- [ ] Detour history visible to users (past detours on a route)
 - [ ] Detection works correctly for route variants (8A/8B)
+- [ ] Screen reader announces new detours
 
 ### Nice to Have
 - [ ] ETA impact estimation (how much longer the detour adds)
+- [ ] Detour history visible to users (past detours on a route)
 - [ ] Staff dashboard for monitoring detection accuracy
-- [ ] Manual override: staff can confirm/dismiss auto-detected detours
 
 ---
 
