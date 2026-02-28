@@ -634,6 +634,7 @@ const HomeScreen = ({ route }) => {
             strokeWidth={getPolylineWeight(shape.routeId)}
             opacity={opacity}
             outlineWidth={outlineW}
+            showArrows={isSelected}
           />
         );
       })}

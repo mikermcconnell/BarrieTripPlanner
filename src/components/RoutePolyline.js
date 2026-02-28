@@ -38,6 +38,7 @@ const RoutePolylineComponent = ({
   outlineWidth = 2,
   outlineColor = '#000000',
   id,
+  showArrows = false,
 }) => {
   const formattedCoordinates = Array.isArray(coordinates)
     ? coordinates
@@ -98,6 +99,22 @@ const RoutePolylineComponent = ({
           }}
           aboveLayerID={`${sourceId}-outline`}
         />
+        {showArrows && (
+          <MapLibreGL.SymbolLayer
+            id={`${sourceId}-arrows`}
+            style={{
+              symbolPlacement: 'line',
+              symbolSpacing: 80,
+              textField: '▶',
+              textSize: 10,
+              textColor: normalizedFill,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+              textRotationAlignment: 'map',
+            }}
+            aboveLayerID={`${sourceId}-fill`}
+          />
+        )}
       </MapLibreGL.ShapeSource>
     );
   }
@@ -114,6 +131,22 @@ const RoutePolylineComponent = ({
           ...(dashArray ? { lineDasharray: dashArray } : {}),
         }}
       />
+      {showArrows && (
+        <MapLibreGL.SymbolLayer
+          id={`${sourceId}-arrows`}
+          style={{
+            symbolPlacement: 'line',
+            symbolSpacing: 80,
+            textField: '▶',
+            textSize: 10,
+            textColor: normalizedFill,
+            textAllowOverlap: true,
+            textIgnorePlacement: true,
+            textRotationAlignment: 'map',
+          }}
+          aboveLayerID={`${sourceId}-fill`}
+        />
+      )}
     </MapLibreGL.ShapeSource>
   );
 };
@@ -138,6 +171,7 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.opacity === next.opacity &&
   prev.outlineWidth === next.outlineWidth &&
   prev.outlineColor === next.outlineColor &&
+  prev.showArrows === next.showArrows &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)
 );
 

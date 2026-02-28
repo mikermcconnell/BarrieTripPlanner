@@ -40,6 +40,7 @@ import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import StatusBadge from '../components/StatusBadge';
 import useRoutePanel from '../hooks/useRoutePanel';
+import DirectionArrows from '../components/DirectionArrows.web';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
@@ -551,6 +552,17 @@ const HomeScreen = ({ route }) => {
             />
           );
         })}
+        {/* Direction arrows on selected route polylines */}
+        {!isTripPreviewMode && hasSelection && displayedShapes
+          .filter(shape => isRouteSelected(shape.routeId))
+          .map(shape => (
+            <DirectionArrows
+              key={`arrows-${shape.id}`}
+              coordinates={shape.coordinates}
+              color={shape.color}
+            />
+          ))
+        }
         {/* Detour geometry overlays — above route polylines */}
         {!isTripPreviewMode && detourOverlays.map((overlay) => (
           <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
