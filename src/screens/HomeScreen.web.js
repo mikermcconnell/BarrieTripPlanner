@@ -192,7 +192,7 @@ const HomeScreen = ({ route }) => {
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
-  const { affectedStops } = useAffectedStops({
+  const { affectedStops, entryStopName, exitStopName } = useAffectedStops({
     routeId: detourSheetRouteId,
     entryPoint: selectedDetour?.entryPoint,
     exitPoint: selectedDetour?.exitPoint,
@@ -1000,6 +1000,8 @@ const HomeScreen = ({ route }) => {
           routeId={detourSheetRouteId}
           detour={selectedDetour}
           affectedStops={affectedStops}
+          entryStopName={entryStopName}
+          exitStopName={exitStopName}
           onClose={() => setDetourSheetRouteId(null)}
           onViewOnMap={() => {
             if (selectedDetour.entryPoint && selectedDetour.exitPoint) {

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from '
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
+import DetourTimeline from './DetourTimeline';
 
 function formatDetourTime(detectedAt) {
   if (!detectedAt) return null;
@@ -30,7 +31,7 @@ function getConfidenceChip(confidence) {
   }
 }
 
-const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnMap }) => {
+const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exitStopName, onClose, onViewOnMap }) => {
   const [slideAnim] = useState(new Animated.Value(100));
   // Keep a ref to onClose so the Escape key handler never captures a stale value
   const onCloseRef = useRef(onClose);
@@ -124,19 +125,11 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
         <View style={styles.divider} />
 
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-          {affectedStops && affectedStops.length > 0 ? (
-            <View style={styles.stopsSection}>
-              <Text style={styles.sectionHeader}>Skipped Stops</Text>
-              {affectedStops.map((stop) => (
-                <View key={stop.id} style={styles.stopRow}>
-                  <Icon name="X" size={14} color={COLORS.error} />
-                  <Text style={styles.stopName}>{stop.name}</Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyText}>Detour detected — stop details pending</Text>
-          )}
+          <DetourTimeline
+            affectedStops={affectedStops}
+            entryStopName={entryStopName}
+            exitStopName={exitStopName}
+          />
 
           <TouchableOpacity
             style={styles.viewButton}
@@ -244,33 +237,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: SPACING.lg,
-  },
-  stopsSection: {
-    marginBottom: SPACING.lg,
-  },
-  sectionHeader: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  stopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.xs,
-    gap: SPACING.sm,
-  },
-  stopName: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
-  },
-  emptyText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
-    marginBottom: SPACING.lg,
   },
   viewButton: {
     backgroundColor: COLORS.primary,
