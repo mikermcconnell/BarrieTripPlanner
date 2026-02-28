@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, LayoutAnimation } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
@@ -25,6 +25,7 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
   const [expanded, setExpanded] = useState(false);
 
   const toggleExpanded = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
   }, []);
 
