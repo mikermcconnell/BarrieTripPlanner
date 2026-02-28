@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { formatDuration, formatMinutes, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
+import { getContrastTextColor } from '../utils/colorUtils';
 
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -92,43 +93,57 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         </View>
       )}
 
-      {/* Main Content Row */}
-      <View style={styles.mainRow}>
-        {/* Left: Duration and Time */}
-        <View style={styles.timeSection}>
-          <View style={styles.durationRow}>
-            <Text style={styles.duration}>{duration}</Text>
-            {hasRealtimeInfo && (
-              <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
-            )}
-          </View>
-          <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
+      {/* Top Row: Duration + Route Badge Chain + Leave In */}
+      <View style={styles.topRow}>
+        <View style={styles.topRowLeft}>
+          <Text style={styles.durationLarge}>{duration}</Text>
+          {hasRealtimeInfo && (
+            <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+          )}
+          {itinerary.legs.map((leg, index) => (
+            <React.Fragment key={`leg-${leg.mode}-${leg.from?.name || index}-${leg.startTime || index}`}>
+              {index > 0 && <View style={styles.connector} />}
+              {leg.mode === 'WALK' ? (
+                <View style={[styles.walkIcon, styles.routeBadgeInline]}>
+                  <Text style={styles.walkIconText}>🚶</Text>
+                </View>
+              ) : leg.isOnDemand ? (
+                <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+                  <Text style={styles.busIconText}>📞</Text>
+                </View>
+              ) : (
+                <View
+                  style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
+                >
+                  <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
+                </View>
+              )}
+            </React.Fragment>
+          ))}
         </View>
+        {leavesInText && (
+          <Text style={[
+            styles.leaveInText,
+            minutesUntilDeparture <= 5 && styles.leavesInSoon,
+          ]}>
+            {leavesInText}
+          </Text>
+        )}
+      </View>
 
-        {/* Center: Route Summary */}
-        <View style={styles.routeSection}>
-          <View style={styles.routeSummary}>
-            {itinerary.legs.map((leg, index) => (
-              <React.Fragment key={`leg-${leg.mode}-${leg.from?.name || index}-${leg.startTime || index}`}>
-                {index > 0 && <View style={styles.connector} />}
-                {leg.mode === 'WALK' ? (
-                  <View style={styles.walkIcon}>
-                    <Text style={styles.walkIconText}>🚶</Text>
-                  </View>
-                ) : leg.isOnDemand ? (
-                  <View style={[styles.busIcon, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
-                    <Text style={styles.busIconText}>📞</Text>
-                  </View>
-                ) : (
-                  <View
-                    style={[styles.busIcon, { backgroundColor: leg.route?.color || COLORS.primary }]}
-                  >
-                    <Text style={styles.busIconText}>{leg.route?.shortName || '?'}</Text>
-                  </View>
-                )}
-              </React.Fragment>
-            ))}
-          </View>
+      {/* On-demand booking note */}
+      {onDemandLeg && (
+        <View style={styles.onDemandNote}>
+          <Text style={styles.onDemandNoteText}>
+            📞 Call {onDemandLeg.bookingPhone || 'transit'} to book
+          </Text>
+        </View>
+      )}
+
+      {/* Bottom Row: Time Range + Walk/Transfer Details + Action Button */}
+      <View style={styles.bottomRow}>
+        <View style={styles.bottomRowContent}>
+          <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
           <View style={styles.details}>
             <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
               {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
@@ -140,51 +155,30 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             )}
           </View>
         </View>
-
-        {/* On-demand booking note */}
-        {onDemandLeg && (
-          <View style={styles.onDemandNote}>
-            <Text style={styles.onDemandNoteText}>
-              📞 Call {onDemandLeg.bookingPhone || 'transit'} to book
-            </Text>
-          </View>
-        )}
-
-        {/* Right: Leaves In + Action Buttons */}
-        <View style={styles.rightSection}>
-          {leavesInText && (
-            <Text style={[
-              styles.leavesIn,
-              minutesUntilDeparture <= 5 && styles.leavesInSoon,
-            ]}>
-              {leavesInText}
-            </Text>
-          )}
-          {isSelected && onStartNavigation ? (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.detailsButton}
-                onPress={() => onViewDetails && onViewDetails(itinerary)}
-                accessibilityRole="button"
-                accessibilityLabel="View trip details"
-              >
-                <Text style={styles.detailsButtonText}>Details</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.goButton}
-                onPress={() => onStartNavigation(itinerary)}
-                accessibilityRole="button"
-                accessibilityLabel="Start navigation"
-              >
-                <Text style={styles.goButtonText}>Go</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.stepsButton} onPress={onPress} accessibilityRole="button" accessibilityLabel="Select this trip option">
-              <Text style={styles.stepsButtonText}>Select</Text>
+        {isSelected && onStartNavigation ? (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.detailsButton}
+              onPress={() => onViewDetails && onViewDetails(itinerary)}
+              accessibilityRole="button"
+              accessibilityLabel="View trip details"
+            >
+              <Text style={styles.detailsButtonText}>Details</Text>
             </TouchableOpacity>
-          )}
-        </View>
+            <TouchableOpacity
+              style={styles.goButton}
+              onPress={() => onStartNavigation(itinerary)}
+              accessibilityRole="button"
+              accessibilityLabel="Start navigation"
+            >
+              <Text style={styles.goButtonText}>Go</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.stepsButton} onPress={onPress} accessibilityRole="button" accessibilityLabel="Select this trip option">
+            <Text style={styles.stepsButtonText}>Select</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -254,37 +248,43 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.white,
   },
-  mainRow: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
-  timeSection: {
-    marginRight: SPACING.md,
-    minWidth: 70,
-  },
-  durationRow: {
+  topRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    flexWrap: 'wrap',
+    flex: 1,
   },
-  duration: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.bold,
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bottomRowContent: {
+    flex: 1,
+  },
+  durationLarge: {
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.textPrimary,
+    marginRight: 8,
+  },
+  leaveInText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  routeBadgeInline: {
+    marginHorizontal: 2,
   },
   timeRange: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  routeSection: {
-    flex: 1,
-  },
-  routeSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   connector: {
     width: 12,
@@ -311,7 +311,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   busIconText: {
-    color: COLORS.white,
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
   },
@@ -327,16 +326,6 @@ const styles = StyleSheet.create({
   detailTextWarning: {
     color: COLORS.warning,
     fontWeight: FONT_WEIGHTS.semibold,
-  },
-  rightSection: {
-    alignItems: 'flex-end',
-    marginLeft: SPACING.sm,
-  },
-  leavesIn: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-    fontWeight: FONT_WEIGHTS.medium,
   },
   leavesInSoon: {
     color: COLORS.success,

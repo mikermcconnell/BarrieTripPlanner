@@ -48,35 +48,28 @@ const TripDetailsScreen = ({ route, navigation }) => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Summary Card */}
         <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Duration</Text>
-              <Text style={styles.summaryValue}>{duration}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Walking</Text>
-              <Text style={styles.summaryValue}>{walkDistance}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Transfers</Text>
-              <Text style={styles.summaryValue}>{itinerary.transfers}</Text>
-            </View>
+          {/* Hero duration */}
+          <Text style={styles.durationHero}>{duration}</Text>
+
+          {/* Time range row */}
+          <View style={styles.timeRangeRow}>
+            <Text style={styles.timeText}>{startTime}</Text>
+            <Icon name="Route" size={20} color={COLORS.textSecondary} />
+            <Text style={styles.timeText}>{endTime}</Text>
           </View>
 
-          <View style={styles.timeRow}>
-            <View style={styles.timeItem}>
-              <Text style={styles.timeLabel}>Depart</Text>
-              <Text style={styles.timeValue}>{startTime}</Text>
+          {/* Compact chips */}
+          <View style={styles.chipsRow}>
+            <View style={styles.chip}>
+              <Text style={styles.chipIcon}>🚶</Text>
+              <Text style={styles.chipText}>{walkDistance} walk</Text>
             </View>
-            <View style={styles.arrow}>
-              <Icon name="Route" size={24} color={COLORS.textSecondary} />
-            </View>
-            <View style={styles.timeItem}>
-              <Text style={styles.timeLabel}>Arrive</Text>
-              <Text style={styles.timeValue}>{endTime}</Text>
-            </View>
+            {itinerary.transfers > 0 && (
+              <View style={styles.chip}>
+                <Text style={styles.chipIcon}>🔄</Text>
+                <Text style={styles.chipText}>{itinerary.transfers} transfer{itinerary.transfers !== 1 ? 's' : ''}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -97,30 +90,6 @@ const TripDetailsScreen = ({ route, navigation }) => {
         {/* Fare Information */}
         <FareInfoPanel />
 
-        {/* Tips */}
-        <View style={styles.tipsCard}>
-          <Text style={styles.tipsTitle}>Trip Tips</Text>
-          <View style={styles.tipItem}>
-            <Icon name="Clock" size={18} color={COLORS.textSecondary} />
-            <Text style={styles.tipText}>
-              Leave a few minutes early to account for walking time
-            </Text>
-          </View>
-          {itinerary.transfers > 0 && (
-            <View style={styles.tipItem}>
-              <Text style={styles.tipIcon}>🔄</Text>
-              <Text style={styles.tipText}>
-                Allow extra time at transfer points in case of delays
-              </Text>
-            </View>
-          )}
-          <View style={styles.tipItem}>
-            <Text style={styles.tipIcon}>📱</Text>
-            <Text style={styles.tipText}>
-              Check real-time arrivals before heading to your stop
-            </Text>
-          </View>
-        </View>
       </ScrollView>
 
       {/* Start Navigation Button */}
@@ -176,55 +145,43 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     ...SHADOWS.small,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.md,
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryDivider: {
-    width: 1,
-    backgroundColor: COLORS.borderLight,
-  },
-  summaryLabel: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: FONT_SIZES.xl,
+  durationHero: {
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.textPrimary,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  timeRow: {
+  timeRangeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    marginBottom: 12,
   },
-  timeItem: {
-    alignItems: 'center',
-  },
-  timeLabel: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  timeValue: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
+  timeText: {
+    fontSize: 16,
     color: COLORS.textPrimary,
   },
-  arrow: {
-    marginHorizontal: SPACING.lg,
+  chipsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
-  arrowText: {
-    fontSize: 24,
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.grey100,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  chipText: {
+    fontSize: 13,
     color: COLORS.textSecondary,
+  },
+  chipIcon: {
+    fontSize: 14,
   },
   stepsContainer: {
     backgroundColor: COLORS.surface,
@@ -238,34 +195,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
-  },
-  tipsCard: {
-    backgroundColor: COLORS.surface,
-    margin: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    ...SHADOWS.small,
-  },
-  tipsTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  tipItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.sm,
-  },
-  tipIcon: {
-    fontSize: 16,
-    marginRight: SPACING.sm,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
   },
   footer: {
     backgroundColor: COLORS.surface,
