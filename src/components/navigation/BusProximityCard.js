@@ -140,7 +140,7 @@ const BusProximityCard = ({
 
   // Get icon based on state
   const getIcon = () => {
-    if (isOnBoard && shouldGetOff) return <Text style={styles.busIcon}>🚪</Text>;
+    if (isOnBoard && shouldGetOff) return <Icon name="Door" size={28} color={COLORS.primary} />;
     return <Icon name="Bus" size={28} color={COLORS.primary} />;
   };
 
@@ -568,13 +568,15 @@ const styles = StyleSheet.create({
   },
   boardButton: {
     marginTop: SPACING.md,
-    backgroundColor: COLORS.success,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.success,
     paddingVertical: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
   },
   boardButtonText: {
-    color: COLORS.white,
+    color: COLORS.success,
     fontSize: FONT_SIZES.md,
     fontWeight: '700',
   },

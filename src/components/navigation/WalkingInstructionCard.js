@@ -83,6 +83,8 @@ const WalkingInstructionCard = ({
   onNextStep,
   destinationName,
   currentLeg,
+  onNextLeg,
+  isLastStep,
 }) => {
   if (!currentStep) return null;
 
@@ -129,11 +131,19 @@ const WalkingInstructionCard = ({
           </View>
         </View>
 
-        {/* Next Step Button */}
-        {onNextStep && (
-          <TouchableOpacity style={styles.nextStepButton} onPress={onNextStep}>
-            <Text style={styles.nextStepButtonText}>Next Step</Text>
+        {/* Next Step / Done Walking Button */}
+        {isLastStep ? (
+          <TouchableOpacity style={styles.nextLegBtn} onPress={onNextLeg} accessibilityRole="button">
+            <Text style={styles.nextLegBtnText}>Done Walking</Text>
+            <Icon name="Bus" size={16} color={COLORS.white} />
           </TouchableOpacity>
+        ) : (
+          onNextStep && (
+            <TouchableOpacity style={styles.nextStepButton} onPress={onNextStep} accessibilityRole="button">
+              <Text style={styles.nextStepButtonText}>Next Step</Text>
+              <Text style={{ fontSize: 16, color: COLORS.primary }}>›</Text>
+            </TouchableOpacity>
+          )
         )}
       </View>
     </View>
@@ -185,16 +195,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextStepButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
     marginLeft: SPACING.sm,
+    gap: 4,
   },
   nextStepButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '700',
+  },
+  nextLegBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 6,
+    marginLeft: SPACING.sm,
+  },
+  nextLegBtnText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 14,
   },
   destinationHeader: {
     flexDirection: 'row',

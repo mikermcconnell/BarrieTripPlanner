@@ -5,8 +5,8 @@
  * Different colors for walk vs transit, with current/completed/upcoming states.
  */
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES } from '../../config/theme';
+import { View, StyleSheet } from 'react-native';
+import { COLORS, SPACING } from '../../config/theme';
 
 const NavigationProgressBar = ({ legs, currentLegIndex }) => {
   if (!legs || legs.length === 0) return null;
@@ -52,10 +52,6 @@ const NavigationProgressBar = ({ legs, currentLegIndex }) => {
         })}
       </View>
 
-      {/* Step label */}
-      <Text style={styles.stepLabel}>
-        Step {currentLegIndex + 1} of {legs.length}
-      </Text>
     </View>
   );
 };
@@ -128,12 +124,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.primary,
-  },
-  stepLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACING.xs,
   },
 });
 

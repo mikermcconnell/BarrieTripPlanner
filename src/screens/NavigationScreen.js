@@ -47,6 +47,7 @@ import { useStepProgress } from '../hooks/useStepProgress';
 
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
+import * as Haptics from 'expo-haptics';
 import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import RoutePolyline from '../components/RoutePolyline';
@@ -160,6 +161,24 @@ const NavigationScreen = ({ route }) => {
     completeLeg,
     resetNavigation,
   } = useStepProgress(itinerary, userLocation, null); // busProximity passed after it's created
+
+  // Haptic feedback — fire once per key per leg
+  const hapticFiredRef = useRef({});
+
+  const triggerHapticOnce = async (key, type) => {
+    if (hapticFiredRef.current[key]) return;
+    hapticFiredRef.current[key] = true;
+    try {
+      await Haptics.notificationAsync(type);
+    } catch (_) {
+      // Haptics not available on web — silently ignore
+    }
+  };
+
+  // Reset haptic tracking when the leg changes
+  useEffect(() => {
+    hapticFiredRef.current = {};
+  }, [currentLegIndex]);
 
   // Get current transit leg for bus proximity tracking
   const currentTransitLeg = useMemo(() => {
@@ -293,6 +312,7 @@ const NavigationScreen = ({ route }) => {
     if (transitStatus === 'waiting' && busProximity?.hasArrived) {
       // Bus has arrived - the BusProximityCard will show the "I'm on the bus" button
       // No automatic boarding - user must confirm
+      triggerHapticOnce('bus-arrived', Haptics.NotificationFeedbackType.Success);
     }
   }, [currentTransitLeg, transitStatus, busProximity?.hasArrived]);
 
@@ -300,6 +320,7 @@ const NavigationScreen = ({ route }) => {
   useEffect(() => {
     if (!currentTransitLeg) return;
     if (transitStatus === 'on_board' && busProximity?.shouldGetOff) {
+      triggerHapticOnce('alight-soon', Haptics.NotificationFeedbackType.Warning);
       // Auto-alight after 3 seconds if user doesn't respond
       const timer = setTimeout(() => {
         alightBus();
@@ -704,9 +725,11 @@ const NavigationScreen = ({ route }) => {
         {isWalkingLeg && (
           <WalkingInstructionCard
             currentStep={currentWalkingStep}
-            onNextStep={advanceLeg}
+            onNextStep={advanceStep}
             destinationName={currentLeg?.to?.name}
             currentLeg={currentLeg}
+            isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
+            onNextLeg={advanceLeg}
           />
         )}
 
@@ -738,7 +761,7 @@ const NavigationScreen = ({ route }) => {
         {isOnDemandLeg && (
           <View style={[styles.onDemandCard, { borderLeftColor: currentLeg.zoneColor || COLORS.primary }]}>
             <View style={styles.onDemandCardHeader}>
-              <Text style={styles.onDemandCardIcon}>📞</Text>
+              <Icon name="Phone" size={28} color={COLORS.primary} style={{ marginRight: SPACING.sm }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.onDemandCardTitle}>
                   {currentLeg.zoneName || 'On-Demand Zone'}
