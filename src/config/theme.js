@@ -22,6 +22,10 @@ export const COLORS = {
   accentDark: '#FF8B00',
   accentSubtle: '#FFF4E5',
 
+  // Transfer indicator (amber)
+  transfer: '#F5A623',
+  transferSubtle: '#FEF3E0',
+
   // Status colors
   success: '#4CAF50',
   successSubtle: '#E8F5E9',
@@ -91,6 +95,9 @@ export const COLORS_DARK = {
   accentLight: '#FFCC02',
   accentDark: '#FFA726',
   accentSubtle: '#3D2E0A',
+
+  transfer: '#FFB74D',
+  transferSubtle: '#3D2E0A',
 
   success: '#66BB6A',
   successSubtle: '#1B3A1D',
