@@ -53,6 +53,7 @@ jest.mock('react-leaflet', () => ({
   Marker: 'Marker',
   Popup: 'Popup',
   CircleMarker: MockCircleMarker,
+  Tooltip: 'Tooltip',
   useMap: jest.fn(),
   useMapEvents: jest.fn(),
 }));
@@ -357,7 +358,8 @@ describe('DetourOverlay component rendering', () => {
     test('renders PointAnnotation markers for entry/exit', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const annotations = inst.root.findAllByType('PointAnnotation');
-      expect(annotations).toHaveLength(2);
+      // 2 entry/exit markers + 2 midpoint label annotations
+      expect(annotations).toHaveLength(4);
       const entry = annotations.find((a) => a.props.id === 'detour-entry-8A');
       const exit = annotations.find((a) => a.props.id === 'detour-exit-8A');
       expect(entry).toBeDefined();
@@ -373,7 +375,8 @@ describe('DetourOverlay component rendering', () => {
         exitPoint: null,
       });
       const annotations = inst.root.findAllByType('PointAnnotation');
-      expect(annotations).toHaveLength(0);
+      // 2 midpoint label annotations still render (polylines are still present)
+      expect(annotations).toHaveLength(2);
     });
   });
 
@@ -418,7 +421,8 @@ describe('DetourOverlay component rendering', () => {
     test('renders CircleMarker for entry/exit', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const markers = inst.root.findAllByType(MockCircleMarker);
-      expect(markers).toHaveLength(2);
+      // 2 entry/exit markers + 2 midpoint label markers
+      expect(markers).toHaveLength(4);
       const centers = markers.map((m) => m.props.center);
       expect(centers).toContainEqual([44.38, -79.69]);
       expect(centers).toContainEqual([44.39, -79.68]);
@@ -445,7 +449,8 @@ describe('DetourOverlay component rendering', () => {
         exitPoint: null,
       });
       const markers = inst.root.findAllByType(MockCircleMarker);
-      expect(markers).toHaveLength(0);
+      // 2 midpoint label markers still render (polylines are still present)
+      expect(markers).toHaveLength(2);
     });
   });
 });
