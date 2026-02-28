@@ -61,12 +61,12 @@ const TripDetailsScreen = ({ route, navigation }) => {
           {/* Compact chips */}
           <View style={styles.chipsRow}>
             <View style={styles.chip}>
-              <Text style={styles.chipIcon}>🚶</Text>
+              <Icon name="Walk" size={16} color={COLORS.textSecondary} />
               <Text style={styles.chipText}>{walkDistance} walk</Text>
             </View>
             {itinerary.transfers > 0 && (
               <View style={styles.chip}>
-                <Text style={styles.chipIcon}>🔄</Text>
+                <Icon name="Transfer" size={16} color={COLORS.textSecondary} />
                 <Text style={styles.chipText}>{itinerary.transfers} transfer{itinerary.transfers !== 1 ? 's' : ''}</Text>
               </View>
             )}

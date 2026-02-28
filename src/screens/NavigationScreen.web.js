@@ -34,6 +34,7 @@ import { decodePolyline, extractShapeSegment } from '../utils/polylineUtils';
 
 // Context for route shapes
 import { useTransitStatic } from '../context/TransitContext';
+import Icon from '../components/Icon';
 
 // Inject Leaflet CSS
 if (typeof document !== 'undefined' && !document.getElementById('leaflet-css-nav')) {
@@ -814,7 +815,7 @@ const NavigationScreen = ({ route }) => {
         {isOnDemandLeg && (
           <View style={[styles.onDemandCard, { borderLeftColor: currentLeg.zoneColor || COLORS.primary }]}>
             <View style={styles.onDemandCardHeader}>
-              <Text style={styles.onDemandCardIcon}>📞</Text>
+              <Icon name="Phone" size={28} color={COLORS.primary} style={{ marginRight: SPACING.sm }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.onDemandCardTitle}>
                   {currentLeg.zoneName || 'On-Demand Zone'}

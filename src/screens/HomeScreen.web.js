@@ -689,7 +689,7 @@ const HomeScreen = ({ route }) => {
               html: `
                 <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
                   <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};margin-bottom:4px;white-space:nowrap;max-width:180px;">
-                    <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? '🚏 Board' : '🚏 Exit'} ${marker.routeName ? `Route ${marker.routeName}` : ''}</div>
+                    <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? 'Board' : 'Exit'} ${marker.routeName ? `Route ${marker.routeName}` : ''}</div>
                     <div style="font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;">#${marker.stopCode} - ${marker.stopName}</div>
                   </div>
                   <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${marker.routeColor};"></div>

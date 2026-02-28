@@ -49,20 +49,20 @@ const NavigationHeader = ({
   const getIcon = () => {
     switch (navigationState?.type) {
       case 'walking':
-        return <Text style={styles.icon}>🚶</Text>;
+        return <Icon name="Walk" size={28} color={COLORS.white} />;
       case 'waiting':
-        return <Text style={styles.icon}>⏳</Text>;
+        return <Icon name="Hourglass" size={28} color={COLORS.white} />;
       case 'boarding':
         return <Icon name="Bus" size={28} color={COLORS.white} />;
       case 'transit':
         return <Icon name="Bus" size={28} color={COLORS.white} />;
       case 'alighting':
       case 'alighting_soon':
-        return <Text style={styles.icon}>🚪</Text>;
+        return <Icon name="Door" size={28} color={COLORS.white} />;
       case 'on_demand':
-        return <Text style={styles.icon}>📞</Text>;
+        return <Icon name="Phone" size={28} color={COLORS.white} />;
       case 'complete':
-        return <Text style={styles.icon}>🎉</Text>;
+        return <Icon name="Celebration" size={28} color={COLORS.white} />;
       default:
         return <Icon name="MapPin" size={28} color={COLORS.white} />;
     }

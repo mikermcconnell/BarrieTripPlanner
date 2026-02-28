@@ -1,5 +1,5 @@
 import * as React from 'react';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 
 // Custom generated SVG components from the user's sprite sheet
 
@@ -12097,5 +12097,48 @@ M797.799316,523.269531
 	C803.977783,507.955750 806.303345,510.408295 807.409729,514.028259 
 	C809.041992,519.368774 804.555603,523.829895 797.799316,523.269531 
 z" />
+  </Svg>
+);
+
+// BusStop — vertical pole with horizontal bar at top
+export const BusStop = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6m0-12h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6m0-12v12m0 2v6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+// Transfer — two arrows forming a cycle
+export const Transfer = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// Door — rectangle with handle
+export const Door = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    <Circle cx="15" cy="12" r="1" fill={color} />
+  </Svg>
+);
+
+// Phone — simple handset shape
+export const Phone = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 12 19.79 19.79 0 0 1 1.08 3.38 2 2 0 0 1 3.05 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// Hourglass
+export const Hourglass = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// Celebration — simple star burst
+export const Celebration = ({ size = 24, color = '#172B4D' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill={color} fillOpacity="0.15" />
   </Svg>
 );

@@ -44,7 +44,7 @@ const FavoritesScreen = ({ navigation }) => {
   const renderStopItem = ({ item }) => (
     <View style={styles.favoriteItem}>
       <View style={styles.itemIcon}>
-        <Text style={styles.itemIconText}>🚏</Text>
+        <Icon name="BusStop" size={20} color={COLORS.textSecondary} />
       </View>
       <View style={styles.itemContent}>
         <Text style={styles.itemTitle}>{item.name}</Text>

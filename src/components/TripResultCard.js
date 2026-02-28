@@ -16,6 +16,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } fro
 import { formatDuration, formatMinutes, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
+import Icon from './Icon';
 
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -105,11 +106,11 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               {index > 0 && <View style={styles.connector} />}
               {leg.mode === 'WALK' ? (
                 <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                  <Text style={styles.walkIconText}>🚶</Text>
+                  <Icon name="Walk" size={16} color={COLORS.textSecondary} />
                 </View>
               ) : leg.isOnDemand ? (
                 <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
-                  <Text style={styles.busIconText}>📞</Text>
+                  <Icon name="Phone" size={14} color={COLORS.white} />
                 </View>
               ) : (
                 <View
@@ -133,9 +134,10 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
 
       {/* On-demand booking note */}
       {onDemandLeg && (
-        <View style={styles.onDemandNote}>
+        <View style={[styles.onDemandNote, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+          <Icon name="Phone" size={12} color={COLORS.primary} />
           <Text style={styles.onDemandNoteText}>
-            📞 Call {onDemandLeg.bookingPhone || 'transit'} to book
+            Call {onDemandLeg.bookingPhone || 'transit'} to book
           </Text>
         </View>
       )}

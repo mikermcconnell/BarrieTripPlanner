@@ -103,9 +103,9 @@ const StepOverviewSheet = ({
                 <View style={styles.legContent}>
                   <View style={styles.legHeader}>
                     {isWalk ? (
-                      <Text style={styles.legIcon}>🚶</Text>
+                      <Icon name="Walk" size={18} color={COLORS.white} />
                     ) : leg.isOnDemand ? (
-                      <Text style={styles.legIcon}>📞</Text>
+                      <Icon name="Phone" size={18} color={COLORS.white} />
                     ) : (
                       <Icon name="Bus" size={18} color={COLORS.primary} />
                     )}

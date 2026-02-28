@@ -25,6 +25,7 @@ import {
 } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { getContrastTextColor } from '../utils/colorUtils';
+import Icon from './Icon';
 
 const TripPreviewModal = ({
   visible,
@@ -93,7 +94,7 @@ const TripPreviewModal = ({
                   {index > 0 && <View style={styles.connector} />}
                   {leg.mode === 'WALK' ? (
                     <View style={styles.walkIcon}>
-                      <Text style={styles.walkIconText}>🚶</Text>
+                      <Icon name="Walk" size={18} color={COLORS.white} />
                     </View>
                   ) : (
                     <View

@@ -46,7 +46,7 @@ const TripCard = ({ itinerary, onPress, isSelected = false }) => {
             {index > 0 && <View style={styles.connector} />}
             {leg.mode === 'WALK' ? (
               <View style={styles.walkIcon}>
-                <Text style={styles.walkIconText}>🚶</Text>
+                <Icon name="Walk" size={16} color={COLORS.textSecondary} />
               </View>
             ) : (
               <View
@@ -62,13 +62,13 @@ const TripCard = ({ itinerary, onPress, isSelected = false }) => {
       {/* Details */}
       <View style={styles.details}>
         <View style={styles.detailItem}>
-          <Text style={styles.detailIcon}>🚶</Text>
+          <Icon name="Walk" size={16} color={COLORS.textSecondary} />
           <Text style={styles.detailText}>{walkDistance} walk</Text>
         </View>
 
         {itinerary.transfers > 0 && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailIcon}>🔄</Text>
+            <Icon name="Transfer" size={16} color={COLORS.textSecondary} />
             <Text style={styles.detailText}>
               {itinerary.transfers} transfer{itinerary.transfers > 1 ? 's' : ''}
             </Text>

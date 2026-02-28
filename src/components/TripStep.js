@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
+import Icon from './Icon';
 import { DelayIndicator } from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 
@@ -50,7 +51,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
         <View style={[styles.stepCard, isBus && styles.stepCardBus]}>
           {isWalk ? (
             <View style={styles.walkContent}>
-              <Text style={styles.walkIcon}>🚶</Text>
+              <Icon name="Walk" size={20} color={COLORS.textSecondary} />
               <View style={styles.walkDetails}>
                 <Text style={styles.stepTitle}>Walk {distance}</Text>
                 <Text style={styles.stepSubtitle}>{duration}</Text>

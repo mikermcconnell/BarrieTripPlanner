@@ -85,7 +85,7 @@ const NearbyStopsScreen = ({ navigation }) => {
       }}
     >
       <View style={styles.stopIcon}>
-        <Text style={styles.stopIconText}>🚏</Text>
+        <Icon name="BusStop" size={20} color={COLORS.textSecondary} />
       </View>
       <View style={styles.stopContent}>
         <Text style={styles.stopName} numberOfLines={1}>

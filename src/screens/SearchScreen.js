@@ -19,6 +19,7 @@ import {
 } from '../utils/mapSelection';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { trackEvent } from '../services/analyticsService';
+import Icon from '../components/Icon';
 
 const SearchScreen = ({ navigation }) => {
   const { stops, routes, isLoadingStatic } = useTransitStatic();
@@ -127,7 +128,7 @@ const SearchScreen = ({ navigation }) => {
   const renderStopItem = ({ item }) => (
     <TouchableOpacity style={styles.resultItem} onPress={() => handleSelectStop(item)} accessibilityRole="button" accessibilityLabel={`${item.name}, Stop #${item.code}`}>
       <View style={styles.stopIcon}>
-        <Text style={styles.stopIconText}>🚏</Text>
+        <Icon name="BusStop" size={20} color={COLORS.textSecondary} />
       </View>
       <View style={styles.resultContent}>
         <Text style={styles.resultTitle}>{item.name}</Text>

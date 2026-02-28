@@ -10,7 +10,14 @@ import {
     Settings,
     Star,
     Clock,
-    Warning
+    Warning,
+    Walk,
+    BusStop,
+    Transfer,
+    Door,
+    Phone,
+    Hourglass,
+    Celebration,
 } from './CartoonIcons';
 import { COLORS } from '../config/theme';
 
@@ -39,6 +46,13 @@ const Icon = ({ name, color = COLORS.textPrimary, size = 24, strokeWidth = 2, ..
         Star: Star,
         Clock: Clock,
         Warning: Warning,
+        Walk: Walk,
+        BusStop: BusStop,
+        Transfer: Transfer,
+        Door: Door,
+        Phone: Phone,
+        Hourglass: Hourglass,
+        Celebration: Celebration,
         X: Add // We can rotate the "Add" (plus) icon 45deg to create an X!
     };
 

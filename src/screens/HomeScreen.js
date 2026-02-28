@@ -766,7 +766,7 @@ const HomeScreen = ({ route }) => {
           <View style={styles.stopLabelContainer}>
             <View style={[styles.stopLabelBubble, { borderColor: marker.routeColor }]}>
               <Text style={[styles.stopLabelType, { color: marker.routeColor }]}>
-                {marker.type === 'boarding' ? '🚏 Board' : '🚏 Exit'} {marker.routeName ? `Route ${marker.routeName}` : ''}
+                {marker.type === 'boarding' ? 'Board' : 'Exit'} {marker.routeName ? `Route ${marker.routeName}` : ''}
               </Text>
               <Text style={styles.stopLabelName} numberOfLines={1}>
                 #{marker.stopCode} - {marker.stopName}
