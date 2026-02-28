@@ -13,9 +13,21 @@ function formatDetourTime(detectedAt) {
   const diffMin = Math.floor(diffMs / 60000);
 
   if (diffMin < 60) {
-    return `Since ${diffMin} min ago`;
+    return `Active for ${diffMin} min`;
   }
-  return `Since ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  const hours = Math.floor(diffMin / 60);
+  return `Active for ${hours}h ${diffMin % 60}m`;
+}
+
+function getConfidenceChip(confidence) {
+  switch (confidence) {
+    case 'high':
+      return { label: 'Confirmed', color: COLORS.success, bgColor: COLORS.successSubtle };
+    case 'medium':
+      return { label: 'Detecting...', color: COLORS.warning, bgColor: COLORS.warningSubtle };
+    default:
+      return { label: 'Low confidence', color: COLORS.textSecondary, bgColor: COLORS.grey200 };
+  }
 }
 
 const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnMap }) => {
@@ -82,10 +94,22 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
         <View style={styles.handleBar} />
 
         <View style={styles.header}>
-          <View style={[styles.routeDot, { backgroundColor: routeColor }]} />
+          <View style={[styles.routeBadge, { backgroundColor: routeColor }]}>
+            <Text style={styles.routeBadgeText}>{routeId}</Text>
+          </View>
           <View style={styles.headerText}>
             <Text style={styles.title}>Route {routeId} — Detour Active</Text>
-            {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
+            <View style={styles.headerMeta}>
+              {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
+              {detour?.confidence && (() => {
+                const chip = getConfidenceChip(detour.confidence);
+                return (
+                  <View style={[styles.confidenceChip, { backgroundColor: chip.bgColor }]}>
+                    <Text style={[styles.confidenceText, { color: chip.color }]}>{chip.label}</Text>
+                  </View>
+                );
+              })()}
+            </View>
           </View>
           <TouchableOpacity
             onPress={handleClose}
@@ -165,11 +189,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
   },
-  routeDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+  routeBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+    minWidth: 28,
+    alignItems: 'center',
     marginRight: SPACING.md,
+  },
+  routeBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.white,
   },
   headerText: {
     flex: 1,
@@ -179,10 +210,24 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
   },
+  headerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: 2,
+  },
   timeLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginTop: 2,
+  },
+  confidenceChip: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 1,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  confidenceText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
   closeButton: {
     padding: SPACING.sm,
