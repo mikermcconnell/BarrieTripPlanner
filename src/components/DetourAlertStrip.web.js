@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, LayoutAnimation } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
@@ -28,6 +28,22 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
   }, []);
+
+  const collapseTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (expanded) {
+      collapseTimerRef.current = setTimeout(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpanded(false);
+      }, 10000);
+    }
+    return () => {
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+      }
+    };
+  }, [expanded]);
 
   if (!activeDetours || typeof activeDetours !== 'object') return null;
 
