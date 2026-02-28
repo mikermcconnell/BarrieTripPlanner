@@ -50,6 +50,8 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourBanner from '../components/DetourBanner';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
+import StatusBadge from '../components/StatusBadge';
+import useRoutePanel from '../hooks/useRoutePanel';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -143,7 +145,7 @@ const HomeScreen = ({ route }) => {
   });
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
@@ -222,6 +224,29 @@ const HomeScreen = ({ route }) => {
 
   // Pulse animation for live indicator
   const pulseAnim = useMapPulseAnimation();
+  const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel({ defaultExpanded: false });
+
+  // Wrap route select to auto-collapse panel on selection
+  const handleRouteSelect = useCallback((routeId) => {
+    rawHandleRouteSelect(routeId);
+    if (routeId !== null && autoCollapseOnSelect) {
+      collapseRoutePanel();
+    }
+  }, [rawHandleRouteSelect, autoCollapseOnSelect, collapseRoutePanel]);
+
+  // StatusBadge computed props
+  const selectedRouteNames = useMemo(() => {
+    if (selectedRoutes.size === 0) return [];
+    return [...selectedRoutes].map(id => {
+      const route = routes.find(r => r.id === id);
+      return route ? route.shortName : id;
+    });
+  }, [selectedRoutes, routes]);
+
+  const activeVehicleCount = useMemo(() => {
+    if (selectedRoutes.size === 0) return 0;
+    return vehicles.filter(v => selectedRoutes.has(v.routeId)).length;
+  }, [selectedRoutes, vehicles]);
 
   // Map tap popup
   const {
@@ -623,6 +648,7 @@ const HomeScreen = ({ route }) => {
             strokeWidth={getPolylineWeight(shape.routeId)}
             opacity={opacity}
             outlineWidth={outlineW}
+            showArrows={isSelected}
           />
         );
       })}
@@ -829,12 +855,13 @@ const HomeScreen = ({ route }) => {
             style={styles.whereToAutocomplete}
             inputStyle={styles.whereToInput}
             rightIcon={
-              <View style={styles.statusBadgeLive}>
-                <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
-                <Text style={styles.statusTextLive}>
-                  {isOffline ? 'Offline' : `${vehicles.length} buses live`}
-                </Text>
-              </View>
+              <StatusBadge
+                isOffline={isOffline}
+                vehicleCount={vehicles.length}
+                selectedRouteNames={selectedRouteNames}
+                activeVehicleCount={activeVehicleCount}
+                pulseAnim={pulseAnim}
+              />
             }
           />
         </View>
@@ -889,6 +916,8 @@ const HomeScreen = ({ route }) => {
           showZones={showZones}
           onToggleZones={() => setShowZones(z => !z)}
           zoneCount={Object.keys(onDemandZones || {}).length}
+          isExpanded={routePanelExpanded}
+          onToggle={toggleRoutePanel}
         />
       )}
 

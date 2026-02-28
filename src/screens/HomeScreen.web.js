@@ -2,7 +2,7 @@
  * Web-specific HomeScreen - Premium UI/UX Design v2.0
  * Features: Refined header, collapsible route filters, prominent alerts, modern controls
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
@@ -41,6 +41,9 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourBanner from '../components/DetourBanner';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
+import StatusBadge from '../components/StatusBadge';
+import useRoutePanel from '../hooks/useRoutePanel';
+import DirectionArrows from '../components/DirectionArrows.web';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
@@ -136,7 +139,7 @@ const HomeScreen = ({ route }) => {
   } = useTransitRealtime();
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
@@ -150,6 +153,41 @@ const HomeScreen = ({ route }) => {
   const [whereToText, setWhereToText] = useState('');
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const pulseAnim = useMapPulseAnimation();
+  const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel();
+
+  // Wrap route select to auto-collapse panel on selection
+  const handleRouteSelect = useCallback((routeId) => {
+    rawHandleRouteSelect(routeId);
+    if (routeId !== null && autoCollapseOnSelect) {
+      collapseRoutePanel();
+    }
+  }, [rawHandleRouteSelect, autoCollapseOnSelect, collapseRoutePanel]);
+
+  // Track newly selected routes for draw-on animation
+  const prevSelectedRef = useRef(new Set());
+  const newlySelectedRoutes = useMemo(() => {
+    const prev = prevSelectedRef.current;
+    const newly = new Set();
+    selectedRoutes.forEach(id => {
+      if (!prev.has(id)) newly.add(id);
+    });
+    prevSelectedRef.current = new Set(selectedRoutes);
+    return newly;
+  }, [selectedRoutes]);
+
+  // StatusBadge computed props
+  const selectedRouteNames = useMemo(() => {
+    if (selectedRoutes.size === 0) return [];
+    return [...selectedRoutes].map(id => {
+      const route = routes.find(r => r.id === id);
+      return route ? route.shortName : id;
+    });
+  }, [selectedRoutes, routes]);
+
+  const activeVehicleCount = useMemo(() => {
+    if (selectedRoutes.size === 0) return 0;
+    return vehicles.filter(v => selectedRoutes.has(v.routeId)).length;
+  }, [selectedRoutes, vehicles]);
 
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
@@ -526,6 +564,8 @@ const HomeScreen = ({ route }) => {
             outlineW = currentZoom >= 14 ? 2 : 1;
           }
 
+          const isNewlySelected = newlySelectedRoutes.has(shape.routeId);
+
           return (
             <WebRoutePolyline
               key={shape.id}
@@ -537,9 +577,21 @@ const HomeScreen = ({ route }) => {
               smoothFactor={1.2}
               onMouseOver={() => setHoveredRouteId(shape.routeId)}
               onMouseOut={() => setHoveredRouteId(null)}
+              className={isNewlySelected ? 'polyline-draw-on' : ''}
             />
           );
         })}
+        {/* Direction arrows on selected route polylines */}
+        {!isTripPreviewMode && hasSelection && displayedShapes
+          .filter(shape => isRouteSelected(shape.routeId))
+          .map(shape => (
+            <DirectionArrows
+              key={`arrows-${shape.id}`}
+              coordinates={shape.coordinates}
+              color={shape.color}
+            />
+          ))
+        }
         {/* Detour geometry overlays — above route polylines */}
         {!isTripPreviewMode && detourOverlays.map((overlay) => (
           <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
@@ -721,19 +773,13 @@ const HomeScreen = ({ route }) => {
               inputStyle={styles.whereToInput}
               rightIcon={
                 <View style={styles.headerRight}>
-                  {isOffline ? (
-                    <View style={styles.statusBadgeOffline}>
-                      <View style={styles.statusDotOffline} />
-                      <Text style={styles.statusTextOffline}>Offline</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.statusBadgeLive}>
-                      <Animated.View style={[styles.statusDotLive, { opacity: pulseAnim }]} />
-                      <Text style={styles.statusTextLive}>
-                        {vehicles.length} buses live
-                      </Text>
-                    </View>
-                  )}
+                  <StatusBadge
+                    isOffline={isOffline}
+                    vehicleCount={vehicles.length}
+                    selectedRouteNames={selectedRouteNames}
+                    activeVehicleCount={activeVehicleCount}
+                    pulseAnim={pulseAnim}
+                  />
                 </View>
               }
             />
@@ -759,9 +805,20 @@ const HomeScreen = ({ route }) => {
             <CenterIcon size={18} color={COLORS.textPrimary} />
           </TouchableOpacity>
 
-          {/* Route Filter - Left Side Panel with Alert Indicators */}
-          <View style={styles.filterPanel}>
-            <Text style={styles.filterPanelTitle}>Routes</Text>
+          {/* Route Filter - Collapsible Left Side Panel */}
+          {!routePanelExpanded && (
+            <TouchableOpacity style={styles.routePanelPill} onPress={toggleRoutePanel}>
+              <BusIcon size={14} color={COLORS.textSecondary} />
+              <Text style={styles.routePanelPillText}>Routes{hasSelection ? ` (${selectedRoutes.size})` : ''}</Text>
+            </TouchableOpacity>
+          )}
+          <View style={[styles.filterPanel, !routePanelExpanded && styles.filterPanelCollapsed]}>
+            <View style={styles.filterPanelHeader}>
+              <Text style={styles.filterPanelTitle}>Routes</Text>
+              <TouchableOpacity onPress={toggleRoutePanel} style={styles.filterPanelClose}>
+                <Text style={styles.filterPanelCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
             {serviceAlerts.length > 0 && (
               <TouchableOpacity
                 style={styles.alertsHeaderChip}
@@ -862,7 +919,7 @@ const HomeScreen = ({ route }) => {
       {!isTripPlanningMode && !selectedStop && (
         <View style={styles.bottomActionBar}>
           <View style={styles.bottomActionCard}>
-            {/* Stops Toggle */}
+            {/* Stops Toggle - Ghost style when inactive */}
             <TouchableOpacity
               style={[styles.bottomActionButton, showStops && styles.bottomActionButtonActive]}
               onPress={() => setShowStops(!showStops)}
@@ -870,23 +927,17 @@ const HomeScreen = ({ route }) => {
             >
               {showStops
                 ? <StopIconFilled size={18} color={COLORS.white} />
-                : <StopIconOutline size={18} color={COLORS.textPrimary} />
+                : <StopIconOutline size={18} color={COLORS.grey600} />
               }
-              <Text style={[styles.bottomActionText, showStops && styles.bottomActionTextActive]}>
-                Stops
-              </Text>
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.bottomActionDivider} />
-
-            {/* Plan Trip Button - Primary action */}
+            {/* Plan Trip Button - Primary CTA */}
             <TouchableOpacity
               style={styles.planTripButton}
               onPress={enterTripPlanningMode}
               activeOpacity={0.8}
             >
-              <DirectionsIcon size={27} color={COLORS.white} />
+              <DirectionsIcon size={28} color={COLORS.white} />
               <Text style={styles.planTripButtonText}>Plan Trip</Text>
             </TouchableOpacity>
           </View>
@@ -1121,6 +1172,31 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
+  // Route Panel - Collapsed Pill
+  routePanelPill: {
+    position: 'absolute',
+    top: 72,
+    left: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.white,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    boxShadow: '0 2px 12px rgba(23, 43, 77, 0.12)',
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+    zIndex: 998,
+    cursor: 'pointer',
+  },
+  routePanelPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
   // Route Filter - Left Side Panel
   filterPanel: {
     position: 'absolute',
@@ -1142,9 +1218,32 @@ const styles = StyleSheet.create({
     borderColor: COLORS.grey200,
     overflowY: 'auto',
     overflowX: 'visible',
+    transition: 'opacity 0.25s ease, transform 0.25s ease',
+  },
+  filterPanelCollapsed: {
+    opacity: 0,
+    transform: [{ translateX: -20 }],
+    pointerEvents: 'none',
+    maxHeight: 0,
+    overflow: 'hidden',
+  },
+  filterPanelHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  filterPanelClose: {
+    padding: SPACING.xs,
+    cursor: 'pointer',
+  },
+  filterPanelCloseText: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
   },
   filterPanelTitle: {
-    width: '100%',
     textAlign: 'center',
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.bold,
@@ -1305,47 +1404,36 @@ const styles = StyleSheet.create({
     boxShadow: '0 4px 24px rgba(23, 43, 77, 0.14)',
     borderWidth: 1,
     borderColor: 'rgba(235, 236, 240, 0.8)',
-    gap: SPACING.xs,
+    gap: SPACING.md,
   },
   bottomActionButton: {
-    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.lg,
-    gap: 6,
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.grey300,
   },
   bottomActionButtonActive: {
     backgroundColor: COLORS.primary,
-  },
-  bottomActionText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textPrimary,
-  },
-  bottomActionTextActive: {
-    color: COLORS.white,
-  },
-  bottomActionDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: COLORS.grey300,
+    borderColor: COLORS.primary,
   },
   planTripButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.ctaGreen,
     borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.lg + 4,
-    gap: 6,
-    boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    gap: 8,
+    boxShadow: '0 4px 16px rgba(46, 125, 50, 0.35)',
   },
   planTripButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.white,
-    letterSpacing: -0.2,
+    letterSpacing: 0.2,
   },
 
   // Trip Planning Header

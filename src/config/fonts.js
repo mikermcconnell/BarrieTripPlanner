@@ -1,11 +1,12 @@
 /**
  * Custom fonts configuration for Barrie Transit app.
- * Uses Nunito for a friendly, approachable geometric sans-serif aesthetic.
+ * Uses Outfit for a sharp, modern geometric sans-serif aesthetic
+ * with excellent small-size legibility and built-in tabular figures.
  */
 
 export const FONT_FAMILIES = {
-    regular: 'Nunito_400Regular',
-    medium: 'Nunito_500Medium',
-    semibold: 'Nunito_600SemiBold',
-    bold: 'Nunito_700Bold',
+    regular: 'Outfit_400Regular',
+    medium: 'Outfit_500Medium',
+    semibold: 'Outfit_600SemiBold',
+    bold: 'Outfit_700Bold',
 };

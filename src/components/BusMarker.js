@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { memo, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -15,6 +15,19 @@ const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: r
   const latitude = vehicle?.coordinate?.latitude;
   const longitude = vehicle?.coordinate?.longitude;
   const bearing = vehicle?.bearing ?? 0;
+
+  // Subtle breathing pulse animation
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.85, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;
@@ -72,12 +85,12 @@ const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: r
         )}
 
         {/* Colored circle with bus icon + route number */}
-        <View collapsable={false} style={[styles.circle, { backgroundColor: color }]}>
+        <Animated.View style={[styles.circle, { backgroundColor: color, opacity: pulseAnim }]}>
           <Svg width={12} height={12} viewBox="0 0 24 24">
             <Path d={BUS_ICON_PATH} fill="white" />
           </Svg>
           <Text style={styles.routeLabel}>{routeLabel}</Text>
-        </View>
+        </Animated.View>
       </View>
     </MapLibreGL.MarkerView>
   );

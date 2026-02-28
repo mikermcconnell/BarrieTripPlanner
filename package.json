@@ -26,7 +26,7 @@
     "build:release:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Apk"
   },
   "dependencies": {
-    "@expo-google-fonts/nunito": "^0.4.2",
+    "@expo-google-fonts/outfit": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.8",
     "@maplibre/maplibre-react-native": "^10.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -56,6 +56,7 @@
     "firebase": "^12.9.0",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
+    "leaflet-polylinedecorator": "^1.6.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-leaflet": "^5.0.0",
