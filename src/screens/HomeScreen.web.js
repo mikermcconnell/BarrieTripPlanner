@@ -248,8 +248,27 @@ const HomeScreen = ({ route }) => {
 
   const {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, tripVehicles,
+    boardingAlightingMarkers, transferMarkers, tripVehicles,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
+
+  // Inject transfer pulse animation CSS (web only)
+  React.useEffect(() => {
+    const styleId = 'transfer-pulse-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        @keyframes transfer-pulse {
+          0% { transform: scale(1); opacity: 0.8; }
+          100% { transform: scale(2.5); opacity: 0; }
+        }
+        .transfer-marker-pulse {
+          animation: transfer-pulse 2s ease-out infinite;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
 
   // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
@@ -611,7 +630,7 @@ const HomeScreen = ({ route }) => {
             key={route.id}
             positions={route.coordinates.map(c => [c.latitude, c.longitude])}
             pathOptions={{
-              color: route.color,
+              color: route.isTransferWalk ? '#F5A623' : route.color,
               weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
               dashArray: route.isWalk ? '10, 8' : route.isOnDemand ? '12, 6' : null,
               lineCap: 'round',
@@ -670,6 +689,30 @@ const HomeScreen = ({ route }) => {
               iconSize: [180, 60],
               iconAnchor: [90, 60],
             })}
+          />
+        ))}
+
+        {/* Transfer point markers */}
+        {transferMarkers.map((marker) => (
+          <Marker
+            key={marker.id}
+            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+            icon={L.divIcon({
+              className: 'transfer-point-marker',
+              html: `
+                <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+                  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:#F5A623;opacity:0.3;" class="transfer-marker-pulse"></div>
+                  <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);border:2px solid #F5A623;margin-bottom:4px;white-space:nowrap;">
+                    <div style="font-size:10px;font-weight:bold;color:#F5A623;text-transform:uppercase;">🔄 Transfer</div>
+                    <div style="font-size:11px;font-weight:600;color:#333;">${marker.fromStopName}</div>
+                  </div>
+                  <div style="width:20px;height:20px;background:#F5A623;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);transform:rotate(45deg);border-radius:3px;"></div>
+                </div>
+              `,
+              iconSize: [180, 80],
+              iconAnchor: [90, 80],
+            })}
+            zIndexOffset={1000}
           />
         ))}
 
