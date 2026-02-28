@@ -206,7 +206,7 @@ const HomeScreen = ({ route }) => {
 
   const {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, tripVehicles,
+    boardingAlightingMarkers, transferMarkers, tripVehicles,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
 
   // Reset trip planner when navigating away from this tab
@@ -750,6 +750,25 @@ const HomeScreen = ({ route }) => {
         </MapLibreGL.PointAnnotation>
       ))}
 
+      {/* Transfer point markers */}
+      {transferMarkers.map((marker) => (
+        <MapLibreGL.PointAnnotation
+          key={marker.id}
+          id={`transfer-${marker.id}`}
+          coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <View style={styles.transferMarkerContainer}>
+            <View style={styles.transferLabelBubble}>
+              <Text style={styles.transferLabelType}>🔄 Transfer</Text>
+              <Text style={styles.transferLabelName} numberOfLines={1}>{marker.fromStopName}</Text>
+            </View>
+            <View style={styles.transferLabelPointer} />
+            <View style={styles.transferDiamond} />
+          </View>
+        </MapLibreGL.PointAnnotation>
+      ))}
+
       {/* Real-time bus positions for trip routes */}
       {isTripPreviewMode && tripVehicles.map((vehicle) => (
         <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
@@ -792,6 +811,7 @@ const HomeScreen = ({ route }) => {
     intermediateStopMarkers,
     tripMarkers,
     boardingAlightingMarkers,
+    transferMarkers,
     tripVehicles,
     mapTapLocation,
   ]);
@@ -1208,6 +1228,51 @@ const styles = StyleSheet.create({
     borderTopWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
+  },
+  // Transfer point markers
+  transferMarkerContainer: {
+    alignItems: 'center',
+  },
+  transferLabelBubble: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 2,
+    borderColor: '#F5A623',
+    marginBottom: 4,
+  },
+  transferLabelType: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#F5A623',
+    textTransform: 'uppercase',
+  },
+  transferLabelName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#333',
+    maxWidth: 150,
+  },
+  transferLabelPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#F5A623',
+    marginBottom: 2,
+  },
+  transferDiamond: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#F5A623',
+    borderWidth: 3,
+    borderColor: 'white',
+    borderRadius: 3,
+    transform: [{ rotate: '45deg' }],
   },
   // Map tap marker (dropped pin style)
   mapTapMarker: {
