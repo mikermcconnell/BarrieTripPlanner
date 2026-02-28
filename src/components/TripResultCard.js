@@ -10,11 +10,12 @@
  * - Warning badges for long walks and tomorrow's trips
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { formatDuration, formatMinutes, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
+import { isTransferWalk, calculateWaitDuration } from '../utils/tripUtils';
 
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -28,19 +29,16 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
 
   // Build segment data for timeline (only when selected with transfers)
-  const segments = isSelected ? itinerary.legs.map((leg, index) => {
-    const isTransfer = leg.mode === 'WALK'
-      && index > 0
-      && index < itinerary.legs.length - 1
-      && itinerary.legs[index - 1].mode !== 'WALK'
-      && itinerary.legs[index + 1].mode !== 'WALK';
-
-    const waitDuration = isTransfer && itinerary.legs[index + 1]?.startTime && leg.endTime
-      ? Math.max(0, Math.round((itinerary.legs[index + 1].startTime - leg.endTime) / 1000))
-      : null;
-
-    return { ...leg, isTransfer, waitDuration };
-  }) : null;
+  const segments = useMemo(() => {
+    if (!isSelected) return null;
+    return itinerary.legs.map((leg, index) => {
+      const isTransfer = isTransferWalk(itinerary.legs, index);
+      const waitDuration = isTransfer
+        ? calculateWaitDuration(leg.endTime, itinerary.legs[index + 1]?.startTime)
+        : null;
+      return { ...leg, isTransfer, waitDuration };
+    });
+  }, [isSelected, itinerary]);
 
   // Get delay info from first transit leg
   const firstTransitLeg = transitLegs[0];

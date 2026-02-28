@@ -701,12 +701,12 @@ const HomeScreen = ({ route }) => {
               className: 'transfer-point-marker',
               html: `
                 <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-                  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:#F5A623;opacity:0.3;" class="transfer-marker-pulse"></div>
-                  <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);border:2px solid #F5A623;margin-bottom:4px;white-space:nowrap;">
-                    <div style="font-size:10px;font-weight:bold;color:#F5A623;text-transform:uppercase;">🔄 Transfer</div>
+                  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:${COLORS.transfer};opacity:0.3;" class="transfer-marker-pulse"></div>
+                  <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);border:2px solid ${COLORS.transfer};margin-bottom:4px;white-space:nowrap;">
+                    <div style="font-size:10px;font-weight:bold;color:${COLORS.transfer};text-transform:uppercase;">🔄 Transfer</div>
                     <div style="font-size:11px;font-weight:600;color:#333;">${marker.fromStopName}</div>
                   </div>
-                  <div style="width:20px;height:20px;background:#F5A623;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);transform:rotate(45deg);border-radius:3px;"></div>
+                  <div style="width:20px;height:20px;background:${COLORS.transfer};border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);transform:rotate(45deg);border-radius:3px;"></div>
                 </div>
               `,
               iconSize: [180, 80],

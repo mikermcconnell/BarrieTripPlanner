@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import { COLORS } from '../config/theme';
 import { decodePolyline, findClosestPointIndex } from '../utils/polylineUtils';
+import { isTransferWalk } from '../utils/tripUtils';
 
 /** Snap a lat/lon to the nearest point on a decoded polyline */
 const snapToPolyline = (lat, lon, polylineCoords) => {
@@ -68,22 +69,17 @@ export const useTripVisualization = ({
       }
 
       if (coords.length > 0) {
-        // Detect if this walk leg is a transfer (between two transit legs)
-        const isTransferWalk = leg.mode === 'WALK'
-          && index > 0
-          && index < selectedItinerary.legs.length - 1
-          && selectedItinerary.legs[index - 1].mode !== 'WALK'
-          && selectedItinerary.legs[index + 1].mode !== 'WALK';
+        const isTransfer = isTransferWalk(selectedItinerary.legs, index);
 
         routes.push({
           id: `trip-leg-${index}`,
           coordinates: coords,
           color: leg.mode === 'WALK'
-            ? (isTransferWalk ? COLORS.transfer : COLORS.grey500)
+            ? (isTransfer ? COLORS.transfer : COLORS.grey500)
             : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
             : (leg.route?.color || COLORS.primary),
           isWalk: leg.mode === 'WALK',
-          isTransferWalk,
+          isTransferWalk: isTransfer,
           isOnDemand: !!leg.isOnDemand,
         });
       }
@@ -194,11 +190,9 @@ export const useTripVisualization = ({
     const legs = selectedItinerary.legs;
 
     legs.forEach((leg, index) => {
-      if (leg.mode !== 'WALK') return;
+      if (!isTransferWalk(legs, index)) return;
       const prevLeg = legs[index - 1];
       const nextLeg = legs[index + 1];
-      if (!prevLeg || !nextLeg) return;
-      if (prevLeg.mode === 'WALK' || nextLeg.mode === 'WALK') return;
 
       const transferCoord = leg.from?.lat && leg.from?.lon
         ? { latitude: leg.from.lat, longitude: leg.from.lon }
