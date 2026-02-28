@@ -148,10 +148,18 @@ topRow: {
   justifyContent: 'space-between',
   marginBottom: 6,
 },
+topRowLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
 bottomRow: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'space-between',
+},
+bottomRowContent: {
+  flex: 1,
 },
 durationLarge: {
   fontSize: 16,
@@ -164,31 +172,39 @@ leaveInText: {
   fontWeight: '600',
   color: COLORS.primary,
 },
+routeBadgeInline: {
+  marginHorizontal: 2,
+},
 ```
 
 **New JSX structure (replaces existing mainRow content):**
+
+Note: Use existing variable names from the component — `itinerary.legs`, `minutesUntilDeparture`, `walkDistance`, `itinerary.transfers`. The route badges should use the existing inline badge pattern from TripResultCard.js:127-131 (`<View style={[styles.busIcon, { backgroundColor: routeColor }]}><Text>...</Text></View>`), NOT a `RouteBadge` component (which does not exist). For walk legs in the badge chain, use a text `🚶` placeholder until Task 14 adds the Walk icon to Icon.js.
+
 ```jsx
 {/* Row 1: Duration + route badges + leave-in */}
 <View style={styles.topRow}>
-  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+  <View style={styles.topRowLeft}>
     <Text style={styles.durationLarge}>{duration}</Text>
-    {/* Route badge chain: walk icon → bus badge → walk icon → ... */}
-    {legs.map((leg, i) => (
+    {/* Route badge chain using existing inline badge pattern */}
+    {itinerary.legs.map((leg, i) => (
       leg.mode === 'WALK'
-        ? <Icon key={i} name="Walk" size={16} color={COLORS.textSecondary} style={{ marginHorizontal: 2 }} />
-        : <RouteBadge key={i} leg={leg} compact />
+        ? <Text key={i} style={styles.routeBadgeInline}>🚶</Text>
+        : <View key={i} style={[styles.busIcon, { backgroundColor: leg.route?.color || COLORS.primary }]}>
+            <Text style={styles.busIconText}>{leg.route?.shortName || '?'}</Text>
+          </View>
     ))}
   </View>
-  {leaveInMinutes != null && (
-    <Text style={styles.leaveInText}>Leave in {leaveInMinutes} min</Text>
+  {minutesUntilDeparture != null && (
+    <Text style={styles.leaveInText}>Leave in {minutesUntilDeparture} min</Text>
   )}
 </View>
 
 {/* Row 2: Time range + details + action */}
 <View style={styles.bottomRow}>
-  <View style={{ flex: 1 }}>
+  <View style={styles.bottomRowContent}>
     <Text style={styles.timeRange}>{startTime} – {endTime}</Text>
-    <Text style={styles.detailText}>{walkDistance} walk · {transferCount} transfer{transferCount !== 1 ? 's' : ''}</Text>
+    <Text style={styles.detailText}>{walkDistance} walk · {itinerary.transfers} transfer{itinerary.transfers !== 1 ? 's' : ''}</Text>
   </View>
   <TouchableOpacity style={styles.detailsBtn} onPress={onPress}>
     <Text style={styles.detailsBtnText}>Details</Text>
@@ -224,19 +240,19 @@ Replace the current summary card (lines 49-80) with a redesigned header:
   {/* Time range row */}
   <View style={styles.timeRangeRow}>
     <Text style={styles.timeText}>{startTime}</Text>
-    <Icon name="Route" size={20} color={COLORS.textSecondary} style={{ marginHorizontal: 8 }} />
+    <Icon name="Route" size={20} color={COLORS.textSecondary} />
     <Text style={styles.timeText}>{endTime}</Text>
   </View>
 
-  {/* Compact chips */}
+  {/* Compact chips — use text placeholders for Walk/Transfer icons until Phase 3 adds them to Icon.js */}
   <View style={styles.chipsRow}>
     <View style={styles.chip}>
-      <Icon name="Walk" size={14} color={COLORS.textSecondary} />
+      <Text style={styles.chipIcon}>🚶</Text>
       <Text style={styles.chipText}>{walkDistance} walk</Text>
     </View>
     {transferCount > 0 && (
       <View style={styles.chip}>
-        <Icon name="Transfer" size={14} color={COLORS.textSecondary} />
+        <Text style={styles.chipIcon}>🔄</Text>
         <Text style={styles.chipText}>{transferCount} transfer{transferCount !== 1 ? 's' : ''}</Text>
       </View>
     )}
@@ -320,19 +336,21 @@ Also delete the `stepCounter` and `stepCounterText` entries from the StyleSheet.
 
 **Step 1:** Modify `src/components/navigation/WalkingInstructionCard.js`.
 
-Add new props at the top of the component:
+Add new props at the top of the component. **Important:** keep existing prop name `currentStep`, not `step`:
 ```javascript
 export default function WalkingInstructionCard({
-  step,
-  currentStepIndex,
-  totalSteps,
-  onNextStep,
+  currentStep,       // existing prop — keep the name
+  onNextStep,        // existing prop
   // New props:
   destinationName,
-  walkTimeMinutes,
-  busDepartureMinutes,
-  isLastWalkingLeg,
+  currentLeg,        // pass the raw leg object — let the card compute walk time/bus departure
 }) {
+```
+
+Compute walk/bus timing inside the card (avoids inventing variables in NavigationScreen):
+```javascript
+// Compute walk time from leg duration (leg.duration is in seconds from OTP)
+const walkTimeMinutes = currentLeg?.duration ? Math.round(currentLeg.duration / 60) : null;
 ```
 
 Add destination header section above the main instruction row:
@@ -343,8 +361,8 @@ Add destination header section above the main instruction row:
     <Text style={styles.destinationText} numberOfLines={1}>
       {destinationName}
     </Text>
-    {busDepartureMinutes != null && (
-      <Text style={styles.departureText}>· Bus in {busDepartureMinutes} min</Text>
+    {walkTimeMinutes != null && (
+      <Text style={styles.departureText}>{walkTimeMinutes} min walk</Text>
     )}
   </View>
 )}
@@ -378,14 +396,10 @@ departureText: {
 Remove the standalone `<DestinationBanner>` conditional when walking (around lines 694-702) and pass destination props to `<WalkingInstructionCard>`:
 ```jsx
 <WalkingInstructionCard
-  step={currentStep}
-  currentStepIndex={currentStepIndex}
-  totalSteps={currentLegSteps.length}
+  currentStep={currentWalkingStep}
   onNextStep={advanceStep}
   destinationName={currentLeg?.to?.name}
-  walkTimeMinutes={currentLegWalkMinutes}
-  busDepartureMinutes={nextBusDepartureMinutes}
-  isLastWalkingLeg={isLastLeg}
+  currentLeg={currentLeg}
 />
 ```
 
@@ -399,17 +413,33 @@ Modify `src/components/TripSearchHeader.js`.
 
 Replace `cycleTimeMode()` with direct-select handlers and replace the single `timeModeBtn` TouchableOpacity with a row of 3 chips.
 
-**New handler:**
+**New handler (replaces `cycleTimeMode`):**
+
+Note: `TripSearchHeader` is a controlled component — it receives `timeMode` and `onTimeModeChange` as props. There is no local `setTimeMode`. The handler must call `onTimeModeChange`.
+
 ```javascript
 const selectTimeMode = (mode) => {
-  setTimeMode(mode);
+  if (!onTimeModeChange) return;
+  onTimeModeChange(mode);
+  // When switching to a timed mode, initialize selectedTime if not set
+  if (mode !== 'now' && !selectedTime) {
+    onSelectedTimeChange && onSelectedTimeChange(new Date());
+  }
+  // When switching back to 'now', clear stale selectedTime
+  if (mode === 'now') {
+    onSelectedTimeChange && onSelectedTimeChange(null);
+  }
 };
 ```
 
-**Important:** The existing code uses time mode keys `'now'`, `'departAt'`, `'arriveBy'` (see `TIME_MODES` array at line 16). The chip loop must use these same keys to avoid breaking the parent component's state.
+**Important:** The existing code uses time mode keys `'now'`, `'departAt'`, `'arriveBy'` (see `TIME_MODES` array at line 16). The chip loop must use these same keys.
 
 **New JSX (replaces the timeRow section, lines 162-185):**
+
+The chip row replaces the single cycling button, but the time display and Search button must be preserved below the chips for `departAt`/`arriveBy` modes.
+
 ```jsx
+{/* Time mode chips */}
 <View style={styles.timeModeRow}>
   {['now', 'departAt', 'arriveBy'].map((mode) => {
     const labels = { now: 'Leave Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
@@ -429,6 +459,20 @@ const selectTimeMode = (mode) => {
     );
   })}
 </View>
+
+{/* Time display + Search button (preserved from original, shown for non-'now' modes) */}
+{timeMode !== 'now' && (
+  <View style={styles.timeRow}>
+    {selectedTime && (
+      <Text style={styles.timeDisplay}>{formatTimeDisplay(selectedTime)}</Text>
+    )}
+    {onSearch && (
+      <TouchableOpacity style={styles.searchBtn} onPress={onSearch} accessibilityLabel="Search trips" accessibilityRole="button">
+        <Text style={styles.searchBtnText}>Search</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+)}
 ```
 
 **New styles:**
@@ -619,7 +663,7 @@ export const useTripVisualization = ({
 }) => {
 ```
 
-Add import:
+Update import (already imports `decodePolyline` and `findClosestPointIndex` — just add `extractShapeSegment`):
 ```javascript
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 ```
@@ -643,14 +687,15 @@ const busApproachLines = useMemo(() => {
     const shapeCoords = shapes[mapping.shapeId];
     if (!shapeCoords || shapeCoords.length === 0) return;
 
-    // Extract segment from bus position to boarding stop
-    const segment = extractShapeSegment(
-      shapeCoords,
-      vehicle.coordinate.latitude,
-      vehicle.coordinate.longitude,
-      leg.from.lat,
-      leg.from.lon
-    );
+    // Find indices on the shape for bus position and boarding stop
+    const busIdx = findClosestPointIndex(shapeCoords, vehicle.coordinate.latitude, vehicle.coordinate.longitude);
+    const boardIdx = findClosestPointIndex(shapeCoords, leg.from.lat, leg.from.lon);
+
+    // Guard: if bus is already past the boarding stop (busIdx >= boardIdx),
+    // the bus has passed and won't return — don't draw an approach line
+    if (busIdx >= boardIdx) return;
+
+    const segment = shapeCoords.slice(busIdx, boardIdx + 1);
 
     if (segment.length >= 2) {
       lines.push({
@@ -703,19 +748,14 @@ In `src/screens/HomeScreen.js`, after the existing `tripRouteCoordinates` polyli
     id={line.id}
     coordinates={line.coordinates}
     color={line.color}
-    lineWidth={3}
+    strokeWidth={3}
     lineDashPattern={[8, 6]}
-    lineOpacity={0.7}
+    opacity={0.7}
   />
 ))}
 ```
 
-Verify that `RoutePolyline` supports `lineDashPattern` and `lineOpacity` props. Check `src/components/RoutePolyline.js` — if it doesn't support dashes, add:
-```javascript
-// In RoutePolyline.js, pass through to MapLibreGL.ShapeSource + LineLayer:
-lineDasharray: lineDashPattern || undefined,
-lineOpacity: lineOpacity || 1,
-```
+Note: `RoutePolyline` already supports `lineDashPattern` (line 34), `strokeWidth` (line 33), and `opacity` (line 37). No changes needed to RoutePolyline itself.
 
 **Step 4: Render the dashed approach line on web map**
 
@@ -795,28 +835,11 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 
 ## PHASE 3: New Components & Features
 
-### Task 14: Wire walk.svg into CartoonIcons (3a)
+### Task 14: Register Walk icon and replace 🚶 emoji (3a)
 
-**Step 1:** Read `assets/icons/walk.svg` to extract the path data and viewBox.
+The `Walk` component **already exists** in `src/components/CartoonIcons.js` (it was generated as part of the cartoon sprite sheet). No SVG extraction is needed. Only the Icon.js mapping is missing.
 
-**Step 2:** Add `Walk` component to `src/components/CartoonIcons.js` following the same pattern as other icons:
-```javascript
-export const Walk = ({ size = 24, color = '#172B4D' }) => (
-  <Svg
-    width={size}
-    height={size}
-    viewBox="0 0 191 191"
-    fill="none"
-  >
-    {/* Replace with actual path data extracted from walk.svg */}
-    <Path d="M..." fill={color} />
-  </Svg>
-);
-```
-
-Note: The walk.svg viewBox is `483.4196869 565.2498714 190.63483919999993 190.63483919999993` — normalize to `0 0 191 191` when defining the component by adjusting path coordinates (or use the raw viewBox string directly).
-
-**Step 3:** Add to `src/components/Icon.js` iconMap:
+**Step 1:** Add `Walk` to `src/components/Icon.js` iconMap:
 ```javascript
 import { ..., Walk } from './CartoonIcons';
 
@@ -826,7 +849,7 @@ const iconMap = {
 };
 ```
 
-**Step 4:** Replace 🚶 in 6 locations:
+**Step 2:** Replace 🚶 in 6 locations (and the emoji placeholders from Tasks 6 and 7):
 1. `src/components/TripCard.js:47` and `:63` — `<Icon name="Walk" size={16} color={COLORS.textSecondary} />`
 2. `src/components/TripResultCard.js:120` — `<Icon name="Walk" size={16} color={COLORS.textSecondary} />`
 3. `src/components/TripStep.js:52` — `<Icon name="Walk" size={20} color={COLORS.textSecondary} />`
@@ -960,7 +983,7 @@ Update the action button:
 ) : (
   <TouchableOpacity style={styles.nextStepBtn} onPress={onNextStep} accessibilityRole="button">
     <Text style={styles.nextStepBtnText}>Next Step</Text>
-    <Icon name="ChevronRight" size={16} color={COLORS.primary} />
+    <Text style={{ fontSize: 16, color: COLORS.primary }}>›</Text>
   </TouchableOpacity>
 )}
 ```
@@ -1054,60 +1077,62 @@ This ensures the button has sufficient contrast whether the card background is w
 
 ### Task 19: Add haptic feedback on navigation transitions (3e)
 
-**Step 1:** Install expo-haptics if not already in package.json:
-```bash
-npx expo install expo-haptics
-npm install
-```
-
-Check first: `grep -r "expo-haptics" package.json` — skip install if already present.
+**Step 1:** `expo-haptics` is already in `package.json` at version `~15.0.8`. No install needed.
 
 **Step 2:** Modify `src/screens/NavigationScreen.js`.
 
 Add import near top:
 ```javascript
+import { useRef } from 'react'; // add useRef to existing React import
 import * as Haptics from 'expo-haptics';
 ```
 
-Add a safe haptic helper to avoid web crashes:
+Add a safe haptic helper with a "fired once" guard to prevent repeated triggers:
 ```javascript
-const triggerHaptic = async (type) => {
+// Track which haptic events have fired to avoid repeats
+const hapticFiredRef = useRef({});
+
+const triggerHapticOnce = async (key, type) => {
+  if (hapticFiredRef.current[key]) return;
+  hapticFiredRef.current[key] = true;
   try {
     await Haptics.notificationAsync(type);
   } catch (_) {
     // Haptics not available on web — silently ignore
   }
 };
+
+// Reset haptic tracking when leg changes
+useEffect(() => {
+  hapticFiredRef.current = {};
+}, [currentLegIndex]);
 ```
 
 **Step 3:** Add haptic calls in the existing effects.
 
-In the bus arrival effect (around line 291 — where card transitions to "arrived" state):
+In the bus arrival effect (around line 289-295 — where `busProximity?.hasArrived` is true):
 ```javascript
-triggerHaptic(Haptics.NotificationFeedbackType.Success);
+triggerHapticOnce('bus-arrived', Haptics.NotificationFeedbackType.Success);
 ```
 
-In the alighting soon effect (around line 299 — where "prepare to exit" warning triggers):
+In the alighting soon effect (around line 298-307 — where `busProximity?.shouldGetOff` triggers):
 ```javascript
-triggerHaptic(Haptics.NotificationFeedbackType.Warning);
+triggerHapticOnce('alight-soon', Haptics.NotificationFeedbackType.Warning);
 ```
 
-In the departure warning effect (if separate from arrival — check NavigationScreen.js for the exact trigger):
-```javascript
-triggerHaptic(Haptics.NotificationFeedbackType.Warning);
-```
+**Important:** The bus arrival effect at lines 289-295 currently has no code body (just a comment "No automatic boarding"). Add the haptic call there. The alighting effect at lines 298-307 already has a timeout — add the haptic before the timeout.
 
-Note: `expo-haptics` is a no-op on web automatically — the try/catch is a belt-and-suspenders safety measure.
+Note: `expo-haptics` is a no-op on web automatically — the try/catch is a belt-and-suspenders safety measure. The `triggerHapticOnce` guard prevents repeated haptic events when the effect re-runs due to dependency changes.
 
 ---
 
 ### Task 20: Phase 3 commits
 
 ```bash
-git commit -m "feat(ui): add Walk icon and wire walk.svg into CartoonIcons
+git commit -m "feat(ui): register Walk icon and replace walking emoji
 
-Phase 3a: Walk component added to CartoonIcons.js from walk.svg path data.
-Icon.js mapping updated. Replaces 🚶 in 6 components.
+Phase 3a: Walk component already existed in CartoonIcons.js — added
+Icon.js mapping. Replaces 🚶 in 6 components + Phase 2 placeholders.
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
