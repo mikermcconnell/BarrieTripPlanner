@@ -38,7 +38,7 @@ import ZoneInfoSheet from '../components/ZoneInfoSheet.web';
 import HomeScreenControls from '../components/HomeScreenControls';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
-import DetourBanner from '../components/DetourBanner';
+import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
@@ -805,10 +805,11 @@ const HomeScreen = ({ route }) => {
           />
 
           {/* Detour Banner */}
-          <DetourBanner
+          <DetourAlertStrip
             activeDetours={activeDetours}
             onPress={setDetourSheetRouteId}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+            routes={routes}
           />
 
           {/* Center Map Button - Top Right */}

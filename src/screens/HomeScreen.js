@@ -47,7 +47,7 @@ import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
-import DetourBanner from '../components/DetourBanner';
+import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
@@ -889,10 +889,11 @@ const HomeScreen = ({ route }) => {
 
       {/* Detour Banner */}
       {!isTripPlanningMode && (
-        <DetourBanner
+        <DetourAlertStrip
           activeDetours={activeDetours}
           onPress={setDetourSheetRouteId}
           alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+          routes={routes}
         />
       )}
 
