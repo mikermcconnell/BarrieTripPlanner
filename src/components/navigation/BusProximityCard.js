@@ -12,6 +12,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import { formatMinutes } from '../../services/tripService';
+import Icon from '../Icon';
 
 const BusProximityCard = ({
   routeShortName,
@@ -139,9 +140,8 @@ const BusProximityCard = ({
 
   // Get icon based on state
   const getIcon = () => {
-    if (isOnBoard && shouldGetOff) return '🚪';
-    if (isOnBoard) return '🚌';
-    return '🚌';
+    if (isOnBoard && shouldGetOff) return <Text style={styles.busIcon}>🚪</Text>;
+    return <Icon name="Bus" size={28} color={COLORS.primary} />;
   };
 
   // Get status text style
@@ -184,7 +184,7 @@ const BusProximityCard = ({
           isOnBoard && shouldGetOff && styles.busIconContainerUrgent,
           isOnBoard && nearAlightingStop && !shouldGetOff && styles.busIconContainerWarning,
         ]}>
-          <Text style={styles.busIcon}>{getIcon()}</Text>
+          {getIcon()}
           {(hasArrived && !isOnBoard) && (
             <View style={styles.arrivedBadge}>
               <Text style={styles.arrivedBadgeText}>!</Text>

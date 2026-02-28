@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
+import Icon from './Icon';
 
 const MapTapPopup = ({
   visible,
@@ -28,7 +29,7 @@ const MapTapPopup = ({
 
         {/* Address display */}
         <View style={styles.addressContainer}>
-          <Text style={styles.addressIcon}>📍</Text>
+          <Icon name="MapPin" size={18} color={COLORS.primary} />
           {isLoading ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (

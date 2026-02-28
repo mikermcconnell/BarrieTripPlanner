@@ -14,6 +14,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
+import Icon from '../Icon';
 
 const ExitConfirmationModal = ({ visible, onCancel, onConfirm }) => {
   return (
@@ -29,7 +30,7 @@ const ExitConfirmationModal = ({ visible, onCancel, onConfirm }) => {
             <View style={styles.modal}>
               {/* Icon */}
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>🚌</Text>
+                <Icon name="Bus" size={36} color={COLORS.primary} />
               </View>
 
               {/* Title */}

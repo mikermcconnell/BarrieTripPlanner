@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../config/theme';
+import Icon from '../components/Icon';
 
 const SignUpScreen = ({ navigation }) => {
   const { signUp } = useAuth();
@@ -69,7 +70,7 @@ const SignUpScreen = ({ navigation }) => {
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logo}>🚌</Text>
+            <Icon name="Bus" size={48} color={COLORS.primary} style={{ marginBottom: SPACING.xs }} />
             <Text style={styles.subtitle}>Join Barrie Transit</Text>
           </View>
 

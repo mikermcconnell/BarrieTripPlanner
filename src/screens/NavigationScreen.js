@@ -50,6 +50,7 @@ import { enrichItineraryWithWalking } from '../services/walkingService';
 import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import RoutePolyline from '../components/RoutePolyline';
+import Icon from '../components/Icon';
 
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
@@ -601,7 +602,7 @@ const NavigationScreen = ({ route }) => {
                 ]}
               >
                 {marker.type === 'bus-stop' ? (
-                  <Text style={styles.busStopIcon}>🚏</Text>
+                  <Icon name="MapPin" size={16} color={COLORS.primary} />
                 ) : (
                   <View style={styles.markerInner} />
                 )}
@@ -673,7 +674,7 @@ const NavigationScreen = ({ route }) => {
           style={[styles.mapControlButton, isFollowMode && styles.mapControlButtonActive]}
           onPress={isFollowMode ? toggleFollowMode : jumpToMyLocation}
         >
-          <Text style={styles.mapControlIcon}>{isFollowMode ? '📍' : '📍'}</Text>
+          <Icon name="MapPin" size={20} color={isFollowMode ? COLORS.primary : COLORS.textSecondary} />
           <Text style={[styles.mapControlLabel, isFollowMode && styles.mapControlLabelActive]}>
             {isFollowMode ? 'Following' : 'My Location'}
           </Text>
@@ -684,7 +685,7 @@ const NavigationScreen = ({ route }) => {
           style={styles.mapControlButton}
           onPress={showTripOverview}
         >
-          <Text style={styles.mapControlIcon}>🗺️</Text>
+          <Icon name="Map" size={20} color={COLORS.textSecondary} />
           <Text style={styles.mapControlLabel}>Full Trip</Text>
         </TouchableOpacity>
       </View>
@@ -795,7 +796,7 @@ const NavigationScreen = ({ route }) => {
       {locationError && (
         <View style={styles.errorOverlay}>
           <View style={styles.errorCard}>
-            <Text style={styles.errorIcon}>📍</Text>
+            <Icon name="MapPin" size={32} color={COLORS.error} />
             <Text style={styles.errorTitle}>Location Unavailable</Text>
             <Text style={styles.errorText}>{locationError}</Text>
             <TouchableOpacity

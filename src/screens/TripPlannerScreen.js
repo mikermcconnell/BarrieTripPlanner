@@ -21,6 +21,7 @@ import TripErrorDisplay from '../components/TripErrorDisplay';
 import TimePicker from '../components/TimePicker';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import Icon from '../components/Icon';
 import { MAP_CONFIG } from '../config/constants';
 
 const TripPlannerScreen = ({ navigation }) => {
@@ -209,7 +210,7 @@ const TripPlannerScreen = ({ navigation }) => {
               icon={<View style={styles.fromDot} />}
               rightIcon={
                 <TouchableOpacity style={styles.locationButton} onPress={useCurrentLocation}>
-                  <Text style={styles.locationButtonText}>📍</Text>
+                  <Icon name="MapPin" size={20} color={COLORS.primary} />
                 </TouchableOpacity>
               }
               style={styles.autocompleteContainer}
@@ -277,7 +278,7 @@ const TripPlannerScreen = ({ navigation }) => {
             !isLoading &&
             !error && (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>🚌</Text>
+                <Icon name="Bus" size={48} color={COLORS.grey400} style={{ marginBottom: SPACING.md }} />
                 <Text style={styles.emptyText}>Enter your trip details above</Text>
                 <Text style={styles.emptySubtext}>We'll find the best routes for you</Text>
               </View>

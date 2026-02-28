@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import Icon from '../components/Icon';
 
 const FavoritesScreen = ({ navigation }) => {
   const { favorites, removeFavoriteStop, removeFavoriteRoute, isAuthenticated } = useAuth();
@@ -109,7 +110,7 @@ const FavoritesScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyListContainer}>
-            <Text style={styles.emptyListIcon}>{activeTab === 'stops' ? '🚏' : '🚌'}</Text>
+            <Icon name="Bus" size={48} color={COLORS.grey400} style={{ marginBottom: SPACING.md }} />
             <Text style={styles.emptyListText}>
               No favorite {activeTab === 'stops' ? 'stops' : 'routes'} yet
             </Text>

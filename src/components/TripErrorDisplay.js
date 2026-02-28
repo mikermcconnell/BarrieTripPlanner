@@ -7,29 +7,38 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { getErrorConfig } from '../config/errorMessages';
+import Icon from './Icon';
 
 const TripErrorDisplay = ({ error, onRetry }) => {
   // Get error configuration based on error code
   const errorCode = error?.code || 'NETWORK_ERROR';
   const config = getErrorConfig(errorCode);
 
-  // Map icon names to emoji (simple approach without external dependencies)
+  // Map icon names to Icon components
   const getIcon = (iconName) => {
-    const icons = {
-      'server': '🖥️',
-      'wifi-off': '📶',
-      'route': '🚌',
-      'map-marker-off': '📍',
-      'clock': '⏱️',
-    };
-    return icons[iconName] || '⚠️';
+    const iconSize = 32;
+    const iconColor = COLORS.error;
+    switch (iconName) {
+      case 'server':
+        return <Text style={styles.icon}>🖥️</Text>;
+      case 'wifi-off':
+        return <Text style={styles.icon}>📶</Text>;
+      case 'route':
+        return <Icon name="Bus" size={iconSize} color={iconColor} />;
+      case 'map-marker-off':
+        return <Icon name="MapPin" size={iconSize} color={iconColor} />;
+      case 'clock':
+        return <Icon name="Clock" size={iconSize} color={iconColor} />;
+      default:
+        return <Icon name="Warning" size={iconSize} color={iconColor} />;
+    }
   };
 
   return (
     <View style={styles.container}>
       {/* Icon */}
       <View style={styles.iconContainer}>
-        <Text style={styles.icon}>{getIcon(config.icon)}</Text>
+        {getIcon(config.icon)}
       </View>
 
       {/* Title */}

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import { formatDuration, formatDistance } from '../../services/tripService';
+import Icon from '../Icon';
 
 /** Format stop name with stop number when available */
 const formatStopName = (stop) => {
@@ -101,9 +102,13 @@ const StepOverviewSheet = ({
                 {/* Leg content */}
                 <View style={styles.legContent}>
                   <View style={styles.legHeader}>
-                    <Text style={styles.legIcon}>
-                      {isWalk ? '🚶' : leg.isOnDemand ? '📞' : '🚌'}
-                    </Text>
+                    {isWalk ? (
+                      <Text style={styles.legIcon}>🚶</Text>
+                    ) : leg.isOnDemand ? (
+                      <Text style={styles.legIcon}>📞</Text>
+                    ) : (
+                      <Icon name="Bus" size={18} color={COLORS.primary} />
+                    )}
                     {!isWalk && !leg.isOnDemand && leg.route && (
                       <View
                         style={[
@@ -171,7 +176,7 @@ const StepOverviewSheet = ({
           {/* Destination marker */}
           <View style={styles.destinationMarker}>
             <View style={styles.destinationDot}>
-              <Text style={styles.destinationIcon}>📍</Text>
+              <Icon name="MapPin" size={16} color={COLORS.error} />
             </View>
             <Text style={styles.destinationText}>
               {formatStopName(legs[legs.length - 1]?.to) || 'Destination'}

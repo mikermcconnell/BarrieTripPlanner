@@ -2,6 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, LayoutAnimation, UIManager } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+import Icon from './Icon';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -89,7 +90,7 @@ const HomeScreenControls = ({
                         onPress={onAlertPress}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.alertHeaderIcon}>⚠️</Text>
+                        <Icon name="Warning" size={14} color={COLORS.warning} />
                         <Text style={styles.alertHeaderText}>{serviceAlerts.length}</Text>
                     </TouchableOpacity>
                 )}

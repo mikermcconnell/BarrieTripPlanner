@@ -14,6 +14,7 @@ import { useTransitStatic } from '../context/TransitContext';
 import { getNearbyStops } from '../services/arrivalService';
 import { formatDistance, formatMinutes } from '../services/tripService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import Icon from '../components/Icon';
 
 const NearbyStopsScreen = ({ navigation }) => {
   const { stops, isLoadingStatic } = useTransitStatic();
@@ -156,7 +157,7 @@ const NearbyStopsScreen = ({ navigation }) => {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🚌</Text>
+            <Icon name="Bus" size={48} color={COLORS.grey400} style={{ marginBottom: SPACING.md }} />
             <Text style={styles.emptyText}>No stops nearby</Text>
             <Text style={styles.emptySubtext}>
               There are no transit stops within 1km of your location

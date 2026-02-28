@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
+import Icon from './Icon';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
 
@@ -75,7 +76,7 @@ const TripCard = ({ itinerary, onPress, isSelected = false }) => {
 
         {transitLegs.length > 0 && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailIcon}>🚌</Text>
+            <Icon name="Bus" size={14} color={COLORS.textSecondary} />
             <Text style={styles.detailText}>
               {transitLegs.map((leg) => leg.route?.shortName || '?').join(', ')}
             </Text>

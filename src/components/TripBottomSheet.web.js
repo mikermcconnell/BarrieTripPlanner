@@ -12,6 +12,7 @@ import TripResultCard from './TripResultCard';
 import TripErrorDisplay from './TripErrorDisplay';
 import FareCard from './FareCard';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import Icon from './Icon';
 
 // Empty state icon
 const EmptyIcon = ({ size = 48, color = COLORS.grey400 }) => (
@@ -142,7 +143,7 @@ const TripBottomSheet = ({
                   accessibilityRole="button"
                   accessibilityLabel={`Recent trip: ${trip.fromText} to ${trip.toText}`}
                 >
-                  <Text style={styles.recentTripIcon}>🕐</Text>
+                  <Icon name="Clock" size={16} color={COLORS.textSecondary} />
                   <View style={styles.recentTripContent}>
                     <Text style={styles.recentTripText} numberOfLines={1}>
                       {trip.fromText}

@@ -27,6 +27,7 @@ const Icon = ({ name, color = COLORS.textPrimary, size = 24, strokeWidth = 2, ..
     // needing to touch any other files in the codebase!
     const iconMap = {
         ArrowUpDown: Route, // For the trip direction button
+        Route: Route, // Direct alias for route/arrow icon
         LocateFixed: MapPin, // For the "Locate Me" button
         Map: MapIcon,
         MapPin: MapPin,

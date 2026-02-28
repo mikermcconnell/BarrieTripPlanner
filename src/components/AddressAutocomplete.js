@@ -35,6 +35,7 @@ import {
 import { autocompleteAddress, getDistanceFromBarrie } from '../services/locationIQService';
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import Icon from './Icon';
 
 const AddressAutocomplete = ({
   value,
@@ -219,7 +220,7 @@ const AddressAutocomplete = ({
         activeOpacity={0.7}
       >
         <View style={styles.suggestionIcon}>
-          <Text style={styles.suggestionIconText}>📍</Text>
+          <Icon name="MapPin" size={16} color={COLORS.textSecondary} />
         </View>
         <View style={styles.suggestionContent}>
           <Text style={styles.suggestionMain} numberOfLines={1}>

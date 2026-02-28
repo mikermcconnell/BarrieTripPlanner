@@ -9,6 +9,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
+import Icon from '../Icon';
 
 // Calculate ETA based on distance and mode
 const calculateETA = (distanceMeters, mode = 'WALK') => {
@@ -48,22 +49,22 @@ const NavigationHeader = ({
   const getIcon = () => {
     switch (navigationState?.type) {
       case 'walking':
-        return '🚶';
+        return <Text style={styles.icon}>🚶</Text>;
       case 'waiting':
-        return '⏳';
+        return <Text style={styles.icon}>⏳</Text>;
       case 'boarding':
-        return '🚌';
+        return <Icon name="Bus" size={28} color={COLORS.white} />;
       case 'transit':
-        return '🚌';
+        return <Icon name="Bus" size={28} color={COLORS.white} />;
       case 'alighting':
       case 'alighting_soon':
-        return '🚪';
+        return <Text style={styles.icon}>🚪</Text>;
       case 'on_demand':
-        return '📞';
+        return <Text style={styles.icon}>📞</Text>;
       case 'complete':
-        return '🎉';
+        return <Text style={styles.icon}>🎉</Text>;
       default:
-        return '📍';
+        return <Icon name="MapPin" size={28} color={COLORS.white} />;
     }
   };
 
@@ -122,13 +123,13 @@ const NavigationHeader = ({
       <View style={styles.content}>
         {/* Close Button */}
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>×</Text>
+          <Icon name="X" size={20} color={COLORS.white} />
         </TouchableOpacity>
 
         {/* Main Content */}
         <View style={styles.mainContent}>
           <View style={styles.instructionContainer}>
-            <Text style={styles.icon}>{getIcon()}</Text>
+            <View style={styles.iconWrapper}>{getIcon()}</View>
             <View style={styles.textContainer}>
               <Text style={styles.stateLabel}>{getHeaderLabel()}</Text>
               <Text style={styles.destination} numberOfLines={1}>
@@ -194,9 +195,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  iconWrapper: {
+    marginRight: SPACING.sm,
+  },
   icon: {
     fontSize: 28,
-    marginRight: SPACING.sm,
   },
   textContainer: {
     flex: 1,

@@ -12,6 +12,7 @@ import TripStep from '../components/TripStep';
 import FareInfoPanel from '../components/FareInfoPanel';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import Icon from '../components/Icon';
 
 const TripDetailsScreen = ({ route, navigation }) => {
   const { itinerary } = route.params;
@@ -38,7 +39,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>←</Text>
+          <Icon name="X" size={20} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Trip Details</Text>
         <View style={styles.placeholder} />
@@ -70,7 +71,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
               <Text style={styles.timeValue}>{startTime}</Text>
             </View>
             <View style={styles.arrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <Icon name="Route" size={24} color={COLORS.textSecondary} />
             </View>
             <View style={styles.timeItem}>
               <Text style={styles.timeLabel}>Arrive</Text>
@@ -100,7 +101,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
         <View style={styles.tipsCard}>
           <Text style={styles.tipsTitle}>Trip Tips</Text>
           <View style={styles.tipItem}>
-            <Text style={styles.tipIcon}>⏰</Text>
+            <Icon name="Clock" size={18} color={COLORS.textSecondary} />
             <Text style={styles.tipText}>
               Leave a few minutes early to account for walking time
             </Text>
