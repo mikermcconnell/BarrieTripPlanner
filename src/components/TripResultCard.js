@@ -27,6 +27,21 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
   const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
 
+  // Build segment data for timeline (only when selected with transfers)
+  const segments = (isSelected && itinerary.transfers > 0) ? itinerary.legs.map((leg, index) => {
+    const isTransfer = leg.mode === 'WALK'
+      && index > 0
+      && index < itinerary.legs.length - 1
+      && itinerary.legs[index - 1].mode !== 'WALK'
+      && itinerary.legs[index + 1].mode !== 'WALK';
+
+    const waitDuration = isTransfer && itinerary.legs[index + 1]?.startTime && leg.endTime
+      ? Math.max(0, Math.round((itinerary.legs[index + 1].startTime - leg.endTime) / 1000))
+      : null;
+
+    return { ...leg, isTransfer, waitDuration };
+  }) : null;
+
   // Get delay info from first transit leg
   const firstTransitLeg = transitLegs[0];
   const hasRealtimeInfo = itinerary.hasRealtimeInfo || firstTransitLeg?.isRealtime;
@@ -190,6 +205,89 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           )}
         </View>
       </View>
+
+      {/* Segment Timeline — only for selected cards with transfers */}
+      {segments && (
+        <View style={styles.segmentTimeline}>
+          <View style={styles.segmentDivider} />
+          {segments.map((seg, index) => {
+            if (seg.isTransfer) {
+              return (
+                <View key={`seg-${index}`} style={styles.segmentRow}>
+                  <View style={styles.segmentIconCol}>
+                    <View style={styles.segmentLine} />
+                    <View style={styles.transferDiamond}>
+                      <Text style={styles.transferDiamondText}>◆</Text>
+                    </View>
+                    <View style={styles.segmentLine} />
+                  </View>
+                  <View style={styles.segmentContent}>
+                    <Text style={styles.transferTitle}>
+                      Transfer at {seg.to?.name || seg.from?.name || 'stop'}
+                    </Text>
+                    <Text style={styles.transferDetail}>
+                      {seg.distance > 0 ? `Walk ${formatDistance(seg.distance)}` : ''}
+                      {seg.distance > 0 && seg.waitDuration != null ? ' · ' : ''}
+                      {seg.waitDuration != null ? `Wait ~${formatDuration(seg.waitDuration)}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+
+            if (seg.mode === 'WALK') {
+              const isFirst = index === 0;
+              const isLast = index === segments.length - 1;
+              return (
+                <View key={`seg-${index}`} style={styles.segmentRow}>
+                  <View style={styles.segmentIconCol}>
+                    {!isFirst && <View style={styles.segmentLine} />}
+                    <View style={[
+                      styles.segmentDot,
+                      isFirst && styles.segmentDotOrigin,
+                      isLast && styles.segmentDotDestination,
+                    ]} />
+                    {!isLast && <View style={styles.segmentLine} />}
+                  </View>
+                  <View style={styles.segmentContent}>
+                    <Text style={styles.segmentWalkText}>
+                      Walk {formatDuration(seg.duration)}
+                      {isFirst && seg.to?.name ? ` → ${seg.to.name}` : ''}
+                      {isLast ? ' → destination' : ''}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+
+            // Bus leg
+            const routeColor = seg.route?.color || COLORS.primary;
+            return (
+              <View key={`seg-${index}`} style={styles.segmentRow}>
+                <View style={styles.segmentIconCol}>
+                  <View style={styles.segmentLine} />
+                  <View style={[styles.segmentBusBar, { backgroundColor: routeColor }]} />
+                  <View style={styles.segmentLine} />
+                </View>
+                <View style={styles.segmentContent}>
+                  <View style={styles.segmentBusRow}>
+                    <View style={[styles.segmentRouteBadge, { backgroundColor: routeColor }]}>
+                      <Text style={styles.segmentRouteText}>{seg.route?.shortName || '?'}</Text>
+                    </View>
+                    <Text style={styles.segmentBusTitle} numberOfLines={1}>
+                      {seg.headsign || seg.route?.longName || 'Bus'}
+                    </Text>
+                  </View>
+                  <Text style={styles.segmentBusDetail}>
+                    {formatDuration(seg.duration)} · {seg.intermediateStops?.length || 0} stops
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+          <View style={styles.segmentDivider} />
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
@@ -405,6 +503,105 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.primary,
+  },
+  // Segment timeline styles
+  segmentTimeline: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.xs,
+  },
+  segmentDivider: {
+    height: 1,
+    backgroundColor: COLORS.grey200,
+    marginVertical: SPACING.xs,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    minHeight: 32,
+  },
+  segmentIconCol: {
+    width: 24,
+    alignItems: 'center',
+  },
+  segmentLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: COLORS.grey300,
+  },
+  segmentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.grey400,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  segmentDotOrigin: {
+    backgroundColor: COLORS.success,
+  },
+  segmentDotDestination: {
+    backgroundColor: COLORS.error,
+  },
+  transferDiamond: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  transferDiamondText: {
+    fontSize: 16,
+    color: COLORS.transfer || '#F5A623',
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  segmentBusBar: {
+    width: 6,
+    borderRadius: 3,
+    minHeight: 16,
+  },
+  segmentContent: {
+    flex: 1,
+    paddingLeft: SPACING.sm,
+    paddingVertical: 2,
+    justifyContent: 'center',
+  },
+  transferTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.transfer || '#F5A623',
+  },
+  transferDetail: {
+    fontSize: FONT_SIZES.xxs,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  segmentWalkText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  segmentBusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  segmentRouteBadge: {
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 1,
+    borderRadius: BORDER_RADIUS.xs,
+  },
+  segmentRouteText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  segmentBusTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  segmentBusDetail: {
+    fontSize: FONT_SIZES.xxs,
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
 });
 
