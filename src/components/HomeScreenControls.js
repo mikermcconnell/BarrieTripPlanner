@@ -1,7 +1,11 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, LayoutAnimation, UIManager } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
@@ -16,6 +20,8 @@ const HomeScreenControls = ({
     showZones,
     onToggleZones,
     zoneCount = 0,
+    isExpanded = true,
+    onToggle,
 }) => {
     const routeAlertsMap = useMemo(() => {
         const map = new Map();
@@ -42,9 +48,40 @@ const HomeScreenControls = ({
         return labelB.localeCompare(labelA);
     }), [routes]);
 
+    const handleToggle = useCallback(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        onToggle?.();
+    }, [onToggle]);
+
+    if (!isExpanded) {
+        return (
+            <View style={styles.filterContainer}>
+                <TouchableOpacity
+                    style={styles.collapsedPill}
+                    onPress={handleToggle}
+                    activeOpacity={0.7}
+                >
+                    <Text style={styles.collapsedPillText}>
+                        Routes{selectedRoutes.size > 0 ? ` (${selectedRoutes.size})` : ''}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.filterContainer}>
             <View style={styles.chipScrollContent}>
+                {/* Collapse Button */}
+                {onToggle && (
+                    <TouchableOpacity
+                        style={styles.collapsePill}
+                        onPress={handleToggle}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.collapsePillText}>×</Text>
+                    </TouchableOpacity>
+                )}
                 {/* Alert Count Badge */}
                 {serviceAlerts.length > 0 && (
                     <TouchableOpacity
@@ -255,6 +292,37 @@ const styles = StyleSheet.create({
     },
     zoneCountTextActive: {
         color: COLORS.white,
+    },
+    collapsedPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.white,
+        paddingVertical: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        borderRadius: BORDER_RADIUS.round,
+        ...SHADOWS.small,
+        borderWidth: 1,
+        borderColor: COLORS.grey200,
+    },
+    collapsedPillText: {
+        fontSize: FONT_SIZES.xs,
+        fontWeight: FONT_WEIGHTS.semibold,
+        color: COLORS.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.3,
+    },
+    collapsePill: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: COLORS.grey100,
+    },
+    collapsePillText: {
+        fontSize: FONT_SIZES.lg,
+        color: COLORS.textSecondary,
+        lineHeight: 18,
     },
 });
 
