@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, LayoutAnimation, UIManager } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, LayoutAnimation, UIManager, Animated } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import Icon from './Icon';
@@ -9,6 +9,40 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
+
+const PulsingDetourDot = () => {
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.3,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1.0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [scaleAnim]);
+
+  return (
+    <Animated.View
+      accessible={true}
+      accessibilityLabel="Route is on detour"
+      style={[
+        styles.detourDot,
+        { transform: [{ scale: scaleAnim }] },
+      ]}
+    />
+  );
+};
 
 const HomeScreenControls = ({
     routes,
@@ -158,13 +192,7 @@ const HomeScreenControls = ({
                                     {r.shortName}
                                 </Text>
                             </TouchableOpacity>
-                            {isRouteDetouring?.(r.id) && (
-                                <View
-                                    accessible={true}
-                                    accessibilityLabel={`Route ${r.shortName} is on detour`}
-                                    style={styles.detourDot}
-                                />
-                            )}
+                            {isRouteDetouring?.(r.id) && <PulsingDetourDot />}
                             {hasAlert && (
                                 <View style={[styles.alertDot, isActive && styles.alertDotActive]} />
                             )}
