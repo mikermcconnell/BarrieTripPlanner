@@ -158,6 +158,18 @@ const HomeScreen = ({ route }) => {
     }
   }, [rawHandleRouteSelect, autoCollapseOnSelect, collapseRoutePanel]);
 
+  // Track newly selected routes for draw-on animation
+  const prevSelectedRef = useRef(new Set());
+  const newlySelectedRoutes = useMemo(() => {
+    const prev = prevSelectedRef.current;
+    const newly = new Set();
+    selectedRoutes.forEach(id => {
+      if (!prev.has(id)) newly.add(id);
+    });
+    prevSelectedRef.current = new Set(selectedRoutes);
+    return newly;
+  }, [selectedRoutes]);
+
   // StatusBadge computed props
   const selectedRouteNames = useMemo(() => {
     if (selectedRoutes.size === 0) return [];
@@ -538,6 +550,8 @@ const HomeScreen = ({ route }) => {
             outlineW = currentZoom >= 14 ? 2 : 1;
           }
 
+          const isNewlySelected = newlySelectedRoutes.has(shape.routeId);
+
           return (
             <WebRoutePolyline
               key={shape.id}
@@ -549,6 +563,7 @@ const HomeScreen = ({ route }) => {
               smoothFactor={1.2}
               onMouseOver={() => setHoveredRouteId(shape.routeId)}
               onMouseOut={() => setHoveredRouteId(null)}
+              className={isNewlySelected ? 'polyline-draw-on' : ''}
             />
           );
         })}

@@ -46,6 +46,29 @@ if (typeof document !== 'undefined' && !document.getElementById('leaflet-attribu
   document.head.appendChild(style);
 }
 
+// Inject bus marker pulse + polyline draw-on animations
+if (typeof document !== 'undefined' && !document.getElementById('bus-pulse-css')) {
+  const pulseStyle = document.createElement('style');
+  pulseStyle.id = 'bus-pulse-css';
+  pulseStyle.textContent = `
+    @keyframes busPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.85; }
+    }
+    .bus-icon > div {
+      animation: busPulse 2.4s ease-in-out infinite;
+    }
+    @keyframes polylineDrawOn {
+      from { stroke-dashoffset: 2000; }
+      to { stroke-dashoffset: 0; }
+    }
+    .polyline-draw-on {
+      stroke-dasharray: 2000;
+      animation: polylineDrawOn 1.2s ease-out forwards;
+    }
+  `;
+  document.head.appendChild(pulseStyle);
+}
 
 // Convert lat/lng delta to zoom level
 const getZoomFromDelta = (latDelta) => {
@@ -193,6 +216,7 @@ export const WebRoutePolyline = ({
   onMouseOver,
   onMouseOut,
   interactive = true,
+  className = '',
 }) => {
   const positions = coordinates.map(c => [c.latitude, c.longitude]);
 
@@ -206,6 +230,7 @@ export const WebRoutePolyline = ({
     interactive,
     ...(offset !== 0 && { offset }),
     ...(dashArray != null && { dashArray }),
+    ...(className && { className }),
   };
 
   const eventHandlers = {};
