@@ -9,12 +9,19 @@
  * Accepts pre-computed props from useDetourOverlays hook.
  */
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import RoutePolyline from './RoutePolyline';
 
 const hasFiniteCoordinate = (point) =>
   Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+
+const getMidpoint = (polyline) => {
+  if (!polyline || polyline.length < 2) return null;
+  const mid = Math.floor(polyline.length / 2);
+  const p = polyline[mid];
+  return p?.latitude != null && p?.longitude != null ? p : null;
+};
 
 const styles = StyleSheet.create({
   entryMarker: {
@@ -29,6 +36,20 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#ffffff',
     borderWidth: 2,
+  },
+  labelPill: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  labelPillOrange: {
+    backgroundColor: '#f97316',
+  },
+  labelText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
   },
 });
 
@@ -81,6 +102,34 @@ const DetourOverlay = ({
         <View style={[styles.exitMarker, { borderColor: markerBorderColor, opacity }]} />
       </MapLibreGL.PointAnnotation>
     )}
+    {skippedSegmentPolyline?.length >= 2 && (() => {
+      const mid = getMidpoint(skippedSegmentPolyline);
+      return mid ? (
+        <MapLibreGL.PointAnnotation
+          id={`detour-label-skipped-${routeId}`}
+          coordinate={[mid.longitude, mid.latitude]}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View style={styles.labelPill}>
+            <Text style={styles.labelText}>Skipped</Text>
+          </View>
+        </MapLibreGL.PointAnnotation>
+      ) : null;
+    })()}
+    {inferredDetourPolyline?.length >= 2 && (() => {
+      const mid = getMidpoint(inferredDetourPolyline);
+      return mid ? (
+        <MapLibreGL.PointAnnotation
+          id={`detour-label-path-${routeId}`}
+          coordinate={[mid.longitude, mid.latitude]}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View style={[styles.labelPill, styles.labelPillOrange]}>
+            <Text style={styles.labelText}>Detour route</Text>
+          </View>
+        </MapLibreGL.PointAnnotation>
+      ) : null;
+    })()}
   </>
 );
 
