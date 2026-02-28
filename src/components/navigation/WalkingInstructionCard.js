@@ -11,6 +11,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import { formatDistance } from '../../services/tripService';
+import Icon from '../Icon';
 
 // Large direction arrows for prominent display
 const DIRECTION_ARROWS = {
@@ -80,8 +81,12 @@ const formatInstruction = (step) => {
 const WalkingInstructionCard = ({
   currentStep,
   onNextStep,
+  destinationName,
+  currentLeg,
 }) => {
   if (!currentStep) return null;
+
+  const walkTimeMinutes = currentLeg?.duration ? Math.round(currentLeg.duration / 60) : null;
 
   const directionArrow = getDirectionArrow(currentStep.type, currentStep.modifier);
   const arrowColor = getArrowColor(currentStep.type, currentStep.modifier);
@@ -90,6 +95,19 @@ const WalkingInstructionCard = ({
 
   return (
     <View style={styles.container}>
+      {/* Destination Header */}
+      {destinationName && (
+        <View style={styles.destinationHeader}>
+          <Icon name="MapPin" size={14} color={COLORS.primary} />
+          <Text style={styles.destinationText} numberOfLines={1}>
+            {destinationName}
+          </Text>
+          {walkTimeMinutes != null && (
+            <Text style={styles.departureText}>{walkTimeMinutes} min walk</Text>
+          )}
+        </View>
+      )}
+
       {/* Main Instruction Row */}
       <View style={styles.mainRow}>
         {/* Large Direction Arrow */}
@@ -177,6 +195,25 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '700',
+  },
+  destinationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 6,
+  },
+  destinationText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  departureText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
 });
 

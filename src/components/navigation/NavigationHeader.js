@@ -147,12 +147,6 @@ const NavigationHeader = ({
           )}
         </View>
 
-        {/* Step Counter */}
-        <View style={styles.stepCounter}>
-          <Text style={styles.stepCounterText}>
-            {currentLegIndex + 1}/{totalLegs}
-          </Text>
-        </View>
       </View>
     </View>
   );
@@ -233,18 +227,6 @@ const styles = StyleSheet.create({
   etaMinutes: {
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 10,
-    fontWeight: '600',
-  },
-  stepCounter: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
-    marginLeft: SPACING.sm,
-  },
-  stepCounterText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
     fontWeight: '600',
   },
 });

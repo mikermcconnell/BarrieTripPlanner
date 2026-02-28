@@ -114,6 +114,7 @@ const NavigationScreen = ({ route }) => {
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
+  const [followMode, setFollowMode] = useState('full-trip'); // 'my-location' | 'full-trip'
   const [hasInitializedMap, setHasInitializedMap] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
 
@@ -251,14 +252,14 @@ const NavigationScreen = ({ route }) => {
 
   // Center map on user location when in follow mode
   useEffect(() => {
-    if (isFollowMode && userLocation && cameraRef.current) {
+    if ((isFollowMode || followMode === 'my-location') && userLocation && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
         zoomLevel: 17,
         animationDuration: 500,
       });
     }
-  }, [userLocation, isFollowMode]);
+  }, [userLocation, isFollowMode, followMode]);
 
   // Handle navigation completion
   useEffect(() => {
@@ -503,6 +504,7 @@ const NavigationScreen = ({ route }) => {
   const showTripOverview = () => {
     if (tripBounds && cameraRef.current) {
       setIsFollowMode(false);
+      setFollowMode('full-trip');
       cameraRef.current.setCamera({
         bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
         padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
@@ -662,50 +664,49 @@ const NavigationScreen = ({ route }) => {
         currentLegIndex={currentLegIndex}
         totalLegs={totalLegs}
         onClose={handleClose}
-        destinationName={finalDestination}
+        destinationName={currentLeg?.to?.name || finalDestination}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
       />
 
       {/* Map control buttons */}
       <View style={styles.mapControls}>
-        {/* Jump to my location button */}
         <TouchableOpacity
-          style={[styles.mapControlButton, isFollowMode && styles.mapControlButtonActive]}
-          onPress={isFollowMode ? toggleFollowMode : jumpToMyLocation}
+          style={[styles.mapControlBtn, followMode === 'my-location' && styles.mapControlBtnActive]}
+          onPress={() => setFollowMode('my-location')}
+          accessibilityLabel="Center on my location"
         >
-          <Icon name="MapPin" size={20} color={isFollowMode ? COLORS.primary : COLORS.textSecondary} />
-          <Text style={[styles.mapControlLabel, isFollowMode && styles.mapControlLabelActive]}>
-            {isFollowMode ? 'Following' : 'My Location'}
-          </Text>
+          <Icon name="MapPin" size={20} color={followMode === 'my-location' ? COLORS.white : COLORS.textPrimary} />
         </TouchableOpacity>
-
-        {/* Show trip overview button */}
         <TouchableOpacity
-          style={styles.mapControlButton}
-          onPress={showTripOverview}
+          style={[styles.mapControlBtn, followMode === 'full-trip' && styles.mapControlBtnActive]}
+          onPress={() => { setFollowMode('full-trip'); showTripOverview(); }}
+          accessibilityLabel="Show full trip"
         >
-          <Icon name="Map" size={20} color={COLORS.textSecondary} />
-          <Text style={styles.mapControlLabel}>Full Trip</Text>
+          <Icon name="Map" size={20} color={followMode === 'full-trip' ? COLORS.white : COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
 
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
-        {/* Destination Banner */}
-        <DestinationBanner
-          currentLeg={currentLeg}
-          nextTransitLeg={nextTransitLeg}
-          distanceRemaining={distanceToDestination}
-          totalLegDistance={currentLeg?.distance || 0}
-          isLastWalkingLeg={isLastWalkingLeg}
-        />
+        {/* Destination Banner — only shown during transit legs */}
+        {!isWalkingLeg && (
+          <DestinationBanner
+            currentLeg={currentLeg}
+            nextTransitLeg={nextTransitLeg}
+            distanceRemaining={distanceToDestination}
+            totalLegDistance={currentLeg?.distance || 0}
+            isLastWalkingLeg={isLastWalkingLeg}
+          />
+        )}
 
         {/* Walking Instruction Card */}
         {isWalkingLeg && (
           <WalkingInstructionCard
             currentStep={currentWalkingStep}
             onNextStep={advanceLeg}
+            destinationName={currentLeg?.to?.name}
+            currentLeg={currentLeg}
           />
         )}
 
@@ -836,33 +837,25 @@ const styles = StyleSheet.create({
   },
   mapControls: {
     position: 'absolute',
-    right: SPACING.md,
-    top: 160,
-    gap: SPACING.sm,
+    right: 16,
+    bottom: 160,
+    gap: 8,
   },
-  mapControlButton: {
-    flexDirection: 'row',
+  mapControlBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.round,
-    ...SHADOWS.medium,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  mapControlButtonActive: {
+  mapControlBtnActive: {
     backgroundColor: COLORS.primary,
-  },
-  mapControlIcon: {
-    fontSize: 16,
-    marginRight: SPACING.xs,
-  },
-  mapControlLabel: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  mapControlLabelActive: {
-    color: COLORS.white,
   },
   marker: {
     width: 24,
