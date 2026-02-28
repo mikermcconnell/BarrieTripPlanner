@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Modernize the Plan My Trip feature UI by replacing emoji icons with custom SVGs, restructuring card layouts for better information hierarchy, and fixing navigation screen UX issues.
+**Goal:** Modernize the Plan My Trip feature UI by replacing emoji icons with custom SVGs, restructuring card layouts for better information hierarchy, adding a bus-approach route line to the trip preview map, and fixing navigation screen UX issues.
 
-**Architecture:** 3 risk-based phases — Phase 1 (zero-risk icon swaps), Phase 2 (layout restructuring), Phase 3 (new components/features). Each phase gets its own commit(s). All changes must work on both native and web.
+**Architecture:** 3 risk-based phases — Phase 1 (zero-risk icon swaps), Phase 2 (layout restructuring + trip preview map enhancement), Phase 3 (new components/features). Each phase gets its own commit(s). All changes must work on both native and web.
 
-**Tech Stack:** React Native, Expo, react-native-svg (CartoonIcons), @gorhom/bottom-sheet
+**Tech Stack:** React Native, Expo, react-native-svg (CartoonIcons), @gorhom/bottom-sheet, MapLibre GL (native), Leaflet (web)
 
 ---
 
@@ -64,14 +64,20 @@ Files to modify (add `import Icon from '../components/Icon'` or `'../../componen
 
 **⚠️ → `<Icon name="Warning" />`:**
 1. `src/components/TripErrorDisplay.js:25` — fallback icon
+2. `src/components/HomeScreenControls.js:92` — alert header icon `⚠️`
 
 ---
 
 ### Task 3: Replace text character icons with Icon components
 
+**Pre-requisite:** Add `Route` as a direct alias in `src/components/Icon.js` iconMap. Currently `ArrowUpDown` maps to the Route cartoon icon, but `Route` itself is not a key. Add:
+```javascript
+Route, // direct alias for the Route cartoon icon (arrow-like shape)
+```
+
 1. `src/screens/TripDetailsScreen.js:41` — Back button `←` → `<Icon name="X" size={20} color={COLORS.textPrimary} />` (the X icon rotates `Add` 45deg, giving an X shape; alternatively add a `ChevronLeft` mapping)
 2. `src/screens/TripDetailsScreen.js:73` — Arrow `→` between times — replace the `<Text style={styles.arrowText}>→</Text>` with `<Icon name="Route" size={24} color={COLORS.textSecondary} />`
-3. `src/components/navigation/NavigationHeader.js:126` — Close button `×` rendered as `<Text>` — replace with `<Icon name="X" size={20} color={COLORS.white} />`
+3. `src/components/navigation/NavigationHeader.js:125` — Close button `×` rendered as `<Text>` — replace with `<Icon name="X" size={20} color={COLORS.white} />` (note: line 125, not 126)
 
 ---
 
@@ -190,6 +196,15 @@ leaveInText: {
 </View>
 ```
 
+**On-demand note handling:** The existing `onDemandNote` block (lines 148-155) sits inside the current `mainRow`. In the new layout, place it between `topRow` and `bottomRow`:
+```jsx
+{leg.isOnDemand && (
+  <View style={styles.onDemandNote}>
+    <Text style={styles.onDemandNoteText}>{onDemandText}</Text>
+  </View>
+)}
+```
+
 Verify: Run `npm run web:dev` and confirm card renders correctly at both narrow and wide widths.
 
 ---
@@ -301,6 +316,8 @@ Also delete the `stepCounter` and `stepCounterText` entries from the StyleSheet.
 
 ### Task 9: Combine DestinationBanner into WalkingInstructionCard (2d)
 
+**Note:** This task and Task 16 (fix "Next Step") both modify the `<WalkingInstructionCard>` invocation in `NavigationScreen.js`. Implement them together to avoid double-editing the same JSX block. When writing the props below, also include `isLastStep` and `onNextLeg` from Task 16.
+
 **Step 1:** Modify `src/components/navigation/WalkingInstructionCard.js`.
 
 Add new props at the top of the component:
@@ -389,11 +406,13 @@ const selectTimeMode = (mode) => {
 };
 ```
 
+**Important:** The existing code uses time mode keys `'now'`, `'departAt'`, `'arriveBy'` (see `TIME_MODES` array at line 16). The chip loop must use these same keys to avoid breaking the parent component's state.
+
 **New JSX (replaces the timeRow section, lines 162-185):**
 ```jsx
 <View style={styles.timeModeRow}>
-  {['now', 'depart', 'arrive'].map((mode) => {
-    const labels = { now: 'Leave Now', depart: 'Depart At', arrive: 'Arrive By' };
+  {['now', 'departAt', 'arriveBy'].map((mode) => {
+    const labels = { now: 'Leave Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
     const isActive = timeMode === mode;
     return (
       <TouchableOpacity
@@ -572,6 +591,162 @@ Remove styles: `mapControlIcon`, `mapControlLabel`, `mapControlLabelActive`, `ma
 
 ---
 
+### Task 12b: Bus approach dashed line on trip preview map (NEW)
+
+When a trip is selected and a live bus is matched, show a **dashed polyline in the route color** tracing the bus's upcoming path from its current position to the boarding stop. This gives the user visual context for how the bus will reach them — currently the bus marker just floats on the map with no visible route connection.
+
+**Data chain:**
+- `tripVehicles[i]` has `{ tripId, coordinate: { latitude, longitude } }` — live bus position
+- `selectedItinerary.legs[i]` has `{ tripId, from: { lat, lon }, route: { color } }` — boarding stop + route color
+- `tripMapping[tripId].shapeId` → `shapes[shapeId]` — full GTFS shape coordinates for the trip
+- `extractShapeSegment(shapeCoords, fromLat, fromLon, toLat, toLon)` from `src/utils/polylineUtils.js` — slices the shape between two points
+
+All data is already available: `shapes` and `tripMapping` are in `HomeScreen.js` from `useTransitStatic()` (lines 100, 105).
+
+**Step 1: Extend `useTripVisualization` hook**
+
+Modify `src/hooks/useTripVisualization.js`:
+
+Add new parameters:
+```javascript
+export const useTripVisualization = ({
+  isTripPlanningMode,
+  itineraries,
+  selectedItineraryIndex,
+  vehicles,
+  shapes,        // NEW: GTFS shapes dictionary from TransitContext
+  tripMapping,   // NEW: tripId → { routeId, shapeId, ... } from TransitContext
+}) => {
+```
+
+Add import:
+```javascript
+import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
+```
+
+Add new `useMemo` block after `tripVehicles` (around line 204):
+```javascript
+// Dashed approach lines: bus current position → boarding stop (following GTFS shape)
+const busApproachLines = useMemo(() => {
+  if (!selectedItinerary || tripVehicles.length === 0 || !shapes || !tripMapping) return [];
+
+  const lines = [];
+  selectedItinerary.legs.forEach((leg) => {
+    if (leg.mode === 'WALK' || leg.isOnDemand || !leg.tripId) return;
+
+    const vehicle = tripVehicles.find(v => v.tripId === leg.tripId);
+    if (!vehicle) return;
+
+    const mapping = tripMapping[leg.tripId];
+    if (!mapping?.shapeId) return;
+
+    const shapeCoords = shapes[mapping.shapeId];
+    if (!shapeCoords || shapeCoords.length === 0) return;
+
+    // Extract segment from bus position to boarding stop
+    const segment = extractShapeSegment(
+      shapeCoords,
+      vehicle.coordinate.latitude,
+      vehicle.coordinate.longitude,
+      leg.from.lat,
+      leg.from.lon
+    );
+
+    if (segment.length >= 2) {
+      lines.push({
+        id: `bus-approach-${leg.tripId}`,
+        coordinates: segment,
+        color: leg.route?.color || COLORS.primary,
+      });
+    }
+  });
+
+  return lines;
+}, [selectedItinerary, tripVehicles, shapes, tripMapping]);
+```
+
+Add `busApproachLines` to the return object:
+```javascript
+return {
+  tripRouteCoordinates,
+  tripMarkers,
+  intermediateStopMarkers,
+  boardingAlightingMarkers,
+  tripVehicles,
+  busApproachLines,  // NEW
+};
+```
+
+**Step 2: Pass shapes + tripMapping into the hook**
+
+Modify `src/screens/HomeScreen.js:212-215`:
+```javascript
+const {
+  tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
+  boardingAlightingMarkers, tripVehicles, busApproachLines,
+} = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping });
+```
+
+`shapes` and `tripMapping` are already destructured from `useTransitStatic()` at lines 100 and 105.
+
+Modify `src/screens/HomeScreen.web.js:263-266` identically. Both HomeScreens already have `shapes` and `tripMapping` available from `useTransitStatic()`.
+
+**Step 3: Render the dashed approach line on native map**
+
+In `src/screens/HomeScreen.js`, after the existing `tripRouteCoordinates` polylines (around line 755-765) and before/after the tripVehicles section, add:
+
+```jsx
+{/* Bus approach lines — dashed route-colored line from bus to boarding stop */}
+{busApproachLines.map((line) => (
+  <RoutePolyline
+    key={line.id}
+    id={line.id}
+    coordinates={line.coordinates}
+    color={line.color}
+    lineWidth={3}
+    lineDashPattern={[8, 6]}
+    lineOpacity={0.7}
+  />
+))}
+```
+
+Verify that `RoutePolyline` supports `lineDashPattern` and `lineOpacity` props. Check `src/components/RoutePolyline.js` — if it doesn't support dashes, add:
+```javascript
+// In RoutePolyline.js, pass through to MapLibreGL.ShapeSource + LineLayer:
+lineDasharray: lineDashPattern || undefined,
+lineOpacity: lineOpacity || 1,
+```
+
+**Step 4: Render the dashed approach line on web map**
+
+In `src/screens/HomeScreen.web.js`, after the trip polyline rendering section, add:
+
+```jsx
+{busApproachLines.map((line) => (
+  <Polyline
+    key={line.id}
+    positions={line.coordinates.map(c => [c.latitude, c.longitude])}
+    pathOptions={{
+      color: line.color,
+      weight: 3,
+      dashArray: '8 6',
+      opacity: 0.7,
+    }}
+  />
+))}
+```
+
+**Step 5: Verify**
+
+Run `npm run web:dev`, plan a trip, and confirm:
+1. When a trip result card is selected and a live bus is matched, a dashed line appears from the bus marker to the boarding stop
+2. The dashed line follows the actual route shape (curves along roads)
+3. The color matches the route badge color
+4. When switching between trip results, the dashed line updates
+5. When no live bus is matched, no dashed line appears
+
+---
+
 ### Task 13: Phase 2 commit(s)
 
 Commit after each sub-task group, or group 6+7 together and 8+9 together:
@@ -602,6 +777,16 @@ git commit -m "feat(ui): add time mode segmented control and route badge contras
 Phase 2e+2f+2g: Replace single-tap time mode cycling with visible chip row.
 Add colorUtils.js with luminance-based contrast helper. Make map controls
 icon-only 44x44 circular FABs.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+```bash
+git commit -m "feat(map): add dashed bus approach line on trip preview map
+
+Show a dashed polyline tracing the bus route from its current live
+position to the boarding stop. Uses GTFS shape data + extractShapeSegment
+utility. Renders on both native (RoutePolyline) and web (Leaflet).
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 ```
@@ -966,6 +1151,7 @@ After each phase:
 3. Run `npm test` if tests exist for modified areas. After Task 11, run: `npm test -- --testPathPattern=colorUtils`
 4. Visual regression check: compare before/after for each modified screen.
 5. Confirm both native (`.js`) and web (`.web.js`) counterparts are updated for every changed component.
+6. For Task 12b (bus approach line): verify dashed line appears only when a live bus is matched, follows route shape (not straight line), and updates when switching trip results.
 
 ---
 
