@@ -79,7 +79,7 @@ export const useTripVisualization = ({
           id: `trip-leg-${index}`,
           coordinates: coords,
           color: leg.mode === 'WALK'
-            ? (isTransferWalk ? (COLORS.transfer || '#F5A623') : COLORS.grey500)
+            ? (isTransferWalk ? COLORS.transfer : COLORS.grey500)
             : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
             : (leg.route?.color || COLORS.primary),
           isWalk: leg.mode === 'WALK',

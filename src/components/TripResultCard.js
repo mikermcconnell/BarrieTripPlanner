@@ -28,7 +28,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
 
   // Build segment data for timeline (only when selected with transfers)
-  const segments = (isSelected && itinerary.transfers > 0) ? itinerary.legs.map((leg, index) => {
+  const segments = isSelected ? itinerary.legs.map((leg, index) => {
     const isTransfer = leg.mode === 'WALK'
       && index > 0
       && index < itinerary.legs.length - 1
@@ -207,7 +207,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
       </View>
 
       {/* Segment Timeline — only for selected cards with transfers */}
-      {segments && (
+      {segments && segments.some(s => s.isTransfer) && (
         <View style={styles.segmentTimeline}>
           <View style={styles.segmentDivider} />
           {segments.map((seg, index) => {
@@ -223,7 +223,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                   </View>
                   <View style={styles.segmentContent}>
                     <Text style={styles.transferTitle}>
-                      Transfer at {seg.to?.name || seg.from?.name || 'stop'}
+                      Transfer at {seg.from?.name || seg.to?.name || 'stop'}
                     </Text>
                     <Text style={styles.transferDetail}>
                       {seg.distance > 0 ? `Walk ${formatDistance(seg.distance)}` : ''}
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
   },
   transferDiamondText: {
     fontSize: 16,
-    color: COLORS.transfer || '#F5A623',
+    color: COLORS.transfer,
     fontWeight: FONT_WEIGHTS.bold,
   },
   segmentBusBar: {
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   transferTitle: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.transfer || '#F5A623',
+    color: COLORS.transfer,
   },
   transferDetail: {
     fontSize: FONT_SIZES.xxs,

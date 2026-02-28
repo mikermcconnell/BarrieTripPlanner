@@ -630,7 +630,7 @@ const HomeScreen = ({ route }) => {
             key={route.id}
             positions={route.coordinates.map(c => [c.latitude, c.longitude])}
             pathOptions={{
-              color: route.isTransferWalk ? '#F5A623' : route.color,
+              color: route.color,
               weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
               dashArray: route.isWalk ? '10, 8' : route.isOnDemand ? '12, 6' : null,
               lineCap: 'round',
