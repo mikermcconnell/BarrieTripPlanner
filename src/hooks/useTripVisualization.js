@@ -68,13 +68,22 @@ export const useTripVisualization = ({
       }
 
       if (coords.length > 0) {
+        // Detect if this walk leg is a transfer (between two transit legs)
+        const isTransferWalk = leg.mode === 'WALK'
+          && index > 0
+          && index < selectedItinerary.legs.length - 1
+          && selectedItinerary.legs[index - 1].mode !== 'WALK'
+          && selectedItinerary.legs[index + 1].mode !== 'WALK';
+
         routes.push({
           id: `trip-leg-${index}`,
           coordinates: coords,
-          color: leg.mode === 'WALK' ? COLORS.grey500
+          color: leg.mode === 'WALK'
+            ? (isTransferWalk ? (COLORS.transfer || '#F5A623') : COLORS.grey500)
             : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
             : (leg.route?.color || COLORS.primary),
           isWalk: leg.mode === 'WALK',
+          isTransferWalk,
           isOnDemand: !!leg.isOnDemand,
         });
       }
@@ -177,6 +186,47 @@ export const useTripVisualization = ({
     return markers;
   }, [selectedItinerary, decodedLegPolylines]);
 
+  // Transfer point markers (walk legs between two transit legs)
+  const transferMarkers = useMemo(() => {
+    if (!selectedItinerary) return [];
+
+    const markers = [];
+    const legs = selectedItinerary.legs;
+
+    legs.forEach((leg, index) => {
+      if (leg.mode !== 'WALK') return;
+      const prevLeg = legs[index - 1];
+      const nextLeg = legs[index + 1];
+      if (!prevLeg || !nextLeg) return;
+      if (prevLeg.mode === 'WALK' || nextLeg.mode === 'WALK') return;
+
+      const transferCoord = leg.from?.lat && leg.from?.lon
+        ? { latitude: leg.from.lat, longitude: leg.from.lon }
+        : prevLeg.to?.lat && prevLeg.to?.lon
+          ? { latitude: prevLeg.to.lat, longitude: prevLeg.to.lon }
+          : null;
+
+      if (!transferCoord) return;
+
+      const walkDuration = leg.duration || 0;
+      const waitDuration = nextLeg.startTime && leg.endTime
+        ? Math.max(0, Math.round((nextLeg.startTime - leg.endTime) / 1000))
+        : null;
+
+      markers.push({
+        id: `transfer-${index}`,
+        coordinate: transferCoord,
+        fromStopName: leg.from?.name || prevLeg.to?.name || 'Transfer',
+        toStopName: leg.to?.name || nextLeg.from?.name || '',
+        walkDuration,
+        waitDuration,
+        walkDistance: leg.distance || 0,
+      });
+    });
+
+    return markers;
+  }, [selectedItinerary]);
+
   // Vehicles matching the selected itinerary's trips
   const tripVehicles = useMemo(() => {
     if (!selectedItinerary || vehicles.length === 0) return [];
@@ -208,6 +258,7 @@ export const useTripVisualization = ({
     tripMarkers,
     intermediateStopMarkers,
     boardingAlightingMarkers,
+    transferMarkers,
     tripVehicles,
   };
 };
