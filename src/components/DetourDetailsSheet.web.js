@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
+import Icon from './Icon';
 
 function formatDetourTime(detectedAt) {
   if (!detectedAt) return null;
@@ -92,7 +93,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
             accessibilityRole="button"
             accessibilityLabel="Close detour details"
           >
-            <Text style={styles.closeIcon}>✕</Text>
+            <Icon name="X" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -104,7 +105,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
               <Text style={styles.sectionHeader}>Skipped Stops</Text>
               {affectedStops.map((stop) => (
                 <View key={stop.id} style={styles.stopRow}>
-                  <Text style={styles.stopIcon}>✕</Text>
+                  <Icon name="X" size={14} color={COLORS.error} />
                   <Text style={styles.stopName}>{stop.name}</Text>
                 </View>
               ))}
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     maxHeight: '60%',
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: BORDER_RADIUS.lg,
     borderTopRightRadius: BORDER_RADIUS.lg,
     boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
@@ -187,10 +188,6 @@ const styles = StyleSheet.create({
     padding: SPACING.sm,
     cursor: 'pointer',
   },
-  closeIcon: {
-    fontSize: FONT_SIZES.lg,
-    color: COLORS.textSecondary,
-  },
   divider: {
     height: 1,
     backgroundColor: COLORS.grey200,
@@ -218,12 +215,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SPACING.xs,
-  },
-  stopIcon: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.error,
-    marginRight: SPACING.sm,
-    fontWeight: FONT_WEIGHTS.bold,
+    gap: SPACING.sm,
   },
   stopName: {
     fontSize: FONT_SIZES.md,

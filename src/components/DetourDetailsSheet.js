@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
+import Icon from './Icon';
 
 function formatDetourTime(detectedAt) {
   if (!detectedAt) return null;
@@ -58,7 +59,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
             <Text style={styles.sectionHeader}>Skipped Stops</Text>
             {affectedStops.map((stop) => (
               <View key={stop.id} style={styles.stopRow}>
-                <Text style={styles.stopIcon}>✕</Text>
+                <Icon name="X" size={14} color={COLORS.error} />
                 <Text style={styles.stopName}>{stop.name}</Text>
               </View>
             ))}
@@ -82,7 +83,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, onClose, onViewOnM
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: BORDER_RADIUS.lg,
     borderTopRightRadius: BORDER_RADIUS.lg,
   },
@@ -137,12 +138,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SPACING.xs,
-  },
-  stopIcon: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.error,
-    marginRight: SPACING.sm,
-    fontWeight: FONT_WEIGHTS.bold,
+    gap: SPACING.sm,
   },
   stopName: {
     fontSize: FONT_SIZES.md,
