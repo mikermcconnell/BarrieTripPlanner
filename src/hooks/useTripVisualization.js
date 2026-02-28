@@ -22,6 +22,8 @@ export const useTripVisualization = ({
   itineraries,
   selectedItineraryIndex,
   vehicles,
+  shapes,
+  tripMapping,
 }) => {
   const selectedItinerary =
     isTripPlanningMode && itineraries.length > 0
@@ -203,11 +205,49 @@ export const useTripVisualization = ({
     return vehicles.filter(v => tripRouteIds.has(v.routeId));
   }, [selectedItinerary, vehicles]);
 
+  // Dashed approach lines: bus current position → boarding stop (following GTFS shape)
+  const busApproachLines = useMemo(() => {
+    if (!selectedItinerary || tripVehicles.length === 0 || !shapes || !tripMapping) return [];
+
+    const lines = [];
+    selectedItinerary.legs.forEach((leg) => {
+      if (leg.mode === 'WALK' || leg.isOnDemand || !leg.tripId) return;
+
+      const vehicle = tripVehicles.find(v => v.tripId === leg.tripId);
+      if (!vehicle) return;
+
+      const mapping = tripMapping[leg.tripId];
+      if (!mapping?.shapeId) return;
+
+      const shapeCoords = shapes[mapping.shapeId];
+      if (!shapeCoords || shapeCoords.length === 0) return;
+
+      const busIdx = findClosestPointIndex(shapeCoords, vehicle.coordinate.latitude, vehicle.coordinate.longitude);
+      const boardIdx = findClosestPointIndex(shapeCoords, leg.from.lat, leg.from.lon);
+
+      // Guard: bus already past boarding stop
+      if (busIdx >= boardIdx) return;
+
+      const segment = shapeCoords.slice(busIdx, boardIdx + 1);
+
+      if (segment.length >= 2) {
+        lines.push({
+          id: `bus-approach-${leg.tripId}`,
+          coordinates: segment,
+          color: leg.route?.color || COLORS.primary,
+        });
+      }
+    });
+
+    return lines;
+  }, [selectedItinerary, tripVehicles, shapes, tripMapping]);
+
   return {
     tripRouteCoordinates,
     tripMarkers,
     intermediateStopMarkers,
     boardingAlightingMarkers,
     tripVehicles,
+    busApproachLines,
   };
 };

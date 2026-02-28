@@ -211,8 +211,8 @@ const HomeScreen = ({ route }) => {
 
   const {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, tripVehicles,
-  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles });
+    boardingAlightingMarkers, tripVehicles, busApproachLines,
+  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping });
 
   // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
@@ -708,6 +708,19 @@ const HomeScreen = ({ route }) => {
           strokeWidth={tripRoute.isWalk ? 3 : tripRoute.isOnDemand ? 4 : 5}
           lineDashPattern={tripRoute.isWalk ? [10, 5] : tripRoute.isOnDemand ? [12, 6] : null}
           opacity={1}
+        />
+      ))}
+
+      {/* Bus approach lines — dashed route-colored line from bus to boarding stop */}
+      {busApproachLines.map((line) => (
+        <RoutePolyline
+          key={line.id}
+          id={line.id}
+          coordinates={line.coordinates}
+          color={line.color}
+          strokeWidth={3}
+          lineDashPattern={[8, 6]}
+          opacity={0.7}
         />
       ))}
 
