@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { DelayIndicator } from './DelayBadge';
+import { getContrastTextColor } from '../utils/colorUtils';
 
 /** Format stop name with stop number when available */
 const formatStopName = (stop) => {
@@ -60,7 +61,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
               <View
                 style={[styles.routeBadge, { backgroundColor: leg.route?.color || COLORS.primary }]}
               >
-                <Text style={styles.routeText}>{leg.route?.shortName || '?'}</Text>
+                <Text style={[styles.routeText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
               </View>
               <View style={styles.busDetails}>
                 <View style={styles.busTitleRow}>
@@ -190,7 +191,6 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   routeText: {
-    color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '700',
   },

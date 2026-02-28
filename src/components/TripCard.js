@@ -4,6 +4,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } fro
 import Icon from './Icon';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
+import { getContrastTextColor } from '../utils/colorUtils';
 
 const TripCard = ({ itinerary, onPress, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -51,7 +52,7 @@ const TripCard = ({ itinerary, onPress, isSelected = false }) => {
               <View
                 style={[styles.busIcon, { backgroundColor: leg.route?.color || COLORS.primary }]}
               >
-                <Text style={styles.busIconText}>{leg.route?.shortName || '?'}</Text>
+                <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
               </View>
             )}
           </React.Fragment>
@@ -152,7 +153,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   busIconText: {
-    color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: '700',
   },

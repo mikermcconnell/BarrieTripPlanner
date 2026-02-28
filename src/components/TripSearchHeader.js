@@ -13,9 +13,6 @@ import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } fro
 
 // Using centralized Icon component for rendering icons
 
-const TIME_MODES = ['now', 'departAt', 'arriveBy'];
-const TIME_MODE_LABELS = { now: 'Depart Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
-
 const formatTimeDisplay = (date) => {
   if (!date) return '';
   const d = new Date(date);
@@ -24,13 +21,6 @@ const formatTimeDisplay = (date) => {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${m} ${ampm}`;
-};
-
-const formatDateTimeLocal = (date) => {
-  if (!date) return '';
-  const d = new Date(date);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 const TripSearchHeader = ({
@@ -59,15 +49,15 @@ const TripSearchHeader = ({
   void isLoading;
   void showFromSuggestions;
   void showToSuggestions;
-  void formatDateTimeLocal;
 
-  const cycleTimeMode = () => {
+  const selectTimeMode = (mode) => {
     if (!onTimeModeChange) return;
-    const idx = TIME_MODES.indexOf(timeMode);
-    const next = TIME_MODES[(idx + 1) % TIME_MODES.length];
-    onTimeModeChange(next);
-    if (next !== 'now' && !selectedTime) {
+    onTimeModeChange(mode);
+    if (mode !== 'now' && !selectedTime) {
       onSelectedTimeChange && onSelectedTimeChange(new Date());
+    }
+    if (mode === 'now') {
+      onSelectedTimeChange && onSelectedTimeChange(null);
     }
   };
   return (
@@ -159,30 +149,40 @@ const TripSearchHeader = ({
         </TouchableOpacity>
       </View>
 
-      {/* Time Mode Row */}
-      <View style={styles.timeRow}>
-        <TouchableOpacity
-          style={styles.timeModeBtn}
-          onPress={cycleTimeMode}
-          accessibilityLabel={`Time mode: ${TIME_MODE_LABELS[timeMode]}. Tap to change.`}
-          accessibilityRole="button"
-        >
-          <Text style={styles.timeModeBtnText}>{TIME_MODE_LABELS[timeMode]}</Text>
-        </TouchableOpacity>
-        {timeMode !== 'now' && selectedTime && (
-          <Text style={styles.timeDisplay}>{formatTimeDisplay(selectedTime)}</Text>
-        )}
-        {timeMode !== 'now' && onSearch && (
-          <TouchableOpacity
-            style={styles.searchBtn}
-            onPress={onSearch}
-            accessibilityLabel="Search trips"
-            accessibilityRole="button"
-          >
-            <Text style={styles.searchBtnText}>Search</Text>
-          </TouchableOpacity>
-        )}
+      {/* Time mode chips */}
+      <View style={styles.timeModeRow}>
+        {['now', 'departAt', 'arriveBy'].map((mode) => {
+          const labels = { now: 'Leave Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
+          const isActive = timeMode === mode;
+          return (
+            <TouchableOpacity
+              key={mode}
+              style={[styles.timeModeChip, isActive && styles.timeModeChipActive]}
+              onPress={() => selectTimeMode(mode)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+            >
+              <Text style={[styles.timeModeChipText, isActive && styles.timeModeChipTextActive]}>
+                {labels[mode]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
+      {/* Time display + Search button (shown for non-'now' modes) */}
+      {timeMode !== 'now' && (
+        <View style={styles.timeRow}>
+          {selectedTime && (
+            <Text style={styles.timeDisplay}>{formatTimeDisplay(selectedTime)}</Text>
+          )}
+          {onSearch && (
+            <TouchableOpacity style={styles.searchBtn} onPress={onSearch} accessibilityLabel="Search trips" accessibilityRole="button">
+              <Text style={styles.searchBtnText}>Search</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 };
@@ -280,22 +280,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...SHADOWS.small,
   },
+  timeModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: SPACING.xs,
+  },
+  timeModeChip: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: COLORS.grey100,
+    alignItems: 'center',
+  },
+  timeModeChipActive: {
+    backgroundColor: COLORS.primary,
+  },
+  timeModeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  timeModeChipTextActive: {
+    color: COLORS.white,
+  },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: SPACING.xs,
     gap: SPACING.sm,
-  },
-  timeModeBtn: {
-    backgroundColor: COLORS.grey100,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  timeModeBtnText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semibold,
   },
   timeDisplay: {
     fontSize: FONT_SIZES.sm,

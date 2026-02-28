@@ -24,6 +24,7 @@ import {
   SHADOWS,
 } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
+import { getContrastTextColor } from '../utils/colorUtils';
 
 const TripPreviewModal = ({
   visible,
@@ -101,7 +102,7 @@ const TripPreviewModal = ({
                         { backgroundColor: leg.route?.color || COLORS.primary },
                       ]}
                     >
-                      <Text style={styles.busIconText}>
+                      <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>
                         {leg.route?.shortName || '?'}
                       </Text>
                     </View>
@@ -162,7 +163,7 @@ const TripPreviewModal = ({
                               { backgroundColor: leg.route?.color || COLORS.primary },
                             ]}
                           >
-                            <Text style={styles.busStepBadgeText}>
+                            <Text style={[styles.busStepBadgeText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>
                               {leg.route?.shortName || '?'}
                             </Text>
                           </View>
@@ -336,7 +337,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   busIconText: {
-    color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
   },
@@ -413,7 +413,6 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.xs,
   },
   busStepBadgeText: {
-    color: COLORS.white,
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
   },
