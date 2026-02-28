@@ -9,11 +9,18 @@
  * Accepts pre-computed props from useDetourOverlays hook.
  */
 import React from 'react';
-import { CircleMarker } from 'react-leaflet';
+import { CircleMarker, Tooltip } from 'react-leaflet';
 import { WebRoutePolyline } from './WebMapView';
 
 const hasFiniteCoordinate = (point) =>
   Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+
+const getMidpoint = (polyline) => {
+  if (!polyline || polyline.length < 2) return null;
+  const mid = Math.floor(polyline.length / 2);
+  const p = polyline[mid];
+  return p?.latitude != null && p?.longitude != null ? p : null;
+};
 
 const DetourOverlay = ({
   routeId,
@@ -76,6 +83,34 @@ const DetourOverlay = ({
         interactive={false}
       />
     )}
+    {skippedSegmentPolyline?.length >= 2 && (() => {
+      const mid = getMidpoint(skippedSegmentPolyline);
+      return mid ? (
+        <CircleMarker
+          center={[mid.latitude, mid.longitude]}
+          radius={0}
+          interactive={false}
+        >
+          <Tooltip permanent direction="center" className="detour-label-skipped">
+            Skipped
+          </Tooltip>
+        </CircleMarker>
+      ) : null;
+    })()}
+    {inferredDetourPolyline?.length >= 2 && (() => {
+      const mid = getMidpoint(inferredDetourPolyline);
+      return mid ? (
+        <CircleMarker
+          center={[mid.latitude, mid.longitude]}
+          radius={0}
+          interactive={false}
+        >
+          <Tooltip permanent direction="center" className="detour-label-detour">
+            Detour route
+          </Tooltip>
+        </CircleMarker>
+      ) : null;
+    })()}
   </>
 );
 
