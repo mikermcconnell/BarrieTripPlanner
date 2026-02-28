@@ -8,6 +8,7 @@ export const COLORS = {
   primaryLight: '#81C784',
   primaryDark: '#388E3C',
   primarySubtle: '#E8F5E9',
+  ctaGreen: '#2E7D32',
 
   // Secondary colors (Transit Blue - for informational elements)
   secondary: '#0066CC',
@@ -79,6 +80,7 @@ export const COLORS_DARK = {
   primaryLight: '#81C784',
   primaryDark: '#4CAF50',
   primarySubtle: '#1B3A1D',
+  ctaGreen: '#43A047',
 
   secondary: '#42A5F5',
   secondaryLight: '#64B5F6',

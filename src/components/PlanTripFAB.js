@@ -1,6 +1,5 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Icon from './Icon';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_FAMILIES } from '../config/theme';
 
@@ -10,7 +9,6 @@ const DirectionsIcon = ({ size = 20, color = COLORS.white }) => <Icon name="Navi
 const PlanTripFAB = ({ onPlanTrip }) => {
   return (
     <View style={styles.fabContainer}>
-      {/* Plan Trip Button */}
       <TouchableOpacity
         onPress={onPlanTrip}
         activeOpacity={0.8}
@@ -18,7 +16,7 @@ const PlanTripFAB = ({ onPlanTrip }) => {
         accessibilityLabel="Plan a trip"
       >
         <View style={styles.planTripButton}>
-          <DirectionsIcon size={28} color={COLORS.white} />
+          <DirectionsIcon size={30} color={COLORS.white} />
           <Text style={styles.planTripButtonText}>Plan Trip</Text>
         </View>
       </TouchableOpacity>
@@ -40,17 +38,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg + 8,
-    gap: 8,
-    backgroundColor: COLORS.primary,
-    ...SHADOWS.large,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
+    gap: 10,
+    backgroundColor: COLORS.ctaGreen,
+    ...SHADOWS.elevated,
   },
   planTripButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.lg,
     fontFamily: FONT_FAMILIES.bold,
     color: COLORS.white,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 });
 

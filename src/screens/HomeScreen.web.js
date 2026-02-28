@@ -871,7 +871,7 @@ const HomeScreen = ({ route }) => {
       {!isTripPlanningMode && !selectedStop && (
         <View style={styles.bottomActionBar}>
           <View style={styles.bottomActionCard}>
-            {/* Stops Toggle */}
+            {/* Stops Toggle - Ghost style when inactive */}
             <TouchableOpacity
               style={[styles.bottomActionButton, showStops && styles.bottomActionButtonActive]}
               onPress={() => setShowStops(!showStops)}
@@ -879,23 +879,17 @@ const HomeScreen = ({ route }) => {
             >
               {showStops
                 ? <StopIconFilled size={18} color={COLORS.white} />
-                : <StopIconOutline size={18} color={COLORS.textPrimary} />
+                : <StopIconOutline size={18} color={COLORS.grey600} />
               }
-              <Text style={[styles.bottomActionText, showStops && styles.bottomActionTextActive]}>
-                Stops
-              </Text>
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.bottomActionDivider} />
-
-            {/* Plan Trip Button - Primary action */}
+            {/* Plan Trip Button - Primary CTA */}
             <TouchableOpacity
               style={styles.planTripButton}
               onPress={enterTripPlanningMode}
               activeOpacity={0.8}
             >
-              <DirectionsIcon size={27} color={COLORS.white} />
+              <DirectionsIcon size={28} color={COLORS.white} />
               <Text style={styles.planTripButtonText}>Plan Trip</Text>
             </TouchableOpacity>
           </View>
@@ -1334,47 +1328,36 @@ const styles = StyleSheet.create({
     boxShadow: '0 4px 24px rgba(23, 43, 77, 0.14)',
     borderWidth: 1,
     borderColor: 'rgba(235, 236, 240, 0.8)',
-    gap: SPACING.xs,
+    gap: SPACING.md,
   },
   bottomActionButton: {
-    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.lg,
-    gap: 6,
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.grey300,
   },
   bottomActionButtonActive: {
     backgroundColor: COLORS.primary,
-  },
-  bottomActionText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textPrimary,
-  },
-  bottomActionTextActive: {
-    color: COLORS.white,
-  },
-  bottomActionDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: COLORS.grey300,
+    borderColor: COLORS.primary,
   },
   planTripButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.ctaGreen,
     borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.lg + 4,
-    gap: 6,
-    boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    gap: 8,
+    boxShadow: '0 4px 16px rgba(46, 125, 50, 0.35)',
   },
   planTripButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.white,
-    letterSpacing: -0.2,
+    letterSpacing: 0.2,
   },
 
   // Trip Planning Header
