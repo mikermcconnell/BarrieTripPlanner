@@ -282,18 +282,6 @@ const HomeScreen = ({ route }) => {
     Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
   );
 
-  // Zoom-dependent polyline weight
-  const getPolylineWeight = useCallback((routeId) => {
-    let base;
-    if (currentZoom <= 11) base = 2;
-    else if (currentZoom <= 13) base = 3;
-    else if (currentZoom <= 15) base = 4;
-    else base = 5;
-
-    if (selectedRoutes.has(routeId)) base += 1;
-    return base;
-  }, [currentZoom, selectedRoutes]);
-
   // Displayed entities (vehicles, shapes, stops, detours) based on selection
   const {
     getRouteColor, displayedVehicles, displayedShapes, displayedStops,
@@ -635,8 +623,20 @@ const HomeScreen = ({ route }) => {
       {!isTripPreviewMode && displayedShapes.map((shape) => {
         const isSelected = isRouteSelected(shape.routeId);
 
-        // Visual hierarchy: selected = full, others ghost
-        const opacity = hasSelection ? (isSelected ? 1.0 : 0.15) : 0.85;
+        // Visual hierarchy based on selection state:
+        // - Selected route: full opacity, widest stroke
+        // - Unselected route (when others are selected): dimmed and narrowed
+        // - All routes (no selection): moderate opacity and stroke
+        let routeOpacity;
+        let routeStrokeWidth;
+        if (hasSelection) {
+          routeOpacity = isSelected ? 1.0 : 0.3;
+          routeStrokeWidth = isSelected ? 4 : 2;
+        } else {
+          routeOpacity = 0.6;
+          routeStrokeWidth = 3;
+        }
+
         const outlineW = hasSelection
           ? (isSelected ? (currentZoom >= 14 ? 2 : 1.5) : 0)
           : (currentZoom >= 14 ? 1 : 0.5);
@@ -647,8 +647,8 @@ const HomeScreen = ({ route }) => {
             id={`route-${shape.id}`}
             coordinates={shape.coordinates}
             color={shape.color}
-            strokeWidth={getPolylineWeight(shape.routeId)}
-            opacity={opacity}
+            strokeWidth={routeStrokeWidth}
+            opacity={routeOpacity}
             outlineWidth={outlineW}
             showArrows={isSelected}
           />
@@ -808,7 +808,6 @@ const HomeScreen = ({ route }) => {
     isRouteSelected,
     hasSelection,
     currentZoom,
-    getPolylineWeight,
     detourOverlays,
     zoneOverlays,
     handleZonePress,
