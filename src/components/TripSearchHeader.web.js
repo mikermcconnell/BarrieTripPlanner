@@ -184,7 +184,7 @@ const TripSearchHeaderWeb = ({
           }}
           aria-label="Trip time mode"
         >
-          <option value="now">Depart Now</option>
+          <option value="now">Leave Now</option>
           <option value="departAt">Depart At</option>
           <option value="arriveBy">Arrive By</option>
         </select>

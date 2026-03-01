@@ -5,32 +5,7 @@ import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../con
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import DetourTimeline from './DetourTimeline';
-
-function formatDetourTime(detectedAt) {
-  if (!detectedAt) return null;
-  const date = detectedAt instanceof Date ? detectedAt : new Date(detectedAt);
-  if (isNaN(date.getTime())) return null;
-
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-
-  if (diffMin < 60) {
-    return `Active for ${diffMin} min`;
-  }
-  const hours = Math.floor(diffMin / 60);
-  return `Active for ${hours}h ${diffMin % 60}m`;
-}
-
-function getConfidenceChip(confidence) {
-  switch (confidence) {
-    case 'high':
-      return { label: 'Confirmed', color: COLORS.success, bgColor: COLORS.successSubtle };
-    case 'medium':
-      return { label: 'Detecting...', color: COLORS.warning, bgColor: COLORS.warningSubtle };
-    default:
-      return { label: 'Low confidence', color: COLORS.textSecondary, bgColor: COLORS.grey200 };
-  }
-}
+import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
 
 const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exitStopName, onClose, onViewOnMap }) => {
   const bottomSheetRef = useRef(null);
@@ -45,6 +20,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
 
   const routeColor = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
   const timeLabel = formatDetourTime(detour?.detectedAt);
+  const confidenceChip = detour?.confidence ? getConfidenceChip(detour.confidence) : null;
 
   return (
     <BottomSheet
@@ -65,16 +41,21 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
             <Text style={styles.title}>Route {routeId} — Detour Active</Text>
             <View style={styles.headerMeta}>
               {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
-              {detour?.confidence && (() => {
-                const chip = getConfidenceChip(detour.confidence);
-                return (
-                  <View style={[styles.confidenceChip, { backgroundColor: chip.bgColor }]}>
-                    <Text style={[styles.confidenceText, { color: chip.color }]}>{chip.label}</Text>
-                  </View>
-                );
-              })()}
+              {confidenceChip && (
+                <View style={[styles.confidenceChip, { backgroundColor: confidenceChip.bgColor }]}>
+                  <Text style={[styles.confidenceText, { color: confidenceChip.color }]}>{confidenceChip.label}</Text>
+                </View>
+              )}
             </View>
           </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Close detour details"
+          >
+            <Icon name="X" size={18} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.divider} />
@@ -131,6 +112,9 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  closeButton: {
+    padding: SPACING.sm,
   },
   title: {
     fontSize: FONT_SIZES.lg,

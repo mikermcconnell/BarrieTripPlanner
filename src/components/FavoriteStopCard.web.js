@@ -5,7 +5,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFavoriteStop } from '../hooks/useFavoriteStop';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
 const FavoriteStopCard = ({ onPress }) => {
   const { favoriteStop, nextArrivals, isLoading, isVisible } = useFavoriteStop();
@@ -61,7 +61,8 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     zIndex: 998,
-    boxShadow: '0 4px 16px rgba(23, 43, 77, 0.12)',
+    // Matches SHADOWS.medium (shadowOffset.height: 4, shadowOpacity: 0.15, shadowRadius: 8)
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15)',
     cursor: 'pointer',
   },
   header: {

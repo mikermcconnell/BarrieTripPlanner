@@ -18,6 +18,7 @@ import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import TripBottomSheet from '../components/TripBottomSheet';
+import { applyDelaysToItineraries } from '../services/tripDelayService';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -216,6 +217,7 @@ const HomeScreen = ({ route }) => {
     ensureRoutingData,
     onDemandZones,
     stops,
+    applyDelays: applyDelaysToItineraries,
     onItinerariesReady: (itinerary) => {
       setUserHasInteracted(false);
       fitMapToItinerary(itinerary);
@@ -230,6 +232,8 @@ const HomeScreen = ({ route }) => {
     swap: swapTripLocations,
     setFrom: setTripFrom,
     setTo: setTripTo,
+    setFromText: setTripFromText,
+    setToText: setTripToText,
     selectItinerary: setSelectedItineraryIndex,
     enterPlanningMode,
     reset: resetTrip,

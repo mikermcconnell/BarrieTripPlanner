@@ -314,7 +314,7 @@ describe('DetourOverlay component rendering', () => {
       const skipped = polylines.find((p) => p.props.id === 'detour-skipped-8A');
       expect(skipped).toBeDefined();
       expect(skipped.props.color).toBe('#ef4444');
-      expect(skipped.props.lineDashPattern).toEqual([8, 6]);
+      expect(skipped.props.lineDashPattern).toEqual([10, 8]);
       expect(skipped.props.strokeWidth).toBe(5);
     });
 
@@ -415,7 +415,7 @@ describe('DetourOverlay component rendering', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockWebRoutePolyline);
       const skipped = polylines.find((p) => p.props.dashArray === '10, 8');
-      expect(skipped.props.outlineWidth).toBe(0);
+      expect(skipped.props.outlineWidth).toBe(1.5);
     });
 
     test('renders CircleMarker for entry/exit', () => {

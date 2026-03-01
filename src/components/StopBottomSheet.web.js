@@ -214,6 +214,10 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
             </View>
           ) : error ? (
             <View style={styles.stateContainer}>
+              <View style={styles.errorIconContainer}>
+                <Text style={styles.errorIcon}>!</Text>
+              </View>
+              <Text style={styles.errorTitle}>Connection Error</Text>
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={loadArrivals} accessibilityRole="button" accessibilityLabel="Retry loading arrivals">
                 <RefreshIcon size={16} color={COLORS.white} />
@@ -419,9 +423,30 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.sm,
   },
+  errorIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.errorSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  errorIcon: {
+    fontSize: 28,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+  },
+  errorTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
   errorText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.error,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
     marginBottom: SPACING.sm,
   },
   retryButton: {

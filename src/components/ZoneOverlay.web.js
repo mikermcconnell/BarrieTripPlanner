@@ -23,7 +23,7 @@ const ZoneOverlay = ({
         opacity: strokeOpacity,
         fillColor: color,
         fillOpacity: fillOpacity,
-        dashArray: '8, 6',
+        dashArray: '8, 6', // '8, 6' matches native's [4, 3] at strokeWidth 2 (4*2=8, 3*2=6)
       }}
       eventHandlers={{
         click: () => onPress?.(id),

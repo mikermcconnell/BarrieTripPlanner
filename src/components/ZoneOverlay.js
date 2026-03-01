@@ -1,5 +1,4 @@
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 
 const ZoneOverlay = ({
@@ -56,7 +55,7 @@ const ZoneOverlay = ({
           lineColor: color,
           lineOpacity: strokeOpacity,
           lineWidth: strokeWidth,
-          lineDasharray: [4, 3],
+          lineDasharray: [4, 3], // [4, 3] at strokeWidth 2 = 8px/6px visual, matches web's '8, 6'
         }}
       />
     </MapLibreGL.ShapeSource>

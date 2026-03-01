@@ -59,10 +59,12 @@ const ZoneInfoSheet = ({ zone, onClose, onDirectionsToHub }) => {
           </View>
           <View style={styles.headerContent}>
             <Text style={styles.zoneName} numberOfLines={2}>{zone.name}</Text>
-            <View style={[styles.statusBadge, operating ? styles.statusBadgeActive : styles.statusBadgeClosed]}>
-              <Text style={[styles.statusBadgeText, operating ? styles.statusTextActive : styles.statusTextClosed]}>
-                {operating ? 'Operating' : 'Closed'}
-              </Text>
+            <View style={styles.zoneMeta}>
+              <View style={[styles.statusBadge, operating ? styles.statusBadgeActive : styles.statusBadgeClosed]}>
+                <Text style={[styles.statusBadgeText, operating ? styles.statusTextActive : styles.statusTextClosed]}>
+                  {operating ? 'Operating' : 'Closed'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -165,6 +167,11 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
+  },
+  zoneMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   statusBadge: {
     alignSelf: 'flex-start',

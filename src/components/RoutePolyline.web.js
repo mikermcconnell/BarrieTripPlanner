@@ -12,6 +12,7 @@ const RoutePolyline = ({
   outlineWidth,
   outlineColor,
   id,
+  showArrows,
 }) => {
   // Keep prop + local variable parity with native component for check:parity.
   const formattedCoordinates = Array.isArray(coordinates) ? coordinates : [];
@@ -25,6 +26,7 @@ const RoutePolyline = ({
   void outlineWidth;
   void outlineColor;
   void id;
+  void showArrows;
   return null;
 };
 

@@ -5,7 +5,7 @@
  * Falls back to browser geolocation API.
  */
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Platform, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
@@ -296,6 +296,13 @@ const NavigationScreen = ({ route }) => {
     stopTracking,
   } = useWebLocation();
 
+  const [isAcquiringGPS, setIsAcquiringGPS] = useState(true);
+
+  useEffect(() => {
+    if (userLocation) {
+      setIsAcquiringGPS(false);
+    }
+  }, [userLocation]);
 
   // Step progress hook (need isUserOnBoard before busProximity)
   const {
@@ -311,6 +318,7 @@ const NavigationScreen = ({ route }) => {
     isUserOnBoard,
     transitStatus,
     startNavigation,
+    advanceStep,
     advanceLeg,
     completeLeg,
     boardBus,
@@ -391,6 +399,18 @@ const NavigationScreen = ({ route }) => {
     return { minLat, maxLat, minLon, maxLon };
   }, [itinerary]);
 
+  // Track navigation start
+  useEffect(() => {
+    if (initialItinerary) {
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('navigation_started', {
+          leg_count: initialItinerary.legs?.length || 0,
+        });
+      } catch {}
+    }
+  }, []);
+
   // Start tracking on mount
   useEffect(() => {
     const initNavigation = async () => {
@@ -409,6 +429,10 @@ const NavigationScreen = ({ route }) => {
   // Handle completion
   useEffect(() => {
     if (isNavigationComplete) {
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('navigation_completed');
+      } catch {}
       // Set nudge flag for post-trip survey banner on HomeScreen
       AsyncStorage.setItem('@barrie_transit_show_survey_nudge', 'true').catch(() => {});
       alert('You have arrived at your destination!');
@@ -735,6 +759,17 @@ const NavigationScreen = ({ route }) => {
         </MapContainer>
       </div>
 
+      {/* GPS Acquisition Overlay */}
+      {isAcquiringGPS && (
+        <View style={styles.gpsOverlay}>
+          <View style={styles.gpsCard}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.gpsText}>Acquiring GPS signal...</Text>
+            <Text style={styles.gpsSubtext}>Move to an open area for better signal</Text>
+          </View>
+        </View>
+      )}
+
       {/* Navigation Header */}
       <NavigationHeader
         instruction={instructionText}
@@ -772,19 +807,25 @@ const NavigationScreen = ({ route }) => {
 
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
-        {/* Destination Banner */}
-        <DestinationBanner
-          currentLeg={currentLeg}
-          nextTransitLeg={nextTransitLeg}
-          distanceRemaining={distanceToDestination}
-          totalLegDistance={currentLeg?.distance || 0}
-          isLastWalkingLeg={isLastWalkingLeg}
-        />
+        {/* Destination Banner — only shown during non-walking legs */}
+        {!isWalkingLeg && (
+          <DestinationBanner
+            currentLeg={currentLeg}
+            nextTransitLeg={nextTransitLeg}
+            distanceRemaining={distanceToDestination}
+            totalLegDistance={currentLeg?.distance || 0}
+            isLastWalkingLeg={isLastWalkingLeg}
+          />
+        )}
 
         {isWalkingLeg && (
           <WalkingInstructionCard
             currentStep={currentWalkingStep}
-            onNextStep={advanceLeg}
+            onNextStep={advanceStep}
+            destinationName={currentLeg?.to?.name}
+            currentLeg={currentLeg}
+            isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
+            onNextLeg={advanceLeg}
           />
         )}
 
@@ -1001,6 +1042,33 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
+  },
+  gpsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  gpsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    maxWidth: 280,
+    ...SHADOWS.large,
+  },
+  gpsText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginTop: SPACING.md,
+  },
+  gpsSubtext: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,

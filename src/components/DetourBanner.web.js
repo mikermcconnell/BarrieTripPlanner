@@ -2,12 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
+import { BASE_TOP, ALERT_OFFSET } from '../hooks/useDetourAlertStrip';
 
 const BANNER_HEIGHT = 52;
 const BANNER_GAP = 4;
 const MAX_VISIBLE = 3;
-const BASE_TOP = 140;
-const ALERT_OFFSET = 64;
 
 const DetourBanner = ({ activeDetours, onPress, alertBannerVisible, style }) => {
   if (!activeDetours || typeof activeDetours !== 'object') return null;

@@ -1,3 +1,27 @@
+import { COLORS } from '../config/theme';
+
+export const normalizeHexColor = (color, fallback = COLORS.primary) => {
+  if (typeof color !== 'string' || color.trim().length === 0) return fallback;
+  const raw = color.trim();
+  const normalized = raw.startsWith('#') ? raw : `#${raw}`;
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized : fallback;
+};
+
+export const hexToRgba = (hexColor, opacity = 1) => {
+  const normalized = normalizeHexColor(hexColor);
+  const hex = normalized.replace('#', '');
+
+  if (hex.length !== 6) {
+    return normalized;
+  }
+
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const a = Math.max(0, Math.min(1, opacity));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+};
+
 /**
  * Determine if a hex color is "light" (needs dark text) or "dark" (needs white text).
  * Uses relative luminance formula (ITU-R BT.601).
