@@ -43,6 +43,7 @@ import TripSearchHeader from '../components/TripSearchHeader';
 import TripBottomSheet from '../components/TripBottomSheet';
 import MapTapPopup from '../components/MapTapPopup';
 import HomeScreenControls from '../components/HomeScreenControls';
+import RouteFilterSheet from '../components/RouteFilterSheet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
@@ -93,6 +94,7 @@ const hasMeaningfulRegionChange = (prevRegion, nextRegion) => {
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
+  const routeFilterSheetRef = useRef(null);
   const navigation = useNavigation();
   const {
     routes,
@@ -587,7 +589,7 @@ const HomeScreen = ({ route }) => {
 
     if (coords.length > 0) {
       compatMapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 150, right: 50, bottom: 200, left: 50 },
+        edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
         animated: true,
       });
     }
@@ -705,9 +707,10 @@ const HomeScreen = ({ route }) => {
           id={`trip-${tripRoute.id}`}
           coordinates={tripRoute.coordinates}
           color={tripRoute.color}
-          strokeWidth={tripRoute.isWalk ? 3 : tripRoute.isOnDemand ? 4 : 5}
-          lineDashPattern={tripRoute.isWalk ? [10, 5] : tripRoute.isOnDemand ? [12, 6] : null}
-          opacity={1}
+          strokeWidth={tripRoute.isWalk ? 4 : tripRoute.isOnDemand ? 4 : 5}
+          lineDashPattern={tripRoute.isWalk ? [2, 8] : tripRoute.isOnDemand ? [12, 6] : null}
+          opacity={tripRoute.isWalk ? 0.9 : 1}
+          outlineColor={tripRoute.isWalk ? tripRoute.color : undefined}
         />
       ))}
 
@@ -721,6 +724,7 @@ const HomeScreen = ({ route }) => {
           strokeWidth={3}
           lineDashPattern={[8, 6]}
           opacity={0.7}
+          outlineColor={line.color}
         />
       ))}
 
@@ -738,9 +742,8 @@ const HomeScreen = ({ route }) => {
 
       {/* Trip planning markers */}
       {tripMarkers.map((marker) => (
-        <MapLibreGL.PointAnnotation
+        <MapLibreGL.MarkerView
           key={marker.id}
-          id={`trip-marker-${marker.id}`}
           coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
         >
           <View style={[
@@ -752,7 +755,7 @@ const HomeScreen = ({ route }) => {
               marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
             ]} />
           </View>
-        </MapLibreGL.PointAnnotation>
+        </MapLibreGL.MarkerView>
       ))}
 
       {/* Boarding and alighting stop markers with labels */}
@@ -917,7 +920,7 @@ const HomeScreen = ({ route }) => {
         </View>
       )}
 
-      {/* Route Filter Panel (Horizontal below search) */}
+      {/* Route Filter Panel (Horizontal scroll row below search) */}
       {!isTripPlanningMode && (
         <HomeScreenControls
           routes={routes}
@@ -930,8 +933,7 @@ const HomeScreen = ({ route }) => {
           showZones={showZones}
           onToggleZones={() => setShowZones(z => !z)}
           zoneCount={Object.keys(onDemandZones || {}).length}
-          isExpanded={routePanelExpanded}
-          onToggle={toggleRoutePanel}
+          onOpenFilterSheet={() => routeFilterSheetRef.current?.expand()}
         />
       )}
 
@@ -1045,6 +1047,16 @@ const HomeScreen = ({ route }) => {
           }}
         />
       )}
+
+      {/* Route Filter Sheet - full grid view for route selection */}
+      <RouteFilterSheet
+        sheetRef={routeFilterSheetRef}
+        routes={routes}
+        selectedRoutes={selectedRoutes}
+        onRouteSelect={handleRouteSelect}
+        getRouteColor={getRouteColor}
+        isRouteDetouring={isRouteDetouring}
+      />
 
       {/* Map Tap Popup - for choosing directions from/to a tapped location */}
       <MapTapPopup

@@ -1,12 +1,8 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, LayoutAnimation, UIManager, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Animated } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import Icon from './Icon';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
@@ -55,8 +51,7 @@ const HomeScreenControls = ({
     showZones,
     onToggleZones,
     zoneCount = 0,
-    isExpanded = true,
-    onToggle,
+    onOpenFilterSheet,
 }) => {
     const routeAlertsMap = useMemo(() => {
         const map = new Map();
@@ -83,40 +78,14 @@ const HomeScreenControls = ({
         return labelB.localeCompare(labelA);
     }), [routes]);
 
-    const handleToggle = useCallback(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        onToggle?.();
-    }, [onToggle]);
-
-    if (!isExpanded) {
-        return (
-            <View style={styles.filterContainer}>
-                <TouchableOpacity
-                    style={styles.collapsedPill}
-                    onPress={handleToggle}
-                    activeOpacity={0.7}
-                >
-                    <Text style={styles.collapsedPillText}>
-                        Routes{selectedRoutes.size > 0 ? ` (${selectedRoutes.size})` : ''}
-                    </Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
     return (
         <View style={styles.filterContainer}>
-            <View style={styles.chipScrollContent}>
-                {/* Collapse Button */}
-                {onToggle && (
-                    <TouchableOpacity
-                        style={styles.collapsePill}
-                        onPress={handleToggle}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.collapsePillText}>×</Text>
-                    </TouchableOpacity>
-                )}
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+            >
                 {/* Alert Count Badge */}
                 {serviceAlerts.length > 0 && (
                     <TouchableOpacity
@@ -178,8 +147,9 @@ const HomeScreenControls = ({
                             <TouchableOpacity
                                 style={[
                                     styles.filterChip,
-                                    isActive && { backgroundColor: routeColor, borderColor: routeColor },
-                                    hasAlert && !isActive && styles.filterChipWithAlert,
+                                    isActive
+                                        ? { backgroundColor: routeColor, borderWidth: 0 }
+                                        : { backgroundColor: COLORS.grey100, borderLeftWidth: 3, borderLeftColor: hasAlert ? COLORS.warning : routeColor, borderWidth: 0 },
                                 ]}
                                 onPress={() => onRouteSelect(r.id)}
                                 onLongPress={() => hasAlert && onAlertPress?.()}
@@ -187,7 +157,7 @@ const HomeScreenControls = ({
                             >
                                 <Text style={[
                                     styles.filterChipText,
-                                    { color: isActive ? COLORS.white : routeColor }
+                                    { color: isActive ? COLORS.white : COLORS.textPrimary }
                                 ]}>
                                     {r.shortName}
                                 </Text>
@@ -199,7 +169,21 @@ const HomeScreenControls = ({
                         </View>
                     );
                 })}
-            </View>
+
+                {/* Spacer to separate chips from filter button */}
+                <View style={styles.spacer} />
+            </ScrollView>
+
+            {/* Filter/Grid button at the right end */}
+            <TouchableOpacity
+                style={styles.filterIconButton}
+                onPress={onOpenFilterSheet}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Open route filter"
+            >
+                <Text style={styles.filterIconText}>⊞</Text>
+            </TouchableOpacity>
         </View>
     );
 };
@@ -207,17 +191,19 @@ const HomeScreenControls = ({
 const styles = StyleSheet.create({
     filterContainer: {
         position: 'absolute',
-        top: 76 + STATUS_BAR_OFFSET, // Tucked elegantly under the search bar
+        top: 76 + STATUS_BAR_OFFSET,
         left: SPACING.sm,
-        right: SPACING.sm, // Full width — map controls moved to bottom-left
+        right: SPACING.sm,
         zIndex: 998,
-    },
-    chipScrollContent: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
+        alignItems: 'center',
+        height: 44,
+    },
+    scrollContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
         gap: SPACING.xs,
-        paddingBottom: SPACING.xs,
+        paddingRight: SPACING.xs,
     },
     filterChip: {
         flexDirection: 'row',
@@ -226,20 +212,17 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         paddingHorizontal: SPACING.sm + 4,
         borderRadius: BORDER_RADIUS.xl,
-        backgroundColor: COLORS.white,
-        borderWidth: 1.5,
-        borderColor: COLORS.grey200,
-        ...SHADOWS.small,
         height: 36,
         minWidth: 50,
+        ...SHADOWS.small,
     },
     filterChipAllActive: {
         backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
     },
     filterChipText: {
         fontSize: FONT_SIZES.sm,
         fontWeight: FONT_WEIGHTS.bold,
+        color: COLORS.textPrimary,
     },
     filterChipTextActive: {
         color: COLORS.white,
@@ -271,17 +254,12 @@ const styles = StyleSheet.create({
         minWidth: 50,
         borderWidth: 1.5,
         borderColor: COLORS.warning,
-    },
-    alertHeaderIcon: {
-        fontSize: 14,
+        ...SHADOWS.small,
     },
     alertHeaderText: {
         fontSize: FONT_SIZES.sm,
         fontWeight: FONT_WEIGHTS.bold,
         color: COLORS.warning,
-    },
-    filterChipWithAlert: {
-        borderColor: COLORS.warning,
     },
     alertDot: {
         position: 'absolute',
@@ -299,7 +277,6 @@ const styles = StyleSheet.create({
     },
     filterChipZonesActive: {
         backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
     },
     zoneCountBadge: {
         backgroundColor: COLORS.grey200,
@@ -322,36 +299,24 @@ const styles = StyleSheet.create({
     zoneCountTextActive: {
         color: COLORS.white,
     },
-    collapsedPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.white,
-        paddingVertical: SPACING.sm,
-        paddingHorizontal: SPACING.md,
-        borderRadius: BORDER_RADIUS.round,
-        ...SHADOWS.small,
-        borderWidth: 1,
-        borderColor: COLORS.grey200,
+    spacer: {
+        width: SPACING.xs,
     },
-    collapsedPillText: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: FONT_WEIGHTS.semibold,
-        color: COLORS.textSecondary,
-        textTransform: 'uppercase',
-        letterSpacing: 0.3,
-    },
-    collapsePill: {
+    filterIconButton: {
+        width: 36,
+        height: 36,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surface,
         alignItems: 'center',
         justifyContent: 'center',
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: COLORS.grey100,
+        marginLeft: SPACING.xs,
+        ...SHADOWS.small,
+        flexShrink: 0,
     },
-    collapsePillText: {
-        fontSize: FONT_SIZES.lg,
+    filterIconText: {
+        fontSize: 18,
         color: COLORS.textSecondary,
-        lineHeight: 18,
+        lineHeight: 20,
     },
 });
 
