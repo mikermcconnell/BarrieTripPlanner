@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Animated } from 'react-native';
 import Constants from 'expo-constants';
-import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
 import Icon from './Icon';
 
@@ -212,8 +212,9 @@ const styles = StyleSheet.create({
     },
     filterChipText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: FONT_WEIGHTS.bold,
+        fontFamily: FONT_FAMILIES.semibold,
         color: COLORS.textPrimary,
+        letterSpacing: 0.3,
     },
     filterChipTextActive: {
         color: COLORS.white,

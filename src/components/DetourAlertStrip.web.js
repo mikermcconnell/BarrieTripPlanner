@@ -1,74 +1,23 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, LayoutAnimation } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
-
-const BASE_TOP = 140;
-const ALERT_OFFSET = 64;
-const MAX_EXPANDED = 5;
+import { useDetourAlertStrip } from '../hooks/useDetourAlertStrip';
 
 /**
  * DetourAlertStrip (web) — collapsible amber banner showing active detours.
  *
- * Collapsed: single bar with Warning icon, count text, route-coloured pill badges, and a toggle chevron.
- * Expanded:  shows the collapsed bar (chevron flips) + a detail panel with one row per detour route.
- *
- * Props:
- *   activeDetours        — object keyed by routeId, each value has { state, ... }. 'cleared' entries are filtered.
- *   onPress(routeId)     — called when an expanded detail row is tapped.
- *   alertBannerVisible   — boolean; when true, shifts the strip down by ALERT_OFFSET.
- *   routes               — array of { id, shortName } for route name lookup.
- *   style                — optional additional View style.
+ * All state and logic lives in useDetourAlertStrip; this file is rendering only.
+ * Differs from native only in styles (boxShadow, cursor).
  */
 const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes = [], style }) => {
-  const [expanded, setExpanded] = useState(false);
+  const {
+    expanded, toggleExpanded, routeIds, topOffset, getRouteName,
+    visibleIds, overflowCount, countText, shouldRender,
+  } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
-  const toggleExpanded = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpanded((prev) => !prev);
-  }, []);
-
-  const collapseTimerRef = useRef(null);
-
-  useEffect(() => {
-    if (expanded) {
-      collapseTimerRef.current = setTimeout(() => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setExpanded(false);
-      }, 10000);
-    }
-    return () => {
-      if (collapseTimerRef.current) {
-        clearTimeout(collapseTimerRef.current);
-      }
-    };
-  }, [expanded]);
-
-  if (!activeDetours || typeof activeDetours !== 'object') return null;
-
-  const routeIds = Object.keys(activeDetours).filter(
-    (id) => activeDetours[id]?.state !== 'cleared'
-  );
-  if (routeIds.length === 0) return null;
-
-  const topOffset = alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP;
-
-  // Build a quick lookup from routes array
-  const routeNameMap = {};
-  routes.forEach((r) => {
-    routeNameMap[r.id] = r.shortName || r.id;
-  });
-
-  const getRouteName = (routeId) => routeNameMap[routeId] || routeId;
-
-  const visibleIds = routeIds.slice(0, MAX_EXPANDED);
-  const overflowCount = routeIds.length - MAX_EXPANDED;
-
-  const countText =
-    routeIds.length === 1
-      ? `Route ${getRouteName(routeIds[0])} on detour`
-      : `${routeIds.length} routes on detour`;
+  if (!shouldRender) return null;
 
   return (
     <View
@@ -84,15 +33,10 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
         accessibilityLabel={expanded ? 'Collapse detour list' : 'Expand detour list'}
         accessibilityHint={countText}
       >
-        {/* Warning icon */}
         <Icon name="Warning" size={16} color={COLORS.warning} />
-
-        {/* Count text */}
         <Text style={styles.countText} numberOfLines={1}>
           {countText}
         </Text>
-
-        {/* Route pill badges (collapsed view) */}
         <View style={styles.pillsRow}>
           {routeIds.slice(0, 3).map((routeId) => {
             const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
@@ -106,8 +50,6 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
             <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
           )}
         </View>
-
-        {/* Chevron toggle */}
         <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
       </TouchableOpacity>
 
@@ -132,17 +74,12 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
                 accessibilityRole="button"
                 accessibilityLabel={`Route ${getRouteName(routeId)} detour details`}
               >
-                {/* Route badge pill */}
                 <View style={[styles.routePill, { backgroundColor: routeColor }]}>
                   <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
                 </View>
-
-                {/* Row label */}
                 <Text style={styles.detailLabel} numberOfLines={1}>
                   Route {getRouteName(routeId)} — {isClearPending ? 'Clearing...' : 'On detour'}
                 </Text>
-
-                {/* Chevron right */}
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>
             );
@@ -191,8 +128,9 @@ const styles = StyleSheet.create({
   countText: {
     flex: 1,
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
+    letterSpacing: 0.2,
   },
   pillsRow: {
     flexDirection: 'row',

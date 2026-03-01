@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, UIManager } from 'react-native';
-import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, SHADOWS, BORDER_RADIUS } from '../config/theme';
+import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, SHADOWS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import { useDetourAlertStrip } from '../hooks/useDetourAlertStrip';
@@ -129,8 +129,9 @@ const styles = StyleSheet.create({
   countText: {
     flex: 1,
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
+    letterSpacing: 0.2,
   },
   pillsRow: {
     flexDirection: 'row',

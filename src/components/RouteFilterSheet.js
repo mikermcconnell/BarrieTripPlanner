@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
 
 const RouteFilterSheet = ({
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: FONT_WEIGHTS.bold,
+        fontFamily: FONT_FAMILIES.semibold,
         color: COLORS.textPrimary,
         marginBottom: SPACING.md,
         marginTop: SPACING.xs,
