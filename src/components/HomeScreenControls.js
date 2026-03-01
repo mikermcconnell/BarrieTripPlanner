@@ -2,6 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Animated } from 'react-native';
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
+import { sortRoutesByNumber } from '../utils/routeSorting';
 import Icon from './Icon';
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
@@ -66,17 +67,7 @@ const HomeScreenControls = ({
 
     const hasRouteAlert = useCallback((routeId) => (routeAlertsMap.get(routeId) || 0) > 0, [routeAlertsMap]);
 
-    // Sort routes from largest to smallest
-    const sortedRoutes = useMemo(() => [...routes].sort((a, b) => {
-        const labelA = String(a?.shortName ?? a?.id ?? '');
-        const labelB = String(b?.shortName ?? b?.id ?? '');
-        const numA = parseInt(labelA, 10);
-        const numB = parseInt(labelB, 10);
-        if (!isNaN(numA) && !isNaN(numB)) {
-            return numB - numA;
-        }
-        return labelB.localeCompare(labelA);
-    }), [routes]);
+    const sortedRoutes = useMemo(() => sortRoutesByNumber(routes), [routes]);
 
     return (
         <View style={styles.filterContainer}>
@@ -237,7 +228,7 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#FF8C00',
+        backgroundColor: COLORS.warning,
         borderWidth: 1,
         borderColor: 'white',
     },

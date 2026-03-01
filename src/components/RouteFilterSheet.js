@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { sortRoutesByNumber } from '../utils/routeSorting';
 
 const RouteFilterSheet = ({
     sheetRef,
@@ -25,17 +26,7 @@ const RouteFilterSheet = ({
         []
     );
 
-    // Sort routes from largest to smallest (same as HomeScreenControls)
-    const sortedRoutes = useMemo(() => [...routes].sort((a, b) => {
-        const labelA = String(a?.shortName ?? a?.id ?? '');
-        const labelB = String(b?.shortName ?? b?.id ?? '');
-        const numA = parseInt(labelA, 10);
-        const numB = parseInt(labelB, 10);
-        if (!isNaN(numA) && !isNaN(numB)) {
-            return numB - numA;
-        }
-        return labelB.localeCompare(labelA);
-    }), [routes]);
+    const sortedRoutes = useMemo(() => sortRoutesByNumber(routes), [routes]);
 
     return (
         <BottomSheet
@@ -163,7 +154,7 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#FF8C00',
+        backgroundColor: COLORS.warning,
         borderWidth: 1,
         borderColor: COLORS.white,
     },
