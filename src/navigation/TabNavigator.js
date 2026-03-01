@@ -28,7 +28,7 @@ const RootStack = createNativeStackNavigator();
 
 // Tab Icon Component with indicator
 const TabIcon = ({ name, focused, color }) => {
-  const iconProps = { size: 26, color, strokeWidth: focused ? 2.5 : 2 };
+  const iconProps = { size: 26, color, strokeWidth: focused ? 2.5 : 1.5 };
 
   const icons = {
     Map: <Icon name="Map" {...iconProps} />,
@@ -134,16 +134,15 @@ const TabNavigator = () => {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.grey200,
+    borderTopWidth: 0,
     paddingTop: 10,
     paddingHorizontal: SPACING.xxl,
+    ...SHADOWS.medium,
     // Web-specific premium shadow
     ...(Platform.OS === 'web' && {
       boxShadow: '0 -2px 20px rgba(23, 43, 77, 0.06)',
       backdropFilter: 'blur(16px)',
       backgroundColor: 'rgba(255, 255, 255, 0.98)',
-      borderTopWidth: 0,
     }),
   },
   tabBarLabel: {
@@ -166,10 +165,10 @@ const styles = StyleSheet.create({
   activeIndicator: {
     position: 'absolute',
     top: -8,
-    width: 36,
+    width: 24,
     height: 3,
     backgroundColor: COLORS.primary,
-    borderRadius: 2,
+    borderRadius: 1.5,
     // Web-specific glow effect
     ...(Platform.OS === 'web' && {
       boxShadow: '0 2px 8px rgba(76, 175, 80, 0.25)',
