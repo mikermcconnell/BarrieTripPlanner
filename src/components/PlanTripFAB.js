@@ -1,25 +1,31 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import Icon from './Icon';
-import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_FAMILIES } from '../config/theme';
+import React, { useEffect } from 'react';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withDelay } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS, SPACING, SHADOWS } from '../config/theme';
 
-// Direction/Route icon
-const DirectionsIcon = ({ size = 20, color = COLORS.white }) => <Icon name="Navigation" size={size} color={color} fill={color} />;
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const PlanTripFAB = ({ onPlanTrip }) => {
+  const scale = useSharedValue(0);
+
+  useEffect(() => {
+    scale.value = withDelay(300, withSpring(1, { damping: 12, stiffness: 180 }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
     <View style={styles.fabContainer}>
-      <TouchableOpacity
+      <AnimatedTouchable
+        style={[styles.fab, animStyle]}
         onPress={onPlanTrip}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel="Plan a trip"
+        activeOpacity={0.85}
       >
-        <View style={styles.planTripButton}>
-          <DirectionsIcon size={30} color={COLORS.white} />
-          <Text style={styles.planTripButtonText}>Plan Trip</Text>
-        </View>
-      </TouchableOpacity>
+        <Ionicons name="navigate" size={26} color={COLORS.white} />
+      </AnimatedTouchable>
     </View>
   );
 };
@@ -28,27 +34,18 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     bottom: 32,
-    right: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    right: SPACING.lg,
     zIndex: 1000,
   },
-  planTripButton: {
-    flexDirection: 'row',
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#388E3C',
     alignItems: 'center',
-    borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.xl,
-    gap: 10,
-    backgroundColor: COLORS.ctaGreen,
+    justifyContent: 'center',
     ...SHADOWS.elevated,
-  },
-  planTripButtonText: {
-    fontSize: FONT_SIZES.lg,
-    fontFamily: FONT_FAMILIES.bold,
-    color: COLORS.white,
-    letterSpacing: 0.3,
+    shadowColor: '#388E3C',
   },
 });
 
