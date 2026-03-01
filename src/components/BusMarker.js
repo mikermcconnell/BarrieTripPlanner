@@ -6,8 +6,8 @@ import Svg, { Path } from 'react-native-svg';
 const BUS_ICON_PATH =
   'M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z';
 
-const MARKER_SIZE = 40;
-const ARROW_WRAPPER_SIZE = 80;
+const MARKER_SIZE = 30;
+const ARROW_WRAPPER_SIZE = 56;
 const markerDebugState = new Map();
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
@@ -73,13 +73,13 @@ const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: r
           <Svg
             width={ARROW_WRAPPER_SIZE}
             height={ARROW_WRAPPER_SIZE}
-            viewBox="0 0 80 80"
+            viewBox="0 0 56 56"
             style={styles.arrowSvg}
           >
             <Path
-              d="M40 5 L32 19 L48 19 Z"
+              d="M28 4 L21 14 L35 14 Z"
               fill={color}
-              transform={`rotate(${bearing}, 40, 40)`}
+              transform={`rotate(${bearing}, 28, 28)`}
             />
           </Svg>
         )}
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     width: MARKER_SIZE,
     height: MARKER_SIZE,
     borderRadius: MARKER_SIZE / 2,
-    borderWidth: 3,
+    borderWidth: 2.5,
     borderColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   routeLabel: {
     color: 'white',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,
     lineHeight: 12,
