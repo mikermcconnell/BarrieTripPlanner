@@ -10,7 +10,7 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import { MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
-import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
+import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import { useTripPlanner } from '../hooks/useTripPlanner';
@@ -866,7 +866,7 @@ const HomeScreen = ({ route }) => {
             onChangeText={setWhereToText}
             onSelect={handleWhereToSelect}
             placeholder="Where to?"
-            icon={<SearchIcon size={18} color={COLORS.grey500} />}
+            icon={<SearchIcon size={20} color={COLORS.grey500} />}
             style={styles.whereToAutocomplete}
             inputStyle={styles.whereToInput}
             rightIcon={
@@ -1157,17 +1157,16 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   whereToAutocomplete: {
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.round,
-    paddingVertical: 2,
-    paddingLeft: SPACING.sm,
-    paddingRight: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
     ...SHADOWS.medium,
   },
   whereToInput: {
     backgroundColor: 'transparent',
-    height: 40,
+    height: 52,
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.medium,
   },
   statusBadgeLive: {
     flexDirection: 'row',
