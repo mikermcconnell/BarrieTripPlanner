@@ -38,7 +38,7 @@ import DestinationBanner from '../components/navigation/DestinationBanner';
 import PulsingSpinner from '../components/PulsingSpinner';
 
 // Context for route shapes
-import { useTransitStatic } from '../context/TransitContext';
+import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 
 // Hooks
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
@@ -110,8 +110,9 @@ const NavigationScreen = ({ route }) => {
 
   if (!itinerary) return null;
 
-  // Get route shapes from TransitContext
+  // Get route shapes and realtime vehicles from TransitContext
   const { shapes, routeShapeMapping } = useTransitStatic();
+  const { vehicles } = useTransitRealtime();
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
@@ -465,21 +466,42 @@ const NavigationScreen = ({ route }) => {
   }, [busProximity?.vehicle, currentTransitLeg]);
 
   // Bus marker for next transit leg (shown during walking legs)
+  // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
+  // This fixes the cold-start issue where useBusProximity hasn't polled yet on mount.
   const nextBusMarker = useMemo(() => {
     if (!isWalkingLeg || !nextTransitLeg) return null;
-    if (!nextTransitBusProximity?.vehicle?.coordinate) return null;
+
+    // Primary: direct lookup from already-warm vehicles context (same as HomeScreen)
+    const tripId = nextTransitLeg.tripId;
+    const routeId = nextTransitLeg.route?.id || nextTransitLeg.routeId;
+    let vehicle = null;
+
+    if (tripId) {
+      vehicle = vehicles.find(v => v.tripId === tripId);
+    }
+    if (!vehicle && routeId) {
+      const routeVehicles = vehicles.filter(v => v.routeId === routeId);
+      vehicle = routeVehicles.length === 1 ? routeVehicles[0] : null;
+    }
+
+    // Fallback: useBusProximity data (after polling warms up)
+    if (!vehicle && nextTransitBusProximity?.vehicle) {
+      vehicle = nextTransitBusProximity.vehicle;
+    }
+
+    if (!vehicle?.coordinate) return null;
 
     return {
       id: 'next-bus',
       coordinate: [
-        nextTransitBusProximity.vehicle.coordinate.longitude,
-        nextTransitBusProximity.vehicle.coordinate.latitude,
+        vehicle.coordinate.longitude,
+        vehicle.coordinate.latitude,
       ],
       color: nextTransitLeg.route?.color || COLORS.primary,
       routeShortName: nextTransitLeg.route?.shortName || '?',
-      bearing: nextTransitBusProximity.vehicle.bearing,
+      bearing: vehicle.bearing,
     };
-  }, [isWalkingLeg, nextTransitLeg, nextTransitBusProximity?.vehicle]);
+  }, [isWalkingLeg, nextTransitLeg, vehicles, nextTransitBusProximity?.vehicle]);
 
   // Close navigation - show confirmation modal
   const handleClose = () => {
