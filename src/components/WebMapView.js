@@ -119,66 +119,52 @@ const MapClickHandler = ({ onPress }) => {
   return null;
 };
 
-// Create compact pill bus icon with route number and direction arrow
+// Create professional pill bus icon with route number and direction arrow
 const createBusIcon = (color, routeId, bearing = null, scale = 1) => {
   const routeLabel = routeId || '?';
-
-  // Check if we have valid bearing data (not null/undefined and not the default 0 fallback)
   const hasValidBearing = bearing !== null && bearing !== undefined;
 
   const arrowHtml = hasValidBearing ? `
-    <div style="
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 80px;
-      height: 80px;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      transform: rotate(${bearing}deg);
-      pointer-events: none;
-      z-index: 1;
-    ">
-      <div style="
-        width: 0;
-        height: 0;
-        margin-top: 0px;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-bottom: 14px solid ${color};
-        filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
-      "></div>
-    </div>
+    <svg width="80" height="80" viewBox="0 0 80 80"
+      style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;">
+      <path d="M40 2 L30 32 L40 22 L50 32 Z"
+        fill="#222222" stroke="white" stroke-width="2" stroke-linejoin="round"
+        transform="rotate(${bearing}, 40, 40)"/>
+    </svg>
   ` : '';
 
   return L.divIcon({
     className: 'bus-icon',
     html: `
-      <div style="position: relative; width: 80px; height: 80px; overflow: visible; transform: scale(${scale}); transition: transform 0.1s ease-out;">
+      <div style="position:relative;width:80px;height:80px;overflow:visible;transform:scale(${scale});transition:transform 0.1s ease-out;">
         ${arrowHtml}
         <div style="
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 2px;
-          width: 40px;
-          height: 40px;
-          background: ${color};
-          border-radius: 50%;
-          border: 3px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-          z-index: 2;
+          position:absolute;
+          top:50%;left:50%;
+          transform:translate(-50%,-50%);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          width:44px;
+          height:44px;
+          background:linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 50%), ${color};
+          border-radius:50%;
+          border:2.5px solid rgba(255,255,255,0.92);
+          box-shadow:0 1px 3px rgba(0,0,0,0.30), 0 3px 8px rgba(0,0,0,0.12);
+          z-index:2;
+          overflow:hidden;
+          box-sizing:border-box;
         ">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-            <path d="M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z"/>
-          </svg>
-          <span style="color:white;font-size:10px;font-weight:700;letter-spacing:0.3px;line-height:1;">${routeLabel}</span>
+          <span style="
+            color:white;
+            font-size:17px;
+            font-weight:800;
+            letter-spacing:0.5px;
+            text-shadow:0 1px 2px rgba(0,0,0,0.25);
+            line-height:1;
+            position:relative;
+            z-index:1;
+          ">${routeLabel}</span>
         </div>
       </div>
     `,
@@ -200,6 +186,74 @@ const createStopIcon = (isSelected) => {
   });
 };
 
+// Compute evenly spaced label positions along a coordinate array
+const computeLabelPositions = (coordinates, spacingPx, map) => {
+  if (!map || coordinates.length < 2) return [];
+
+  const points = coordinates.map(c => map.latLngToContainerPoint([c.latitude, c.longitude]));
+  const labels = [];
+  let accumulated = spacingPx / 2; // start offset so first label isn't at the very beginning
+
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
+    if (segLen === 0) continue;
+
+    let remaining = segLen;
+    while (accumulated <= remaining) {
+      const ratio = accumulated / segLen;
+      const lat = coordinates[i - 1].latitude + ratio * (coordinates[i].latitude - coordinates[i - 1].latitude);
+      const lon = coordinates[i - 1].longitude + ratio * (coordinates[i].longitude - coordinates[i - 1].longitude);
+      // Bearing in degrees, ensure text reads left-to-right
+      let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      labels.push({ lat, lon, angle });
+      remaining -= accumulated;
+      accumulated = spacingPx;
+    }
+    accumulated -= remaining;
+  }
+
+  return labels;
+};
+
+// Inline route label markers along a polyline
+export const RouteLineLabels = ({ coordinates, color, routeLabel }) => {
+  const map = useMap();
+
+  const labelPositions = useMemo(() => {
+    if (!routeLabel || !map) return [];
+    return computeLabelPositions(coordinates, 250, map);
+  }, [coordinates, routeLabel, map]);
+
+  if (labelPositions.length === 0) return null;
+
+  return labelPositions.map((pos, i) => (
+    <Marker
+      key={`${routeLabel}-label-${i}`}
+      position={[pos.lat, pos.lon]}
+      interactive={false}
+      icon={L.divIcon({
+        className: '',
+        html: `<div style="
+          font-size:11px;
+          font-weight:700;
+          color:${color};
+          text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 -2px 0 #fff, 0 2px 0 #fff, -2px 0 0 #fff, 2px 0 0 #fff;
+          opacity:0.75;
+          white-space:nowrap;
+          transform:rotate(${pos.angle}deg);
+          pointer-events:none;
+        ">${routeLabel}</div>`,
+        iconSize: [0, 0],
+        iconAnchor: [0, 6],
+      })}
+    />
+  ));
+};
+
 // Web Route Polyline - Professional rendering with casing, offset, and hover support
 export const WebRoutePolyline = ({
   coordinates,
@@ -217,6 +271,7 @@ export const WebRoutePolyline = ({
   onMouseOut,
   interactive = true,
   className = '',
+  routeLabel = null,
 }) => {
   const positions = coordinates.map(c => [c.latitude, c.longitude]);
 
@@ -237,6 +292,10 @@ export const WebRoutePolyline = ({
   if (onMouseOver) eventHandlers.mouseover = onMouseOver;
   if (onMouseOut) eventHandlers.mouseout = onMouseOut;
 
+  const labels = routeLabel ? (
+    <RouteLineLabels coordinates={coordinates} color={color} routeLabel={routeLabel} />
+  ) : null;
+
   if (outlineWidth > 0) {
     const resolvedOutlineColor = outlineColor || darkenColorHex(color, 0.4);
     const outlineOptions = {
@@ -254,11 +313,17 @@ export const WebRoutePolyline = ({
       <>
         <Polyline positions={positions} pathOptions={outlineOptions} />
         <Polyline positions={positions} pathOptions={fillOptions} eventHandlers={eventHandlers} />
+        {labels}
       </>
     );
   }
 
-  return <Polyline positions={positions} pathOptions={fillOptions} eventHandlers={eventHandlers} />;
+  return (
+    <>
+      <Polyline positions={positions} pathOptions={fillOptions} eventHandlers={eventHandlers} />
+      {labels}
+    </>
+  );
 };
 
 // Inline darken helper for web (avoids importing geometryUtils into web map module)

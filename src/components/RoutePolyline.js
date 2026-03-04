@@ -18,6 +18,7 @@ const RoutePolylineComponent = ({
   outlineColor = '#000000',
   id,
   showArrows = false,
+  routeLabel = null,
 }) => {
   const formattedCoordinates = Array.isArray(coordinates)
     ? coordinates
@@ -43,6 +44,29 @@ const RoutePolylineComponent = ({
 
   const normalizedFill = normalizeHexColor(color);
   const fillColor = hexToRgba(normalizedFill, opacity);
+
+  const topLayerId = showArrows ? `${sourceId}-arrows` : `${sourceId}-fill`;
+
+  const routeLabelLayer = routeLabel ? (
+    <MapLibreGL.SymbolLayer
+      id={`${sourceId}-label`}
+      style={{
+        symbolPlacement: 'line',
+        symbolSpacing: 250,
+        textField: routeLabel,
+        textSize: 11,
+        textColor: normalizedFill,
+        textHaloColor: '#FFFFFF',
+        textHaloWidth: 2,
+        textOpacity: 0.75,
+        textAllowOverlap: false,
+        textIgnorePlacement: false,
+        textRotationAlignment: 'map',
+        textPitchAlignment: 'viewport',
+      }}
+      aboveLayerID={topLayerId}
+    />
+  ) : null;
 
   const dashArray = lineDashPattern
     ? lineDashPattern.map((v) => v / strokeWidth)
@@ -94,6 +118,7 @@ const RoutePolylineComponent = ({
             aboveLayerID={`${sourceId}-fill`}
           />
         )}
+        {routeLabelLayer}
       </MapLibreGL.ShapeSource>
     );
   }
@@ -126,6 +151,7 @@ const RoutePolylineComponent = ({
           aboveLayerID={`${sourceId}-fill`}
         />
       )}
+      {routeLabelLayer}
     </MapLibreGL.ShapeSource>
   );
 };
@@ -151,6 +177,7 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.outlineWidth === next.outlineWidth &&
   prev.outlineColor === next.outlineColor &&
   prev.showArrows === next.showArrows &&
+  prev.routeLabel === next.routeLabel &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)
 );
 

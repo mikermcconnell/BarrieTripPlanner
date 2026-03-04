@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import { COLORS } from '../config/theme';
 import { decodePolyline, findClosestPointIndex } from '../utils/polylineUtils';
+import { haversineDistance } from '../utils/geometryUtils';
 
 /** Snap a lat/lon to the nearest point on a decoded polyline */
 const snapToPolyline = (lat, lon, polylineCoords) => {
@@ -24,6 +25,8 @@ export const useTripVisualization = ({
   vehicles,
   shapes,
   tripMapping,
+  tripFrom,  // { lat, lon } - user's entered origin address
+  tripTo,    // { lat, lon } - user's entered destination address
 }) => {
   const selectedItinerary =
     isTripPlanningMode && itineraries.length > 0
@@ -73,11 +76,12 @@ export const useTripVisualization = ({
         routes.push({
           id: `trip-leg-${index}`,
           coordinates: coords,
-          color: leg.mode === 'WALK' ? COLORS.grey500
+          color: leg.mode === 'WALK' ? '#4285F4'
             : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
             : (leg.route?.color || COLORS.primary),
           isWalk: leg.mode === 'WALK',
           isOnDemand: !!leg.isOnDemand,
+          routeLabel: leg.mode !== 'WALK' ? (leg.route?.shortName || null) : null,
         });
       }
     });
@@ -85,7 +89,7 @@ export const useTripVisualization = ({
     return routes;
   }, [selectedItinerary, decodedLegPolylines]);
 
-  // Origin + destination markers
+  // Origin + destination markers with stop info
   const tripMarkers = useMemo(() => {
     if (!selectedItinerary?.legs) return [];
 
@@ -94,25 +98,37 @@ export const useTripVisualization = ({
     const lastLeg = selectedItinerary.legs[selectedItinerary.legs.length - 1];
 
     if (firstLeg?.from) {
+      const walkDist = tripFrom
+        ? Math.round(haversineDistance(tripFrom.lat, tripFrom.lon, firstLeg.from.lat, firstLeg.from.lon))
+        : null;
       markers.push({
         id: 'origin',
         coordinate: { latitude: firstLeg.from.lat, longitude: firstLeg.from.lon },
         type: 'origin',
         title: 'Start',
+        stopName: firstLeg.from.name || null,
+        stopCode: firstLeg.from.stopCode || firstLeg.from.stopId || null,
+        walkDistance: walkDist,
       });
     }
 
     if (lastLeg?.to) {
+      const walkDist = tripTo
+        ? Math.round(haversineDistance(lastLeg.to.lat, lastLeg.to.lon, tripTo.lat, tripTo.lon))
+        : null;
       markers.push({
         id: 'destination',
         coordinate: { latitude: lastLeg.to.lat, longitude: lastLeg.to.lon },
         type: 'destination',
         title: 'End',
+        stopName: lastLeg.to.name || null,
+        stopCode: lastLeg.to.stopCode || lastLeg.to.stopId || null,
+        walkDistance: walkDist,
       });
     }
 
     return markers;
-  }, [selectedItinerary]);
+  }, [selectedItinerary, tripFrom, tripTo]);
 
   // Intermediate stop dots along transit legs (snapped to polyline)
   const intermediateStopMarkers = useMemo(() => {
