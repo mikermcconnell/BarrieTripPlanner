@@ -31,7 +31,7 @@ import { useStepProgress } from '../hooks/useStepProgress';
 
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
-import { decodePolyline, extractShapeSegment } from '../utils/polylineUtils';
+import { decodePolyline, extractShapeSegment, findClosestPointIndex } from '../utils/polylineUtils';
 
 // Context for route shapes
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
@@ -552,14 +552,16 @@ const NavigationScreen = ({ route }) => {
   const routePolylines = useMemo(() => {
     if (!itinerary?.legs) return [];
 
-    return itinerary.legs.map((leg, index) => {
-      let positions = [];
+    const result = [];
+
+    itinerary.legs.forEach((leg, index) => {
+      let coordObjects = []; // {latitude, longitude} objects for split calculation
       const isWalk = leg.mode === 'WALK';
       const isTransit = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
 
       if (leg.legGeometry?.points) {
         // Use encoded polyline if available (walking legs from walkingService)
-        positions = decodePolyline(leg.legGeometry.points).map(c => [c.latitude, c.longitude]);
+        coordObjects = decodePolyline(leg.legGeometry.points);
       } else if (isTransit && leg.route?.id && leg.from && leg.to) {
         // For transit legs, use actual GTFS route shape
         const routeId = leg.route.id;
@@ -588,37 +590,78 @@ const NavigationScreen = ({ route }) => {
           }
         }
 
-        // Convert to Leaflet format [lat, lng]
-        positions = bestSegment.length > 0
-          ? bestSegment.map(coord => [coord.latitude, coord.longitude])
-          : [[leg.from.lat, leg.from.lon], [leg.to.lat, leg.to.lon]];
+        coordObjects = bestSegment.length > 0
+          ? bestSegment
+          : [
+              { latitude: leg.from.lat, longitude: leg.from.lon },
+              { latitude: leg.to.lat, longitude: leg.to.lon },
+            ];
       } else if (leg.from && leg.to) {
         // Fallback to straight line
-        positions = [
-          [leg.from.lat, leg.from.lon],
-          [leg.to.lat, leg.to.lon],
+        coordObjects = [
+          { latitude: leg.from.lat, longitude: leg.from.lon },
+          { latitude: leg.to.lat, longitude: leg.to.lon },
         ];
       }
 
       const isCurrentLeg = index === currentLegIndex;
       const isCompletedLeg = index < currentLegIndex;
 
-      return {
+      const routeColor = isCompletedLeg
+        ? COLORS.grey400
+        : isWalk
+        ? COLORS.grey600
+        : leg.isOnDemand
+        ? (leg.zoneColor || COLORS.primary)
+        : (leg.route?.color || COLORS.primary);
+
+      const weight = isCurrentLeg ? 5 : 3;
+      const dashArray = isWalk ? '10, 5' : leg.isOnDemand ? '8, 6' : null;
+      const opacity = isCompletedLeg ? 0.5 : 1;
+
+      // For the current leg, split at the user's position into completed (grey) and remaining (colored)
+      if (isCurrentLeg && userLocation && coordObjects.length > 1) {
+        const splitIdx = findClosestPointIndex(
+          coordObjects,
+          userLocation.latitude,
+          userLocation.longitude
+        );
+
+        if (splitIdx > 0 && splitIdx < coordObjects.length - 1) {
+          // Completed portion: from start up to user position (grey, lower opacity)
+          result.push({
+            id: `leg-${index}-completed`,
+            positions: coordObjects.slice(0, splitIdx + 1).map(c => [c.latitude, c.longitude]),
+            color: '#9E9E9E',
+            weight,
+            dashArray,
+            opacity: 0.5,
+          });
+          // Remaining portion: from user position to end (full route color)
+          result.push({
+            id: `leg-${index}-remaining`,
+            positions: coordObjects.slice(splitIdx).map(c => [c.latitude, c.longitude]),
+            color: routeColor,
+            weight,
+            dashArray,
+            opacity,
+          });
+          return;
+        }
+      }
+
+      result.push({
         id: `leg-${index}`,
-        positions,
-        color: isCompletedLeg
-          ? COLORS.grey400
-          : isWalk
-          ? COLORS.grey600
-          : leg.isOnDemand
-          ? (leg.zoneColor || COLORS.primary)
-          : (leg.route?.color || COLORS.primary),
-        weight: isCurrentLeg ? 5 : 3,
-        dashArray: isWalk ? '10, 5' : leg.isOnDemand ? '8, 6' : null,
-        opacity: isCompletedLeg ? 0.5 : 1,
-      };
+        positions: coordObjects.map(c => [c.latitude, c.longitude]),
+        color: routeColor,
+        weight,
+        dashArray,
+        opacity,
+      });
     });
-  }, [itinerary, currentLegIndex, shapes, routeShapeMapping]);
+
+    return result;
+  }, [itinerary, currentLegIndex, userLocation, shapes, routeShapeMapping]);
 
   // Get markers
   const markers = useMemo(() => {

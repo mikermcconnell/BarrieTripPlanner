@@ -53,7 +53,7 @@ import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
-
+import Svg, { Circle, Path, G } from 'react-native-svg';
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
 const computeBounds = (coords) => {
@@ -122,6 +122,7 @@ const NavigationScreen = ({ route }) => {
   const [followMode, setFollowMode] = useState('full-trip'); // 'my-location' | 'full-trip'
   const [hasInitializedMap, setHasInitializedMap] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [isHeadingUp, setIsHeadingUp] = useState(false); // Compass/heading-up mode (walking only)
 
   // Location tracking
   const useWebLocation = useNavigationLocation;
@@ -359,18 +360,37 @@ const NavigationScreen = ({ route }) => {
     };
   }, []);
 
-  // Center map on user location when in follow mode
+  // Center map on user location when in follow mode, and apply heading rotation during walking
   // Skip for 2 seconds after a leg transition so the per-leg zoom isn't immediately overridden
   useEffect(() => {
     if ((isFollowMode || followMode === 'my-location') && userLocation && cameraRef.current) {
       if (Date.now() - legTransitionTimeRef.current < 2000) return;
+
+      const heading = (isHeadingUp && isWalkingLeg && userLocation.heading != null)
+        ? userLocation.heading
+        : 0;
+      const zoom = isHeadingUp && isWalkingLeg ? 17 : MIN_NAV_ZOOM;
+
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: MIN_NAV_ZOOM,
+        zoomLevel: zoom,
+        heading,
         animationDuration: 500,
       });
     }
-  }, [userLocation, isFollowMode, followMode]);
+  }, [userLocation, isFollowMode, followMode, isHeadingUp, isWalkingLeg]);
+
+  // When heading-up is toggled off (or leg is no longer walking), snap heading back to north
+  useEffect(() => {
+    if (!isHeadingUp || !isWalkingLeg) {
+      if (cameraRef.current && (isFollowMode || followMode === 'my-location')) {
+        cameraRef.current.setCamera({
+          heading: 0,
+          animationDuration: 300,
+        });
+      }
+    }
+  }, [isHeadingUp, isWalkingLeg]);
 
   // Handle navigation completion
   useEffect(() => {
@@ -425,7 +445,9 @@ const NavigationScreen = ({ route }) => {
   const routePolylines = useMemo(() => {
     if (!itinerary?.legs) return [];
 
-    return itinerary.legs.map((leg, index) => {
+    const result = [];
+
+    itinerary.legs.forEach((leg, index) => {
       let coordinates = [];
       const isWalk = leg.mode === 'WALK';
       const isTransit = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
@@ -471,22 +493,61 @@ const NavigationScreen = ({ route }) => {
       const isCurrentLeg = index === currentLegIndex;
       const isCompletedLeg = index < currentLegIndex;
 
-      return {
+      const routeColor = isCompletedLeg
+        ? COLORS.grey400
+        : isWalk
+        ? COLORS.grey600
+        : leg.isOnDemand
+        ? (leg.zoneColor || COLORS.primary)
+        : (leg.route?.color || COLORS.primary);
+
+      const strokeWidth = isCurrentLeg ? 5 : 3;
+      const lineDashPattern = isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null;
+      const opacity = isCompletedLeg ? 0.5 : 1;
+
+      // For the current leg, split at the user's position into completed (grey) and remaining (colored)
+      if (isCurrentLeg && userLocation && coordinates.length > 1) {
+        const splitIdx = findClosestPointIndex(
+          coordinates,
+          userLocation.latitude,
+          userLocation.longitude
+        );
+
+        if (splitIdx > 0 && splitIdx < coordinates.length - 1) {
+          // Completed portion: from start up to user position (grey, lower opacity)
+          result.push({
+            id: `leg-${index}-completed`,
+            coordinates: coordinates.slice(0, splitIdx + 1),
+            color: '#9E9E9E',
+            strokeWidth,
+            lineDashPattern,
+            opacity: 0.5,
+          });
+          // Remaining portion: from user position to end (full route color)
+          result.push({
+            id: `leg-${index}-remaining`,
+            coordinates: coordinates.slice(splitIdx),
+            color: routeColor,
+            strokeWidth,
+            lineDashPattern,
+            opacity,
+          });
+          return;
+        }
+      }
+
+      result.push({
         id: `leg-${index}`,
         coordinates,
-        color: isCompletedLeg
-          ? COLORS.grey400
-          : isWalk
-          ? COLORS.grey600
-          : leg.isOnDemand
-          ? (leg.zoneColor || COLORS.primary)
-          : (leg.route?.color || COLORS.primary),
-        strokeWidth: isCurrentLeg ? 5 : 3,
-        lineDashPattern: isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null,
-        opacity: isCompletedLeg ? 0.5 : 1,
-      };
+        color: routeColor,
+        strokeWidth,
+        lineDashPattern,
+        opacity,
+      });
     });
-  }, [itinerary, currentLegIndex, shapes, routeShapeMapping]);
+
+    return result;
+  }, [itinerary, currentLegIndex, userLocation, shapes, routeShapeMapping]);
 
   // Get markers for map
   const markers = useMemo(() => {
@@ -826,6 +887,30 @@ const NavigationScreen = ({ route }) => {
 
       {/* Map control buttons */}
       <View style={styles.mapControls}>
+        {/* Compass / heading-up toggle — only during walking legs */}
+        {isWalkingLeg && (
+          <TouchableOpacity
+            style={[styles.mapControlBtn, isHeadingUp && styles.mapControlBtnActive]}
+            onPress={() => setIsHeadingUp(prev => !prev)}
+            accessibilityLabel={isHeadingUp ? 'Switch to north-up' : 'Switch to heading-up'}
+          >
+            <Svg width={22} height={22} viewBox="0 0 22 22">
+              <Circle cx={11} cy={11} r={10} stroke={isHeadingUp ? COLORS.white : COLORS.grey400} strokeWidth={1.5} fill="none" />
+              {/* North needle (red/white) */}
+              <Path
+                d="M11 2 L13 11 L11 9 L9 11 Z"
+                fill={isHeadingUp ? COLORS.white : COLORS.error}
+              />
+              {/* South needle (grey) */}
+              <Path
+                d="M11 20 L9 11 L11 13 L13 11 Z"
+                fill={isHeadingUp ? 'rgba(255,255,255,0.5)' : COLORS.grey400}
+              />
+              {/* Center dot */}
+              <Circle cx={11} cy={11} r={1.5} fill={isHeadingUp ? COLORS.white : COLORS.textPrimary} />
+            </Svg>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.mapControlBtn, followMode === 'my-location' && styles.mapControlBtnActive]}
           onPress={() => setFollowMode('my-location')}
