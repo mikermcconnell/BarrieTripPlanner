@@ -48,6 +48,23 @@ const EVIDENCE_WINDOW_MS =
     ? configuredEvidenceWindowMs
     : 15 * 60 * 1000;
 
+const SERVICE_START_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_START_HOUR || '5', 10);
+const SERVICE_END_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_END_HOUR || '1', 10);
+const SERVICE_TIMEZONE = process.env.DETOUR_SERVICE_TIMEZONE || 'America/Toronto';
+
+function isWithinServiceHours(nowMs) {
+  const d = new Date(nowMs);
+  const hour = Number.parseInt(
+    d.toLocaleString('en-US', { timeZone: SERVICE_TIMEZONE, hour: 'numeric', hour12: false }),
+    10
+  );
+  // Handle midnight-crossing window (e.g., start=5, end=1)
+  if (SERVICE_START_HOUR > SERVICE_END_HOUR) {
+    return hour >= SERVICE_START_HOUR || hour < SERVICE_END_HOUR;
+  }
+  return hour >= SERVICE_START_HOUR && hour < SERVICE_END_HOUR;
+}
+
 // State
 const vehicleState = new Map();
 const activeDetours = new Map();
@@ -428,6 +445,7 @@ module.exports = {
   getDetourEvidence,
   getRawDetourEvidence,
   setMinVehicles,
+  isWithinServiceHours,
   OFF_ROUTE_THRESHOLD_METERS,
   ON_ROUTE_CLEAR_THRESHOLD_METERS,
   CONSECUTIVE_READINGS_REQUIRED,
@@ -435,4 +453,6 @@ module.exports = {
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
   EVIDENCE_WINDOW_MS,
+  SERVICE_START_HOUR,
+  SERVICE_END_HOUR,
 };

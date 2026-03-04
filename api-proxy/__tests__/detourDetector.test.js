@@ -1032,3 +1032,51 @@ describe('trip-aware shape resolution', () => {
     expect(state.activeDetourCount).toBe(0);
   });
 });
+
+const { isWithinServiceHours } = require('../detourDetector');
+
+describe('isWithinServiceHours', () => {
+  // Service window: 5 AM - 1 AM (next day), America/Toronto
+
+  test('returns true during midday (10 AM EST)', () => {
+    // 2026-03-04 10:00 AM EST = 15:00 UTC
+    const midday = new Date('2026-03-04T15:00:00Z').getTime();
+    expect(isWithinServiceHours(midday)).toBe(true);
+  });
+
+  test('returns true at 11 PM EST (before midnight)', () => {
+    // 2026-03-04 11:00 PM EST = 2026-03-05 04:00 UTC
+    const lateNight = new Date('2026-03-05T04:00:00Z').getTime();
+    expect(isWithinServiceHours(lateNight)).toBe(true);
+  });
+
+  test('returns true at 12:30 AM EST (before 1 AM cutoff)', () => {
+    // 2026-03-05 00:30 AM EST = 2026-03-05 05:30 UTC
+    const pastMidnight = new Date('2026-03-05T05:30:00Z').getTime();
+    expect(isWithinServiceHours(pastMidnight)).toBe(true);
+  });
+
+  test('returns false at 3 AM EST (outside service)', () => {
+    // 2026-03-05 03:00 AM EST = 2026-03-05 08:00 UTC
+    const offHours = new Date('2026-03-05T08:00:00Z').getTime();
+    expect(isWithinServiceHours(offHours)).toBe(false);
+  });
+
+  test('returns false at 2 AM EST (outside service)', () => {
+    // 2026-03-05 02:00 AM EST = 2026-03-05 07:00 UTC
+    const offHours = new Date('2026-03-05T07:00:00Z').getTime();
+    expect(isWithinServiceHours(offHours)).toBe(false);
+  });
+
+  test('returns true at 5 AM EST (service start boundary)', () => {
+    // 2026-03-04 05:00 AM EST = 2026-03-04 10:00 UTC
+    const serviceStart = new Date('2026-03-04T10:00:00Z').getTime();
+    expect(isWithinServiceHours(serviceStart)).toBe(true);
+  });
+
+  test('returns false at 1 AM EST (service end boundary)', () => {
+    // 2026-03-05 01:00 AM EST = 2026-03-05 06:00 UTC
+    const serviceEnd = new Date('2026-03-05T06:00:00Z').getTime();
+    expect(isWithinServiceHours(serviceEnd)).toBe(false);
+  });
+});
