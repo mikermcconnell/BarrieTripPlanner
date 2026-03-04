@@ -12,20 +12,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import { formatDistance } from '../../services/tripService';
 import Icon from '../Icon';
-
-// Large direction arrows for prominent display
-const DIRECTION_ARROWS = {
-  left: '←',
-  right: '→',
-  'sharp left': '↰',
-  'sharp right': '↱',
-  'slight left': '↖',
-  'slight right': '↗',
-  straight: '↑',
-  uturn: '↩',
-  depart: '↑',
-  arrive: '◉',
-};
+import TurnIcon from './TurnIcon';
 
 // Get compass direction from bearing
 const getCompassDirection = (bearing) => {
@@ -33,13 +20,6 @@ const getCompassDirection = (bearing) => {
   const directions = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
   const index = Math.round(bearing / 45) % 8;
   return directions[index];
-};
-
-// Map maneuver types/modifiers to arrow display
-const getDirectionArrow = (type, modifier) => {
-  if (type === 'arrive') return DIRECTION_ARROWS.arrive;
-  if (type === 'depart') return DIRECTION_ARROWS.depart;
-  return DIRECTION_ARROWS[modifier] || DIRECTION_ARROWS.straight;
 };
 
 // Get arrow background color based on turn type
@@ -90,7 +70,6 @@ const WalkingInstructionCard = ({
 
   const walkTimeMinutes = currentLeg?.duration ? Math.round(currentLeg.duration / 60) : null;
 
-  const directionArrow = getDirectionArrow(currentStep.type, currentStep.modifier);
   const arrowColor = getArrowColor(currentStep.type, currentStep.modifier);
   const stepDistance = currentStep.distance ? formatDistance(currentStep.distance) : '';
   const formattedInstruction = formatInstruction(currentStep);
@@ -113,8 +92,8 @@ const WalkingInstructionCard = ({
       {/* Main Instruction Row */}
       <View style={styles.mainRow}>
         {/* Large Direction Arrow */}
-        <View style={[styles.arrowContainer, { backgroundColor: arrowColor }]}>
-          <Text style={styles.directionArrow}>{directionArrow}</Text>
+        <View style={styles.arrowContainer}>
+          <TurnIcon type={currentStep.type} modifier={currentStep.modifier} size={40} color={arrowColor} />
         </View>
 
         {/* Instruction Details */}
@@ -163,17 +142,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   arrowContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: SPACING.md,
-  },
-  directionArrow: {
-    fontSize: 36,
-    color: COLORS.white,
-    fontWeight: '700',
   },
   instructionDetails: {
     flex: 1,
