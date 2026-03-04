@@ -147,6 +147,76 @@ const formatWalkingSteps = (steps) => {
 };
 
 /**
+ * OTP relativeDirection → OSRM type/modifier mapping
+ */
+const OTP_DIRECTION_MAP = {
+  DEPART:        { type: 'depart',   modifier: null },
+  CONTINUE:      { type: 'continue', modifier: 'straight' },
+  LEFT:          { type: 'turn',     modifier: 'left' },
+  RIGHT:         { type: 'turn',     modifier: 'right' },
+  SLIGHTLY_LEFT: { type: 'turn',     modifier: 'slight left' },
+  SLIGHTLY_RIGHT:{ type: 'turn',     modifier: 'slight right' },
+  HARD_LEFT:     { type: 'turn',     modifier: 'sharp left' },
+  HARD_RIGHT:    { type: 'turn',     modifier: 'sharp right' },
+  UTURN_LEFT:    { type: 'turn',     modifier: 'uturn' },
+  UTURN_RIGHT:   { type: 'turn',     modifier: 'uturn' },
+};
+
+/**
+ * Generate a human-readable instruction from a mapped OTP step
+ */
+const buildOtpInstruction = (type, modifier, streetName) => {
+  const on = streetName ? ` on ${streetName}` : '';
+  switch (type) {
+    case 'depart':
+      return `Start walking${on}`;
+    case 'continue':
+      return `Continue straight${on}`;
+    case 'turn':
+      return modifier ? `Turn ${modifier}${on}` : `Turn${on}`;
+    default:
+      return modifier ? `Go ${modifier}${on}` : `Continue${on}`;
+  }
+};
+
+/**
+ * Normalize OTP walk steps to OSRM format used by WalkingInstructionCard.
+ * Returns steps unchanged if they are already in OSRM format or are empty.
+ *
+ * @param {Array} steps - Raw steps from an OTP walk leg
+ * @returns {Array} Steps in OSRM format (type/modifier/name/instruction/distance/duration)
+ */
+export const normalizeOtpSteps = (steps) => {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return steps;
+  }
+
+  // Already OSRM format if first step has type/modifier (not OTP relativeDirection)
+  if (steps[0].type !== undefined || steps[0].modifier !== undefined) {
+    return steps;
+  }
+
+  // Only transform if steps are in OTP format (have relativeDirection)
+  if (steps[0].relativeDirection === undefined) {
+    return steps;
+  }
+
+  return steps.map((step) => {
+    const direction = step.relativeDirection;
+    const mapped = OTP_DIRECTION_MAP[direction] || { type: 'continue', modifier: 'straight' };
+    const streetName = step.streetName || '';
+    return {
+      type: mapped.type,
+      modifier: mapped.modifier,
+      name: streetName,
+      instruction: buildOtpInstruction(mapped.type, mapped.modifier, streetName),
+      distance: step.distance || 0,
+      duration: undefined, // OTP steps don't carry per-step duration
+    };
+  });
+};
+
+/**
  * Format maneuver into readable instruction
  */
 const formatManeuver = (maneuver) => {

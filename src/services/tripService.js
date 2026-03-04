@@ -1,6 +1,6 @@
 import { MAP_CONFIG, OTP_CONFIG, ROUTING_CONFIG } from '../config/constants';
 import { planTripLocal, RoutingError, ROUTING_ERROR_CODES } from './localRouter';
-import { enrichTripPlanWithWalking } from './walkingService';
+import { enrichTripPlanWithWalking, normalizeOtpSteps } from './walkingService';
 import { analyzeZoneInvolvement, buildZoneAwareTrip, estimateOnDemandDuration } from './onDemandRouter';
 import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
@@ -334,7 +334,7 @@ const formatLeg = (leg) => ({
     stopId: stop.stopId,
   })),
   legGeometry: leg.legGeometry,
-  steps: leg.steps,
+  steps: leg.mode === 'WALK' ? normalizeOtpSteps(leg.steps) : undefined,
 });
 
 /**
