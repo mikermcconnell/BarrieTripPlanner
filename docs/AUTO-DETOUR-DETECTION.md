@@ -99,7 +99,7 @@ All history events include `source: "detour-worker-v2"`.
 
 ---
 
-## 3. Current State (as of 2026-02-27)
+## 3. Current State (as of 2026-03-03)
 
 ### What riders see today: Nothing yet
 The client feature flag `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` is **off** (`false`). The detection is running server-side, but riders don't see anything in the app. The map overlay component exists in code but is behind the feature flag.
@@ -109,10 +109,11 @@ Note: The detour Firestore subscription in `TransitContext.js` runs unconditiona
 ### What's built (backend — complete)
 - Detection worker running on Railway, polling every 30s
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
+- **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, low/medium-confidence detours are auto-cleared. High-confidence detours persist overnight and are re-verified within 10 minutes of morning service start.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
 - Debug endpoints: `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
-- 143 tests across 6 suites
+- 170 tests across 9 suites
 
 ### What's built (frontend — partially complete)
 - `DetourOverlay` component (native + web) — draws skipped segment + inferred path on the map
@@ -134,8 +135,9 @@ Note: The detour Firestore subscription in `TransitContext.js` runs unconditiona
 5. **Push notifications** — Alert riders who have favorited a route when a new detour is detected.
 6. **Accessibility** — Screen reader announcements for detour events.
 
-### Known Issues (Fixed 2026-02-27)
-- **Flapping detours** — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
+### Known Issues (Fixed)
+- **Flapping detours** (Fixed 2026-02-27) — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
+- **Zombie detours & premature clearing** (Fixed 2026-03-03) — False-positive detours persisted overnight as "zombies" while real multi-vehicle detours got cleared when buses stopped reporting. Fixed by adding service-hours awareness: low-confidence detours auto-clear at end-of-service, high-confidence detours persist overnight and re-verify at morning service start.
 
 ---
 
@@ -176,6 +178,14 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming (4 × 30s = 2min) |
 | `DETOUR_EVIDENCE_WINDOW_MS` | `900000` | Time window for geometry evidence points (15min) |
 | `DETOUR_NO_VEHICLE_TIMEOUT_MS` | `1800000` | Time before detour with no vehicles enters clear-pending (30min) |
+
+### Service Hours
+| Variable | Default | Description |
+|---|---|---|
+| `DETOUR_SERVICE_START_HOUR` | `5` | Local hour when detection activates (24h format) |
+| `DETOUR_SERVICE_END_HOUR` | `1` | Local hour when detection freezes |
+| `DETOUR_SERVICE_TIMEZONE` | `America/Toronto` | IANA timezone for service hour evaluation |
+| `DETOUR_REVERIFICATION_WINDOW_MS` | `600000` | Time after service start to re-confirm overnight detours (10min) |
 
 ### Clearing Tuning
 | Variable | Default | Description |
@@ -218,6 +228,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | **Firestore write fails** | Error logged, publish skipped for that tick. Detection state machine continues in-memory. Retries next tick. |
 | **Firestore unreachable at startup** | First-tick Firestore seed skipped. Worker begins fresh. Detours re-detected as vehicles appear. |
 | **Worker restarts** | Seeds active detours from Firestore on first tick, preserving state across deploys. |
+| **Service ends with active detours** | Low/medium-confidence detours cleared immediately. High-confidence detours frozen and re-verified at morning service start within 10 minutes. |
+| **Worker restarts overnight** | Seeded detours from Firestore get `pendingReverification` flag at next service start. |
 
 ---
 
