@@ -69,6 +69,7 @@ function isWithinServiceHours(nowMs) {
 const vehicleState = new Map();
 const activeDetours = new Map();
 const detourEvidence = new Map();
+let wasInService = true;
 
 function setMinVehicles(n) {
   MIN_VEHICLES_FOR_DETOUR = n;
@@ -78,6 +79,7 @@ function clearVehicleState() {
   vehicleState.clear();
   activeDetours.clear();
   detourEvidence.clear();
+  wasInService = true;
 }
 
 // Seed a detour from persisted state (e.g. Firestore) so detours
@@ -107,8 +109,30 @@ function isInDetourZoneCore(coordinate, detour, shapes) {
   return result.index >= detour.detourZone.coreStart && result.index <= detour.detourZone.coreEnd;
 }
 
+function endOfServiceCleanup(now, shapes, routeShapeMapping) {
+  // Implemented in Task 3
+}
+
+function morningReverificationSetup(now) {
+  // Implemented in Task 4
+}
+
 function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping) {
   const now = Date.now();
+  const inService = isWithinServiceHours(now);
+
+  if (!inService) {
+    if (wasInService) {
+      endOfServiceCleanup(now, shapes, routeShapeMapping);
+      wasInService = false;
+    }
+    return getActiveDetours(shapes, routeShapeMapping);
+  }
+
+  if (!wasInService) {
+    morningReverificationSetup(now);
+    wasInService = true;
+  }
 
   // Compute detour zones from current evidence before processing vehicles
   for (const [routeId, detour] of activeDetours) {

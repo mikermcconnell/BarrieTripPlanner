@@ -1033,7 +1033,7 @@ describe('trip-aware shape resolution', () => {
   });
 });
 
-const { isWithinServiceHours } = require('../detourDetector');
+const { isWithinServiceHours, setMinVehicles } = require('../detourDetector');
 
 describe('isWithinServiceHours', () => {
   // Service window: 5 AM - 1 AM (next day), America/Toronto
@@ -1078,5 +1078,48 @@ describe('isWithinServiceHours', () => {
     // 2026-03-05 01:00 AM EST = 2026-03-05 06:00 UTC
     const serviceEnd = new Date('2026-03-05T06:00:00Z').getTime();
     expect(isWithinServiceHours(serviceEnd)).toBe(false);
+  });
+});
+
+describe('service hours guard', () => {
+  beforeEach(() => clearVehicleState());
+
+  test('processVehicles skips processing outside service hours', () => {
+    // First, confirm a detour during service hours
+    const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+    confirmDetour(offRouteVehicle);
+    const before = getState();
+    expect(before.activeDetourCount).toBe(1);
+
+    // Mock Date.now to return 3 AM EST (outside service)
+    // 3 AM EST = 8 AM UTC on a non-DST day
+    const threeAmEst = new Date('2026-03-05T08:00:00Z').getTime();
+    const originalNow = Date.now;
+    Date.now = () => threeAmEst;
+
+    // Process with a new vehicle — should be ignored
+    const newVehicle = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
+    const result = processVehicles([newVehicle], shapes, routeShapeMapping);
+
+    // No new detour activity — state frozen
+    const after = getState();
+    expect(after.activeDetourCount).toBe(1);
+    // bus-2 should NOT have been added
+    expect(after.detours['route-1'].vehicleCount).toBe(1);
+
+    Date.now = originalNow;
+  });
+
+  test('processVehicles resumes normal processing during service hours', () => {
+    const tenAmEst = new Date('2026-03-04T15:00:00Z').getTime();
+    const originalNow = Date.now;
+    Date.now = () => tenAmEst;
+
+    const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+    confirmDetour(offRouteVehicle);
+    const state = getState();
+    expect(state.activeDetourCount).toBe(1);
+
+    Date.now = originalNow;
   });
 });
