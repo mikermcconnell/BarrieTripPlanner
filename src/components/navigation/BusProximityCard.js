@@ -35,6 +35,8 @@ const BusProximityCard = ({
   scheduledDeparture = null, // timestamp in ms
   isRealtime = false,
   delaySeconds = 0,
+  // Peek-ahead: preview of the next leg, shown when nearing alighting stop
+  nextLegPreview = null,
 }) => {
   // Format scheduled departure time
   const formatDepartureTime = () => {
@@ -300,6 +302,15 @@ const BusProximityCard = ({
         <View style={styles.noTrackingBanner}>
           <Text style={styles.noTrackingText}>
             Real-time tracking unavailable. Check schedule.
+          </Text>
+        </View>
+      )}
+
+      {/* Peek-ahead: shown when on board and nearing alighting stop */}
+      {isOnBoard && stopsUntilAlighting !== null && stopsUntilAlighting <= 3 && nextLegPreview && (
+        <View style={styles.peekAheadContainer}>
+          <Text style={styles.peekAheadText} numberOfLines={2}>
+            {nextLegPreview}
           </Text>
         </View>
       )}
@@ -591,6 +602,16 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: '700',
+  },
+  peekAheadContainer: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  peekAheadText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
   },
 });
 

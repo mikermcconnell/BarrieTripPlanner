@@ -31,6 +31,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/t
 import NavigationHeader from '../components/navigation/NavigationHeader';
 import WalkingInstructionCard from '../components/navigation/WalkingInstructionCard';
 import BusProximityCard from '../components/navigation/BusProximityCard';
+import BoardingInstructionCard from '../components/navigation/BoardingInstructionCard';
 import NavigationProgressBar from '../components/navigation/NavigationProgressBar';
 import StepOverviewSheet from '../components/navigation/StepOverviewSheet';
 import ExitConfirmationModal from '../components/navigation/ExitConfirmationModal';
@@ -234,6 +235,39 @@ const NavigationScreen = ({ route }) => {
     const parts = [`Then board Route ${routeName}`, stopLabel && `at ${stopLabel}`, timeStr && `at ${timeStr}`];
     return parts.filter(Boolean).join(' ');
   }, [itinerary, currentLegIndex, isWalkingLeg]);
+
+  // Peek-ahead text for the leg after the current transit leg (shown in BusProximityCard/BoardingInstructionCard)
+  const transitPeekAheadText = useMemo(() => {
+    if (!itinerary?.legs || !isTransitLeg) return null;
+    const nextLegIndex = currentLegIndex + 1;
+    if (nextLegIndex >= itinerary.legs.length) return null;
+    const nextLeg = itinerary.legs[nextLegIndex];
+    if (!nextLeg) return null;
+
+    if (nextLeg.mode === 'WALK') {
+      const durationMin = nextLeg.duration ? Math.ceil(nextLeg.duration / 60) : null;
+      const durationStr = durationMin ? `${durationMin} min` : '';
+      // Check if there is a transit leg after the walk
+      const legAfterWalk = itinerary.legs[nextLegIndex + 1];
+      if (legAfterWalk && (legAfterWalk.mode === 'BUS' || legAfterWalk.mode === 'TRANSIT')) {
+        const routeName = legAfterWalk.route?.shortName || legAfterWalk.routeShortName || '';
+        const stopName = legAfterWalk.from?.name || '';
+        const stopCode = legAfterWalk.from?.stopCode;
+        const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
+        const parts = [
+          `Next: Walk${durationStr ? ` ${durationStr}` : ''}`,
+          stopLabel && `to ${stopLabel}`,
+          routeName && `for Route ${routeName}`,
+        ];
+        return parts.filter(Boolean).join(' ');
+      }
+      // Walk to destination
+      const destName = nextLeg.to?.name || 'your destination';
+      return `Next: Walk${durationStr ? ` ${durationStr}` : ''} to ${destName}`;
+    }
+
+    return null;
+  }, [itinerary, currentLegIndex, isTransitLeg]);
 
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
@@ -836,28 +870,45 @@ const NavigationScreen = ({ route }) => {
           />
         )}
 
-        {/* Bus Proximity Card */}
-        {isTransitLeg && (
-          <BusProximityCard
-            routeShortName={currentLeg?.route?.shortName}
-            routeColor={currentLeg?.route?.color}
-            stopsAway={busProximity.stopsAway}
-            stopsUntilAlighting={busProximity.stopsUntilAlighting}
-            estimatedArrival={busProximity.estimatedArrival}
-            isApproaching={busProximity.isApproaching}
-            hasArrived={busProximity.hasArrived}
-            isTracking={busProximity.isTracking}
-            headsign={currentLeg?.headsign}
-            isOnBoard={isUserOnBoard}
-            nearAlightingStop={busProximity.nearAlightingStop}
-            shouldGetOff={busProximity.shouldGetOff}
-            onBoardBus={boardBus}
-            onAlightBus={alightBus}
-            alightingStopName={currentLeg?.to ? `${currentLeg.to.name}${currentLeg.to.stopCode ? ` (#${currentLeg.to.stopCode})` : ''}` : undefined}
-            scheduledDeparture={currentLeg?.startTime}
-            isRealtime={currentLeg?.isRealtime || false}
-            delaySeconds={currentLeg?.delaySeconds || 0}
-          />
+        {/* Bus Proximity Card / Boarding Instruction Card */}
+        {isTransitLeg && !isOnDemandLeg && (
+          <>
+            {transitStatus === 'waiting' && !busProximity.hasArrived ? (
+              <BoardingInstructionCard
+                routeShortName={currentLeg?.route?.shortName}
+                routeColor={currentLeg?.route?.color}
+                headsign={currentLeg?.headsign}
+                stopName={currentLeg?.from?.name}
+                stopCode={currentLeg?.from?.stopCode}
+                scheduledDeparture={currentLeg?.startTime}
+                delaySeconds={currentLeg?.delaySeconds || 0}
+                isRealtime={currentLeg?.isRealtime || false}
+                peekAheadText={transitPeekAheadText}
+              />
+            ) : (
+              <BusProximityCard
+                routeShortName={currentLeg?.route?.shortName}
+                routeColor={currentLeg?.route?.color}
+                stopsAway={busProximity.stopsAway}
+                stopsUntilAlighting={busProximity.stopsUntilAlighting}
+                estimatedArrival={busProximity.estimatedArrival}
+                isApproaching={busProximity.isApproaching}
+                hasArrived={busProximity.hasArrived}
+                isTracking={busProximity.isTracking}
+                headsign={currentLeg?.headsign}
+                isOnBoard={isUserOnBoard}
+                nearAlightingStop={busProximity.nearAlightingStop}
+                shouldGetOff={busProximity.shouldGetOff}
+                onBoardBus={boardBus}
+                onAlightBus={alightBus}
+                alightingStopName={currentLeg?.to ? `${currentLeg.to.name}${currentLeg.to.stopCode ? ` (#${currentLeg.to.stopCode})` : ''}` : undefined}
+                scheduledDeparture={currentLeg?.startTime}
+                isRealtime={currentLeg?.isRealtime || false}
+                delaySeconds={currentLeg?.delaySeconds || 0}
+                nextLegPreview={transitPeekAheadText}
+              />
+            )}
+          </>
         )}
 
         {/* On-Demand Zone Card */}
