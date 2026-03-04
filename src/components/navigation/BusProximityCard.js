@@ -100,10 +100,15 @@ const BusProximityCard = ({
     // On-board states
     if (isOnBoard) {
       if (shouldGetOff) return 'Get off now!';
-      if (nearAlightingStop) return 'Your stop is next!';
+      if (nearAlightingStop || stopsUntilAlighting === 1) return 'Your stop is next!';
+      if (stopsUntilAlighting === 2) {
+        return `Prepare to exit at ${alightingStopName || 'your stop'}`;
+      }
+      if (stopsUntilAlighting === 3) {
+        return `Your stop: ${alightingStopName || 'destination'} in 3 stops`;
+      }
       if (stopsUntilAlighting !== null) {
         if (stopsUntilAlighting === 0) return 'Arriving at your stop';
-        if (stopsUntilAlighting === 1) return '1 stop remaining';
         return `${stopsUntilAlighting} stops remaining`;
       }
       return `Riding to ${alightingStopName || 'destination'}`;
@@ -118,12 +123,19 @@ const BusProximityCard = ({
   };
 
   // Determine card style based on state
+  const isNextStopUrgent = isOnBoard && (nearAlightingStop || stopsUntilAlighting === 1) && !shouldGetOff;
+  const isNextStopWarning = isOnBoard && stopsUntilAlighting === 2 && !nearAlightingStop && !shouldGetOff;
+  const isNextStopInfo = isOnBoard && stopsUntilAlighting === 3 && !nearAlightingStop && !shouldGetOff;
+  const isNeutralOnBoard = isOnBoard && !shouldGetOff && !isNextStopUrgent && !isNextStopWarning && !isNextStopInfo;
+
   const cardStyle = [
     styles.container,
-    // On-board styles
+    // On-board styles (ordered most-urgent → least-urgent, last match wins in RN)
+    isNeutralOnBoard && styles.containerOnBoard,
+    isNextStopInfo && styles.containerInfo,
+    isNextStopWarning && styles.containerWarning,
+    isNextStopUrgent && styles.containerOrange,
     isOnBoard && shouldGetOff && styles.containerUrgent,
-    isOnBoard && nearAlightingStop && !shouldGetOff && styles.containerWarning,
-    isOnBoard && !nearAlightingStop && !shouldGetOff && styles.containerOnBoard,
     // Waiting styles
     !isOnBoard && hasArrived && styles.containerArrived,
     !isOnBoard && isApproaching && !hasArrived && styles.containerApproaching,
@@ -150,7 +162,9 @@ const BusProximityCard = ({
   const getStatusTextStyle = () => {
     if (isOnBoard) {
       if (shouldGetOff) return styles.statusTextUrgent;
-      if (nearAlightingStop) return styles.statusTextWarning;
+      if (isNextStopUrgent) return styles.statusTextOrange;
+      if (isNextStopWarning) return styles.statusTextWarning;
+      if (isNextStopInfo) return styles.statusTextInfo;
       return styles.statusTextOnBoard;
     }
     if (hasArrived) return styles.statusTextArrived;
@@ -183,8 +197,10 @@ const BusProximityCard = ({
         {/* Bus Icon with animation */}
         <View style={[
           styles.busIconContainer,
+          isNextStopInfo && styles.busIconContainerInfo,
+          isNextStopWarning && styles.busIconContainerWarning,
+          isNextStopUrgent && styles.busIconContainerOrange,
           isOnBoard && shouldGetOff && styles.busIconContainerUrgent,
-          isOnBoard && nearAlightingStop && !shouldGetOff && styles.busIconContainerWarning,
         ]}>
           {getIcon()}
           {(hasArrived && !isOnBoard) && (
@@ -351,6 +367,18 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: COLORS.error,
   },
+  // Info tier: 3 stops away (blue)
+  containerInfo: {
+    backgroundColor: COLORS.infoSubtle,
+    borderWidth: 2,
+    borderColor: COLORS.info,
+  },
+  // Orange tier: 1 stop / nearAlighting (between warning amber and urgent red)
+  containerOrange: {
+    backgroundColor: COLORS.accentSubtle,
+    borderWidth: 2,
+    borderColor: COLORS.accent,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -401,11 +429,17 @@ const styles = StyleSheet.create({
     marginRight: SPACING.md,
     position: 'relative',
   },
+  busIconContainerInfo: {
+    backgroundColor: COLORS.infoSubtle,
+  },
   busIconContainerWarning: {
-    backgroundColor: COLORS.warningSubtle || '#FFF3E0',
+    backgroundColor: COLORS.warningSubtle,
+  },
+  busIconContainerOrange: {
+    backgroundColor: COLORS.accentSubtle,
   },
   busIconContainerUrgent: {
-    backgroundColor: COLORS.errorSubtle || '#FFEBEE',
+    backgroundColor: COLORS.errorSubtle,
   },
   busIcon: {
     fontSize: 28,
@@ -454,12 +488,18 @@ const styles = StyleSheet.create({
   statusTextOnBoard: {
     color: COLORS.primary,
   },
+  statusTextInfo: {
+    color: COLORS.info,
+  },
   statusTextWarning: {
     color: COLORS.warning,
   },
+  statusTextOrange: {
+    color: COLORS.accent,
+  },
   statusTextUrgent: {
     color: COLORS.error,
-    fontSize: FONT_SIZES.xxl || 24,
+    fontSize: FONT_SIZES.xxl,
   },
   etaText: {
     fontSize: FONT_SIZES.sm,

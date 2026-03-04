@@ -26,6 +26,8 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
     nearAlightingStop: false,
   });
   const intervalRef = useRef(null);
+  // Monotonic counter: only allow stops count to decrease (prevents GPS jitter bouncing)
+  const lastConfirmedStopsRef = useRef(null);
 
   // Find the vehicle matching this transit leg's trip
   const findMatchingVehicle = useCallback(() => {
@@ -227,7 +229,15 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
     if (isUserOnBoard && userLocation) {
       const alightingInfo = calculateStopsUntilAlighting(userLocation, stopSequence);
       if (alightingInfo) {
-        stopsUntilAlighting = alightingInfo.stopsRemaining;
+        const rawStops = alightingInfo.stopsRemaining;
+        // Monotonic filter: only accept new count if it's <= last confirmed (no GPS-jitter bouncing upward)
+        if (lastConfirmedStopsRef.current === null || rawStops <= lastConfirmedStopsRef.current) {
+          stopsUntilAlighting = rawStops;
+          lastConfirmedStopsRef.current = rawStops;
+        } else {
+          // GPS jitter pushed count up — hold the last confirmed lower value
+          stopsUntilAlighting = lastConfirmedStopsRef.current;
+        }
         nearAlightingStop = alightingInfo.nearAlighting;
         shouldGetOff = alightingInfo.atAlighting;
       }
@@ -261,6 +271,11 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
     isUserOnBoard,
     userLocation,
   ]);
+
+  // Reset monotonic counter whenever the transit leg changes (new leg = fresh counter)
+  useEffect(() => {
+    lastConfirmedStopsRef.current = null;
+  }, [transitLeg]);
 
   // Set up polling for vehicle updates
   useEffect(() => {
