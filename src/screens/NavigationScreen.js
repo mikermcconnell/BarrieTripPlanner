@@ -54,7 +54,7 @@ import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../u
 import { pointToPolylineDistance } from '../utils/geometryUtils';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
-import Svg, { Circle, Path, G } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
 const computeBounds = (coords) => {
