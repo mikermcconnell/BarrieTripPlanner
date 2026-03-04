@@ -32,6 +32,7 @@ import { useStepProgress } from '../hooks/useStepProgress';
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
 import { decodePolyline, extractShapeSegment, findClosestPointIndex } from '../utils/polylineUtils';
+import { pointToPolylineDistance } from '../utils/geometryUtils';
 
 // Context for route shapes
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
@@ -301,8 +302,15 @@ const NavigationScreen = ({ route }) => {
   const [jumpToLocationTrigger, setJumpToLocationTrigger] = useState(0);
   const [showOverviewTrigger, setShowOverviewTrigger] = useState(0);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [isOffRoute, setIsOffRoute] = useState(false);
+  const offRouteTimerRef = useRef(null);
+  const [isHeadingUp, setIsHeadingUp] = useState(false); // Compass/heading-up mode (walking only)
   const legZoomedRef = useRef(new Set());
   const legTransitionTimeRef = useRef(0);
+  const mapInstanceRef = useRef(null); // Holds the Leaflet map instance
+  const [showStaleWarning, setShowStaleWarning] = useState(false);
+  const [showMissedBusWarning, setShowMissedBusWarning] = useState(false);
+  const staleCheckedRef = useRef(false);
 
   // Web location tracking
   const {
@@ -548,6 +556,27 @@ const NavigationScreen = ({ route }) => {
     }
   }, [currentTransitLeg, transitStatus, busProximity?.shouldGetOff, alightBus]);
 
+  // Stale itinerary check: warn if trip was planned more than 30 minutes ago
+  useEffect(() => {
+    if (staleCheckedRef.current) return;
+    staleCheckedRef.current = true;
+    const firstLegStart = itinerary?.legs?.[0]?.startTime;
+    if (firstLegStart && Date.now() - firstLegStart > 30 * 60 * 1000) {
+      setShowStaleWarning(true);
+    }
+  }, [itinerary]);
+
+  // Missed bus detection: warn if >5 min past scheduled departure with no tracked vehicle
+  useEffect(() => {
+    if (!isTransitLeg) return;
+    if (transitStatus !== 'waiting') return;
+    const scheduledDeparture = currentLeg?.startTime;
+    if (!scheduledDeparture) return;
+    if (Date.now() <= scheduledDeparture + 5 * 60 * 1000) return;
+    if (busProximity?.vehicle) return;
+    setShowMissedBusWarning(true);
+  }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle]);
+
   // Get polylines for Leaflet
   const routePolylines = useMemo(() => {
     if (!itinerary?.legs) return [];
@@ -712,7 +741,7 @@ const NavigationScreen = ({ route }) => {
     }
     if (!vehicle && routeId) {
       const routeVehicles = vehicles.filter(v => v.routeId === routeId);
-      vehicle = routeVehicles.length === 1 ? routeVehicles[0] : null;
+      vehicle = routeVehicles[0] || null;
     }
 
     if (!vehicle && busProximity?.vehicle) {
@@ -745,15 +774,22 @@ const NavigationScreen = ({ route }) => {
     };
   }, [currentTransitLeg, isUserOnBoard]);
 
-  // Bus marker for next transit leg (shown during walking legs)
-  // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
-  // This fixes the cold-start issue where useBusProximity hasn't polled yet on mount.
-  const nextBusMarker = useMemo(() => {
-    if (!isWalkingLeg || !nextTransitLeg) return null;
+  // Bus marker shown during walking legs — looks forward (next transit) then backward (previous)
+  const walkingBusMarker = useMemo(() => {
+    if (!isWalkingLeg || !itinerary?.legs) return null;
 
-    // Primary: direct lookup from already-warm vehicles context (same as HomeScreen)
-    const tripId = nextTransitLeg.tripId;
-    const routeId = nextTransitLeg.route?.id || nextTransitLeg.routeId;
+    // Find nearest transit leg: forward first, then backward
+    let transitLeg = nextTransitLeg;
+    if (!transitLeg) {
+      for (let i = currentLegIndex - 1; i >= 0; i--) {
+        const leg = itinerary.legs[i];
+        if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') { transitLeg = leg; break; }
+      }
+    }
+    if (!transitLeg) return null;
+
+    const tripId = transitLeg.tripId;
+    const routeId = transitLeg.route?.id || transitLeg.routeId;
     let vehicle = null;
 
     if (tripId) {
@@ -761,10 +797,9 @@ const NavigationScreen = ({ route }) => {
     }
     if (!vehicle && routeId) {
       const routeVehicles = vehicles.filter(v => v.routeId === routeId);
-      vehicle = routeVehicles.length === 1 ? routeVehicles[0] : null;
+      vehicle = routeVehicles[0] || null;
     }
 
-    // Fallback: useBusProximity data (after polling warms up)
     if (!vehicle && nextTransitBusProximity?.vehicle) {
       vehicle = nextTransitBusProximity.vehicle;
     }
@@ -772,16 +807,85 @@ const NavigationScreen = ({ route }) => {
     if (!vehicle?.coordinate) return null;
 
     return {
-      id: 'next-bus',
+      id: 'walking-bus',
       position: [
         vehicle.coordinate.latitude,
         vehicle.coordinate.longitude,
       ],
-      color: nextTransitLeg.route?.color || COLORS.primary,
-      routeShortName: nextTransitLeg.route?.shortName || '?',
+      color: transitLeg.route?.color || COLORS.primary,
+      routeShortName: transitLeg.route?.shortName || '?',
       bearing: vehicle.bearing,
     };
-  }, [isWalkingLeg, nextTransitLeg, vehicles, nextTransitBusProximity?.vehicle]);
+  }, [isWalkingLeg, itinerary, currentLegIndex, nextTransitLeg, vehicles, nextTransitBusProximity?.vehicle]);
+
+  // Off-route detection: watch user location vs walking leg polyline
+  useEffect(() => {
+    if (!isWalkingLeg || !userLocation || !currentLeg) {
+      if (offRouteTimerRef.current) {
+        clearTimeout(offRouteTimerRef.current);
+        offRouteTimerRef.current = null;
+      }
+      setIsOffRoute(false);
+      return;
+    }
+
+    // Get the walking leg polyline
+    let polyline = [];
+    if (currentLeg.legGeometry?.points) {
+      polyline = decodePolyline(currentLeg.legGeometry.points);
+    } else if (currentLeg.steps && currentLeg.steps.length > 0) {
+      currentLeg.steps.forEach(step => {
+        if (step.lat != null && step.lon != null) {
+          polyline.push({ latitude: step.lat, longitude: step.lon });
+        }
+      });
+    }
+
+    if (polyline.length < 2) {
+      return;
+    }
+
+    const userPoint = { latitude: userLocation.latitude, longitude: userLocation.longitude };
+    const dist = pointToPolylineDistance(userPoint, polyline);
+
+    if (dist > 50) {
+      // User is more than 50m from the route — start 30-second timer if not already running
+      if (!offRouteTimerRef.current) {
+        offRouteTimerRef.current = setTimeout(() => {
+          setIsOffRoute(true);
+          offRouteTimerRef.current = null;
+        }, 30000);
+      }
+    } else {
+      // Back on route — clear timer and reset
+      if (offRouteTimerRef.current) {
+        clearTimeout(offRouteTimerRef.current);
+        offRouteTimerRef.current = null;
+      }
+      setIsOffRoute(false);
+    }
+  }, [userLocation, currentLeg, isWalkingLeg]);
+
+  // Clear off-route timer on unmount
+  useEffect(() => {
+    return () => {
+      if (offRouteTimerRef.current) {
+        clearTimeout(offRouteTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Dismiss off-route banner and log recalculate intent
+  const handleRecalculate = () => {
+    // TODO: Implement actual re-routing from current position to leg destination
+    // This would fetch new walking directions from userLocation to currentLeg.to
+    logger.log('Off-route recalculate requested — rerouting not yet implemented');
+    setIsOffRoute(false);
+    if (offRouteTimerRef.current) {
+      clearTimeout(offRouteTimerRef.current);
+      offRouteTimerRef.current = null;
+    }
+  };
 
   // Close navigation - show confirmation modal
   const handleClose = () => {
@@ -820,6 +924,43 @@ const NavigationScreen = ({ route }) => {
   const handleBoundsFit = useCallback(() => {
     setHasInitializedMap(true);
   }, []);
+
+  // Store Leaflet map instance for CSS transform access
+  const handleMapReady = useCallback((mapInstance) => {
+    mapInstanceRef.current = mapInstance;
+  }, []);
+
+  // Detect touch device for compass button visibility
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+  // Apply CSS rotation to Leaflet map container for heading-up mode (walking only, touch only)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const container = mapInstanceRef.current.getContainer();
+    if (!container) return;
+
+    if (isHeadingUp && isWalkingLeg && isTouchDevice) {
+      const heading = userLocation?.heading ?? 0;
+      container.style.transform = `rotate(-${heading}deg)`;
+      container.style.transformOrigin = 'center center';
+    } else {
+      container.style.transform = '';
+      container.style.transformOrigin = '';
+    }
+  }, [isHeadingUp, isWalkingLeg, userLocation?.heading, isTouchDevice]);
+
+  // When switching off heading-up or leaving walking leg, ensure rotation is cleared
+  useEffect(() => {
+    if (!isHeadingUp || !isWalkingLeg) {
+      if (mapInstanceRef.current) {
+        const container = mapInstanceRef.current.getContainer();
+        if (container) {
+          container.style.transform = '';
+          container.style.transformOrigin = '';
+        }
+      }
+    }
+  }, [isHeadingUp, isWalkingLeg]);
 
   // Get final destination name for header
   const finalDestination = useMemo(() => {
@@ -874,6 +1015,7 @@ const NavigationScreen = ({ route }) => {
             showOverview={showOverviewTrigger}
             fitToLegBounds={fitToLegBounds}
             legTransitionTimeRef={legTransitionTimeRef}
+            onMapReady={handleMapReady}
           />
 
           {/* Route polylines */}
@@ -925,14 +1067,14 @@ const NavigationScreen = ({ route }) => {
             />
           )}
 
-          {/* Next bus marker (shown during walking legs) */}
-          {nextBusMarker && (
+          {/* Bus marker (shown during walking legs) */}
+          {walkingBusMarker && (
             <Marker
-              position={nextBusMarker.position}
+              position={walkingBusMarker.position}
               icon={createBusMarkerIcon(
-                nextBusMarker.color,
-                nextBusMarker.routeShortName,
-                nextBusMarker.bearing
+                walkingBusMarker.color,
+                walkingBusMarker.routeShortName,
+                walkingBusMarker.bearing
               )}
             />
           )}
@@ -967,6 +1109,20 @@ const NavigationScreen = ({ route }) => {
 
       {/* Map control buttons */}
       <View style={styles.mapControls}>
+        {/* Compass heading-up toggle — only on touch devices during walking legs */}
+        {isWalkingLeg && isTouchDevice && (
+          <TouchableOpacity
+            style={[styles.mapControlButton, isHeadingUp && styles.mapControlButtonActive]}
+            onPress={() => setIsHeadingUp(prev => !prev)}
+            accessibilityLabel={isHeadingUp ? 'Switch to north-up' : 'Switch to heading-up'}
+          >
+            <Text style={styles.mapControlIcon}>🧭</Text>
+            <Text style={[styles.mapControlLabel, isHeadingUp && styles.mapControlLabelActive]}>
+              {isHeadingUp ? 'Heading Up' : 'North Up'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Jump to my location button */}
         <TouchableOpacity
           style={[styles.mapControlButton, isFollowMode && styles.mapControlButtonActive]}
@@ -999,6 +1155,76 @@ const NavigationScreen = ({ route }) => {
             totalLegDistance={currentLeg?.distance || 0}
             isLastWalkingLeg={isLastWalkingLeg}
           />
+        )}
+
+        {/* Off-Route Warning Banner */}
+        {isOffRoute && (
+          <View style={styles.offRouteBanner}>
+            <Text style={styles.offRouteBannerText}>You appear to be off-route</Text>
+            <View style={styles.offRouteBannerButtons}>
+              <TouchableOpacity onPress={handleRecalculate} style={styles.offRouteRecalcButton}>
+                <Text style={styles.offRouteRecalcText}>Recalculate</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsOffRoute(false);
+                  if (offRouteTimerRef.current) {
+                    clearTimeout(offRouteTimerRef.current);
+                    offRouteTimerRef.current = null;
+                  }
+                }}
+                style={styles.offRouteDismissButton}
+              >
+                <Text style={styles.offRouteDismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Stale itinerary warning banner */}
+        {showStaleWarning && (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningBannerText}>
+              This trip was planned a while ago. Times may have changed.
+            </Text>
+            <View style={styles.warningBannerActions}>
+              <TouchableOpacity
+                style={styles.warningBannerButton}
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={styles.warningBannerButtonText}>Re-plan trip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.warningBannerDismiss}
+                onPress={() => setShowStaleWarning(false)}
+              >
+                <Text style={styles.warningBannerDismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Missed bus warning banner */}
+        {showMissedBusWarning && (
+          <View style={styles.missedBusBanner}>
+            <Text style={styles.warningBannerText}>
+              Your bus may have departed. Search for the next trip?
+            </Text>
+            <View style={styles.warningBannerActions}>
+              <TouchableOpacity
+                style={styles.missedBusBannerButton}
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={styles.warningBannerButtonText}>Re-plan trip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.warningBannerDismiss}
+                onPress={() => setShowMissedBusWarning(false)}
+              >
+                <Text style={styles.warningBannerDismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         )}
 
         {isWalkingLeg && (
@@ -1247,6 +1473,64 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
   },
+  warningBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.warningSubtle,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.warning,
+    ...SHADOWS.small,
+  },
+  missedBusBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.errorSubtle,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.error,
+    ...SHADOWS.small,
+  },
+  warningBannerText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
+    marginBottom: SPACING.sm,
+  },
+  warningBannerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  warningBannerButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.warning,
+  },
+  missedBusBannerButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.error,
+  },
+  warningBannerButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  warningBannerDismiss: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.grey200,
+  },
+  warningBannerDismissText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
   gpsOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -1315,6 +1599,50 @@ const styles = StyleSheet.create({
   errorButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+  },
+  offRouteBanner: {
+    backgroundColor: COLORS.warningSubtle,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.warning,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    ...SHADOWS.small,
+  },
+  offRouteBannerText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  offRouteBannerButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  offRouteRecalcButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.warning,
+    alignItems: 'center',
+  },
+  offRouteRecalcText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  offRouteDismissButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.grey200,
+    alignItems: 'center',
+  },
+  offRouteDismissText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
     fontWeight: '600',
   },
 });
