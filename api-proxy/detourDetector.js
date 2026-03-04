@@ -52,6 +52,14 @@ const SERVICE_START_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_START_HOUR
 const SERVICE_END_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_END_HOUR || '1', 10);
 const SERVICE_TIMEZONE = process.env.DETOUR_SERVICE_TIMEZONE || 'America/Toronto';
 
+const configuredReverificationMs = Number.parseFloat(
+  process.env.DETOUR_REVERIFICATION_WINDOW_MS || '600000'
+);
+const REVERIFICATION_WINDOW_MS =
+  Number.isFinite(configuredReverificationMs) && configuredReverificationMs > 0
+    ? configuredReverificationMs
+    : 600_000;
+
 function isWithinServiceHours(nowMs) {
   const d = new Date(nowMs);
   const hour = Number.parseInt(
@@ -136,7 +144,10 @@ function endOfServiceCleanup(now, shapes, routeShapeMapping) {
 }
 
 function morningReverificationSetup(now) {
-  // Implemented in Task 4
+  for (const [routeId, detour] of activeDetours) {
+    detour.pendingReverification = true;
+    detour.reverificationDeadline = now + REVERIFICATION_WINDOW_MS;
+  }
 }
 
 function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping) {
@@ -312,6 +323,11 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now) {
   detour.lastOffRouteEvidenceAt = now || Date.now();
   // Clear seed vehicle count — real vehicles now take precedence
   detour.seedVehicleCount = 0;
+  // Vehicle confirmed off-route — re-verification passed
+  if (detour.pendingReverification) {
+    detour.pendingReverification = false;
+    detour.reverificationDeadline = null;
+  }
   // If a vehicle returns off-route during clear-pending, reactivate
   if (detour.state === 'clear-pending') {
     detour.state = 'active';
@@ -377,6 +393,13 @@ function maybeRemoveVehicleFromDetour(vehicleId, routeId, consecutiveOnRoute, no
 // after the no-vehicle timeout.
 function tickClearPending(now) {
   for (const [routeId, detour] of activeDetours) {
+    // Check reverification deadline for overnight-persisted detours
+    if (detour.pendingReverification && detour.reverificationDeadline && now >= detour.reverificationDeadline) {
+      activeDetours.delete(routeId);
+      detourEvidence.delete(routeId);
+      continue;
+    }
+
     // Active detour with no vehicles — check no-vehicle timeout
     if (detour.state === 'active' && detour.vehiclesOffRoute.size < MIN_VEHICLES_FOR_DETOUR) {
       const lastEvidence = detour.lastOffRouteEvidenceAt || detour.detectedAt.getTime();
@@ -502,4 +525,5 @@ module.exports = {
   SERVICE_START_HOUR,
   SERVICE_END_HOUR,
   SERVICE_TIMEZONE,
+  REVERIFICATION_WINDOW_MS,
 };

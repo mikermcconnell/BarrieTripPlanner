@@ -1208,3 +1208,85 @@ describe('end-of-service cleanup', () => {
     Date.now = originalNow;
   });
 });
+
+describe('morning re-verification', () => {
+  beforeEach(() => clearVehicleState());
+
+  test('persisted detour is cleared if unconfirmed after reverification window', () => {
+    const originalNow = Date.now;
+    try {
+      // Build high-confidence detour during daytime
+      const daytime = new Date('2026-03-04T15:00:00Z').getTime(); // 10 AM EST
+      const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
+      const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
+        Date.now = () => daytime + i * 30000;
+        processVehicles([bus1, bus2], shapes, routeShapeMapping);
+      }
+      expect(getState().activeDetourCount).toBe(1);
+
+      // Transition to out-of-service (1 AM EST)
+      const oneAm = new Date('2026-03-05T06:00:00Z').getTime();
+      Date.now = () => oneAm;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1); // high confidence survives
+
+      // Transition back to in-service (5 AM EST) — reverification starts
+      const fiveAm = new Date('2026-03-05T10:00:00Z').getTime();
+      Date.now = () => fiveAm;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1); // still active, waiting
+
+      // 11 minutes later (past 10-min window), still no off-route evidence
+      const fiveAmPlus11 = fiveAm + 11 * 60 * 1000;
+      Date.now = () => fiveAmPlus11;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(0); // cleared — unconfirmed
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  test('persisted detour survives if re-confirmed within window', () => {
+    const originalNow = Date.now;
+    try {
+      // Build high-confidence detour
+      const daytime = new Date('2026-03-04T15:00:00Z').getTime();
+      const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
+      const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
+        Date.now = () => daytime + i * 30000;
+        processVehicles([bus1, bus2], shapes, routeShapeMapping);
+      }
+
+      // End of service
+      const oneAm = new Date('2026-03-05T06:00:00Z').getTime();
+      Date.now = () => oneAm;
+      processVehicles([], shapes, routeShapeMapping);
+
+      // Morning — service resumes
+      const fiveAm = new Date('2026-03-05T10:00:00Z').getTime();
+      Date.now = () => fiveAm;
+      processVehicles([], shapes, routeShapeMapping);
+
+      // 3 minutes later, a bus goes off-route and confirms the detour
+      const fiveAmPlus3 = fiveAm + 3 * 60 * 1000;
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
+        Date.now = () => fiveAmPlus3 + i * 30000;
+        processVehicles(
+          [makeVehicle({ id: 'morning-bus', coordinate: OFF_ROUTE_COORD })],
+          shapes,
+          routeShapeMapping
+        );
+      }
+
+      // Detour should be re-verified and persist past the window
+      const fiveAmPlus15 = fiveAm + 15 * 60 * 1000;
+      Date.now = () => fiveAmPlus15;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+});
