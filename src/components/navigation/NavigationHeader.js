@@ -35,6 +35,15 @@ const calculateETA = (distanceMeters, mode = 'WALK') => {
   };
 };
 
+// Compute ETA from a scheduled arrival timestamp plus optional real-time delay
+const computeScheduledETA = (scheduledArrivalTime, delaySeconds = 0) => {
+  if (!scheduledArrivalTime) return null;
+  const adjustedArrival = scheduledArrivalTime + delaySeconds * 1000;
+  const minutesRemaining = Math.max(0, Math.ceil((adjustedArrival - Date.now()) / 60000));
+  const time = new Date(adjustedArrival).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return { minutes: minutesRemaining, time };
+};
+
 const NavigationHeader = ({
   instruction,
   navigationState,
@@ -44,6 +53,9 @@ const NavigationHeader = ({
   destinationName,
   totalDistanceRemaining,
   currentMode = 'WALK',
+  scheduledArrivalTime = null,
+  delaySeconds = 0,
+  isRealtime = false,
 }) => {
   // Get icon based on navigation state type
   const getIcon = () => {
@@ -116,7 +128,9 @@ const NavigationHeader = ({
     }
   };
 
-  const eta = calculateETA(totalDistanceRemaining, currentMode);
+  const eta = scheduledArrivalTime
+    ? computeScheduledETA(scheduledArrivalTime, delaySeconds)
+    : calculateETA(totalDistanceRemaining, currentMode);
 
   return (
     <View style={[styles.container, { backgroundColor: getBackgroundColor() }]}>
@@ -141,7 +155,12 @@ const NavigationHeader = ({
           {/* ETA Display */}
           {eta && (
             <View style={styles.etaContainer}>
-              <Text style={styles.etaTime}>{eta.time}</Text>
+              <View style={styles.etaTimeRow}>
+                <Text style={styles.etaTime}>~{eta.time}</Text>
+                {isRealtime && scheduledArrivalTime && (
+                  <Text style={styles.liveIndicator}>LIVE</Text>
+                )}
+              </View>
               <Text style={styles.etaMinutes}>{eta.minutes} min</Text>
             </View>
           )}
@@ -219,6 +238,11 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     marginLeft: SPACING.sm,
   },
+  etaTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   etaTime: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
@@ -228,6 +252,17 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 10,
     fontWeight: '600',
+  },
+  liveIndicator: {
+    color: COLORS.white,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 3,
+    overflow: 'hidden',
   },
 });
 

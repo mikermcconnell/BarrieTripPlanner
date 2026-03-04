@@ -14,6 +14,7 @@ export const GTFS_URLS = {
 // Free, no API key required, clean desaturated look
 export const OSM_MAP_STYLE = {
   version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
     'carto-light': {
       type: 'raster',
@@ -43,6 +44,9 @@ export const OSM_MAP_STYLE = {
     },
   ],
 };
+
+// Minimum zoom level during navigation (per-leg auto-fit)
+export const MIN_NAV_ZOOM = 16;
 
 // Map configuration
 export const MAP_CONFIG = {

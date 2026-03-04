@@ -12,7 +12,7 @@ import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet
 import logger from '../utils/logger';
 import L from 'leaflet';
 
-import { MAP_CONFIG } from '../config/constants';
+import { MAP_CONFIG, MIN_NAV_ZOOM } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -123,6 +123,8 @@ const MapController = ({
   jumpToLocation,
   showOverview,
   onMapReady,
+  fitToLegBounds,
+  legTransitionTimeRef,
 }) => {
   const map = useMap();
 
@@ -144,19 +146,30 @@ const MapController = ({
     }
   }, [shouldFitBounds, tripBounds, map, onBoundsFit]);
 
+  // Auto-zoom to current leg bounds on each leg transition (fires once per leg)
+  useEffect(() => {
+    if (!fitToLegBounds) return;
+    map.fitBounds(
+      [fitToLegBounds.sw, fitToLegBounds.ne],
+      { padding: [50, 50], maxZoom: MIN_NAV_ZOOM }
+    );
+  }, [fitToLegBounds, map]);
+
   // Follow user location when in follow mode
+  // Skip for 2 seconds after a leg transition so the per-leg zoom isn't immediately overridden
   useEffect(() => {
     if (isFollowMode && userLocation) {
-      map.flyTo([userLocation.latitude, userLocation.longitude], 17, {
+      if (legTransitionTimeRef && Date.now() - legTransitionTimeRef.current < 2000) return;
+      map.flyTo([userLocation.latitude, userLocation.longitude], MIN_NAV_ZOOM, {
         duration: 0.5,
       });
     }
-  }, [userLocation, isFollowMode, map]);
+  }, [userLocation, isFollowMode, map, legTransitionTimeRef]);
 
   // Handle jump to location command
   useEffect(() => {
     if (jumpToLocation && userLocation) {
-      map.flyTo([userLocation.latitude, userLocation.longitude], 17, {
+      map.flyTo([userLocation.latitude, userLocation.longitude], MIN_NAV_ZOOM, {
         duration: 0.5,
       });
     }
@@ -287,6 +300,8 @@ const NavigationScreen = ({ route }) => {
   const [jumpToLocationTrigger, setJumpToLocationTrigger] = useState(0);
   const [showOverviewTrigger, setShowOverviewTrigger] = useState(0);
   const [showExitModal, setShowExitModal] = useState(false);
+  const legZoomedRef = useRef(new Set());
+  const legTransitionTimeRef = useRef(0);
 
   // Web location tracking
   const {
@@ -359,6 +374,29 @@ const NavigationScreen = ({ route }) => {
     return true;
   }, [isWalkingLeg, itinerary, currentLegIndex]);
 
+  // Peek-ahead text for the next transit leg (shown in WalkingInstructionCard)
+  const nextLegPreviewText = useMemo(() => {
+    if (!itinerary?.legs || !isWalkingLeg) return null;
+    let nextLeg = null;
+    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
+      const leg = itinerary.legs[i];
+      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') {
+        nextLeg = leg;
+        break;
+      }
+    }
+    if (!nextLeg) return null;
+    const routeName = nextLeg.route?.shortName || nextLeg.routeShortName || '';
+    const stopName = nextLeg.from?.name || '';
+    const stopCode = nextLeg.from?.stopCode;
+    const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
+    const timeStr = nextLeg.startTime
+      ? new Date(nextLeg.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : null;
+    const parts = [`Then board Route ${routeName}`, stopLabel && `at ${stopLabel}`, timeStr && `at ${timeStr}`];
+    return parts.filter(Boolean).join(' ');
+  }, [itinerary, currentLegIndex, isWalkingLeg]);
+
   // Bus proximity tracking with user location and on-board state
   const busProximity = useBusProximity(
     currentTransitLeg,
@@ -399,6 +437,29 @@ const NavigationScreen = ({ route }) => {
 
     return { minLat, maxLat, minLon, maxLon };
   }, [itinerary]);
+
+  // Compute per-leg fit bounds (only when the leg hasn't been zoomed yet)
+  const fitToLegBounds = useMemo(() => {
+    if (legZoomedRef.current.has(currentLegIndex)) return null;
+    if (!currentLeg?.from || !currentLeg?.to) return null;
+
+    const fromLat = currentLeg.from.lat;
+    const fromLon = currentLeg.from.lon;
+    const toLat = currentLeg.to.lat;
+    const toLon = currentLeg.to.lon;
+
+    return {
+      ne: [Math.max(fromLat, toLat), Math.max(fromLon, toLon)],
+      sw: [Math.min(fromLat, toLat), Math.min(fromLon, toLon)],
+    };
+  }, [currentLegIndex, currentLeg]);
+
+  // Record leg transition time and mark leg as zoomed when fitToLegBounds resolves
+  useEffect(() => {
+    if (!fitToLegBounds) return;
+    legZoomedRef.current.add(currentLegIndex);
+    legTransitionTimeRef.current = Date.now();
+  }, [fitToLegBounds, currentLegIndex]);
 
   // Track navigation start
   useEffect(() => {
@@ -561,21 +622,39 @@ const NavigationScreen = ({ route }) => {
   }, [itinerary, currentLeg, currentLegIndex]);
 
   // Tracked bus marker (when tracking a bus)
+  // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
   const trackedBusMarker = useMemo(() => {
-    if (!busProximity?.vehicle?.coordinate) return null;
     if (!currentTransitLeg) return null;
+
+    const tripId = currentTransitLeg.tripId;
+    const routeId = currentTransitLeg.route?.id || currentTransitLeg.routeId;
+    let vehicle = null;
+
+    if (tripId) {
+      vehicle = vehicles.find(v => v.tripId === tripId);
+    }
+    if (!vehicle && routeId) {
+      const routeVehicles = vehicles.filter(v => v.routeId === routeId);
+      vehicle = routeVehicles.length === 1 ? routeVehicles[0] : null;
+    }
+
+    if (!vehicle && busProximity?.vehicle) {
+      vehicle = busProximity.vehicle;
+    }
+
+    if (!vehicle?.coordinate) return null;
 
     return {
       id: 'tracked-bus',
       position: [
-        busProximity.vehicle.coordinate.latitude,
-        busProximity.vehicle.coordinate.longitude
+        vehicle.coordinate.latitude,
+        vehicle.coordinate.longitude
       ],
       color: currentTransitLeg.route?.color || COLORS.primary,
       routeShortName: currentTransitLeg.route?.shortName || '?',
-      bearing: busProximity.vehicle.bearing,
+      bearing: vehicle.bearing,
     };
-  }, [busProximity?.vehicle, currentTransitLeg]);
+  }, [currentTransitLeg, vehicles, busProximity?.vehicle]);
 
   // Bus stop marker (boarding stop when waiting)
   const busStopMarker = useMemo(() => {
@@ -716,6 +795,8 @@ const NavigationScreen = ({ route }) => {
             onBoundsFit={handleBoundsFit}
             jumpToLocation={jumpToLocationTrigger}
             showOverview={showOverviewTrigger}
+            fitToLegBounds={fitToLegBounds}
+            legTransitionTimeRef={legTransitionTimeRef}
           />
 
           {/* Route polylines */}
@@ -802,6 +883,9 @@ const NavigationScreen = ({ route }) => {
         destinationName={finalDestination}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
+        scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
+        delaySeconds={currentLeg?.delaySeconds || 0}
+        isRealtime={currentLeg?.isRealtime || false}
       />
 
       {/* Map control buttons */}

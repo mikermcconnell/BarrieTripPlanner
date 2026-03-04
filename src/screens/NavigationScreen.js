@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
+import { MAP_CONFIG, OSM_MAP_STYLE, MIN_NAV_ZOOM } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -73,6 +73,8 @@ const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
+  const legZoomedRef = useRef(new Set());
+  const legTransitionTimeRef = useRef(0);
 
   const initialItinerary = route.params?.itinerary;
   const [itinerary, setItinerary] = useState(initialItinerary);
@@ -210,6 +212,29 @@ const NavigationScreen = ({ route }) => {
     return true;
   }, [isWalkingLeg, itinerary, currentLegIndex]);
 
+  // Peek-ahead text for the next transit leg (shown in WalkingInstructionCard)
+  const nextLegPreviewText = useMemo(() => {
+    if (!itinerary?.legs || !isWalkingLeg) return null;
+    let nextLeg = null;
+    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
+      const leg = itinerary.legs[i];
+      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') {
+        nextLeg = leg;
+        break;
+      }
+    }
+    if (!nextLeg) return null;
+    const routeName = nextLeg.route?.shortName || nextLeg.routeShortName || '';
+    const stopName = nextLeg.from?.name || '';
+    const stopCode = nextLeg.from?.stopCode;
+    const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
+    const timeStr = nextLeg.startTime
+      ? new Date(nextLeg.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : null;
+    const parts = [`Then board Route ${routeName}`, stopLabel && `at ${stopLabel}`, timeStr && `at ${timeStr}`];
+    return parts.filter(Boolean).join(' ');
+  }, [itinerary, currentLegIndex, isWalkingLeg]);
+
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
 
@@ -249,6 +274,36 @@ const NavigationScreen = ({ route }) => {
     }
   }, [tripBounds, hasInitializedMap]);
 
+  // Auto-zoom to fit current leg extent on each leg transition (fires once per leg)
+  useEffect(() => {
+    if (legZoomedRef.current.has(currentLegIndex)) return;
+    if (!currentLeg?.from || !currentLeg?.to) return;
+    if (!cameraRef.current) return;
+
+    const fromLat = currentLeg.from.lat;
+    const fromLon = currentLeg.from.lon;
+    const toLat = currentLeg.to.lat;
+    const toLon = currentLeg.to.lon;
+
+    const ne = [Math.max(fromLon, toLon), Math.max(fromLat, toLat)];
+    const sw = [Math.min(fromLon, toLon), Math.min(fromLat, toLat)];
+
+    cameraRef.current.setCamera({
+      bounds: {
+        ne,
+        sw,
+        paddingTop: 100,
+        paddingBottom: 300,
+        paddingLeft: 50,
+        paddingRight: 50,
+      },
+      animationDuration: 600,
+    });
+
+    legZoomedRef.current.add(currentLegIndex);
+    legTransitionTimeRef.current = Date.now();
+  }, [currentLegIndex, currentLeg]);
+
   // Start location tracking and navigation on mount
   useEffect(() => {
     const initNavigation = async () => {
@@ -271,11 +326,13 @@ const NavigationScreen = ({ route }) => {
   }, []);
 
   // Center map on user location when in follow mode
+  // Skip for 2 seconds after a leg transition so the per-leg zoom isn't immediately overridden
   useEffect(() => {
     if ((isFollowMode || followMode === 'my-location') && userLocation && cameraRef.current) {
+      if (Date.now() - legTransitionTimeRef.current < 2000) return;
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: 17,
+        zoomLevel: MIN_NAV_ZOOM,
         animationDuration: 500,
       });
     }
@@ -449,21 +506,39 @@ const NavigationScreen = ({ route }) => {
   }, [itinerary, currentLeg, currentLegIndex, currentTransitLeg, transitStatus]);
 
   // Get tracked bus marker
+  // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
   const trackedBusMarker = useMemo(() => {
-    if (!busProximity?.vehicle?.coordinate) return null;
     if (!currentTransitLeg) return null;
+
+    const tripId = currentTransitLeg.tripId;
+    const routeId = currentTransitLeg.route?.id || currentTransitLeg.routeId;
+    let vehicle = null;
+
+    if (tripId) {
+      vehicle = vehicles.find(v => v.tripId === tripId);
+    }
+    if (!vehicle && routeId) {
+      const routeVehicles = vehicles.filter(v => v.routeId === routeId);
+      vehicle = routeVehicles.length === 1 ? routeVehicles[0] : null;
+    }
+
+    if (!vehicle && busProximity?.vehicle) {
+      vehicle = busProximity.vehicle;
+    }
+
+    if (!vehicle?.coordinate) return null;
 
     return {
       id: 'tracked-bus',
       coordinate: [
-        busProximity.vehicle.coordinate.longitude,
-        busProximity.vehicle.coordinate.latitude,
+        vehicle.coordinate.longitude,
+        vehicle.coordinate.latitude,
       ],
       color: currentTransitLeg.route?.color || COLORS.primary,
       routeShortName: currentTransitLeg.route?.shortName || '?',
-      bearing: busProximity.vehicle.bearing,
+      bearing: vehicle.bearing,
     };
-  }, [busProximity?.vehicle, currentTransitLeg]);
+  }, [currentTransitLeg, vehicles, busProximity?.vehicle]);
 
   // Bus marker for next transit leg (shown during walking legs)
   // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
@@ -710,6 +785,9 @@ const NavigationScreen = ({ route }) => {
         destinationName={currentLeg?.to?.name || finalDestination}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
+        scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
+        delaySeconds={currentLeg?.delaySeconds || 0}
+        isRealtime={currentLeg?.isRealtime || false}
       />
 
       {/* Map control buttons */}
@@ -752,6 +830,9 @@ const NavigationScreen = ({ route }) => {
             currentLeg={currentLeg}
             isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
             onNextLeg={advanceLeg}
+            currentStepIndex={currentStepIndex}
+            totalSteps={(currentLeg?.steps || []).length}
+            nextLegPreview={nextLegPreviewText}
           />
         )}
 
