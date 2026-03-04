@@ -932,6 +932,9 @@ const NavigationScreen = ({ route }) => {
             currentLeg={currentLeg}
             isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
             onNextLeg={advanceLeg}
+            currentStepIndex={currentStepIndex}
+            totalSteps={(currentLeg?.steps || []).length}
+            nextLegPreview={nextLegPreviewText}
           />
         )}
 

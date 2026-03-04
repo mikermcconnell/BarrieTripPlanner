@@ -65,6 +65,9 @@ const WalkingInstructionCard = ({
   currentLeg,
   onNextLeg,
   isLastStep,
+  currentStepIndex,
+  totalSteps,
+  nextLegPreview,
 }) => {
   if (!currentStep) return null;
 
@@ -72,22 +75,36 @@ const WalkingInstructionCard = ({
 
   const arrowColor = getArrowColor(currentStep.type, currentStep.modifier);
   const stepDistance = currentStep.distance ? formatDistance(currentStep.distance) : '';
+  const stepMinutes = currentStep.duration ? Math.ceil(currentStep.duration / 60) : null;
   const formattedInstruction = formatInstruction(currentStep);
+
+  // Street name: use currentStep.name if present and non-empty, else fall back to destinationName
+  const streetName = currentStep.name && currentStep.name.trim().length > 0
+    ? currentStep.name
+    : null;
+
+  // Time + distance label
+  let timeDistanceLabel = '';
+  if (stepMinutes != null && stepDistance) {
+    timeDistanceLabel = `${stepMinutes} min · ${stepDistance}`;
+  } else if (stepDistance) {
+    timeDistanceLabel = `${stepDistance} to next turn`;
+  } else {
+    timeDistanceLabel = 'Starting point';
+  }
 
   return (
     <View style={styles.container}>
-      {/* Destination Header */}
-      {destinationName && (
-        <View style={styles.destinationHeader}>
-          <Icon name="MapPin" size={14} color={COLORS.primary} />
-          <Text style={styles.destinationText} numberOfLines={1}>
-            {destinationName}
-          </Text>
-          {walkTimeMinutes != null && (
-            <Text style={styles.departureText}>{walkTimeMinutes} min walk</Text>
-          )}
-        </View>
-      )}
+      {/* Destination / Street Name Header */}
+      <View style={styles.destinationHeader}>
+        <Icon name="MapPin" size={14} color={COLORS.primary} />
+        <Text style={styles.destinationText} numberOfLines={1}>
+          {streetName || destinationName || ''}
+        </Text>
+        {walkTimeMinutes != null && (
+          <Text style={styles.departureText}>{walkTimeMinutes} min walk</Text>
+        )}
+      </View>
 
       {/* Main Instruction Row */}
       <View style={styles.mainRow}>
@@ -102,12 +119,26 @@ const WalkingInstructionCard = ({
             {formattedInstruction}
           </Text>
 
-          {/* Distance to next action */}
+          {/* Time + Distance per step */}
           <View style={styles.distanceRow}>
             <Text style={styles.stepDistance}>
-              {stepDistance ? `${stepDistance} to next turn` : 'Starting point'}
+              {timeDistanceLabel}
             </Text>
           </View>
+
+          {/* Step counter */}
+          {totalSteps > 1 && currentStepIndex != null && (
+            <Text style={styles.stepCounter}>
+              Step {currentStepIndex + 1} of {totalSteps}
+            </Text>
+          )}
+
+          {/* Peek-ahead preview */}
+          {nextLegPreview != null && (
+            <Text style={styles.peekAheadText} numberOfLines={2}>
+              {nextLegPreview}
+            </Text>
+          )}
         </View>
 
         {/* Next Step / Done Walking Button */}
@@ -162,6 +193,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  stepCounter: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  peekAheadText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   nextStepButton: {
     flexDirection: 'row',
