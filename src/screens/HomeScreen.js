@@ -164,6 +164,37 @@ const HomeScreen = ({ route }) => {
   });
   const suppressNextMapTapRef = useRef(false);
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
+  // Guards auto-zoom so it only fires once per itinerary selection, not on every re-render
+  const tripZoomedRef = useRef(false);
+
+  // Fit map to show the full extent of a trip itinerary
+  const fitMapToItinerary = useCallback((itinerary) => {
+    if (!itinerary || !itinerary.legs) return;
+
+    const coords = [];
+    itinerary.legs.forEach(leg => {
+      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      if (leg.legGeometry?.points) {
+        const decoded = decodePolyline(leg.legGeometry.points);
+        coords.push(...decoded);
+      }
+      if (leg.intermediateStops) {
+        leg.intermediateStops.forEach(stop => {
+          if (stop.lat && stop.lon) {
+            coords.push({ latitude: stop.lat, longitude: stop.lon });
+          }
+        });
+      }
+    });
+
+    if (coords.length > 0) {
+      compatMapRef.current.fitToCoordinates(coords, {
+        edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
+        animated: true,
+      });
+    }
+  }, []);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
@@ -171,8 +202,9 @@ const HomeScreen = ({ route }) => {
     applyDelays: applyDelaysToItineraries,
     onDemandZones,
     stops,
-    onItinerariesReady: (itinerary) => {
-      fitMapToItinerary(itinerary);
+    onItinerariesReady: () => {
+      // Reset zoom flag so the effect below fires for the new results
+      tripZoomedRef.current = false;
     },
   });
   const {
@@ -214,7 +246,7 @@ const HomeScreen = ({ route }) => {
   const {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
-  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping });
+  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
 
   // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
@@ -223,6 +255,25 @@ const HomeScreen = ({ route }) => {
       resetTrip();
     }
   }, [isFocused]);
+
+  // Reset zoom flag whenever the selected itinerary changes so the new selection gets its own zoom
+  useEffect(() => {
+    tripZoomedRef.current = false;
+  }, [selectedItineraryIndex, itineraries]);
+
+  // Auto-zoom to selected itinerary bounds — fires once per selection, not on every re-render
+  useEffect(() => {
+    if (!isTripPlanningMode || !itineraries.length) {
+      tripZoomedRef.current = false;
+      return;
+    }
+    if (tripZoomedRef.current) return;
+    const itinerary = itineraries[selectedItineraryIndex];
+    if (itinerary) {
+      fitMapToItinerary(itinerary);
+      tripZoomedRef.current = true;
+    }
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, fitMapToItinerary]);
 
   // Pulse animation for live indicator
   const pulseAnim = useMapPulseAnimation();
@@ -235,6 +286,12 @@ const HomeScreen = ({ route }) => {
       collapseRoutePanel();
     }
   }, [rawHandleRouteSelect, autoCollapseOnSelect, collapseRoutePanel]);
+
+  const routeShortNameMap = useMemo(() => {
+    const map = new Map();
+    routes.forEach((r) => { if (r?.id) map.set(r.id, r.shortName || r.id); });
+    return map;
+  }, [routes]);
 
   // StatusBadge computed props
   const selectedRouteNames = useMemo(() => {
@@ -555,35 +612,6 @@ const HomeScreen = ({ route }) => {
     });
   };
 
-  const fitMapToItinerary = (itinerary) => {
-    if (!itinerary || !itinerary.legs) return;
-
-    const coords = [];
-    itinerary.legs.forEach(leg => {
-      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      if (leg.legGeometry?.points) {
-        const decoded = decodePolyline(leg.legGeometry.points);
-        coords.push(...decoded);
-      }
-      if (leg.intermediateStops) {
-        leg.intermediateStops.forEach(stop => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-      }
-    });
-
-    if (coords.length > 0) {
-      compatMapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
-        animated: true,
-      });
-    }
-  };
-
-
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
   };
@@ -651,6 +679,7 @@ const HomeScreen = ({ route }) => {
             opacity={routeOpacity}
             outlineWidth={outlineW}
             showArrows={isSelected}
+            routeLabel={routeShortNameMap.get(shape.routeId) || null}
           />
         );
       })}
@@ -711,6 +740,7 @@ const HomeScreen = ({ route }) => {
           lineDashPattern={tripRoute.isWalk ? [2, 8] : tripRoute.isOnDemand ? [12, 6] : null}
           opacity={tripRoute.isWalk ? 0.9 : 1}
           outlineColor={tripRoute.isWalk ? tripRoute.color : undefined}
+          routeLabel={tripRoute.routeLabel}
         />
       ))}
 
@@ -740,20 +770,37 @@ const HomeScreen = ({ route }) => {
         </MapLibreGL.PointAnnotation>
       ))}
 
-      {/* Trip planning markers */}
+      {/* Trip planning markers with stop info labels */}
       {tripMarkers.map((marker) => (
         <MapLibreGL.MarkerView
           key={marker.id}
           coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
         >
-          <View style={[
-            styles.tripMarker,
-            marker.type === 'origin' ? styles.tripMarkerOrigin : styles.tripMarkerDestination
-          ]}>
+          <View style={styles.tripMarkerLabelContainer}>
             <View style={[
-              styles.tripMarkerInner,
-              marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
-            ]} />
+              styles.tripMarker,
+              marker.type === 'origin' ? styles.tripMarkerOrigin : styles.tripMarkerDestination
+            ]}>
+              <View style={[
+                styles.tripMarkerInner,
+                marker.type === 'origin' ? styles.tripMarkerInnerOrigin : styles.tripMarkerInnerDestination
+              ]} />
+            </View>
+            {marker.stopName && (
+              <View style={[styles.tripMarkerLabel, marker.type === 'origin' ? styles.tripMarkerLabelOrigin : styles.tripMarkerLabelDest]}>
+                <Text style={styles.tripMarkerLabelName} numberOfLines={1}>
+                  {marker.stopCode ? `#${marker.stopCode} - ` : ''}{marker.stopName}
+                </Text>
+                {marker.walkDistance != null && (
+                  <Text style={styles.tripMarkerLabelWalk}>
+                    {marker.walkDistance >= 1000
+                      ? `${(marker.walkDistance / 1000).toFixed(1)}km walk`
+                      : `${marker.walkDistance}m walk`}
+                    {marker.type === 'origin' ? ' from start' : ' to destination'}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         </MapLibreGL.MarkerView>
       ))}
@@ -1241,6 +1288,35 @@ const styles = StyleSheet.create({
   },
   tripMarkerInnerDestination: {
     backgroundColor: COLORS.white,
+  },
+  tripMarkerLabelContainer: {
+    alignItems: 'center',
+  },
+  tripMarkerLabel: {
+    backgroundColor: COLORS.white,
+    borderRadius: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    marginTop: 4,
+    maxWidth: 180,
+    borderWidth: 1.5,
+    ...SHADOWS.small,
+  },
+  tripMarkerLabelOrigin: {
+    borderColor: COLORS.success,
+  },
+  tripMarkerLabelDest: {
+    borderColor: COLORS.error,
+  },
+  tripMarkerLabelName: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+  },
+  tripMarkerLabelWalk: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
   // Intermediate stop markers (small circles)
   intermediateStopMarker: {

@@ -28,7 +28,7 @@ import { decodePolyline } from '../utils/polylineUtils';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 
 // Web-only imports
-import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
+import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker, RouteLineLabels } from '../components/WebMapView';
 import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
 import L from 'leaflet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
@@ -148,6 +148,8 @@ const HomeScreen = ({ route }) => {
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const perfRef = useRef({ lastWarnTs: 0 });
+  // Guards auto-zoom so it only fires once per itinerary selection, not on every re-render
+  const tripZoomedRef = useRef(false);
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
   const [showZones, setShowZones] = useState(true);
   const [selectedZone, setSelectedZone] = useState(null);
@@ -175,6 +177,12 @@ const HomeScreen = ({ route }) => {
     prevSelectedRef.current = new Set(selectedRoutes);
     return newly;
   }, [selectedRoutes]);
+
+  const routeShortNameMap = useMemo(() => {
+    const map = new Map();
+    routes.forEach((r) => { if (r?.id) map.set(r.id, r.shortName || r.id); });
+    return map;
+  }, [routes]);
 
   // StatusBadge computed props
   const selectedRouteNames = useMemo(() => {
@@ -218,9 +226,9 @@ const HomeScreen = ({ route }) => {
     onDemandZones,
     stops,
     applyDelays: applyDelaysToItineraries,
-    onItinerariesReady: (itinerary) => {
-      setUserHasInteracted(false);
-      fitMapToItinerary(itinerary);
+    onItinerariesReady: () => {
+      // Reset zoom flag so the effect below fires for the new results
+      tripZoomedRef.current = false;
     },
   });
   const {
@@ -267,7 +275,35 @@ const HomeScreen = ({ route }) => {
   const {
     tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
-  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping });
+  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
+
+  // Fit map to show the full extent of a trip itinerary
+  const fitMapToItinerary = useCallback((itinerary) => {
+    if (!itinerary || !itinerary.legs) return;
+
+    const coords = [];
+    itinerary.legs.forEach(leg => {
+      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      if (leg.legGeometry?.points) {
+        const decoded = decodePolyline(leg.legGeometry.points);
+        coords.push(...decoded);
+      }
+      if (leg.intermediateStops) {
+        leg.intermediateStops.forEach(stop => {
+          if (stop.lat && stop.lon) {
+            coords.push({ latitude: stop.lat, longitude: stop.lon });
+          }
+        });
+      }
+    });
+
+    if (coords.length > 0) {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 200, right: 50, bottom: 350, left: 50 },
+      });
+    }
+  }, []);
 
   // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
@@ -276,6 +312,25 @@ const HomeScreen = ({ route }) => {
       resetTrip();
     }
   }, [isFocused]);
+
+  // Reset zoom flag whenever the selected itinerary changes so the new selection gets its own zoom
+  useEffect(() => {
+    tripZoomedRef.current = false;
+  }, [selectedItineraryIndex, itineraries]);
+
+  // Auto-zoom to selected itinerary bounds — fires once per selection, not on every re-render
+  useEffect(() => {
+    if (!isTripPlanningMode || !itineraries.length) {
+      tripZoomedRef.current = false;
+      return;
+    }
+    if (tripZoomedRef.current) return;
+    const itinerary = itineraries[selectedItineraryIndex];
+    if (itinerary) {
+      fitMapToItinerary(itinerary);
+      tripZoomedRef.current = true;
+    }
+  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, fitMapToItinerary]);
 
   // Map tap popup
   const {
@@ -481,34 +536,6 @@ const HomeScreen = ({ route }) => {
   // Trip preview mode - hide regular map elements when viewing trip results
   const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
 
-  // Fit map to itinerary bounds (called once via onItinerariesReady, not on every switch)
-  const fitMapToItinerary = useCallback((itinerary) => {
-    if (!itinerary || !itinerary.legs) return;
-
-    const coords = [];
-    itinerary.legs.forEach(leg => {
-      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      if (leg.legGeometry?.points) {
-        const decoded = decodePolyline(leg.legGeometry.points);
-        coords.push(...decoded);
-      }
-      if (leg.intermediateStops) {
-        leg.intermediateStops.forEach(stop => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-      }
-    });
-
-    if (coords.length > 0) {
-      mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: 120, right: 50 },
-      });
-    }
-  }, []);
-
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
   };
@@ -582,6 +609,7 @@ const HomeScreen = ({ route }) => {
               onMouseOver={() => setHoveredRouteId(shape.routeId)}
               onMouseOut={() => setHoveredRouteId(null)}
               className={isNewlySelected ? 'polyline-draw-on' : ''}
+              routeLabel={routeShortNameMap.get(shape.routeId) || null}
             />
           );
         })}
@@ -625,18 +653,22 @@ const HomeScreen = ({ route }) => {
         ))}
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((route) => (
-          <LeafletPolyline
-            key={route.id}
-            positions={route.coordinates.map(c => [c.latitude, c.longitude])}
-            pathOptions={{
-              color: route.color,
-              weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
-              dashArray: route.isWalk ? '10, 8' : route.isOnDemand ? '12, 6' : null,
-              lineCap: 'round',
-              lineJoin: 'round',
-              opacity: 1,
-            }}
-          />
+          <React.Fragment key={route.id}>
+            <LeafletPolyline
+              positions={route.coordinates.map(c => [c.latitude, c.longitude])}
+              pathOptions={{
+                color: route.color,
+                weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
+                dashArray: route.isWalk ? '2, 8' : route.isOnDemand ? '12, 6' : null,
+                lineCap: 'round',
+                lineJoin: 'round',
+                opacity: route.isWalk ? 0.9 : 1,
+              }}
+            />
+            {route.routeLabel && (
+              <RouteLineLabels coordinates={route.coordinates} color={route.color} routeLabel={route.routeLabel} />
+            )}
+          </React.Fragment>
         ))}
 
         {/* Bus approach lines — dashed route-colored line from bus to boarding stop */}
@@ -667,21 +699,40 @@ const HomeScreen = ({ route }) => {
           />
         ))}
 
-        {/* Trip planning markers (origin/destination) */}
-        {tripMarkers.map((marker) => (
-          <Marker
-            key={marker.id}
-            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-            icon={L.divIcon({
-              className: `trip-marker-${marker.type}`,
-              html: marker.type === 'origin'
-                ? `<div style="background:#4CAF50;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><div style="background:white;width:8px;height:8px;border-radius:50%;"></div></div>`
-                : `<div style="background:#f44336;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><div style="background:white;width:8px;height:8px;border-radius:50%;"></div></div>`,
-              iconSize: [20, 20],
-              iconAnchor: [10, 10],
-            })}
-          />
-        ))}
+        {/* Trip planning markers with stop info labels */}
+        {tripMarkers.map((marker) => {
+          const color = marker.type === 'origin' ? '#4CAF50' : '#f44336';
+          const walkLabel = marker.walkDistance != null
+            ? (marker.walkDistance >= 1000
+                ? `${(marker.walkDistance / 1000).toFixed(1)}km walk`
+                : `${marker.walkDistance}m walk`)
+              + (marker.type === 'origin' ? ' from start' : ' to destination')
+            : '';
+          const labelHtml = marker.stopName
+            ? `<div style="background:white;border-radius:6px;padding:3px 6px;margin-top:4px;border:1.5px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.15);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <div style="font-size:10px;font-weight:600;color:#333;">${marker.stopCode ? `#${marker.stopCode} - ` : ''}${marker.stopName}</div>
+                ${walkLabel ? `<div style="font-size:9px;color:#888;margin-top:1px;">${walkLabel}</div>` : ''}
+              </div>`
+            : '';
+          return (
+            <Marker
+              key={marker.id}
+              position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+              zIndexOffset={1000}
+              icon={L.divIcon({
+                className: `trip-marker-${marker.type}`,
+                html: `<div style="display:flex;flex-direction:column;align-items:center;">
+                  <div style="background:${color};width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+                    <div style="background:white;width:8px;height:8px;border-radius:50%;"></div>
+                  </div>
+                  ${labelHtml}
+                </div>`,
+                iconSize: [180, 70],
+                iconAnchor: [90, 10],
+              })}
+            />
+          );
+        })}
 
         {/* Boarding and alighting stop markers with labels */}
         {boardingAlightingMarkers.map((marker) => (
