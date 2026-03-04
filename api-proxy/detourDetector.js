@@ -1,5 +1,5 @@
 const { pointToPolylineDistance } = require('./geometry');
-const { buildGeometry, findClosestShapePoint, findAnchors, MIN_EVIDENCE_FOR_GEOMETRY } = require('./detourGeometry');
+const { buildGeometry, findClosestShapePoint, findAnchors, MIN_EVIDENCE_FOR_GEOMETRY, scoreConfidence } = require('./detourGeometry');
 
 const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '75');
 const OFF_ROUTE_THRESHOLD_METERS = Number.isFinite(configuredThreshold) && configuredThreshold > 0
@@ -110,7 +110,29 @@ function isInDetourZoneCore(coordinate, detour, shapes) {
 }
 
 function endOfServiceCleanup(now, shapes, routeShapeMapping) {
-  // Implemented in Task 3
+  const toDelete = [];
+  for (const [routeId, detour] of activeDetours) {
+    const evidence = detourEvidence.get(routeId);
+    const detectedAtMs = detour.detectedAt instanceof Date
+      ? detour.detectedAt.getTime()
+      : Number(detour.detectedAt);
+    const points = evidence ? evidence.points : [];
+    const confidence = scoreConfidence(points, detectedAtMs, now);
+
+    if (confidence === 'high') {
+      // Preserve: prune stale vehicles but keep the detour
+      detour.vehiclesOffRoute.clear();
+      continue;
+    }
+
+    // Low or medium confidence — mark for deletion
+    toDelete.push(routeId);
+  }
+
+  for (const routeId of toDelete) {
+    activeDetours.delete(routeId);
+    detourEvidence.delete(routeId);
+  }
 }
 
 function morningReverificationSetup(now) {
