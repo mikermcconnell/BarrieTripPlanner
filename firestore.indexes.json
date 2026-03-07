@@ -55,6 +55,24 @@
       ]
     },
     {
+      "collectionGroup": "transitNews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archivedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "publishedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "detourHistory",
       "queryScope": "COLLECTION",
       "fields": [

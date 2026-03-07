@@ -1,5 +1,6 @@
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import logger from '../../utils/logger';
 
 /**
  * Subscribe to active transit news from Firestore.
@@ -32,10 +33,13 @@ export function subscribeToTransitNews(onUpdate, onError) {
     },
     (error) => {
       if (error.code === 'permission-denied') {
-        console.warn('News subscription: permission denied, returning empty');
+        logger.warn('News subscription: permission denied, returning empty');
+        onUpdate([]);
+      } else if (error.code === 'failed-precondition') {
+        logger.warn('News subscription: missing Firestore index, returning empty until index is available');
         onUpdate([]);
       } else {
-        console.error('News subscription error:', error);
+        logger.error('News subscription error:', error);
         onError?.(error);
       }
     }

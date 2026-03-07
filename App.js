@@ -31,67 +31,34 @@ import {
 import { userFirestoreService } from './src/services/firebase/userFirestoreService';
 import logger from './src/utils/logger';
 import { installStartupDiagnostics, recordStartupFatal } from './src/utils/startupDiagnostics';
+import runtimeConfig, { hasCriticalStartupIssues } from './src/config/runtimeConfig';
 
-const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
-const IS_TEST = process.env.NODE_ENV === 'test';
-const STARTUP_ENV_ISSUES = [];
+const STARTUP_ENV_ISSUES = runtimeConfig.startup.criticalIssues;
 
-// Validate critical environment variables in production
-if (!IS_DEV && !IS_TEST) {
-  // Expo only inlines static process.env property access in production bundles.
-  // Avoid dynamic indexing (process.env[key]) or values may appear undefined at runtime.
-  const requiredVars = {
-    EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-    EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  };
-  const missing = Object.entries(requiredVars)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
-  if (missing.length > 0) {
-    STARTUP_ENV_ISSUES.push(`Missing required environment variables: ${missing.join(', ')}`);
-  }
-
-  const forbiddenPublicVars = [];
-  if (process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY) {
-    forbiddenPublicVars.push('EXPO_PUBLIC_LOCATIONIQ_API_KEY');
-  }
-  if (process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ === 'true') {
-    forbiddenPublicVars.push('EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=true');
-  }
-  if (process.env.EXPO_PUBLIC_API_PROXY_TOKEN) {
-    forbiddenPublicVars.push('EXPO_PUBLIC_API_PROXY_TOKEN');
-  }
-  if (process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN) {
-    forbiddenPublicVars.push('EXPO_PUBLIC_CORS_PROXY_TOKEN');
-  }
-  if (forbiddenPublicVars.length > 0) {
-    console.warn(
-      `[StartupConfig] Insecure production env detected: ${forbiddenPublicVars.join(', ')}. ` +
-      'Use server-side proxy auth and Firebase Bearer tokens for public builds.'
-    );
-  }
-
-  if (!process.env.EXPO_PUBLIC_API_PROXY_URL) {
-    console.warn(
-      'EXPO_PUBLIC_API_PROXY_URL is not set. Geocoding and walking directions may be unavailable until proxy URL is configured.'
-    );
-  }
+if (hasCriticalStartupIssues) {
+  logger.error(`[StartupConfig] ${STARTUP_ENV_ISSUES.join(' | ')}`);
 }
 
-if (STARTUP_ENV_ISSUES.length > 0) {
-  console.error(`[StartupConfig] ${STARTUP_ENV_ISSUES.join(' | ')}`);
+runtimeConfig.startup.followUpIssues.forEach((issue) => {
+  logger.warn(`[StartupConfig] ${issue}`);
+});
+
+if (!runtimeConfig.proxy.apiBaseUrl && !runtimeConfig.isProductionLike) {
+  logger.warn(
+    '[StartupConfig] EXPO_PUBLIC_API_PROXY_URL is not set. Geocoding and walking directions may be unavailable until proxy URL is configured.'
+  );
 }
 
 // Initialize Sentry for crash reporting (production only)
-const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+const sentryDsn = runtimeConfig.sentry.dsn;
 if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    enabled: !IS_DEV,
+    enabled: !runtimeConfig.isDevelopment,
     tracesSampleRate: 0.2,
   });
 
-  if (STARTUP_ENV_ISSUES.length > 0) {
+  if (hasCriticalStartupIssues) {
     Sentry.captureMessage(`Startup config issues: ${STARTUP_ENV_ISSUES.join(' | ')}`, 'error');
   }
 }
@@ -101,7 +68,8 @@ if (sentryDsn) {
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
@@ -266,7 +234,7 @@ export default function App() {
     };
   }, []);
 
-  if (STARTUP_ENV_ISSUES.length > 0) {
+  if (hasCriticalStartupIssues) {
     return (
       <SafeAreaProvider>
         <StartupConfigErrorScreen issues={STARTUP_ENV_ISSUES} />

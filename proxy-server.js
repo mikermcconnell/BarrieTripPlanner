@@ -199,7 +199,7 @@ const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
 
   // ─── Health check ────────────────────────────────────────────
-  if (parsedUrl.pathname === '/health') {
+  if (parsedUrl.pathname === '/health' || parsedUrl.pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
     return;
