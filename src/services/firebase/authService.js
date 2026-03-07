@@ -13,7 +13,9 @@ import {
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import { auth } from '../../config/firebase';
+import runtimeConfig, { GOOGLE_SIGN_IN_DISABLED_MESSAGE } from '../../config/runtimeConfig';
 import { userFirestoreService } from './userFirestoreService';
+import logger from '../../utils/logger';
 
 export const authService = {
   // Sign in with email and password
@@ -30,7 +32,7 @@ export const authService = {
         user: this.formatUser(user),
       };
     } catch (error) {
-      console.error('Sign in error:', error);
+      logger.error('Sign in error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error.code),
@@ -65,7 +67,7 @@ export const authService = {
         message: 'Account created. Please check your email to verify your account.',
       };
     } catch (error) {
-      console.error('Sign up error:', error);
+      logger.error('Sign up error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error.code),
@@ -79,7 +81,7 @@ export const authService = {
       await firebaseSignOut(auth);
       return { success: true };
     } catch (error) {
-      console.error('Sign out error:', error);
+      logger.error('Sign out error:', error);
       return {
         success: false,
         error: error.message,
@@ -96,7 +98,7 @@ export const authService = {
         message: 'Password reset email sent. Check your inbox.',
       };
     } catch (error) {
-      console.error('Password reset error:', error);
+      logger.error('Password reset error:', error);
       return {
         success: false,
         error: this.getErrorMessage(error.code),
@@ -141,10 +143,20 @@ export const authService = {
         userCredential = await signInWithPopup(auth, provider);
       } else {
         // Native: use @react-native-google-signin
+        if (!runtimeConfig.googleAuth.webClientId) {
+          return { success: false, error: GOOGLE_SIGN_IN_DISABLED_MESSAGE };
+        }
         const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-        GoogleSignin.configure({
-          webClientId: '648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com',
-        });
+        const googleSigninConfig = {
+          webClientId: runtimeConfig.googleAuth.webClientId,
+        };
+        if (runtimeConfig.googleAuth.iosClientId) {
+          googleSigninConfig.iosClientId = runtimeConfig.googleAuth.iosClientId;
+        }
+        if (runtimeConfig.googleAuth.androidClientId) {
+          googleSigninConfig.androidClientId = runtimeConfig.googleAuth.androidClientId;
+        }
+        GoogleSignin.configure(googleSigninConfig);
         const signInResult = await GoogleSignin.signIn();
         const idToken = signInResult.data?.idToken;
         if (!idToken) {
@@ -174,7 +186,7 @@ export const authService = {
         user: this.formatUser(user),
       };
     } catch (error) {
-      console.error('Google sign in error:', error);
+      logger.error('Google sign in error:', error);
       // User cancelled
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'SIGN_IN_CANCELLED') {
         return { success: false, error: null };

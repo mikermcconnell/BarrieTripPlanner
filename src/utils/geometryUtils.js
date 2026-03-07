@@ -49,6 +49,18 @@ export const haversineDistance = (lat1, lon1, lat2, lon2) => {
  * @returns {number} Distance in meters
  */
 export const pointToSegmentDistance = (point, segmentStart, segmentEnd) => {
+  const projection = projectPointToSegment(point, segmentStart, segmentEnd);
+  return projection.distanceMeters;
+};
+
+/**
+ * Project a point onto a line segment and return the closest point metadata.
+ * @param {Object} point - Point with latitude and longitude
+ * @param {Object} segmentStart - Start point of segment with latitude and longitude
+ * @param {Object} segmentEnd - End point of segment with latitude and longitude
+ * @returns {{point: {latitude: number, longitude: number}, t: number, distanceMeters: number}}
+ */
+export const projectPointToSegment = (point, segmentStart, segmentEnd) => {
   const x = point.longitude;
   const y = point.latitude;
   const x1 = segmentStart.longitude;
@@ -62,7 +74,11 @@ export const pointToSegmentDistance = (point, segmentStart, segmentEnd) => {
 
   // If segment has zero length, return distance to the point
   if (dx === 0 && dy === 0) {
-    return haversineDistance(y, x, y1, x1);
+    return {
+      point: { latitude: y1, longitude: x1 },
+      t: 0,
+      distanceMeters: haversineDistance(y, x, y1, x1),
+    };
   }
 
   // Project point onto segment line using parametric form
@@ -73,8 +89,37 @@ export const pointToSegmentDistance = (point, segmentStart, segmentEnd) => {
   const closestX = x1 + t * dx;
   const closestY = y1 + t * dy;
 
-  // Return haversine distance to the closest point
-  return haversineDistance(y, x, closestY, closestX);
+  return {
+    point: {
+      latitude: closestY,
+      longitude: closestX,
+    },
+    t,
+    distanceMeters: haversineDistance(y, x, closestY, closestX),
+  };
+};
+
+export const calculateBearing = (from, to) => {
+  if (!from || !to) return null;
+  if (
+    !Number.isFinite(from.latitude) ||
+    !Number.isFinite(from.longitude) ||
+    !Number.isFinite(to.latitude) ||
+    !Number.isFinite(to.longitude)
+  ) {
+    return null;
+  }
+
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  const bearing = Math.atan2(y, x) * (180 / Math.PI);
+  return (bearing + 360) % 360;
 };
 
 /**
@@ -103,6 +148,85 @@ export const pointToPolylineDistance = (point, polyline) => {
     minDistance = Math.min(minDistance, pointToSegmentDistance(point, polyline[i], polyline[i + 1]));
   }
   return minDistance;
+};
+
+export const projectPointToPolyline = (point, polyline) => {
+  if (!polyline || polyline.length === 0) {
+    return null;
+  }
+
+  if (polyline.length === 1) {
+    return {
+      point: polyline[0],
+      distanceMeters: haversineDistance(
+        point.latitude,
+        point.longitude,
+        polyline[0].latitude,
+        polyline[0].longitude
+      ),
+      segmentIndex: 0,
+      t: 0,
+      bearing: null,
+    };
+  }
+
+  let best = null;
+
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const projection = projectPointToSegment(point, polyline[i], polyline[i + 1]);
+    if (!best || projection.distanceMeters < best.distanceMeters) {
+      best = {
+        ...projection,
+        segmentIndex: i,
+        bearing: calculateBearing(polyline[i], polyline[i + 1]),
+      };
+    }
+  }
+
+  return best;
+};
+
+const dedupeSequentialCoordinates = (points) => {
+  if (!Array.isArray(points) || points.length <= 1) return points || [];
+
+  const deduped = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = deduped[deduped.length - 1];
+    const next = points[i];
+    if (prev.latitude !== next.latitude || prev.longitude !== next.longitude) {
+      deduped.push(next);
+    }
+  }
+  return deduped;
+};
+
+export const buildPolylineSegment = (polyline, startProjection, endProjection) => {
+  if (!polyline || polyline.length < 2 || !startProjection || !endProjection) {
+    return [];
+  }
+
+  const start = startProjection.point;
+  const end = endProjection.point;
+  const startIndex = startProjection.segmentIndex;
+  const endIndex = endProjection.segmentIndex;
+
+  if (startIndex === endIndex) {
+    return dedupeSequentialCoordinates([start, end]);
+  }
+
+  if (startIndex < endIndex) {
+    return dedupeSequentialCoordinates([
+      start,
+      ...polyline.slice(startIndex + 1, endIndex + 1),
+      end,
+    ]);
+  }
+
+  return dedupeSequentialCoordinates([
+    start,
+    ...polyline.slice(endIndex + 1, startIndex + 1).reverse(),
+    end,
+  ]);
 };
 
 /**
@@ -492,6 +616,15 @@ export const pointInPolygon = (lat, lon, coordinates) => {
 
   return true;
 };
+
+/**
+ * Check whether a point object has finite latitude and longitude values.
+ * Useful as a guard before rendering map annotations.
+ * @param {Object|null|undefined} point - Object with latitude and longitude
+ * @returns {boolean}
+ */
+export const hasFiniteCoordinate = (point) =>
+  Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
 
 export const simplifyPath = (path, minDistanceMeters = 20) => {
   if (!path || path.length <= 2) {

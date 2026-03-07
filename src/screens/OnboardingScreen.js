@@ -13,31 +13,28 @@ import {
 } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { trackEvent } from '../services/analyticsService';
+import OnboardingScene from '../components/OnboardingScene';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const SLIDES = [
   {
     id: '1',
-    icon: '🚌',
     title: 'Live Bus Tracking',
     description: 'See every Barrie Transit bus in real time on the map.',
   },
   {
     id: '2',
-    icon: '🗺️',
     title: 'Trip Planning',
     description: 'Get step-by-step directions between any two points in Barrie.',
   },
   {
     id: '3',
-    icon: '⭐',
     title: 'Favorites & Alerts',
     description: 'Save your stops and routes. Get notified about service changes.',
   },
   {
     id: '4',
-    icon: '🧭',
     title: 'Turn-by-Turn Navigation',
     description: 'Follow along with live guidance from bus stop to destination.',
   },
@@ -72,7 +69,6 @@ const OnboardingScreen = ({ onComplete }) => {
 
   const renderSlide = ({ item }) => (
     <View style={styles.slide}>
-      <Text style={styles.slideIcon}>{item.icon}</Text>
       <Text style={styles.slideTitle}>{item.title}</Text>
       <Text style={styles.slideDescription}>{item.description}</Text>
     </View>
@@ -80,23 +76,27 @@ const OnboardingScreen = ({ onComplete }) => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={SLIDES}
-        renderItem={renderSlide}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        bounces={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        getItemLayout={(_, index) => ({
-          length: SCREEN_WIDTH,
-          offset: SCREEN_WIDTH * index,
-          index,
-        })}
-      />
+      <OnboardingScene />
+
+      <View style={styles.contentArea}>
+        <FlatList
+          ref={flatListRef}
+          data={SLIDES}
+          renderItem={renderSlide}
+          keyExtractor={(item) => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          getItemLayout={(_, index) => ({
+            length: SCREEN_WIDTH,
+            offset: SCREEN_WIDTH * index,
+            index,
+          })}
+        />
+      </View>
 
       {/* Dots */}
       <View style={styles.dotsContainer}>
@@ -136,14 +136,13 @@ const styles = StyleSheet.create({
   },
   slide: {
     width: SCREEN_WIDTH,
-    flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: SPACING.xxl,
+    paddingTop: SPACING.xl,
   },
-  slideIcon: {
-    fontSize: 72,
-    marginBottom: SPACING.xl,
+  contentArea: {
+    flex: 1,
   },
   slideTitle: {
     fontSize: FONT_SIZES.xxl,

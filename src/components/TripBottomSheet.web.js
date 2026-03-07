@@ -14,6 +14,23 @@ import FareCard from './FareCard';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
 
+const getItineraryKey = (itinerary, index) => {
+  const legSignature = Array.isArray(itinerary?.legs)
+    ? itinerary.legs
+        .map((leg, legIndex) => `${leg.mode || 'mode'}-${leg.route?.id || leg.route?.shortName || 'route'}-${leg.startTime || legIndex}`)
+        .join('|')
+    : 'no-legs';
+
+  return [
+    itinerary?.id || 'itinerary',
+    itinerary?.startTime || 'start',
+    itinerary?.endTime || 'end',
+    itinerary?.duration || 'duration',
+    legSignature,
+    index,
+  ].join('-');
+};
+
 // Empty state icon
 const EmptyIcon = ({ size = 48, color = COLORS.grey400 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -182,7 +199,7 @@ const TripBottomSheet = ({
         <ScrollView style={styles.resultsList} contentContainerStyle={styles.resultsContent}>
           {itineraries.map((itinerary, index) => (
             <TripResultCard
-              key={itinerary.id || index}
+              key={getItineraryKey(itinerary, index)}
               itinerary={itinerary}
               isSelected={index === selectedIndex}
               onPress={() => onSelectItinerary(index)}

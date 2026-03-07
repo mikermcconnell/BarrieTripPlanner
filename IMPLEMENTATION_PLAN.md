@@ -1,5 +1,9 @@
 # Barrie Transit Trip Planner - Implementation Plan
 
+> Historical planning document. The active product surface and stabilization scope now live in
+> `docs/plans/2026-03-07-app-stabilization-roadmap.md` and
+> `docs/plans/2026-03-07-phase-0-3-deliverables.md`.
+
 ## Approach: Expo Go + EAS Build (Option 1)
 
 **Strategy:** Develop with Expo Go for instant testing on physical device. Use EAS Build only when native features require it (Phase 5+).
@@ -102,7 +106,7 @@ GTFS-RT (15 sec) → Parse protobuf → Update bus positions on map
 - `src/components/StopBottomSheet.js` - Slide-up arrival info
 - `src/components/ArrivalRow.js` - Single arrival time display
 - `src/services/arrivalService.js` - Calculate arrival predictions
-- `src/screens/NearbyStopsScreen.js` - Stops near user
+- `src/screens/NearbyStopsScreen.js` - Stops near user (historical; orphaned screen later removed from repo)
 
 ### Implementation Steps:
 

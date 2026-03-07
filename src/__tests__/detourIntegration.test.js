@@ -18,6 +18,7 @@ const React = require('react');
 // Store references to mock components so findAllByType works
 const MockRoutePolyline = (props) => React.createElement('div', { 'data-mock': 'RoutePolyline' });
 const MockWebRoutePolyline = (props) => React.createElement('div', { 'data-mock': 'WebRoutePolyline' });
+const MockWebHtmlMarker = (props) => React.createElement('div', { 'data-mock': 'WebHtmlMarker' });
 
 // ─── Mocks needed before any require ────────────────────────────────────────
 
@@ -38,24 +39,7 @@ jest.mock('../components/WebMapView', () => ({
   __esModule: true,
   default: 'WebMapView',
   WebRoutePolyline: MockWebRoutePolyline,
-}));
-
-jest.mock('leaflet', () => ({
-  Icon: { Default: { prototype: {}, mergeOptions: jest.fn() } },
-}));
-
-const MockCircleMarker = (props) => React.createElement('div', { 'data-mock': 'CircleMarker' });
-
-jest.mock('react-leaflet', () => ({
-  MapContainer: 'MapContainer',
-  TileLayer: 'TileLayer',
-  Polyline: 'Polyline',
-  Marker: 'Marker',
-  Popup: 'Popup',
-  CircleMarker: MockCircleMarker,
-  Tooltip: 'Tooltip',
-  useMap: jest.fn(),
-  useMapEvents: jest.fn(),
+  WebHtmlMarker: MockWebHtmlMarker,
 }));
 
 // ─── Shared test data ────────────────────────────────────────────────────────
@@ -420,26 +404,20 @@ describe('DetourOverlay component rendering', () => {
 
     test('renders CircleMarker for entry/exit', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
-      const markers = inst.root.findAllByType(MockCircleMarker);
+      const markers = inst.root.findAllByType(MockWebHtmlMarker);
       // 2 entry/exit markers + 2 midpoint label markers
       expect(markers).toHaveLength(4);
-      const centers = markers.map((m) => m.props.center);
-      expect(centers).toContainEqual([44.38, -79.69]);
-      expect(centers).toContainEqual([44.39, -79.68]);
-      // Entry marker: larger, filled with route color, white border
-      const entry = markers.find((m) => m.props.center[0] === 44.38);
-      expect(entry.props.radius).toBe(8);
-      expect(entry.props.interactive).toBe(false);
-      expect(entry.props.pathOptions.fillColor).toBe('#f97316');
-      expect(entry.props.pathOptions.color).toBe('#ffffff');
-      expect(entry.props.pathOptions.weight).toBe(2);
-      // Exit marker: smaller, white fill, route color border
-      const exit = markers.find((m) => m.props.center[0] === 44.39);
-      expect(exit.props.radius).toBe(6);
-      expect(exit.props.interactive).toBe(false);
-      expect(exit.props.pathOptions.fillColor).toBe('#ffffff');
-      expect(exit.props.pathOptions.color).toBe('#f97316');
-      expect(exit.props.pathOptions.weight).toBe(2);
+      const coords = markers.map((m) => m.props.coordinate);
+      expect(coords).toContainEqual({ latitude: 44.38, longitude: -79.69 });
+      expect(coords).toContainEqual({ latitude: 44.39, longitude: -79.68 });
+      const entry = markers.find((m) => m.props.coordinate.latitude === 44.38);
+      expect(entry.props.html).toContain('width:16px');
+      expect(entry.props.html).toContain('background:#f97316');
+      expect(entry.props.html).toContain('border:2px solid #ffffff');
+      const exit = markers.find((m) => m.props.coordinate.latitude === 44.39);
+      expect(exit.props.html).toContain('width:12px');
+      expect(exit.props.html).toContain('background:#ffffff');
+      expect(exit.props.html).toContain('border:2px solid #f97316');
     });
 
     test('no markers when entryPoint/exitPoint are null', () => {
@@ -448,7 +426,7 @@ describe('DetourOverlay component rendering', () => {
         entryPoint: null,
         exitPoint: null,
       });
-      const markers = inst.root.findAllByType(MockCircleMarker);
+      const markers = inst.root.findAllByType(MockWebHtmlMarker);
       // 2 midpoint label markers still render (polylines are still present)
       expect(markers).toHaveLength(2);
     });

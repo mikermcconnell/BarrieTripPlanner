@@ -7,8 +7,30 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
 - Real-time bus tracking with live vehicle positions
 - Interactive map with route polylines
 - Stop search and information
-- Trip planning (coming soon)
-- User favorites and history (coming soon)
+- Trip planning with integrated trip details and navigation
+- Service alerts and detour overlays
+- Favorites and account-backed rider preferences
+- Supporting profile flows for news, surveys, and settings
+
+## Current Product Surface
+
+Core v1 features:
+
+- map
+- stop and route search
+- arrivals
+- trip planning
+- navigation
+- alerts
+- favorites
+
+Supporting features:
+
+- onboarding
+- profile and auth utilities
+- transit news
+- surveys
+- settings
 
 ## Prerequisites
 
@@ -41,6 +63,7 @@ A React Native mobile app for real-time transit information in Barrie, Ontario.
    - `EXPO_PUBLIC_API_PROXY_URL`
    - `LOCATIONIQ_API_KEY` (for local `proxy-server.js` / `api-proxy`)
    - `EXPO_PUBLIC_FIREBASE_*`
+   - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` for native Google sign-in
    - Optional fallback OTP backend: `EXPO_PUBLIC_OTP_URL`
    - Keep `EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=false` for production/public builds
    - Keep `EXPO_PUBLIC_API_PROXY_TOKEN` empty for production/public builds
@@ -121,22 +144,21 @@ src/
 
 Data provided by [Barrie Transit](https://www.barrie.ca/transit).
 
-## Development Phases
+## Roadmap
 
-See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the full development roadmap.
+Current stabilization roadmap:
 
-- [x] Phase 0+1: Project Setup & Map with Buses
-- [x] Phase 2: Stop Information & Arrivals
-- [x] Phase 3: Trip Planning (mock data, needs OTP backend)
-- [x] Phase 4: User Accounts & Favorites
-- [ ] Phase 5: Notifications & Alerts (requires EAS Build)
-- [ ] Phase 6: Polish & Launch
+- [docs/plans/2026-03-07-app-stabilization-roadmap.md](./docs/plans/2026-03-07-app-stabilization-roadmap.md)
+- [docs/plans/2026-03-07-phase-0-3-deliverables.md](./docs/plans/2026-03-07-phase-0-3-deliverables.md)
+- [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md)
 
 ## Server-Side Detour Feed (New)
 
 The app can now consume a shared Firestore detour feed produced by the backend worker (instead of relying only on on-device detection).
 
 ### Backend setup (`api-proxy`)
+
+The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md).
 
 1. Install backend dependencies:
    ```bash

@@ -7,6 +7,11 @@ import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
 import logger from '../utils/logger';
 
+const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
+  ...tripPlan,
+  routingDiagnostics,
+});
+
 /**
  * Add basic metadata to itineraries (used when walking enrichment is skipped)
  * Adds departure time info, tomorrow flag, and filters excessive durations
@@ -92,6 +97,26 @@ export class TripPlanningError extends Error {
     this.name = 'TripPlanningError';
   }
 }
+
+const buildRoutingDiagnostics = ({
+  source,
+  usedMock = false,
+  fallbackReason = null,
+  fallbackFrom = null,
+  localRouterError = null,
+  zoneAdjusted = false,
+  onDemandDirect = false,
+  walkingEnrichment = 'none',
+}) => ({
+  source,
+  usedMock,
+  fallbackReason,
+  fallbackFrom,
+  localRouterError,
+  zoneAdjusted,
+  onDemandDirect,
+  walkingEnrichment,
+});
 
 /**
  * Plan a trip using OpenTripPlanner
@@ -207,7 +232,15 @@ export const planTrip = async ({
       // In development mode with mock enabled, return mock data instead
       if (OTP_CONFIG.USE_MOCK_IN_DEV) {
         logger.warn('OTP error, using mock data:', error.message);
-        return getMockTripPlan(fromLat, fromLon, toLat, toLon);
+        return withRoutingDiagnostics(
+          getMockTripPlan(fromLat, fromLon, toLat, toLon),
+          buildRoutingDiagnostics({
+            source: 'otp_mock_dev',
+            usedMock: true,
+            fallbackReason: error.code,
+            fallbackFrom: 'otp',
+          })
+        );
       }
       throw error;
     }
@@ -216,7 +249,15 @@ export const planTrip = async ({
     if (error.name === 'AbortError') {
       if (OTP_CONFIG.USE_MOCK_IN_DEV) {
         logger.warn('OTP timeout, using mock data');
-        return getMockTripPlan(fromLat, fromLon, toLat, toLon);
+        return withRoutingDiagnostics(
+          getMockTripPlan(fromLat, fromLon, toLat, toLon),
+          buildRoutingDiagnostics({
+            source: 'otp_mock_dev',
+            usedMock: true,
+            fallbackReason: TRIP_ERROR_CODES.TIMEOUT,
+            fallbackFrom: 'otp',
+          })
+        );
       }
       throw new TripPlanningError(
         TRIP_ERROR_CODES.TIMEOUT,
@@ -228,7 +269,15 @@ export const planTrip = async ({
     if (error.message?.includes('fetch') || error.message?.includes('network') || error.name === 'TypeError') {
       if (OTP_CONFIG.USE_MOCK_IN_DEV) {
         logger.warn('Network error, using mock data:', error.message);
-        return getMockTripPlan(fromLat, fromLon, toLat, toLon);
+        return withRoutingDiagnostics(
+          getMockTripPlan(fromLat, fromLon, toLat, toLon),
+          buildRoutingDiagnostics({
+            source: 'otp_mock_dev',
+            usedMock: true,
+            fallbackReason: TRIP_ERROR_CODES.NETWORK_ERROR,
+            fallbackFrom: 'otp',
+          })
+        );
       }
       throw new TripPlanningError(
         TRIP_ERROR_CODES.NETWORK_ERROR,
@@ -239,7 +288,15 @@ export const planTrip = async ({
     // Unknown error - in dev mode, use mock; otherwise throw
     logger.error('Error planning trip:', error);
     if (OTP_CONFIG.USE_MOCK_IN_DEV) {
-      return getMockTripPlan(fromLat, fromLon, toLat, toLon);
+      return withRoutingDiagnostics(
+        getMockTripPlan(fromLat, fromLon, toLat, toLon),
+        buildRoutingDiagnostics({
+          source: 'otp_mock_dev',
+          usedMock: true,
+          fallbackReason: 'UNKNOWN_ERROR',
+          fallbackFrom: 'otp',
+        })
+      );
     }
     throw new TripPlanningError(
       TRIP_ERROR_CODES.NETWORK_ERROR,
@@ -580,7 +637,13 @@ export const planTripWithLocalRouter = async ({
     }
 
     // Add basic metadata even when not enriching
-    return addBasicMetadata(result);
+    return withRoutingDiagnostics(
+      addBasicMetadata(result),
+      buildRoutingDiagnostics({
+        source: 'local_router',
+        walkingEnrichment: enrichWalking ? 'trip_enrichment' : 'deferred_to_navigation',
+      })
+    );
   } catch (error) {
     // Convert RoutingError to TripPlanningError for consistency
     if (error instanceof RoutingError) {
@@ -665,6 +728,15 @@ const buildOnDemandLeg = ({ zone, from, to, estimatedDuration, startTime }) => (
   isOnDemand: true,
 });
 
+const getRequestedTripTimestamp = ({ date, time }) => {
+  const requested = time ?? date;
+  const timestamp = requested instanceof Date
+    ? requested.getTime()
+    : new Date(requested || Date.now()).getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : Date.now();
+};
+
 /**
  * Plan a trip using the best available method
  * Tries local router first, falls back to OTP if needed
@@ -713,22 +785,28 @@ export const planTripAuto = async (params) => {
           params.fromLat, params.fromLon,
           params.toLat, params.toLon
         );
-        const now = Date.now();
+        const requestedTimeMs = getRequestedTripTimestamp(params);
+        const startTime = params.arriveBy
+          ? requestedTimeMs - duration * 1000
+          : requestedTimeMs;
+        const endTime = params.arriveBy
+          ? requestedTimeMs
+          : requestedTimeMs + duration * 1000;
         const leg = buildOnDemandLeg({
           zone: zoneTrip.zone,
           from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
           to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
           estimatedDuration: duration,
-          startTime: now,
+          startTime,
         });
-        return {
+        return withRoutingDiagnostics({
           from: { name: 'Origin', lat: params.fromLat, lon: params.fromLon },
           to: { name: 'Destination', lat: params.toLat, lon: params.toLon },
           itineraries: [{
             id: 'on-demand-direct',
             duration: duration,
-            startTime: now,
-            endTime: now + duration * 1000,
+            startTime,
+            endTime,
             walkTime: 0,
             transitTime: 0,
             waitingTime: 0,
@@ -737,7 +815,11 @@ export const planTripAuto = async (params) => {
             legs: [leg],
             isOnDemand: true,
           }],
-        };
+        }, buildRoutingDiagnostics({
+          source: 'on_demand_direct',
+          onDemandDirect: true,
+          zoneAdjusted: true,
+        }));
       }
 
       // Adjust origin/dest for RAPTOR routing via hub stops
@@ -758,6 +840,7 @@ export const planTripAuto = async (params) => {
   }
 
   let result;
+  let localRouterError = null;
 
   // If routing data is available, prefer local router
   if (routingData) {
@@ -765,6 +848,10 @@ export const planTripAuto = async (params) => {
       result = await planTripWithLocalRouter(params);
     } catch (error) {
       logger.warn('Local router failed, trying OTP:', error.message);
+      localRouterError = {
+        message: error.message,
+        code: error.code || null,
+      };
       result = null;
       // Fall through to OTP
     }
@@ -772,13 +859,33 @@ export const planTripAuto = async (params) => {
 
   // Fall back to OTP if local router wasn't used or failed
   if (!result) {
-    result = await planTrip(otpParams);
+    result = await planTrip({
+      ...otpParams,
+      fromLat: params.fromLat,
+      fromLon: params.fromLon,
+      toLat: params.toLat,
+      toLon: params.toLon,
+    });
   }
 
   // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
   if (zoneTrip && !zoneTrip.sameZone) {
     result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, params);
   }
+
+  const existingDiagnostics = result.routingDiagnostics || {};
+  const effectiveSource = existingDiagnostics.source || (localRouterError ? 'otp' : (routingData ? 'local_router' : 'otp'));
+  result = withRoutingDiagnostics(result, {
+    ...existingDiagnostics,
+    source: effectiveSource,
+    fallbackFrom: existingDiagnostics.fallbackFrom || (localRouterError ? 'local_router' : null),
+    fallbackReason: existingDiagnostics.fallbackReason || (localRouterError ? 'LOCAL_ROUTER_ERROR' : null),
+    localRouterError: existingDiagnostics.localRouterError || localRouterError,
+    zoneAdjusted: existingDiagnostics.zoneAdjusted || Boolean(zoneTrip?.raptorFrom || zoneTrip?.raptorTo || zoneTrip?.sameZone),
+    onDemandDirect: existingDiagnostics.onDemandDirect || Boolean(zoneTrip?.sameZone),
+  });
+
+  logger.info('Trip planning route selected', result.routingDiagnostics);
 
   setCachedTrip(cacheKey, result);
   return result;

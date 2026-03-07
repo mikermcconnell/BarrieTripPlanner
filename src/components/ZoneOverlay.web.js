@@ -1,5 +1,5 @@
 import React from 'react';
-import { Polygon } from 'react-leaflet';
+import { WebPolygon } from './WebMapView';
 
 const ZoneOverlay = ({
   id,
@@ -12,22 +12,15 @@ const ZoneOverlay = ({
 }) => {
   if (!coordinates || coordinates.length < 3) return null;
 
-  const positions = coordinates.map((c) => [c.latitude, c.longitude]);
-
   return (
-    <Polygon
-      positions={positions}
-      pathOptions={{
-        color: color,
-        weight: strokeWidth,
-        opacity: strokeOpacity,
-        fillColor: color,
-        fillOpacity: fillOpacity,
-        dashArray: '8, 6', // '8, 6' matches native's [4, 3] at strokeWidth 2 (4*2=8, 3*2=6)
-      }}
-      eventHandlers={{
-        click: () => onPress?.(id),
-      }}
+    <WebPolygon
+      coordinates={coordinates}
+      color={color}
+      strokeWidth={strokeWidth}
+      strokeOpacity={strokeOpacity}
+      fillOpacity={fillOpacity}
+      dashArray="8, 6"
+      onPress={() => onPress?.(id)}
     />
   );
 };

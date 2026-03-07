@@ -188,6 +188,44 @@ describe('api-proxy route hardening', () => {
     expect(response.body.enabled).toBe(false);
   });
 
+  test('health endpoint reports auth and feature posture without authentication', async () => {
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'test',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'true',
+      API_PROXY_TOKEN: 'test-proxy-token',
+      REQUIRE_FIREBASE_AUTH: 'false',
+      ALLOW_SHARED_TOKEN_AUTH: 'true',
+      DETOUR_WORKER_ENABLED: 'true',
+      DETOUR_HISTORY_ENABLED: 'true',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
+    };
+
+    const app = require('../index');
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      status: 'ok',
+      service: 'api-proxy',
+      auth: expect.objectContaining({
+        requireApiAuth: true,
+        requireFirebaseAuth: false,
+        allowSharedTokenAuth: true,
+        sharedTokenConfigured: true,
+      }),
+      features: expect.objectContaining({
+        locationIqProxyConfigured: true,
+        detourWorkerEnabled: true,
+        detourHistoryEnabled: true,
+        surveyAdminUsesApiAuth: true,
+        detourDebugKeyEnabled: false,
+        firebaseAdminConfigured: true,
+      }),
+    }));
+  });
+
   test('baseline-status requires auth', async () => {
     const app = require('../index');
     const response = await request(app).get('/api/baseline-status');

@@ -28,9 +28,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
-.env
+# local env files and secrets
+.env*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -61,6 +61,8 @@ metro-*.hbc
 proxy_bundle.*
 proxy_headers.*
 .tmp-metro-proxy.js
+.tmp*
+.claude/worktrees/
 
 # Release signing
 *.keystore

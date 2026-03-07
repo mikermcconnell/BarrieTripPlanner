@@ -1,7 +1,7 @@
 /**
  * DetourOverlay (Web)
  *
- * Renders detour geometry on the Leaflet web map:
+ * Renders detour geometry on the MapLibre web map:
  * - Red dashed line for the skipped normal-route segment
  * - Orange line for the inferred detour path
  * - White circle markers at entry/exit points
@@ -10,10 +10,35 @@
  * Accepts pre-computed props from useDetourOverlays hook.
  */
 import React from 'react';
-import { CircleMarker, Tooltip } from 'react-leaflet';
-import { WebRoutePolyline } from './WebMapView';
+import { WebHtmlMarker, WebRoutePolyline } from './WebMapView';
 import { hasFiniteCoordinate } from '../utils/geometryUtils';
 import { getPolylineMidpoint } from '../utils/polylineUtils';
+
+const makeCircleHtml = (diameter, fillColor, borderColor) => `
+  <div style="
+    width:${diameter}px;
+    height:${diameter}px;
+    border-radius:50%;
+    background:${fillColor};
+    border:2px solid ${borderColor};
+    box-sizing:border-box;
+    box-shadow:0 1px 3px rgba(0,0,0,0.15);
+  "></div>
+`;
+
+const makeLabelHtml = (label) => `
+  <div style="
+    font-size:11px;
+    font-weight:700;
+    color:#374151;
+    background:rgba(255,255,255,0.9);
+    border-radius:999px;
+    padding:2px 8px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.12);
+    white-space:nowrap;
+    pointer-events:none;
+  ">${label}</div>
+`;
 
 const DetourOverlay = ({
   routeId,
@@ -59,54 +84,28 @@ const DetourOverlay = ({
         />
       )}
       {hasFiniteCoordinate(entryPoint) && (
-        <CircleMarker
-          center={[entryPoint.latitude, entryPoint.longitude]}
-          radius={8}
-          pathOptions={{
-            fillColor: markerBorderColor,
-            fillOpacity: opacity,
-            color: '#ffffff',
-            weight: 2,
-            opacity,
-          }}
-          interactive={false}
+        <WebHtmlMarker
+          coordinate={{ latitude: entryPoint.latitude, longitude: entryPoint.longitude }}
+          html={makeCircleHtml(16, markerBorderColor, '#ffffff')}
         />
       )}
       {hasFiniteCoordinate(exitPoint) && (
-        <CircleMarker
-          center={[exitPoint.latitude, exitPoint.longitude]}
-          radius={6}
-          pathOptions={{
-            fillColor: '#ffffff',
-            fillOpacity: opacity,
-            color: markerBorderColor,
-            weight: 2,
-            opacity,
-          }}
-          interactive={false}
+        <WebHtmlMarker
+          coordinate={{ latitude: exitPoint.latitude, longitude: exitPoint.longitude }}
+          html={makeCircleHtml(12, '#ffffff', markerBorderColor)}
         />
       )}
       {skippedMidpoint && (
-        <CircleMarker
-          center={[skippedMidpoint.latitude, skippedMidpoint.longitude]}
-          radius={0}
-          interactive={false}
-        >
-          <Tooltip permanent direction="center" className="detour-label-skipped">
-            Skipped
-          </Tooltip>
-        </CircleMarker>
+        <WebHtmlMarker
+          coordinate={{ latitude: skippedMidpoint.latitude, longitude: skippedMidpoint.longitude }}
+          html={makeLabelHtml('Skipped')}
+        />
       )}
       {detourMidpoint && (
-        <CircleMarker
-          center={[detourMidpoint.latitude, detourMidpoint.longitude]}
-          radius={0}
-          interactive={false}
-        >
-          <Tooltip permanent direction="center" className="detour-label-detour">
-            Detour route
-          </Tooltip>
-        </CircleMarker>
+        <WebHtmlMarker
+          coordinate={{ latitude: detourMidpoint.latitude, longitude: detourMidpoint.longitude }}
+          html={makeLabelHtml('Detour route')}
+        />
       )}
     </>
   );

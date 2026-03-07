@@ -12,7 +12,6 @@ import SearchScreen from '../screens/SearchScreen';
 import TripDetailsScreen from '../screens/TripDetailsScreen';
 import NavigationScreen from '../screens/NavigationScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import NearbyStopsScreen from '../screens/NearbyStopsScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
@@ -50,7 +49,6 @@ const TabIcon = ({ name, focused, color }) => {
 const MapStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
     <Stack.Screen name="MapMain" component={HomeScreen} />
-    <Stack.Screen name="NearbyStops" component={NearbyStopsScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="Alerts" component={AlertsScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
     <Stack.Screen

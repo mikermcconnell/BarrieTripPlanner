@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
+import logger from '../utils/logger';
 
 const LOCATION_CONFIG = {
   accuracy: Location.Accuracy.High,
@@ -61,7 +61,7 @@ export const useNavigationLocation = () => {
       setIsTracking(true);
       return true;
     } catch (err) {
-      console.error('Error starting location tracking:', err);
+      logger.error('Error starting location tracking:', err);
       setError(err.message || 'Failed to start location tracking');
       return false;
     }

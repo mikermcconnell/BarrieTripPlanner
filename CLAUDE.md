@@ -59,3 +59,12 @@ Barrie Transit routes may have sub-variants (e.g., Route 8 splits into 8A and 8B
 - Web dev: `npm run web:dev` (starts proxy + expo web)
 - Port 8081 for Metro bundler
 - Tests: `npm test` (Jest)
+
+### Fast Iteration Workflow
+For quick hot-refresh iteration, avoid rebuilding the native app every time:
+
+1. **Web (fastest loop):** `npm run web:dev` — instant hot refresh for layout, logic, state, and most UI work. Use this for everything except map-specific native work.
+2. **Mobile hot refresh:** Build the dev client **once** with `npx expo run:android` (or `npm run android:dev`), then iterate with just `npx expo start --dev-client`. JS changes hot-refresh instantly without rebuilding.
+3. Only rebuild the native app when adding/changing native dependencies, modifying `app.base.json` native config, or editing code in `android/`/`ios/`.
+
+**Default to web for UI iteration. Use mobile dev client for native-specific testing.**

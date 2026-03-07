@@ -194,8 +194,13 @@ export const SHAPE_PROCESSING = {
 // Trip UI Configuration
 // Bus marker animation configuration
 export const ANIMATION = {
-  BUS_POSITION_DURATION_MS: 2000,   // interpolation duration
+  BUS_POSITION_DURATION_MS: 2000,   // fallback interpolation duration
+  BUS_POSITION_MIN_DURATION_MS: 1200,
+  BUS_POSITION_MAX_DURATION_MS: 12000,
+  BUS_POSITION_DURATION_RATIO: 0.85, // animate for most of the observed feed interval
+  BUS_ROUTE_SNAP_MAX_DISTANCE_M: 120,
   BUS_BEARING_THRESHOLD_DEG: 2,     // min bearing change to re-render icon (web)
+  BUS_BEARING_MIN_SPEED_MPS: 1.5,
   BUS_PULSE_DURATION_MS: 400,       // scale pulse duration on new position
 };
 

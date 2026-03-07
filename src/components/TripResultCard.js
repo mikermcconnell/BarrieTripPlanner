@@ -18,6 +18,16 @@ import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 import Icon from './Icon';
 
+const getTripLegKey = (leg, index) => {
+  const routeKey = leg.route?.id || leg.route?.shortName || 'route';
+  const fromKey = leg.from?.stopId || leg.from?.name || 'from';
+  const toKey = leg.to?.stopId || leg.to?.name || 'to';
+  const startKey = leg.startTime || 'start';
+  return `${leg.mode || 'mode'}-${routeKey}-${fromKey}-${toKey}-${startKey}-${index}`;
+};
+
+const getLabelKey = (label, index) => `${label || 'label'}-${index}`;
+
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
@@ -50,14 +60,142 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   };
 
   const leavesInText = getLeavesInText();
+  const showsInlineActions = isSelected && !!onStartNavigation;
+  const containerStyle = [
+    styles.container,
+    isSelected && styles.containerSelected,
+    isRecommended && styles.containerRecommended,
+  ];
+
+  if (showsInlineActions) {
+    return (
+      <View
+        style={containerStyle}
+        accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${transitLegs.length} bus${transitLegs.length !== 1 ? 'es' : ''}, ${walkDistance} walking`}
+        accessibilityState={{ selected: isSelected }}
+      >
+        {/* Top Row: Labels */}
+        {(labels || isTomorrow) && (
+          <View style={styles.labelsRow}>
+            {labels && labels.map((label, idx) => (
+              <View
+                key={getLabelKey(label, idx)}
+                style={[
+                  styles.labelBadge,
+                  label === 'Recommended' && styles.labelRecommended,
+                  label === 'Fastest' && styles.labelFastest,
+                  label === 'Less Walking' && styles.labelLessWalking,
+                  label === 'Direct' && styles.labelDirect,
+                ]}
+              >
+                <Text style={[
+                  styles.labelText,
+                  label === 'Recommended' && styles.labelTextRecommended,
+                ]}>
+                  {label === 'Recommended' ? '⭐ ' : ''}{label}
+                </Text>
+              </View>
+            ))}
+            {isTomorrow && (
+              <View style={styles.tomorrowBadge}>
+                <Text style={styles.tomorrowText}>🌙 Tomorrow</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Top Row: Duration + Route Badge Chain + Leave In */}
+        <View style={styles.topRow}>
+          <View style={styles.topRowLeft}>
+            <Text style={styles.durationLarge}>{duration}</Text>
+            {hasRealtimeInfo && (
+              <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+            )}
+            {itinerary.legs.map((leg, index) => (
+              <React.Fragment key={getTripLegKey(leg, index)}>
+                {index > 0 && <View style={styles.connector} />}
+                <View style={styles.legColumn}>
+                  {leg.mode === 'WALK' ? (
+                    <View style={[styles.walkIcon, styles.routeBadgeInline]}>
+                      <Icon name="Walk" size={16} color={COLORS.textSecondary} />
+                    </View>
+                  ) : leg.isOnDemand ? (
+                    <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+                      <Icon name="Phone" size={14} color={COLORS.white} />
+                    </View>
+                  ) : (
+                    <View
+                      style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
+                    >
+                      <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.legDurationText}>{Math.max(1, Math.round(leg.duration / 60))} min</Text>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+          {leavesInText && (
+            <Text style={[
+              styles.leaveInText,
+              minutesUntilDeparture <= 5 && styles.leavesInSoon,
+            ]}>
+              {leavesInText}
+            </Text>
+          )}
+        </View>
+
+        {/* On-demand booking note */}
+        {onDemandLeg && (
+          <View style={[styles.onDemandNote, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+            <Icon name="Phone" size={12} color={COLORS.primary} />
+            <Text style={styles.onDemandNoteText}>
+              Call {onDemandLeg.bookingPhone || 'transit'} to book
+            </Text>
+          </View>
+        )}
+
+        {/* Bottom Row: Time Range + Walk/Transfer Details + Action Button */}
+        <View style={styles.bottomRow}>
+          <View style={styles.bottomRowContent}>
+            <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
+            <View style={styles.details}>
+              <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
+                {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
+              </Text>
+              {itinerary.transfers > 0 && (
+                <Text style={styles.detailText}>
+                  • {itinerary.transfers} transfer{itinerary.transfers > 1 ? 's' : ''}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.detailsButton}
+              onPress={() => onViewDetails && onViewDetails(itinerary)}
+              accessibilityRole="button"
+              accessibilityLabel="View trip details"
+            >
+              <Text style={styles.detailsButtonText}>Details</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.goButton}
+              onPress={() => onStartNavigation(itinerary)}
+              accessibilityRole="button"
+              accessibilityLabel="Start navigation"
+            >
+              <Text style={styles.goButtonText}>Go</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <TouchableOpacity
-      style={[
-        styles.container,
-        isSelected && styles.containerSelected,
-        isRecommended && styles.containerRecommended,
-      ]}
+      style={containerStyle}
       onPress={onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
@@ -69,7 +207,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         <View style={styles.labelsRow}>
           {labels && labels.map((label, idx) => (
             <View
-              key={idx}
+              key={getLabelKey(label, idx)}
               style={[
                 styles.labelBadge,
                 label === 'Recommended' && styles.labelRecommended,
@@ -102,23 +240,26 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
           )}
           {itinerary.legs.map((leg, index) => (
-            <React.Fragment key={`leg-${leg.mode}-${leg.from?.name || index}-${leg.startTime || index}`}>
+            <React.Fragment key={getTripLegKey(leg, index)}>
               {index > 0 && <View style={styles.connector} />}
-              {leg.mode === 'WALK' ? (
-                <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                  <Icon name="Walk" size={16} color={COLORS.textSecondary} />
-                </View>
-              ) : leg.isOnDemand ? (
-                <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
-                  <Icon name="Phone" size={14} color={COLORS.white} />
-                </View>
-              ) : (
-                <View
-                  style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
-                >
-                  <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
-                </View>
-              )}
+              <View style={styles.legColumn}>
+                {leg.mode === 'WALK' ? (
+                  <View style={[styles.walkIcon, styles.routeBadgeInline]}>
+                    <Icon name="Walk" size={16} color={COLORS.textSecondary} />
+                  </View>
+                ) : leg.isOnDemand ? (
+                  <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+                    <Icon name="Phone" size={14} color={COLORS.white} />
+                  </View>
+                ) : (
+                  <View
+                    style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
+                  >
+                    <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
+                  </View>
+                )}
+                <Text style={styles.legDurationText}>{Math.max(1, Math.round(leg.duration / 60))} min</Text>
+              </View>
             </React.Fragment>
           ))}
         </View>
@@ -157,30 +298,9 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             )}
           </View>
         </View>
-        {isSelected && onStartNavigation ? (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.detailsButton}
-              onPress={() => onViewDetails && onViewDetails(itinerary)}
-              accessibilityRole="button"
-              accessibilityLabel="View trip details"
-            >
-              <Text style={styles.detailsButtonText}>Details</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.goButton}
-              onPress={() => onStartNavigation(itinerary)}
-              accessibilityRole="button"
-              accessibilityLabel="Start navigation"
-            >
-              <Text style={styles.goButtonText}>Go</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.stepsButton} onPress={onPress} accessibilityRole="button" accessibilityLabel="Select this trip option">
-            <Text style={styles.stepsButtonText}>Select</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.stepsButton} pointerEvents="none">
+          <Text style={styles.stepsButtonText}>Select</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -282,6 +402,14 @@ const styles = StyleSheet.create({
   },
   routeBadgeInline: {
     marginHorizontal: 2,
+  },
+  legColumn: {
+    alignItems: 'center',
+  },
+  legDurationText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
   timeRange: {
     fontSize: FONT_SIZES.xs,

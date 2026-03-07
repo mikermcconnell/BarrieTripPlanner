@@ -8,6 +8,8 @@ const mockGet = jest.fn();
 const mockAdd = jest.fn();
 const mockSet = jest.fn();
 const mockUpdate = jest.fn();
+const mockVerifyIdToken = jest.fn();
+const mockGetAuth = jest.fn(() => null);
 
 const mockDocRef = {
   get: mockGet,
@@ -28,7 +30,7 @@ jest.mock('../firebaseAdmin', () => ({
   getDb: jest.fn(() => ({
     collection: jest.fn(() => mockCollectionRef),
   })),
-  getAuth: jest.fn(() => null),
+  getAuth: mockGetAuth,
 }));
 
 const MOCK_SURVEY_CONFIG = {
@@ -57,7 +59,6 @@ describe('surveyRoutes', () => {
       REQUIRE_FIREBASE_AUTH: 'false',
       DETOUR_WORKER_ENABLED: 'false',
       NEWS_WORKER_ENABLED: 'false',
-      SURVEY_ADMIN_API_KEY: 'test-admin-key',
     };
 
     // Reset mock return values
@@ -65,6 +66,9 @@ describe('surveyRoutes', () => {
     mockAdd.mockReset();
     mockSet.mockReset();
     mockUpdate.mockReset();
+    mockVerifyIdToken.mockReset();
+    mockGetAuth.mockReset();
+    mockGetAuth.mockReturnValue(null);
     mockCollectionRef.where.mockReturnThis();
     mockCollectionRef.orderBy.mockReturnThis();
     mockCollectionRef.limit.mockReturnThis();
@@ -243,23 +247,21 @@ describe('surveyRoutes', () => {
   });
 
   describe('Admin endpoints', () => {
-    test('POST /admin/config rejects without admin key', async () => {
+    test('POST /admin/config still requires authenticated api access', async () => {
       const res = await request(app)
         .post('/api/survey/admin/config')
-        .set('x-api-token', 'test-proxy-token')
         .send({ title: 'Test', questions: [{ id: 'q1' }] });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
 
-    test('POST /admin/config creates survey with admin key', async () => {
+    test('POST /admin/config creates survey for authenticated non-production callers', async () => {
       mockGet.mockResolvedValueOnce({ exists: false });
       mockSet.mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/survey/admin/config')
         .set('x-api-token', 'test-proxy-token')
-        .set('x-admin-key', 'test-admin-key')
         .send({
           title: 'New Survey',
           questions: [{ id: 'q1', type: 'star_rating', text: 'Rate?', required: true }],
@@ -270,25 +272,57 @@ describe('surveyRoutes', () => {
       expect(res.body.version).toBe(1);
     });
 
-    test('POST /admin/toggle rejects without admin key', async () => {
+    test('POST /admin/toggle rejects unauthenticated callers', async () => {
       const res = await request(app)
-        .post('/api/survey/admin/toggle?surveyId=survey1&active=false')
-        .set('x-api-token', 'test-proxy-token');
+        .post('/api/survey/admin/toggle?surveyId=survey1&active=false');
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
 
-    test('POST /admin/toggle activates/deactivates survey', async () => {
+    test('POST /admin/toggle activates/deactivates survey for authenticated callers', async () => {
       mockGet.mockResolvedValueOnce({ exists: true, data: () => MOCK_SURVEY_CONFIG });
       mockUpdate.mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/survey/admin/toggle?surveyId=survey1&active=false')
-        .set('x-api-token', 'test-proxy-token')
-        .set('x-admin-key', 'test-admin-key');
+        .set('x-api-token', 'test-proxy-token');
 
       expect(res.status).toBe(200);
       expect(res.body.isActive).toBe(false);
+    });
+
+    test('POST /admin/config accepts Firebase bearer auth in production', async () => {
+      process.env = {
+        ...ORIGINAL_ENV,
+        NODE_ENV: 'production',
+        LOCATIONIQ_API_KEY: 'test-key',
+        REQUIRE_API_AUTH: 'true',
+        REQUIRE_FIREBASE_AUTH: 'true',
+        ALLOW_SHARED_TOKEN_AUTH: 'false',
+        DETOUR_WORKER_ENABLED: 'false',
+        NEWS_WORKER_ENABLED: 'false',
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
+      };
+
+      mockGetAuth.mockReturnValue({ verifyIdToken: mockVerifyIdToken });
+      mockVerifyIdToken.mockResolvedValueOnce({ uid: 'admin-user-1' });
+      mockGet.mockResolvedValueOnce({ exists: false });
+      mockSet.mockResolvedValueOnce();
+
+      jest.resetModules();
+      app = require('../index');
+
+      const res = await request(app)
+        .post('/api/survey/admin/config')
+        .set('authorization', 'Bearer production-admin-token')
+        .send({
+          title: 'Prod Survey',
+          questions: [{ id: 'q1', type: 'star_rating', text: 'Rate?', required: true }],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(mockVerifyIdToken).toHaveBeenCalledWith('production-admin-token');
     });
   });
 });

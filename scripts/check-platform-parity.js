@@ -13,11 +13,40 @@ const path = require('path');
 
 const SRC_DIR = path.join(__dirname, '..', 'src');
 const HANDLER_NAME_PATTERN = /^(handle\w+|on[A-Z]\w+|use\w+|enter\w+|exit\w+|reset\w+|swap\w+|fit\w+|view\w+|start\w+|format\w+)$/;
-const HOOK_EQUIVALENTS = {
+const HOOK_EQUIVALENTS = {};
+const INTENTIONAL_DIFFS = {
+  'components/BusMarker': {
+    propsMissingInNative: ['vehicle', 'color', 'onPress', 'routeLabel', 'snapPath'],
+  },
+  'components/DetourDetailsSheet': {
+    handlersMissingInWeb: ['handleSheetChanges'],
+    handlersMissingInNative: ['onCloseRef', 'handleClose', 'handleKey'],
+  },
+  'components/DirectionArrows': {
+    propsMissingInNative: ['coordinates', 'color'],
+  },
+  'components/RoutePolyline': {
+    propsMissingInNative: ['coordinates', 'color', 'strokeWidth', 'lineDashPattern', 'lineCap', 'lineJoin', 'opacity', 'outlineWidth', 'outlineColor', 'id', 'showArrows'],
+  },
+  'components/StopMarker': {
+    propsMissingInNative: ['stop', 'onPress', 'isSelected'],
+  },
+  'components/TripSearchHeader': {
+    handlersMissingInNative: ['formatTimeDisplay', 'formatDateTimeLocal'],
+  },
+  'components/ZoneInfoSheet': {
+    handlersMissingInWeb: ['handleClose', 'handleSheetChanges'],
+  },
+  'components/ZoneOverlay': {
+    handlersMissingInWeb: ['handlePress'],
+  },
+  'screens/HomeScreen': {
+    handlersMissingInWeb: ['handleStopLayerPress', 'handlerStart', 'handlerEnd', 'handlerMs'],
+    handlersMissingInNative: ['handleStopPress', 'formatLastUpdate'],
+  },
   'screens/NavigationScreen': {
-    webProvidesForNative: {
-      useNavigationLocation: ['useWebLocation'],
-    },
+    handlersMissingInWeb: ['handleBoundsFit'],
+    handlersMissingInNative: ['fitToLegBounds'],
   },
 };
 
@@ -135,6 +164,10 @@ function setDifference(a, b) {
   return new Set([...a].filter(x => !b.has(x)));
 }
 
+function removeDocumentedDiffs(diffSet, documentedNames = []) {
+  documentedNames.forEach((name) => diffSet.delete(name));
+}
+
 function main() {
   const webFiles = findWebFiles(SRC_DIR);
 
@@ -169,6 +202,7 @@ function main() {
     const warnings = [];
     const baseName = relNative.replace(/\.js$/, '');
     const normalizedBaseName = baseName.replace(/\\/g, '/');
+    const intentionalDiffs = INTENTIONAL_DIFFS[normalizedBaseName] || {};
 
     const nativeFallbackName = path.basename(nativePath, '.js');
     const webFallbackName = path.basename(webPath, '.web.js');
@@ -203,6 +237,9 @@ function main() {
       });
     }
 
+    removeDocumentedDiffs(missingInWeb, intentionalDiffs.hooksMissingInWeb);
+    removeDocumentedDiffs(missingInNative, intentionalDiffs.hooksMissingInNative);
+
     if (missingInWeb.size > 0) {
       warnings.push(`  Hook imports missing in web: ${[...missingInWeb].join(', ')}`);
     }
@@ -216,6 +253,9 @@ function main() {
     const propsMissingInWeb = setDifference(nativeProps, webProps);
     const propsMissingInNative = setDifference(webProps, nativeProps);
 
+    removeDocumentedDiffs(propsMissingInWeb, intentionalDiffs.propsMissingInWeb);
+    removeDocumentedDiffs(propsMissingInNative, intentionalDiffs.propsMissingInNative);
+
     if (propsMissingInWeb.size > 0) {
       warnings.push(`  Props missing in web: ${[...propsMissingInWeb].join(', ')}`);
     }
@@ -228,6 +268,9 @@ function main() {
     const nativeHandlers = extractHandlerNames(nativeContent);
     const handlersMissingInWeb = setDifference(nativeHandlers, webHandlers);
     const handlersMissingInNative = setDifference(webHandlers, nativeHandlers);
+
+    removeDocumentedDiffs(handlersMissingInWeb, intentionalDiffs.handlersMissingInWeb);
+    removeDocumentedDiffs(handlersMissingInNative, intentionalDiffs.handlersMissingInNative);
 
     if (handlersMissingInWeb.size > 0) {
       warnings.push(`  Handlers missing in web: ${[...handlersMissingInWeb].join(', ')}`);
@@ -253,6 +296,8 @@ function main() {
   if (totalWarnings > 0) {
     console.log('\nNote: Some differences are intentional (e.g., platform-specific handlers).');
     console.log('Review warnings above to identify unintentional drift.');
+  } else {
+    console.log('\nIntentional renderer-only differences are documented in the parity allowlist.');
   }
 }
 

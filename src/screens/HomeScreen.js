@@ -20,9 +20,10 @@ import { useMapTapPopup } from '../hooks/useMapTapPopup';
 import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
+import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { decodePolyline } from '../utils/polylineUtils';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
+import { pointToPolylineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -52,6 +53,8 @@ import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
+import SystemHealthBanner from '../components/SystemHealthBanner';
+import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
 
 
@@ -110,6 +113,8 @@ const HomeScreen = ({ route }) => {
     loadStaticData,
     isOffline,
     ensureRoutingData,
+    diagnostics,
+    loadProxyHealth,
   } = useTransitStatic();
   const {
     vehicles,
@@ -118,6 +123,7 @@ const HomeScreen = ({ route }) => {
     serviceAlerts,
     onDemandZones,
     getRouteDetour,
+    loadVehiclePositions,
   } = useTransitRealtime();
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -164,37 +170,6 @@ const HomeScreen = ({ route }) => {
   });
   const suppressNextMapTapRef = useRef(false);
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
-  // Guards auto-zoom so it only fires once per itinerary selection, not on every re-render
-  const tripZoomedRef = useRef(false);
-
-  // Fit map to show the full extent of a trip itinerary
-  const fitMapToItinerary = useCallback((itinerary) => {
-    if (!itinerary || !itinerary.legs) return;
-
-    const coords = [];
-    itinerary.legs.forEach(leg => {
-      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      if (leg.legGeometry?.points) {
-        const decoded = decodePolyline(leg.legGeometry.points);
-        coords.push(...decoded);
-      }
-      if (leg.intermediateStops) {
-        leg.intermediateStops.forEach(stop => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-      }
-    });
-
-    if (coords.length > 0) {
-      compatMapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
-        animated: true,
-      });
-    }
-  }, []);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
@@ -202,10 +177,6 @@ const HomeScreen = ({ route }) => {
     applyDelays: applyDelaysToItineraries,
     onDemandZones,
     stops,
-    onItinerariesReady: () => {
-      // Reset zoom flag so the effect below fires for the new results
-      tripZoomedRef.current = false;
-    },
   });
   const {
     state: tripState,
@@ -248,32 +219,17 @@ const HomeScreen = ({ route }) => {
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
 
-  // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
-  useEffect(() => {
-    if (!isFocused && isTripPlanningMode) {
-      resetTrip();
-    }
-  }, [isFocused]);
-
-  // Reset zoom flag whenever the selected itinerary changes so the new selection gets its own zoom
-  useEffect(() => {
-    tripZoomedRef.current = false;
-  }, [selectedItineraryIndex, itineraries]);
-
-  // Auto-zoom to selected itinerary bounds — fires once per selection, not on every re-render
-  useEffect(() => {
-    if (!isTripPlanningMode || !itineraries.length) {
-      tripZoomedRef.current = false;
-      return;
-    }
-    if (tripZoomedRef.current) return;
-    const itinerary = itineraries[selectedItineraryIndex];
-    if (itinerary) {
-      fitMapToItinerary(itinerary);
-      tripZoomedRef.current = true;
-    }
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, fitMapToItinerary]);
+  useTripPreviewViewport({
+    isFocused,
+    isTripPlanningMode,
+    itineraries,
+    selectedItineraryIndex,
+    fitToCoordinates: (coordinates, options) => compatMapRef.current.fitToCoordinates(coordinates, options),
+    edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
+    animated: true,
+    onBlurInactive: resetTrip,
+  });
 
   // Pulse animation for live indicator
   const pulseAnim = useMapPulseAnimation();
@@ -348,6 +304,45 @@ const HomeScreen = ({ route }) => {
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
   });
+
+  const routePathsByRouteId = useMemo(() => {
+    const shapeSource = Object.keys(processedShapes || {}).length > 0 ? processedShapes : shapes;
+    const map = new Map();
+
+    Object.entries(routeShapeMapping || {}).forEach(([routeId, shapeIds]) => {
+      const paths = (shapeIds || [])
+        .map((shapeId) => shapeSource[shapeId] || shapes[shapeId])
+        .filter((coords) => Array.isArray(coords) && coords.length >= 2);
+
+      if (paths.length > 0) {
+        map.set(routeId, paths);
+      }
+    });
+
+    return map;
+  }, [processedShapes, routeShapeMapping, shapes]);
+
+  const getVehicleSnapPath = useCallback((vehicle) => {
+    const candidatePaths = routePathsByRouteId.get(vehicle?.routeId);
+    if (!candidatePaths || candidatePaths.length === 0) return null;
+    if (candidatePaths.length === 1) return candidatePaths[0];
+
+    const point = vehicle?.coordinate;
+    if (!point) return candidatePaths[0];
+
+    let bestPath = candidatePaths[0];
+    let bestDistance = pointToPolylineDistance(point, bestPath);
+
+    for (let i = 1; i < candidatePaths.length; i++) {
+      const distance = pointToPolylineDistance(point, candidatePaths[i]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestPath = candidatePaths[i];
+      }
+    }
+
+    return bestPath;
+  }, [routePathsByRouteId]);
 
   const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
 
@@ -570,11 +565,12 @@ const HomeScreen = ({ route }) => {
 
   // Handle "Where to?" address selection — open trip planner with destination + current location
   const handleWhereToSelect = (address) => {
+    const destination = { lat: address.lat, lon: address.lon };
     setWhereToText('');
     enterPlanningMode();
     setSelectedStop(null);
-    setTripTo({ lat: address.lat, lon: address.lon }, address.shortName || address.displayName);
-    useCurrentLocationForTrip();
+    setTripTo(destination, address.shortName || address.displayName);
+    useCurrentLocationForTrip(destination);
   };
 
   const handleZonePress = (zoneId) => {
@@ -603,13 +599,13 @@ const HomeScreen = ({ route }) => {
   };
 
 
-  const useCurrentLocationForTrip = () => {
+  const useCurrentLocationForTrip = (searchTo = null) => {
     useCurrentLocationHook(async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') throw new Error('Location permission required');
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       return { lat: loc.coords.latitude, lon: loc.coords.longitude };
-    });
+    }, { searchTo });
   };
 
   const viewTripDetails = (itinerary) => {
@@ -726,7 +722,13 @@ const HomeScreen = ({ route }) => {
       )}
       {/* Vehicles - hide when previewing a trip */}
       {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-        <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+        <BusMarker
+          key={vehicle.id}
+          vehicle={vehicle}
+          color={getRouteColor(vehicle.routeId)}
+          routeLabel={getRouteLabel(vehicle)}
+          snapPath={getVehicleSnapPath(vehicle)}
+        />
       ))}
 
       {/* Trip planning route overlay */}
@@ -829,7 +831,13 @@ const HomeScreen = ({ route }) => {
 
       {/* Real-time bus positions for trip routes */}
       {isTripPreviewMode && tripVehicles.map((vehicle) => (
-        <BusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+        <BusMarker
+          key={vehicle.id}
+          vehicle={vehicle}
+          color={getRouteColor(vehicle.routeId)}
+          routeLabel={getRouteLabel(vehicle)}
+          snapPath={getVehicleSnapPath(vehicle)}
+        />
       ))}
 
       {/* Map tap marker - shows where user tapped */}
@@ -864,6 +872,7 @@ const HomeScreen = ({ route }) => {
     displayedVehicles,
     getRouteColor,
     getRouteLabel,
+    getVehicleSnapPath,
     tripRouteCoordinates,
     intermediateStopMarkers,
     tripMarkers,
@@ -917,14 +926,23 @@ const HomeScreen = ({ route }) => {
             style={styles.whereToAutocomplete}
             inputStyle={styles.whereToInput}
             rightIcon={
-              <StatusBadge
-                isOffline={isOffline}
-                vehicleCount={vehicles.length}
-                selectedRouteNames={selectedRouteNames}
-                activeVehicleCount={activeVehicleCount}
-                pulseAnim={pulseAnim}
-              />
+              <View style={styles.searchBarRight}>
+                <SystemHealthChip diagnostics={diagnostics} />
+                <StatusBadge
+                  isOffline={isOffline}
+                  vehicleCount={vehicles.length}
+                  selectedRouteNames={selectedRouteNames}
+                  activeVehicleCount={activeVehicleCount}
+                  pulseAnim={pulseAnim}
+                />
+              </View>
             }
+          />
+          <SystemHealthBanner
+            diagnostics={diagnostics}
+            onRetryStatic={loadStaticData}
+            onRetryRealtime={loadVehiclePositions}
+            onRetryProxy={loadProxyHealth}
           />
         </View>
       )}
@@ -1214,6 +1232,11 @@ const styles = StyleSheet.create({
     height: 52,
     fontSize: FONT_SIZES.md,
     fontFamily: FONT_FAMILIES.medium,
+  },
+  searchBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
   },
   statusBadgeLive: {
     flexDirection: 'row',

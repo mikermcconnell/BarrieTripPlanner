@@ -43,32 +43,31 @@ import { useTransitStatic, useTransitRealtime } from '../context/TransitContext'
 
 // Hooks
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
+import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
 
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
+import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import * as Haptics from 'expo-haptics';
 import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
+import {
+  collectItineraryEndpointCoordinates,
+  computeCoordinateBounds,
+  computeLegBounds,
+} from '../utils/itineraryViewport';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-// Helper: compute bounds from coordinates array [{latitude, longitude}]
-const computeBounds = (coords) => {
-  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-  coords.forEach(c => {
-    minLat = Math.min(minLat, c.latitude || c.lat);
-    maxLat = Math.max(maxLat, c.latitude || c.lat);
-    minLng = Math.min(minLng, c.longitude || c.lon);
-    maxLng = Math.max(maxLng, c.longitude || c.lon);
-  });
-  return {
-    ne: [maxLng, maxLat],
-    sw: [minLng, minLat],
-  };
+const trackNavigationEvent = (eventName, params) => {
+  try {
+    const { trackEvent } = require('../services/analyticsService');
+    trackEvent(eventName, params);
+  } catch {}
 };
 
 const NavigationScreen = ({ route }) => {
@@ -115,8 +114,8 @@ const NavigationScreen = ({ route }) => {
   if (!itinerary) return null;
 
   // Get route shapes and realtime vehicles from TransitContext
-  const { shapes, routeShapeMapping } = useTransitStatic();
-  const { vehicles } = useTransitRealtime();
+  const { shapes, routeShapeMapping, ensureRoutingData, stops } = useTransitStatic();
+  const { vehicles, onDemandZones } = useTransitRealtime();
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
@@ -128,11 +127,10 @@ const NavigationScreen = ({ route }) => {
   const [isHeadingUp, setIsHeadingUp] = useState(false); // Compass/heading-up mode (walking only)
   const [showStaleWarning, setShowStaleWarning] = useState(false);
   const [showMissedBusWarning, setShowMissedBusWarning] = useState(false);
+  const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
   const staleCheckedRef = useRef(false);
+  const missedBusWarningRef = useRef(false);
 
-  // Location tracking
-  const useWebLocation = useNavigationLocation;
-  void useWebLocation;
   const {
     location: userLocation,
     error: locationError,
@@ -189,92 +187,26 @@ const NavigationScreen = ({ route }) => {
   // Reset haptic tracking when the leg changes
   useEffect(() => {
     hapticFiredRef.current = {};
+    missedBusWarningRef.current = false;
   }, [currentLegIndex]);
 
-  // Get current transit leg for bus proximity tracking
-  const currentTransitLeg = useMemo(() => {
-    if (!currentLeg) return null;
-    const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
-    return isTransit ? currentLeg : null;
-  }, [currentLeg]);
-
-  const isWalkingLeg = currentLeg?.mode === 'WALK';
-  const isTransitLeg = currentLeg?.mode === 'BUS' || currentLeg?.mode === 'TRANSIT';
-  const isOnDemandLeg = currentLeg?.isOnDemand === true;
-
-  // Get next transit leg (for bus tracking during walking legs)
-  const nextTransitLeg = useMemo(() => {
-    if (!itinerary?.legs || !isWalkingLeg) return null;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      const leg = itinerary.legs[i];
-      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') return leg;
-    }
-    return null;
-  }, [itinerary, currentLegIndex, isWalkingLeg]);
-
-  const isLastWalkingLeg = useMemo(() => {
-    if (!isWalkingLeg || !itinerary?.legs) return false;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      if (itinerary.legs[i].mode === 'BUS' || itinerary.legs[i].mode === 'TRANSIT') return false;
-    }
-    return true;
-  }, [isWalkingLeg, itinerary, currentLegIndex]);
-
-  // Peek-ahead text for the next transit leg (shown in WalkingInstructionCard)
-  const nextLegPreviewText = useMemo(() => {
-    if (!itinerary?.legs || !isWalkingLeg) return null;
-    let nextLeg = null;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      const leg = itinerary.legs[i];
-      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') {
-        nextLeg = leg;
-        break;
-      }
-    }
-    if (!nextLeg) return null;
-    const routeName = nextLeg.route?.shortName || nextLeg.routeShortName || '';
-    const stopName = nextLeg.from?.name || '';
-    const stopCode = nextLeg.from?.stopCode;
-    const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
-    const timeStr = nextLeg.startTime
-      ? new Date(nextLeg.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-      : null;
-    const parts = [`Then board Route ${routeName}`, stopLabel && `at ${stopLabel}`, timeStr && `at ${timeStr}`];
-    return parts.filter(Boolean).join(' ');
-  }, [itinerary, currentLegIndex, isWalkingLeg]);
-
-  // Peek-ahead text for the leg after the current transit leg (shown in BusProximityCard/BoardingInstructionCard)
-  const transitPeekAheadText = useMemo(() => {
-    if (!itinerary?.legs || !isTransitLeg) return null;
-    const nextLegIndex = currentLegIndex + 1;
-    if (nextLegIndex >= itinerary.legs.length) return null;
-    const nextLeg = itinerary.legs[nextLegIndex];
-    if (!nextLeg) return null;
-
-    if (nextLeg.mode === 'WALK') {
-      const durationMin = nextLeg.duration ? Math.ceil(nextLeg.duration / 60) : null;
-      const durationStr = durationMin ? `${durationMin} min` : '';
-      // Check if there is a transit leg after the walk
-      const legAfterWalk = itinerary.legs[nextLegIndex + 1];
-      if (legAfterWalk && (legAfterWalk.mode === 'BUS' || legAfterWalk.mode === 'TRANSIT')) {
-        const routeName = legAfterWalk.route?.shortName || legAfterWalk.routeShortName || '';
-        const stopName = legAfterWalk.from?.name || '';
-        const stopCode = legAfterWalk.from?.stopCode;
-        const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
-        const parts = [
-          `Next: Walk${durationStr ? ` ${durationStr}` : ''}`,
-          stopLabel && `to ${stopLabel}`,
-          routeName && `for Route ${routeName}`,
-        ];
-        return parts.filter(Boolean).join(' ');
-      }
-      // Walk to destination
-      const destName = nextLeg.to?.name || 'your destination';
-      return `Next: Walk${durationStr ? ` ${durationStr}` : ''} to ${destName}`;
-    }
-
-    return null;
-  }, [itinerary, currentLegIndex, isTransitLeg]);
+  const {
+    currentTransitLeg,
+    finalDestination,
+    isLastWalkingLeg,
+    isOnDemandLeg,
+    isTransitLeg,
+    isWalkingLeg,
+    nextLegPreviewText,
+    nextTransitLeg,
+    totalRemainingDistance,
+    transitPeekAheadText,
+  } = useNavigationTripViewModel({
+    itinerary,
+    currentLegIndex,
+    currentLeg,
+    distanceToDestination,
+  });
 
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
@@ -289,18 +221,7 @@ const NavigationScreen = ({ route }) => {
 
   // Calculate trip bounds for initial map view
   const tripBounds = useMemo(() => {
-    if (!itinerary?.legs || itinerary.legs.length === 0) return null;
-
-    const points = [];
-    itinerary.legs.forEach(leg => {
-      if (leg.from) points.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      if (leg.to) points.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-    });
-
-    if (points.length === 0) return null;
-
-    const bounds = computeBounds(points);
-    return bounds;
+    return computeCoordinateBounds(collectItineraryEndpointCoordinates(itinerary));
   }, [itinerary]);
 
   // Fit map to trip bounds on initial load
@@ -318,21 +239,14 @@ const NavigationScreen = ({ route }) => {
   // Auto-zoom to fit current leg extent on each leg transition (fires once per leg)
   useEffect(() => {
     if (legZoomedRef.current.has(currentLegIndex)) return;
-    if (!currentLeg?.from || !currentLeg?.to) return;
+    const bounds = computeLegBounds(currentLeg);
+    if (!bounds) return;
     if (!cameraRef.current) return;
-
-    const fromLat = currentLeg.from.lat;
-    const fromLon = currentLeg.from.lon;
-    const toLat = currentLeg.to.lat;
-    const toLon = currentLeg.to.lon;
-
-    const ne = [Math.max(fromLon, toLon), Math.max(fromLat, toLat)];
-    const sw = [Math.min(fromLon, toLon), Math.min(fromLat, toLat)];
 
     cameraRef.current.setCamera({
       bounds: {
-        ne,
-        sw,
+        ne: bounds.ne,
+        sw: bounds.sw,
         paddingTop: 100,
         paddingBottom: 300,
         paddingLeft: 50,
@@ -453,6 +367,14 @@ const NavigationScreen = ({ route }) => {
     staleCheckedRef.current = true;
     const firstLegStart = itinerary?.legs?.[0]?.startTime;
     if (firstLegStart && Date.now() - firstLegStart > 30 * 60 * 1000) {
+      const ageMinutes = Math.round((Date.now() - firstLegStart) / 60000);
+      logger.warn('Navigation itinerary is stale', {
+        ageMinutes,
+        firstLegStart,
+      });
+      trackNavigationEvent('navigation_itinerary_stale', {
+        age_minutes: ageMinutes,
+      });
       setShowStaleWarning(true);
     }
   }, [itinerary]);
@@ -465,8 +387,21 @@ const NavigationScreen = ({ route }) => {
     if (!scheduledDeparture) return;
     if (Date.now() <= scheduledDeparture + 5 * 60 * 1000) return;
     if (busProximity?.vehicle) return;
+    if (missedBusWarningRef.current) return;
+    missedBusWarningRef.current = true;
+    const minutesLate = Math.round((Date.now() - scheduledDeparture) / 60000);
+    logger.warn('Navigation missed bus warning triggered', {
+      currentLegIndex,
+      minutesLate,
+      routeId: currentLeg?.route?.id || null,
+    });
+    trackNavigationEvent('navigation_missed_bus_warning', {
+      leg_index: currentLegIndex,
+      minutes_late: minutesLate,
+      route_id: currentLeg?.route?.id || 'unknown',
+    });
     setShowMissedBusWarning(true);
-  }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle]);
+  }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle, currentLegIndex]);
 
   // Get route polylines for map
   const routePolylines = useMemo(() => {
@@ -742,6 +677,14 @@ const NavigationScreen = ({ route }) => {
       if (!offRouteTimerRef.current) {
         offRouteTimerRef.current = setTimeout(() => {
           setIsOffRoute(true);
+          logger.warn('Navigation off-route warning triggered', {
+            currentLegIndex,
+            distanceFromRouteMeters: Math.round(dist),
+          });
+          trackNavigationEvent('navigation_off_route_warning', {
+            leg_index: currentLegIndex,
+            distance_from_route_m: Math.round(dist),
+          });
           offRouteTimerRef.current = null;
         }, 30000);
       }
@@ -753,7 +696,7 @@ const NavigationScreen = ({ route }) => {
       }
       setIsOffRoute(false);
     }
-  }, [userLocation, currentLeg, isWalkingLeg]);
+  }, [userLocation, currentLeg, isWalkingLeg, currentLegIndex]);
 
   // Clear off-route timer on unmount
   useEffect(() => {
@@ -764,17 +707,69 @@ const NavigationScreen = ({ route }) => {
     };
   }, []);
 
-  // Dismiss off-route banner and log recalculate intent
-  const handleRecalculate = () => {
-    // TODO: Implement actual re-routing from current position to leg destination
-    // This would fetch new walking directions from userLocation to currentLeg.to
-    logger.log('Off-route recalculate requested — rerouting not yet implemented');
+  const clearOffRouteState = useCallback(() => {
     setIsOffRoute(false);
     if (offRouteTimerRef.current) {
       clearTimeout(offRouteTimerRef.current);
       offRouteTimerRef.current = null;
     }
-  };
+  }, []);
+
+  const handleRecalculate = useCallback(async () => {
+    if (isRecalculatingRoute) return;
+
+    const finalDestinationStop = itinerary?.legs?.[itinerary.legs.length - 1]?.to;
+    setIsRecalculatingRoute(true);
+    clearOffRouteState();
+
+    try {
+      const { itinerary: nextItinerary, routingDiagnostics } = await recalculateNavigationItinerary({
+        userLocation,
+        destination: finalDestinationStop,
+        ensureRoutingData,
+        onDemandZones,
+        stops,
+      });
+
+      logger.info('Navigation reroute applied', routingDiagnostics);
+      trackNavigationEvent('navigation_rerouted', {
+        routing_source: routingDiagnostics?.source || 'unknown',
+        fallback_from: routingDiagnostics?.fallbackFrom || 'none',
+        fallback_reason: routingDiagnostics?.fallbackReason || 'none',
+      });
+      legZoomedRef.current = new Set();
+      legTransitionTimeRef.current = 0;
+      staleCheckedRef.current = false;
+      missedBusWarningRef.current = false;
+      setShowStaleWarning(false);
+      setShowMissedBusWarning(false);
+      setIsFollowMode(false);
+      setFollowMode('full-trip');
+      setHasInitializedMap(false);
+      setItinerary(nextItinerary);
+      resetNavigation();
+      startNavigation();
+    } catch (error) {
+      logger.error('Navigation reroute failed:', error);
+      trackNavigationEvent('navigation_reroute_failed', {
+        code: error?.code || 'UNKNOWN_ERROR',
+      });
+      Alert.alert('Could Not Recalculate', error.message || 'A new route could not be generated right now.');
+    } finally {
+      setIsRecalculatingRoute(false);
+    }
+  }, [
+    clearOffRouteState,
+    ensureRoutingData,
+    isRecalculatingRoute,
+    itinerary,
+    onDemandZones,
+    resetNavigation,
+    startNavigation,
+    stops,
+    userLocation,
+    currentLegIndex,
+  ]);
 
   // Close navigation - show confirmation modal
   const handleClose = () => {
@@ -830,30 +825,6 @@ const NavigationScreen = ({ route }) => {
   };
   const handleBoundsFit = useCallback(() => {}, []);
   void handleBoundsFit;
-
-  // Get final destination name for header
-  const finalDestination = useMemo(() => {
-    if (!itinerary?.legs) return 'Destination';
-    const lastLeg = itinerary.legs[itinerary.legs.length - 1];
-    return lastLeg?.to?.name || 'Destination';
-  }, [itinerary]);
-
-  // Calculate total remaining distance across all legs
-  const totalRemainingDistance = useMemo(() => {
-    if (!itinerary?.legs) return 0;
-
-    let remaining = 0;
-
-    if (currentLeg && distanceToDestination) {
-      remaining += distanceToDestination;
-    }
-
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      remaining += itinerary.legs[i].distance || 0;
-    }
-
-    return remaining;
-  }, [itinerary, currentLegIndex, currentLeg, distanceToDestination]);
 
   // Initial camera settings
   const initialCameraCenter = useMemo(() => {
@@ -980,7 +951,7 @@ const NavigationScreen = ({ route }) => {
         currentLegIndex={currentLegIndex}
         totalLegs={totalLegs}
         onClose={handleClose}
-        destinationName={currentLeg?.to?.name || finalDestination}
+        destinationName={finalDestination}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
         scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
@@ -1049,16 +1020,12 @@ const NavigationScreen = ({ route }) => {
             <Text style={styles.offRouteBannerText}>You appear to be off-route</Text>
             <View style={styles.offRouteBannerButtons}>
               <TouchableOpacity onPress={handleRecalculate} style={styles.offRouteRecalcButton}>
-                <Text style={styles.offRouteRecalcText}>Recalculate</Text>
+                <Text style={styles.offRouteRecalcText}>
+                  {isRecalculatingRoute ? 'Recalculating...' : 'Recalculate'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => {
-                  setIsOffRoute(false);
-                  if (offRouteTimerRef.current) {
-                    clearTimeout(offRouteTimerRef.current);
-                    offRouteTimerRef.current = null;
-                  }
-                }}
+                onPress={clearOffRouteState}
                 style={styles.offRouteDismissButton}
               >
                 <Text style={styles.offRouteDismissText}>Dismiss</Text>

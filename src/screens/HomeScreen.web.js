@@ -17,6 +17,7 @@ import { useMapTapPopup } from '../hooks/useMapTapPopup';
 import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
+import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import TripBottomSheet from '../components/TripBottomSheet';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import logger from '../utils/logger';
@@ -24,13 +25,12 @@ import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
-import { decodePolyline } from '../utils/polylineUtils';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
+import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { escapeHtml } from '../utils/htmlUtils';
 
 // Web-only imports
-import WebMapView, { WebBusMarker, WebRoutePolyline, WebStopMarker, RouteLineLabels } from '../components/WebMapView';
-import { Marker, Polyline as LeafletPolyline } from 'react-leaflet';
-import L from 'leaflet';
+import WebMapView, { WebBusMarker, WebHtmlMarker, WebRoutePolyline, WebStopMarker, RouteLineLabels } from '../components/WebMapView';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import DetourOverlay from '../components/DetourOverlay.web';
 import { useZoneOverlays } from '../hooks/useZoneOverlays';
@@ -43,6 +43,8 @@ import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import { useAffectedStops } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
+import SystemHealthBanner from '../components/SystemHealthBanner';
+import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
 import DirectionArrows from '../components/DirectionArrows.web';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
@@ -109,6 +111,57 @@ const ChevronRightIcon = ({ size = 16, color = COLORS.textSecondary }) => (
   </svg>
 );
 
+const buildIntermediateStopMarkerHtml = (color) => `
+  <div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>
+`;
+
+const buildTripMarkerHtml = (marker) => {
+  const color = marker.type === 'origin' ? '#4CAF50' : '#f44336';
+  const stopCode = escapeHtml(marker.stopCode || '');
+  const stopName = escapeHtml(marker.stopName || '');
+  const walkLabel = marker.walkDistance != null
+    ? (marker.walkDistance >= 1000
+        ? `${(marker.walkDistance / 1000).toFixed(1)}km walk`
+        : `${marker.walkDistance}m walk`) +
+      (marker.type === 'origin' ? ' from start' : ' to destination')
+    : '';
+  const labelHtml = marker.stopName
+    ? `<div style="background:white;border-radius:6px;padding:3px 6px;margin-top:4px;border:1.5px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.15);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <div style="font-size:10px;font-weight:600;color:#333;">${marker.stopCode ? `#${stopCode} - ` : ''}${stopName}</div>
+        ${walkLabel ? `<div style="font-size:9px;color:#888;margin-top:1px;">${walkLabel}</div>` : ''}
+      </div>`
+    : '';
+
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;">
+      <div style="background:${color};width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+        <div style="background:white;width:8px;height:8px;border-radius:50%;"></div>
+      </div>
+      ${labelHtml}
+    </div>
+  `;
+};
+
+const buildBoardingMarkerHtml = (marker) => {
+  const routeName = escapeHtml(marker.routeName || '');
+  const stopCode = escapeHtml(marker.stopCode || '');
+  const stopName = escapeHtml(marker.stopName || '');
+
+  return `
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+      <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};margin-bottom:4px;white-space:nowrap;max-width:180px;">
+        <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? 'Board' : 'Exit'} ${routeName ? `Route ${routeName}` : ''}</div>
+        <div style="font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;">#${stopCode} - ${stopName}</div>
+      </div>
+      <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${marker.routeColor};"></div>
+    </div>
+  `;
+};
+
+const buildMapTapMarkerHtml = () => `
+  <div style="background:#1a73e8;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>
+`;
+
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const navigation = useNavigation();
@@ -128,6 +181,8 @@ const HomeScreen = ({ route }) => {
     isOffline,
     usingCachedData,
     ensureRoutingData,
+    diagnostics,
+    loadProxyHealth,
   } = useTransitStatic();
   const {
     vehicles,
@@ -137,6 +192,7 @@ const HomeScreen = ({ route }) => {
     activeDetours,
     onDemandZones,
     getRouteDetour,
+    loadVehiclePositions,
   } = useTransitRealtime();
 
   const {
@@ -148,8 +204,6 @@ const HomeScreen = ({ route }) => {
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const perfRef = useRef({ lastWarnTs: 0 });
-  // Guards auto-zoom so it only fires once per itinerary selection, not on every re-render
-  const tripZoomedRef = useRef(false);
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
   const [showZones, setShowZones] = useState(true);
   const [selectedZone, setSelectedZone] = useState(null);
@@ -220,16 +274,12 @@ const HomeScreen = ({ route }) => {
     return getRouteAlerts(routeId).length > 0;
   }, [getRouteAlerts]);
 
-  // Trip planning — shared hook (with onItinerariesReady for initial zoom)
+  // Trip planning — shared hook
   const trip = useTripPlanner({
     ensureRoutingData,
     onDemandZones,
     stops,
     applyDelays: applyDelaysToItineraries,
-    onItinerariesReady: () => {
-      // Reset zoom flag so the effect below fires for the new results
-      tripZoomedRef.current = false;
-    },
   });
   const {
     state: tripState,
@@ -277,60 +327,16 @@ const HomeScreen = ({ route }) => {
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
 
-  // Fit map to show the full extent of a trip itinerary
-  const fitMapToItinerary = useCallback((itinerary) => {
-    if (!itinerary || !itinerary.legs) return;
-
-    const coords = [];
-    itinerary.legs.forEach(leg => {
-      if (leg.from) coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      if (leg.to) coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      if (leg.legGeometry?.points) {
-        const decoded = decodePolyline(leg.legGeometry.points);
-        coords.push(...decoded);
-      }
-      if (leg.intermediateStops) {
-        leg.intermediateStops.forEach(stop => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-      }
-    });
-
-    if (coords.length > 0) {
-      mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: 200, right: 50, bottom: 350, left: 50 },
-      });
-    }
-  }, []);
-
-  // Reset trip planner when navigating away from this tab
   const isFocused = useIsFocused();
-  useEffect(() => {
-    if (!isFocused && isTripPlanningMode) {
-      resetTrip();
-    }
-  }, [isFocused]);
-
-  // Reset zoom flag whenever the selected itinerary changes so the new selection gets its own zoom
-  useEffect(() => {
-    tripZoomedRef.current = false;
-  }, [selectedItineraryIndex, itineraries]);
-
-  // Auto-zoom to selected itinerary bounds — fires once per selection, not on every re-render
-  useEffect(() => {
-    if (!isTripPlanningMode || !itineraries.length) {
-      tripZoomedRef.current = false;
-      return;
-    }
-    if (tripZoomedRef.current) return;
-    const itinerary = itineraries[selectedItineraryIndex];
-    if (itinerary) {
-      fitMapToItinerary(itinerary);
-      tripZoomedRef.current = true;
-    }
-  }, [isTripPlanningMode, itineraries, selectedItineraryIndex, fitMapToItinerary]);
+  useTripPreviewViewport({
+    isFocused,
+    isTripPlanningMode,
+    itineraries,
+    selectedItineraryIndex,
+    fitToCoordinates: (coordinates, options) => mapRef.current?.fitToCoordinates(coordinates, options),
+    edgePadding: { top: 200, right: 50, bottom: 350, left: 50 },
+    onBlurInactive: resetTrip,
+  });
 
   // Map tap popup
   const {
@@ -386,6 +392,45 @@ const HomeScreen = ({ route }) => {
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
   });
+
+  const routePathsByRouteId = useMemo(() => {
+    const shapeSource = Object.keys(processedShapes || {}).length > 0 ? processedShapes : shapes;
+    const map = new Map();
+
+    Object.entries(routeShapeMapping || {}).forEach(([routeId, shapeIds]) => {
+      const paths = (shapeIds || [])
+        .map((shapeId) => shapeSource[shapeId] || shapes[shapeId])
+        .filter((coords) => Array.isArray(coords) && coords.length >= 2);
+
+      if (paths.length > 0) {
+        map.set(routeId, paths);
+      }
+    });
+
+    return map;
+  }, [processedShapes, routeShapeMapping, shapes]);
+
+  const getVehicleSnapPath = useCallback((vehicle) => {
+    const candidatePaths = routePathsByRouteId.get(vehicle?.routeId);
+    if (!candidatePaths || candidatePaths.length === 0) return null;
+    if (candidatePaths.length === 1) return candidatePaths[0];
+
+    const point = vehicle?.coordinate;
+    if (!point) return candidatePaths[0];
+
+    let bestPath = candidatePaths[0];
+    let bestDistance = pointToPolylineDistance(point, bestPath);
+
+    for (let i = 1; i < candidatePaths.length; i++) {
+      const distance = pointToPolylineDistance(point, candidatePaths[i]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestPath = candidatePaths[i];
+      }
+    }
+
+    return bestPath;
+  }, [routePathsByRouteId]);
 
   // Build vehicle routeId → display label lookup
   const getRouteLabel = useCallback((vehicle) => {
@@ -502,11 +547,12 @@ const HomeScreen = ({ route }) => {
 
   // Handle "Where to?" address selection — open trip planner with destination + current location
   const handleWhereToSelect = (address) => {
+    const destination = { lat: address.lat, lon: address.lon };
     setWhereToText('');
     enterPlanningMode();
     setSelectedStop(null);
-    setTripTo({ lat: address.lat, lon: address.lon }, address.shortName || address.displayName);
-    useCurrentLocationForTrip();
+    setTripTo(destination, address.shortName || address.displayName);
+    useCurrentLocationForTrip(destination);
   };
 
   const handleZonePress = (zoneId) => {
@@ -520,7 +566,7 @@ const HomeScreen = ({ route }) => {
     setTripTo({ lat: hubStop.latitude, lon: hubStop.longitude }, hubStop.name || 'Hub Stop');
   };
 
-  const useCurrentLocationForTrip = () => {
+  const useCurrentLocationForTrip = (searchTo = null) => {
     useCurrentLocationHook(
       () => new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('No geolocation'));
@@ -528,7 +574,8 @@ const HomeScreen = ({ route }) => {
           (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
           (err) => reject(err)
         );
-      })
+      }),
+      { searchTo }
     );
   };
 
@@ -649,21 +696,27 @@ const HomeScreen = ({ route }) => {
         ))}
         {/* Live bus markers - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+          <WebBusMarker
+            key={vehicle.id}
+            vehicle={vehicle}
+            color={getRouteColor(vehicle.routeId)}
+            routeLabel={getRouteLabel(vehicle)}
+            snapPath={getVehicleSnapPath(vehicle)}
+          />
         ))}
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((route) => (
           <React.Fragment key={route.id}>
-            <LeafletPolyline
-              positions={route.coordinates.map(c => [c.latitude, c.longitude])}
-              pathOptions={{
-                color: route.color,
-                weight: route.isWalk ? 4 : route.isOnDemand ? 5 : 6,
-                dashArray: route.isWalk ? '2, 8' : route.isOnDemand ? '12, 6' : null,
-                lineCap: 'round',
-                lineJoin: 'round',
-                opacity: route.isWalk ? 0.9 : 1,
-              }}
+            <WebRoutePolyline
+              coordinates={route.coordinates}
+              color={route.color}
+              strokeWidth={route.isWalk ? 4 : route.isOnDemand ? 5 : 6}
+              dashArray={route.isWalk ? '2, 8' : route.isOnDemand ? '12, 6' : null}
+              lineCap="round"
+              lineJoin="round"
+              opacity={route.isWalk ? 0.9 : 1}
+              outlineWidth={0}
+              interactive={false}
             />
             {route.routeLabel && (
               <RouteLineLabels coordinates={route.coordinates} color={route.color} routeLabel={route.routeLabel} />
@@ -673,104 +726,66 @@ const HomeScreen = ({ route }) => {
 
         {/* Bus approach lines — dashed route-colored line from bus to boarding stop */}
         {busApproachLines.map((line) => (
-          <LeafletPolyline
+          <WebRoutePolyline
             key={line.id}
-            positions={line.coordinates.map(c => [c.latitude, c.longitude])}
-            pathOptions={{
-              color: line.color,
-              weight: 3,
-              dashArray: '8 6',
-              opacity: 0.7,
-            }}
+            coordinates={line.coordinates}
+            color={line.color}
+            strokeWidth={3}
+            dashArray="8 6"
+            opacity={0.7}
+            outlineWidth={0}
+            interactive={false}
           />
         ))}
 
         {/* Trip planning intermediate stop markers */}
         {intermediateStopMarkers.map((marker) => (
-          <Marker
+          <WebHtmlMarker
             key={marker.id}
-            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-            icon={L.divIcon({
-              className: 'intermediate-stop-marker',
-              html: `<div style="background:${marker.color};width:10px;height:10px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
-              iconSize: [10, 10],
-              iconAnchor: [5, 5],
-            })}
+            coordinate={marker.coordinate}
+            html={buildIntermediateStopMarkerHtml(marker.color)}
+            className="intermediate-stop-marker"
           />
         ))}
 
         {/* Trip planning markers with stop info labels */}
-        {tripMarkers.map((marker) => {
-          const color = marker.type === 'origin' ? '#4CAF50' : '#f44336';
-          const walkLabel = marker.walkDistance != null
-            ? (marker.walkDistance >= 1000
-                ? `${(marker.walkDistance / 1000).toFixed(1)}km walk`
-                : `${marker.walkDistance}m walk`)
-              + (marker.type === 'origin' ? ' from start' : ' to destination')
-            : '';
-          const labelHtml = marker.stopName
-            ? `<div style="background:white;border-radius:6px;padding:3px 6px;margin-top:4px;border:1.5px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.15);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                <div style="font-size:10px;font-weight:600;color:#333;">${marker.stopCode ? `#${marker.stopCode} - ` : ''}${marker.stopName}</div>
-                ${walkLabel ? `<div style="font-size:9px;color:#888;margin-top:1px;">${walkLabel}</div>` : ''}
-              </div>`
-            : '';
-          return (
-            <Marker
-              key={marker.id}
-              position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-              zIndexOffset={1000}
-              icon={L.divIcon({
-                className: `trip-marker-${marker.type}`,
-                html: `<div style="display:flex;flex-direction:column;align-items:center;">
-                  <div style="background:${color};width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
-                    <div style="background:white;width:8px;height:8px;border-radius:50%;"></div>
-                  </div>
-                  ${labelHtml}
-                </div>`,
-                iconSize: [180, 70],
-                iconAnchor: [90, 10],
-              })}
-            />
-          );
-        })}
+        {tripMarkers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            html={buildTripMarkerHtml(marker)}
+            className={`trip-marker-${marker.type}`}
+            zIndexOffset={1000}
+          />
+        ))}
 
         {/* Boarding and alighting stop markers with labels */}
         {boardingAlightingMarkers.map((marker) => (
-          <Marker
+          <WebHtmlMarker
             key={marker.id}
-            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-            icon={L.divIcon({
-              className: `stop-marker-${marker.type}`,
-              html: `
-                <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-                  <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};margin-bottom:4px;white-space:nowrap;max-width:180px;">
-                    <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? 'Board' : 'Exit'} ${marker.routeName ? `Route ${marker.routeName}` : ''}</div>
-                    <div style="font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;">#${marker.stopCode} - ${marker.stopName}</div>
-                  </div>
-                  <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${marker.routeColor};"></div>
-                </div>
-              `,
-              iconSize: [180, 60],
-              iconAnchor: [90, 60],
-            })}
+            coordinate={marker.coordinate}
+            html={buildBoardingMarkerHtml(marker)}
+            className={`stop-marker-${marker.type}`}
           />
         ))}
 
         {/* Real-time bus positions for trip routes */}
         {isTripPreviewMode && tripVehicles.map((vehicle) => (
-          <WebBusMarker key={vehicle.id} vehicle={vehicle} color={getRouteColor(vehicle.routeId)} routeLabel={getRouteLabel(vehicle)} />
+          <WebBusMarker
+            key={vehicle.id}
+            vehicle={vehicle}
+            color={getRouteColor(vehicle.routeId)}
+            routeLabel={getRouteLabel(vehicle)}
+            snapPath={getVehicleSnapPath(vehicle)}
+          />
         ))}
 
         {/* Map tap marker */}
         {mapTapLocation && (
-          <Marker
-            position={[mapTapLocation.latitude, mapTapLocation.longitude]}
-            icon={L.divIcon({
-              className: 'map-tap-marker',
-              html: `<div style="background:#1a73e8;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
-            })}
+          <WebHtmlMarker
+            coordinate={mapTapLocation}
+            html={buildMapTapMarkerHtml()}
+            className="map-tap-marker"
           />
         )}
       </WebMapView>
@@ -842,6 +857,7 @@ const HomeScreen = ({ route }) => {
               inputStyle={styles.whereToInput}
               rightIcon={
                 <View style={styles.headerRight}>
+                  <SystemHealthChip diagnostics={diagnostics} />
                   <StatusBadge
                     isOffline={isOffline}
                     vehicleCount={vehicles.length}
@@ -851,6 +867,12 @@ const HomeScreen = ({ route }) => {
                   />
                 </View>
               }
+            />
+            <SystemHealthBanner
+              diagnostics={diagnostics}
+              onRetryStatic={loadStaticData}
+              onRetryRealtime={loadVehiclePositions}
+              onRetryProxy={loadProxyHealth}
             />
           </View>
 
@@ -1059,6 +1081,7 @@ const HomeScreen = ({ route }) => {
           exitStopName={exitStopName}
           onClose={() => setDetourSheetRouteId(null)}
           onViewOnMap={() => {
+            selectRoute(detourSheetRouteId);
             if (selectedDetour.entryPoint && selectedDetour.exitPoint) {
               const entry = selectedDetour.entryPoint;
               const exit = selectedDetour.exitPoint;
@@ -1199,6 +1222,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
   },
   statusBadgeLive: {
     flexDirection: 'row',

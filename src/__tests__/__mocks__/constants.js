@@ -3,7 +3,12 @@
  */
 export const GTFS_URLS = {};
 export const MAP_CONFIG = {};
-export const REFRESH_INTERVALS = {};
+export const REFRESH_INTERVALS = {
+  VEHICLE_POSITIONS: 15000,
+  TRIP_UPDATES: 30000,
+  SERVICE_ALERTS: 60000,
+  STATIC_DATA: 86400000,
+};
 export const ROUTE_COLORS = {};
 export const APP_CONFIG = {};
 export const OTP_CONFIG = {
@@ -14,6 +19,8 @@ export const OTP_CONFIG = {
 export const LOCATIONIQ_CONFIG = {
   API_KEY: 'test-key',
   BASE_URL: 'https://us1.locationiq.com/v1',
+  PROXY_URL: 'https://proxy.example.com',
+  PROXY_TOKEN: 'test-proxy-token',
   BARRIE_BOUNDS: '-79.85,44.25,-79.55,44.50',
   BARRIE_CENTER: { lat: 44.3894, lon: -79.6903 },
   DEBOUNCE_MS: 300,

@@ -1,16 +1,14 @@
 /**
  * NavigationScreen (Web Version)
  *
- * Web-compatible turn-by-turn navigation using Leaflet maps.
+ * Web-compatible turn-by-turn navigation using MapLibre maps.
  * Falls back to browser geolocation API.
  */
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Platform, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import logger from '../utils/logger';
-import L from 'leaflet';
 
 import { MAP_CONFIG, MIN_NAV_ZOOM } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
@@ -26,29 +24,38 @@ import ExitConfirmationModal from '../components/navigation/ExitConfirmationModa
 import DestinationBanner from '../components/navigation/DestinationBanner';
 
 // Hooks
+import { useNavigationLocation } from '../hooks/useNavigationLocation';
+import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
 
 // Walking enrichment (fetched on navigation start, not during preview)
 import { enrichItineraryWithWalking } from '../services/walkingService';
+import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import { decodePolyline, extractShapeSegment, findClosestPointIndex } from '../utils/polylineUtils';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { escapeHtml } from '../utils/htmlUtils';
+import {
+  collectItineraryEndpointCoordinates,
+  computeCoordinateBounds,
+  computeLegBounds,
+} from '../utils/itineraryViewport';
 
 // Context for route shapes
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import Icon from '../components/Icon';
+import WebMapView, { WebBusMarker, WebHtmlMarker, WebRoutePolyline } from '../components/WebMapView';
 
-// Inject Leaflet CSS
-if (typeof document !== 'undefined' && !document.getElementById('leaflet-css-nav')) {
-  const link = document.createElement('link');
-  link.id = 'leaflet-css-nav';
-  link.rel = 'stylesheet';
-  link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-  document.head.appendChild(link);
-}
+const NAV_FOLLOW_DELTA = 360 / Math.pow(2, MIN_NAV_ZOOM);
 
-// Create marker icons
-const createMarkerIcon = (type) => {
+const trackNavigationEvent = (eventName, params) => {
+  try {
+    const { trackEvent } = require('../services/analyticsService');
+    trackEvent(eventName, params);
+  } catch {}
+};
+
+const buildNavMarkerHtml = (type) => {
   const colors = {
     origin: COLORS.success,
     destination: COLORS.error,
@@ -58,213 +65,38 @@ const createMarkerIcon = (type) => {
   const size = type === 'waypoint' ? 16 : 24;
   const color = colors[type] || COLORS.primary;
 
-  return L.divIcon({
-    className: 'nav-marker',
-    html: `<div style="
-      width: ${size}px;
-      height: ${size}px;
-      background: ${color};
-      border: 3px solid white;
-      border-radius: 50%;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    "></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+  return `<div style="
+    width:${size}px;
+    height:${size}px;
+    background:${color};
+    border:3px solid white;
+    border-radius:50%;
+    box-shadow:0 2px 6px rgba(0,0,0,0.3);
+  "></div>`;
 };
 
-// Create bus marker icon
-const createBusMarkerIcon = (color, routeShortName, bearing) => {
-  const rotation = bearing || 0;
-  return L.divIcon({
-    className: 'bus-marker',
-    html: `<div style="
-      width: 36px;
-      height: 36px;
-      background: ${color || COLORS.primary};
-      border: 3px solid white;
-      border-radius: 50%;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: bold;
-      color: white;
-      transform: rotate(${rotation}deg);
-    ">${routeShortName || '🚌'}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-  });
-};
+const buildBusStopMarkerHtml = () => (
+  `<div style="
+    width:20px;
+    height:20px;
+    background:white;
+    border:3px solid ${COLORS.primary};
+    border-radius:50%;
+    box-shadow:0 2px 4px rgba(0,0,0,0.3);
+  "></div>`
+);
 
-// Create bus stop marker icon
-const createBusStopMarkerIcon = () => {
-  return L.divIcon({
-    className: 'bus-stop-marker',
-    html: `<div style="
-      width: 20px;
-      height: 20px;
-      background: white;
-      border: 3px solid ${COLORS.primary};
-      border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-    "></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  });
-};
+const positionToCoordinate = (position) => ({
+  latitude: position[0],
+  longitude: position[1],
+});
 
-// Map controller component
-const MapController = ({
-  userLocation,
-  isFollowMode,
-  tripBounds,
-  shouldFitBounds,
-  onBoundsFit,
-  jumpToLocation,
-  showOverview,
-  onMapReady,
-  fitToLegBounds,
-  legTransitionTimeRef,
-}) => {
-  const map = useMap();
-
-  // Expose map instance on mount
-  useEffect(() => {
-    if (onMapReady) {
-      onMapReady(map);
-    }
-  }, [map, onMapReady]);
-
-  // Fit to trip bounds on initial load
-  useEffect(() => {
-    if (shouldFitBounds && tripBounds) {
-      map.fitBounds([
-        [tripBounds.minLat, tripBounds.minLon],
-        [tripBounds.maxLat, tripBounds.maxLon],
-      ], { padding: [50, 50] });
-      onBoundsFit();
-    }
-  }, [shouldFitBounds, tripBounds, map, onBoundsFit]);
-
-  // Auto-zoom to current leg bounds on each leg transition (fires once per leg)
-  useEffect(() => {
-    if (!fitToLegBounds) return;
-    map.fitBounds(
-      [fitToLegBounds.sw, fitToLegBounds.ne],
-      { padding: [50, 50], maxZoom: MIN_NAV_ZOOM }
-    );
-  }, [fitToLegBounds, map]);
-
-  // Follow user location when in follow mode
-  // Skip for 2 seconds after a leg transition so the per-leg zoom isn't immediately overridden
-  useEffect(() => {
-    if (isFollowMode && userLocation) {
-      if (legTransitionTimeRef && Date.now() - legTransitionTimeRef.current < 2000) return;
-      map.flyTo([userLocation.latitude, userLocation.longitude], MIN_NAV_ZOOM, {
-        duration: 0.5,
-      });
-    }
-  }, [userLocation, isFollowMode, map, legTransitionTimeRef]);
-
-  // Handle jump to location command
-  useEffect(() => {
-    if (jumpToLocation && userLocation) {
-      map.flyTo([userLocation.latitude, userLocation.longitude], MIN_NAV_ZOOM, {
-        duration: 0.5,
-      });
-    }
-  }, [jumpToLocation, userLocation, map]);
-
-  // Handle show overview command
-  useEffect(() => {
-    if (showOverview && tripBounds) {
-      map.fitBounds([
-        [tripBounds.minLat, tripBounds.minLon],
-        [tripBounds.maxLat, tripBounds.maxLon],
-      ], { padding: [50, 50] });
-    }
-  }, [showOverview, tripBounds, map]);
-
-  return null;
-};
-
-// Web geolocation hook
-const useWebLocation = () => {
-  const [location, setLocation] = useState(null);
-  const [error, setError] = useState(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const watchIdRef = useRef(null);
-
-  const startTracking = useCallback(async () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser');
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            heading: position.coords.heading,
-            accuracy: position.coords.accuracy,
-          });
-
-          watchIdRef.current = navigator.geolocation.watchPosition(
-            (pos) => {
-              setLocation({
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-                heading: pos.coords.heading,
-                accuracy: pos.coords.accuracy,
-              });
-            },
-            (err) => {
-              logger.warn('Location watch error:', err);
-            },
-            {
-              enableHighAccuracy: true,
-              maximumAge: 10000,
-              timeout: 5000,
-            }
-          );
-
-          setIsTracking(true);
-          resolve(true);
-        },
-        (err) => {
-          setError(err.message);
-          resolve(false);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-        }
-      );
-    });
-  }, []);
-
-  const stopTracking = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
-    setIsTracking(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
-  }, []);
-
-  return { location, error, isTracking, startTracking, stopTracking };
-};
+const buildRegionForLocation = (latitude, longitude) => ({
+  latitude,
+  longitude,
+  latitudeDelta: NAV_FOLLOW_DELTA,
+  longitudeDelta: NAV_FOLLOW_DELTA,
+});
 
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
@@ -294,10 +126,12 @@ const NavigationScreen = ({ route }) => {
   if (!itinerary) return null;
 
   // Get route shapes and realtime vehicles from TransitContext
-  const { shapes, routeShapeMapping } = useTransitStatic();
-  const { vehicles } = useTransitRealtime();
+  const { shapes, routeShapeMapping, ensureRoutingData, stops } = useTransitStatic();
+  const { vehicles, onDemandZones } = useTransitRealtime();
 
+  const mapRef = useRef(null);
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview
+  const [isMapReady, setIsMapReady] = useState(false);
   const [hasInitializedMap, setHasInitializedMap] = useState(false);
   const [jumpToLocationTrigger, setJumpToLocationTrigger] = useState(0);
   const [showOverviewTrigger, setShowOverviewTrigger] = useState(0);
@@ -307,10 +141,11 @@ const NavigationScreen = ({ route }) => {
   const [isHeadingUp, setIsHeadingUp] = useState(false); // Compass/heading-up mode (walking only)
   const legZoomedRef = useRef(new Set());
   const legTransitionTimeRef = useRef(0);
-  const mapInstanceRef = useRef(null); // Holds the Leaflet map instance
   const [showStaleWarning, setShowStaleWarning] = useState(false);
   const [showMissedBusWarning, setShowMissedBusWarning] = useState(false);
+  const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
   const staleCheckedRef = useRef(false);
+  const missedBusWarningRef = useRef(false);
 
   // Web location tracking
   const {
@@ -319,7 +154,7 @@ const NavigationScreen = ({ route }) => {
     isTracking,
     startTracking,
     stopTracking,
-  } = useWebLocation();
+  } = useNavigationLocation();
 
   const [isAcquiringGPS, setIsAcquiringGPS] = useState(true);
 
@@ -352,92 +187,27 @@ const NavigationScreen = ({ route }) => {
   } = useStepProgress(itinerary, userLocation, null); // Pass null initially, update below
   void resetNavigation;
 
-  // Get current transit leg
-  const currentTransitLeg = useMemo(() => {
-    if (!currentLeg) return null;
-    if (currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT') {
-      return currentLeg;
-    }
-    return null;
-  }, [currentLeg]);
+  useEffect(() => {
+    missedBusWarningRef.current = false;
+  }, [currentLegIndex]);
 
-  const isWalkingLeg = currentLeg?.mode === 'WALK';
-  const isTransitLeg = currentLeg?.mode === 'BUS' || currentLeg?.mode === 'TRANSIT';
-  const isOnDemandLeg = currentLeg?.isOnDemand === true;
-
-  // Get next transit leg (for bus tracking during walking legs)
-  const nextTransitLeg = useMemo(() => {
-    if (!itinerary?.legs || !isWalkingLeg) return null;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      const leg = itinerary.legs[i];
-      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') return leg;
-    }
-    return null;
-  }, [itinerary, currentLegIndex, isWalkingLeg]);
-
-  const isLastWalkingLeg = useMemo(() => {
-    if (!isWalkingLeg || !itinerary?.legs) return false;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      if (itinerary.legs[i].mode === 'BUS' || itinerary.legs[i].mode === 'TRANSIT') return false;
-    }
-    return true;
-  }, [isWalkingLeg, itinerary, currentLegIndex]);
-
-  // Peek-ahead text for the next transit leg (shown in WalkingInstructionCard)
-  const nextLegPreviewText = useMemo(() => {
-    if (!itinerary?.legs || !isWalkingLeg) return null;
-    let nextLeg = null;
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      const leg = itinerary.legs[i];
-      if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') {
-        nextLeg = leg;
-        break;
-      }
-    }
-    if (!nextLeg) return null;
-    const routeName = nextLeg.route?.shortName || nextLeg.routeShortName || '';
-    const stopName = nextLeg.from?.name || '';
-    const stopCode = nextLeg.from?.stopCode;
-    const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
-    const timeStr = nextLeg.startTime
-      ? new Date(nextLeg.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-      : null;
-    const parts = [`Then board Route ${routeName}`, stopLabel && `at ${stopLabel}`, timeStr && `at ${timeStr}`];
-    return parts.filter(Boolean).join(' ');
-  }, [itinerary, currentLegIndex, isWalkingLeg]);
-
-  // Peek-ahead text for the leg after the current transit leg (shown in BusProximityCard/BoardingInstructionCard)
-  const transitPeekAheadText = useMemo(() => {
-    if (!itinerary?.legs || !isTransitLeg) return null;
-    const nextLegIndex = currentLegIndex + 1;
-    if (nextLegIndex >= itinerary.legs.length) return null;
-    const nextLeg = itinerary.legs[nextLegIndex];
-    if (!nextLeg) return null;
-
-    if (nextLeg.mode === 'WALK') {
-      const durationMin = nextLeg.duration ? Math.ceil(nextLeg.duration / 60) : null;
-      const durationStr = durationMin ? `${durationMin} min` : '';
-      // Check if there is a transit leg after the walk
-      const legAfterWalk = itinerary.legs[nextLegIndex + 1];
-      if (legAfterWalk && (legAfterWalk.mode === 'BUS' || legAfterWalk.mode === 'TRANSIT')) {
-        const routeName = legAfterWalk.route?.shortName || legAfterWalk.routeShortName || '';
-        const stopName = legAfterWalk.from?.name || '';
-        const stopCode = legAfterWalk.from?.stopCode;
-        const stopLabel = stopCode ? `${stopName} (#${stopCode})` : stopName;
-        const parts = [
-          `Next: Walk${durationStr ? ` ${durationStr}` : ''}`,
-          stopLabel && `to ${stopLabel}`,
-          routeName && `for Route ${routeName}`,
-        ];
-        return parts.filter(Boolean).join(' ');
-      }
-      // Walk to destination
-      const destName = nextLeg.to?.name || 'your destination';
-      return `Next: Walk${durationStr ? ` ${durationStr}` : ''} to ${destName}`;
-    }
-
-    return null;
-  }, [itinerary, currentLegIndex, isTransitLeg]);
+  const {
+    currentTransitLeg,
+    finalDestination,
+    isLastWalkingLeg,
+    isOnDemandLeg,
+    isTransitLeg,
+    isWalkingLeg,
+    nextLegPreviewText,
+    nextTransitLeg,
+    totalRemainingDistance,
+    transitPeekAheadText,
+  } = useNavigationTripViewModel({
+    itinerary,
+    currentLegIndex,
+    currentLeg,
+    distanceToDestination,
+  });
 
   // Bus proximity tracking with user location and on-board state
   const busProximity = useBusProximity(
@@ -457,51 +227,14 @@ const NavigationScreen = ({ route }) => {
 
   // Calculate trip bounds for initial map view
   const tripBounds = useMemo(() => {
-    if (!itinerary?.legs || itinerary.legs.length === 0) return null;
-
-    let minLat = Infinity, maxLat = -Infinity;
-    let minLon = Infinity, maxLon = -Infinity;
-
-    itinerary.legs.forEach(leg => {
-      if (leg.from) {
-        minLat = Math.min(minLat, leg.from.lat);
-        maxLat = Math.max(maxLat, leg.from.lat);
-        minLon = Math.min(minLon, leg.from.lon);
-        maxLon = Math.max(maxLon, leg.from.lon);
-      }
-      if (leg.to) {
-        minLat = Math.min(minLat, leg.to.lat);
-        maxLat = Math.max(maxLat, leg.to.lat);
-        minLon = Math.min(minLon, leg.to.lon);
-        maxLon = Math.max(maxLon, leg.to.lon);
-      }
-    });
-
-    return { minLat, maxLat, minLon, maxLon };
+    return computeCoordinateBounds(collectItineraryEndpointCoordinates(itinerary));
   }, [itinerary]);
 
   // Compute per-leg fit bounds (only when the leg hasn't been zoomed yet)
   const fitToLegBounds = useMemo(() => {
     if (legZoomedRef.current.has(currentLegIndex)) return null;
-    if (!currentLeg?.from || !currentLeg?.to) return null;
-
-    const fromLat = currentLeg.from.lat;
-    const fromLon = currentLeg.from.lon;
-    const toLat = currentLeg.to.lat;
-    const toLon = currentLeg.to.lon;
-
-    return {
-      ne: [Math.max(fromLat, toLat), Math.max(fromLon, toLon)],
-      sw: [Math.min(fromLat, toLat), Math.min(fromLon, toLon)],
-    };
+    return computeLegBounds(currentLeg);
   }, [currentLegIndex, currentLeg]);
-
-  // Record leg transition time and mark leg as zoomed when fitToLegBounds resolves
-  useEffect(() => {
-    if (!fitToLegBounds) return;
-    legZoomedRef.current.add(currentLegIndex);
-    legTransitionTimeRef.current = Date.now();
-  }, [fitToLegBounds, currentLegIndex]);
 
   // Track navigation start
   useEffect(() => {
@@ -562,6 +295,14 @@ const NavigationScreen = ({ route }) => {
     staleCheckedRef.current = true;
     const firstLegStart = itinerary?.legs?.[0]?.startTime;
     if (firstLegStart && Date.now() - firstLegStart > 30 * 60 * 1000) {
+      const ageMinutes = Math.round((Date.now() - firstLegStart) / 60000);
+      logger.warn('Navigation itinerary is stale', {
+        ageMinutes,
+        firstLegStart,
+      });
+      trackNavigationEvent('navigation_itinerary_stale', {
+        age_minutes: ageMinutes,
+      });
       setShowStaleWarning(true);
     }
   }, [itinerary]);
@@ -574,10 +315,23 @@ const NavigationScreen = ({ route }) => {
     if (!scheduledDeparture) return;
     if (Date.now() <= scheduledDeparture + 5 * 60 * 1000) return;
     if (busProximity?.vehicle) return;
+    if (missedBusWarningRef.current) return;
+    missedBusWarningRef.current = true;
+    const minutesLate = Math.round((Date.now() - scheduledDeparture) / 60000);
+    logger.warn('Navigation missed bus warning triggered', {
+      currentLegIndex,
+      minutesLate,
+      routeId: currentLeg?.route?.id || null,
+    });
+    trackNavigationEvent('navigation_missed_bus_warning', {
+      leg_index: currentLegIndex,
+      minutes_late: minutesLate,
+      route_id: currentLeg?.route?.id || 'unknown',
+    });
     setShowMissedBusWarning(true);
-  }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle]);
+  }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle, currentLegIndex]);
 
-  // Get polylines for Leaflet
+  // Get polylines for the web map
   const routePolylines = useMemo(() => {
     if (!itinerary?.legs) return [];
 
@@ -660,7 +414,7 @@ const NavigationScreen = ({ route }) => {
           // Completed portion: from start up to user position (grey, lower opacity)
           result.push({
             id: `leg-${index}-completed`,
-            positions: coordObjects.slice(0, splitIdx + 1).map(c => [c.latitude, c.longitude]),
+            coordinates: coordObjects.slice(0, splitIdx + 1),
             color: '#9E9E9E',
             weight,
             dashArray,
@@ -669,7 +423,7 @@ const NavigationScreen = ({ route }) => {
           // Remaining portion: from user position to end (full route color)
           result.push({
             id: `leg-${index}-remaining`,
-            positions: coordObjects.slice(splitIdx).map(c => [c.latitude, c.longitude]),
+            coordinates: coordObjects.slice(splitIdx),
             color: routeColor,
             weight,
             dashArray,
@@ -681,7 +435,7 @@ const NavigationScreen = ({ route }) => {
 
       result.push({
         id: `leg-${index}`,
-        positions: coordObjects.map(c => [c.latitude, c.longitude]),
+        coordinates: coordObjects,
         color: routeColor,
         weight,
         dashArray,
@@ -853,6 +607,14 @@ const NavigationScreen = ({ route }) => {
       if (!offRouteTimerRef.current) {
         offRouteTimerRef.current = setTimeout(() => {
           setIsOffRoute(true);
+          logger.warn('Navigation off-route warning triggered', {
+            currentLegIndex,
+            distanceFromRouteMeters: Math.round(dist),
+          });
+          trackNavigationEvent('navigation_off_route_warning', {
+            leg_index: currentLegIndex,
+            distance_from_route_m: Math.round(dist),
+          });
           offRouteTimerRef.current = null;
         }, 30000);
       }
@@ -864,7 +626,7 @@ const NavigationScreen = ({ route }) => {
       }
       setIsOffRoute(false);
     }
-  }, [userLocation, currentLeg, isWalkingLeg]);
+  }, [userLocation, currentLeg, isWalkingLeg, currentLegIndex]);
 
   // Clear off-route timer on unmount
   useEffect(() => {
@@ -875,17 +637,68 @@ const NavigationScreen = ({ route }) => {
     };
   }, []);
 
-  // Dismiss off-route banner and log recalculate intent
-  const handleRecalculate = () => {
-    // TODO: Implement actual re-routing from current position to leg destination
-    // This would fetch new walking directions from userLocation to currentLeg.to
-    logger.log('Off-route recalculate requested — rerouting not yet implemented');
+  const clearOffRouteState = useCallback(() => {
     setIsOffRoute(false);
     if (offRouteTimerRef.current) {
       clearTimeout(offRouteTimerRef.current);
       offRouteTimerRef.current = null;
     }
-  };
+  }, []);
+
+  const handleRecalculate = useCallback(async () => {
+    if (isRecalculatingRoute) return;
+
+    const finalDestinationStop = itinerary?.legs?.[itinerary.legs.length - 1]?.to;
+    setIsRecalculatingRoute(true);
+    clearOffRouteState();
+
+    try {
+      const { itinerary: nextItinerary, routingDiagnostics } = await recalculateNavigationItinerary({
+        userLocation,
+        destination: finalDestinationStop,
+        ensureRoutingData,
+        onDemandZones,
+        stops,
+      });
+
+      logger.info('Navigation reroute applied', routingDiagnostics);
+      trackNavigationEvent('navigation_rerouted', {
+        routing_source: routingDiagnostics?.source || 'unknown',
+        fallback_from: routingDiagnostics?.fallbackFrom || 'none',
+        fallback_reason: routingDiagnostics?.fallbackReason || 'none',
+      });
+      legZoomedRef.current = new Set();
+      legTransitionTimeRef.current = 0;
+      staleCheckedRef.current = false;
+      missedBusWarningRef.current = false;
+      setShowStaleWarning(false);
+      setShowMissedBusWarning(false);
+      setIsFollowMode(false);
+      setHasInitializedMap(false);
+      setItinerary(nextItinerary);
+      resetNavigation();
+      startNavigation();
+    } catch (error) {
+      logger.error('Navigation reroute failed:', error);
+      trackNavigationEvent('navigation_reroute_failed', {
+        code: error?.code || 'UNKNOWN_ERROR',
+      });
+      alert(error.message || 'A new route could not be generated right now.');
+    } finally {
+      setIsRecalculatingRoute(false);
+    }
+  }, [
+    clearOffRouteState,
+    ensureRoutingData,
+    isRecalculatingRoute,
+    itinerary,
+    onDemandZones,
+    resetNavigation,
+    startNavigation,
+    stops,
+    userLocation,
+    currentLegIndex,
+  ]);
 
   // Close navigation - show confirmation modal
   const handleClose = () => {
@@ -920,166 +733,163 @@ const NavigationScreen = ({ route }) => {
     setShowOverviewTrigger(prev => prev + 1);
   }, []);
 
-  // Handle initial bounds fit
-  const handleBoundsFit = useCallback(() => {
-    setHasInitializedMap(true);
-  }, []);
-
-  // Store Leaflet map instance for CSS transform access
-  const handleMapReady = useCallback((mapInstance) => {
-    mapInstanceRef.current = mapInstance;
-  }, []);
-
   // Detect touch device for compass button visibility
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-  // Apply CSS rotation to Leaflet map container for heading-up mode (walking only, touch only)
+  // Fit full-trip bounds once when the web map becomes ready.
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
-    const container = mapInstanceRef.current.getContainer();
-    if (!container) return;
+    if (!isMapReady || hasInitializedMap || !tripBounds) return;
+    mapRef.current?.fitToCoordinates(
+      [
+        { latitude: tripBounds.minLat, longitude: tripBounds.minLon },
+        { latitude: tripBounds.maxLat, longitude: tripBounds.maxLon },
+      ],
+      { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 } }
+    );
+    setHasInitializedMap(true);
+  }, [hasInitializedMap, isMapReady, tripBounds]);
 
-    if (isHeadingUp && isWalkingLeg && isTouchDevice) {
-      const heading = userLocation?.heading ?? 0;
-      container.style.transform = `rotate(-${heading}deg)`;
-      container.style.transformOrigin = 'center center';
-    } else {
-      container.style.transform = '';
-      container.style.transformOrigin = '';
-    }
-  }, [isHeadingUp, isWalkingLeg, userLocation?.heading, isTouchDevice]);
-
-  // When switching off heading-up or leaving walking leg, ensure rotation is cleared
+  // Auto-zoom to the active leg once per leg transition.
   useEffect(() => {
-    if (!isHeadingUp || !isWalkingLeg) {
-      if (mapInstanceRef.current) {
-        const container = mapInstanceRef.current.getContainer();
-        if (container) {
-          container.style.transform = '';
-          container.style.transformOrigin = '';
-        }
+    if (!isMapReady || !fitToLegBounds) return;
+    mapRef.current?.fitToCoordinates(
+      [
+        { latitude: fitToLegBounds.minLat, longitude: fitToLegBounds.minLon },
+        { latitude: fitToLegBounds.maxLat, longitude: fitToLegBounds.maxLon },
+      ],
+      {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        maxZoom: MIN_NAV_ZOOM,
       }
+    );
+    legZoomedRef.current.add(currentLegIndex);
+    legTransitionTimeRef.current = Date.now();
+  }, [currentLegIndex, fitToLegBounds, isMapReady]);
+
+  // Follow the user while follow mode is enabled, except right after a leg zoom.
+  useEffect(() => {
+    if (!isMapReady || !isFollowMode || !userLocation) return;
+    if (Date.now() - legTransitionTimeRef.current < 2000) return;
+    mapRef.current?.animateToRegion(
+      buildRegionForLocation(userLocation.latitude, userLocation.longitude),
+      500
+    );
+  }, [isFollowMode, isMapReady, userLocation]);
+
+  // Jump to current location when requested.
+  useEffect(() => {
+    if (!isMapReady || !jumpToLocationTrigger || !userLocation) return;
+    mapRef.current?.animateToRegion(
+      buildRegionForLocation(userLocation.latitude, userLocation.longitude),
+      500
+    );
+  }, [isMapReady, jumpToLocationTrigger, userLocation]);
+
+  // Restore the full trip overview when requested.
+  useEffect(() => {
+    if (!isMapReady || !showOverviewTrigger || !tripBounds) return;
+    mapRef.current?.fitToCoordinates(
+      [
+        { latitude: tripBounds.minLat, longitude: tripBounds.minLon },
+        { latitude: tripBounds.maxLat, longitude: tripBounds.maxLon },
+      ],
+      { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 } }
+    );
+  }, [isMapReady, showOverviewTrigger, tripBounds]);
+
+  // Keep north-up / heading-up behavior using the MapLibre map bearing.
+  useEffect(() => {
+    if (!isMapReady) return;
+    if (isHeadingUp && isWalkingLeg && isTouchDevice) {
+      mapRef.current?.setBearing(-(userLocation?.heading ?? 0));
+      return;
     }
-  }, [isHeadingUp, isWalkingLeg]);
+    mapRef.current?.setBearing(0);
+  }, [isHeadingUp, isMapReady, isTouchDevice, isWalkingLeg, userLocation?.heading]);
 
-  // Get final destination name for header
-  const finalDestination = useMemo(() => {
-    if (!itinerary?.legs) return 'Destination';
-    const lastLeg = itinerary.legs[itinerary.legs.length - 1];
-    return lastLeg?.to?.name || 'Destination';
-  }, [itinerary]);
-
-  // Calculate total remaining distance across all legs
-  const totalRemainingDistance = useMemo(() => {
-    if (!itinerary?.legs) return 0;
-
-    let remaining = 0;
-
-    // Add remaining distance in current leg
-    if (currentLeg && distanceToDestination) {
-      remaining += distanceToDestination;
-    }
-
-    // Add distance from all subsequent legs
-    for (let i = currentLegIndex + 1; i < itinerary.legs.length; i++) {
-      remaining += itinerary.legs[i].distance || 0;
-    }
-
-    return remaining;
-  }, [itinerary, currentLegIndex, currentLeg, distanceToDestination]);
-
-  const initialCenter = userLocation
-    ? [userLocation.latitude, userLocation.longitude]
-    : [MAP_CONFIG.INITIAL_REGION.latitude, MAP_CONFIG.INITIAL_REGION.longitude];
+  const initialRegion = userLocation
+    ? buildRegionForLocation(userLocation.latitude, userLocation.longitude)
+    : MAP_CONFIG.INITIAL_REGION;
 
   return (
     <View style={styles.container}>
-      {/* Leaflet Map */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
-        <MapContainer
-          center={initialCenter}
-          zoom={13}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://stadiamaps.com/">Stadia Maps</a>'
-            url="https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png"
+      <WebMapView
+        ref={mapRef}
+        initialRegion={initialRegion}
+        onMapReady={() => setIsMapReady(true)}
+      >
+        {routePolylines.map((route) => (
+          <WebRoutePolyline
+            key={route.id}
+            coordinates={route.coordinates}
+            color={route.color}
+            strokeWidth={route.weight}
+            dashArray={route.dashArray}
+            opacity={route.opacity}
+            outlineWidth={0}
+            interactive={false}
           />
-          <MapController
-            userLocation={userLocation}
-            isFollowMode={isFollowMode}
-            tripBounds={tripBounds}
-            shouldFitBounds={!hasInitializedMap && !!tripBounds}
-            onBoundsFit={handleBoundsFit}
-            jumpToLocation={jumpToLocationTrigger}
-            showOverview={showOverviewTrigger}
-            fitToLegBounds={fitToLegBounds}
-            legTransitionTimeRef={legTransitionTimeRef}
-            onMapReady={handleMapReady}
+        ))}
+
+        {markers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={positionToCoordinate(marker.position)}
+            html={buildNavMarkerHtml(marker.type)}
+            className={`nav-marker-${marker.type}`}
+            zIndexOffset={700}
           />
+        ))}
 
-          {/* Route polylines */}
-          {routePolylines.map((route) => (
-            <Polyline
-              key={route.id}
-              positions={route.positions}
-              color={route.color}
-              weight={route.weight}
-              dashArray={route.dashArray}
-              opacity={route.opacity}
-            />
-          ))}
+        {userLocation && (
+          <WebHtmlMarker
+            coordinate={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
+            html={buildNavMarkerHtml('user')}
+            className="nav-marker-user"
+            zIndexOffset={900}
+          />
+        )}
 
-          {/* Markers */}
-          {markers.map((marker) => (
-            <Marker
-              key={marker.id}
-              position={marker.position}
-              icon={createMarkerIcon(marker.type)}
-            />
-          ))}
+        {busStopMarker && (
+          <WebHtmlMarker
+            coordinate={positionToCoordinate(busStopMarker.position)}
+            html={buildBusStopMarkerHtml()}
+            className="nav-bus-stop-marker"
+            zIndexOffset={800}
+            popupHtml={busStopMarker.name ? `<strong>${escapeHtml(busStopMarker.name)}</strong>` : null}
+          />
+        )}
 
-          {/* User location marker */}
-          {userLocation && (
-            <Marker
-              position={[userLocation.latitude, userLocation.longitude]}
-              icon={createMarkerIcon('user')}
-            />
-          )}
+        {trackedBusMarker && (
+          <WebBusMarker
+            key={trackedBusMarker.id}
+            vehicle={{
+              id: trackedBusMarker.id,
+              routeId: trackedBusMarker.routeShortName,
+              label: trackedBusMarker.routeShortName,
+              bearing: trackedBusMarker.bearing,
+              coordinate: positionToCoordinate(trackedBusMarker.position),
+            }}
+            color={trackedBusMarker.color}
+            routeLabel={trackedBusMarker.routeShortName}
+          />
+        )}
 
-          {/* Bus stop marker (boarding stop) */}
-          {busStopMarker && (
-            <Marker
-              position={busStopMarker.position}
-              icon={createBusStopMarkerIcon()}
-            />
-          )}
-
-          {/* Tracked bus marker */}
-          {trackedBusMarker && (
-            <Marker
-              position={trackedBusMarker.position}
-              icon={createBusMarkerIcon(
-                trackedBusMarker.color,
-                trackedBusMarker.routeShortName,
-                trackedBusMarker.bearing
-              )}
-            />
-          )}
-
-          {/* Bus marker (shown during walking legs) */}
-          {walkingBusMarker && (
-            <Marker
-              position={walkingBusMarker.position}
-              icon={createBusMarkerIcon(
-                walkingBusMarker.color,
-                walkingBusMarker.routeShortName,
-                walkingBusMarker.bearing
-              )}
-            />
-          )}
-        </MapContainer>
-      </div>
+        {walkingBusMarker && (
+          <WebBusMarker
+            key={walkingBusMarker.id}
+            vehicle={{
+              id: walkingBusMarker.id,
+              routeId: walkingBusMarker.routeShortName,
+              label: walkingBusMarker.routeShortName,
+              bearing: walkingBusMarker.bearing,
+              coordinate: positionToCoordinate(walkingBusMarker.position),
+            }}
+            color={walkingBusMarker.color}
+            routeLabel={walkingBusMarker.routeShortName}
+          />
+        )}
+      </WebMapView>
 
       {/* GPS Acquisition Overlay */}
       {isAcquiringGPS && (
@@ -1163,16 +973,12 @@ const NavigationScreen = ({ route }) => {
             <Text style={styles.offRouteBannerText}>You appear to be off-route</Text>
             <View style={styles.offRouteBannerButtons}>
               <TouchableOpacity onPress={handleRecalculate} style={styles.offRouteRecalcButton}>
-                <Text style={styles.offRouteRecalcText}>Recalculate</Text>
+                <Text style={styles.offRouteRecalcText}>
+                  {isRecalculatingRoute ? 'Recalculating...' : 'Recalculate'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => {
-                  setIsOffRoute(false);
-                  if (offRouteTimerRef.current) {
-                    clearTimeout(offRouteTimerRef.current);
-                    offRouteTimerRef.current = null;
-                  }
-                }}
+                onPress={clearOffRouteState}
                 style={styles.offRouteDismissButton}
               >
                 <Text style={styles.offRouteDismissText}>Dismiss</Text>

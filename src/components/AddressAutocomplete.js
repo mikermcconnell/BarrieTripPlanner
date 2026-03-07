@@ -37,6 +37,28 @@ import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from './Icon';
 
+const getSuggestionKey = (item, index) => [
+  item?.id || 'suggestion',
+  item?.lat ?? 'lat',
+  item?.lon ?? 'lon',
+  item?.shortName || item?.displayName || 'location',
+  index,
+].join('-');
+
+const dedupeSuggestions = (results) => {
+  const seen = new Set();
+
+  return results.filter((item, index) => {
+    const key = getSuggestionKey(item, index).replace(/-\d+$/, '');
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+};
+
 const AddressAutocomplete = ({
   value,
   onChangeText,
@@ -100,14 +122,15 @@ const AddressAutocomplete = ({
         if (requestSeq !== requestSeqRef.current) return;
 
         // Sort results by distance from Barrie (closest first)
-        const sortedResults = results.sort((a, b) => {
+        const sortedResults = [...results].sort((a, b) => {
           const distA = getDistanceFromBarrie(a.lat, a.lon);
           const distB = getDistanceFromBarrie(b.lat, b.lon);
           return distA - distB;
         });
+        const uniqueResults = dedupeSuggestions(sortedResults);
 
-        setSuggestions(sortedResults);
-        setShowDropdown(isFocusedRef.current && sortedResults.length > 0);
+        setSuggestions(uniqueResults);
+        setShowDropdown(isFocusedRef.current && uniqueResults.length > 0);
       } catch (error) {
         if (requestSeq !== requestSeqRef.current) return;
         console.error('Autocomplete search error:', error);
@@ -280,7 +303,7 @@ const AddressAutocomplete = ({
         <View style={styles.dropdown}>
           <FlatList
             data={suggestions}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item, index) => getSuggestionKey(item, index)}
             renderItem={renderSuggestion}
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled

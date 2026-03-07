@@ -17,7 +17,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { useAuth } from '../context/AuthContext';
-import { useTransitStatic } from '../context/TransitContext';
+import { useTransitRealtime, useTransitStatic } from '../context/TransitContext';
 import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
@@ -25,6 +25,7 @@ import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
 const SettingsScreen = ({ navigation }) => {
   const { user, isAuthenticated } = useAuth();
   const { routes } = useTransitStatic();
+  const { detoursEnabled, setDetoursEnabled } = useTransitRealtime();
   const [notificationSettings, setNotificationSettings] = useState({
     serviceAlerts: true,
     tripReminders: true,
@@ -77,6 +78,13 @@ const SettingsScreen = ({ navigation }) => {
     };
     setNotificationSettings(newSettings);
     await saveNotificationSettings(newSettings);
+  };
+
+  const handleDetourToggle = async (enabled) => {
+    const result = await setDetoursEnabled(enabled);
+    if (!result.success) {
+      Alert.alert('Error', result.error || 'Could not update detour visibility');
+    }
   };
 
   const handleEnableNotifications = async () => {
@@ -226,6 +234,16 @@ const SettingsScreen = ({ navigation }) => {
               })}
             </View>
           </View>
+        )}
+
+        {renderSection(
+          'Map Display',
+          renderToggleRow(
+            'Show Detours',
+            'Show or hide detour banners, route markers, and map overlays.',
+            detoursEnabled,
+            handleDetourToggle
+          )
         )}
 
         {renderSection(

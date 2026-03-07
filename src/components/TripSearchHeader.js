@@ -9,19 +9,13 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Text, Animated, ActivityIndicator } from 'react-native';
 import Icon from './Icon';
 import AddressAutocomplete from './AddressAutocomplete';
+import TimePicker from './TimePicker';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 
 // Using centralized Icon component for rendering icons
 
-const formatTimeDisplay = (date) => {
-  if (!date) return '';
-  const d = new Date(date);
-  const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${m} ${ampm}`;
-};
+const PICKER_TO_HOOK = { now: 'now', depart: 'departAt', arrive: 'arriveBy' };
+const HOOK_TO_PICKER = { now: 'now', departAt: 'depart', arriveBy: 'arrive' };
 
 const TripSearchHeader = ({
   fromText,
@@ -50,16 +44,6 @@ const TripSearchHeader = ({
   void showFromSuggestions;
   void showToSuggestions;
 
-  const selectTimeMode = (mode) => {
-    if (!onTimeModeChange) return;
-    onTimeModeChange(mode);
-    if (mode !== 'now' && !selectedTime) {
-      onSelectedTimeChange && onSelectedTimeChange(new Date());
-    }
-    if (mode === 'now') {
-      onSelectedTimeChange && onSelectedTimeChange(null);
-    }
-  };
   return (
     <View style={styles.container}>
       {/* Header with close button */}
@@ -149,39 +133,26 @@ const TripSearchHeader = ({
         </TouchableOpacity>
       </View>
 
-      {/* Time mode chips */}
-      <View style={styles.timeModeRow}>
-        {['now', 'departAt', 'arriveBy'].map((mode) => {
-          const labels = { now: 'Leave Now', departAt: 'Depart At', arriveBy: 'Arrive By' };
-          const isActive = timeMode === mode;
-          return (
-            <TouchableOpacity
-              key={mode}
-              style={[styles.timeModeChip, isActive && styles.timeModeChipActive]}
-              onPress={() => selectTimeMode(mode)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-            >
-              <Text style={[styles.timeModeChipText, isActive && styles.timeModeChipTextActive]}>
-                {labels[mode]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {/* Time picker (Leave Now / Depart At / Arrive By) */}
+      <TimePicker
+        value={selectedTime || new Date()}
+        mode={HOOK_TO_PICKER[timeMode] || 'now'}
+        onChange={(newTime, pickerMode) => {
+          const hookMode = PICKER_TO_HOOK[pickerMode] || 'now';
+          if (onTimeModeChange) onTimeModeChange(hookMode);
+          if (hookMode === 'now') {
+            onSelectedTimeChange && onSelectedTimeChange(null);
+          } else {
+            onSelectedTimeChange && onSelectedTimeChange(newTime);
+          }
+        }}
+      />
 
-      {/* Time display + Search button (shown for non-'now' modes) */}
-      {timeMode !== 'now' && (
-        <View style={styles.timeRow}>
-          {selectedTime && (
-            <Text style={styles.timeDisplay}>{formatTimeDisplay(selectedTime)}</Text>
-          )}
-          {onSearch && (
-            <TouchableOpacity style={styles.searchBtn} onPress={onSearch} accessibilityLabel="Search trips" accessibilityRole="button">
-              <Text style={styles.searchBtnText}>Search</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+      {/* Search button (shown for non-'now' modes) */}
+      {timeMode !== 'now' && onSearch && (
+        <TouchableOpacity style={styles.searchBtn} onPress={onSearch} accessibilityLabel="Search trips" accessibilityRole="button">
+          <Text style={styles.searchBtnText}>Search</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -279,40 +250,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     ...SHADOWS.small,
-  },
-  timeModeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: SPACING.xs,
-  },
-  timeModeChip: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: COLORS.grey100,
-    alignItems: 'center',
-  },
-  timeModeChipActive: {
-    backgroundColor: COLORS.primary,
-  },
-  timeModeChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  timeModeChipTextActive: {
-    color: COLORS.white,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.xs,
-    gap: SPACING.sm,
-  },
-  timeDisplay: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textPrimary,
-    fontWeight: FONT_WEIGHTS.medium,
   },
   searchBtn: {
     backgroundColor: COLORS.primary,

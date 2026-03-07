@@ -10,6 +10,14 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
 
+const getSuggestionKey = (item, index) => [
+  item?.id || 'suggestion',
+  item?.lat ?? 'lat',
+  item?.lon ?? 'lon',
+  item?.shortName || item?.displayName || 'location',
+  index,
+].join('-');
+
 // Close icon
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -89,10 +97,10 @@ const TripSearchHeaderWeb = ({
     </View>
 
     {showFromSuggestions && fromSuggestions.length > 0 && (
-      <View style={styles.suggestionsDropdown} role="listbox" aria-label="Origin suggestions">
-        {fromSuggestions.slice(0, 5).map((item) => (
+        <View style={styles.suggestionsDropdown} role="listbox" aria-label="Origin suggestions">
+        {fromSuggestions.slice(0, 5).map((item, index) => (
           <TouchableOpacity
-            key={item.id}
+            key={getSuggestionKey(item, index)}
             style={styles.suggestionItem}
             onPress={() => onFromSelect(item)}
             role="option"
@@ -131,10 +139,10 @@ const TripSearchHeaderWeb = ({
     </View>
 
     {showToSuggestions && toSuggestions.length > 0 && (
-      <View style={styles.suggestionsDropdown} role="listbox" aria-label="Destination suggestions">
-        {toSuggestions.slice(0, 5).map((item) => (
+        <View style={styles.suggestionsDropdown} role="listbox" aria-label="Destination suggestions">
+        {toSuggestions.slice(0, 5).map((item, index) => (
           <TouchableOpacity
-            key={item.id}
+            key={getSuggestionKey(item, index)}
             style={styles.suggestionItem}
             onPress={() => onToSelect(item)}
             role="option"

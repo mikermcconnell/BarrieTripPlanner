@@ -1,5 +1,9 @@
 # Barrie Transit Trip Planner - Project Plan
 
+> Historical planning document. For the current integrated trip flow and route ownership, use
+> `docs/plans/2026-03-07-app-stabilization-roadmap.md` and
+> `docs/plans/2026-03-07-phase-0-3-deliverables.md`.
+
 ## Project Vision
 
 A friendly, approachable mobile app for Barrie Transit riders featuring real-time bus tracking, next bus arrivals, and trip planning. The app uses a clean, modern design inspired by BudgetMe.ca with Google Maps-style trip planning UX.

@@ -48,7 +48,6 @@ const UTURN_PATH = 'M14,28 L14,16 C14,10 28,10 28,16 L28,22 L32,22 L27,28 L22,22
 
 const TurnIcon = ({ type, modifier, size = 40, color = '#1a73e8' }) => {
   const variant = getIconVariant(type, modifier);
-  const half = size / 2;
 
   // Rotation angles for each direction variant (applied to the base up-arrow)
   const rotationForVariant = {
@@ -89,7 +88,7 @@ const TurnIcon = ({ type, modifier, size = 40, color = '#1a73e8' }) => {
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">
       <Circle cx={20} cy={20} r={20} fill={color} />
-      <G rotation={rotation} origin={`${half}, ${half}`}>
+      <G transform={`rotate(${rotation} 20 20)`}>
         <Path d={ARROW_UP} fill="white" />
       </G>
     </Svg>

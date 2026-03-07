@@ -110,6 +110,20 @@ const encodeSignedValue = (value) => {
   return encoded;
 };
 
+/**
+ * Return the midpoint of a polyline (the element at the middle index).
+ * Returns null if the polyline has fewer than 2 points or the middle
+ * point has null coordinates.
+ * @param {Array<{latitude: number, longitude: number}>} polyline
+ * @returns {{latitude: number, longitude: number}|null}
+ */
+export const getPolylineMidpoint = (polyline) => {
+  if (!polyline || polyline.length < 2) return null;
+  const mid = Math.floor(polyline.length / 2);
+  const p = polyline[mid];
+  return p?.latitude != null && p?.longitude != null ? p : null;
+};
+
 export const extractShapeSegment = (shapeCoords, fromLat, fromLon, toLat, toLon) => {
   if (!shapeCoords || shapeCoords.length === 0) return [];
 

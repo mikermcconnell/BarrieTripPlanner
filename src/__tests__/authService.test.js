@@ -38,6 +38,28 @@ const loadAuthService = ({
   jest.doMock('../config/firebase', () => ({
     auth: { currentUser: null },
   }));
+  jest.doMock('../config/runtimeConfig', () => ({
+    __esModule: true,
+    default: {
+      googleAuth: {
+        webClientId: 'test-google-web-client-id',
+        iosClientId: '',
+        androidClientId: '',
+      },
+    },
+    GOOGLE_SIGN_IN_DISABLED_MESSAGE:
+      'Google sign-in is unavailable in this build. Configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and rebuild.',
+  }));
+  jest.doMock('../utils/logger', () => ({
+    __esModule: true,
+    default: {
+      log: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+    },
+  }));
 
   jest.doMock('../services/firebase/userFirestoreService', () => ({
     userFirestoreService: {
@@ -104,6 +126,9 @@ describe('authService.signInWithGoogle', () => {
 
     expect(result.success).toBe(true);
     expect(nativeConfigure).toHaveBeenCalledTimes(1);
+    expect(nativeConfigure).toHaveBeenCalledWith({
+      webClientId: 'test-google-web-client-id',
+    });
     expect(nativeSignIn).toHaveBeenCalledTimes(1);
     expect(signInWithCredential).toHaveBeenCalledTimes(1);
     expect(createUser).toHaveBeenCalledWith({

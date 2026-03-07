@@ -1,12 +1,14 @@
 jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
+  Platform: { select: (obj) => obj.ios || obj.android || {} },
   StyleSheet: {
     create: (styles) => styles,
   },
 }));
 
 jest.mock('@maplibre/maplibre-react-native', () => ({
+  MarkerView: 'MarkerView',
   PointAnnotation: 'PointAnnotation',
 }));
 
@@ -59,6 +61,13 @@ describe('BusMarker memo comparator', () => {
         coordinate: { latitude: 44.39, longitude: -79.68 },
       },
     });
+
+    expect(areBusMarkerPropsEqual(prev, next)).toBe(false);
+  });
+
+  test('returns false when snap path reference changes', () => {
+    const prev = buildProps({ snapPath: [{ latitude: 44.38, longitude: -79.69 }, { latitude: 44.39, longitude: -79.69 }] });
+    const next = buildProps({ snapPath: [{ latitude: 44.38, longitude: -79.69 }, { latitude: 44.39, longitude: -79.69 }] });
 
     expect(areBusMarkerPropsEqual(prev, next)).toBe(false);
   });

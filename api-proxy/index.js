@@ -126,7 +126,10 @@ app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Token, X-Client-Id, X-Device-Id, X-Admin-Key');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-API-Token, X-Client-Id, X-Device-Id, X-Debug-Key'
+  );
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -146,8 +149,8 @@ async function authenticateApiRequest(req, res, next) {
   if (req.path === '/health') return next();
   if (!REQUIRE_API_AUTH) return next();
 
-  // Ops-safe auth bypass for detour debug endpoint using server-only API key (header only)
-  if (req.path === '/detour-debug' && DETOUR_DEBUG_API_KEY) {
+  // Non-production ops bypass for detour debug endpoint using a server-only API key.
+  if (!isProd && req.path === '/detour-debug' && DETOUR_DEBUG_API_KEY) {
     const debugKey = req.get('x-debug-key');
     if (debugKey && debugKey === DETOUR_DEBUG_API_KEY) {
       req.clientId = 'debug-ops';
@@ -414,6 +417,23 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    service: 'api-proxy',
+    auth: {
+      requireApiAuth: REQUIRE_API_AUTH,
+      requireFirebaseAuth: REQUIRE_FIREBASE_AUTH,
+      allowSharedTokenAuth: ALLOW_SHARED_TOKEN_AUTH,
+      sharedTokenConfigured: API_TOKENS.size > 0,
+    },
+    features: {
+      locationIqProxyConfigured: hasLocationIQKey,
+      detourWorkerEnabled: process.env.DETOUR_WORKER_ENABLED === 'true',
+      detourHistoryEnabled: process.env.DETOUR_HISTORY_ENABLED !== 'false',
+      surveyAdminUsesApiAuth: true,
+      detourDebugKeyEnabled: !isProd && Boolean(DETOUR_DEBUG_API_KEY),
+      firebaseAdminConfigured: Boolean(
+        process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS
+      ),
+    },
   });
 });
 
@@ -744,9 +764,12 @@ module.exports = app;
 try {
   const { onRequest } = require('firebase-functions/v2/https');
 
-  // Start background workers in Cloud Functions mode (require.main !== module)
-  if (detourWorker) detourWorker.start();
-  if (newsWorker) newsWorker.start();
+  // Start background workers in Cloud Functions mode (require.main !== module),
+  // but keep Jest isolated from long-running intervals and fetch loops.
+  if (process.env.NODE_ENV !== 'test') {
+    if (detourWorker) detourWorker.start();
+    if (newsWorker) newsWorker.start();
+  }
 
   module.exports.apiProxy = onRequest(
     {

@@ -103,6 +103,7 @@ function seedActiveDetour(routeId, detectedAtMs, lastEvidenceAtMs, seedVehicleCo
     clearPendingAt: null,
     lastOffRouteEvidenceAt: lastEvidenceAtMs,
     seedVehicleCount: seedVehicleCount || 0,
+    restoredFromSeed: true,
   });
 }
 
@@ -120,6 +121,11 @@ function isInDetourZoneCore(coordinate, detour, shapes) {
 function endOfServiceCleanup(now, shapes, routeShapeMapping) {
   const toDelete = [];
   for (const [routeId, detour] of activeDetours) {
+    if (detour.restoredFromSeed) {
+      detour.vehiclesOffRoute.clear();
+      continue;
+    }
+
     const evidence = detourEvidence.get(routeId);
     const detectedAtMs = detour.detectedAt instanceof Date
       ? detour.detectedAt.getTime()
@@ -308,8 +314,8 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now) {
   let detour = activeDetours.get(routeId);
   if (!detour) {
     detour = {
-      detectedAt: new Date(),
-      lastSeenAt: new Date(),
+      detectedAt: new Date(now || Date.now()),
+      lastSeenAt: new Date(now || Date.now()),
       triggerVehicleId: vehicleId,
       vehiclesOffRoute: new Set(),
       state: 'active',
@@ -319,10 +325,11 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now) {
     activeDetours.set(routeId, detour);
   }
   detour.vehiclesOffRoute.add(vehicleId);
-  detour.lastSeenAt = new Date();
+  detour.lastSeenAt = new Date(now || Date.now());
   detour.lastOffRouteEvidenceAt = now || Date.now();
   // Clear seed vehicle count — real vehicles now take precedence
   detour.seedVehicleCount = 0;
+  detour.restoredFromSeed = false;
   // Vehicle confirmed off-route — re-verification passed
   if (detour.pendingReverification) {
     detour.pendingReverification = false;
@@ -394,9 +401,11 @@ function maybeRemoveVehicleFromDetour(vehicleId, routeId, consecutiveOnRoute, no
 function tickClearPending(now) {
   for (const [routeId, detour] of activeDetours) {
     // Check reverification deadline for overnight-persisted detours
-    if (detour.pendingReverification && detour.reverificationDeadline && now >= detour.reverificationDeadline) {
-      activeDetours.delete(routeId);
-      detourEvidence.delete(routeId);
+    if (detour.pendingReverification) {
+      if (detour.reverificationDeadline && now >= detour.reverificationDeadline) {
+        activeDetours.delete(routeId);
+        detourEvidence.delete(routeId);
+      }
       continue;
     }
 

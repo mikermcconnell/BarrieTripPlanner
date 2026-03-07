@@ -14,8 +14,13 @@ import {
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
 import { subscribeToTransitNews } from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
+import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
+import { DIAGNOSTIC_STATUS, buildTransitDiagnostics } from '../utils/transitDiagnostics';
 import { showLocalNotification } from '../services/notificationService';
+import { LOCATIONIQ_CONFIG } from '../config/constants';
+import runtimeConfig from '../config/runtimeConfig';
+import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -73,10 +78,24 @@ export const TransitProvider = ({ children }) => {
   const [staticError, setStaticError] = useState(null);
   const [vehicleError, setVehicleError] = useState(null);
   const [serviceAlerts, setServiceAlerts] = useState([]);
+  const [lastStaticRefreshAt, setLastStaticRefreshAt] = useState(null);
+  const [lastStaticFailureAt, setLastStaticFailureAt] = useState(null);
+  const [lastVehicleFailureAt, setLastVehicleFailureAt] = useState(null);
+  const [lastRoutingBuildAt, setLastRoutingBuildAt] = useState(null);
+  const [lastRoutingFailureAt, setLastRoutingFailureAt] = useState(null);
+  const [routingError, setRoutingError] = useState(null);
+  const [isBuildingRouting, setIsBuildingRouting] = useState(false);
+  const [proxyHealth, setProxyHealth] = useState(null);
+  const [isCheckingProxyHealth, setIsCheckingProxyHealth] = useState(false);
+  const [proxyHealthError, setProxyHealthError] = useState(null);
+  const [lastProxyHealthCheckAt, setLastProxyHealthCheckAt] = useState(null);
+  const [lastProxyHealthFailureAt, setLastProxyHealthFailureAt] = useState(null);
 
   // Detour detection (server-side, via Firestore)
-  const [activeDetours, setActiveDetours] = useState({});
+  const [detourFeed, setDetourFeed] = useState({});
+  const [detoursEnabled, setDetoursEnabledState] = useState(runtimeConfig.detours.enabledByDefault);
   const prevDetourIdsRef = useRef(new Set());
+  const detoursEnabledRef = useRef(detoursEnabled);
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
@@ -92,12 +111,32 @@ export const TransitProvider = ({ children }) => {
   const vehicleIntervalRef = useRef(null);
   const prevVehiclesRef = useRef([]);
   const serviceAlertIntervalRef = useRef(null);
+  const proxyHealthIntervalRef = useRef(null);
   const shapeProcessingJobRef = useRef(0);
 
   // Refs for deferred routing and cache-first strategy
   const gtfsDataRef = useRef(null);
   const routingDataRef = useRef(null);
   const routingBuildPromiseRef = useRef(null);
+
+  useEffect(() => {
+    detoursEnabledRef.current = detoursEnabled;
+  }, [detoursEnabled]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const storedEnabled = await getDetoursEnabled();
+      if (isMounted) {
+        setDetoursEnabledState(storedEnabled);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   /**
    * Process raw shapes through the rendering pipeline without blocking the UI thread.
@@ -196,14 +235,18 @@ export const TransitProvider = ({ children }) => {
           gtfsDataRef.current = data;
           applyStaticData(data);
           setUsingCachedData(false);
+          setLastStaticRefreshAt(Date.now());
           processAndStoreShapes(data.shapes);
           // Invalidate stale routing so next trip plan rebuilds
           routingDataRef.current = null;
           setRoutingData(null);
           setIsRoutingReady(false);
+          setLastRoutingBuildAt(null);
+          setRoutingError(null);
           await cacheGTFSData(data);
         } catch (error) {
           // Silent fail — cached data is already displayed
+          setLastStaticFailureAt(Date.now());
           logger.warn('Background GTFS refresh failed:', error);
         }
       }
@@ -213,6 +256,7 @@ export const TransitProvider = ({ children }) => {
     // No cache available
     if (!online) {
       setStaticError('No internet connection and no cached data available');
+      setLastStaticFailureAt(Date.now());
       setIsLoadingStatic(false);
       return;
     }
@@ -222,10 +266,12 @@ export const TransitProvider = ({ children }) => {
       const data = await fetchAllStaticData();
       gtfsDataRef.current = data;
       applyStaticData(data);
+      setLastStaticRefreshAt(Date.now());
       processAndStoreShapes(data.shapes);
       await cacheGTFSData(data);
     } catch (error) {
       logger.error('Failed to load static data:', error);
+      setLastStaticFailureAt(Date.now());
       setStaticError(error.message || 'Failed to load transit data');
     } finally {
       setIsLoadingStatic(false);
@@ -247,6 +293,9 @@ export const TransitProvider = ({ children }) => {
     }
 
     const buildPromise = (async () => {
+      setIsBuildingRouting(true);
+      setRoutingError(null);
+
       try {
         let data = gtfsDataRef.current;
 
@@ -265,12 +314,16 @@ export const TransitProvider = ({ children }) => {
         routingDataRef.current = routing;
         setRoutingData(routing);
         setIsRoutingReady(true);
+        setLastRoutingBuildAt(Date.now());
         return routing;
       } catch (error) {
         logger.error('Failed to build routing data:', error);
+        setRoutingError(error);
+        setLastRoutingFailureAt(Date.now());
         return null;
       } finally {
         routingBuildPromiseRef.current = null;
+        setIsBuildingRouting(false);
       }
     })();
 
@@ -326,6 +379,7 @@ export const TransitProvider = ({ children }) => {
       setLastVehicleUpdate(new Date());
     } catch (error) {
       logger.error('Failed to load vehicle positions:', error);
+      setLastVehicleFailureAt(Date.now());
       setVehicleError(error.message || 'Failed to load vehicle positions');
     } finally {
       setIsLoadingVehicles(false);
@@ -397,6 +451,52 @@ export const TransitProvider = ({ children }) => {
     }
   }, []);
 
+  const loadProxyHealth = useCallback(async () => {
+    if (!LOCATIONIQ_CONFIG.PROXY_URL) {
+      setProxyHealth(null);
+      setProxyHealthError('API proxy URL is not configured');
+      setLastProxyHealthFailureAt(Date.now());
+      return;
+    }
+
+    setIsCheckingProxyHealth(true);
+    try {
+      const nextHealth = await fetchProxyHealth();
+      setProxyHealth(nextHealth);
+      setProxyHealthError(null);
+      setLastProxyHealthCheckAt(nextHealth.checkedAt || Date.now());
+    } catch (error) {
+      logger.warn('API proxy health check failed:', error);
+      setProxyHealth(null);
+      setProxyHealthError(error.message || 'API proxy health check failed');
+      setLastProxyHealthFailureAt(Date.now());
+    } finally {
+      setIsCheckingProxyHealth(false);
+    }
+  }, []);
+
+  const startProxyHealthChecks = useCallback(() => {
+    if (proxyHealthIntervalRef.current) {
+      clearInterval(proxyHealthIntervalRef.current);
+    }
+
+    void loadProxyHealth();
+
+    if (LOCATIONIQ_CONFIG.PROXY_URL) {
+      proxyHealthIntervalRef.current = setInterval(
+        loadProxyHealth,
+        PROXY_HEALTH_CHECK_INTERVAL_MS
+      );
+    }
+  }, [loadProxyHealth]);
+
+  const stopProxyHealthChecks = useCallback(() => {
+    if (proxyHealthIntervalRef.current) {
+      clearInterval(proxyHealthIntervalRef.current);
+      proxyHealthIntervalRef.current = null;
+    }
+  }, []);
+
   const getRouteById = useCallback(
     (routeId) => routes.find((route) => route.id === routeId),
     [routes]
@@ -423,6 +523,25 @@ export const TransitProvider = ({ children }) => {
     [vehicles]
   );
 
+  const setDetoursEnabled = useCallback(async (enabled) => {
+    const previousEnabled = detoursEnabledRef.current;
+    detoursEnabledRef.current = enabled;
+    setDetoursEnabledState(enabled);
+    const result = await saveDetoursEnabled(enabled);
+
+    if (!result.success) {
+      detoursEnabledRef.current = previousEnabled;
+      setDetoursEnabledState(previousEnabled);
+    }
+
+    return result;
+  }, []);
+
+  const activeDetours = useMemo(
+    () => (detoursEnabled ? detourFeed : {}),
+    [detoursEnabled, detourFeed]
+  );
+
   const isRouteDetouring = useCallback(
     (routeId) => Boolean(activeDetours[routeId]),
     [activeDetours]
@@ -441,7 +560,7 @@ export const TransitProvider = ({ children }) => {
         const newIds = Object.keys(detourMap);
         const prevIds = prevDetourIdsRef.current;
         for (const routeId of newIds) {
-          if (!prevIds.has(routeId)) {
+          if (detoursEnabledRef.current && !prevIds.has(routeId)) {
             showLocalNotification({
               title: 'Route ' + routeId + ' Detour',
               body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
@@ -450,7 +569,7 @@ export const TransitProvider = ({ children }) => {
           }
         }
         prevDetourIdsRef.current = new Set(newIds);
-        setActiveDetours(detourMap);
+        setDetourFeed(detourMap);
       },
       (error) => logger.error('Detour subscription error:', error)
     );
@@ -501,6 +620,19 @@ export const TransitProvider = ({ children }) => {
     stopServiceAlertUpdates,
   ]);
 
+  useEffect(() => {
+    if (isOffline) {
+      stopProxyHealthChecks();
+      return;
+    }
+
+    startProxyHealthChecks();
+
+    return () => {
+      stopProxyHealthChecks();
+    };
+  }, [isOffline, startProxyHealthChecks, stopProxyHealthChecks]);
+
   // Listen for network changes
   useEffect(() => {
     const unsubscribe = addNetworkListener((state) => {
@@ -524,6 +656,129 @@ export const TransitProvider = ({ children }) => {
     };
   }, [isOffline, loadStaticData]);
 
+  const diagnostics = useMemo(() => buildTransitDiagnostics({
+    isOffline,
+    staticData: {
+      isLoading: isLoadingStatic,
+      isOffline,
+      isAvailable: routes.length > 0 && stops.length > 0,
+      usingCachedData,
+      lastSuccessAt: lastStaticRefreshAt,
+      lastFailureAt: lastStaticFailureAt,
+      error: staticError,
+    },
+    realtimeVehicles: {
+      isLoading: isLoadingVehicles,
+      isOffline,
+      isAvailable: Boolean(lastVehicleUpdate),
+      lastSuccessAt: lastVehicleUpdate,
+      lastFailureAt: lastVehicleFailureAt,
+      error: vehicleError,
+    },
+    routing: {
+      isLoading: isBuildingRouting,
+      isOffline,
+      isReady: isRoutingReady,
+      routingData,
+      lastSuccessAt: lastRoutingBuildAt,
+      lastFailureAt: lastRoutingFailureAt,
+      error: routingError,
+    },
+    proxyApi: {
+      isLoading: isCheckingProxyHealth,
+      isOffline,
+      isAvailable: Boolean(proxyHealth?.ok),
+      lastSuccessAt: lastProxyHealthCheckAt,
+      lastFailureAt: lastProxyHealthFailureAt,
+      error: proxyHealthError,
+    },
+    counts: {
+      routes: routes.length,
+      stops: stops.length,
+      vehicles: vehicles.length,
+      alerts: serviceAlerts.length,
+    },
+  }), [
+    isOffline,
+    isLoadingStatic,
+    routes.length,
+    stops.length,
+    usingCachedData,
+    lastStaticRefreshAt,
+    lastStaticFailureAt,
+    staticError,
+    isLoadingVehicles,
+    lastVehicleUpdate,
+    lastVehicleFailureAt,
+    vehicleError,
+    isBuildingRouting,
+    isRoutingReady,
+    routingData,
+    lastRoutingBuildAt,
+    lastRoutingFailureAt,
+    routingError,
+    isCheckingProxyHealth,
+    proxyHealth,
+    lastProxyHealthCheckAt,
+    lastProxyHealthFailureAt,
+    proxyHealthError,
+    vehicles.length,
+    serviceAlerts.length,
+  ]);
+
+  const diagnosticsSignatureRef = useRef('');
+  useEffect(() => {
+    const signature = [
+      diagnostics.overall.status,
+      diagnostics.staticData.status,
+      diagnostics.realtimeVehicles.status,
+      diagnostics.routing.status,
+      diagnostics.proxyApi.status,
+      diagnostics.staticData.reason,
+      diagnostics.realtimeVehicles.reason,
+      diagnostics.routing.reason,
+      diagnostics.proxyApi.reason,
+    ].join('|');
+
+    if (diagnosticsSignatureRef.current === signature) {
+      return;
+    }
+
+    diagnosticsSignatureRef.current = signature;
+
+    const logMethod =
+      diagnostics.overall.status === DIAGNOSTIC_STATUS.ERROR
+        ? logger.error
+        : diagnostics.overall.status === DIAGNOSTIC_STATUS.DEGRADED
+        ? logger.warn
+        : logger.info;
+
+    logMethod('Transit diagnostics updated', {
+      overall: diagnostics.overall,
+      staticData: {
+        status: diagnostics.staticData.status,
+        reason: diagnostics.staticData.reason,
+        usingCachedData: diagnostics.staticData.usingCachedData,
+        isStale: diagnostics.staticData.isStale,
+      },
+      realtimeVehicles: {
+        status: diagnostics.realtimeVehicles.status,
+        reason: diagnostics.realtimeVehicles.reason,
+        isStale: diagnostics.realtimeVehicles.isStale,
+      },
+      routing: {
+        status: diagnostics.routing.status,
+        reason: diagnostics.routing.reason,
+      },
+      proxyApi: {
+        status: diagnostics.proxyApi.status,
+        reason: diagnostics.proxyApi.reason,
+        isStale: diagnostics.proxyApi.isStale,
+      },
+      counts: diagnostics.counts,
+    });
+  }, [diagnostics]);
+
   const staticValue = useMemo(() => ({
     routes,
     stops,
@@ -541,7 +796,9 @@ export const TransitProvider = ({ children }) => {
     staticError,
     isOffline,
     usingCachedData,
+    diagnostics,
     loadStaticData,
+    loadProxyHealth,
     getRouteById,
     getStopById,
     getShapesForRoute,
@@ -562,7 +819,9 @@ export const TransitProvider = ({ children }) => {
     staticError,
     isOffline,
     usingCachedData,
+    diagnostics,
     loadStaticData,
+    loadProxyHealth,
     getRouteById,
     getStopById,
     getShapesForRoute,
@@ -572,6 +831,8 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
+    detoursEnabled,
+    setDetoursEnabled,
     activeDetours,
     isRouteDetouring,
     getRouteDetour,
@@ -579,6 +840,7 @@ export const TransitProvider = ({ children }) => {
     onDemandZones,
     isLoadingVehicles,
     vehicleError,
+    diagnostics,
     loadVehiclePositions,
     loadServiceAlerts,
     startVehicleUpdates,
@@ -590,6 +852,8 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
+    detoursEnabled,
+    setDetoursEnabled,
     activeDetours,
     isRouteDetouring,
     getRouteDetour,
@@ -597,6 +861,7 @@ export const TransitProvider = ({ children }) => {
     onDemandZones,
     isLoadingVehicles,
     vehicleError,
+    diagnostics,
     loadVehiclePositions,
     loadServiceAlerts,
     startVehicleUpdates,

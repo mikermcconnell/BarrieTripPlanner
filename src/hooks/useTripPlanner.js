@@ -12,6 +12,7 @@ import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { planTripAuto, TripPlanningError } from '../services/tripService';
 import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
 import { validateTripInputs } from '../utils/tripValidation';
+import logger from '../utils/logger';
 
 // ─── Action Types ─────────────────────────────────────────────────
 const SET_FROM = 'SET_FROM';
@@ -34,6 +35,7 @@ const SET_TIME_MODE = 'SET_TIME_MODE';
 const SET_DEPARTURE_TIME = 'SET_DEPARTURE_TIME';
 const SET_FROM_TYPING = 'SET_FROM_TYPING';
 const SET_TO_TYPING = 'SET_TO_TYPING';
+const CLEAR_RESULTS = 'CLEAR_RESULTS';
 
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
@@ -56,6 +58,15 @@ const initialState = {
   timeMode: 'now',          // 'now' | 'departAt' | 'arriveBy'
   selectedTime: null,       // Date object or null (null = use current time)
 };
+
+const clearResults = (state) => ({
+  ...state,
+  itineraries: [],
+  selectedIndex: 0,
+  isLoading: false,
+  error: null,
+  hasSearched: false,
+});
 
 // ─── Reducer ──────────────────────────────────────────────────────
 function tripReducer(state, action) {
@@ -115,13 +126,19 @@ function tripReducer(state, action) {
     case SET_ERROR:
       return { ...state, error: action.payload };
     case SET_TIME_MODE:
-      return { ...state, timeMode: action.payload, selectedTime: action.payload === 'now' ? null : state.selectedTime };
+      return {
+        ...state,
+        timeMode: action.payload,
+        selectedTime: action.payload === 'now' ? null : (state.selectedTime || new Date()),
+      };
     case SET_DEPARTURE_TIME:
       return { ...state, selectedTime: action.payload };
     case SET_FROM_TYPING:
       return { ...state, isTypingFrom: action.payload };
     case SET_TO_TYPING:
       return { ...state, isTypingTo: action.payload };
+    case CLEAR_RESULTS:
+      return clearResults(state);
     default:
       return state;
   }
@@ -187,6 +204,7 @@ export const useTripPlanner = ({
       });
 
       let finalItineraries = result.itineraries;
+      const routingDiagnostics = result.routingDiagnostics || {};
 
       // Apply real-time delays if the platform provides the function
       if (applyDelays && finalItineraries.length > 0) {
@@ -198,6 +216,11 @@ export const useTripPlanner = ({
       }
 
       dispatch({ type: SEARCH_SUCCESS, payload: finalItineraries });
+      logger.info('Trip planning completed', {
+        resultsCount: finalItineraries.length,
+        timeMode: state.timeMode,
+        routingDiagnostics,
+      });
 
       // Track successful trip planning
       try {
@@ -205,6 +228,11 @@ export const useTripPlanner = ({
         trackEvent('trip_planned', {
           results_count: finalItineraries.length,
           time_mode: state.timeMode,
+          routing_source: routingDiagnostics.source || 'unknown',
+          fallback_from: routingDiagnostics.fallbackFrom || 'none',
+          fallback_reason: routingDiagnostics.fallbackReason || 'none',
+          used_mock: routingDiagnostics.usedMock ? 'true' : 'false',
+          zone_adjusted: routingDiagnostics.zoneAdjusted ? 'true' : 'false',
         });
       } catch {}
 
@@ -212,7 +240,20 @@ export const useTripPlanner = ({
         onItinerariesReady(finalItineraries[0]);
       }
     } catch (err) {
-      console.error('Error searching trips:', err);
+      logger.error('Error searching trips:', err);
+      const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
+      logger.warn('Trip planning failed', {
+        code: errorCode,
+        message: err?.message || 'Unknown trip planning error',
+        timeMode: state.timeMode,
+      });
+      try {
+        const { trackEvent } = require('../services/analyticsService');
+        trackEvent('trip_planning_failed', {
+          code: errorCode,
+          time_mode: state.timeMode,
+        });
+      } catch {}
       if (err instanceof TripPlanningError) {
         // Preserve full error object so TripErrorDisplay can render rich UI
         dispatch({ type: SEARCH_ERROR, payload: err });
@@ -225,6 +266,8 @@ export const useTripPlanner = ({
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
     dispatch({ type: SET_FROM_TEXT, payload: text });
+    dispatch({ type: SET_FROM, payload: null });
+    dispatch({ type: CLEAR_RESULTS });
     if (fromDebounceRef.current) clearTimeout(fromDebounceRef.current);
     if (text.length < 3) {
       fromRequestSeqRef.current += 1;
@@ -253,6 +296,8 @@ export const useTripPlanner = ({
 
   const searchToAddress = useCallback((text) => {
     dispatch({ type: SET_TO_TEXT, payload: text });
+    dispatch({ type: SET_TO, payload: null });
+    dispatch({ type: CLEAR_RESULTS });
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
     if (text.length < 3) {
       toRequestSeqRef.current += 1;
@@ -288,7 +333,11 @@ export const useTripPlanner = ({
     dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
     dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
     // Auto-search if both locations set
-    if (state.to) searchTrips(loc, state.to);
+    if (state.to) {
+      searchTrips(loc, state.to);
+      return;
+    }
+    dispatch({ type: CLEAR_RESULTS });
   }, [state.to, searchTrips]);
 
   const selectToSuggestion = useCallback((item) => {
@@ -298,33 +347,56 @@ export const useTripPlanner = ({
     dispatch({ type: SET_TO, payload: loc });
     dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
     dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });
-    if (state.from) searchTrips(state.from, loc);
+    if (state.from) {
+      searchTrips(state.from, loc);
+      return;
+    }
+    dispatch({ type: CLEAR_RESULTS });
   }, [state.from, searchTrips]);
 
   // ─── Swap ────────────────────────────────────────────────────
   const swap = useCallback(() => {
+    const nextFrom = state.to;
+    const nextTo = state.from;
     dispatch({ type: SWAP });
-  }, []);
+    if (nextFrom && nextTo) {
+      searchTrips(nextFrom, nextTo);
+      return;
+    }
+    dispatch({ type: CLEAR_RESULTS });
+  }, [state.from, state.to, searchTrips]);
 
   // ─── Set locations directly (e.g. from map tap) ──────────────
   const setFrom = useCallback((location, text) => {
     dispatch({ type: SET_FROM, payload: location });
     if (text) dispatch({ type: SET_FROM_TEXT, payload: text });
-    if (state.to && location) searchTrips(location, state.to);
+    if (state.to && location) {
+      searchTrips(location, state.to);
+      return;
+    }
+    dispatch({ type: CLEAR_RESULTS });
   }, [state.to, searchTrips]);
 
   const setTo = useCallback((location, text) => {
     dispatch({ type: SET_TO, payload: location });
     if (text) dispatch({ type: SET_TO_TEXT, payload: text });
-    if (state.from && location) searchTrips(state.from, location);
+    if (state.from && location) {
+      searchTrips(state.from, location);
+      return;
+    }
+    dispatch({ type: CLEAR_RESULTS });
   }, [state.from, searchTrips]);
 
   const setFromText = useCallback((text) => {
     dispatch({ type: SET_FROM_TEXT, payload: text });
+    dispatch({ type: SET_FROM, payload: null });
+    dispatch({ type: CLEAR_RESULTS });
   }, []);
 
   const setToText = useCallback((text) => {
     dispatch({ type: SET_TO_TEXT, payload: text });
+    dispatch({ type: SET_TO, payload: null });
+    dispatch({ type: CLEAR_RESULTS });
   }, []);
 
   // ─── Select itinerary ────────────────────────────────────────
@@ -364,7 +436,7 @@ export const useTripPlanner = ({
   }, []);
 
   // ─── Use current location ───────────────────────────────────
-  const useCurrentLocation = useCallback(async (getCurrentPosition) => {
+  const useCurrentLocation = useCallback(async (getCurrentPosition, options = {}) => {
     try {
       const coords = await getCurrentPosition();
       const loc = { lat: coords.lat, lon: coords.lon };
@@ -377,7 +449,12 @@ export const useTripPlanner = ({
         dispatch({ type: SET_FROM_TEXT, payload: 'Current Location' });
       }
 
-      if (state.to) searchTrips(loc, state.to);
+      const destination = options.searchTo || state.to;
+      if (destination) {
+        searchTrips(loc, destination);
+        return;
+      }
+      dispatch({ type: CLEAR_RESULTS });
     } catch {
       dispatch({ type: SET_ERROR, payload: 'Could not get your location' });
     }

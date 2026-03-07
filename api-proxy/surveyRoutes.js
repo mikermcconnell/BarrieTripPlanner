@@ -21,8 +21,7 @@ const router = express.Router();
 const CONFIG_COLLECTION = 'surveyConfig';
 const RESPONSES_COLLECTION = 'surveyResponses';
 const AGGREGATES_COLLECTION = 'surveyAggregates';
-
-const SURVEY_ADMIN_API_KEY = (process.env.SURVEY_ADMIN_API_KEY || '').trim();
+const isProd = process.env.NODE_ENV === 'production';
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -35,14 +34,15 @@ function requireDb(res) {
   return db;
 }
 
-function requireAdmin(req, res) {
-  if (!SURVEY_ADMIN_API_KEY) {
-    res.status(503).json({ error: 'Admin API key not configured' });
+function requireSurveyAdmin(req, res) {
+  if (!req.clientId) {
+    res.status(401).json({ error: 'Survey admin routes require authenticated API access' });
     return false;
   }
-  const key = req.get('x-admin-key') || '';
-  if (key !== SURVEY_ADMIN_API_KEY) {
-    res.status(403).json({ error: 'Invalid admin key' });
+  if (isProd && !req.clientId.startsWith('uid:')) {
+    res.status(403).json({
+      error: 'Survey admin routes require Firebase-authenticated user access in production',
+    });
     return false;
   }
   return true;
@@ -208,7 +208,7 @@ router.get('/check-submitted', async (req, res) => {
 // ─── GET /report ───────────────────────────────────────────────
 
 router.get('/report', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireSurveyAdmin(req, res)) return;
   const db = requireDb(res);
   if (!db) return;
 
@@ -264,7 +264,7 @@ router.get('/report', async (req, res) => {
 // ─── POST /admin/config ────────────────────────────────────────
 
 router.post('/admin/config', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireSurveyAdmin(req, res)) return;
   const db = requireDb(res);
   if (!db) return;
 
@@ -305,7 +305,7 @@ router.post('/admin/config', async (req, res) => {
 // ─── POST /admin/toggle ────────────────────────────────────────
 
 router.post('/admin/toggle', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireSurveyAdmin(req, res)) return;
   const db = requireDb(res);
   if (!db) return;
 
@@ -334,7 +334,7 @@ router.post('/admin/toggle', async (req, res) => {
 // ─── POST /send-digest ─────────────────────────────────────────
 
 router.post('/send-digest', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  if (!requireSurveyAdmin(req, res)) return;
   const db = requireDb(res);
   if (!db) return;
 

@@ -4,7 +4,11 @@
 
 const {
   haversineDistance,
+  buildPolylineSegment,
+  calculateBearing,
   pointToSegmentDistance,
+  projectPointToPolyline,
+  projectPointToSegment,
   pointToPolylineDistance,
   pathsOverlap,
   simplifyPath,
@@ -66,6 +70,21 @@ describe('geometryUtils', () => {
     });
   });
 
+  describe('projectPointToSegment', () => {
+    test('returns the projected point and distance', () => {
+      const point = { latitude: 44.39, longitude: -79.68 };
+      const segStart = { latitude: 44.38, longitude: -79.69 };
+      const segEnd = { latitude: 44.40, longitude: -79.69 };
+
+      const projection = projectPointToSegment(point, segStart, segEnd);
+
+      expect(projection.point.longitude).toBeCloseTo(-79.69, 5);
+      expect(projection.point.latitude).toBeCloseTo(44.39, 5);
+      expect(projection.distanceMeters).toBeGreaterThan(500);
+      expect(projection.distanceMeters).toBeLessThan(1000);
+    });
+  });
+
   describe('pointToPolylineDistance', () => {
     test('returns Infinity for empty polyline', () => {
       const point = { latitude: 44.39, longitude: -79.69 };
@@ -104,6 +123,81 @@ describe('geometryUtils', () => {
 
       const dist = pointToPolylineDistance(point, polyline);
       expect(dist).toBeLessThan(10); // Essentially 0
+    });
+  });
+
+  describe('projectPointToPolyline', () => {
+    test('returns closest projected point and segment metadata', () => {
+      const polyline = [
+        { latitude: 44.38, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.40, longitude: -79.68 },
+      ];
+
+      const projection = projectPointToPolyline(
+        { latitude: 44.391, longitude: -79.685 },
+        polyline
+      );
+
+      expect(projection.segmentIndex).toBe(1);
+      expect(projection.distanceMeters).toBeLessThan(400);
+      expect(projection.point.latitude).toBeGreaterThan(44.39);
+      expect(projection.point.longitude).toBeGreaterThan(-79.69);
+      expect(projection.bearing).toBeGreaterThanOrEqual(0);
+      expect(projection.bearing).toBeLessThan(360);
+    });
+  });
+
+  describe('buildPolylineSegment', () => {
+    test('builds a forward segment between projected points', () => {
+      const polyline = [
+        { latitude: 44.38, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.40, longitude: -79.69 },
+      ];
+
+      const segment = buildPolylineSegment(
+        polyline,
+        { point: { latitude: 44.385, longitude: -79.69 }, segmentIndex: 0 },
+        { point: { latitude: 44.395, longitude: -79.69 }, segmentIndex: 1 }
+      );
+
+      expect(segment).toEqual([
+        { latitude: 44.385, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.395, longitude: -79.69 },
+      ]);
+    });
+
+    test('builds a reverse segment between projected points', () => {
+      const polyline = [
+        { latitude: 44.38, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.40, longitude: -79.69 },
+      ];
+
+      const segment = buildPolylineSegment(
+        polyline,
+        { point: { latitude: 44.395, longitude: -79.69 }, segmentIndex: 1 },
+        { point: { latitude: 44.385, longitude: -79.69 }, segmentIndex: 0 }
+      );
+
+      expect(segment).toEqual([
+        { latitude: 44.395, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.385, longitude: -79.69 },
+      ]);
+    });
+  });
+
+  describe('calculateBearing', () => {
+    test('returns 0 for northbound segments', () => {
+      expect(
+        calculateBearing(
+          { latitude: 44.38, longitude: -79.69 },
+          { latitude: 44.39, longitude: -79.69 }
+        )
+      ).toBeCloseTo(0, 0);
     });
   });
 

@@ -831,6 +831,32 @@ describe('seedActiveDetour', () => {
     }
   });
 
+  test('seeded detour survives off-service restart and clears after morning reverification window', () => {
+    const realDateNow = Date.now;
+
+    try {
+      const oneAm = new Date('2026-03-05T06:00:00Z').getTime();
+      const fiveAm = new Date('2026-03-05T10:00:00Z').getTime();
+      const previousEvening = oneAm - 30 * 60 * 1000;
+
+      Date.now = () => oneAm;
+      seedActiveDetour('route-1', previousEvening, previousEvening, 1);
+
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+
+      Date.now = () => fiveAm;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+
+      Date.now = () => fiveAm + 11 * 60 * 1000;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(0);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
   test('seeded detour with on-route vehicle does not clear via consecutive path', () => {
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
@@ -1088,13 +1114,14 @@ describe('service hours guard', () => {
     const originalNow = Date.now;
 
     try {
-      const fiveMinAgo = originalNow() - 6 * 60 * 1000;
+      const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+      const sevenMinBeforeServiceEnd = oneAmEst - 7 * 60 * 1000;
 
       // Build a high-confidence detour (survives end-of-service cleanup)
       const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
       const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
       for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
-        Date.now = () => fiveMinAgo + i * 30000;
+        Date.now = () => sevenMinBeforeServiceEnd + i * 30000;
         processVehicles([bus1, bus2], shapes, routeShapeMapping);
       }
       Date.now = originalNow;
@@ -1160,15 +1187,16 @@ describe('end-of-service cleanup', () => {
     // - 2+ unique vehicles
     // - 10+ evidence points
     // - 5+ minutes duration
-    const fiveMinAgo = Date.now() - 6 * 60 * 1000;
     const originalNow = Date.now;
+    const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+    const sevenMinBeforeServiceEnd = oneAmEst - 7 * 60 * 1000;
 
-    // Simulate detection 6 min ago with 2 vehicles accumulating evidence
+    // Simulate detection shortly before the fixed 1 AM EST service boundary
     const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
     const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
     // Run enough ticks with 2 vehicles to accumulate 10+ evidence points
     for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
-      Date.now = () => fiveMinAgo + i * 30000;
+      Date.now = () => sevenMinBeforeServiceEnd + i * 30000;
       processVehicles([bus1, bus2], shapes, routeShapeMapping);
     }
 
@@ -1176,7 +1204,6 @@ describe('end-of-service cleanup', () => {
     expect(before.activeDetourCount).toBe(1);
 
     // Transition to out-of-service
-    const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
     Date.now = () => oneAmEst;
     processVehicles([], shapes, routeShapeMapping);
 
