@@ -53,7 +53,7 @@ import { recalculateNavigationItinerary } from '../services/navigationRecalculat
 import * as Haptics from 'expo-haptics';
 import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
-import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { haversineDistance, pointToPolylineDistance } from '../utils/geometryUtils';
 import {
   collectItineraryEndpointCoordinates,
   computeCoordinateBounds,
@@ -130,6 +130,12 @@ const NavigationScreen = ({ route }) => {
   const [isRecalculatingRoute, setIsRecalculatingRoute] = useState(false);
   const staleCheckedRef = useRef(false);
   const missedBusWarningRef = useRef(false);
+  const followCameraRef = useRef({
+    heading: null,
+    lastUpdatedAt: 0,
+    latitude: null,
+    longitude: null,
+  });
 
   const {
     location: userLocation,
@@ -286,16 +292,47 @@ const NavigationScreen = ({ route }) => {
     if ((isFollowMode || followMode === 'my-location') && userLocation && cameraRef.current) {
       if (Date.now() - legTransitionTimeRef.current < 2000) return;
 
+      const now = Date.now();
       const heading = (isHeadingUp && isWalkingLeg && userLocation.heading != null)
         ? userLocation.heading
         : 0;
       const zoom = isHeadingUp && isWalkingLeg ? 17 : MIN_NAV_ZOOM;
+      const previousCamera = followCameraRef.current;
+      const movedMeters = previousCamera.latitude == null || previousCamera.longitude == null
+        ? Infinity
+        : haversineDistance(
+            previousCamera.latitude,
+            previousCamera.longitude,
+            userLocation.latitude,
+            userLocation.longitude
+          );
+      const headingDelta = previousCamera.heading == null
+        ? Infinity
+        : Math.abs((((heading - previousCamera.heading) % 360) + 540) % 360 - 180);
+      const minIntervalMs = Platform.OS === 'android' ? 1200 : 500;
+      const minMoveMeters = Platform.OS === 'android' ? 12 : 4;
+      const minHeadingDelta = 10;
+
+      if (
+        now - previousCamera.lastUpdatedAt < minIntervalMs &&
+        movedMeters < minMoveMeters &&
+        headingDelta < minHeadingDelta
+      ) {
+        return;
+      }
+
+      followCameraRef.current = {
+        heading,
+        lastUpdatedAt: now,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+      };
 
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
         zoomLevel: zoom,
         heading,
-        animationDuration: 500,
+        animationDuration: Platform.OS === 'android' ? 250 : 500,
       });
     }
   }, [userLocation, isFollowMode, followMode, isHeadingUp, isWalkingLeg]);
@@ -1180,6 +1217,16 @@ const NavigationScreen = ({ route }) => {
           </View>
         )}
 
+        <TouchableOpacity
+          style={styles.exitNavigationButton}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Exit navigation"
+        >
+          <Icon name="X" size={16} color={COLORS.textPrimary} />
+          <Text style={styles.exitNavigationButtonText}>Exit Navigation</Text>
+        </TouchableOpacity>
+
         {/* Progress Bar */}
         <NavigationProgressBar
           legs={itinerary?.legs || []}
@@ -1236,6 +1283,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+  },
+  exitNavigationButton: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    minHeight: 48,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.grey300,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    ...SHADOWS.medium,
+  },
+  exitNavigationButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
   },
   mapControls: {
     position: 'absolute',

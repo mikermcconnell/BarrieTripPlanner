@@ -1136,6 +1136,16 @@ const NavigationScreen = ({ route }) => {
           </View>
         )}
 
+        <TouchableOpacity
+          style={styles.exitNavigationButton}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Exit navigation"
+        >
+          <Text style={styles.exitNavigationButtonIcon}>✕</Text>
+          <Text style={styles.exitNavigationButtonText}>Exit Navigation</Text>
+        </TouchableOpacity>
+
         <NavigationProgressBar
           legs={itinerary?.legs || []}
           currentLegIndex={currentLegIndex}
@@ -1186,6 +1196,30 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+  exitNavigationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.grey300,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
+    gap: SPACING.xs,
+    ...SHADOWS.medium,
+  },
+  exitNavigationButtonIcon: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+  },
+  exitNavigationButtonText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
   },
   mapControls: {
     position: 'absolute',

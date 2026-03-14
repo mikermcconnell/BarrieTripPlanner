@@ -5,7 +5,7 @@
  * keep rendering logic separate from trip planning state.
  */
 
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
@@ -55,6 +55,56 @@ const TripSearchHeaderWeb = ({
   onSelectedTimeChange,
   onSearch,
 }) => {
+  const [activeField, setActiveField] = useState(null);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+
+  useEffect(() => {
+    if (activeField === 'from' && showFromSuggestions && fromSuggestions.length > 0) {
+      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), fromSuggestions.length - 1));
+      return;
+    }
+
+    if (activeField === 'to' && showToSuggestions && toSuggestions.length > 0) {
+      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), toSuggestions.length - 1));
+      return;
+    }
+
+    setActiveSuggestionIndex(-1);
+  }, [activeField, fromSuggestions, toSuggestions, showFromSuggestions, showToSuggestions]);
+
+  const handleSuggestionKeyDown = useCallback((field, suggestions, onSelect) => (e) => {
+    if (!suggestions.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault?.();
+      setActiveField(field);
+      setActiveSuggestionIndex((prev) => {
+        if (prev < 0) return 0;
+        return Math.min(prev + 1, suggestions.length - 1);
+      });
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault?.();
+      setActiveField(field);
+      setActiveSuggestionIndex((prev) => {
+        if (prev <= 0) return 0;
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      const index = activeSuggestionIndex >= 0 ? activeSuggestionIndex : 0;
+      const selectedSuggestion = suggestions[index];
+      if (selectedSuggestion) {
+        e.preventDefault?.();
+        onSelect(selectedSuggestion);
+      }
+    }
+  }, [activeSuggestionIndex]);
+
   void isLoading;
   return (
   <View style={styles.tripPlanHeader}>
@@ -81,6 +131,8 @@ const TripSearchHeaderWeb = ({
           style={styles.tripInput}
           value={fromText}
           onChangeText={onFromChange}
+          onFocus={() => setActiveField('from')}
+          onKeyDown={handleSuggestionKeyDown('from', showFromSuggestions ? fromSuggestions : [], onFromSelect)}
           placeholder="Your location"
           placeholderTextColor={COLORS.grey500}
           aria-label="Starting location"
@@ -101,9 +153,13 @@ const TripSearchHeaderWeb = ({
         {fromSuggestions.slice(0, 5).map((item, index) => (
           <TouchableOpacity
             key={getSuggestionKey(item, index)}
-            style={styles.suggestionItem}
+            style={[
+              styles.suggestionItem,
+              activeField === 'from' && index === activeSuggestionIndex && styles.suggestionItemActive,
+            ]}
             onPress={() => onFromSelect(item)}
             role="option"
+            aria-selected={activeField === 'from' && index === activeSuggestionIndex}
           >
             <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
             <Text style={styles.suggestionDistance}>
@@ -131,6 +187,8 @@ const TripSearchHeaderWeb = ({
           style={styles.tripInput}
           value={toText}
           onChangeText={onToChange}
+          onFocus={() => setActiveField('to')}
+          onKeyDown={handleSuggestionKeyDown('to', showToSuggestions ? toSuggestions : [], onToSelect)}
           placeholder="Where to?"
           placeholderTextColor={COLORS.grey500}
           aria-label="Destination"
@@ -143,9 +201,13 @@ const TripSearchHeaderWeb = ({
         {toSuggestions.slice(0, 5).map((item, index) => (
           <TouchableOpacity
             key={getSuggestionKey(item, index)}
-            style={styles.suggestionItem}
+            style={[
+              styles.suggestionItem,
+              activeField === 'to' && index === activeSuggestionIndex && styles.suggestionItemActive,
+            ]}
             onPress={() => onToSelect(item)}
             role="option"
+            aria-selected={activeField === 'to' && index === activeSuggestionIndex}
           >
             <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
             <Text style={styles.suggestionDistance}>
@@ -354,6 +416,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
     minHeight: 44,
+  },
+  suggestionItemActive: {
+    backgroundColor: COLORS.primarySubtle,
   },
   suggestionText: {
     flex: 1,

@@ -3,11 +3,23 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from '
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
+import DetourOverviewCard from './DetourOverviewCard';
 import DetourTimeline from './DetourTimeline';
+import DetourImpactSummary from './DetourImpactSummary';
 import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
+import { useDetourRoadSummary } from '../hooks/useDetourRoadSummary';
 
-const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exitStopName, onClose, onViewOnMap }) => {
+const getDetourTitle = (routeId, state) => {
+  const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
+  return `Route ${routeId} - ${statusLabel}`;
+};
+
+const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose, onViewOnMap }) => {
   const [slideAnim] = useState(new Animated.Value(100));
+  const { roadNames, loading: roadsLoading } = useDetourRoadSummary({
+    detour,
+    enabled: Boolean(routeId && detour),
+  });
   // Keep a ref to onClose so the Escape key handler never captures a stale value
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -75,7 +87,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
             <Text style={styles.routeBadgeText}>{routeId}</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.title}>Route {routeId} — Detour Active</Text>
+            <Text style={styles.title}>{getDetourTitle(routeId, detour?.state)}</Text>
             <View style={styles.headerMeta}>
               {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
               {confidenceChip && (
@@ -98,11 +110,14 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
         <View style={styles.divider} />
 
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-          <DetourTimeline
-            affectedStops={affectedStops}
-            entryStopName={entryStopName}
-            exitStopName={exitStopName}
+          <DetourOverviewCard
+            routeId={routeId}
+            sections={segmentStopDetails}
+            roadNames={roadNames}
+            roadsLoading={roadsLoading}
           />
+          <DetourTimeline sections={segmentStopDetails} />
+          <DetourImpactSummary routeId={routeId} sections={segmentStopDetails} />
 
           <TouchableOpacity
             style={styles.viewButton}
@@ -133,7 +148,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: '60%',
+    maxHeight: '78%',
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: BORDER_RADIUS.lg,
     borderTopRightRadius: BORDER_RADIUS.lg,

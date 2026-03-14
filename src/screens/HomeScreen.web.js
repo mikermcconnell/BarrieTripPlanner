@@ -27,6 +27,7 @@ import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { escapeHtml } from '../utils/htmlUtils';
 
 // Web-only imports
@@ -41,7 +42,8 @@ import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
-import { useAffectedStops } from '../hooks/useAffectedStops';
+import MapViewModeToggle from '../components/MapViewModeToggle';
+import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
@@ -119,25 +121,57 @@ const buildTripMarkerHtml = (marker) => {
   const color = marker.type === 'origin' ? '#4CAF50' : '#f44336';
   const stopCode = escapeHtml(marker.stopCode || '');
   const stopName = escapeHtml(marker.stopName || '');
+  const bubbleSide = marker.type === 'origin' ? 'left: 28px;' : 'right: 28px;';
+  const accentStyle = marker.type === 'origin'
+    ? `border-left:4px solid ${color};`
+    : `border-right:4px solid ${color};`;
+  const connectorSide = marker.type === 'origin' ? 'left: 20px;' : 'right: 20px;';
   const walkLabel = marker.walkDistance != null
     ? (marker.walkDistance >= 1000
-        ? `${(marker.walkDistance / 1000).toFixed(1)}km walk`
-        : `${marker.walkDistance}m walk`) +
+        ? `${(marker.walkDistance / 1000).toFixed(1)} km walk`
+        : `${marker.walkDistance} m walk`) +
       (marker.type === 'origin' ? ' from start' : ' to destination')
     : '';
   const labelHtml = marker.stopName
-    ? `<div style="background:white;border-radius:6px;padding:3px 6px;margin-top:4px;border:1.5px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.15);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        <div style="font-size:10px;font-weight:600;color:#333;">${marker.stopCode ? `#${stopCode} - ` : ''}${stopName}</div>
-        ${walkLabel ? `<div style="font-size:9px;color:#888;margin-top:1px;">${walkLabel}</div>` : ''}
+    ? `<div style="position:absolute;top:-10px;${bubbleSide}background:rgba(255,255,255,0.97);border-radius:12px;padding:7px 10px;min-width:126px;max-width:190px;border:1px solid rgba(15,23,42,0.08);${accentStyle}box-shadow:0 10px 24px rgba(15,23,42,0.16);backdrop-filter:blur(8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        <div style="font-size:11px;font-weight:600;color:#1f2937;line-height:1.2;">${marker.stopCode ? `#${stopCode} - ` : ''}${stopName}</div>
+        ${walkLabel ? `<div style="font-size:10px;color:#64748b;line-height:1.3;margin-top:3px;">${walkLabel}</div>` : ''}
       </div>`
+    : '';
+  const connectorHtml = marker.stopName
+    ? `<div style="position:absolute;top:9px;${connectorSide}width:14px;height:2px;border-radius:999px;background:rgba(38,50,56,0.22);"></div>`
     : '';
 
   return `
-    <div style="display:flex;flex-direction:column;align-items:center;">
+    <div style="position:relative;width:20px;height:20px;">
+      ${labelHtml}
+      ${connectorHtml}
       <div style="background:${color};width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
         <div style="background:white;width:8px;height:8px;border-radius:50%;"></div>
       </div>
-      ${labelHtml}
+    </div>
+  `;
+};
+
+const buildTripEndpointMarkerHtml = (marker) => {
+  const color = marker.type === 'originLocation' ? '#4CAF50' : '#f44336';
+  const iconSvg = marker.type === 'originLocation'
+    ? `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" fill="${color}"/>
+        <path d="M5 19C5.8 15.9 8.54 14 12 14C15.46 14 18.2 15.9 19 19" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `
+    : `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 21C12 21 18 14.5 18 9.5C18 6.19 15.31 3.5 12 3.5C8.69 3.5 6 6.19 6 9.5C6 14.5 12 21 12 21Z" fill="${color}"/>
+        <circle cx="12" cy="9.5" r="2.3" fill="white"/>
+      </svg>
+    `;
+
+  return `
+    <div style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.96);border:1.5px solid ${color}55;box-shadow:0 4px 10px rgba(15,23,42,0.12);display:flex;align-items:center;justify-content:center;">
+      ${iconSvg}
     </div>
   `;
 };
@@ -175,6 +209,7 @@ const HomeScreen = ({ route }) => {
     shapeOverlapOffsets,
     routeShapeMapping,
     routeStopsMapping,
+    routeStopSequencesMapping,
     isLoadingStatic,
     staticError,
     loadStaticData,
@@ -188,6 +223,7 @@ const HomeScreen = ({ route }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
+    detoursEnabled,
     isRouteDetouring,
     activeDetours,
     onDemandZones,
@@ -196,7 +232,7 @@ const HomeScreen = ({ route }) => {
   } = useTransitRealtime();
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
@@ -209,6 +245,8 @@ const HomeScreen = ({ route }) => {
   const [selectedZone, setSelectedZone] = useState(null);
   const [whereToText, setWhereToText] = useState('');
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
+  const [focusedDetourRouteId, setFocusedDetourRouteId] = useState(null);
+  const [mapViewMode, setMapViewMode] = useState('regular');
   const pulseAnim = useMapPulseAnimation();
   const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel();
 
@@ -252,16 +290,83 @@ const HomeScreen = ({ route }) => {
     return vehicles.filter(v => selectedRoutes.has(v.routeId)).length;
   }, [selectedRoutes, vehicles]);
 
-  const { detourOverlays } = useDetourOverlays({ selectedRouteIds: selectedRoutes, activeDetours });
+  const activeDetourRouteIds = useMemo(() => {
+    const routeIds = new Set();
+    if (!detoursEnabled) return routeIds;
+
+    Object.entries(activeDetours || {}).forEach(([routeId, detour]) => {
+      if (detour?.state !== 'cleared') {
+        routeIds.add(routeId);
+      }
+    });
+
+    return routeIds;
+  }, [activeDetours, detoursEnabled]);
+  const canUseDetourView = detoursEnabled && activeDetourRouteIds.size > 0;
+  const isDetourView = canUseDetourView && mapViewMode === 'detour';
+  const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
+
+  useEffect(() => {
+    if (!canUseDetourView && mapViewMode !== 'regular') {
+      setMapViewMode('regular');
+    }
+  }, [canUseDetourView, mapViewMode]);
+
+  useEffect(() => {
+    if (focusedDetourRouteId && !activeDetourRouteIds.has(focusedDetourRouteId)) {
+      setFocusedDetourRouteId(null);
+    }
+  }, [focusedDetourRouteId, activeDetourRouteIds]);
+
+  const detourStopDetailsByRouteId = useMemo(() => {
+    if (!detoursEnabled) return {};
+
+    return Object.fromEntries(
+      Object.entries(activeDetours || {}).map(([routeId, detour]) => [
+        routeId,
+        deriveAffectedStopDetailsForDetour({
+          routeId,
+          segments: detour?.segments?.length
+            ? detour.segments
+            : [{
+              shapeId: detour?.shapeId ?? null,
+              entryPoint: detour?.entryPoint ?? null,
+              exitPoint: detour?.exitPoint ?? null,
+              skippedSegmentPolyline: detour?.skippedSegmentPolyline ?? null,
+              inferredDetourPolyline: detour?.inferredDetourPolyline ?? null,
+            }],
+          stops,
+          routeStopsMapping,
+          routeStopSequencesMapping,
+        }),
+      ])
+    );
+  }, [activeDetours, detoursEnabled, routeStopSequencesMapping, routeStopsMapping, stops]);
+
+  const { detourOverlays } = useDetourOverlays({
+    selectedRouteIds: selectedRoutes,
+    activeDetours,
+    enabled: detoursEnabled,
+    focusedRouteId: hasDetourFocus ? focusedDetourRouteId : null,
+    detourStopDetailsByRouteId,
+  });
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
-  const { affectedStops, entryStopName, exitStopName } = useAffectedStops({
+  const selectedDetourStopDetails = useMemo(() => deriveAffectedStopDetailsForDetour({
     routeId: detourSheetRouteId,
-    entryPoint: selectedDetour?.entryPoint,
-    exitPoint: selectedDetour?.exitPoint,
+    segments: selectedDetour?.segments?.length
+      ? selectedDetour.segments
+      : [{
+        shapeId: selectedDetour?.shapeId ?? null,
+        entryPoint: selectedDetour?.entryPoint ?? null,
+        exitPoint: selectedDetour?.exitPoint ?? null,
+        skippedSegmentPolyline: selectedDetour?.skippedSegmentPolyline ?? null,
+        inferredDetourPolyline: selectedDetour?.inferredDetourPolyline ?? null,
+      }],
     stops,
     routeStopsMapping,
-  });
+    routeStopSequencesMapping,
+  }), [detourSheetRouteId, routeStopSequencesMapping, routeStopsMapping, selectedDetour?.segments, stops]);
 
   const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
 
@@ -323,7 +428,7 @@ const HomeScreen = ({ route }) => {
   } = tripState;
 
   const {
-    tripRouteCoordinates, tripMarkers, intermediateStopMarkers,
+    tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
 
@@ -378,10 +483,24 @@ const HomeScreen = ({ route }) => {
     else if (currentZoom <= 15) base = 8;
     else base = 10;
 
+    const isDetouring = activeDetourRouteIds.has(routeId);
+    const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === routeId;
+
+    if (isFocusedDetour) return base + 2;
+    if (isDetourView && !hasSelection) return isDetouring ? base : Math.max(3, base - 4);
     if (selectedRoutes.has(routeId)) base += 2;
     if (hoveredRouteId === routeId) base += 2;
     return base;
-  }, [currentZoom, selectedRoutes, hoveredRouteId]);
+  }, [
+    activeDetourRouteIds,
+    currentZoom,
+    focusedDetourRouteId,
+    isDetourView,
+    hasDetourFocus,
+    hasSelection,
+    hoveredRouteId,
+    selectedRoutes,
+  ]);
 
   // Displayed entities (vehicles, shapes, stops, detours) based on selection
   const {
@@ -579,6 +698,37 @@ const HomeScreen = ({ route }) => {
     );
   };
 
+  const centerOnUserLocationOnce = useCallback(() => {
+    if (!navigator.geolocation) {
+      logger.warn('Geolocation unavailable for one-time centering');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latestRegion = mapRegion || MAP_CONFIG.INITIAL_REGION;
+        const nextRegion = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          latitudeDelta: latestRegion.latitudeDelta || MAP_CONFIG.INITIAL_REGION.latitudeDelta,
+          longitudeDelta: latestRegion.longitudeDelta || MAP_CONFIG.INITIAL_REGION.longitudeDelta,
+        };
+
+        mapRef.current?.animateToRegion(nextRegion, 500);
+        setMapRegion(nextRegion);
+        setUserHasInteracted(true);
+      },
+      (error) => {
+        logger.warn('Failed to center on user location', error);
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 30000,
+        timeout: 10000,
+      }
+    );
+  }, [mapRegion]);
+
 
   // Trip preview mode - hide regular map elements when viewing trip results
   const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
@@ -628,15 +778,38 @@ const HomeScreen = ({ route }) => {
           const isHovering = hoveredRouteId !== null;
           const isThisHovered = hoveredRouteId === shape.routeId;
           const isSelected = isRouteSelected(shape.routeId);
+          const isDetouring = activeDetourRouteIds.has(shape.routeId);
+          const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === shape.routeId;
+          const shouldRenderShape = shouldRenderRouteShape({
+            routeId: shape.routeId,
+            hasDetourFocus,
+            focusedDetourRouteId,
+          });
 
-          // Visual hierarchy: selected = full, others ghost; hover = bright, others dim
+          if (!shouldRenderShape) {
+            return null;
+          }
+
           let opacity, outlineW;
-          if (hasSelection) {
+          let routeColor = shape.color;
+          let routeLabel = null;
+
+          if (hasDetourFocus) {
+            opacity = isFocusedDetour ? 0.98 : isDetouring ? 0.22 : 0.1;
+            outlineW = isFocusedDetour ? (currentZoom >= 14 ? 4 : 3) : 0;
+            routeColor = isFocusedDetour ? '#111827' : COLORS.grey400;
+          } else if (isDetourView && !hasSelection) {
+            opacity = isDetouring ? 0.82 : 0.18;
+            outlineW = isDetouring ? (currentZoom >= 14 ? 3 : 2) : 0;
+            routeColor = isDetouring ? '#111827' : COLORS.grey400;
+          } else if (hasSelection) {
             opacity = isSelected ? 1.0 : 0.15;
             outlineW = isSelected ? (currentZoom >= 14 ? 4 : 3) : 0;
+            routeLabel = isSelected ? (routeShortNameMap.get(shape.routeId) || null) : null;
           } else if (isHovering) {
             opacity = isThisHovered ? 0.95 : 0.4;
             outlineW = currentZoom >= 14 ? 2 : 1;
+            routeLabel = isThisHovered ? (routeShortNameMap.get(shape.routeId) || null) : null;
           } else {
             opacity = 0.85;
             outlineW = currentZoom >= 14 ? 2 : 1;
@@ -648,7 +821,7 @@ const HomeScreen = ({ route }) => {
             <WebRoutePolyline
               key={shape.id}
               coordinates={shape.coordinates}
-              color={shape.color}
+              color={routeColor}
               strokeWidth={getPolylineWeight(shape.routeId)}
               opacity={opacity}
               outlineWidth={outlineW}
@@ -656,7 +829,7 @@ const HomeScreen = ({ route }) => {
               onMouseOver={() => setHoveredRouteId(shape.routeId)}
               onMouseOut={() => setHoveredRouteId(null)}
               className={isNewlySelected ? 'polyline-draw-on' : ''}
-              routeLabel={routeShortNameMap.get(shape.routeId) || null}
+              routeLabel={routeLabel}
             />
           );
         })}
@@ -695,15 +868,27 @@ const HomeScreen = ({ route }) => {
           />
         ))}
         {/* Live bus markers - hide when in trip preview mode */}
-        {!isTripPreviewMode && displayedVehicles.map((vehicle) => (
-          <WebBusMarker
-            key={vehicle.id}
-            vehicle={vehicle}
-            color={getRouteColor(vehicle.routeId)}
-            routeLabel={getRouteLabel(vehicle)}
-            snapPath={getVehicleSnapPath(vehicle)}
-          />
-        ))}
+        {!isTripPreviewMode && displayedVehicles.map((vehicle) => {
+          const isDetouring = activeDetourRouteIds.has(vehicle.routeId);
+          const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
+          const dimmed = hasDetourFocus
+            ? !isFocusedDetour
+            : isDetourView && !hasSelection
+              ? !isDetouring
+              : false;
+          const markerColor = dimmed ? COLORS.grey400 : getRouteColor(vehicle.routeId);
+
+          return (
+            <WebBusMarker
+              key={vehicle.id}
+              vehicle={vehicle}
+              color={markerColor}
+              routeLabel={getRouteLabel(vehicle)}
+              snapPath={getVehicleSnapPath(vehicle)}
+              dimmed={dimmed}
+            />
+          );
+        })}
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((route) => (
           <React.Fragment key={route.id}>
@@ -722,6 +907,17 @@ const HomeScreen = ({ route }) => {
               <RouteLineLabels coordinates={route.coordinates} color={route.color} routeLabel={route.routeLabel} />
             )}
           </React.Fragment>
+        ))}
+
+        {/* Actual trip start and final destination markers */}
+        {tripEndpointMarkers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            html={buildTripEndpointMarkerHtml(marker)}
+            className={`trip-endpoint-marker-${marker.type}`}
+            zIndexOffset={900}
+          />
         ))}
 
         {/* Bus approach lines — dashed route-colored line from bus to boarding stop */}
@@ -884,15 +1080,33 @@ const HomeScreen = ({ route }) => {
           {/* Detour Banner */}
           <DetourAlertStrip
             activeDetours={activeDetours}
-            onPress={setDetourSheetRouteId}
+            onPress={(routeId) => {
+              if (!routeId) {
+                setMapViewMode('detour');
+                return;
+              }
+
+              setFocusedDetourRouteId(routeId);
+              setDetourSheetRouteId(routeId);
+              setMapViewMode('detour');
+            }}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
             routes={routes}
+          />
+          <MapViewModeToggle
+            visible={canUseDetourView}
+            mode={mapViewMode}
+            onChange={setMapViewMode}
+            detourCount={activeDetourRouteIds.size}
+            alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
           />
 
           {/* Center Map Button - Top Right */}
           <TouchableOpacity
             style={styles.centerButton}
-            onPress={centerOnBarrie}
+            onPress={centerOnUserLocationOnce}
+            accessibilityRole="button"
+            accessibilityLabel="Center on my location"
           >
             <CenterIcon size={18} color={COLORS.textPrimary} />
           </TouchableOpacity>
@@ -1076,24 +1290,36 @@ const HomeScreen = ({ route }) => {
         <DetourDetailsSheet
           routeId={detourSheetRouteId}
           detour={selectedDetour}
-          affectedStops={affectedStops}
-          entryStopName={entryStopName}
-          exitStopName={exitStopName}
+          segmentStopDetails={selectedDetourStopDetails.segmentStopDetails}
           onClose={() => setDetourSheetRouteId(null)}
           onViewOnMap={() => {
-            selectRoute(detourSheetRouteId);
-            if (selectedDetour.entryPoint && selectedDetour.exitPoint) {
-              const entry = selectedDetour.entryPoint;
-              const exit = selectedDetour.exitPoint;
-              const lat1 = entry.latitude || entry.lat;
-              const lon1 = entry.longitude || entry.lon;
-              const lat2 = exit.latitude || exit.lat;
-              const lon2 = exit.longitude || exit.lon;
+            setFocusedDetourRouteId(detourSheetRouteId);
+            setMapViewMode('detour');
+            const fitCoords = ((selectedDetour.segments?.length
+              ? selectedDetour.segments
+              : [{
+                entryPoint: selectedDetour.entryPoint ?? null,
+                exitPoint: selectedDetour.exitPoint ?? null,
+              }]) ?? [])
+              .flatMap((segment) => {
+                const coords = [];
+                if (segment?.entryPoint) {
+                  coords.push({
+                    latitude: segment.entryPoint.latitude || segment.entryPoint.lat,
+                    longitude: segment.entryPoint.longitude || segment.entryPoint.lon,
+                  });
+                }
+                if (segment?.exitPoint) {
+                  coords.push({
+                    latitude: segment.exitPoint.latitude || segment.exitPoint.lat,
+                    longitude: segment.exitPoint.longitude || segment.exitPoint.lon,
+                  });
+                }
+                return coords;
+              });
+            if (fitCoords.length > 0) {
               mapRef.current?.fitToCoordinates(
-                [
-                  { latitude: lat1, longitude: lon1 },
-                  { latitude: lat2, longitude: lon2 },
-                ],
+                fitCoords,
                 { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
               );
             }

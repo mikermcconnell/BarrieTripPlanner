@@ -1,6 +1,6 @@
 param(
-    [int]$Port = 8084,
-    [int]$MetroPort = 8084,
+    [int]$Port = 8081,
+    [int]$MetroPort = 8081,
     [string]$AppId = "com.barrietransit.planner",
     [string]$Scheme,
     [string]$ManifestHost = "127.0.0.1",
@@ -189,18 +189,22 @@ if ($apiProxyPort) {
     $apiProxyOutLog = Join-Path $projectRoot ".logs-expo-dev-api-proxy-$apiProxyPort.out.txt"
     $apiProxyErrLog = Join-Path $projectRoot ".logs-expo-dev-api-proxy-$apiProxyPort.err.txt"
     Remove-Item $apiProxyOutLog, $apiProxyErrLog -ErrorAction SilentlyContinue
-
-    Write-Status "Starting local API proxy on port $apiProxyPort"
-    $apiProxyProcess = Start-Process `
-        -FilePath "node.exe" `
-        -ArgumentList @("proxy-server.js") `
-        -WorkingDirectory $projectRoot `
-        -RedirectStandardOutput $apiProxyOutLog `
-        -RedirectStandardError $apiProxyErrLog `
-        -WindowStyle Hidden `
-        -PassThru
-
     $apiProxyUrl = "http://127.0.0.1:$apiProxyPort/api/health"
+
+    if (Test-HttpReady -Url $apiProxyUrl) {
+        Write-Status "Using existing local API proxy at $apiProxyUrl"
+    } else {
+        Write-Status "Starting local API proxy on port $apiProxyPort"
+        $apiProxyProcess = Start-Process `
+            -FilePath "node.exe" `
+            -ArgumentList @("proxy-server.js") `
+            -WorkingDirectory $projectRoot `
+            -RedirectStandardOutput $apiProxyOutLog `
+            -RedirectStandardError $apiProxyErrLog `
+            -WindowStyle Hidden `
+            -PassThru
+    }
+
     $apiProxyReady = $false
     for ($i = 0; $i -lt 20; $i++) {
         if (Test-HttpReady -Url $apiProxyUrl) {

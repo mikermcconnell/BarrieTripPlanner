@@ -27,8 +27,23 @@ import { retryFetch } from '../utils/retryFetch';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
 
-// Initialize local geocoding on module load
-initLocalGeocoding();
+let localGeocodingInitPromise = null;
+
+const ensureLocalGeocodingReady = async () => {
+  if (isLocalDataReady()) {
+    return true;
+  }
+
+  if (!localGeocodingInitPromise) {
+    localGeocodingInitPromise = initLocalGeocoding();
+  }
+
+  try {
+    return await localGeocodingInitPromise;
+  } catch {
+    return false;
+  }
+};
 
 // ─── Response Cache (reduces repeat API calls) ───────────────────
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -295,6 +310,8 @@ export const autocompleteAddress = async (query) => {
     return [];
   }
 
+  await ensureLocalGeocodingReady();
+
   // Try local first
   if (isLocalDataReady()) {
     const localResults = localAutocomplete(query, MAX_RESULTS);
@@ -357,6 +374,8 @@ export const geocodeAddress = async (address) => {
     return null;
   }
 
+  await ensureLocalGeocodingReady();
+
   // Try local first — look for a confident match
   if (isLocalDataReady()) {
     const localResults = localAutocomplete(address, 1);
@@ -378,6 +397,8 @@ export const geocodeAddress = async (address) => {
  * @returns {Promise<Object|null>} Address object or null
  */
 export const reverseGeocode = async (lat, lon) => {
+  await ensureLocalGeocodingReady();
+
   // Try local first if data is ready and coords are in Barrie
   if (isLocalDataReady()) {
     const localResult = localReverseGeocode(lat, lon);

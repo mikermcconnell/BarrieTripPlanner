@@ -164,17 +164,24 @@ export const useTripPlanner = ({
   const toDebounceRef = useRef(null);
   const fromRequestSeqRef = useRef(0);
   const toRequestSeqRef = useRef(0);
+  const tripSearchSeqRef = useRef(0);
+
+  const invalidateTripSearches = useCallback(() => {
+    tripSearchSeqRef.current += 1;
+  }, []);
 
   // ─── Search ──────────────────────────────────────────────────
   const searchTrips = useCallback(async (from, to) => {
     if (!from || !to) return;
 
-    const validation = validateTripInputs({ from, to });
+    const validation = validateTripInputs({ from, to, onDemandZones });
     if (!validation.valid) {
+      invalidateTripSearches();
       dispatch({ type: SET_ERROR, payload: validation.errorMessage });
       return;
     }
 
+    const requestSeq = ++tripSearchSeqRef.current;
     dispatch({ type: SEARCH_START });
 
     try {
@@ -203,6 +210,8 @@ export const useTripPlanner = ({
         stops,
       });
 
+      if (requestSeq !== tripSearchSeqRef.current) return;
+
       let finalItineraries = result.itineraries;
       const routingDiagnostics = result.routingDiagnostics || {};
 
@@ -214,6 +223,8 @@ export const useTripPlanner = ({
           // Continue without delay info
         }
       }
+
+      if (requestSeq !== tripSearchSeqRef.current) return;
 
       dispatch({ type: SEARCH_SUCCESS, payload: finalItineraries });
       logger.info('Trip planning completed', {
@@ -240,6 +251,7 @@ export const useTripPlanner = ({
         onItinerariesReady(finalItineraries[0]);
       }
     } catch (err) {
+      if (requestSeq !== tripSearchSeqRef.current) return;
       logger.error('Error searching trips:', err);
       const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
       logger.warn('Trip planning failed', {
@@ -261,10 +273,11 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime, onDemandZones, stops]);
+  }, [ensureRoutingData, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime, onDemandZones, stops, invalidateTripSearches]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_FROM_TEXT, payload: text });
     dispatch({ type: SET_FROM, payload: null });
     dispatch({ type: CLEAR_RESULTS });
@@ -292,9 +305,10 @@ export const useTripPlanner = ({
         dispatch({ type: SET_FROM_TYPING, payload: false });
       }
     }, 300);
-  }, []);
+  }, [invalidateTripSearches]);
 
   const searchToAddress = useCallback((text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_TO_TEXT, payload: text });
     dispatch({ type: SET_TO, payload: null });
     dispatch({ type: CLEAR_RESULTS });
@@ -322,12 +336,13 @@ export const useTripPlanner = ({
         dispatch({ type: SET_TO_TYPING, payload: false });
       }
     }, 300);
-  }, []);
+  }, [invalidateTripSearches]);
 
   // ─── Suggestion selection ────────────────────────────────────
   const selectFromSuggestion = useCallback((item) => {
     const loc = { lat: item.lat, lon: item.lon };
     fromRequestSeqRef.current += 1;
+    invalidateTripSearches();
     dispatch({ type: SET_FROM_TEXT, payload: item.shortName });
     dispatch({ type: SET_FROM, payload: loc });
     dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
@@ -338,11 +353,12 @@ export const useTripPlanner = ({
       return;
     }
     dispatch({ type: CLEAR_RESULTS });
-  }, [state.to, searchTrips]);
+  }, [state.to, searchTrips, invalidateTripSearches]);
 
   const selectToSuggestion = useCallback((item) => {
     const loc = { lat: item.lat, lon: item.lon };
     toRequestSeqRef.current += 1;
+    invalidateTripSearches();
     dispatch({ type: SET_TO_TEXT, payload: item.shortName });
     dispatch({ type: SET_TO, payload: loc });
     dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
@@ -352,22 +368,24 @@ export const useTripPlanner = ({
       return;
     }
     dispatch({ type: CLEAR_RESULTS });
-  }, [state.from, searchTrips]);
+  }, [state.from, searchTrips, invalidateTripSearches]);
 
   // ─── Swap ────────────────────────────────────────────────────
   const swap = useCallback(() => {
     const nextFrom = state.to;
     const nextTo = state.from;
+    invalidateTripSearches();
     dispatch({ type: SWAP });
     if (nextFrom && nextTo) {
       searchTrips(nextFrom, nextTo);
       return;
     }
     dispatch({ type: CLEAR_RESULTS });
-  }, [state.from, state.to, searchTrips]);
+  }, [state.from, state.to, searchTrips, invalidateTripSearches]);
 
   // ─── Set locations directly (e.g. from map tap) ──────────────
   const setFrom = useCallback((location, text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_FROM, payload: location });
     if (text) dispatch({ type: SET_FROM_TEXT, payload: text });
     if (state.to && location) {
@@ -375,9 +393,10 @@ export const useTripPlanner = ({
       return;
     }
     dispatch({ type: CLEAR_RESULTS });
-  }, [state.to, searchTrips]);
+  }, [state.to, searchTrips, invalidateTripSearches]);
 
   const setTo = useCallback((location, text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_TO, payload: location });
     if (text) dispatch({ type: SET_TO_TEXT, payload: text });
     if (state.from && location) {
@@ -385,19 +404,21 @@ export const useTripPlanner = ({
       return;
     }
     dispatch({ type: CLEAR_RESULTS });
-  }, [state.from, searchTrips]);
+  }, [state.from, searchTrips, invalidateTripSearches]);
 
   const setFromText = useCallback((text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_FROM_TEXT, payload: text });
     dispatch({ type: SET_FROM, payload: null });
     dispatch({ type: CLEAR_RESULTS });
-  }, []);
+  }, [invalidateTripSearches]);
 
   const setToText = useCallback((text) => {
+    invalidateTripSearches();
     dispatch({ type: SET_TO_TEXT, payload: text });
     dispatch({ type: SET_TO, payload: null });
     dispatch({ type: CLEAR_RESULTS });
-  }, []);
+  }, [invalidateTripSearches]);
 
   // ─── Select itinerary ────────────────────────────────────────
   const selectItinerary = useCallback((index) => {
@@ -423,8 +444,9 @@ export const useTripPlanner = ({
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
     fromRequestSeqRef.current += 1;
     toRequestSeqRef.current += 1;
+    invalidateTripSearches();
     dispatch({ type: RESET });
-  }, []);
+  }, [invalidateTripSearches]);
 
   useEffect(() => {
     return () => {
@@ -432,6 +454,7 @@ export const useTripPlanner = ({
       if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
       fromRequestSeqRef.current += 1;
       toRequestSeqRef.current += 1;
+      tripSearchSeqRef.current += 1;
     };
   }, []);
 
@@ -440,6 +463,7 @@ export const useTripPlanner = ({
     try {
       const coords = await getCurrentPosition();
       const loc = { lat: coords.lat, lon: coords.lon };
+      invalidateTripSearches();
       dispatch({ type: SET_FROM, payload: loc });
 
       try {
@@ -458,7 +482,7 @@ export const useTripPlanner = ({
     } catch {
       dispatch({ type: SET_ERROR, payload: 'Could not get your location' });
     }
-  }, [state.to, searchTrips]);
+  }, [state.to, searchTrips, invalidateTripSearches]);
 
   return {
     state,

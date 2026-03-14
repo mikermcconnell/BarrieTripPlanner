@@ -199,13 +199,15 @@ const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0 }
   element.innerHTML = html;
 };
 
-const createBusHtml = (color, routeId, bearing = null, scale = 1) => {
+const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false) => {
   const routeLabel = escapeHtml(routeId || '?');
   const hasValidBearing = bearing !== null && bearing !== undefined;
+  const resolvedScale = scale * (dimmed ? 0.84 : 1);
+  const resolvedOpacity = dimmed ? 0.42 : 1;
 
   const arrowHtml = hasValidBearing ? `
     <svg width="80" height="80" viewBox="0 0 80 80"
-      style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;">
+      style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;opacity:${resolvedOpacity};">
       <path d="M40 2 L30 32 L40 22 L50 32 Z"
         fill="#222222" stroke="white" stroke-width="2" stroke-linejoin="round"
         transform="rotate(${bearing}, 40, 40)"/>
@@ -213,7 +215,7 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1) => {
   ` : '';
 
   return `
-    <div style="position:relative;width:80px;height:80px;overflow:visible;transform:scale(${scale});transition:transform 0.1s ease-out;">
+    <div style="position:relative;width:80px;height:80px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
       ${arrowHtml}
       <div style="
         position:absolute;
@@ -728,7 +730,7 @@ export const __TEST_ONLY__ = {
   resolveLayerCallbacks,
 };
 
-export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, snapPath = null }) => {
+export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, snapPath = null, dimmed = false }) => {
   if (!vehicle?.coordinate?.latitude || !vehicle?.coordinate?.longitude) return null;
   const label = routeLabelProp || vehicle.routeId;
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
@@ -755,7 +757,7 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
   return (
     <WebHtmlMarker
       coordinate={{ latitude, longitude }}
-      html={createBusHtml(color, label, bearing, scale)}
+      html={createBusHtml(color, label, bearing, scale, dimmed)}
       className="bus-icon"
       popupHtml={`<strong>Route ${escapeHtml(label)}</strong>${vehicle.label ? `<br />Bus ${escapeHtml(vehicle.label)}` : ''}`}
     />

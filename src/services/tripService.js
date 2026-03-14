@@ -679,10 +679,23 @@ const TRIP_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const TRIP_CACHE_MAX_ENTRIES = 20;
 const tripCache = new Map();
 
-function getTripCacheKey(fromLat, fromLon, toLat, toLon) {
-  // Round time to 5-minute windows for cache hits on nearby requests
-  const timeRounded = Math.floor(Date.now() / TRIP_CACHE_TTL_MS);
-  return `${fromLat.toFixed(4)},${fromLon.toFixed(4)},${toLat.toFixed(4)},${toLon.toFixed(4)},${timeRounded}`;
+function getTripCacheKey({
+  fromLat,
+  fromLon,
+  toLat,
+  toLon,
+  requestedTimeMs,
+  arriveBy = false,
+}) {
+  const timeRounded = Math.floor(requestedTimeMs / TRIP_CACHE_TTL_MS);
+  return [
+    fromLat.toFixed(4),
+    fromLon.toFixed(4),
+    toLat.toFixed(4),
+    toLon.toFixed(4),
+    timeRounded,
+    arriveBy ? 'arrive' : 'depart',
+  ].join(',');
 }
 
 function getCachedTrip(key) {
@@ -745,12 +758,23 @@ const getRequestedTripTimestamp = ({ date, time }) => {
  * @returns {Promise<Object>} Trip plan results
  */
 export const planTripAuto = async (params) => {
-  const { routingData, onDemandZones, stops: contextStops, ...otpParams } = params;
+  const originalParams = {
+    fromLat: params.fromLat,
+    fromLon: params.fromLon,
+    toLat: params.toLat,
+    toLon: params.toLon,
+    date: params.date,
+    time: params.time,
+    arriveBy: params.arriveBy,
+  };
+  let routingParams = { ...params };
+  const { routingData, onDemandZones, stops: contextStops } = routingParams;
 
   // Validate inputs before routing
   const validation = validateTripInputs({
-    from: { lat: params.fromLat, lon: params.fromLon },
-    to: { lat: params.toLat, lon: params.toLon },
+    from: { lat: routingParams.fromLat, lon: routingParams.fromLon },
+    to: { lat: routingParams.toLat, lon: routingParams.toLon },
+    onDemandZones,
   });
   if (!validation.valid) {
     throw new TripPlanningError(
@@ -782,26 +806,26 @@ export const planTripAuto = async (params) => {
       // Both in same zone — single ON_DEMAND leg, no RAPTOR needed
       if (zoneTrip.sameZone) {
         const duration = estimateOnDemandDuration(
-          params.fromLat, params.fromLon,
-          params.toLat, params.toLon
+          originalParams.fromLat, originalParams.fromLon,
+          originalParams.toLat, originalParams.toLon
         );
-        const requestedTimeMs = getRequestedTripTimestamp(params);
-        const startTime = params.arriveBy
+        const requestedTimeMs = getRequestedTripTimestamp(originalParams);
+        const startTime = originalParams.arriveBy
           ? requestedTimeMs - duration * 1000
           : requestedTimeMs;
-        const endTime = params.arriveBy
+        const endTime = originalParams.arriveBy
           ? requestedTimeMs
           : requestedTimeMs + duration * 1000;
         const leg = buildOnDemandLeg({
           zone: zoneTrip.zone,
-          from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
-          to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
+          from: { lat: originalParams.fromLat, lon: originalParams.fromLon, name: 'Pickup' },
+          to: { lat: originalParams.toLat, lon: originalParams.toLon, name: 'Drop-off' },
           estimatedDuration: duration,
           startTime,
         });
         return withRoutingDiagnostics({
-          from: { name: 'Origin', lat: params.fromLat, lon: params.fromLon },
-          to: { name: 'Destination', lat: params.toLat, lon: params.toLon },
+          from: { name: 'Origin', lat: originalParams.fromLat, lon: originalParams.fromLon },
+          to: { name: 'Destination', lat: originalParams.toLat, lon: originalParams.toLon },
           itineraries: [{
             id: 'on-demand-direct',
             duration: duration,
@@ -822,20 +846,64 @@ export const planTripAuto = async (params) => {
         }));
       }
 
+      const prependDurationSeconds = zoneTrip.prependLeg
+        ? estimateOnDemandDuration(
+            originalParams.fromLat,
+            originalParams.fromLon,
+            zoneTrip.prependLeg.hubStop.latitude,
+            zoneTrip.prependLeg.hubStop.longitude
+          )
+        : 0;
+      const appendDurationSeconds = zoneTrip.appendLeg
+        ? estimateOnDemandDuration(
+            zoneTrip.appendLeg.hubStop.latitude,
+            zoneTrip.appendLeg.hubStop.longitude,
+            originalParams.toLat,
+            originalParams.toLon
+          )
+        : 0;
+      const requestedTimeMs = getRequestedTripTimestamp(originalParams);
+      const routingRequestTimeMs = originalParams.arriveBy
+        ? requestedTimeMs - appendDurationSeconds * 1000
+        : requestedTimeMs + prependDurationSeconds * 1000;
+
+      routingParams = {
+        ...routingParams,
+        date: new Date(routingRequestTimeMs),
+        time: new Date(routingRequestTimeMs),
+      };
+
       // Adjust origin/dest for RAPTOR routing via hub stops
       if (zoneTrip.raptorFrom) {
-        params = { ...params, fromLat: zoneTrip.raptorFrom.lat, fromLon: zoneTrip.raptorFrom.lon };
+        routingParams = {
+          ...routingParams,
+          fromLat: zoneTrip.raptorFrom.lat,
+          fromLon: zoneTrip.raptorFrom.lon,
+        };
       }
       if (zoneTrip.raptorTo) {
-        params = { ...params, toLat: zoneTrip.raptorTo.lat, toLon: zoneTrip.raptorTo.lon };
+        routingParams = {
+          ...routingParams,
+          toLat: zoneTrip.raptorTo.lat,
+          toLon: zoneTrip.raptorTo.lon,
+        };
       }
     }
   }
 
-  // Check cache before routing (use adjusted coordinates if zone-modified)
-  const cacheKey = getTripCacheKey(params.fromLat, params.fromLon, params.toLat, params.toLon);
-  const cached = getCachedTrip(cacheKey);
-  if (cached && !zoneTrip) {
+  const shouldUseCache = !zoneTrip;
+  const cacheKey = shouldUseCache
+    ? getTripCacheKey({
+        fromLat: routingParams.fromLat,
+        fromLon: routingParams.fromLon,
+        toLat: routingParams.toLat,
+        toLon: routingParams.toLon,
+        requestedTimeMs: getRequestedTripTimestamp(routingParams),
+        arriveBy: Boolean(routingParams.arriveBy),
+      })
+    : null;
+  const cached = cacheKey ? getCachedTrip(cacheKey) : null;
+  if (cached) {
     return cached;
   }
 
@@ -845,7 +913,7 @@ export const planTripAuto = async (params) => {
   // If routing data is available, prefer local router
   if (routingData) {
     try {
-      result = await planTripWithLocalRouter(params);
+      result = await planTripWithLocalRouter(routingParams);
     } catch (error) {
       logger.warn('Local router failed, trying OTP:', error.message);
       localRouterError = {
@@ -859,18 +927,15 @@ export const planTripAuto = async (params) => {
 
   // Fall back to OTP if local router wasn't used or failed
   if (!result) {
+    const { routingData: _routingData, onDemandZones: _onDemandZones, stops: _stops, ...otpRequestParams } = routingParams;
     result = await planTrip({
-      ...otpParams,
-      fromLat: params.fromLat,
-      fromLon: params.fromLon,
-      toLat: params.toLat,
-      toLon: params.toLon,
+      ...otpRequestParams,
     });
   }
 
   // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
   if (zoneTrip && !zoneTrip.sameZone) {
-    result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, params);
+    result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, originalParams);
   }
 
   const existingDiagnostics = result.routingDiagnostics || {};
@@ -887,7 +952,9 @@ export const planTripAuto = async (params) => {
 
   logger.info('Trip planning route selected', result.routingDiagnostics);
 
-  setCachedTrip(cacheKey, result);
+  if (cacheKey) {
+    setCachedTrip(cacheKey, result);
+  }
   return result;
 };
 

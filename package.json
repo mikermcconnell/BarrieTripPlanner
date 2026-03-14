@@ -9,7 +9,7 @@
     "android:recover": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-recover.ps1",
     "android:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1",
     "android:dev:direct": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1 -Direct",
-    "android:dev:proxy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1 -Proxy -Port 8083 -MetroPort 8084",
+    "android:dev:proxy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1 -Proxy -Port 8081 -MetroPort 8084",
     "android:stable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-stable.ps1",
     "android:stable:launch": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-stable.ps1 -SkipBuild",
     "android:stable:rebuild": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-stable.ps1",

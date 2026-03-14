@@ -32,7 +32,7 @@ GTFS-RT Feed (vehicle positions)
         │
         ▼
 ┌─────────────────────┐
-│  detourWorker.js     │  30s tick interval (hardcoded), seeds from Firestore on restart
+│  detourWorker.js     │  30s tick interval (hardcoded), starts fresh each worker run
 │  (api-proxy/Railway) │
 └────────┬────────────┘
          │
@@ -101,15 +101,20 @@ All history events include `source: "detour-worker-v2"`.
 
 ## 3. Current State (as of 2026-03-03)
 
-### What riders see today: Nothing yet
-The client feature flag `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` is **off** (`false`). The detection is running server-side, but riders don't see anything in the app. The map overlay component exists in code but is behind the feature flag.
+### What riders see today
+The client now has the main rider-facing pieces in code:
+- `DetourAlertStrip` on the map screen
+- `DetourDetailsSheet` for affected stops and detour timing
+- `DetourOverlay` and detour-focused map mode
 
-Note: The detour Firestore subscription in `TransitContext.js` runs unconditionally — only the map overlay rendering is gated by a feature flag.
+The rider feature is still controlled by `EXPO_PUBLIC_ENABLE_AUTO_DETOURS`.
+
+Note: Firestore is the source of truth for active detours. The client should render what the backend publishes rather than applying its own freshness pruning rules.
 
 ### What's built (backend — complete)
 - Detection worker running on Railway, polling every 30s
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
-- **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, low/medium-confidence detours are auto-cleared. High-confidence detours persist overnight and are re-verified within 10 minutes of morning service start.
+- **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, all active detours are cleared and the worker starts fresh when service resumes.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
 - Debug endpoints: `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
@@ -124,12 +129,11 @@ Note: The detour Firestore subscription in `TransitContext.js` runs unconditiona
 ### What's missing to go public
 
 **Deploy steps:**
-1. **Turn on the feature flag** — Set `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` to `true`. This alone would show the map overlay, but without the banner or details, riders might not notice or understand it.
+1. **Turn on the rider feature flag** — Set `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` to `true`.
 
 **Build work:**
-2. **DetourBanner** — A notification banner on the main map: "Route 1 is currently on detour." This is how riders find out. Without it, they'd have to visually spot the overlay.
-3. **DetourDetailsSheet** — Tap the banner or overlay → bottom sheet with: which stops are skipped, where the bus is going instead, when the detour started.
-4. **useAffectedStops hook** — Figures out which stops fall within the detoured segment. Powers the details sheet.
+2. Validate the current alert strip, map overlay, and details sheet together in production-like builds.
+3. Confirm the affected-stop derivation is accurate across route variants and opposite directions.
 
 **Should-haves:**
 5. **Push notifications** — Alert riders who have favorited a route when a new detour is detected.
@@ -137,7 +141,7 @@ Note: The detour Firestore subscription in `TransitContext.js` runs unconditiona
 
 ### Known Issues (Fixed)
 - **Flapping detours** (Fixed 2026-02-27) — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
-- **Zombie detours & premature clearing** (Fixed 2026-03-03) — False-positive detours persisted overnight as "zombies" while real multi-vehicle detours got cleared when buses stopped reporting. Fixed by adding service-hours awareness: low-confidence detours auto-clear at end-of-service, high-confidence detours persist overnight and re-verify at morning service start.
+- **Zombie detours & premature clearing** (Fixed 2026-03-03, simplified 2026-03-13) — False-positive detours could linger overnight while real multi-vehicle detours cleared inconsistently when buses stopped reporting. The current model clears all detours at end-of-service and re-detects fresh detours the next service day.
 
 ---
 
@@ -185,7 +189,6 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_SERVICE_START_HOUR` | `5` | Local hour when detection activates (24h format) |
 | `DETOUR_SERVICE_END_HOUR` | `1` | Local hour when detection freezes |
 | `DETOUR_SERVICE_TIMEZONE` | `America/Toronto` | IANA timezone for service hour evaluation |
-| `DETOUR_REVERIFICATION_WINDOW_MS` | `600000` | Time after service start to re-confirm overnight detours (10min) |
 
 ### Clearing Tuning
 | Variable | Default | Description |
@@ -204,7 +207,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 ### Client Feature Flags
 | Variable | Default | Description |
 |---|---|---|
-| `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` | `false` | Show detour geometry overlay on map |
+| `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` | `false` | Enable the rider-facing auto detour feature |
+| `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` | `false` | Legacy fallback for older builds; prefer `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` |
 
 ### Hardcoded Constants (not env-configurable)
 | Constant | Value | File | Description |
@@ -226,10 +230,9 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | **Vehicle disappears from feed** | Removed from state after 5min (`STALE_VEHICLE_TIMEOUT_MS`). Does NOT clear the detour — absence of data is not evidence of return. |
 | **All vehicles on route go offline** | Detour enters `clear-pending` after 30min without evidence (`DETOUR_NO_VEHICLE_TIMEOUT_MS`). Can reactivate if a vehicle returns off-route. |
 | **Firestore write fails** | Error logged, publish skipped for that tick. Detection state machine continues in-memory. Retries next tick. |
-| **Firestore unreachable at startup** | First-tick Firestore seed skipped. Worker begins fresh. Detours re-detected as vehicles appear. |
-| **Worker restarts** | Seeds active detours from Firestore on first tick, preserving state across deploys. |
-| **Service ends with active detours** | Low/medium-confidence detours cleared immediately. High-confidence detours frozen and re-verified at morning service start within 10 minutes. |
-| **Worker restarts overnight** | Seeded detours from Firestore get `pendingReverification` flag at next service start. |
+| **Firestore unreachable at startup** | Publisher hydration may fail, but the detector still begins fresh. Existing detours are re-detected as vehicles appear. |
+| **Worker restarts** | Detector state is rebuilt from fresh vehicle evidence rather than seeded from Firestore. |
+| **Service ends with active detours** | All active detours are cleared immediately. New off-route vehicles are ignored until service hours resume. |
 
 ---
 
@@ -255,13 +258,13 @@ Queries `detourHistory` collection with optional filters. Returns event log entr
 ## 8. Rollout Plan
 
 **Stage 1: Internal Testing** (current)
-- Detection worker running in production, geometry overlays behind feature flag
+- Detection worker running in production, rider UI behind `EXPO_PUBLIC_ENABLE_AUTO_DETOURS`
 - Monitoring for false positives and flapping via `/api/detour-status`
 - Tuning thresholds based on real Barrie Transit data
 
 **Stage 2: Soft Launch**
-- Build and ship DetourBanner + DetourDetailsSheet
-- Enable `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` for all users
+- Validate `DetourAlertStrip`, `DetourDetailsSheet`, and map overlays in production-like builds
+- Enable `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` for all users
 - Monitor user-facing accuracy for 2 weeks
 
 **Stage 3: Full Launch**
@@ -294,7 +297,7 @@ To run the detour detection system locally:
 
 4. To see detour overlays in the client, also set in your root `.env`:
    ```
-   EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI=true
+   EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true
    ```
 
 ---
@@ -302,7 +305,7 @@ To run the detour detection system locally:
 ## 10. Key Files
 
 ### Server (api-proxy/)
-- `detourWorker.js` — Worker orchestrator, 30s tick loop, Firestore seeding
+- `detourWorker.js` — Worker orchestrator, 30s tick loop, service-hours-aware fresh-start processing
 - `detourDetector.js` — Core detection algorithm, state machine, vehicle tracking
 - `detourGeometry.js` — Skipped segment + inferred path computation
 - `detourPublisher.js` — Firestore publisher with write throttling

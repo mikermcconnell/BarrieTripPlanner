@@ -4,9 +4,11 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
+import DetourOverviewCard from './DetourOverviewCard';
 import DetourTimeline from './DetourTimeline';
 import DetourImpactSummary from './DetourImpactSummary';
 import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
+import { useDetourRoadSummary } from '../hooks/useDetourRoadSummary';
 
 const getDetourTitle = (routeId, state) => {
   const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
@@ -16,6 +18,10 @@ const getDetourTitle = (routeId, state) => {
 const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose, onViewOnMap }) => {
   const bottomSheetRef = useRef(null);
   const snapPoints = useMemo(() => ['45%', '78%'], []);
+  const { roadNames, loading: roadsLoading } = useDetourRoadSummary({
+    detour,
+    enabled: Boolean(routeId && detour),
+  });
 
   const handleSheetChanges = useCallback(
     (index) => {
@@ -66,8 +72,15 @@ const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose,
 
         <View style={styles.divider} />
 
+        <DetourOverviewCard
+          routeId={routeId}
+          sections={segmentStopDetails}
+          roadNames={roadNames}
+          roadsLoading={roadsLoading}
+        />
+
         <DetourTimeline sections={segmentStopDetails} />
-        <DetourImpactSummary sections={segmentStopDetails} />
+        <DetourImpactSummary routeId={routeId} sections={segmentStopDetails} />
 
         <TouchableOpacity
           style={styles.viewButton}

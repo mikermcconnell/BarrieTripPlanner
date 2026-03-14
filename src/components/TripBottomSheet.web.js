@@ -6,7 +6,7 @@
  * Now includes preview modal for quick trip overview and direct navigation start.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import TripResultCard from './TripResultCard';
 import TripErrorDisplay from './TripErrorDisplay';
@@ -71,15 +71,15 @@ const TripBottomSheet = ({
   recentTrips = [],
   onSelectRecentTrip,
 }) => {
-  // Sheet states: 'peek' (10%), 'default' (42%), 'expanded' (60%)
+  // Match native sheet sizing: 'peek' (10%), 'default' (38%), 'expanded' (85%)
   const [sheetState, setSheetState] = useState('default');
   const handleSheetChanges = useCallback((_nextState) => {}, []);
 
   const getSheetHeight = () => {
     switch (sheetState) {
       case 'peek': return '10%';
-      case 'expanded': return '60%';
-      default: return '42%';
+      case 'expanded': return '85%';
+      default: return '38%';
     }
   };
 
@@ -96,15 +96,10 @@ const TripBottomSheet = ({
     }
   }, [sheetState, handleSheetChanges]);
 
-  // Keyboard support: Escape to collapse, Enter/Space to toggle
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && sheetState !== 'peek') {
-        setSheetState('peek');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+  const handleContainerKeyDown = useCallback((e) => {
+    if (e.key === 'Escape' && sheetState !== 'peek') {
+      setSheetState('peek');
+    }
   }, [sheetState]);
 
   const renderContent = () => {
@@ -214,7 +209,10 @@ const TripBottomSheet = ({
   };
 
   return (
-    <View style={[styles.container, { height: getSheetHeight(), transition: 'height 0.3s ease-in-out' }]}>
+    <View
+      style={[styles.container, { height: getSheetHeight(), transition: 'height 0.3s ease-in-out' }]}
+      onKeyDown={handleContainerKeyDown}
+    >
       {/* Handle bar / header */}
       <TouchableOpacity
         style={styles.handleContainer}

@@ -70,7 +70,41 @@ function makeSnapshot(doc) {
     confidence: doc.confidence || null,
     evidencePointCount: doc.evidencePointCount ?? null,
     lastEvidenceAt: toMillis(doc.lastEvidenceAt) ?? null,
+    segmentCount: Array.isArray(doc.segments) ? doc.segments.length : 0,
+    geometrySignature: Array.isArray(doc.segments)
+      ? doc.segments
+        .map((segment) => {
+          const entry = segment?.entryPoint;
+          const exit = segment?.exitPoint;
+          return [
+            segment?.shapeId || '',
+            entry?.latitude ?? '',
+            entry?.longitude ?? '',
+            exit?.latitude ?? '',
+            exit?.longitude ?? '',
+          ].join(':');
+        })
+        .join('|')
+      : '',
   };
+}
+
+function hasRenderableGeometry(geo) {
+  if (!geo) return false;
+
+  const segments = Array.isArray(geo.segments) ? geo.segments : [];
+  if (segments.some((segment) =>
+    (segment?.skippedSegmentPolyline?.length >= 2) ||
+    (segment?.inferredDetourPolyline?.length >= 2)
+  )) {
+    return true;
+  }
+
+  return (
+    Array.isArray(geo.skippedSegmentPolyline) && geo.skippedSegmentPolyline.length >= 2
+  ) || (
+    Array.isArray(geo.inferredDetourPolyline) && geo.inferredDetourPolyline.length >= 2
+  );
 }
 
 /**
@@ -98,6 +132,27 @@ function shouldWriteGeometry(routeId, detour, previousSnapshot, now) {
   // Always write on confidence change
   const prevConfidence = prevGeo?.confidence || null;
   if (prevConfidence !== geo.confidence) return true;
+
+  const currentSegmentCount = Array.isArray(geo.segments) ? geo.segments.length : 0;
+  const prevSegmentCount = prevGeo?.segmentCount ?? 0;
+  if (currentSegmentCount !== prevSegmentCount) return true;
+
+  const currentSignature = Array.isArray(geo.segments)
+    ? geo.segments
+      .map((segment) => {
+        const entry = segment?.entryPoint;
+        const exit = segment?.exitPoint;
+        return [
+          segment?.shapeId || '',
+          entry?.latitude ?? '',
+          entry?.longitude ?? '',
+          exit?.latitude ?? '',
+          exit?.longitude ?? '',
+        ].join(':');
+      })
+      .join('|')
+    : '';
+  if ((prevGeo?.geometrySignature || '') !== currentSignature) return true;
 
   // Write if point count changed significantly since last write
   const prevPointCount = prevGeo?.evidencePointCount ?? 0;
@@ -203,12 +258,45 @@ async function hydratePublisherState(db) {
           confidence: data.confidence || null,
           evidencePointCount: data.evidencePointCount ?? null,
           lastEvidenceAt: data.lastEvidenceAt || null,
+          segments: Array.isArray(data.segments) ? data.segments : [],
         };
         lastPublishedIds.add(routeId);
         lastPublishedState.set(routeId, makeSnapshot(normalized));
         const updatedAtMs = toMillis(normalized.updatedAt);
         if (updatedAtMs != null) {
           lastSeenUpdateTime.set(routeId, updatedAtMs);
+          lastGeometryWriteTime.set(routeId, updatedAtMs);
+        }
+
+        const hydratedGeometry = {
+          shapeId: data.shapeId || null,
+          segments: Array.isArray(data.segments) ? data.segments : [],
+          skippedSegmentPolyline: data.skippedSegmentPolyline || null,
+          inferredDetourPolyline: data.inferredDetourPolyline || null,
+          confidence: data.confidence || null,
+          evidencePointCount: data.evidencePointCount ?? null,
+          lastEvidenceAt: data.lastEvidenceAt || null,
+        };
+        if (hasRenderableGeometry(hydratedGeometry)) {
+          lastKnownGeometry.set(routeId, {
+            confidence: hydratedGeometry.confidence,
+            evidencePointCount: hydratedGeometry.evidencePointCount,
+            lastEvidenceAt: hydratedGeometry.lastEvidenceAt,
+            segmentCount: hydratedGeometry.segments.length,
+            geometrySignature: hydratedGeometry.segments
+              .map((segment) => {
+                const entry = segment?.entryPoint;
+                const exit = segment?.exitPoint;
+                return [
+                  segment?.shapeId || '',
+                  entry?.latitude ?? '',
+                  entry?.longitude ?? '',
+                  exit?.latitude ?? '',
+                  exit?.longitude ?? '',
+                ].join(':');
+              })
+              .join('|'),
+          });
         }
       });
       if (snapshot.size > 0) {
@@ -312,7 +400,7 @@ async function publishDetours(activeDetours) {
       triggerVehicleId: detour.triggerVehicleId || null,
       vehicleCount: detour.vehiclesOffRoute && detour.vehiclesOffRoute.size > 0
         ? detour.vehiclesOffRoute.size
-        : normalizeVehicleCount(detour.seedVehicleCount || detour.vehicleCount),
+        : normalizeVehicleCount(detour.vehicleCount),
       state: detour.state || 'active',
     };
 
@@ -322,8 +410,11 @@ async function publishDetours(activeDetours) {
 
     // Geometry write throttle: only write geometry when criteria are met
     const geo = detour.geometry;
-    const writeGeo = isNew || shouldWriteGeometry(routeId, detour, previousSnapshot, now);
+    const writeGeo = hasRenderableGeometry(geo) &&
+      (isNew || shouldWriteGeometry(routeId, detour, previousSnapshot, now));
     if (writeGeo && geo) {
+      doc.shapeId = geo.shapeId || null;
+      doc.segments = geo.segments || [];
       doc.skippedSegmentPolyline = geo.skippedSegmentPolyline || null;
       doc.inferredDetourPolyline = geo.inferredDetourPolyline || null;
       doc.entryPoint = geo.entryPoint || null;
@@ -354,6 +445,22 @@ async function publishDetours(activeDetours) {
           confidence: geo.confidence,
           evidencePointCount: geo.evidencePointCount,
           lastEvidenceAt: geo.lastEvidenceAt,
+          segmentCount: Array.isArray(geo.segments) ? geo.segments.length : 0,
+          geometrySignature: Array.isArray(geo.segments)
+            ? geo.segments
+              .map((segment) => {
+                const entry = segment?.entryPoint;
+                const exit = segment?.exitPoint;
+                return [
+                  segment?.shapeId || '',
+                  entry?.latitude ?? '',
+                  entry?.longitude ?? '',
+                  exit?.latitude ?? '',
+                  exit?.longitude ?? '',
+                ].join(':');
+              })
+              .join('|')
+            : '',
         });
       }
     } catch (err) {

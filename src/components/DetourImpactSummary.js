@@ -29,12 +29,15 @@ const StopList = ({ title, subtitle, stops = [], variant = 'default', emptyMessa
   );
 };
 
-const SegmentSummary = ({ section, index, showHeading }) => {
+const getRouteImpactLabel = (routeId) => (routeId ? `Route ${routeId}` : 'this route');
+
+const SegmentSummary = ({ routeId, section, index, showHeading }) => {
   const affectedStops = Array.isArray(section?.affectedStops) ? section.affectedStops : [];
   const skippedStops = Array.isArray(section?.skippedStops) ? section.skippedStops : [];
   const unaffectedStops = Array.isArray(section?.unaffectedStops) ? section.unaffectedStops : [];
   const startStopName = section?.entryStopName ?? section?.entryStop?.name ?? null;
   const endStopName = section?.exitStopName ?? section?.exitStop?.name ?? null;
+  const routeLabel = getRouteImpactLabel(routeId);
 
   return (
     <View style={styles.card}>
@@ -53,22 +56,22 @@ const SegmentSummary = ({ section, index, showHeading }) => {
 
       <StopList
         title={`Impacted stops (${affectedStops.length})`}
-        subtitle="Stops inside the detour section, including the start and end boundary stops."
+        subtitle={`Stops inside the current ${routeLabel} detour section, including the start and end boundary stops.`}
         stops={affectedStops}
         emptyMessage="Impacted stops are still resolving for this detour."
       />
 
       <StopList
-        title={`Not served (${skippedStops.length})`}
-        subtitle="Stops the detoured bus is skipping."
+        title={`Not served on ${routeLabel} (${skippedStops.length})`}
+        subtitle={`Regular ${routeLabel} stops the detoured bus is skipping right now.`}
         stops={skippedStops}
         variant="warning"
         emptyMessage="No skipped stops were identified inside this detour section."
       />
 
       <StopList
-        title={`Not impacted (${unaffectedStops.length})`}
-        subtitle="Route stops outside the detour section that remain on the scheduled path."
+        title={`Still served on ${routeLabel} (${unaffectedStops.length})`}
+        subtitle={`${routeLabel} stops outside the detour section that remain on the scheduled path.`}
         stops={unaffectedStops}
         emptyMessage="All known route stops fall inside the current affected section."
       />
@@ -76,7 +79,7 @@ const SegmentSummary = ({ section, index, showHeading }) => {
   );
 };
 
-const DetourImpactSummary = ({ sections = [] }) => {
+const DetourImpactSummary = ({ routeId, sections = [] }) => {
   const normalizedSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
 
   if (normalizedSections.length === 0) {
@@ -96,6 +99,7 @@ const DetourImpactSummary = ({ sections = [] }) => {
       {normalizedSections.map((section, index) => (
         <SegmentSummary
           key={`detour-impact-section-${index}`}
+          routeId={routeId}
           section={section}
           index={index}
           showHeading={normalizedSections.length > 1}

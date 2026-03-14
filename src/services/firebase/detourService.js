@@ -16,10 +16,12 @@ export function subscribeToActiveDetours(onUpdate, onError) {
         const data = doc.data();
         detourMap[doc.id] = {
           routeId: doc.id,
+          shapeId: data.shapeId ?? null,
           detectedAt: data.detectedAt?.toDate?.()?.toISOString() ?? null,
           lastSeenAt: data.lastSeenAt?.toDate?.()?.toISOString() ?? null,
           vehicleCount: data.vehicleCount ?? 0,
           state: data.state ?? 'active',
+          segments: Array.isArray(data.segments) ? data.segments : [],
           skippedSegmentPolyline: data.skippedSegmentPolyline ?? null,
           inferredDetourPolyline: data.inferredDetourPolyline ?? null,
           entryPoint: data.entryPoint ?? null,

@@ -1,25 +1,11 @@
 const { getStaticData } = require('./gtfsLoader');
 const { fetchVehicles, errors: fetchErrors } = require('./vehicleFetcher');
-const { processVehicles, getState, seedActiveDetour } = require('./detourDetector');
+const { processVehicles, getState } = require('./detourDetector');
 const { publishDetours } = require('./detourPublisher');
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
-const { getDb } = require('./firebaseAdmin');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
-
-function toMillis(value) {
-  if (value == null) return null;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value.toMillis === 'function') return value.toMillis();
-  if (typeof value.toDate === 'function') {
-    const dateValue = value.toDate();
-    return dateValue instanceof Date ? dateValue.getTime() : null;
-  }
-  const parsed = Date.parse(String(value));
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 let interval = null;
 let running = false;
@@ -29,7 +15,6 @@ let lastDetourPublishAt = null;
 let consecutiveFailureCount = 0;
 let lastGtfsRefresh = null;
 let tickInProgress = false;
-let firstTick = true;
 let publishFailures = 0;
 const recentEvents = [];
 
@@ -54,35 +39,6 @@ async function tick() {
     }
 
     const baseline = await getBaselineData(data);
-
-    // On first tick, seed detector from Firestore so detours survive restarts
-    if (firstTick) {
-      try {
-        const db = getDb();
-        if (db) {
-          const snapshot = await db.collection('activeDetours').get();
-          let seeded = 0;
-          snapshot.forEach((doc) => {
-            const d = doc.data() || {};
-            const routeId = d.routeId || doc.id;
-            const detectedAtMs = toMillis(d.detectedAt);
-            const lastEvidenceAtMs = toMillis(d.updatedAt) || detectedAtMs;
-            if (detectedAtMs && lastEvidenceAtMs) {
-              const vehicleCount = typeof d.vehicleCount === 'number' ? d.vehicleCount : 0;
-              seedActiveDetour(routeId, detectedAtMs, lastEvidenceAtMs, vehicleCount);
-              seeded++;
-            }
-          });
-          if (seeded > 0) {
-            console.log(`[detourWorker] Seeded ${seeded} active detours from Firestore`);
-          }
-        }
-        firstTick = false;
-      } catch (err) {
-        console.error('[detourWorker] Failed to seed detours from Firestore:', err.message);
-        // firstTick remains true — will retry on next tick
-      }
-    }
 
     const tripObj = Object.fromEntries(data.tripMapping);
     const vehicles = await fetchVehicles(tripObj);

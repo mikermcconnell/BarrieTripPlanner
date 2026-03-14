@@ -117,6 +117,7 @@ export const cacheGTFSData = async (data) => {
       tripMapping: data.tripMapping,
       routeShapeMapping: data.routeShapeMapping,
       routeStopsMapping: data.routeStopsMapping,
+      routeStopSequencesMapping: data.routeStopSequencesMapping,
       calendar: data.calendar,
     });
 

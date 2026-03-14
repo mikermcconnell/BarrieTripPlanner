@@ -52,6 +52,14 @@ describe('runtimeConfig', () => {
     const { default: runtimeConfig } = loadRuntimeConfig();
 
     expect(runtimeConfig.detours.enabledByDefault).toBe(true);
-    expect(runtimeConfig.detours.geometryEnabledByDefault).toBe(false);
+  });
+
+  test('falls back to legacy geometry flag when detour flag is unset', () => {
+    delete process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS;
+    process.env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI = 'true';
+
+    const { default: runtimeConfig } = loadRuntimeConfig();
+
+    expect(runtimeConfig.detours.enabledByDefault).toBe(true);
   });
 });

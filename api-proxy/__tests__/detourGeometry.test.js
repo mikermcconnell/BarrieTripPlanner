@@ -2,10 +2,13 @@ const {
   findClosestShapePoint,
   findAnchors,
   extractSkippedSegment,
+  extractSkippedSegmentByProgress,
   douglasPeucker,
   scoreConfidence,
   buildGeometry,
+  reconcileRouteFamilyGeometries,
   MIN_EVIDENCE_FOR_GEOMETRY,
+  MIN_LINEAR_SEGMENT_LENGTH_METERS,
 } = require('../detourGeometry');
 
 // Reuse the same test shape as detourDetector.test.js: straight line east along 44.39 lat
@@ -130,6 +133,25 @@ describe('extractSkippedSegment', () => {
   });
 });
 
+describe('extractSkippedSegmentByProgress', () => {
+  test('interpolates endpoints for coarse same-segment spans', () => {
+    const coarsePolyline = [
+      { latitude: 44.39, longitude: -79.70 },
+      { latitude: 44.39, longitude: -79.686 },
+    ];
+    const segment = extractSkippedSegmentByProgress(
+      coarsePolyline,
+      150,
+      150 + MIN_LINEAR_SEGMENT_LENGTH_METERS + 100
+    );
+
+    expect(segment).toHaveLength(2);
+    expect(segment[0].longitude).toBeGreaterThan(-79.70);
+    expect(segment[1].longitude).toBeGreaterThan(segment[0].longitude);
+    expect(segment[1].longitude).toBeLessThan(-79.686);
+  });
+});
+
 describe('douglasPeucker', () => {
   test('returns empty array for null input', () => {
     expect(douglasPeucker(null, 25)).toEqual([]);
@@ -207,6 +229,12 @@ describe('scoreConfidence', () => {
 describe('buildGeometry', () => {
   const NOW = Date.now();
   const DETECTED_AT = NOW - 10 * 60 * 1000;
+  const coarsePolyline = [
+    { latitude: 44.39, longitude: -79.70 },
+    { latitude: 44.39, longitude: -79.686 },
+  ];
+  const coarseShapes = new Map([['shape-coarse', coarsePolyline]]);
+  const coarseRouteMapping = new Map([['route-coarse', ['shape-coarse']]]);
 
   test('returns empty geometry when evidence is below minimum', () => {
     const evidence = {
@@ -249,6 +277,57 @@ describe('buildGeometry', () => {
     expect(['low', 'medium', 'high']).toContain(result.confidence);
   });
 
+  test('uses entry and exit boundary candidates when available', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 60_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.685,
+        timestampMs: DETECTED_AT + 90_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.675,
+        timestampMs: DETECTED_AT + 120_000,
+      }),
+    ];
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT + 30_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.671,
+            timestampMs: DETECTED_AT + 150_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.entryPoint.longitude).toBeCloseTo(-79.699, 3);
+    expect(result.exitPoint.longitude).toBeCloseTo(-79.671, 3);
+  });
+
   test('returns empty geometry for unknown route', () => {
     const points = Array.from({ length: 5 }, (_, i) =>
       makeEvidencePoint({ timestampMs: NOW - 150000 + i * 30000 })
@@ -276,6 +355,352 @@ describe('buildGeometry', () => {
       expect(result.exitPoint).toHaveProperty('latitude');
       expect(result.exitPoint).toHaveProperty('longitude');
     }
+  });
+
+  test('captures same-segment detours when projected span exceeds 500m', () => {
+    const points = Array.from({ length: 6 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.699 + i * 0.0018,
+        timestampMs: DETECTED_AT + i * 30000,
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+      })
+    );
+    const result = buildGeometry(
+      'route-coarse',
+      { points },
+      coarseShapes,
+      coarseRouteMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.skippedSegmentPolyline).not.toBeNull();
+    expect(result.skippedSegmentPolyline).toHaveLength(2);
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.entryPoint.longitude).toBeLessThan(result.exitPoint.longitude);
+  });
+
+  test('does not publish skipped segment when same-segment span stays below 500m', () => {
+    const points = Array.from({ length: 5 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.699 + i * 0.0005,
+        timestampMs: DETECTED_AT + i * 30000,
+      })
+    );
+    const result = buildGeometry(
+      'route-coarse',
+      { points },
+      coarseShapes,
+      coarseRouteMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.inferredDetourPolyline).not.toBeNull();
+  });
+
+  test('prefers observed trip shape ids over closer sibling shapes', () => {
+    const hintedShapes = new Map([
+      ['shape-main', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.67 },
+      ]],
+      ['shape-branch', [
+        { latitude: 44.3909, longitude: -79.70 },
+        { latitude: 44.3909, longitude: -79.69 },
+        { latitude: 44.3909, longitude: -79.68 },
+        { latitude: 44.3909, longitude: -79.67 },
+      ]],
+    ]);
+    const hintedRouteMapping = new Map([
+      ['route-hinted', ['shape-main', 'shape-branch']],
+    ]);
+    const points = Array.from({ length: 6 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.3902,
+        longitude: -79.699 + i * 0.005,
+        timestampMs: DETECTED_AT + i * 30_000,
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+        tripShapeId: 'shape-branch',
+      })
+    );
+
+    const result = buildGeometry(
+      'route-hinted',
+      { points },
+      hintedShapes,
+      hintedRouteMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.shapeId).toBe('shape-branch');
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.entryPoint.latitude).toBeCloseTo(44.3909, 3);
+    expect(result.exitPoint.latitude).toBeCloseTo(44.3909, 3);
+  });
+
+  test('falls back to closest shape when evidence has no matching trip shape id', () => {
+    const hintedShapes = new Map([
+      ['shape-main', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.67 },
+      ]],
+      ['shape-branch', [
+        { latitude: 44.3909, longitude: -79.70 },
+        { latitude: 44.3909, longitude: -79.69 },
+        { latitude: 44.3909, longitude: -79.68 },
+        { latitude: 44.3909, longitude: -79.67 },
+      ]],
+    ]);
+    const hintedRouteMapping = new Map([
+      ['route-hinted', ['shape-main', 'shape-branch']],
+    ]);
+    const points = Array.from({ length: 6 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.3902,
+        longitude: -79.699 + i * 0.005,
+        timestampMs: DETECTED_AT + i * 30_000,
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+        tripShapeId: 'shape-missing',
+      })
+    );
+
+    const result = buildGeometry(
+      'route-hinted',
+      { points },
+      hintedShapes,
+      hintedRouteMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.shapeId).toBe('shape-main');
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.entryPoint.latitude).toBeCloseTo(44.39, 3);
+    expect(result.exitPoint.latitude).toBeCloseTo(44.39, 3);
+  });
+});
+
+describe('route family geometry handoff', () => {
+  test('creates a sibling branch detour when only one branch is active', () => {
+    const familyShapes = new Map([
+      ['shape-8b', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.67 },
+        { latitude: 44.39, longitude: -79.66 },
+      ]],
+      ['shape-8a', [
+        { latitude: 44.39, longitude: -79.66 },
+        { latitude: 44.39, longitude: -79.67 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.70 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['8A', ['shape-8a']],
+      ['8B', ['shape-8b']],
+    ]);
+    const detours = {
+      '8B': {
+        routeId: '8B',
+        detectedAt: new Date('2026-03-13T20:00:00Z'),
+        lastSeenAt: new Date('2026-03-13T20:05:00Z'),
+        state: 'active',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 6,
+          lastEvidenceAt: 10_000,
+          segments: [
+            {
+              shapeId: 'shape-8b',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.698 },
+                { latitude: 44.39, longitude: -79.694 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.698 },
+                { latitude: 44.392, longitude: -79.694 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.698 },
+              exitPoint: { latitude: 44.39, longitude: -79.694 },
+              confidence: 'medium',
+              evidencePointCount: 6,
+              lastEvidenceAt: 10_000,
+              entryIndex: 0,
+              exitIndex: 1,
+              spanMeters: 350,
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.698 },
+            { latitude: 44.39, longitude: -79.694 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.392, longitude: -79.698 },
+            { latitude: 44.392, longitude: -79.694 },
+          ],
+          entryPoint: { latitude: 44.39, longitude: -79.698 },
+          exitPoint: { latitude: 44.39, longitude: -79.694 },
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+
+    expect(detours['8A']).toBeDefined();
+    expect(detours['8A'].handoffSourceRouteId).toBe('8B');
+    expect(detours['8A'].geometry.segments).toHaveLength(1);
+    expect(detours['8A'].geometry.entryPoint.longitude).toBeCloseTo(-79.694, 3);
+    expect(detours['8A'].geometry.exitPoint.longitude).toBeCloseTo(-79.698, 3);
+  });
+
+  test('projects sibling branch detour segments onto the opposite-direction shape', () => {
+    const familyShapes = new Map([
+      ['shape-8b', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.67 },
+        { latitude: 44.39, longitude: -79.66 },
+      ]],
+      ['shape-8a', [
+        { latitude: 44.39, longitude: -79.66 },
+        { latitude: 44.39, longitude: -79.67 },
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.70 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['8A', ['shape-8a']],
+      ['8B', ['shape-8b']],
+    ]);
+    const detours = {
+      '8B': {
+        vehicleCount: 4,
+        geometry: {
+          confidence: 'high',
+          evidencePointCount: 10,
+          lastEvidenceAt: 10_000,
+          segments: [
+            {
+              shapeId: 'shape-8b',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.698 },
+                { latitude: 44.39, longitude: -79.694 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.698 },
+                { latitude: 44.392, longitude: -79.694 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.698 },
+              exitPoint: { latitude: 44.39, longitude: -79.694 },
+              confidence: 'high',
+              evidencePointCount: 6,
+              lastEvidenceAt: 9_000,
+              entryIndex: 0,
+              exitIndex: 1,
+              spanMeters: 350,
+            },
+            {
+              shapeId: 'shape-8b',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.688 },
+                { latitude: 44.39, longitude: -79.684 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.688 },
+                { latitude: 44.392, longitude: -79.684 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.688 },
+              exitPoint: { latitude: 44.39, longitude: -79.684 },
+              confidence: 'medium',
+              evidencePointCount: 4,
+              lastEvidenceAt: 10_000,
+              entryIndex: 1,
+              exitIndex: 2,
+              spanMeters: 350,
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.698 },
+            { latitude: 44.39, longitude: -79.694 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.392, longitude: -79.698 },
+            { latitude: 44.392, longitude: -79.694 },
+          ],
+          entryPoint: { latitude: 44.39, longitude: -79.698 },
+          exitPoint: { latitude: 44.39, longitude: -79.694 },
+        },
+      },
+      '8A': {
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 5,
+          lastEvidenceAt: 8_000,
+          segments: [
+            {
+              shapeId: 'shape-8a',
+              skippedSegmentPolyline: [
+                { latitude: 44.40, longitude: -79.650 },
+                { latitude: 44.40, longitude: -79.648 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.401, longitude: -79.650 },
+                { latitude: 44.401, longitude: -79.648 },
+              ],
+              entryPoint: { latitude: 44.40, longitude: -79.650 },
+              exitPoint: { latitude: 44.40, longitude: -79.648 },
+              confidence: 'low',
+              evidencePointCount: 3,
+              lastEvidenceAt: 8_000,
+              entryIndex: 0,
+              exitIndex: 1,
+              spanMeters: 200,
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.40, longitude: -79.650 },
+            { latitude: 44.40, longitude: -79.648 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.401, longitude: -79.650 },
+            { latitude: 44.401, longitude: -79.648 },
+          ],
+          entryPoint: { latitude: 44.40, longitude: -79.650 },
+          exitPoint: { latitude: 44.40, longitude: -79.648 },
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+
+    expect(detours['8A'].geometry.segments).toHaveLength(2);
+    expect(detours['8A'].geometry.shapeId).toBe('shape-8a');
+    expect(detours['8A'].geometry.entryPoint.longitude).toBeGreaterThan(detours['8A'].geometry.exitPoint.longitude);
+    expect(detours['8A'].geometry.segments[0].entryPoint.longitude).toBeCloseTo(-79.694, 3);
+    expect(detours['8A'].geometry.segments[0].exitPoint.longitude).toBeCloseTo(-79.698, 3);
+    expect(detours['8A'].geometry.segments[1].entryPoint.longitude).toBeCloseTo(-79.684, 3);
+    expect(detours['8A'].geometry.segments[1].exitPoint.longitude).toBeCloseTo(-79.688, 3);
   });
 });
 

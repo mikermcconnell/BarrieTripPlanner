@@ -470,7 +470,9 @@ describe('DetourOverlay component rendering', () => {
       expect(coords).toContainEqual({ latitude: 44.391, longitude: -79.679 });
       const entry = markers.find((m) => m.props.html.includes('START'));
       const exit = markers.find((m) => m.props.html.includes('END'));
+      expect(entry.props.html).toContain('DETOUR');
       expect(entry.props.html).toContain('START');
+      expect(exit.props.html).toContain('DETOUR');
       expect(exit.props.html).toContain('END');
     });
 
@@ -481,8 +483,8 @@ describe('DetourOverlay component rendering', () => {
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       expect(markers).toHaveLength(2);
-      expect(markers.some((m) => m.props.html.includes('START'))).toBe(true);
-      expect(markers.some((m) => m.props.html.includes('END'))).toBe(true);
+      expect(markers.some((m) => m.props.html.includes('DETOUR') && m.props.html.includes('START'))).toBe(true);
+      expect(markers.some((m) => m.props.html.includes('DETOUR') && m.props.html.includes('END'))).toBe(true);
     });
   });
 });

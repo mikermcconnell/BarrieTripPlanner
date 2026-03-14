@@ -1,8 +1,8 @@
 const http = require('http');
 
-const LISTEN_PORT = 8083;
+const LISTEN_PORT = Number(process.env.METRO_PROXY_PORT || 8081);
 const TARGET_HOST = '127.0.0.1';
-const TARGET_PORT = 8084;
+const TARGET_PORT = Number(process.env.METRO_TARGET_PORT || 8084);
 
 function shouldNormalizeBundleRequest(pathname) {
   return pathname.includes('.bundle') || pathname.includes('/index.bundle');

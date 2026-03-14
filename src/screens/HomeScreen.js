@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import { MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
@@ -24,6 +25,7 @@ import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -61,7 +63,16 @@ import useRoutePanel from '../hooks/useRoutePanel';
 
 // SVG Icons for native replaced with Lucide Icons
 const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => <Icon name="Search" size={size} color={color} />;
-const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => <Icon name="Map" size={size} color={color} />;
+const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 3V6" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M12 18V21" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M3 12H6" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M18 12H21" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Circle cx="12" cy="12" r="4.5" stroke={color} strokeWidth={2} />
+    <Circle cx="12" cy="12" r="1.5" fill={color} />
+  </Svg>
+);
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
@@ -196,6 +207,16 @@ const HomeMapRoutesLayer = React.memo(({
         const isSelected = isRouteSelected(shape.routeId);
         const isDetouring = activeDetourRouteIds.has(shape.routeId);
         const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === shape.routeId;
+        const shouldRenderShape = shouldRenderRouteShape({
+          routeId: shape.routeId,
+          hasDetourFocus,
+          focusedDetourRouteId,
+        });
+
+        if (!shouldRenderShape) {
+          return null;
+        }
+
         const routeVisual = getRouteVisualState({
           shape,
           isSelected,
@@ -517,6 +538,7 @@ const HomeMapView = React.memo(({
     <MapLibreGL.Camera
       ref={cameraRef}
       defaultSettings={cameraDefaultSettings}
+      followUserLocation={false}
     />
     <MapLibreGL.UserLocation visible={true} />
 
@@ -680,7 +702,7 @@ const HomeScreen = ({ route }) => {
   });
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, centerOnBarrie, isRouteSelected, selectRoute,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
@@ -1205,6 +1227,39 @@ const HomeScreen = ({ route }) => {
     }, { searchTo });
   };
 
+  const centerOnUserLocationOnce = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const latestRegion = mapRegionRef.current || MAP_CONFIG.INITIAL_REGION;
+      const nextRegion = {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: latestRegion.latitudeDelta || MAP_CONFIG.INITIAL_REGION.latitudeDelta,
+        longitudeDelta: latestRegion.longitudeDelta || MAP_CONFIG.INITIAL_REGION.longitudeDelta,
+      };
+
+      cameraRef.current?.setCamera({
+        followUserLocation: false,
+        animationDuration: 0,
+      });
+      cameraRef.current?.moveTo([nextRegion.longitude, nextRegion.latitude], 500);
+      mapRegionRef.current = nextRegion;
+
+      if (showStops && selectedRoutes.size === 0) {
+        setMapRegion((prevRegion) =>
+          hasMeaningfulRegionChange(prevRegion, nextRegion) ? nextRegion : prevRegion
+        );
+      }
+    } catch (error) {
+      logger.warn('Failed to center on user location', error);
+    }
+  }, [selectedRoutes.size, showStops]);
+
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
   };
@@ -1379,8 +1434,10 @@ const HomeScreen = ({ route }) => {
         <View style={styles.mapControls}>
           <TouchableOpacity
             style={styles.mapControlButton}
-            onPress={centerOnBarrie}
+            onPress={centerOnUserLocationOnce}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Center on my location"
           >
             <CenterIcon size={18} color={COLORS.textPrimary} />
           </TouchableOpacity>

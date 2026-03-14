@@ -97,8 +97,10 @@ const runtimeConfig = {
     corsBaseUrl: readEnv('EXPO_PUBLIC_CORS_PROXY_URL'),
   },
   detours: {
-    enabledByDefault: readBooleanEnv('EXPO_PUBLIC_ENABLE_AUTO_DETOURS'),
-    geometryEnabledByDefault: readBooleanEnv('EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI'),
+    enabledByDefault: readBooleanEnv(
+      'EXPO_PUBLIC_ENABLE_AUTO_DETOURS',
+      readBooleanEnv('EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI')
+    ),
   },
   googleAuth,
   startup: {

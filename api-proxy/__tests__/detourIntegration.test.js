@@ -88,6 +88,7 @@ function makeFirestoreMock() {
       commit: jest.fn(async () => {}),
     })),
     _writes: writes,
+    _hydrationDocs: hydrationDocs,
   };
 
   return db;
@@ -169,6 +170,7 @@ describe('detector → publisher: full pipeline', () => {
     expect(setOps).toHaveLength(1);
     const doc = setOps[0].data;
     // Geometry fields present on first write (isNew=true always writes geometry)
+    expect(doc).toHaveProperty('shapeId');
     expect(doc).toHaveProperty('confidence');
     expect(doc).toHaveProperty('evidencePointCount');
     expect(doc).toHaveProperty('skippedSegmentPolyline');
@@ -389,5 +391,80 @@ describe('geometry write throttling across pipeline', () => {
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     expect(setOps.length).toBeGreaterThan(0);
     expect(setOps[0].data).toHaveProperty('skippedSegmentPolyline');
+  });
+
+  test('publisher hydration does not wipe previously stored geometry on restart', async () => {
+    const BASE_TIME = realDateNow();
+    const existingGeometry = {
+      routeId: 'route-1',
+      detectedAt: new Date(BASE_TIME - 10 * 60 * 1000),
+      lastSeenAt: new Date(BASE_TIME - 60 * 1000),
+      updatedAt: BASE_TIME - 60 * 1000,
+      vehicleCount: 2,
+      state: 'active',
+      shapeId: 'shape-1',
+      confidence: 'medium',
+      evidencePointCount: 12,
+      lastEvidenceAt: BASE_TIME - 60 * 1000,
+      segments: [{
+        shapeId: 'shape-1',
+        entryPoint: { latitude: 44.39, longitude: -79.698 },
+        exitPoint: { latitude: 44.39, longitude: -79.690 },
+        skippedSegmentPolyline: [
+          { latitude: 44.39, longitude: -79.698 },
+          { latitude: 44.39, longitude: -79.690 },
+        ],
+        inferredDetourPolyline: [
+          { latitude: 44.395, longitude: -79.698 },
+          { latitude: 44.395, longitude: -79.690 },
+        ],
+      }],
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.698 },
+        { latitude: 44.39, longitude: -79.690 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.698 },
+        { latitude: 44.395, longitude: -79.690 },
+      ],
+      entryPoint: { latitude: 44.39, longitude: -79.698 },
+      exitPoint: { latitude: 44.39, longitude: -79.690 },
+    };
+
+    mockDb._hydrationDocs.push({
+      id: 'route-1',
+      data: () => existingGeometry,
+    });
+
+    Date.now = () => BASE_TIME;
+
+    await publishDetours({
+      'route-1': {
+        detectedAt: new Date(BASE_TIME - 10 * 60 * 1000),
+        lastSeenAt: new Date(BASE_TIME),
+        triggerVehicleId: null,
+        vehiclesOffRoute: new Set(),
+        vehicleCount: 2,
+        state: 'active',
+        geometry: {
+          shapeId: null,
+          segments: [],
+          skippedSegmentPolyline: null,
+          inferredDetourPolyline: null,
+          entryPoint: null,
+          exitPoint: null,
+          confidence: 'low',
+          evidencePointCount: 0,
+          lastEvidenceAt: null,
+        },
+      },
+    });
+
+    const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
+    expect(setOps).toHaveLength(1);
+    expect(setOps[0].data.shapeId).toBeUndefined();
+    expect(setOps[0].data.segments).toBeUndefined();
+    expect(setOps[0].data.skippedSegmentPolyline).toBeUndefined();
+    expect(setOps[0].data.inferredDetourPolyline).toBeUndefined();
   });
 });

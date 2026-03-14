@@ -11,7 +11,7 @@ import {
 
 const BRANCH_FAMILIES = [
   { familyId: '2', routeIds: ['2A', '2B'] },
-  { familyId: '8', routeIds: ['8A', '8B'] },
+  { familyId: '8', routeIds: ['8A', '8B'], preserveRouteDirections: true },
   { familyId: '12', routeIds: ['12A', '12B'] },
 ];
 
@@ -24,6 +24,13 @@ const SHARED_TRUNK_COLOR = '#8F9BA8';
 const SHARED_PROXIMITY_METERS = 40;
 const SHARED_OVERLAP_THRESHOLD = 0.3;
 const MIN_SEGMENT_LENGTH_METERS = 120;
+
+const normalizeColorKey = (color) => {
+  if (typeof color !== 'string') return null;
+  const trimmed = color.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith('#') ? trimmed.toUpperCase() : `#${trimmed.toUpperCase()}`;
+};
 
 const measurePathLengthMeters = (coordinates) => {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return 0;
@@ -66,28 +73,44 @@ const buildShapeDescriptor = ({
   sourceRouteIds,
 });
 
+const getRepresentativePathsForRoute = ({
+  routeId,
+  routeShapeMapping,
+  shapeSource,
+  shapeDirectionMap,
+  maxShapes = 1,
+}) => {
+  const shapeIds = routeShapeMapping[routeId] || [];
+  const representativeShapeIds = getRepresentativeShapeIdsByDirection(
+    shapeIds,
+    shapeSource,
+    shapeDirectionMap,
+    { maxShapes, precision: 3 }
+  );
+
+  return representativeShapeIds
+    .filter((shapeId) => Array.isArray(shapeSource[shapeId]) && shapeSource[shapeId].length >= 2)
+    .map((shapeId) => ({
+      shapeId,
+      coordinates: sanitizePath(shapeSource[shapeId]),
+    }));
+};
+
 const getRepresentativePathForRoute = ({
   routeId,
   routeShapeMapping,
   shapeSource,
   shapeDirectionMap,
 }) => {
-  const shapeIds = routeShapeMapping[routeId] || [];
-  const [shapeId] = getRepresentativeShapeIdsByDirection(
-    shapeIds,
+  const [path] = getRepresentativePathsForRoute({
+    routeId,
+    routeShapeMapping,
     shapeSource,
     shapeDirectionMap,
-    { maxShapes: 1, precision: 3 }
-  );
+    maxShapes: 1,
+  });
 
-  if (!shapeId || !Array.isArray(shapeSource[shapeId]) || shapeSource[shapeId].length < 2) {
-    return null;
-  }
-
-  return {
-    shapeId,
-    coordinates: sanitizePath(shapeSource[shapeId]),
-  };
+  return path || null;
 };
 
 const extractSegments = (path, mask, includeShared) => {
@@ -151,6 +174,7 @@ const buildLoopPairVisuals = ({
   });
 
   if (!repA || !repB) return null;
+  if (normalizeColorKey(colorA) !== normalizeColorKey(colorB)) return null;
 
   if (
     !pathsOverlap(
@@ -213,6 +237,43 @@ const buildLoopPairVisuals = ({
   ];
 };
 
+const buildBranchFamilyDirectionVisuals = ({
+  familyId,
+  routeIds,
+  routeShapeMapping,
+  shapeSource,
+  shapeDirectionMap,
+  getRouteColor,
+}) => {
+  const visuals = [];
+
+  routeIds.forEach((routeId) => {
+    const representativePaths = getRepresentativePathsForRoute({
+      routeId,
+      routeShapeMapping,
+      shapeSource,
+      shapeDirectionMap,
+      maxShapes: 2,
+    });
+
+    representativePaths.forEach(({ shapeId, coordinates }) => {
+      visuals.push(
+        buildShapeDescriptor({
+          id: `family:${familyId}:${routeId}:${shapeId}`,
+          coordinates,
+          color: getRouteColor(routeId),
+          routeId,
+          shapeId,
+          visualType: 'family',
+          sourceRouteIds: [routeId],
+        })
+      );
+    });
+  });
+
+  return visuals;
+};
+
 export const buildNativeHomeAllRoutesShapes = ({
   routeShapeMapping,
   processedShapes,
@@ -225,9 +286,26 @@ export const buildNativeHomeAllRoutesShapes = ({
   const shapesToDisplay = [];
   const handledRouteIds = new Set();
 
-  BRANCH_FAMILIES.forEach(({ familyId, routeIds }) => {
+  BRANCH_FAMILIES.forEach(({ familyId, routeIds, preserveRouteDirections = false }) => {
     const availableRouteIds = routeIds.filter((routeId) => (routeShapeMapping[routeId] || []).length > 0);
     if (availableRouteIds.length < 2) return;
+
+    if (preserveRouteDirections) {
+      const branchVisuals = buildBranchFamilyDirectionVisuals({
+        familyId,
+        routeIds: availableRouteIds,
+        routeShapeMapping,
+        shapeSource,
+        shapeDirectionMap,
+        getRouteColor,
+      });
+
+      if (branchVisuals.length > 0) {
+        shapesToDisplay.push(...branchVisuals);
+        availableRouteIds.forEach((routeId) => handledRouteIds.add(routeId));
+        return;
+      }
+    }
 
     const familyShapeIds = availableRouteIds.flatMap((routeId) => routeShapeMapping[routeId] || []);
     const [shapeId] = getRepresentativeShapeIds(familyShapeIds, shapeSource, {

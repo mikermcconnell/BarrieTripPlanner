@@ -38,18 +38,36 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
   entryStopMarker: {
-    minWidth: 42,
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: 999,
+    minWidth: 80,
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 2,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+  },
+  entryStopDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  entryStopLabelWrap: {
+    flexShrink: 1,
+  },
+  entryStopEyebrow: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.45,
+    lineHeight: 10,
   },
   entryStopLabel: {
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.3,
+    lineHeight: 12,
   },
 });
 
@@ -142,18 +160,22 @@ const DetourOverlay = ({
           {
             kind: 'entry',
             point: segment?.entryPoint ?? null,
+            eyebrow: 'DETOUR',
             label: 'START',
             fillColor: routeBaseColor,
             borderColor: routeStopFillColor,
             textColor: routeStopFillColor,
+            dotColor: routeStopFillColor,
           },
           {
             kind: 'exit',
             point: segment?.exitPoint ?? null,
+            eyebrow: 'DETOUR',
             label: 'END',
             fillColor: routeStopFillColor,
             borderColor: routeBaseColor,
             textColor: routeBaseColor,
+            dotColor: routeBaseColor,
           },
         ]
           .filter((anchor) => anchor.point)
@@ -179,9 +201,15 @@ const DetourOverlay = ({
                     },
                   ]}
                 >
-                  <Text style={[styles.entryStopLabel, { color: anchor.textColor }]}>
-                    {anchor.label}
-                  </Text>
+                  <View style={[styles.entryStopDot, { backgroundColor: anchor.dotColor }]} />
+                  <View style={styles.entryStopLabelWrap}>
+                    <Text style={[styles.entryStopEyebrow, { color: anchor.textColor }]}>
+                      {anchor.eyebrow}
+                    </Text>
+                    <Text style={[styles.entryStopLabel, { color: anchor.textColor }]}>
+                      {anchor.label}
+                    </Text>
+                  </View>
                 </View>
               </MapLibreGL.PointAnnotation>
             );

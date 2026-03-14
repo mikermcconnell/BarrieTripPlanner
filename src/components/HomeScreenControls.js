@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Animate
 import Constants from 'expo-constants';
 import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
+import { hexToRgba } from '../utils/colorUtils';
 import Icon from './Icon';
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
@@ -139,16 +140,19 @@ const HomeScreenControls = ({
                                 style={[
                                     styles.filterChip,
                                     isActive
-                                        ? { backgroundColor: routeColor, borderWidth: 0 }
-                                        : { backgroundColor: COLORS.grey100, borderLeftWidth: 3, borderLeftColor: hasAlert ? COLORS.warning : routeColor, borderWidth: 0 },
+                                        ? [styles.filterChipActive, { backgroundColor: routeColor, borderColor: routeColor }]
+                                        : [styles.filterChipInactiveRoute, { borderColor: hasAlert ? COLORS.warning : hexToRgba(routeColor, 0.22) }],
                                 ]}
                                 onPress={() => onRouteSelect(r.id)}
                                 onLongPress={() => hasAlert && onAlertPress?.()}
                                 activeOpacity={0.7}
                             >
+                                {!isActive && (
+                                    <View style={[styles.routeDot, { backgroundColor: routeColor }]} />
+                                )}
                                 <Text style={[
                                     styles.filterChipText,
-                                    { color: isActive ? COLORS.white : COLORS.textPrimary }
+                                    isActive ? styles.filterChipTextActive : styles.filterChipTextMuted,
                                 ]}>
                                     {r.shortName}
                                 </Text>
@@ -182,33 +186,50 @@ const HomeScreenControls = ({
 const styles = StyleSheet.create({
     filterContainer: {
         position: 'absolute',
-        top: 76 + STATUS_BAR_OFFSET,
+        top: 68 + STATUS_BAR_OFFSET,
         left: SPACING.sm,
         right: SPACING.sm,
         zIndex: 998,
         flexDirection: 'row',
         alignItems: 'center',
         height: 44,
+        padding: 4,
+        borderRadius: BORDER_RADIUS.xxl,
+        backgroundColor: 'rgba(255, 255, 255, 0.7)',
+        borderWidth: 1,
+        borderColor: 'rgba(223, 225, 230, 0.72)',
+        ...SHADOWS.small,
     },
     scrollContent: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: SPACING.xs,
-        paddingRight: SPACING.xs,
+        paddingRight: SPACING.xs + 2,
     },
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 6,
+        paddingVertical: 5,
         paddingHorizontal: SPACING.sm + 4,
-        borderRadius: BORDER_RADIUS.xl,
-        height: 36,
+        borderRadius: BORDER_RADIUS.round,
+        height: 30,
         minWidth: 50,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        borderWidth: 1,
+        borderColor: 'rgba(223, 225, 230, 0.8)',
+        gap: 6,
+    },
+    filterChipActive: {
+        borderWidth: 1,
         ...SHADOWS.small,
+    },
+    filterChipInactiveRoute: {
+        backgroundColor: 'rgba(255,255,255,0.58)',
     },
     filterChipAllActive: {
         backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
     },
     filterChipText: {
         fontSize: FONT_SIZES.sm,
@@ -219,8 +240,16 @@ const styles = StyleSheet.create({
     filterChipTextActive: {
         color: COLORS.white,
     },
+    filterChipTextMuted: {
+        color: COLORS.grey700,
+    },
     chipWrapper: {
         position: 'relative',
+    },
+    routeDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     detourDot: {
         position: 'absolute',
@@ -238,15 +267,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: COLORS.warningSubtle,
-        paddingVertical: 6,
+        paddingVertical: 5,
         paddingHorizontal: SPACING.sm + 4,
-        borderRadius: BORDER_RADIUS.xl,
+        borderRadius: BORDER_RADIUS.round,
         gap: 3,
-        height: 36,
+        height: 32,
         minWidth: 50,
-        borderWidth: 1.5,
+        borderWidth: 1,
         borderColor: COLORS.warning,
-        ...SHADOWS.small,
     },
     alertHeaderText: {
         fontSize: FONT_SIZES.sm,
@@ -269,6 +297,7 @@ const styles = StyleSheet.create({
     },
     filterChipZonesActive: {
         backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
     },
     zoneCountBadge: {
         backgroundColor: COLORS.grey200,
@@ -295,20 +324,21 @@ const styles = StyleSheet.create({
         width: SPACING.xs,
     },
     filterIconButton: {
-        width: 36,
-        height: 36,
-        borderRadius: BORDER_RADIUS.md,
-        backgroundColor: COLORS.surface,
+        width: 30,
+        height: 30,
+        borderRadius: BORDER_RADIUS.round,
+        backgroundColor: 'rgba(255,255,255,0.92)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: SPACING.xs,
-        ...SHADOWS.small,
+        marginLeft: SPACING.xs + 2,
         flexShrink: 0,
+        borderWidth: 1,
+        borderColor: 'rgba(223, 225, 230, 0.8)',
     },
     filterIconText: {
-        fontSize: 18,
-        color: COLORS.textSecondary,
-        lineHeight: 20,
+        fontSize: 16,
+        color: COLORS.grey700,
+        lineHeight: 18,
     },
 });
 

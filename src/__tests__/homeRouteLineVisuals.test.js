@@ -14,6 +14,8 @@ describe('buildNativeHomeAllRoutesShapes', () => {
     '8B': '#0057b8',
     '10': '#00897b',
     '11': '#ff7043',
+    '100': '#910005',
+    '101': '#2464A2',
     '3': '#6d4c41',
   }[routeId] || '#455a64');
 
@@ -59,7 +61,105 @@ describe('buildNativeHomeAllRoutesShapes', () => {
     expect(routeThree).toBeDefined();
   });
 
-  test('renders loop-pair shared trunks as neutral segments with route-colored tails', () => {
+  test('preserves both Route 8 directions per branch in all-routes mode', () => {
+    const shapes = {
+      '8a-north': makePath([
+        [44.38, -79.69],
+        [44.385, -79.688],
+        [44.39, -79.686],
+        [44.395, -79.684],
+      ]),
+      '8a-south': makePath([
+        [44.395, -79.684],
+        [44.39, -79.686],
+        [44.385, -79.688],
+        [44.38, -79.69],
+      ]),
+      '8b-north': makePath([
+        [44.38, -79.69],
+        [44.384, -79.684],
+        [44.388, -79.678],
+        [44.392, -79.672],
+      ]),
+      '8b-south': makePath([
+        [44.392, -79.672],
+        [44.388, -79.678],
+        [44.384, -79.684],
+        [44.38, -79.69],
+      ]),
+    };
+
+    const result = buildNativeHomeAllRoutesShapes({
+      routeShapeMapping: {
+        '8A': ['8a-north', '8a-south'],
+        '8B': ['8b-north', '8b-south'],
+      },
+      processedShapes: shapes,
+      shapes,
+      shapeDirectionMap: {
+        '8a-north': new Set(['0']),
+        '8a-south': new Set(['1']),
+        '8b-north': new Set(['0']),
+        '8b-south': new Set(['1']),
+      },
+      getRouteColor,
+    });
+
+    const route8Shapes = result.filter((shape) => shape.visualType === 'family' && ['8A', '8B'].includes(shape.routeId));
+
+    expect(route8Shapes).toHaveLength(4);
+    expect(route8Shapes.map((shape) => shape.shapeId).sort()).toEqual([
+      '8a-north',
+      '8a-south',
+      '8b-north',
+      '8b-south',
+    ]);
+  });
+
+  test('keeps differently colored loop pairs as fully separate route lines', () => {
+    const sharedTrunk = [
+      [44.38, -79.69],
+      [44.385, -79.688],
+      [44.39, -79.686],
+      [44.395, -79.684],
+    ];
+
+    const shapes = {
+      '10-shape': makePath([
+        ...sharedTrunk,
+        [44.399, -79.681],
+        [44.403, -79.679],
+      ]),
+      '11-shape': makePath([
+        ...sharedTrunk,
+        [44.398, -79.688],
+        [44.402, -79.691],
+      ]),
+    };
+
+    const result = buildNativeHomeAllRoutesShapes({
+      routeShapeMapping: {
+        '100': ['10-shape'],
+        '101': ['11-shape'],
+      },
+      processedShapes: shapes,
+      shapes,
+      shapeDirectionMap: {},
+      getRouteColor,
+    });
+
+    const sharedSegments = result.filter((shape) => shape.visualType === 'shared_trunk');
+    const route100 = result.filter((shape) => shape.routeId === '100' && shape.visualType === 'route');
+    const route101 = result.filter((shape) => shape.routeId === '101' && shape.visualType === 'route');
+
+    expect(sharedSegments).toHaveLength(0);
+    expect(route100).toHaveLength(1);
+    expect(route101).toHaveLength(1);
+    expect(route100[0].color).toBe('#910005');
+    expect(route101[0].color).toBe('#2464A2');
+  });
+
+  test('still supports shared trunks for same-colored loop pairs', () => {
     const sharedTrunk = [
       [44.38, -79.69],
       [44.385, -79.688],
@@ -88,7 +188,7 @@ describe('buildNativeHomeAllRoutesShapes', () => {
       processedShapes: shapes,
       shapes,
       shapeDirectionMap: {},
-      getRouteColor,
+      getRouteColor: () => '#00897b',
     });
 
     const sharedSegments = result.filter((shape) => shape.visualType === 'shared_trunk');

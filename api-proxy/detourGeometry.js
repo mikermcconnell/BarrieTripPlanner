@@ -8,12 +8,21 @@ const MIN_EVIDENCE_FOR_GEOMETRY = 3;
 const MIN_SIMPLIFIED_POINTS = 2;
 // Douglas-Peucker tolerance in meters
 const DP_TOLERANCE_METERS = 25;
+// Minimum linear span on the route to publish skipped-segment geometry
+const MIN_LINEAR_SEGMENT_LENGTH_METERS = Number.parseFloat(
+  process.env.DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS || '500'
+);
+// Minimum distance between projected evidence clusters before they count as separate detour segments
+const SEGMENT_GAP_METERS = Number.parseFloat(process.env.DETOUR_SEGMENT_GAP_METERS || '400');
 // Confidence thresholds
 const HIGH_CONFIDENCE_DURATION_MS = 5 * 60 * 1000;
 const HIGH_CONFIDENCE_POINTS = 10;
 const HIGH_CONFIDENCE_VEHICLES = 2;
 const MEDIUM_CONFIDENCE_DURATION_MS = 2 * 60 * 1000;
 const MEDIUM_CONFIDENCE_POINTS = 5;
+const ROUTE_FAMILY_SEGMENT_MATCH_METERS = Number.parseFloat(
+  process.env.DETOUR_ROUTE_FAMILY_SEGMENT_MATCH_METERS || '250'
+);
 
 /**
  * Find the closest point on a polyline to a coordinate.
@@ -71,6 +80,26 @@ function findClosestShapePoint(coord, polyline) {
   return { index: bestIndex, projectedPoint: bestProjected, distanceMeters: bestDist };
 }
 
+function resolveShapeSelectionCandidates(shapeIds, evidenceGroups = []) {
+  if (!Array.isArray(shapeIds) || shapeIds.length === 0) return [];
+
+  const allowedShapeIds = new Set(shapeIds);
+  const hintedShapeIds = new Set();
+
+  evidenceGroups.forEach((group) => {
+    if (!Array.isArray(group)) return;
+
+    group.forEach((point) => {
+      const hintedShapeId = point?.tripShapeId || point?.shapeId || null;
+      if (hintedShapeId && allowedShapeIds.has(hintedShapeId)) {
+        hintedShapeIds.add(hintedShapeId);
+      }
+    });
+  });
+
+  return hintedShapeIds.size > 0 ? [...hintedShapeIds] : shapeIds;
+}
+
 /**
  * Find entry/exit anchor indices on the best-matching shape for the evidence points.
  * Projects ALL evidence points onto each candidate shape and uses min/max shape indices,
@@ -81,12 +110,14 @@ function findAnchors(evidencePoints, shapes, shapeIds) {
   if (!evidencePoints || evidencePoints.length === 0) return null;
   if (!shapeIds || shapeIds.length === 0) return null;
 
+  const candidateShapeIds = resolveShapeSelectionCandidates(shapeIds, [evidencePoints]);
+
   let bestShapeId = null;
   let bestMinIndex = 0;
   let bestMaxIndex = 0;
   let bestTotalDist = Infinity;
 
-  for (const shapeId of shapeIds) {
+  for (const shapeId of candidateShapeIds) {
     const polyline = shapes.get(shapeId);
     if (!polyline || polyline.length < 2) continue;
 
@@ -123,6 +154,592 @@ function findAnchors(evidencePoints, shapes, shapeIds) {
   };
 }
 
+function buildCumulativeDistances(polyline) {
+  const cumulative = [0];
+  for (let i = 1; i < polyline.length; i++) {
+    cumulative[i] =
+      cumulative[i - 1] +
+      haversineDistance(
+        polyline[i - 1].latitude,
+        polyline[i - 1].longitude,
+        polyline[i].latitude,
+        polyline[i].longitude
+      );
+  }
+  return cumulative;
+}
+
+function dedupeConsecutivePoints(points) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+
+  return points.reduce((deduped, point) => {
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      previous.latitude === point.latitude &&
+      previous.longitude === point.longitude
+    ) {
+      return deduped;
+    }
+
+    deduped.push({
+      latitude: point.latitude,
+      longitude: point.longitude,
+    });
+    return deduped;
+  }, []);
+}
+
+function interpolatePointAlongPolyline(polyline, cumulativeDistances, targetMeters) {
+  if (!Array.isArray(polyline) || polyline.length === 0) return null;
+  if (polyline.length === 1) {
+    return {
+      latitude: polyline[0].latitude,
+      longitude: polyline[0].longitude,
+    };
+  }
+
+  const maxDistance = cumulativeDistances[cumulativeDistances.length - 1] ?? 0;
+  const clampedTarget = Math.max(0, Math.min(targetMeters, maxDistance));
+
+  for (let i = 1; i < cumulativeDistances.length; i++) {
+    if (cumulativeDistances[i] < clampedTarget) continue;
+
+    const segmentStartDistance = cumulativeDistances[i - 1];
+    const segmentLength = cumulativeDistances[i] - segmentStartDistance;
+    if (segmentLength <= 0) {
+      return {
+        latitude: polyline[i].latitude,
+        longitude: polyline[i].longitude,
+      };
+    }
+
+    const ratio = (clampedTarget - segmentStartDistance) / segmentLength;
+    return {
+      latitude: polyline[i - 1].latitude + (polyline[i].latitude - polyline[i - 1].latitude) * ratio,
+      longitude: polyline[i - 1].longitude + (polyline[i].longitude - polyline[i - 1].longitude) * ratio,
+    };
+  }
+
+  const lastPoint = polyline[polyline.length - 1];
+  return {
+    latitude: lastPoint.latitude,
+    longitude: lastPoint.longitude,
+  };
+}
+
+function projectEvidenceOntoShape(evidencePoints, polyline) {
+  if (!Array.isArray(evidencePoints) || evidencePoints.length === 0 || !Array.isArray(polyline) || polyline.length < 2) {
+    return [];
+  }
+
+  const cumulative = buildCumulativeDistances(polyline);
+
+  return evidencePoints
+    .map((point) => {
+      const projection = findClosestShapePoint(point, polyline);
+      if (!projection || !projection.projectedPoint) return null;
+
+      const segmentStart = polyline[projection.index];
+      const progressMeters =
+        cumulative[projection.index] +
+        haversineDistance(
+          segmentStart.latitude,
+          segmentStart.longitude,
+          projection.projectedPoint.latitude,
+          projection.projectedPoint.longitude
+        );
+
+      return {
+        ...point,
+        shapeIndex: projection.index,
+        projectedPoint: projection.projectedPoint,
+        progressMeters,
+        distanceMeters: projection.distanceMeters,
+      };
+    })
+    .filter(Boolean);
+}
+
+function findBestShapeProjection(evidencePoints, shapes, shapeIds) {
+  if (!Array.isArray(evidencePoints) || evidencePoints.length === 0) return null;
+  if (!Array.isArray(shapeIds) || shapeIds.length === 0) return null;
+
+  let best = null;
+
+  for (const shapeId of shapeIds) {
+    const polyline = shapes.get(shapeId);
+    if (!polyline || polyline.length < 2) continue;
+
+    const projectedPoints = projectEvidenceOntoShape(evidencePoints, polyline);
+    if (projectedPoints.length === 0) continue;
+
+    const totalDistance = projectedPoints.reduce((sum, point) => sum + point.distanceMeters, 0);
+    if (!best || totalDistance < best.totalDistance) {
+      best = {
+        shapeId,
+        polyline,
+        projectedPoints,
+        totalDistance,
+      };
+    }
+  }
+
+  return best;
+}
+
+function clusterProjectedEvidence(projectedPoints) {
+  if (!Array.isArray(projectedPoints) || projectedPoints.length === 0) return [];
+
+  const sorted = projectedPoints
+    .slice()
+    .sort((a, b) => a.progressMeters - b.progressMeters);
+
+  const clusters = [];
+  let currentCluster = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    const gap = curr.progressMeters - prev.progressMeters;
+
+    if (gap > SEGMENT_GAP_METERS) {
+      clusters.push(currentCluster);
+      currentCluster = [curr];
+      continue;
+    }
+
+    currentCluster.push(curr);
+  }
+
+  clusters.push(currentCluster);
+  return clusters;
+}
+
+function getRouteFamilyKey(routeId) {
+  const normalized = String(routeId || '').trim().toUpperCase();
+  const match = normalized.match(/^(\d+)([A-Z]+)$/);
+  return match ? match[1] : null;
+}
+
+function confidenceRank(confidence) {
+  switch (String(confidence || '').toLowerCase()) {
+    case 'high':
+      return 3;
+    case 'medium':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function hasRenderableSegment(segment) {
+  if (!segment) return false;
+  return (
+    Array.isArray(segment.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2
+  ) || (
+    Array.isArray(segment.inferredDetourPolyline) && segment.inferredDetourPolyline.length >= 2
+  );
+}
+
+function hasRenderableGeometry(geometry) {
+  return Array.isArray(geometry?.segments) && geometry.segments.some(hasRenderableSegment);
+}
+
+function getSegmentMatchDistanceMeters(a, b) {
+  if (!a?.entryPoint || !a?.exitPoint || !b?.entryPoint || !b?.exitPoint) return Infinity;
+
+  const direct =
+    haversineDistance(
+      a.entryPoint.latitude,
+      a.entryPoint.longitude,
+      b.entryPoint.latitude,
+      b.entryPoint.longitude
+    ) +
+    haversineDistance(
+      a.exitPoint.latitude,
+      a.exitPoint.longitude,
+      b.exitPoint.latitude,
+      b.exitPoint.longitude
+    );
+
+  const reversed =
+    haversineDistance(
+      a.entryPoint.latitude,
+      a.entryPoint.longitude,
+      b.exitPoint.latitude,
+      b.exitPoint.longitude
+    ) +
+    haversineDistance(
+      a.exitPoint.latitude,
+      a.exitPoint.longitude,
+      b.entryPoint.latitude,
+      b.entryPoint.longitude
+    );
+
+  return Math.min(direct, reversed) / 2;
+}
+
+function scoreRouteFamilyLeader(detour) {
+  const geometry = detour?.geometry || null;
+  const segments = Array.isArray(geometry?.segments)
+    ? geometry.segments.filter(hasRenderableSegment)
+    : [];
+  const bestEvidence = segments.reduce((max, segment) => Math.max(max, segment.evidencePointCount || 0), 0);
+  return {
+    confidence: confidenceRank(geometry?.confidence),
+    vehicleCount: detour?.vehicleCount || detour?.vehiclesOffRoute?.size || 0,
+    segmentCount: segments.length,
+    bestEvidence,
+  };
+}
+
+function compareLeaderScores(a, b) {
+  if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+  if (b.vehicleCount !== a.vehicleCount) return b.vehicleCount - a.vehicleCount;
+  if (b.segmentCount !== a.segmentCount) return b.segmentCount - a.segmentCount;
+  return b.bestEvidence - a.bestEvidence;
+}
+
+function findBestShapeForSegment(segment, shapes, shapeIds) {
+  if (!segment?.entryPoint || !segment?.exitPoint || !Array.isArray(shapeIds) || shapeIds.length === 0) {
+    return null;
+  }
+
+  let best = null;
+
+  for (const shapeId of shapeIds) {
+    const polyline = shapes.get(shapeId);
+    if (!polyline || polyline.length < 2) continue;
+
+    const entryProjection = findClosestShapePoint(segment.entryPoint, polyline);
+    const exitProjection = findClosestShapePoint(segment.exitPoint, polyline);
+    if (!entryProjection || !exitProjection) continue;
+
+    const cumulative = buildCumulativeDistances(polyline);
+    const entryProgress =
+      cumulative[entryProjection.index] +
+      haversineDistance(
+        polyline[entryProjection.index].latitude,
+        polyline[entryProjection.index].longitude,
+        entryProjection.projectedPoint.latitude,
+        entryProjection.projectedPoint.longitude
+      );
+    const exitProgress =
+      cumulative[exitProjection.index] +
+      haversineDistance(
+        polyline[exitProjection.index].latitude,
+        polyline[exitProjection.index].longitude,
+        exitProjection.projectedPoint.latitude,
+        exitProjection.projectedPoint.longitude
+      );
+
+    const totalDistance = entryProjection.distanceMeters + exitProjection.distanceMeters;
+    if (!best || totalDistance < best.totalDistance) {
+      best = {
+        shapeId,
+        polyline,
+        totalDistance,
+        entryProjection,
+        exitProjection,
+        entryProgress,
+        exitProgress,
+      };
+    }
+  }
+
+  return best;
+}
+
+function projectSegmentOntoSiblingRoute(segment, shapes, targetShapeIds) {
+  const bestShape = findBestShapeForSegment(segment, shapes, targetShapeIds);
+  if (!bestShape) return null;
+
+  const semanticReversed = bestShape.entryProgress > bestShape.exitProgress;
+  const routeEntry = semanticReversed ? bestShape.exitProjection : bestShape.entryProjection;
+  const routeExit = semanticReversed ? bestShape.entryProjection : bestShape.exitProjection;
+  const startProgress = Math.min(bestShape.entryProgress, bestShape.exitProgress);
+  const endProgress = Math.max(bestShape.entryProgress, bestShape.exitProgress);
+  const spanMeters = Math.max(0, endProgress - startProgress);
+  const skippedSegmentPolyline = extractSkippedSegmentByProgress(
+    bestShape.polyline,
+    startProgress,
+    endProgress
+  );
+
+  return {
+    shapeId: bestShape.shapeId,
+    skippedSegmentPolyline:
+      skippedSegmentPolyline.length >= 2 && spanMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS
+        ? skippedSegmentPolyline
+        : null,
+    inferredDetourPolyline: Array.isArray(segment.inferredDetourPolyline)
+      ? dedupeConsecutivePoints(segment.inferredDetourPolyline)
+      : null,
+    entryPoint: routeEntry.projectedPoint
+      ? {
+        latitude: routeEntry.projectedPoint.latitude,
+        longitude: routeEntry.projectedPoint.longitude,
+      }
+      : null,
+    exitPoint: routeExit.projectedPoint
+      ? {
+        latitude: routeExit.projectedPoint.latitude,
+        longitude: routeExit.projectedPoint.longitude,
+      }
+      : null,
+    confidence: segment.confidence || 'low',
+    evidencePointCount: segment.evidencePointCount || 0,
+    lastEvidenceAt: segment.lastEvidenceAt || null,
+    spanMeters,
+    entryIndex: routeEntry.index,
+    exitIndex: routeExit.index,
+  };
+}
+
+function mergeSiblingSegments(existingSegments, leaderSegments, shapes, targetShapeIds) {
+  const normalizedExisting = Array.isArray(existingSegments)
+    ? existingSegments.filter(hasRenderableSegment)
+    : [];
+  const result = [...normalizedExisting];
+
+  for (const leaderSegment of leaderSegments) {
+    const alreadyMatched = normalizedExisting.some((segment) =>
+      getSegmentMatchDistanceMeters(segment, leaderSegment) <= ROUTE_FAMILY_SEGMENT_MATCH_METERS
+    );
+    if (alreadyMatched) continue;
+
+    const projected = projectSegmentOntoSiblingRoute(leaderSegment, shapes, targetShapeIds);
+    if (projected && hasRenderableSegment(projected)) {
+      result.push(projected);
+    }
+  }
+
+  return result;
+}
+
+function reconcileRouteFamilyGeometries(detourMap, shapes, routeShapeMapping) {
+  if (!detourMap || typeof detourMap !== 'object') return detourMap;
+
+  const families = new Map();
+  for (const routeId of routeShapeMapping.keys()) {
+    const familyKey = getRouteFamilyKey(routeId);
+    if (!familyKey) continue;
+    if (!families.has(familyKey)) families.set(familyKey, []);
+    families.get(familyKey).push(routeId);
+  }
+
+  for (const routeIds of families.values()) {
+    if (!Array.isArray(routeIds) || routeIds.length < 2) continue;
+
+    const entries = routeIds
+      .map((routeId) => [routeId, detourMap[routeId]])
+      .filter(([, detour]) => hasRenderableGeometry(detour?.geometry));
+    if (entries.length === 0) continue;
+
+    const leaderEntry = entries
+      .slice()
+      .sort(([, a], [, b]) => compareLeaderScores(scoreRouteFamilyLeader(a), scoreRouteFamilyLeader(b)))[0];
+    const [leaderRouteId, leaderDetour] = leaderEntry;
+    const leaderSegments = (leaderDetour.geometry?.segments || []).filter(hasRenderableSegment);
+    if (leaderSegments.length === 0) continue;
+
+    for (const [routeId, detour] of entries) {
+      if (routeId === leaderRouteId) continue;
+
+      const targetShapeIds = routeShapeMapping.get(routeId);
+      if (!Array.isArray(targetShapeIds) || targetShapeIds.length === 0) continue;
+
+      const existingSegments = (detour.geometry?.segments || []).filter(hasRenderableSegment);
+      const matchingCount = existingSegments.filter((segment) =>
+        leaderSegments.some((leaderSegment) =>
+          getSegmentMatchDistanceMeters(segment, leaderSegment) <= ROUTE_FAMILY_SEGMENT_MATCH_METERS
+        )
+      ).length;
+
+      let reconciledSegments = existingSegments;
+      if (existingSegments.length === 0 || matchingCount === 0) {
+        reconciledSegments = leaderSegments
+          .map((segment) => projectSegmentOntoSiblingRoute(segment, shapes, targetShapeIds))
+          .filter(hasRenderableSegment);
+      } else if (matchingCount < leaderSegments.length) {
+        reconciledSegments = mergeSiblingSegments(existingSegments, leaderSegments, shapes, targetShapeIds);
+      }
+
+      if (!Array.isArray(reconciledSegments) || reconciledSegments.length === 0) continue;
+
+      const primarySegment = pickPrimarySegment(reconciledSegments);
+      detour.geometry = {
+        ...(detour.geometry || {}),
+        shapeId: primarySegment?.shapeId ?? detour.geometry?.shapeId ?? null,
+        segments: reconciledSegments,
+        skippedSegmentPolyline: primarySegment?.skippedSegmentPolyline ?? null,
+        inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
+        entryPoint: primarySegment?.entryPoint ?? null,
+        exitPoint: primarySegment?.exitPoint ?? null,
+        confidence:
+          confidenceRank(leaderDetour.geometry?.confidence) > confidenceRank(detour.geometry?.confidence)
+            ? leaderDetour.geometry.confidence
+            : detour.geometry?.confidence || leaderDetour.geometry?.confidence || 'low',
+        evidencePointCount: Math.max(
+          detour.geometry?.evidencePointCount || 0,
+          leaderDetour.geometry?.evidencePointCount || 0
+        ),
+        lastEvidenceAt: Math.max(
+          detour.geometry?.lastEvidenceAt || 0,
+          leaderDetour.geometry?.lastEvidenceAt || 0
+        ) || null,
+      };
+    }
+
+    for (const routeId of routeIds) {
+      if (detourMap[routeId]) continue;
+
+      const targetShapeIds = routeShapeMapping.get(routeId);
+      if (!Array.isArray(targetShapeIds) || targetShapeIds.length === 0) continue;
+
+      const projectedSegments = leaderSegments
+        .map((segment) => projectSegmentOntoSiblingRoute(segment, shapes, targetShapeIds))
+        .filter(hasRenderableSegment);
+      if (projectedSegments.length === 0) continue;
+
+      const primarySegment = pickPrimarySegment(projectedSegments);
+      detourMap[routeId] = {
+        ...leaderDetour,
+        routeId,
+        triggerVehicleId: null,
+        vehiclesOffRoute: new Set(),
+        vehicleCount: leaderDetour.vehicleCount || leaderDetour.vehiclesOffRoute?.size || 0,
+        geometry: {
+          ...(leaderDetour.geometry || {}),
+          shapeId: primarySegment?.shapeId ?? null,
+          segments: projectedSegments,
+          skippedSegmentPolyline: primarySegment?.skippedSegmentPolyline ?? null,
+          inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
+          entryPoint: primarySegment?.entryPoint ?? null,
+          exitPoint: primarySegment?.exitPoint ?? null,
+        },
+        handoffSourceRouteId: leaderRouteId,
+      };
+    }
+  }
+
+  return detourMap;
+}
+
+function projectBoundaryCandidates(candidates, polyline) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  return projectEvidenceOntoShape(candidates, polyline);
+}
+
+function selectEntryBoundaryCandidate(projectedCandidates, segmentDetectedAtMs) {
+  if (!Array.isArray(projectedCandidates) || projectedCandidates.length === 0) return null;
+
+  const candidatesBeforeSegment = projectedCandidates
+    .filter((candidate) => candidate.timestampMs <= segmentDetectedAtMs)
+    .sort((a, b) => b.timestampMs - a.timestampMs);
+
+  return candidatesBeforeSegment[0] || null;
+}
+
+function selectExitBoundaryCandidate(projectedCandidates, lastEvidenceAt) {
+  if (!Array.isArray(projectedCandidates) || projectedCandidates.length === 0) return null;
+
+  const candidatesAfterSegment = projectedCandidates
+    .filter((candidate) => candidate.timestampMs >= lastEvidenceAt)
+    .sort((a, b) => a.timestampMs - b.timestampMs);
+
+  return candidatesAfterSegment[0] || null;
+}
+
+function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCandidates = {}) {
+  if (!Array.isArray(cluster) || cluster.length === 0) return null;
+
+  const sortedByProgress = cluster
+    .slice()
+    .sort((a, b) => a.progressMeters - b.progressMeters || a.timestampMs - b.timestampMs);
+  const segmentDetectedAtMs = Math.min(...cluster.map((point) => point.timestampMs));
+  const lastEvidenceAt = Math.max(...cluster.map((point) => point.timestampMs));
+  const rawEntryProjection =
+    selectEntryBoundaryCandidate(boundaryCandidates.entryCandidates, segmentDetectedAtMs) ||
+    sortedByProgress[0];
+  const rawExitProjection =
+    selectExitBoundaryCandidate(boundaryCandidates.exitCandidates, lastEvidenceAt) ||
+    sortedByProgress[sortedByProgress.length - 1];
+  const semanticReversed = (rawEntryProjection.progressMeters || 0) > (rawExitProjection.progressMeters || 0);
+  const entryProjection = semanticReversed ? rawExitProjection : rawEntryProjection;
+  const exitProjection = semanticReversed ? rawEntryProjection : rawExitProjection;
+  const entryIndex = entryProjection.shapeIndex;
+  const exitIndex = exitProjection.shapeIndex;
+  const spanMeters = Math.max(
+    0,
+    Math.max(rawEntryProjection.progressMeters || 0, rawExitProjection.progressMeters || 0) -
+      Math.min(rawEntryProjection.progressMeters || 0, rawExitProjection.progressMeters || 0)
+  );
+  const skippedSegmentPolyline = extractSkippedSegmentByProgress(
+    polyline,
+    rawEntryProjection.progressMeters || 0,
+    rawExitProjection.progressMeters || 0
+  );
+
+  const rawCoords = cluster
+    .slice()
+    .sort((a, b) => a.timestampMs - b.timestampMs)
+    .map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
+  const simplified = douglasPeucker(rawCoords, DP_TOLERANCE_METERS);
+  const inferredDetourPolyline = simplified.length >= MIN_SIMPLIFIED_POINTS ? simplified : null;
+
+  const confidence = scoreConfidence(cluster, Math.min(segmentDetectedAtMs, detectedAtMs), now);
+  const entryPoint = entryProjection.projectedPoint
+    ? {
+      latitude: entryProjection.projectedPoint.latitude,
+      longitude: entryProjection.projectedPoint.longitude,
+    }
+    : null;
+  const exitPoint = exitProjection.projectedPoint
+    ? {
+      latitude: exitProjection.projectedPoint.latitude,
+      longitude: exitProjection.projectedPoint.longitude,
+    }
+    : null;
+  const hasRenderableSkippedSegment =
+    skippedSegmentPolyline.length >= 2 && spanMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS;
+
+  const hasRenderableGeometry =
+    hasRenderableSkippedSegment ||
+    (inferredDetourPolyline && inferredDetourPolyline.length >= 2);
+  if (!hasRenderableGeometry) return null;
+
+  return {
+    entryIndex,
+    exitIndex,
+    spanMeters,
+    skippedSegmentPolyline: hasRenderableSkippedSegment ? skippedSegmentPolyline : null,
+    inferredDetourPolyline,
+    entryPoint,
+    exitPoint,
+    confidence,
+    evidencePointCount: cluster.length,
+    lastEvidenceAt,
+  };
+}
+
+function pickPrimarySegment(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) return null;
+
+  return segments
+    .slice()
+    .sort((a, b) => {
+      if ((b.evidencePointCount || 0) !== (a.evidencePointCount || 0)) {
+        return (b.evidencePointCount || 0) - (a.evidencePointCount || 0);
+      }
+      if ((b.spanMeters || 0) !== (a.spanMeters || 0)) {
+        return (b.spanMeters || 0) - (a.spanMeters || 0);
+      }
+      return (b.exitIndex - b.entryIndex) - (a.exitIndex - a.entryIndex);
+    })[0];
+}
+
 /**
  * Extract a slice of the polyline between entryIndex and exitIndex (inclusive of endpoints).
  */
@@ -134,6 +751,32 @@ function extractSkippedSegment(polyline, entryIndex, exitIndex) {
     latitude: p.latitude,
     longitude: p.longitude,
   }));
+}
+
+function extractSkippedSegmentByProgress(polyline, entryProgressMeters, exitProgressMeters) {
+  if (!Array.isArray(polyline) || polyline.length === 0) return [];
+
+  const cumulativeDistances = buildCumulativeDistances(polyline);
+  const maxDistance = cumulativeDistances[cumulativeDistances.length - 1] ?? 0;
+  const startMeters = Math.max(0, Math.min(entryProgressMeters, exitProgressMeters, maxDistance));
+  const endMeters = Math.max(0, Math.min(Math.max(entryProgressMeters, exitProgressMeters), maxDistance));
+
+  const points = [];
+  const startPoint = interpolatePointAlongPolyline(polyline, cumulativeDistances, startMeters);
+  if (startPoint) points.push(startPoint);
+
+  for (let i = 1; i < cumulativeDistances.length - 1; i++) {
+    if (cumulativeDistances[i] <= startMeters || cumulativeDistances[i] >= endMeters) continue;
+    points.push({
+      latitude: polyline[i].latitude,
+      longitude: polyline[i].longitude,
+    });
+  }
+
+  const endPoint = interpolatePointAlongPolyline(polyline, cumulativeDistances, endMeters);
+  if (endPoint) points.push(endPoint);
+
+  return dedupeConsecutivePoints(points);
 }
 
 /**
@@ -190,6 +833,8 @@ function scoreConfidence(evidencePoints, detectedAtMs, now) {
  */
 function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, detectedAtMs) {
   const empty = {
+    shapeId: null,
+    segments: [],
     skippedSegmentPolyline: null,
     inferredDetourPolyline: null,
     entryPoint: null,
@@ -208,39 +853,49 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
   if (!shapeIds || shapeIds.length === 0) return empty;
 
   const lastEvidenceAt = points[points.length - 1].timestampMs;
+  const candidateShapeIds = resolveShapeSelectionCandidates(shapeIds, [
+    evidenceWindow.points,
+    evidenceWindow.entryCandidates,
+    evidenceWindow.exitCandidates,
+  ]);
+  const bestShape = findBestShapeProjection(points, shapes, candidateShapeIds);
+  if (!bestShape) return empty;
+  const projectedEntryCandidates = projectBoundaryCandidates(evidenceWindow.entryCandidates, bestShape.polyline);
+  const projectedExitCandidates = projectBoundaryCandidates(evidenceWindow.exitCandidates, bestShape.polyline);
 
-  const anchors = findAnchors(points, shapes, shapeIds);
-  if (!anchors) return empty;
+  const clusters = clusterProjectedEvidence(bestShape.projectedPoints);
+  const segments = clusters
+    .map((cluster) => buildSegmentGeometry(cluster, bestShape.polyline, now, detectedAtMs, {
+      entryCandidates: projectedEntryCandidates,
+      exitCandidates: projectedExitCandidates,
+    }))
+    .filter(Boolean)
+    .map((segment) => ({
+      shapeId: bestShape.shapeId,
+      skippedSegmentPolyline: segment.skippedSegmentPolyline,
+      inferredDetourPolyline: segment.inferredDetourPolyline,
+      entryPoint: segment.entryPoint,
+      exitPoint: segment.exitPoint,
+      confidence: segment.confidence,
+      evidencePointCount: segment.evidencePointCount,
+      lastEvidenceAt: segment.lastEvidenceAt,
+      spanMeters: segment.spanMeters,
+      entryIndex: segment.entryIndex,
+      exitIndex: segment.exitIndex,
+    }));
 
-  const polyline = shapes.get(anchors.shapeId);
-  const skippedSegmentPolyline = extractSkippedSegment(
-    polyline, anchors.entryIndex, anchors.exitIndex
-  );
+  if (segments.length === 0) return empty;
 
-  // Build inferred detour polyline from simplified evidence coordinates
-  const rawCoords = points.map(p => ({ latitude: p.latitude, longitude: p.longitude }));
-  const simplified = douglasPeucker(rawCoords, DP_TOLERANCE_METERS);
-  const inferredDetourPolyline = simplified.length >= MIN_SIMPLIFIED_POINTS ? simplified : null;
-
+  const primarySegment = pickPrimarySegment(segments);
   const confidence = scoreConfidence(points, detectedAtMs, now);
 
-  // Entry/exit points as lat/lon for Firestore.
-  // With spatial anchors, entryIndex is always the min shape index and exitIndex the max,
-  // so no swap logic is needed.
-  const entryIdx = anchors.entryIndex;
-  const exitIdx = Math.min(anchors.exitIndex, polyline.length - 1);
-  const entryPoint = polyline[entryIdx]
-    ? { latitude: polyline[entryIdx].latitude, longitude: polyline[entryIdx].longitude }
-    : null;
-  const exitPoint = polyline[exitIdx]
-    ? { latitude: polyline[exitIdx].latitude, longitude: polyline[exitIdx].longitude }
-    : null;
-
   return {
-    skippedSegmentPolyline: skippedSegmentPolyline.length >= 2 ? skippedSegmentPolyline : null,
-    inferredDetourPolyline,
-    entryPoint,
-    exitPoint,
+    shapeId: bestShape.shapeId,
+    segments,
+    skippedSegmentPolyline: primarySegment?.skippedSegmentPolyline ?? null,
+    inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
+    entryPoint: primarySegment?.entryPoint ?? null,
+    exitPoint: primarySegment?.exitPoint ?? null,
     confidence,
     evidencePointCount: points.length,
     lastEvidenceAt,
@@ -250,11 +905,28 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
 module.exports = {
   findClosestShapePoint,
   findAnchors,
+  buildCumulativeDistances,
+  projectEvidenceOntoShape,
+  findBestShapeProjection,
+  clusterProjectedEvidence,
+  resolveShapeSelectionCandidates,
+  projectBoundaryCandidates,
+  selectEntryBoundaryCandidate,
+  selectExitBoundaryCandidate,
+  buildSegmentGeometry,
+  pickPrimarySegment,
+  getRouteFamilyKey,
+  hasRenderableSegment,
+  hasRenderableGeometry,
+  reconcileRouteFamilyGeometries,
   extractSkippedSegment,
+  extractSkippedSegmentByProgress,
   douglasPeucker,
   scoreConfidence,
   buildGeometry,
   MIN_EVIDENCE_FOR_GEOMETRY,
   MIN_SIMPLIFIED_POINTS,
+  MIN_LINEAR_SEGMENT_LENGTH_METERS,
   DP_TOLERANCE_METERS,
+  SEGMENT_GAP_METERS,
 };
