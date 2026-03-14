@@ -14,7 +14,14 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  *
  * All state and logic lives in useDetourAlertStrip; this file is rendering only.
  */
-const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes = [], style }) => {
+const DetourAlertStrip = ({
+  activeDetours,
+  onPress,
+  alertBannerVisible,
+  routes = [],
+  style,
+  inline = false,
+}) => {
   const {
     expanded, toggleExpanded, routeIds, topOffset, getRouteName,
     visibleIds, overflowCount, countText, shouldRender,
@@ -24,12 +31,17 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
 
   return (
     <View
-      style={[styles.container, { top: topOffset }, style]}
+      style={[
+        styles.container,
+        !inline && { top: topOffset },
+        inline && styles.containerInline,
+        style,
+      ]}
       pointerEvents="box-none"
     >
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
       <TouchableOpacity
-        style={styles.collapsedBar}
+        style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
         onPress={toggleExpanded}
         activeOpacity={0.85}
         accessibilityRole="button"
@@ -40,25 +52,27 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
         <Text style={styles.countText} numberOfLines={1}>
           {countText}
         </Text>
-        <View style={styles.pillsRow}>
-          {routeIds.slice(0, 3).map((routeId) => {
-            const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
-            return (
-              <View key={routeId} style={[styles.routePill, { backgroundColor: color }]}>
-                <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
-              </View>
-            );
-          })}
-          {routeIds.length > 3 && (
-            <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
-          )}
-        </View>
+        {!inline && (
+          <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
+            {routeIds.slice(0, 3).map((routeId) => {
+              const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+              return (
+                <View key={routeId} style={[styles.routePill, { backgroundColor: color }]}>
+                  <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+                </View>
+              );
+            })}
+            {routeIds.length > 3 && (
+              <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
+            )}
+          </View>
+        )}
         <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
       </TouchableOpacity>
 
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
-        <View style={styles.expandedPanel}>
+        <View style={[styles.expandedPanel, inline && styles.expandedPanelInline]}>
           {visibleIds.map((routeId) => {
             const routeColor = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
             const detour = activeDetours[routeId];
@@ -112,6 +126,12 @@ const styles = StyleSheet.create({
     right: SPACING.md,
     zIndex: 996,
   },
+  containerInline: {
+    position: 'relative',
+    left: undefined,
+    right: undefined,
+    flex: 1,
+  },
 
   // ── Collapsed bar ────────────────────────────────────────────────
   collapsedBar: {
@@ -126,6 +146,14 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     ...SHADOWS.medium,
   },
+  collapsedBarInline: {
+    alignSelf: 'stretch',
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.18)',
+    backgroundColor: 'rgba(255, 248, 236, 0.94)',
+    shadowOpacity: 0.08,
+  },
   countText: {
     flex: 1,
     fontSize: FONT_SIZES.sm,
@@ -137,6 +165,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  pillsRowInline: {
+    marginLeft: 'auto',
   },
   routePill: {
     paddingHorizontal: SPACING.sm,
@@ -169,6 +200,10 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     ...SHADOWS.medium,
+  },
+  expandedPanelInline: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.14)',
   },
   detailRow: {
     flexDirection: 'row',

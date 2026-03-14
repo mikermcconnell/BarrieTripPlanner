@@ -7,18 +7,16 @@ import Icon from './Icon';
  * DetourTimeline — vertical timeline showing how a detour affects a route's stops.
  *
  * Props:
- *   affectedStops   — array of stop objects ({ name, ... }). Includes entry and exit.
- *   entryStopName   — name of the first affected stop (detour begins here)
- *   exitStopName    — name of the last affected stop (service resumes after here)
+ *   sections        — array of segment objects with affectedStops / entryStopName / exitStopName
  */
-const DetourTimeline = ({ affectedStops, entryStopName, exitStopName }) => {
+const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
   const hasStops = affectedStops && affectedStops.length > 0;
 
   if (!hasStops) {
     return (
       <View style={styles.pendingContainer}>
         <Icon name="Hourglass" size={20} color={COLORS.textSecondary} />
-        <Text style={styles.pendingText}>Detecting affected stops...</Text>
+        <Text style={styles.pendingText}>Affected stops unavailable yet.</Text>
       </View>
     );
   }
@@ -28,7 +26,7 @@ const DetourTimeline = ({ affectedStops, entryStopName, exitStopName }) => {
   const skippedStops = affectedStops.slice(1, -1);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.section}>
       {/* Normal service node (top) */}
       <View style={styles.nodeRow}>
         <View style={styles.nodeColumn}>
@@ -49,7 +47,7 @@ const DetourTimeline = ({ affectedStops, entryStopName, exitStopName }) => {
 
       {/* Skipped stops */}
       {skippedStops.map((stop, index) => (
-        <View key={stop.stop_id || stop.id || index} style={styles.nodeRow}>
+        <View key={`${stop.stop_id || stop.id || 'stop'}-${index}`} style={styles.nodeRow}>
           <View style={styles.nodeColumn}>
             <View style={styles.xIconWrapper}>
               <Icon name="X" size={12} color={COLORS.error} />
@@ -81,9 +79,48 @@ const DetourTimeline = ({ affectedStops, entryStopName, exitStopName }) => {
   );
 };
 
+const DetourTimeline = ({ sections = [] }) => {
+  const normalizedSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
+
+  if (normalizedSections.length === 0) {
+    return <TimelineSection affectedStops={[]} entryStopName={null} exitStopName={null} />;
+  }
+
+  return (
+    <View style={styles.container}>
+      {normalizedSections.map((section, index) => (
+        <View key={`detour-section-${index}`} style={styles.sectionWrapper}>
+          {normalizedSections.length > 1 && (
+            <Text style={styles.sectionTitle}>Affected Section {index + 1}</Text>
+          )}
+          <TimelineSection
+            affectedStops={section.affectedStops}
+            entryStopName={section.entryStopName}
+            exitStopName={section.exitStopName}
+          />
+        </View>
+      ))}
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   container: {
     paddingVertical: SPACING.xs,
+  },
+  section: {
+    paddingVertical: SPACING.xs,
+  },
+  sectionWrapper: {
+    marginBottom: SPACING.md,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: SPACING.xs,
+    letterSpacing: 0.4,
   },
   pendingContainer: {
     flexDirection: 'row',

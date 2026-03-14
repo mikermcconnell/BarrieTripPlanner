@@ -5,11 +5,17 @@ import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../con
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import DetourTimeline from './DetourTimeline';
+import DetourImpactSummary from './DetourImpactSummary';
 import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
 
-const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exitStopName, onClose, onViewOnMap }) => {
+const getDetourTitle = (routeId, state) => {
+  const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
+  return `Route ${routeId} - ${statusLabel}`;
+};
+
+const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose, onViewOnMap }) => {
   const bottomSheetRef = useRef(null);
-  const snapPoints = useMemo(() => ['35%', '60%'], []);
+  const snapPoints = useMemo(() => ['45%', '78%'], []);
 
   const handleSheetChanges = useCallback(
     (index) => {
@@ -38,7 +44,7 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
             <Text style={styles.routeBadgeText}>{routeId}</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.title}>Route {routeId} — Detour Active</Text>
+            <Text style={styles.title}>{getDetourTitle(routeId, detour?.state)}</Text>
             <View style={styles.headerMeta}>
               {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
               {confidenceChip && (
@@ -60,11 +66,8 @@ const DetourDetailsSheet = ({ routeId, detour, affectedStops, entryStopName, exi
 
         <View style={styles.divider} />
 
-        <DetourTimeline
-          affectedStops={affectedStops}
-          entryStopName={entryStopName}
-          exitStopName={exitStopName}
-        />
+        <DetourTimeline sections={segmentStopDetails} />
+        <DetourImpactSummary sections={segmentStopDetails} />
 
         <TouchableOpacity
           style={styles.viewButton}

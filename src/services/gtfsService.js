@@ -1,6 +1,10 @@
 import JSZip from 'jszip';
 import { GTFS_URLS } from '../config/constants';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
+import {
+  createRouteStopSequencesMapping,
+  DEFAULT_ROUTE_STOP_SEQUENCE_KEY,
+} from '../utils/gtfsStopSequences';
 import logger from '../utils/logger';
 
 /**
@@ -399,6 +403,7 @@ export const fetchAllStaticData = async () => {
     const tripMapping = createTripMapping(trips);
     const routeShapeMapping = createRouteShapeMapping(trips);
     const routeStopsMapping = createRouteStopsMapping(trips, stopTimes);
+    const routeStopSequencesMapping = createRouteStopSequencesMapping(trips, stopTimes);
 
     return {
       routes,
@@ -411,6 +416,7 @@ export const fetchAllStaticData = async () => {
       tripMapping,
       routeShapeMapping,
       routeStopsMapping,
+      routeStopSequencesMapping,
     };
   } catch (error) {
     logger.error('Error fetching all static data:', error);
@@ -418,5 +424,13 @@ export const fetchAllStaticData = async () => {
   }
 };
 
-// Export individual parsers for testing
-export { parseCSV, parseRoutes, parseStops, parseShapes, parseTrips };
+// Export individual parsers and GTFS helpers for testing
+export {
+  parseCSV,
+  parseRoutes,
+  parseStops,
+  parseShapes,
+  parseTrips,
+  createRouteStopSequencesMapping,
+  DEFAULT_ROUTE_STOP_SEQUENCE_KEY,
+};

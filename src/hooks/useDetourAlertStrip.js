@@ -61,11 +61,16 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
 
   const visibleIds = routeIds.slice(0, MAX_EXPANDED);
   const overflowCount = routeIds.length - MAX_EXPANDED;
+  const collapsedSummaryIds = routeIds.slice(0, 4);
+  const collapsedOverflowCount = routeIds.length - collapsedSummaryIds.length;
+  const routeSummary = collapsedSummaryIds.map((routeId) => getRouteName(routeId)).join(', ');
 
   const countText =
     routeIds.length === 1
-      ? `Route ${getRouteName(routeIds[0])} on detour`
-      : `${routeIds.length} routes on detour`;
+      ? `Detour: ${routeSummary}`
+      : collapsedOverflowCount > 0
+        ? `Detours: ${routeSummary} +${collapsedOverflowCount}`
+        : `Detours: ${routeSummary}`;
 
   return {
     expanded,

@@ -18,6 +18,208 @@ const snapToPolyline = (lat, lon, polylineCoords) => {
   return polylineCoords[idx];
 };
 
+const hasCoordinate = (point) =>
+  Number.isFinite(point?.lat) && Number.isFinite(point?.lon);
+
+const hasMarkerCoordinate = (point) =>
+  Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+
+const toMarkerCoordinate = (point) => ({
+  latitude: point.lat,
+  longitude: point.lon,
+});
+
+const estimateWalkDistance = (fromPoint, toPoint) => {
+  if (!hasCoordinate(fromPoint) || !hasCoordinate(toPoint)) {
+    return null;
+  }
+
+  return Math.round(haversineDistance(fromPoint.lat, fromPoint.lon, toPoint.lat, toPoint.lon));
+};
+
+const findFirstBoardingStop = (legs) =>
+  legs.find((leg) => leg.mode !== 'WALK' && !leg.isOnDemand && hasCoordinate(leg.from))?.from ?? null;
+
+const findLastAlightingStop = (legs) => {
+  for (let index = legs.length - 1; index >= 0; index -= 1) {
+    const leg = legs[index];
+    if (leg.mode !== 'WALK' && !leg.isOnDemand && hasCoordinate(leg.to)) {
+      return leg.to;
+    }
+  }
+
+  return null;
+};
+
+const areDistinctPoints = (point, markerCoordinate, minDistanceMeters = 20) => {
+  if (!hasCoordinate(point) || !hasMarkerCoordinate(markerCoordinate)) {
+    return false;
+  }
+
+  return haversineDistance(
+    point.lat,
+    point.lon,
+    markerCoordinate.latitude,
+    markerCoordinate.longitude
+  ) >= minDistanceMeters;
+};
+
+export const buildTripMarkers = ({ legs = [], tripFrom = null, tripTo = null }) => {
+  if (!Array.isArray(legs) || legs.length === 0) {
+    return [];
+  }
+
+  const markers = [];
+  const firstLeg = legs[0];
+  const lastLeg = legs[legs.length - 1];
+  const firstBoardingStop = findFirstBoardingStop(legs);
+  const lastAlightingStop = findLastAlightingStop(legs);
+
+  let originPoint = null;
+  let originWalkDistance = null;
+
+  if (firstLeg?.mode === 'WALK') {
+    originPoint = firstBoardingStop ?? (hasCoordinate(firstLeg.from) ? firstLeg.from : null);
+    originWalkDistance = firstBoardingStop
+      ? Math.round(firstLeg.distance ?? estimateWalkDistance(tripFrom, firstBoardingStop) ?? 0)
+      : null;
+  } else {
+    originPoint = firstBoardingStop ?? (hasCoordinate(firstLeg?.from) ? firstLeg.from : null);
+    originWalkDistance = firstLeg?.isOnDemand
+      ? null
+      : estimateWalkDistance(tripFrom, originPoint);
+  }
+
+  if (originPoint) {
+    markers.push({
+      id: 'origin',
+      coordinate: toMarkerCoordinate(originPoint),
+      type: 'origin',
+      title: 'Start',
+      stopName: originPoint.name || null,
+      stopCode: originPoint.stopCode || originPoint.stopId || null,
+      walkDistance: originWalkDistance,
+    });
+  }
+
+  let destinationPoint = null;
+  let destinationWalkDistance = null;
+
+  if (lastLeg?.mode === 'WALK') {
+    destinationPoint = lastAlightingStop ?? (hasCoordinate(lastLeg.to) ? lastLeg.to : null);
+    destinationWalkDistance = lastAlightingStop
+      ? Math.round(lastLeg.distance ?? estimateWalkDistance(lastAlightingStop, tripTo) ?? 0)
+      : null;
+  } else {
+    destinationPoint = lastAlightingStop ?? (hasCoordinate(lastLeg?.to) ? lastLeg.to : null);
+    destinationWalkDistance = lastLeg?.isOnDemand
+      ? null
+      : estimateWalkDistance(destinationPoint, tripTo);
+  }
+
+  if (destinationPoint) {
+    markers.push({
+      id: 'destination',
+      coordinate: toMarkerCoordinate(destinationPoint),
+      type: 'destination',
+      title: 'End',
+      stopName: destinationPoint.name || null,
+      stopCode: destinationPoint.stopCode || destinationPoint.stopId || null,
+      walkDistance: destinationWalkDistance,
+    });
+  }
+
+  return markers;
+};
+
+export const buildTripEndpointMarkers = ({
+  tripFrom = null,
+  tripTo = null,
+  tripMarkers = [],
+}) => {
+  const markers = [];
+  const originStopMarker = tripMarkers.find((marker) => marker.id === 'origin');
+  const destinationStopMarker = tripMarkers.find((marker) => marker.id === 'destination');
+
+  if (hasCoordinate(tripFrom) && areDistinctPoints(tripFrom, originStopMarker?.coordinate)) {
+    markers.push({
+      id: 'origin-location',
+      coordinate: toMarkerCoordinate(tripFrom),
+      type: 'originLocation',
+      title: 'Start location',
+    });
+  }
+
+  if (hasCoordinate(tripTo) && areDistinctPoints(tripTo, destinationStopMarker?.coordinate)) {
+    markers.push({
+      id: 'destination-location',
+      coordinate: toMarkerCoordinate(tripTo),
+      type: 'destinationLocation',
+      title: 'Destination location',
+    });
+  }
+
+  return markers;
+};
+
+export const buildBusApproachLines = ({
+  legs = [],
+  tripVehicles = [],
+  shapes = null,
+  tripMapping = null,
+}) => {
+  if (!Array.isArray(legs) || tripVehicles.length === 0 || !shapes || !tripMapping) {
+    return [];
+  }
+
+  const firstTransitLeg = legs.find((leg) => leg.mode !== 'WALK' && !leg.isOnDemand && leg.tripId);
+  if (!firstTransitLeg?.from || !hasCoordinate(firstTransitLeg.from)) {
+    return [];
+  }
+
+  const vehicle = tripVehicles.find((candidate) => candidate.tripId === firstTransitLeg.tripId);
+  if (!vehicle?.coordinate) {
+    return [];
+  }
+
+  const mapping = tripMapping[firstTransitLeg.tripId];
+  if (!mapping?.shapeId) {
+    return [];
+  }
+
+  const shapeCoords = shapes[mapping.shapeId];
+  if (!Array.isArray(shapeCoords) || shapeCoords.length < 2) {
+    return [];
+  }
+
+  const busIdx = findClosestPointIndex(
+    shapeCoords,
+    vehicle.coordinate.latitude,
+    vehicle.coordinate.longitude
+  );
+  const boardIdx = findClosestPointIndex(
+    shapeCoords,
+    firstTransitLeg.from.lat,
+    firstTransitLeg.from.lon
+  );
+
+  // Guard: bus already past boarding stop
+  if (busIdx >= boardIdx) {
+    return [];
+  }
+
+  const segment = shapeCoords.slice(busIdx, boardIdx + 1);
+  if (segment.length < 2) {
+    return [];
+  }
+
+  return [{
+    id: `bus-approach-${firstTransitLeg.tripId}`,
+    coordinates: segment,
+    color: firstTransitLeg.route?.color || COLORS.primary,
+  }];
+};
+
 export const useTripVisualization = ({
   isTripPlanningMode,
   itineraries,
@@ -91,44 +293,20 @@ export const useTripVisualization = ({
 
   // Origin + destination markers with stop info
   const tripMarkers = useMemo(() => {
-    if (!selectedItinerary?.legs) return [];
-
-    const markers = [];
-    const firstLeg = selectedItinerary.legs[0];
-    const lastLeg = selectedItinerary.legs[selectedItinerary.legs.length - 1];
-
-    if (firstLeg?.from) {
-      const walkDist = tripFrom
-        ? Math.round(haversineDistance(tripFrom.lat, tripFrom.lon, firstLeg.from.lat, firstLeg.from.lon))
-        : null;
-      markers.push({
-        id: 'origin',
-        coordinate: { latitude: firstLeg.from.lat, longitude: firstLeg.from.lon },
-        type: 'origin',
-        title: 'Start',
-        stopName: firstLeg.from.name || null,
-        stopCode: firstLeg.from.stopCode || firstLeg.from.stopId || null,
-        walkDistance: walkDist,
-      });
-    }
-
-    if (lastLeg?.to) {
-      const walkDist = tripTo
-        ? Math.round(haversineDistance(lastLeg.to.lat, lastLeg.to.lon, tripTo.lat, tripTo.lon))
-        : null;
-      markers.push({
-        id: 'destination',
-        coordinate: { latitude: lastLeg.to.lat, longitude: lastLeg.to.lon },
-        type: 'destination',
-        title: 'End',
-        stopName: lastLeg.to.name || null,
-        stopCode: lastLeg.to.stopCode || lastLeg.to.stopId || null,
-        walkDistance: walkDist,
-      });
-    }
-
-    return markers;
+    return buildTripMarkers({
+      legs: selectedItinerary?.legs,
+      tripFrom,
+      tripTo,
+    });
   }, [selectedItinerary, tripFrom, tripTo]);
+
+  const tripEndpointMarkers = useMemo(() => (
+    buildTripEndpointMarkers({
+      tripFrom,
+      tripTo,
+      tripMarkers,
+    })
+  ), [tripFrom, tripTo, tripMarkers]);
 
   // Intermediate stop dots along transit legs (snapped to polyline)
   const intermediateStopMarkers = useMemo(() => {
@@ -223,44 +401,18 @@ export const useTripVisualization = ({
 
   // Dashed approach lines: bus current position → boarding stop (following GTFS shape)
   const busApproachLines = useMemo(() => {
-    if (!selectedItinerary || tripVehicles.length === 0 || !shapes || !tripMapping) return [];
-
-    const lines = [];
-    selectedItinerary.legs.forEach((leg) => {
-      if (leg.mode === 'WALK' || leg.isOnDemand || !leg.tripId) return;
-
-      const vehicle = tripVehicles.find(v => v.tripId === leg.tripId);
-      if (!vehicle) return;
-
-      const mapping = tripMapping[leg.tripId];
-      if (!mapping?.shapeId) return;
-
-      const shapeCoords = shapes[mapping.shapeId];
-      if (!shapeCoords || shapeCoords.length === 0) return;
-
-      const busIdx = findClosestPointIndex(shapeCoords, vehicle.coordinate.latitude, vehicle.coordinate.longitude);
-      const boardIdx = findClosestPointIndex(shapeCoords, leg.from.lat, leg.from.lon);
-
-      // Guard: bus already past boarding stop
-      if (busIdx >= boardIdx) return;
-
-      const segment = shapeCoords.slice(busIdx, boardIdx + 1);
-
-      if (segment.length >= 2) {
-        lines.push({
-          id: `bus-approach-${leg.tripId}`,
-          coordinates: segment,
-          color: leg.route?.color || COLORS.primary,
-        });
-      }
+    return buildBusApproachLines({
+      legs: selectedItinerary?.legs,
+      tripVehicles,
+      shapes,
+      tripMapping,
     });
-
-    return lines;
   }, [selectedItinerary, tripVehicles, shapes, tripMapping]);
 
   return {
     tripRouteCoordinates,
     tripMarkers,
+    tripEndpointMarkers,
     intermediateStopMarkers,
     boardingAlightingMarkers,
     tripVehicles,

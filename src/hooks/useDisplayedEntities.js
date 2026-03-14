@@ -10,6 +10,7 @@
 import { useMemo, useCallback } from 'react';
 import { ROUTE_COLORS } from '../config/constants';
 import { getRepresentativeShapeIdsByDirection } from '../utils/routeShapeUtils';
+import { buildNativeHomeAllRoutesShapes } from '../utils/homeRouteLineVisuals';
 
 export const useDisplayedEntities = ({
   selectedRouteIds,
@@ -24,6 +25,7 @@ export const useDisplayedEntities = ({
   showRoutes,
   showStops,
   mapRegion,
+  routeShapeDisplayMode = 'default',
 }) => {
   const isValidHexColor = (value) =>
     typeof value === 'string' && /^#?[0-9a-fA-F]{6}$/.test(value.trim());
@@ -107,6 +109,16 @@ export const useDisplayedEntities = ({
         });
       });
     } else if (showRoutes) {
+      if (routeShapeDisplayMode === 'native_home') {
+        return buildNativeHomeAllRoutesShapes({
+          routeShapeMapping,
+          processedShapes,
+          shapes,
+          shapeDirectionMap,
+          getRouteColor,
+        });
+      }
+
       Object.keys(routeShapeMapping).forEach((routeId) => {
         const shapeIds = routeShapeMapping[routeId] || [];
         const representativeIds = getRepresentativeShapeIdsByDirection(
@@ -133,7 +145,16 @@ export const useDisplayedEntities = ({
     }
 
     return shapesToDisplay;
-  }, [selectedRouteIds, showRoutes, routeShapeMapping, shapes, processedShapes, getRouteColor, shapeDirectionMap]);
+  }, [
+    selectedRouteIds,
+    showRoutes,
+    routeShapeMapping,
+    shapes,
+    processedShapes,
+    getRouteColor,
+    shapeDirectionMap,
+    routeShapeDisplayMode,
+  ]);
 
   // Get stops to display - using GTFS stop-route mapping for accuracy
   const displayedStops = useMemo(() => {

@@ -87,11 +87,16 @@ describe('deriveDetourOverlays', () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('2');
-    expect(result[0].opacity).toBe(1.0);
+    expect(result[0].opacity).toBe(0.95);
     expect(result[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
     expect(result[0].inferredDetourPolyline).toBeNull();
-    expect(result[0].skippedColor).toBe('#ef4444');
-    expect(result[0].detourColor).toBe('#f97316');
+    expect(result[0].skippedColor).toBe('#d92d20');
+    expect(result[0].detourColor).toBe('#d92d20');
+    expect(result[0].routeBaseColor).toBe('#111827');
+    expect(result[0].routeStopFillColor).toBe('#ffffff');
+    expect(result[0].routeStopStrokeColor).toBe('#111827');
+    expect(result[0].showCallouts).toBe(true);
+    expect(result[0].showStopMarkers).toBe(true);
   });
 
   test('returns overlay for selected route with inferred detour geometry', () => {
@@ -128,7 +133,7 @@ describe('deriveDetourOverlays', () => {
       },
     });
     expect(result[0].state).toBe('active');
-    expect(result[0].opacity).toBe(1.0);
+    expect(result[0].opacity).toBe(0.95);
   });
 
   test('includes entryPoint and exitPoint when present', () => {
@@ -149,7 +154,7 @@ describe('deriveDetourOverlays', () => {
     expect(result).toHaveLength(1);
     expect(result[0].entryPoint).toBe(entry);
     expect(result[0].exitPoint).toBe(exit);
-    expect(result[0].markerBorderColor).toBe('#f97316');
+    expect(result[0].routeBaseColor).toBe('#111827');
   });
 
   test('defaults entryPoint and exitPoint to null when absent', () => {
@@ -163,7 +168,7 @@ describe('deriveDetourOverlays', () => {
     expect(result).toHaveLength(1);
     expect(result[0].entryPoint).toBeNull();
     expect(result[0].exitPoint).toBeNull();
-    expect(result[0].markerBorderColor).toBe('#f97316');
+    expect(result[0].routeBaseColor).toBe('#111827');
   });
 
   test('only returns overlays for selected routes, not all detouring routes', () => {
@@ -191,6 +196,95 @@ describe('deriveDetourOverlays', () => {
     });
     expect(result).toHaveLength(2);
     expect(result.map(o => o.routeId).sort()).toEqual(['1', '2']);
+    expect(result.every((overlay) => overlay.showCallouts === false)).toBe(true);
+    expect(result.every((overlay) => overlay.showStopMarkers === false)).toBe(true);
+  });
+
+  test('only shows callouts for the focused detour route', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      focusedRouteId: '2',
+      selectedRouteIds: new Set(['1', '2']),
+      activeDetours: {
+        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '2': { state: 'active', inferredDetourPolyline: LONG_POLYLINE },
+      },
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result.find((overlay) => overlay.routeId === '2').showCallouts).toBe(true);
+    expect(result.find((overlay) => overlay.routeId === '2').showStopMarkers).toBe(true);
+    expect(result.find((overlay) => overlay.routeId === '1').showCallouts).toBe(false);
+    expect(result.find((overlay) => overlay.routeId === '1').showStopMarkers).toBe(false);
+    expect(result.find((overlay) => overlay.routeId === '1').opacity).toBe(0.24);
+  });
+
+  test('attaches detour stop details when provided', () => {
+    const routeStops = [
+      { id: 's1', latitude: 44.38, longitude: -79.69 },
+      { id: 's2', latitude: 44.39, longitude: -79.68 },
+    ];
+    const skippedStops = [{ id: 's2', latitude: 44.39, longitude: -79.68 }];
+
+    const result = deriveDetourOverlays({
+      enabled: true,
+      focusedRouteId: '8A',
+      selectedRouteIds: new Set(['8A']),
+      activeDetours: {
+        '8A': { state: 'active', inferredDetourPolyline: LONG_POLYLINE },
+      },
+      detourStopDetailsByRouteId: {
+        '8A': {
+          routeStops,
+          skippedStops,
+          entryStop: routeStops[0],
+          exitStop: routeStops[1],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].routeStops).toEqual(routeStops);
+    expect(result[0].skippedStops).toEqual(skippedStops);
+    expect(result[0].entryStop).toEqual(routeStops[0]);
+    expect(result[0].exitStop).toEqual(routeStops[1]);
+    expect(result[0].showStopMarkers).toBe(true);
+  });
+
+  test('preserves multiple geometry segments even before stop details are available', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['8A']),
+      activeDetours: {
+        '8A': {
+          state: 'active',
+          segments: [
+            {
+              shapeId: 'shape-8a-1',
+              skippedSegmentPolyline: SAMPLE_POLYLINE,
+              inferredDetourPolyline: LONG_POLYLINE,
+              entryPoint: SAMPLE_POLYLINE[0],
+              exitPoint: SAMPLE_POLYLINE[1],
+            },
+            {
+              shapeId: 'shape-8a-2',
+              skippedSegmentPolyline: LONG_POLYLINE,
+              inferredDetourPolyline: SAMPLE_POLYLINE,
+              entryPoint: LONG_POLYLINE[0],
+              exitPoint: LONG_POLYLINE[2],
+            },
+          ],
+        },
+      },
+      detourStopDetailsByRouteId: {},
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].segmentStopDetails).toHaveLength(2);
+    expect(result[0].segmentStopDetails[0].shapeId).toBe('shape-8a-1');
+    expect(result[0].segmentStopDetails[1].shapeId).toBe('shape-8a-2');
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBe(LONG_POLYLINE);
+    expect(result[0].segmentStopDetails[1].skippedSegmentPolyline).toBe(LONG_POLYLINE);
   });
 
   test('skips selected route that has no detour entry', () => {

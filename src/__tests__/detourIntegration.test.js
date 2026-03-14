@@ -67,6 +67,7 @@ function makeTimestamp(isoString) {
 function mapFirestoreDoc(docId, data) {
   return {
     routeId: docId,
+    shapeId: data.shapeId ?? null,
     detectedAt: data.detectedAt?.toDate?.()?.toISOString() ?? null,
     lastSeenAt: data.lastSeenAt?.toDate?.()?.toISOString() ?? null,
     vehicleCount: data.vehicleCount ?? 0,
@@ -89,6 +90,7 @@ describe('Firestore → detourService → context → overlay derivation chain',
   test('Stage 1: Firestore doc with all geometry fields maps to complete detour object', () => {
     const firestoreData = {
       detectedAt: makeTimestamp('2025-01-15T10:00:00Z'),
+      shapeId: 'shape-8a-eastbound',
       lastSeenAt: makeTimestamp('2025-01-15T10:05:00Z'),
       vehicleCount: 2,
       state: 'active',
@@ -104,6 +106,7 @@ describe('Firestore → detourService → context → overlay derivation chain',
     const mapped = mapFirestoreDoc('8A', firestoreData);
 
     expect(mapped.routeId).toBe('8A');
+    expect(mapped.shapeId).toBe('shape-8a-eastbound');
     expect(mapped.state).toBe('active');
     expect(mapped.detectedAt).toBe('2025-01-15T10:00:00.000Z');
     expect(mapped.vehicleCount).toBe(2);
@@ -158,9 +161,11 @@ describe('Firestore → detourService → context → overlay derivation chain',
     expect(overlays[0].routeId).toBe('8A');
     expect(overlays[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
     expect(overlays[0].inferredDetourPolyline).toBe(LONG_POLYLINE);
-    expect(overlays[0].opacity).toBe(1.0);
-    expect(overlays[0].skippedColor).toBe('#ef4444');
-    expect(overlays[0].detourColor).toBe('#f97316');
+    expect(overlays[0].opacity).toBe(0.95);
+    expect(overlays[0].skippedColor).toBe('#d92d20');
+    expect(overlays[0].detourColor).toBe('#d92d20');
+    expect(overlays[0].showCallouts).toBe(true);
+    expect(overlays[0].showStopMarkers).toBe(true);
   });
 
   test('Stage 4: clear-pending propagates reduced opacity through full chain', () => {
@@ -246,7 +251,7 @@ describe('Firestore → detourService → context → overlay derivation chain',
     const ids = overlays.map((o) => o.routeId).sort();
     expect(ids).toEqual(['3', '8A']);
     expect(overlays.find((o) => o.routeId === '3').opacity).toBe(0.45);
-    expect(overlays.find((o) => o.routeId === '8A').opacity).toBe(1.0);
+    expect(overlays.find((o) => o.routeId === '8A').opacity).toBe(0.95);
   });
 });
 
@@ -270,13 +275,24 @@ describe('DetourOverlay component rendering', () => {
     routeId: '8A',
     skippedSegmentPolyline: SAMPLE_POLYLINE,
     inferredDetourPolyline: LONG_POLYLINE,
-    entryPoint: { latitude: 44.38, longitude: -79.69 },
-    exitPoint: { latitude: 44.39, longitude: -79.68 },
-    opacity: 1.0,
-    skippedColor: '#ef4444',
-    detourColor: '#f97316',
-    markerBorderColor: '#f97316',
+    entryPoint: { latitude: 44.381, longitude: -79.691 },
+    exitPoint: { latitude: 44.391, longitude: -79.679 },
+    routeStops: [
+      { id: 's1', latitude: 44.38, longitude: -79.69 },
+      { id: 's2', latitude: 44.39, longitude: -79.68 },
+    ],
+    skippedStops: [{ id: 's2', latitude: 44.39, longitude: -79.68 }],
+    entryStop: { id: 's1', latitude: 44.38, longitude: -79.69 },
+    exitStop: { id: 's2', latitude: 44.39, longitude: -79.68 },
+    opacity: 0.95,
+    skippedColor: '#d92d20',
+    detourColor: '#d92d20',
+    routeBaseColor: '#111827',
+    routeStopFillColor: '#ffffff',
+    routeStopStrokeColor: '#111827',
     state: 'active',
+    showCallouts: true,
+    showStopMarkers: true,
   };
 
   const OVERLAY_CLEAR_PENDING = {
@@ -286,29 +302,20 @@ describe('DetourOverlay component rendering', () => {
   };
 
   describe('native DetourOverlay', () => {
-    test('renders two RoutePolyline elements when both polylines present', () => {
+    test('renders one RoutePolyline element when both polylines are present', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockRoutePolyline);
-      expect(polylines).toHaveLength(2);
+      expect(polylines).toHaveLength(1);
     });
 
-    test('skipped segment has correct id, color, and dashPattern', () => {
-      const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
-      const polylines = inst.root.findAllByType(MockRoutePolyline);
-      const skipped = polylines.find((p) => p.props.id === 'detour-skipped-8A');
-      expect(skipped).toBeDefined();
-      expect(skipped.props.color).toBe('#ef4444');
-      expect(skipped.props.lineDashPattern).toEqual([10, 8]);
-      expect(skipped.props.strokeWidth).toBe(5);
-    });
-
-    test('detour path has correct id, color, and no dashPattern', () => {
+    test('detour path has correct id, color, and dashPattern', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockRoutePolyline);
       const path = polylines.find((p) => p.props.id === 'detour-path-8A');
       expect(path).toBeDefined();
-      expect(path.props.color).toBe('#f97316');
-      expect(path.props.lineDashPattern).toBeUndefined();
+      expect(path.props.color).toBe('#d92d20');
+      expect(path.props.lineDashPattern).toEqual([10, 8]);
+      expect(path.props.strokeWidth).toBe(5);
     });
 
     test('clear-pending opacity forwarded to both polylines', () => {
@@ -326,7 +333,34 @@ describe('DetourOverlay component rendering', () => {
       });
       const polylines = inst.root.findAllByType(MockRoutePolyline);
       expect(polylines).toHaveLength(1);
-      expect(polylines[0].props.id).toBe('detour-skipped-8A');
+      expect(polylines[0].props.id).toBe('detour-path-8A');
+    });
+
+    test('renders one path per segment for multi-segment detours', () => {
+      const inst = renderComponent(DetourOverlayNative, {
+        ...OVERLAY_ACTIVE,
+        segmentStopDetails: [
+          {
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            inferredDetourPolyline: LONG_POLYLINE,
+            skippedStops: [],
+            entryStop: null,
+            exitStop: null,
+          },
+          {
+            skippedSegmentPolyline: LONG_POLYLINE,
+            inferredDetourPolyline: SAMPLE_POLYLINE,
+            skippedStops: [],
+            entryStop: null,
+            exitStop: null,
+          },
+        ],
+        showStopMarkers: false,
+      });
+      const polylines = inst.root.findAllByType(MockRoutePolyline);
+      expect(polylines).toHaveLength(2);
+      expect(polylines[0].props.id).toBe('detour-path-8A-0');
+      expect(polylines[1].props.id).toBe('detour-path-8A-1');
     });
 
     test('renders no polylines when both are null', () => {
@@ -339,44 +373,42 @@ describe('DetourOverlay component rendering', () => {
       expect(polylines).toHaveLength(0);
     });
 
-    test('renders PointAnnotation markers for entry/exit', () => {
+    test('renders route, entry/exit, and skipped stop markers', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const annotations = inst.root.findAllByType('PointAnnotation');
-      // 2 entry/exit markers + 2 midpoint label annotations
-      expect(annotations).toHaveLength(4);
-      const entry = annotations.find((a) => a.props.id === 'detour-entry-8A');
-      const exit = annotations.find((a) => a.props.id === 'detour-exit-8A');
-      expect(entry).toBeDefined();
-      expect(exit).toBeDefined();
-      expect(entry.props.coordinate).toEqual([-79.69, 44.38]);
-      expect(exit.props.coordinate).toEqual([-79.68, 44.39]);
+      expect(annotations).toHaveLength(5);
+      expect(annotations.find((a) => a.props.id === 'detour-route-stop-8A-s1')).toBeDefined();
+      expect(annotations.find((a) => a.props.id === 'detour-route-stop-8A-s2')).toBeDefined();
+      expect(annotations.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
+      expect(annotations.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
+      expect(annotations.find((a) => a.props.id === 'detour-skipped-stop-8A-s2')).toBeDefined();
     });
 
-    test('no markers when entryPoint/exitPoint are null', () => {
+    test('still shows entry/exit callouts when stop markers are hidden', () => {
       const inst = renderComponent(DetourOverlayNative, {
         ...OVERLAY_ACTIVE,
-        entryPoint: null,
-        exitPoint: null,
+        showStopMarkers: false,
       });
       const annotations = inst.root.findAllByType('PointAnnotation');
-      // 2 midpoint label annotations still render (polylines are still present)
       expect(annotations).toHaveLength(2);
+      expect(annotations.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
+      expect(annotations.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
     });
   });
 
   describe('web DetourOverlay', () => {
-    test('renders two WebRoutePolyline elements when both polylines present', () => {
+    test('renders one WebRoutePolyline element when both polylines are present', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockWebRoutePolyline);
-      expect(polylines).toHaveLength(2);
+      expect(polylines).toHaveLength(1);
     });
 
-    test('skipped segment uses dashArray (web-specific CSS string)', () => {
+    test('detour path uses dashArray (web-specific CSS string)', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockWebRoutePolyline);
-      const skipped = polylines.find((p) => p.props.dashArray === '10, 8');
-      expect(skipped).toBeDefined();
-      expect(skipped.props.color).toBe('#ef4444');
+      const path = polylines.find((p) => p.props.dashArray === '10, 8');
+      expect(path).toBeDefined();
+      expect(path.props.color).toBe('#d92d20');
     });
 
     test('all web overlays have interactive=false', () => {
@@ -395,40 +427,62 @@ describe('DetourOverlay component rendering', () => {
       });
     });
 
-    test('skipped segment has outlineWidth=0 (web-specific)', () => {
+    test('detour path has outlineWidth=1.5', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const polylines = inst.root.findAllByType(MockWebRoutePolyline);
-      const skipped = polylines.find((p) => p.props.dashArray === '10, 8');
-      expect(skipped.props.outlineWidth).toBe(1.5);
+      const path = polylines.find((p) => p.props.dashArray === '10, 8');
+      expect(path.props.outlineWidth).toBe(1.5);
     });
 
-    test('renders CircleMarker for entry/exit', () => {
+    test('renders one web path per segment for multi-segment detours', () => {
+      const inst = renderComponent(DetourOverlayWeb, {
+        ...OVERLAY_ACTIVE,
+        segmentStopDetails: [
+          {
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            inferredDetourPolyline: LONG_POLYLINE,
+            skippedStops: [],
+            entryStop: null,
+            exitStop: null,
+          },
+          {
+            skippedSegmentPolyline: LONG_POLYLINE,
+            inferredDetourPolyline: SAMPLE_POLYLINE,
+            skippedStops: [],
+            entryStop: null,
+            exitStop: null,
+          },
+        ],
+        showStopMarkers: false,
+      });
+      const polylines = inst.root.findAllByType(MockWebRoutePolyline);
+      expect(polylines).toHaveLength(2);
+    });
+
+    test('renders HTML markers for route, entry/exit, and skipped stops', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
-      // 2 entry/exit markers + 2 midpoint label markers
-      expect(markers).toHaveLength(4);
+      expect(markers).toHaveLength(5);
       const coords = markers.map((m) => m.props.coordinate);
       expect(coords).toContainEqual({ latitude: 44.38, longitude: -79.69 });
       expect(coords).toContainEqual({ latitude: 44.39, longitude: -79.68 });
-      const entry = markers.find((m) => m.props.coordinate.latitude === 44.38);
-      expect(entry.props.html).toContain('width:16px');
-      expect(entry.props.html).toContain('background:#f97316');
-      expect(entry.props.html).toContain('border:2px solid #ffffff');
-      const exit = markers.find((m) => m.props.coordinate.latitude === 44.39);
-      expect(exit.props.html).toContain('width:12px');
-      expect(exit.props.html).toContain('background:#ffffff');
-      expect(exit.props.html).toContain('border:2px solid #f97316');
+      expect(coords).toContainEqual({ latitude: 44.381, longitude: -79.691 });
+      expect(coords).toContainEqual({ latitude: 44.391, longitude: -79.679 });
+      const entry = markers.find((m) => m.props.html.includes('START'));
+      const exit = markers.find((m) => m.props.html.includes('END'));
+      expect(entry.props.html).toContain('START');
+      expect(exit.props.html).toContain('END');
     });
 
-    test('no markers when entryPoint/exitPoint are null', () => {
+    test('still shows entry/exit callouts when stop markers are hidden', () => {
       const inst = renderComponent(DetourOverlayWeb, {
         ...OVERLAY_ACTIVE,
-        entryPoint: null,
-        exitPoint: null,
+        showStopMarkers: false,
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
-      // 2 midpoint label markers still render (polylines are still present)
       expect(markers).toHaveLength(2);
+      expect(markers.some((m) => m.props.html.includes('START'))).toBe(true);
+      expect(markers.some((m) => m.props.html.includes('END'))).toBe(true);
     });
   });
 });

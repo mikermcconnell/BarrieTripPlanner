@@ -287,6 +287,50 @@ export const fetchVehiclePositions = async () => {
   }
 };
 
+const pickPreferredVehicle = (existingVehicle, nextVehicle) => {
+  const existingTimestamp = Number(existingVehicle?.timestamp ?? 0);
+  const nextTimestamp = Number(nextVehicle?.timestamp ?? 0);
+
+  if (nextTimestamp !== existingTimestamp) {
+    return nextTimestamp > existingTimestamp ? nextVehicle : existingVehicle;
+  }
+
+  const existingTripScore = existingVehicle?.tripId ? 1 : 0;
+  const nextTripScore = nextVehicle?.tripId ? 1 : 0;
+  if (nextTripScore !== existingTripScore) {
+    return nextTripScore > existingTripScore ? nextVehicle : existingVehicle;
+  }
+
+  const existingStatusScore = existingVehicle?.currentStatus != null ? 1 : 0;
+  const nextStatusScore = nextVehicle?.currentStatus != null ? 1 : 0;
+  if (nextStatusScore !== existingStatusScore) {
+    return nextStatusScore > existingStatusScore ? nextVehicle : existingVehicle;
+  }
+
+  return existingVehicle;
+};
+
+const dedupeFormattedVehicles = (vehicles) => {
+  const dedupedVehicles = [];
+  const indexByVehicleId = new Map();
+
+  vehicles.forEach((vehicle) => {
+    const existingIndex = indexByVehicleId.get(vehicle.id);
+    if (existingIndex === undefined) {
+      indexByVehicleId.set(vehicle.id, dedupedVehicles.length);
+      dedupedVehicles.push(vehicle);
+      return;
+    }
+
+    dedupedVehicles[existingIndex] = pickPreferredVehicle(
+      dedupedVehicles[existingIndex],
+      vehicle
+    );
+  });
+
+  return dedupedVehicles;
+};
+
 /**
  * Format vehicle positions for map display
  * @param {Array<Object>} vehicles - Raw vehicle positions
@@ -294,7 +338,7 @@ export const fetchVehiclePositions = async () => {
  * @returns {Array<Object>} Formatted vehicle data for markers
  */
 export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
-  return vehicles.map((vehicle) => {
+  const formattedVehicles = vehicles.map((vehicle) => {
     const tripInfo = tripMapping[vehicle.tripId] || {};
 
     return {
@@ -315,4 +359,6 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
       stopId: vehicle.stopId,
     };
   });
+
+  return dedupeFormattedVehicles(formattedVehicles);
 };

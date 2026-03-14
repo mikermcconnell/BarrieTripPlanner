@@ -13,7 +13,7 @@ import { safeHaversineDistance as calculateDistance } from '../utils/geometryUti
 const STOP_ARRIVAL_THRESHOLD = 50;
 
 export const useBusProximity = (transitLeg, isActive = true, userLocation = null, isUserOnBoard = false) => {
-  const { vehicles, loadVehiclePositions } = useTransitRealtime();
+  const { vehicles } = useTransitRealtime();
   const [proximity, setProximity] = useState({
     vehicle: null,
     stopsAway: null,
@@ -293,7 +293,6 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
     // Poll for updates every 15 seconds (or 10 seconds if on board for better accuracy)
     const pollInterval = isUserOnBoard ? 10000 : 15000;
     intervalRef.current = setInterval(() => {
-      loadVehiclePositions();
       updateProximity();
     }, pollInterval);
 
@@ -303,7 +302,7 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
         intervalRef.current = null;
       }
     };
-  }, [isActive, transitLeg, isUserOnBoard, updateProximity, loadVehiclePositions]);
+  }, [isActive, transitLeg, isUserOnBoard, updateProximity]);
 
   // Update proximity when vehicles or user location changes
   useEffect(() => {

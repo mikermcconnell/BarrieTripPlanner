@@ -11,7 +11,14 @@ const BORDER_WIDTH = 2.5;
 const markerDebugState = new Map();
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 
-const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: routeLabelProp, snapPath = null }) => {
+const BusMarkerComponent = ({
+  vehicle,
+  color = '#E53935',
+  onPress,
+  routeLabel: routeLabelProp,
+  snapPath = null,
+  dimmed = false,
+}) => {
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -49,7 +56,13 @@ const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: r
     >
       <View
         collapsable={false}
-        style={[styles.wrapper, { transform: [{ scale }] }]}
+        style={[
+          styles.wrapper,
+          {
+            opacity: dimmed ? 0.42 : 1,
+            transform: [{ scale: scale * (dimmed ? 0.84 : 1) }],
+          },
+        ]}
         onTouchEnd={() => onPress?.(vehicle)}
       >
         {/* Direction arrow — notched arrowhead, rotates behind the pill */}
@@ -72,12 +85,31 @@ const BusMarkerComponent = ({ vehicle, color = '#E53935', onPress, routeLabel: r
         )}
 
         {/* Circle body */}
-        <View style={[styles.circle, { backgroundColor: color }]}>
+        <View
+          style={[
+            styles.circle,
+            {
+              width: MARKER_SIZE,
+              height: MARKER_SIZE,
+              borderRadius: MARKER_SIZE / 2,
+              borderWidth: BORDER_WIDTH,
+              backgroundColor: color,
+            },
+          ]}
+        >
           {/* Top highlight — subtle gradient effect */}
-          <View style={styles.highlight} />
+          <View
+            style={[
+              styles.highlight,
+              {
+                height: MARKER_SIZE / 2,
+                borderTopLeftRadius: MARKER_SIZE / 2,
+                borderTopRightRadius: MARKER_SIZE / 2,
+              },
+            ]}
+          />
           {/* Top edge gleam — glass-like rim */}
           <View style={styles.edgeGleam} />
-          {/* Route number — the hero */}
           <Text style={styles.routeLabel}>{routeLabel}</Text>
         </View>
       </View>
@@ -99,10 +131,6 @@ const styles = StyleSheet.create({
     left: 0,
   },
   circle: {
-    width: MARKER_SIZE,
-    height: MARKER_SIZE,
-    borderRadius: MARKER_SIZE / 2,
-    borderWidth: BORDER_WIDTH,
     borderColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -119,10 +147,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: MARKER_SIZE / 2,
     backgroundColor: 'rgba(255,255,255,0.10)',
-    borderTopLeftRadius: MARKER_SIZE / 2,
-    borderTopRightRadius: MARKER_SIZE / 2,
   },
   edgeGleam: {
     position: 'absolute',
@@ -166,7 +191,8 @@ export const areBusMarkerPropsEqual = (prev, next) => {
     prev.vehicle.bearing === next.vehicle.bearing &&
     prev.color === next.color &&
     prev.routeLabel === next.routeLabel &&
-    prev.snapPath === next.snapPath
+    prev.snapPath === next.snapPath &&
+    prev.dimmed === next.dimmed
   );
 };
 

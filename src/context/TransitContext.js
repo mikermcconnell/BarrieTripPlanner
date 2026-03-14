@@ -17,15 +17,15 @@ import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
 import { DIAGNOSTIC_STATUS, buildTransitDiagnostics } from '../utils/transitDiagnostics';
-import { showLocalNotification } from '../services/notificationService';
+import { getNotificationSettings, showLocalNotification } from '../services/notificationService';
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
+import { diffDetourRouteIds } from '../utils/detourNotificationUtils';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
 const TransitRealtimeContext = createContext(null);
-
 export const useTransit = () => {
   const context = useContext(TransitContext);
   if (!context) {
@@ -59,6 +59,7 @@ export const TransitProvider = ({ children }) => {
   const [tripMapping, setTripMapping] = useState({});
   const [routeShapeMapping, setRouteShapeMapping] = useState({});
   const [routeStopsMapping, setRouteStopsMapping] = useState({});
+  const [routeStopSequencesMapping, setRouteStopSequencesMapping] = useState({});
 
   // Processed shapes for rendering (smoothed + simplified)
   const [processedShapes, setProcessedShapes] = useState({});
@@ -96,6 +97,7 @@ export const TransitProvider = ({ children }) => {
   const [detoursEnabled, setDetoursEnabledState] = useState(runtimeConfig.detours.enabledByDefault);
   const prevDetourIdsRef = useRef(new Set());
   const detoursEnabledRef = useRef(detoursEnabled);
+  const hasSeenInitialDetourSnapshotRef = useRef(false);
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
@@ -109,6 +111,7 @@ export const TransitProvider = ({ children }) => {
 
   // Refs for intervals
   const vehicleIntervalRef = useRef(null);
+  const vehicleRequestPromiseRef = useRef(null);
   const prevVehiclesRef = useRef([]);
   const serviceAlertIntervalRef = useRef(null);
   const proxyHealthIntervalRef = useRef(null);
@@ -199,6 +202,7 @@ export const TransitProvider = ({ children }) => {
     setTripMapping(data.tripMapping || {});
     setRouteShapeMapping(data.routeShapeMapping || {});
     setRouteStopsMapping(data.routeStopsMapping || {});
+    setRouteStopSequencesMapping(data.routeStopSequencesMapping || {});
   }, []);
 
   /**
@@ -365,25 +369,35 @@ export const TransitProvider = ({ children }) => {
    * Load vehicle positions
    */
   const loadVehiclePositions = useCallback(async () => {
-    setIsLoadingVehicles(true);
-    setVehicleError(null);
-
-    try {
-      const rawVehicles = await fetchVehiclePositions();
-      const formattedVehicles = formatVehiclesForMap(rawVehicles, tripMapping);
-      const diffed = diffVehicles(formattedVehicles, prevVehiclesRef.current);
-      if (diffed !== prevVehiclesRef.current) {
-        prevVehiclesRef.current = diffed;
-        setVehicles(diffed);
-      }
-      setLastVehicleUpdate(new Date());
-    } catch (error) {
-      logger.error('Failed to load vehicle positions:', error);
-      setLastVehicleFailureAt(Date.now());
-      setVehicleError(error.message || 'Failed to load vehicle positions');
-    } finally {
-      setIsLoadingVehicles(false);
+    if (vehicleRequestPromiseRef.current) {
+      return vehicleRequestPromiseRef.current;
     }
+
+    const requestPromise = (async () => {
+      setIsLoadingVehicles(true);
+      setVehicleError((prev) => (prev == null ? prev : null));
+
+      try {
+        const rawVehicles = await fetchVehiclePositions();
+        const formattedVehicles = formatVehiclesForMap(rawVehicles, tripMapping);
+        const diffed = diffVehicles(formattedVehicles, prevVehiclesRef.current);
+        if (diffed !== prevVehiclesRef.current) {
+          prevVehiclesRef.current = diffed;
+          setVehicles(diffed);
+        }
+        setLastVehicleUpdate(new Date());
+      } catch (error) {
+        logger.error('Failed to load vehicle positions:', error);
+        setLastVehicleFailureAt(Date.now());
+        setVehicleError(error.message || 'Failed to load vehicle positions');
+      } finally {
+        setIsLoadingVehicles(false);
+        vehicleRequestPromiseRef.current = null;
+      }
+    })();
+
+    vehicleRequestPromiseRef.current = requestPromise;
+    return requestPromise;
   }, [tripMapping, diffVehicles]);
 
   /**
@@ -394,7 +408,7 @@ export const TransitProvider = ({ children }) => {
       clearInterval(vehicleIntervalRef.current);
     }
 
-    loadVehiclePositions();
+    void loadVehiclePositions();
 
     vehicleIntervalRef.current = setInterval(
       loadVehiclePositions,
@@ -552,29 +566,49 @@ export const TransitProvider = ({ children }) => {
     [activeDetours]
   );
 
+  const notifyNewDetours = useCallback(async (routeIds) => {
+    if (!detoursEnabledRef.current || !Array.isArray(routeIds) || routeIds.length === 0) {
+      return;
+    }
+
+    const notificationSettings = await getNotificationSettings();
+    if (!notificationSettings?.serviceAlerts) {
+      return;
+    }
+
+    await Promise.all(
+      routeIds.map((routeId) =>
+        showLocalNotification({
+          title: 'Route ' + routeId + ' Detour',
+          body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
+          data: { type: 'detour_alert', routeId },
+        }).catch(() => {})
+      )
+    );
+  }, []);
+
   // Subscribe to active detours (public collection, no auth required)
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
       (detourMap) => {
-        // Notify on newly detected detours
-        const newIds = Object.keys(detourMap);
-        const prevIds = prevDetourIdsRef.current;
-        for (const routeId of newIds) {
-          if (detoursEnabledRef.current && !prevIds.has(routeId)) {
-            showLocalNotification({
-              title: 'Route ' + routeId + ' Detour',
-              body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
-              data: { type: 'detour_alert', routeId },
-            }).catch(() => {}); // fire-and-forget
-          }
-        }
-        prevDetourIdsRef.current = new Set(newIds);
+        const { nextIds, newRouteIds } = diffDetourRouteIds({
+          detourMap,
+          prevIds: prevDetourIdsRef.current,
+          hasSeenInitialSnapshot: hasSeenInitialDetourSnapshotRef.current,
+        });
+
+        hasSeenInitialDetourSnapshotRef.current = true;
+        prevDetourIdsRef.current = new Set(nextIds);
         setDetourFeed(detourMap);
+
+        if (newRouteIds.length > 0) {
+          void notifyNewDetours(newRouteIds);
+        }
       },
       (error) => logger.error('Detour subscription error:', error)
     );
     return () => unsubscribe();
-  }, []);
+  }, [notifyNewDetours]);
 
   // Subscribe to transit news (public collection, no auth required)
   useEffect(() => {
@@ -789,6 +823,7 @@ export const TransitProvider = ({ children }) => {
     tripMapping,
     routeShapeMapping,
     routeStopsMapping,
+    routeStopSequencesMapping,
     routingData,
     isRoutingReady,
     ensureRoutingData,
@@ -812,6 +847,7 @@ export const TransitProvider = ({ children }) => {
     tripMapping,
     routeShapeMapping,
     routeStopsMapping,
+    routeStopSequencesMapping,
     routingData,
     isRoutingReady,
     ensureRoutingData,
