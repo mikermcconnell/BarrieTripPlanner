@@ -252,8 +252,15 @@ export const useTripPlanner = ({
       }
     } catch (err) {
       if (requestSeq !== tripSearchSeqRef.current) return;
-      logger.error('Error searching trips:', err);
       const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
+      if (err instanceof TripPlanningError) {
+        logger.warn('Trip planning search failed', {
+          code: errorCode,
+          message: err?.message || 'Unknown trip planning error',
+        });
+      } else {
+        logger.error('Error searching trips:', err);
+      }
       logger.warn('Trip planning failed', {
         code: errorCode,
         message: err?.message || 'Unknown trip planning error',

@@ -81,6 +81,7 @@ export const TransitProvider = ({ children }) => {
   const [serviceAlerts, setServiceAlerts] = useState([]);
   const [lastStaticRefreshAt, setLastStaticRefreshAt] = useState(null);
   const [lastStaticFailureAt, setLastStaticFailureAt] = useState(null);
+  const [isRefreshingStatic, setIsRefreshingStatic] = useState(false);
   const [lastVehicleFailureAt, setLastVehicleFailureAt] = useState(null);
   const [lastRoutingBuildAt, setLastRoutingBuildAt] = useState(null);
   const [lastRoutingFailureAt, setLastRoutingFailureAt] = useState(null);
@@ -218,6 +219,7 @@ export const TransitProvider = ({ children }) => {
    */
   const loadStaticData = useCallback(async () => {
     setIsLoadingStatic(true);
+    setIsRefreshingStatic(false);
     setStaticError(null);
     setUsingCachedData(false);
 
@@ -234,6 +236,7 @@ export const TransitProvider = ({ children }) => {
 
       // Phase 2: Background refresh if online
       if (online) {
+        setIsRefreshingStatic(true);
         try {
           const data = await fetchAllStaticData();
           gtfsDataRef.current = data;
@@ -252,6 +255,8 @@ export const TransitProvider = ({ children }) => {
           // Silent fail — cached data is already displayed
           setLastStaticFailureAt(Date.now());
           logger.warn('Background GTFS refresh failed:', error);
+        } finally {
+          setIsRefreshingStatic(false);
         }
       }
       return;
@@ -694,6 +699,7 @@ export const TransitProvider = ({ children }) => {
     isOffline,
     staticData: {
       isLoading: isLoadingStatic,
+      isRefreshing: isRefreshingStatic,
       isOffline,
       isAvailable: routes.length > 0 && stops.length > 0,
       usingCachedData,
@@ -735,6 +741,7 @@ export const TransitProvider = ({ children }) => {
   }), [
     isOffline,
     isLoadingStatic,
+    isRefreshingStatic,
     routes.length,
     stops.length,
     usingCachedData,
@@ -828,6 +835,7 @@ export const TransitProvider = ({ children }) => {
     isRoutingReady,
     ensureRoutingData,
     isLoadingStatic,
+    isRefreshingStatic,
     staticError,
     isOffline,
     usingCachedData,
@@ -852,6 +860,7 @@ export const TransitProvider = ({ children }) => {
     isRoutingReady,
     ensureRoutingData,
     isLoadingStatic,
+    isRefreshingStatic,
     staticError,
     isOffline,
     usingCachedData,

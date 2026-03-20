@@ -7,37 +7,151 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTransitRealtime } from '../context/TransitContext';
-import { safeHaversineDistance as calculateDistance } from '../utils/geometryUtils';
+import {
+  haversineDistance,
+  projectPointToPolyline,
+  safeHaversineDistance as calculateDistance,
+} from '../utils/geometryUtils';
+import { decodePolyline } from '../utils/polylineUtils';
+import { buildTransitStopSequence, findClosestTransitStopIndex } from '../utils/transitStopUtils';
+import {
+  evaluateAutoAlightConfidence,
+  evaluateAutoBoardConfidence,
+} from '../utils/navigationAutoProgress';
 
 // Threshold for considering arrival at a stop (meters)
 const STOP_ARRIVAL_THRESHOLD = 50;
+const EVIDENCE_GRACE_PERIOD_MS = 4000;
+const AUTO_BOARD_MIN_HITS = 2;
+const AUTO_BOARD_MIN_MS = 6000;
+const AUTO_ALIGHT_MIN_HITS = 2;
+const AUTO_ALIGHT_MIN_MS = 5000;
+
+const buildTransitCorridor = (transitLeg, stopSequence) => {
+  const geometryPoints = transitLeg?.legGeometry?.points
+    ? decodePolyline(transitLeg.legGeometry.points)
+    : [];
+
+  if (geometryPoints.length >= 2) {
+    return geometryPoints;
+  }
+
+  return stopSequence
+    .map((stop) => (
+      Number.isFinite(stop?.lat) && Number.isFinite(stop?.lon)
+        ? { latitude: stop.lat, longitude: stop.lon }
+        : null
+    ))
+    .filter(Boolean);
+};
+
+const getProgressAlongPolylineMeters = (polyline, projection) => {
+  if (!projection || !Array.isArray(polyline) || polyline.length < 2) return null;
+
+  let distanceMeters = 0;
+
+  for (let i = 0; i < projection.segmentIndex; i += 1) {
+    distanceMeters += haversineDistance(
+      polyline[i].latitude,
+      polyline[i].longitude,
+      polyline[i + 1].latitude,
+      polyline[i + 1].longitude
+    );
+  }
+
+  const segmentStart = polyline[projection.segmentIndex];
+  if (!segmentStart || !projection.point) return distanceMeters;
+
+  distanceMeters += haversineDistance(
+    segmentStart.latitude,
+    segmentStart.longitude,
+    projection.point.latitude,
+    projection.point.longitude
+  );
+
+  return distanceMeters;
+};
+
+const createEmptyProximity = () => ({
+  vehicle: null,
+  stopsAway: null,
+  stopsUntilAlighting: null,
+  estimatedArrival: null,
+  isApproaching: false,
+  hasArrived: false,
+  isTracking: false,
+  shouldGetOff: false,
+  nearAlightingStop: false,
+  matchQuality: 'none',
+  locationAccuracy: null,
+  userSpeed: null,
+  userStopDistance: null,
+  userVehicleDistance: null,
+  userCorridorDistance: null,
+  userCorridorProgress: null,
+  vehicleStopDistance: null,
+  vehicleCorridorDistance: null,
+  vehicleCorridorProgress: null,
+  autoBoardConfidence: 0,
+  autoAlightConfidence: 0,
+  autoBoardReady: false,
+  autoAlightReady: false,
+});
+
+const updateEvidenceWindow = (ref, isActive, now, minHits, minMs) => {
+  const state = ref.current;
+
+  if (isActive) {
+    if (state.startedAt == null || now - state.lastSeenAt > EVIDENCE_GRACE_PERIOD_MS) {
+      ref.current = {
+        startedAt: now,
+        hits: 1,
+        lastSeenAt: now,
+      };
+    } else {
+      ref.current = {
+        startedAt: state.startedAt,
+        hits: state.hits + 1,
+        lastSeenAt: now,
+      };
+    }
+  } else if (state.startedAt != null && now - state.lastSeenAt > EVIDENCE_GRACE_PERIOD_MS) {
+    ref.current = {
+      startedAt: null,
+      hits: 0,
+      lastSeenAt: 0,
+    };
+  }
+
+  return (
+    isActive &&
+    ref.current.startedAt != null &&
+    ref.current.hits >= minHits &&
+    now - ref.current.startedAt >= minMs
+  );
+};
 
 export const useBusProximity = (transitLeg, isActive = true, userLocation = null, isUserOnBoard = false) => {
   const { vehicles } = useTransitRealtime();
-  const [proximity, setProximity] = useState({
-    vehicle: null,
-    stopsAway: null,
-    stopsUntilAlighting: null,
-    estimatedArrival: null,
-    isApproaching: false,
-    hasArrived: false,
-    isTracking: false,
-    shouldGetOff: false,
-    nearAlightingStop: false,
-  });
+  const [proximity, setProximity] = useState(createEmptyProximity);
   const intervalRef = useRef(null);
   // Monotonic counter: only allow stops count to decrease (prevents GPS jitter bouncing)
   const lastConfirmedStopsRef = useRef(null);
+  const previousSnapshotRef = useRef(null);
+  const autoBoardEvidenceRef = useRef({ startedAt: null, hits: 0, lastSeenAt: 0 });
+  const autoAlightEvidenceRef = useRef({ startedAt: null, hits: 0, lastSeenAt: 0 });
 
   // Find the vehicle matching this transit leg's trip
   const findMatchingVehicle = useCallback(() => {
-    if (!transitLeg || !vehicles.length) return null;
+    if (!transitLeg || !vehicles.length) return { vehicle: null, matchQuality: 'none' };
 
     // Try to match by tripId first (most accurate)
     const tripId = transitLeg.tripId;
     if (tripId) {
       const matchedVehicle = vehicles.find((v) => v.tripId === tripId);
-      if (matchedVehicle) return matchedVehicle;
+      if (matchedVehicle) {
+        return { vehicle: matchedVehicle, matchQuality: 'trip_id' };
+      }
     }
 
     // Fallback: match by routeId and find the best candidate
@@ -46,7 +160,7 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
       const routeVehicles = vehicles.filter((v) => v.routeId === routeId);
 
       if (routeVehicles.length === 1) {
-        return routeVehicles[0];
+        return { vehicle: routeVehicles[0], matchQuality: 'route_single' };
       }
 
       // If multiple vehicles, find the one closest to (but before) the boarding stop
@@ -72,56 +186,15 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
           }
         });
 
-        return bestVehicle;
+        return {
+          vehicle: bestVehicle,
+          matchQuality: bestVehicle ? 'route_nearest' : 'none',
+        };
       }
     }
 
-    return null;
+    return { vehicle: null, matchQuality: 'none' };
   }, [transitLeg, vehicles]);
-
-  // Build the complete stop sequence for this leg
-  const getStopSequence = useCallback((leg) => {
-    if (!leg) return [];
-
-    const stops = [];
-
-    // Add boarding stop
-    if (leg.from) {
-      stops.push({
-        id: leg.from.stopId || 'boarding',
-        name: leg.from.name,
-        lat: leg.from.lat,
-        lon: leg.from.lon,
-        type: 'boarding',
-      });
-    }
-
-    // Add intermediate stops
-    if (leg.intermediateStops) {
-      leg.intermediateStops.forEach((stop, idx) => {
-        stops.push({
-          id: stop.stopId || `intermediate-${idx}`,
-          name: stop.name,
-          lat: stop.lat,
-          lon: stop.lon,
-          type: 'intermediate',
-        });
-      });
-    }
-
-    // Add alighting stop
-    if (leg.to) {
-      stops.push({
-        id: leg.to.stopId || 'alighting',
-        name: leg.to.name,
-        lat: leg.to.lat,
-        lon: leg.to.lon,
-        type: 'alighting',
-      });
-    }
-
-    return stops;
-  }, []);
 
   // Calculate how many stops away the vehicle is from boarding stop
   const calculateStopsAwayFromBoarding = useCallback((vehicle, stopSequence) => {
@@ -166,17 +239,10 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
 
     const alightingStop = stopSequence[stopSequence.length - 1];
 
-    // Find which stop user is closest to
-    let closestStopIndex = 0;
-    let minDistance = Infinity;
-
-    stopSequence.forEach((stop, index) => {
-      const dist = calculateDistance(userLoc.latitude, userLoc.longitude, stop.lat, stop.lon);
-      if (dist < minDistance) {
-        minDistance = dist;
-        closestStopIndex = index;
-      }
-    });
+    const closestStopIndex = Math.max(
+      0,
+      findClosestTransitStopIndex(userLoc, stopSequence)
+    );
 
     // Calculate remaining stops
     const stopsRemaining = stopSequence.length - 1 - closestStopIndex;
@@ -199,27 +265,71 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
   // Update proximity state
   const updateProximity = useCallback(() => {
     if (!transitLeg) {
-      setProximity({
-        vehicle: null,
-        stopsAway: null,
-        stopsUntilAlighting: null,
-        estimatedArrival: null,
-        isApproaching: false,
-        hasArrived: false,
-        isTracking: false,
-        shouldGetOff: false,
-        nearAlightingStop: false,
-      });
+      setProximity(createEmptyProximity());
+      previousSnapshotRef.current = null;
       return;
     }
 
-    const stopSequence = getStopSequence(transitLeg);
-    const vehicle = findMatchingVehicle();
+    const stopSequence = buildTransitStopSequence(transitLeg);
+    const transitCorridor = buildTransitCorridor(transitLeg, stopSequence);
+    const { vehicle, matchQuality } = findMatchingVehicle();
+    const boardingStop = stopSequence[0] || null;
+    const alightingStop = stopSequence[stopSequence.length - 1] || null;
+    const locationAccuracy = Number.isFinite(userLocation?.accuracy) ? userLocation.accuracy : null;
+    const userSpeed = Number.isFinite(userLocation?.speed) ? userLocation.speed : null;
 
     // Calculate stops away from boarding (for waiting phase)
     const stopsAway = vehicle
       ? calculateStopsAwayFromBoarding(vehicle, stopSequence)
       : null;
+
+    const userStopDistance =
+      userLocation && boardingStop
+        ? calculateDistance(userLocation.latitude, userLocation.longitude, boardingStop.lat, boardingStop.lon)
+        : null;
+    const vehicleStopDistance =
+      vehicle && boardingStop
+        ? calculateDistance(
+            vehicle.coordinate?.latitude,
+            vehicle.coordinate?.longitude,
+            boardingStop.lat,
+            boardingStop.lon
+          )
+        : null;
+    const userVehicleDistance =
+      userLocation && vehicle
+        ? calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            vehicle.coordinate?.latitude,
+            vehicle.coordinate?.longitude
+          )
+        : null;
+    const distanceToAlighting =
+      userLocation && alightingStop
+        ? calculateDistance(userLocation.latitude, userLocation.longitude, alightingStop.lat, alightingStop.lon)
+        : null;
+    const userCorridorProjection =
+      userLocation && transitCorridor.length >= 2
+        ? projectPointToPolyline(
+            { latitude: userLocation.latitude, longitude: userLocation.longitude },
+            transitCorridor
+          )
+        : null;
+    const vehicleCorridorProjection =
+      vehicle && transitCorridor.length >= 2
+        ? projectPointToPolyline(
+            {
+              latitude: vehicle.coordinate?.latitude,
+              longitude: vehicle.coordinate?.longitude,
+            },
+            transitCorridor
+          )
+        : null;
+    const userCorridorDistance = userCorridorProjection?.distanceMeters ?? null;
+    const vehicleCorridorDistance = vehicleCorridorProjection?.distanceMeters ?? null;
+    const userCorridorProgress = getProgressAlongPolylineMeters(transitCorridor, userCorridorProjection);
+    const vehicleCorridorProgress = getProgressAlongPolylineMeters(transitCorridor, vehicleCorridorProjection);
 
     // Calculate stops until alighting (for on-board phase)
     let stopsUntilAlighting = null;
@@ -251,6 +361,47 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
     // Determine if bus has arrived at boarding stop
     const hasArrived = stopsAway === 0 || (vehicle && stopsAway !== null && stopsAway <= 0);
 
+    const now = Date.now();
+    const autoBoardEvaluation = evaluateAutoBoardConfidence({
+      hasArrived,
+      locationAccuracy,
+      matchQuality,
+      previousSnapshot: previousSnapshotRef.current,
+      userCorridorDistance,
+      userCorridorProgress,
+      userSpeed,
+      userStopDistance,
+      userVehicleDistance,
+      vehicleCorridorDistance,
+      vehicleCorridorProgress,
+      vehicleStopDistance,
+    });
+    const autoBoardReady = updateEvidenceWindow(
+      autoBoardEvidenceRef,
+      autoBoardEvaluation.eligible,
+      now,
+      AUTO_BOARD_MIN_HITS,
+      AUTO_BOARD_MIN_MS
+    );
+
+    const autoAlightEvaluation = evaluateAutoAlightConfidence({
+      distanceToAlighting,
+      locationAccuracy,
+      nearAlightingStop,
+      previousSnapshot: previousSnapshotRef.current,
+      stopsUntilAlighting,
+      userCorridorDistance,
+      userCorridorProgress,
+      userSpeed,
+    });
+    const autoAlightReady = updateEvidenceWindow(
+      autoAlightEvidenceRef,
+      autoAlightEvaluation.eligible,
+      now,
+      AUTO_ALIGHT_MIN_HITS,
+      AUTO_ALIGHT_MIN_MS
+    );
+
     setProximity({
       vehicle,
       stopsAway,
@@ -261,11 +412,33 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
       isTracking: !!vehicle,
       shouldGetOff,
       nearAlightingStop,
+      matchQuality,
+      locationAccuracy,
+      userSpeed,
+      userStopDistance,
+      userVehicleDistance,
+      userCorridorDistance,
+      userCorridorProgress,
+      vehicleStopDistance,
+      vehicleCorridorDistance,
+      vehicleCorridorProgress,
+      autoBoardConfidence: autoBoardEvaluation.confidence,
+      autoAlightConfidence: autoAlightEvaluation.confidence,
+      autoBoardReady,
+      autoAlightReady,
     });
+
+    previousSnapshotRef.current = {
+      distanceToAlighting,
+      userCorridorDistance,
+      userCorridorProgress,
+      userStopDistance,
+      vehicleCorridorProgress,
+      vehicleStopDistance,
+    };
   }, [
     transitLeg,
     findMatchingVehicle,
-    getStopSequence,
     calculateStopsAwayFromBoarding,
     calculateStopsUntilAlighting,
     isUserOnBoard,
@@ -275,6 +448,9 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
   // Reset monotonic counter whenever the transit leg changes (new leg = fresh counter)
   useEffect(() => {
     lastConfirmedStopsRef.current = null;
+    previousSnapshotRef.current = null;
+    autoBoardEvidenceRef.current = { startedAt: null, hits: 0, lastSeenAt: 0 };
+    autoAlightEvidenceRef.current = { startedAt: null, hits: 0, lastSeenAt: 0 };
   }, [transitLeg]);
 
   // Set up polling for vehicle updates

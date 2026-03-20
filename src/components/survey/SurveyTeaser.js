@@ -53,7 +53,7 @@ const SurveyTeaser = ({ onPress }) => {
           )}
         </View>
         <Text style={styles.cta}>
-          {alreadySubmitted ? 'View Results \u203A' : 'Take Survey \u203A'}
+          {alreadySubmitted ? 'View results \u203A' : 'Take survey \u203A'}
         </Text>
       </View>
     </TouchableOpacity>

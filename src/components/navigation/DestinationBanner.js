@@ -13,6 +13,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../../config/theme';
 import { formatMinutes } from '../../services/tripService';
+import { getTransitStopsRemainingCount } from '../../utils/transitStopUtils';
 
 // Walking speed: 5 km/h = 83.3 m/min
 const WALKING_SPEED_MPM = 83.3;
@@ -33,6 +34,7 @@ const DestinationBanner = ({
   distanceRemaining,
   totalLegDistance,
   isLastWalkingLeg = false,
+  stopsRemaining = null,
 }) => {
   if (!currentLeg) return null;
 
@@ -87,9 +89,11 @@ const DestinationBanner = ({
   } else if (isTransit) {
     // Riding a bus
     destinationLine = `\u{1F68C} Riding to: ${formatStopLabel(to)}`;
-    const stops = currentLeg.intermediateStops;
-    if (stops && stops.length > 0) {
-      timingLine = `${stops.length} stop${stops.length !== 1 ? 's' : ''} remaining`;
+    const remainingCount = getTransitStopsRemainingCount(currentLeg, stopsRemaining);
+    if (remainingCount > 0) {
+      timingLine = `${remainingCount} stop${remainingCount !== 1 ? 's' : ''} remaining`;
+    } else {
+      timingLine = 'Approaching your stop';
     }
   }
 

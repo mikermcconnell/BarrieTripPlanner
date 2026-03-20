@@ -20,6 +20,22 @@ describe('makeSnapshot', () => {
       confidence: 'high',
       evidencePointCount: 15,
       lastEvidenceAt: Date.now() - 30000,
+      shapeId: 'shape-8a',
+      entryPoint: { latitude: 44.39, longitude: -79.698 },
+      exitPoint: { latitude: 44.39, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.698 },
+        { latitude: 44.39, longitude: -79.690 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.698 },
+        { latitude: 44.395, longitude: -79.690 },
+      ],
+      segments: [{
+        shapeId: 'shape-8a',
+        entryPoint: { latitude: 44.39, longitude: -79.698 },
+        exitPoint: { latitude: 44.39, longitude: -79.690 },
+      }],
     };
     const snap = makeSnapshot(doc);
 
@@ -28,6 +44,10 @@ describe('makeSnapshot', () => {
     expect(snap.evidencePointCount).toBe(15);
     expect(snap.lastEvidenceAt).toBeDefined();
     expect(snap.state).toBe('active');
+    expect(snap.shapeId).toBe('shape-8a');
+    expect(snap.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
+    expect(snap.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
+    expect(snap.segmentCount).toBe(1);
   });
 
   test('defaults geometry fields to null when absent', () => {
@@ -41,6 +61,51 @@ describe('makeSnapshot', () => {
     expect(snap.confidence).toBeNull();
     expect(snap.evidencePointCount).toBeNull();
     expect(snap.lastEvidenceAt).toBeNull();
+  });
+
+  test('preserves previous geometry when current write is throttled', () => {
+    const previous = {
+      shapeId: 'shape-8a',
+      entryPoint: { latitude: 44.39, longitude: -79.698 },
+      exitPoint: { latitude: 44.39, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.698 },
+        { latitude: 44.39, longitude: -79.690 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.698 },
+        { latitude: 44.395, longitude: -79.690 },
+      ],
+      segments: [{
+        shapeId: 'shape-8a',
+        entryPoint: { latitude: 44.39, longitude: -79.698 },
+        exitPoint: { latitude: 44.39, longitude: -79.690 },
+      }],
+      confidence: 'high',
+      evidencePointCount: 15,
+      lastEvidenceAt: 1704067500000,
+      segmentCount: 1,
+      geometrySignature: 'shape-8a:44.39:-79.698:44.39:-79.69',
+    };
+    const doc = {
+      routeId: '8A',
+      detectedAt: new Date(),
+      lastSeenAt: new Date(),
+      vehicleCount: 1,
+      state: 'active',
+    };
+
+    const snap = makeSnapshot(doc, previous);
+
+    expect(snap.shapeId).toBe('shape-8a');
+    expect(snap.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
+    expect(snap.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
+    expect(snap.skippedSegmentPolyline).toHaveLength(2);
+    expect(snap.inferredDetourPolyline).toHaveLength(2);
+    expect(snap.confidence).toBe('high');
+    expect(snap.evidencePointCount).toBe(15);
+    expect(snap.lastEvidenceAt).toBe(1704067500000);
+    expect(snap.segmentCount).toBe(1);
   });
 });
 
@@ -196,17 +261,34 @@ describe('buildDetectedEvent', () => {
 
   test('includes confidence and evidence fields', () => {
     const current = {
-      detectedAt: new Date(NOW),
-      lastSeenAt: new Date(NOW),
+      detectedAtMs: NOW,
+      lastSeenAtMs: NOW,
       triggerVehicleId: 'bus-1',
       vehicleCount: 1,
+      shapeId: 'shape-8a',
+      entryPoint: { latitude: 44.39, longitude: -79.698 },
+      exitPoint: { latitude: 44.39, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.698 },
+        { latitude: 44.39, longitude: -79.690 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.698 },
+        { latitude: 44.395, longitude: -79.690 },
+      ],
       confidence: 'low',
       evidencePointCount: 3,
+      lastEvidenceAt: NOW,
+      segmentCount: 1,
     };
     const event = buildDetectedEvent('8A', current, NOW);
     expect(event.eventType).toBe('DETOUR_DETECTED');
     expect(event.confidence).toBe('low');
     expect(event.evidencePointCount).toBe(3);
+    expect(event.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
+    expect(event.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
+    expect(event.shapeId).toBe('shape-8a');
+    expect(event.segmentCount).toBe(1);
   });
 });
 
@@ -218,9 +300,26 @@ describe('buildClearedEvent', () => {
       detectedAtMs: NOW - 600000,
       triggerVehicleId: 'bus-1',
       vehicleCount: 1,
+      shapeId: 'shape-8a',
+      entryPoint: { latitude: 44.39, longitude: -79.698 },
+      exitPoint: { latitude: 44.39, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.698 },
+        { latitude: 44.39, longitude: -79.690 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.698 },
+        { latitude: 44.395, longitude: -79.690 },
+      ],
+      lastEvidenceAt: NOW - 30000,
+      segmentCount: 1,
     };
     const event = buildClearedEvent('8A', previous, NOW);
     expect(event.eventType).toBe('DETOUR_CLEARED');
     expect(event.durationMs).toBe(600000);
+    expect(event.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
+    expect(event.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
+    expect(event.shapeId).toBe('shape-8a');
+    expect(event.lastEvidenceAt).toBe(NOW - 30000);
   });
 });

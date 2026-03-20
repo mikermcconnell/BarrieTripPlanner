@@ -2,6 +2,7 @@ const {
   collectItineraryEndpointCoordinates,
   collectItineraryViewportCoordinates,
   computeCoordinateBounds,
+  computeCoordinateBoundsWithMinSpan,
   computeLegBounds,
 } = require('../utils/itineraryViewport');
 
@@ -62,5 +63,27 @@ describe('itineraryViewport', () => {
       sw: [-79.69, 44.38],
     });
     expect(legBounds).toEqual(tripBounds);
+  });
+
+  test('expands tight bounds to a minimum span for boarding-state map fits', () => {
+    const bounds = computeCoordinateBoundsWithMinSpan(
+      [
+        { latitude: 44.389, longitude: -79.689 },
+        { latitude: 44.3892, longitude: -79.6888 },
+      ],
+      {
+        minLatSpan: 0.003,
+        minLonSpan: 0.004,
+      }
+    );
+
+    expect(bounds).toEqual({
+      minLat: 44.387600000000006,
+      maxLat: 44.3906,
+      minLon: -79.6909,
+      maxLon: -79.6869,
+      ne: [-79.6869, 44.3906],
+      sw: [-79.6909, 44.387600000000006],
+    });
   });
 });

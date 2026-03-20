@@ -26,6 +26,7 @@ import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
 import { shouldRenderRouteShape } from '../utils/detourFocusUtils';
+import { getDetourViewportCoordinates, shouldAutoFitDetourViewport } from '../utils/detourViewport';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -49,16 +50,19 @@ import HomeScreenControls from '../components/HomeScreenControls';
 import RouteFilterSheet from '../components/RouteFilterSheet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
+import TripViewportControls from '../components/TripViewportControls';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import MapViewModeToggle from '../components/MapViewModeToggle';
+import DetourMapLegend from '../components/DetourMapLegend';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
+import { getTransitLoadingState } from '../utils/systemHealthUI';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -311,6 +315,65 @@ const HomeMapVehiclesLayer = React.memo(({
 }) => {
   if (isTripPreviewMode) {
     return null;
+  }
+
+  // Android emulators degrade badly with a large fleet of rich MarkerView instances.
+  // Use a minimal MarkerView on the always-on home fleet: no SVG arrow, no
+  // JS animation hook, just a plain badge with the route label.
+  if (Platform.OS === 'android') {
+    return displayedVehicles.map((vehicle) => {
+      const isDetouring = activeDetourRouteIds.has(vehicle.routeId);
+      const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
+      const dimmed = hasDetourFocus
+        ? !isFocusedDetour
+        : isDetourView && !hasSelection
+          ? !isDetouring
+          : false;
+      const markerColor = dimmed ? COLORS.grey400 : getRouteColor(vehicle.routeId);
+
+      return {
+        vehicle,
+        markerColor,
+        dimmed,
+        routeLabel: String(getRouteLabel(vehicle) || vehicle.routeId || '?'),
+      };
+    }).map(({ vehicle, markerColor, dimmed, routeLabel }) => {
+      const markerWidth = routeLabel.length >= 3 ? 42 : routeLabel.length === 2 ? 36 : 30;
+
+      return (
+        <MapLibreGL.MarkerView
+          key={vehicle.id}
+          id={`home-bus-${vehicle.id}`}
+          coordinate={[vehicle.coordinate.longitude, vehicle.coordinate.latitude]}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View
+            collapsable={false}
+            style={styles.androidBusMarkerFrame}
+          >
+            <View
+              style={[
+                styles.androidBusMarker,
+                dimmed && styles.androidBusMarkerDimmed,
+                {
+                  backgroundColor: markerColor,
+                  width: markerWidth,
+                },
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={styles.androidBusMarkerLabel}
+              >
+                {routeLabel}
+              </Text>
+            </View>
+          </View>
+        </MapLibreGL.MarkerView>
+      );
+    });
   }
 
   return displayedVehicles.map((vehicle) => {
@@ -674,6 +737,13 @@ const HomeScreen = ({ route }) => {
     getRouteDetour,
     loadVehiclePositions,
   } = useTransitRealtime();
+  const loadingState = useMemo(
+    () => getTransitLoadingState(diagnostics) || {
+      title: 'Getting Barrie Transit ready',
+      detail: 'Loading routes and stops.',
+    },
+    [diagnostics]
+  );
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
   const compatMapRef = useRef({
@@ -718,6 +788,10 @@ const HomeScreen = ({ route }) => {
     longRegionHandlers: 0,
   });
   const suppressNextMapTapRef = useRef(false);
+  const previousDetourViewportRef = useRef({
+    isDetourView: false,
+    focusedRouteId: null,
+  });
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const [focusedDetourRouteId, setFocusedDetourRouteId] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('regular');
@@ -769,13 +843,14 @@ const HomeScreen = ({ route }) => {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
+  const selectedItinerary = isTripPlanningMode
+    ? itineraries[selectedItineraryIndex] ?? itineraries[0] ?? null
+    : null;
 
   const isFocused = useIsFocused();
-  useTripPreviewViewport({
+  const { fitMapToItinerary } = useTripPreviewViewport({
     isFocused,
     isTripPlanningMode,
-    itineraries,
-    selectedItineraryIndex,
     fitToCoordinates: (coordinates, options) => compatMapRef.current.fitToCoordinates(coordinates, options),
     edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
     animated: true,
@@ -842,6 +917,35 @@ const HomeScreen = ({ route }) => {
       setFocusedDetourRouteId(null);
     }
   }, [focusedDetourRouteId, activeDetourRouteIds]);
+
+  useEffect(() => {
+    const previous = previousDetourViewportRef.current;
+    const activeFocusedRouteId = hasDetourFocus ? focusedDetourRouteId : null;
+    const shouldFit = shouldAutoFitDetourViewport({
+      isDetourView,
+      previousIsDetourView: previous.isDetourView,
+      focusedRouteId: activeFocusedRouteId,
+      previousFocusedRouteId: previous.focusedRouteId,
+    });
+
+    previousDetourViewportRef.current = {
+      isDetourView,
+      focusedRouteId: activeFocusedRouteId,
+    };
+
+    if (!shouldFit) return;
+
+    const fitCoords = getDetourViewportCoordinates({
+      activeDetours,
+      focusedRouteId: activeFocusedRouteId,
+    });
+    if (fitCoords.length < 2) return;
+
+    compatMapRef.current?.fitToCoordinates(fitCoords, {
+      edgePadding: { top: 180, right: 60, bottom: 140, left: 60 },
+      animated: true,
+    });
+  }, [activeDetours, focusedDetourRouteId, hasDetourFocus, isDetourView]);
 
   // Map tap popup
   const {
@@ -1260,6 +1364,14 @@ const HomeScreen = ({ route }) => {
     }
   }, [selectedRoutes.size, showStops]);
 
+  const showTripOverview = useCallback(() => {
+    if (!selectedItinerary) {
+      return;
+    }
+
+    fitMapToItinerary(selectedItinerary);
+  }, [fitMapToItinerary, selectedItinerary]);
+
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
   };
@@ -1275,7 +1387,7 @@ const HomeScreen = ({ route }) => {
 
 
   // Check if we're in trip preview mode (showing a selected trip on map)
-  const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
+  const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
 
   if (staticError && routes.length === 0) {
     return (
@@ -1346,7 +1458,10 @@ const HomeScreen = ({ route }) => {
           <View style={styles.loadingCard}>
             <PulsingSpinner size={24} />
             <View style={styles.loadingCardContent}>
-              <Text style={styles.loadingCardTitle}>Loading transit data...</Text>
+              <Text style={styles.loadingCardTitle}>{loadingState.title}</Text>
+              {loadingState.detail ? (
+                <Text style={styles.loadingCardDetail}>{loadingState.detail}</Text>
+              ) : null}
               <View style={styles.loadingSkeletonRow}>
                 <LoadingSkeleton width={120} height={12} style={{ marginRight: SPACING.sm }} />
                 <LoadingSkeleton width={80} height={12} />
@@ -1429,6 +1544,11 @@ const HomeScreen = ({ route }) => {
         </View>
       )}
 
+      <DetourMapLegend
+        visible={!isTripPlanningMode && isDetourView && detourOverlays.length > 0}
+        style={styles.detourLegend}
+      />
+
       {/* Map Controls (Top Right) */}
       {!isTripPlanningMode && (
         <View style={styles.mapControls}>
@@ -1449,6 +1569,14 @@ const HomeScreen = ({ route }) => {
             <Icon name="MapPin" size={18} color={showStops ? COLORS.primary : COLORS.textPrimary} fill={showStops ? COLORS.primary : 'none'} />
           </TouchableOpacity>
         </View>
+      )}
+
+      {isTripPreviewMode && (
+        <TripViewportControls
+          style={styles.tripViewportControls}
+          onCenterOnUserLocation={centerOnUserLocationOnce}
+          onShowTrip={showTripOverview}
+        />
       )}
 
       {/* Route Filter Panel (Horizontal scroll row below search) */}
@@ -1563,28 +1691,12 @@ const HomeScreen = ({ route }) => {
           onViewOnMap={() => {
             setFocusedDetourRouteId(detourSheetRouteId);
             setMapViewMode('detour');
-            const fitCoords = ((selectedDetour.segments?.length
-              ? selectedDetour.segments
-              : [{
-                entryPoint: selectedDetour.entryPoint ?? null,
-                exitPoint: selectedDetour.exitPoint ?? null,
-              }]) ?? [])
-              .flatMap((segment) => {
-                const coords = [];
-                if (segment?.entryPoint) {
-                  coords.push({
-                    latitude: segment.entryPoint.latitude || segment.entryPoint.lat,
-                    longitude: segment.entryPoint.longitude || segment.entryPoint.lon,
-                  });
-                }
-                if (segment?.exitPoint) {
-                  coords.push({
-                    latitude: segment.exitPoint.latitude || segment.exitPoint.lat,
-                    longitude: segment.exitPoint.longitude || segment.exitPoint.lon,
-                  });
-                }
-                return coords;
-              });
+            const fitCoords = getDetourViewportCoordinates({
+              activeDetours: detourSheetRouteId && selectedDetour
+                ? { [detourSheetRouteId]: selectedDetour }
+                : {},
+              focusedRouteId: detourSheetRouteId,
+            });
             if (fitCoords.length > 0) {
               compatMapRef.current?.fitToCoordinates(
                 fitCoords,
@@ -1662,6 +1774,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  loadingCardDetail: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
     marginBottom: SPACING.sm,
   },
   loadingSkeletonRow: {
@@ -1769,6 +1886,10 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: SPACING.sm,
   },
+  detourLegend: {
+    top: 174 + STATUS_BAR_OFFSET,
+    right: SPACING.sm,
+  },
   statusBadgeLive: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1816,6 +1937,43 @@ const styles = StyleSheet.create({
   },
   mapControlButtonActive: {
     backgroundColor: COLORS.primarySubtle,
+  },
+  tripViewportControls: {
+    position: 'absolute',
+    top: 152 + STATUS_BAR_OFFSET,
+    right: SPACING.sm,
+    zIndex: 999,
+  },
+  androidBusMarkerFrame: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  androidBusMarker: {
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 4,
+  },
+  androidBusMarkerDimmed: {
+    opacity: 0.42,
+  },
+  androidBusMarkerLabel: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   // Trip planning markers
   tripMarker: {

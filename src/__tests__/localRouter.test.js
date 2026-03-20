@@ -10,6 +10,8 @@
 import { planTripLocal, RoutingError } from '../services/localRouter';
 import { ROUTING_CONFIG } from '../config/constants';
 
+const mockGetActiveServicesForDate = jest.fn(() => new Set(['weekday']));
+
 // ── Helpers ──────────────────────────────────────────────────
 
 /** Build a minimal stop object */
@@ -178,10 +180,7 @@ jest.mock('../services/routingDataService', () => ({
 
 // Mock calendarService
 jest.mock('../services/calendarService', () => ({
-  getActiveServicesForDate: (calendar, date) => {
-    // Always return weekday service active (for testing on any day)
-    return new Set(['weekday']);
-  },
+  getActiveServicesForDate: (...args) => mockGetActiveServicesForDate(...args),
   formatGTFSDate: jest.fn(),
 }));
 
@@ -207,6 +206,10 @@ jest.mock('../services/itineraryBuilder', () => ({
 
 describe('localRouter — trip deduplication and time diversity', () => {
   const routingData = buildFakeRoutingData();
+
+  beforeEach(() => {
+    mockGetActiveServicesForDate.mockImplementation(() => new Set(['weekday']));
+  });
 
   // Origin near O1 (44.389, -79.700), Destination near D1 (44.400, -79.680)
   const tripParams = {
@@ -290,6 +293,10 @@ describe('localRouter — trip deduplication and time diversity', () => {
 describe('localRouter — edge cases', () => {
   const routingData = buildFakeRoutingData();
 
+  beforeEach(() => {
+    mockGetActiveServicesForDate.mockImplementation(() => new Set(['weekday']));
+  });
+
   test('returns at most MAX_ITINERARIES results', async () => {
     const result = await planTripLocal({
       fromLat: 44.389,
@@ -318,5 +325,95 @@ describe('localRouter — edge cases', () => {
         routingData,
       })
     ).rejects.toThrow(RoutingError);
+  });
+
+  test('finds previous service-day trips after midnight', async () => {
+    const overnightRoutingData = {
+      stops: {
+        O1: makeStop('O1', 44.389, -79.700, 'Origin Stop 1'),
+        D1: makeStop('D1', 44.400, -79.680, 'Dest Stop 1'),
+      },
+      stopDepartures: {
+        O1: [
+          {
+            tripId: 'trip-overnight',
+            routeId: '2A',
+            directionId: 0,
+            serviceId: 'night',
+            departureTime: 89280,
+            headsign: 'Downtown',
+            pickupType: 0,
+          },
+        ],
+      },
+      stopTimesIndex: {
+        'trip-overnight_O1': {
+          arrivalTime: 89280,
+          departureTime: 89280,
+        },
+        'trip-overnight_D1': {
+          arrivalTime: 90000,
+          departureTime: 90000,
+        },
+      },
+      routeStopSequences: {
+        '2A': {
+          '0': ['O1', 'D1'],
+        },
+      },
+      stopRoutes: {
+        O1: new Set(['2A']),
+        D1: new Set(['2A']),
+      },
+      transfers: {},
+      serviceCalendar: {},
+      tripIndex: {
+        'trip-overnight': {
+          routeId: '2A',
+          directionId: 0,
+          serviceId: 'night',
+          headsign: 'Downtown',
+        },
+      },
+      stopIndex: {
+        O1: {
+          id: 'O1',
+          code: 'O1',
+          name: 'Origin Stop 1',
+          latitude: 44.389,
+          longitude: -79.700,
+        },
+        D1: {
+          id: 'D1',
+          code: 'D1',
+          name: 'Dest Stop 1',
+          latitude: 44.400,
+          longitude: -79.680,
+        },
+      },
+    };
+
+    mockGetActiveServicesForDate.mockImplementation((_calendar, date) => {
+      const isoDate = date.toISOString().slice(0, 10);
+      if (isoDate === '2025-06-10') {
+        return new Set(['night']);
+      }
+      return new Set();
+    });
+
+    const result = await planTripLocal({
+      fromLat: 44.389,
+      fromLon: -79.700,
+      toLat: 44.400,
+      toLon: -79.680,
+      date: new Date('2025-06-11T00:00:00'),
+      time: new Date('2025-06-11T00:30:00'),
+      arriveBy: false,
+      routingData: overnightRoutingData,
+    });
+
+    expect(result.itineraries).toHaveLength(1);
+    expect(result.itineraries[0].tripIds).toContain('trip-overnight');
+    expect(result.itineraries[0].boardingTimes[0]).toBe(89280);
   });
 });

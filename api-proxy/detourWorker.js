@@ -1,7 +1,13 @@
 const { getStaticData } = require('./gtfsLoader');
 const { fetchVehicles, errors: fetchErrors } = require('./vehicleFetcher');
-const { processVehicles, getState } = require('./detourDetector');
+const {
+  processVehicles,
+  getState,
+  hydratePersistentDetours,
+  getPersistentDetours,
+} = require('./detourDetector');
 const { publishDetours } = require('./detourPublisher');
+const { loadPersistentDetours, syncPersistentDetours } = require('./persistentDetourStore');
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
 
 const TICK_INTERVAL = 30_000;
@@ -16,6 +22,7 @@ let consecutiveFailureCount = 0;
 let lastGtfsRefresh = null;
 let tickInProgress = false;
 let publishFailures = 0;
+let persistentDetoursHydrated = false;
 const recentEvents = [];
 
 function addEvent(msg) {
@@ -28,10 +35,19 @@ function detourKeys(detours) {
   return new Set(Object.keys(detours));
 }
 
+async function ensurePersistentDetoursHydrated() {
+  if (persistentDetoursHydrated) return;
+  const records = await loadPersistentDetours();
+  hydratePersistentDetours(records);
+  persistentDetoursHydrated = true;
+}
+
 async function tick() {
   if (tickInProgress) return;
   tickInProgress = true;
   try {
+    await ensurePersistentDetoursHydrated();
+
     const data = await getStaticData();
     if (data.lastRefresh !== lastGtfsRefresh) {
       if (lastGtfsRefresh !== null) logShapeDivergence(data);
@@ -69,6 +85,7 @@ async function tick() {
 
     try {
       await publishDetours(activeDetours);
+      await syncPersistentDetours(getPersistentDetours());
       if (currKeys.size > 0) lastDetourPublishAt = new Date().toISOString();
     } catch (err) {
       publishFailures++;

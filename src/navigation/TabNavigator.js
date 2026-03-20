@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
@@ -102,8 +103,14 @@ const MainTabs = () => {
       <Tab.Screen
         name="Map"
         component={MapStack}
-        options={{
-          tabBarLabel: 'Map',
+        options={({ route }) => {
+          const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'MapMain';
+          const hideTabBar = nestedRouteName === 'Navigation';
+
+          return {
+            tabBarLabel: 'Map',
+            tabBarStyle: hideTabBar ? { display: 'none' } : undefined,
+          };
         }}
       />
       <Tab.Screen

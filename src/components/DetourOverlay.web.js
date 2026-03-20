@@ -2,7 +2,8 @@
  * DetourOverlay (Web)
  *
  * Renders detour geometry on the MapLibre web map:
- * - Red dashed line for the active detour path (or skipped segment fallback)
+ * - Primary detour reroute in deep orange-red with a white halo
+ * - Secondary skipped-route context as a muted dashed line when available
  * - White route stop markers with dark outlines
  * - Red slashed markers for skipped stops
  *
@@ -10,6 +11,37 @@
  */
 import React from 'react';
 import { WebHtmlMarker, WebRoutePolyline } from './WebMapView';
+import { simplifyPath } from '../utils/geometryUtils';
+
+const DETOUR_LINE_STYLE = {
+  strokeWidth: 4.5,
+  outlineWidth: 2.5,
+  outlineColor: '#FFFFFF',
+};
+
+const SKIPPED_ROUTE_STYLE = {
+  strokeWidth: 3,
+  outlineWidth: 1.25,
+  outlineColor: '#FFFFFF',
+  dashArray: '3, 4',
+  opacityMultiplier: 0.8,
+};
+
+const simplifyOverlayPath = (path, minDistanceMeters = 28) => {
+  if (!Array.isArray(path) || path.length < 2) {
+    return null;
+  }
+
+  return simplifyPath(path, minDistanceMeters);
+};
+
+const getPolylineMidpoint = (path) => {
+  if (!Array.isArray(path) || path.length === 0) {
+    return null;
+  }
+
+  return path[Math.floor(path.length / 2)] ?? null;
+};
 
 const makeCircleHtml = (diameter, fillColor, borderColor, borderWidth = 2) => `
   <div style="
@@ -78,6 +110,28 @@ const makeEntryStopHtml = (eyebrow, label, fillColor, borderColor, textColor, do
   </div>
 `;
 
+const makeClosureBadgeHtml = (label, fillColor, borderColor, textColor) => `
+  <div style="
+    min-width:108px;
+    min-height:30px;
+    padding:5px 10px;
+    border-radius:999px;
+    background:${fillColor};
+    border:2px solid ${borderColor};
+    box-sizing:border-box;
+    box-shadow:0 2px 8px rgba(0,0,0,0.12);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:${textColor};
+    font:800 10px/1 Avenir, Arial, sans-serif;
+    letter-spacing:0.35px;
+    white-space:nowrap;
+  ">
+    ${label}
+  </div>
+`;
+
 const DetourOverlay = ({
   routeId,
   skippedSegmentPolyline,
@@ -115,30 +169,50 @@ const DetourOverlay = ({
   return (
     <>
       {normalizedSegments.map((segment, index) => {
-        const activeDetourPath =
+        const inferredDetourPath =
           segment?.inferredDetourPolyline?.length >= 2
-            ? segment.inferredDetourPolyline
-            : segment?.skippedSegmentPolyline?.length >= 2
-              ? segment.skippedSegmentPolyline
-              : null;
+            ? simplifyOverlayPath(segment.inferredDetourPolyline, 28)
+            : null;
+        const skippedRoutePath =
+          segment?.skippedSegmentPolyline?.length >= 2
+            ? simplifyOverlayPath(segment.skippedSegmentPolyline, 18)
+            : null;
+        const activeDetourPath = inferredDetourPath || skippedRoutePath;
 
         if (!activeDetourPath) return null;
 
         const pathId = hasMultipleSegments
           ? `detour-path-${routeId}-${index}`
           : `detour-path-${routeId}`;
+        const skippedPathId = hasMultipleSegments
+          ? `detour-context-${routeId}-${index}`
+          : `detour-context-${routeId}`;
 
         return (
-          <WebRoutePolyline
-            key={pathId}
-            coordinates={activeDetourPath}
-            color={detourColor}
-            strokeWidth={5}
-            dashArray="10, 8"
-            opacity={opacity}
-            outlineWidth={1.5}
-            interactive={false}
-          />
+          <React.Fragment key={pathId}>
+            {inferredDetourPath && skippedRoutePath ? (
+              <WebRoutePolyline
+                key={skippedPathId}
+                coordinates={skippedRoutePath}
+                color={skippedColor}
+                strokeWidth={SKIPPED_ROUTE_STYLE.strokeWidth}
+                dashArray={SKIPPED_ROUTE_STYLE.dashArray}
+                opacity={Math.min(opacity, 0.75) * SKIPPED_ROUTE_STYLE.opacityMultiplier}
+                outlineWidth={SKIPPED_ROUTE_STYLE.outlineWidth}
+                outlineColor={SKIPPED_ROUTE_STYLE.outlineColor}
+                interactive={false}
+              />
+            ) : null}
+            <WebRoutePolyline
+              coordinates={activeDetourPath}
+              color={detourColor}
+              strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
+              opacity={opacity}
+              outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
+              outlineColor={DETOUR_LINE_STYLE.outlineColor}
+              interactive={false}
+            />
+          </React.Fragment>
         );
       })}
 
@@ -154,10 +228,18 @@ const DetourOverlay = ({
       {showCallouts && normalizedSegments.flatMap((segment, segmentIndex) =>
         [
           {
+            kind: 'closed',
+            point: getPolylineMidpoint(segment?.skippedSegmentPolyline ?? null),
+            label: 'ROUTE CLOSED',
+            fillColor: '#FFEBE6',
+            borderColor: skippedColor,
+            textColor: skippedColor,
+          },
+          {
             kind: 'entry',
             point: segment?.entryPoint ?? null,
-            eyebrow: 'DETOUR',
-            label: 'START',
+            eyebrow: 'BUS DETOUR',
+            label: 'OPEN',
             fillColor: routeBaseColor,
             borderColor: routeStopFillColor,
             textColor: routeStopFillColor,
@@ -166,8 +248,8 @@ const DetourOverlay = ({
           {
             kind: 'exit',
             point: segment?.exitPoint ?? null,
-            eyebrow: 'DETOUR',
-            label: 'END',
+            eyebrow: 'ROUTE',
+            label: 'RESUMES',
             fillColor: routeStopFillColor,
             borderColor: routeBaseColor,
             textColor: routeBaseColor,
@@ -179,6 +261,22 @@ const DetourOverlay = ({
             const entryExitId = hasMultipleSegments
               ? `detour-${anchor.kind}-point-${routeId}-${segmentIndex}`
               : `detour-${anchor.kind}-point-${routeId}`;
+
+            if (anchor.kind === 'closed') {
+              return (
+                <WebHtmlMarker
+                  key={entryExitId}
+                  coordinate={{ latitude: anchor.point.latitude, longitude: anchor.point.longitude }}
+                  html={makeClosureBadgeHtml(
+                    anchor.label,
+                    anchor.fillColor,
+                    anchor.borderColor,
+                    anchor.textColor
+                  )}
+                  zIndexOffset={430}
+                />
+              );
+            }
 
             return (
               <WebHtmlMarker

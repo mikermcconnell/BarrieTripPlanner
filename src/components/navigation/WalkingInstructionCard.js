@@ -1,11 +1,8 @@
 /**
  * WalkingInstructionCard Component
  *
- * Displays turn-by-turn walking instructions with:
- * - Large prominent direction arrow
- * - Current instruction with street name context
- * - Distance to next turn
- * - Next Step button to advance to the next trip leg
+ * Displays the active walking instruction with a strong visual hierarchy,
+ * clear leg context, and lightweight manual controls as a fallback.
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -13,14 +10,6 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../confi
 import { formatDistance } from '../../services/tripService';
 import Icon from '../Icon';
 import TurnIcon from './TurnIcon';
-
-// Get compass direction from bearing
-const getCompassDirection = (bearing) => {
-  if (bearing === null || bearing === undefined) return '';
-  const directions = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
-  const index = Math.round(bearing / 45) % 8;
-  return directions[index];
-};
 
 // Get arrow background color based on turn type
 const getArrowColor = (type, modifier) => {
@@ -58,6 +47,29 @@ const formatInstruction = (step) => {
   return name ? `${turnWord} onto ${name}` : turnWord;
 };
 
+const formatHeaderTitle = (destinationName, streetName, isLastStep) => {
+  if (isLastStep && destinationName) {
+    return `Walk to ${destinationName}`;
+  }
+  if (destinationName) {
+    return `Walk to ${destinationName}`;
+  }
+  if (streetName) {
+    return `Walk via ${streetName}`;
+  }
+  return 'Walk to the next stop';
+};
+
+const formatUpcomingInstruction = (nextLegPreview) => {
+  if (!nextLegPreview) return null;
+  return nextLegPreview
+    .replace(/^then\s+/i, '')
+    .replace(/^board route\s+/i, 'Bus ')
+    .replace(/^board\s+/i, '')
+    .replace(/\s+at\s+(\d{1,2}:\d{2}\s?[AP]M)$/i, ' · $1')
+    .trim();
+};
+
 const WalkingInstructionCard = ({
   currentStep,
   onNextStep,
@@ -71,90 +83,102 @@ const WalkingInstructionCard = ({
 }) => {
   if (!currentStep) return null;
 
-  const walkTimeMinutes = currentLeg?.duration ? Math.round(currentLeg.duration / 60) : null;
+  const walkTimeMinutes = currentLeg?.duration ? Math.max(1, Math.ceil(currentLeg.duration / 60)) : null;
 
   const arrowColor = getArrowColor(currentStep.type, currentStep.modifier);
   const stepDistance = currentStep.distance ? formatDistance(currentStep.distance) : '';
   const stepMinutes = currentStep.duration ? Math.ceil(currentStep.duration / 60) : null;
   const formattedInstruction = formatInstruction(currentStep);
 
-  // Street name: use currentStep.name if present and non-empty, else fall back to destinationName
   const streetName = currentStep.name && currentStep.name.trim().length > 0
     ? currentStep.name
     : null;
+  const headerTitle = formatHeaderTitle(destinationName, streetName, isLastStep);
+  const upcomingInstruction = formatUpcomingInstruction(nextLegPreview);
 
-  // Time + distance label
-  let timeDistanceLabel = '';
-  if (stepMinutes != null && stepDistance) {
-    timeDistanceLabel = `${stepMinutes} min · ${stepDistance}`;
-  } else if (stepDistance) {
-    timeDistanceLabel = `${stepDistance} to next turn`;
-  } else {
-    timeDistanceLabel = 'Starting point';
-  }
+  const manualAdvanceLabel = isLastStep ? 'At stop' : 'Next';
 
   return (
     <View style={styles.container}>
-      {/* Destination / Street Name Header */}
-      <View style={styles.destinationHeader}>
-        <Icon name="MapPin" size={14} color={COLORS.primary} />
-        <Text style={styles.destinationText} numberOfLines={1}>
-          {streetName || destinationName || ''}
-        </Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerContent}>
+          <View style={styles.kickerRow}>
+            <Icon name="Walk" size={14} color={COLORS.primaryDark} />
+            <Text style={styles.kickerText}>On foot</Text>
+          </View>
+          <Text style={styles.headerTitle} numberOfLines={2}>
+            {headerTitle}
+          </Text>
+        </View>
         {walkTimeMinutes != null && (
-          <Text style={styles.departureText}>{walkTimeMinutes} min walk</Text>
+          <View style={styles.timePill}>
+            <Text style={styles.timePillValue}>{walkTimeMinutes} min</Text>
+            <Text style={styles.timePillLabel}>walk</Text>
+          </View>
         )}
       </View>
 
-      {/* Main Instruction Row */}
       <View style={styles.mainRow}>
-        {/* Large Direction Arrow */}
-        <View style={styles.arrowContainer}>
-          <TurnIcon type={currentStep.type} modifier={currentStep.modifier} size={40} color={arrowColor} />
+        <View style={styles.turnBadge}>
+          <TurnIcon type={currentStep.type} modifier={currentStep.modifier} size={36} color={arrowColor} />
         </View>
 
-        {/* Instruction Details */}
         <View style={styles.instructionDetails}>
-          <Text style={styles.instructionText} numberOfLines={2}>
+          <Text style={styles.instructionText} numberOfLines={3}>
             {formattedInstruction}
           </Text>
 
-          {/* Time + Distance per step */}
-          <View style={styles.distanceRow}>
-            <Text style={styles.stepDistance}>
-              {timeDistanceLabel}
-            </Text>
+          <View style={styles.metaRow}>
+            {stepDistance ? (
+              <View style={styles.metaChip}>
+                <Text style={styles.metaChipText}>{stepDistance}</Text>
+              </View>
+            ) : null}
+            {stepMinutes != null ? (
+              <View style={styles.metaChip}>
+                <Text style={styles.metaChipText}>{stepMinutes} min</Text>
+              </View>
+            ) : null}
+            {totalSteps > 1 && currentStepIndex != null ? (
+              <View style={styles.metaChip}>
+                <Text style={styles.metaChipText}>Step {currentStepIndex + 1} of {totalSteps}</Text>
+              </View>
+            ) : null}
           </View>
 
-          {/* Step counter */}
-          {totalSteps > 1 && currentStepIndex != null && (
-            <Text style={styles.stepCounter}>
-              Step {currentStepIndex + 1} of {totalSteps}
-            </Text>
-          )}
+          {upcomingInstruction ? (
+            <View style={styles.upNextPanel}>
+              <Text style={styles.upNextLabel}>Up next</Text>
+              <Text style={styles.upNextText} numberOfLines={1}>
+                {upcomingInstruction}
+              </Text>
+            </View>
+          ) : null}
 
-          {/* Peek-ahead preview */}
-          {nextLegPreview != null && (
-            <Text style={styles.peekAheadText} numberOfLines={2}>
-              {nextLegPreview}
-            </Text>
-          )}
+          <View style={styles.footerRow}>
+            {isLastStep ? (
+              <TouchableOpacity
+                style={[styles.manualAdvanceButton, styles.primaryAdvanceButton]}
+                onPress={onNextLeg}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.manualAdvanceButtonText, styles.primaryAdvanceButtonText]}>
+                  {manualAdvanceLabel}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              onNextStep && (
+                <TouchableOpacity
+                  style={styles.manualAdvanceButton}
+                  onPress={onNextStep}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.manualAdvanceButtonText}>{manualAdvanceLabel}</Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
         </View>
-
-        {/* Next Step / Done Walking Button */}
-        {isLastStep ? (
-          <TouchableOpacity style={styles.nextLegBtn} onPress={onNextLeg} accessibilityRole="button">
-            <Text style={styles.nextLegBtnText}>Done Walking</Text>
-            <Icon name="Bus" size={16} color={COLORS.white} />
-          </TouchableOpacity>
-        ) : (
-          onNextStep && (
-            <TouchableOpacity style={styles.nextStepButton} onPress={onNextStep} accessibilityRole="button">
-              <Text style={styles.nextStepButtonText}>Next Step</Text>
-              <Text style={{ fontSize: 16, color: COLORS.primary }}>›</Text>
-            </TouchableOpacity>
-          )
-        )}
       </View>
     </View>
   );
@@ -163,96 +187,150 @@ const WalkingInstructionCard = ({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.xxl,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
     marginHorizontal: SPACING.md,
-    ...SHADOWS.medium,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 77, 0.06)',
+    ...SHADOWS.large,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  headerContent: {
+    flex: 1,
+    paddingRight: SPACING.md,
+  },
+  kickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  kickerText: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  headerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
+  timePill: {
+    minWidth: 58,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primarySubtle,
+    alignItems: 'center',
+  },
+  timePillValue: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+  },
+  timePillLabel: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   mainRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  arrowContainer: {
+  turnBadge: {
+    width: 50,
+    height: 50,
+    borderRadius: 15,
     marginRight: SPACING.md,
+    backgroundColor: COLORS.grey50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   instructionDetails: {
     flex: 1,
   },
   instructionText: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: '700',
+    fontWeight: '800',
     color: COLORS.textPrimary,
-    lineHeight: 24,
+    lineHeight: 22,
   },
-  distanceRow: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
   },
-  stepDistance: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  stepCounter: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  peekAheadText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  nextStepButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+  metaChip: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
     borderRadius: BORDER_RADIUS.round,
-    marginLeft: SPACING.sm,
-    gap: 4,
+    backgroundColor: COLORS.grey100,
   },
-  nextStepButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+  metaChipText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.grey800,
+    fontWeight: '600',
+  },
+  upNextPanel: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.grey50,
+  },
+  upNextLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  upNextText: {
+    marginTop: 1,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: SPACING.sm,
+  },
+  manualAdvanceButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surface,
+  },
+  primaryAdvanceButton: {
+    backgroundColor: COLORS.primary,
+  },
+  manualAdvanceButtonText: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xs,
     fontWeight: '700',
   },
-  nextLegBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 6,
-    marginLeft: SPACING.sm,
-  },
-  nextLegBtnText: {
+  primaryAdvanceButtonText: {
     color: COLORS.white,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  destinationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  destinationText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    flex: 1,
-  },
-  departureText: {
-    fontSize: 13,
-    color: COLORS.primary,
-    fontWeight: '600',
   },
 });
 

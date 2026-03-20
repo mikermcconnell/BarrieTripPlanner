@@ -1,5 +1,9 @@
 # Barrie Transit Trip Planner
 
+> Tool-specific supplement for Claude/Codex-style editing workflow.
+> Not the top-level source of truth for repo load order, stack reality, or roadmap status.
+> Read `AGENTS.md` and `README.md` first.
+
 ## Platform Rules
 This is a cross-platform app (React Native + Web via Expo). ALWAYS update BOTH native files AND their `.web.js` counterparts when making changes. Never assume the user is testing on native — check for web versions of every file you edit.
 

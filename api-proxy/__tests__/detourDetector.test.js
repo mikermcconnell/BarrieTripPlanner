@@ -4,11 +4,15 @@ const {
   getActiveDetours,
   getState,
   getDetourEvidence,
+  getPersistentDetours,
+  hydratePersistentDetours,
   CONSECUTIVE_READINGS_REQUIRED,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
   EVIDENCE_WINDOW_MS,
+  DETOUR_PERSIST_CONSECUTIVE_MATCHES,
+  DETOUR_PERSIST_MIN_AGE_MS,
 } = require('../detourDetector');
 
 // Route shape: straight line east along 44.39 latitude (11 points, step 0.002)
@@ -834,6 +838,59 @@ describe('geometry in snapshot', () => {
   });
 });
 
+describe('multiple same-route detour segments', () => {
+  test('separate same-route detours with on-route travel between them stay as two segments', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+    const eastA = { latitude: 44.395, longitude: -79.684 };
+    const eastB = { latitude: 44.395, longitude: -79.682 };
+
+    try {
+      Date.now = () => BASE_TIME;
+      [
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_MID,
+        OFF_ROUTE_MID,
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_MID,
+      ].forEach((coordinate) => {
+        processVehicles([makeVehicle({ coordinate })], shapes, routeShapeMapping);
+      });
+
+      Date.now = () => BASE_TIME + 60_000;
+      processVehicles([makeVehicle({ coordinate: ON_ROUTE_COORD })], shapes, routeShapeMapping);
+      processVehicles([makeVehicle({ coordinate: ON_ROUTE_COORD })], shapes, routeShapeMapping);
+
+      Date.now = () => BASE_TIME + 120_000;
+      let result;
+      [
+        eastA,
+        eastA,
+        eastB,
+        eastB,
+        eastA,
+        eastB,
+      ].forEach((coordinate) => {
+        result = processVehicles([makeVehicle({ coordinate })], shapes, routeShapeMapping);
+      });
+
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].geometry.segments).toHaveLength(2);
+
+      const segmentCenters = result['route-1'].geometry.segments
+        .map((segment) => ((segment.entryPoint?.longitude ?? 0) + (segment.exitPoint?.longitude ?? 0)) / 2)
+        .sort((a, b) => a - b);
+
+      expect(segmentCenters[0]).toBeLessThan(-79.686);
+      expect(segmentCenters[1] - segmentCenters[0]).toBeGreaterThan(0.003);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+});
+
 describe('zone-aware clearing', () => {
   test('on-route outside zone core does NOT clear detour', () => {
     const onVehicleOutsideZone = makeVehicle({ coordinate: ON_ROUTE_OUTSIDE_ZONE });
@@ -1254,5 +1311,99 @@ describe('end-of-service cleanup', () => {
     expect(getState().activeDetourCount).toBe(0);
 
     Date.now = originalNow;
+  });
+});
+
+describe('learned persistent detours', () => {
+  test('learns a long-running detour and seeds it again when service resumes', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = new Date('2026-03-14T15:00:00.000Z').getTime(); // 11:00 America/Toronto
+    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_MID });
+
+    try {
+      Date.now = () => BASE_TIME;
+      confirmDetourWithZone();
+
+      Date.now = () => BASE_TIME + DETOUR_PERSIST_MIN_AGE_MS + 1000;
+      confirmDetourWithZone();
+      for (let i = 0; i < DETOUR_PERSIST_CONSECUTIVE_MATCHES; i++) {
+        processVehicles([offVehicle], shapes, routeShapeMapping);
+      }
+
+      const persistentDetours = getPersistentDetours();
+      expect(persistentDetours['route-1']).toBeDefined();
+      expect(persistentDetours['route-1'].fingerprint).toBeTruthy();
+
+      // End of service clears volatile state but keeps the learned record.
+      Date.now = () => new Date('2026-03-14T07:00:00.000Z').getTime(); // 03:00 America/Toronto
+      let result = processVehicles([], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+
+      // Next service day the learned detour is re-seeded immediately.
+      Date.now = () => new Date('2026-03-14T14:00:00.000Z').getTime(); // 10:00 America/Toronto
+      result = processVehicles([], shapes, routeShapeMapping);
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].isPersistent).toBe(true);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('persistent detour only clears after repeated on-route traversal through the learned zone', () => {
+    const realDateNow = Date.now;
+    const persistedDetectedAt = new Date('2026-03-13T14:00:00.000Z').getTime();
+
+    try {
+      hydratePersistentDetours({
+        'route-1': {
+          fingerprint: 'route-1:shape-1:44.3900:-79.6900:44.3900:-79.6820',
+          detectedAt: persistedDetectedAt,
+          learnedAt: persistedDetectedAt + 1000,
+          updatedAt: persistedDetectedAt + 2000,
+          lastSeenAt: persistedDetectedAt + 2000,
+          lastEvidenceAt: persistedDetectedAt + 2000,
+          geometry: {
+            shapeId: 'shape-1',
+            segments: [{
+              shapeId: 'shape-1',
+              entryPoint: { latitude: 44.39, longitude: -79.690 },
+              exitPoint: { latitude: 44.39, longitude: -79.682 },
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.690 },
+                { latitude: 44.39, longitude: -79.682 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.395, longitude: -79.690 },
+                { latitude: 44.395, longitude: -79.682 },
+              ],
+            }],
+          },
+          detourZone: {
+            shapeId: 'shape-1',
+            entryIndex: 5,
+            exitIndex: 9,
+            coreStart: 6,
+            coreEnd: 8,
+          },
+        },
+      });
+
+      Date.now = () => new Date('2026-03-14T14:00:00.000Z').getTime(); // 10:00 America/Toronto
+      let result = processVehicles([], shapes, routeShapeMapping);
+      expect(result['route-1']).toBeDefined();
+
+      const onVehicle = makeVehicle({ coordinate: { latitude: 44.39, longitude: -79.686 } });
+      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
+        result = processVehicles([onVehicle], shapes, routeShapeMapping);
+      }
+      expect(result['route-1'].state).toBe('clear-pending');
+
+      Date.now = () => new Date('2026-03-14T14:01:00.000Z').getTime();
+      result = processVehicles([onVehicle], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+      expect(getPersistentDetours()['route-1']).toBeUndefined();
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 });

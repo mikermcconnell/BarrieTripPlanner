@@ -1,8 +1,11 @@
 # App Stabilization Roadmap
 
 Date: 2026-03-07
-Status: Proposed
+Status: Proposed follow-on roadmap
 Owner: Codex
+
+> Non-default context. This is a dated maintainability roadmap, not the top-level repo contract.
+> Read `AGENTS.md`, `README.md`, and `2026-03-07-phase-0-3-deliverables.md` first.
 
 ## Objective
 

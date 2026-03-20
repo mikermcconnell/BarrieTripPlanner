@@ -104,13 +104,25 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           </View>
         )}
 
-        {/* Top Row: Duration + Route Badge Chain + Leave In */}
+        {/* Top Row: Duration + Leave In */}
         <View style={styles.topRow}>
-          <View style={styles.topRowLeft}>
-            <Text style={styles.durationLarge}>{duration}</Text>
-            {hasRealtimeInfo && (
-              <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+          <View style={styles.topRowHeader}>
+            <View style={styles.topRowLeft}>
+              <Text style={styles.durationLarge}>{duration}</Text>
+              {hasRealtimeInfo && (
+                <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+              )}
+            </View>
+            {leavesInText && (
+              <Text style={[
+                styles.leaveInText,
+                minutesUntilDeparture <= 5 && styles.leavesInSoon,
+              ]}>
+                {leavesInText}
+              </Text>
             )}
+          </View>
+          <View style={styles.routeSummaryRow}>
             {itinerary.legs.map((leg, index) => (
               <React.Fragment key={getTripLegKey(leg, index)}>
                 {index > 0 && <View style={styles.connector} />}
@@ -135,14 +147,6 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               </React.Fragment>
             ))}
           </View>
-          {leavesInText && (
-            <Text style={[
-              styles.leaveInText,
-              minutesUntilDeparture <= 5 && styles.leavesInSoon,
-            ]}>
-              {leavesInText}
-            </Text>
-          )}
         </View>
 
         {/* On-demand booking note */}
@@ -232,13 +236,25 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         </View>
       )}
 
-      {/* Top Row: Duration + Route Badge Chain + Leave In */}
+      {/* Top Row: Duration + Leave In + Route Badge Chain */}
       <View style={styles.topRow}>
-        <View style={styles.topRowLeft}>
-          <Text style={styles.durationLarge}>{duration}</Text>
-          {hasRealtimeInfo && (
-            <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+        <View style={styles.topRowHeader}>
+          <View style={styles.topRowLeft}>
+            <Text style={styles.durationLarge}>{duration}</Text>
+            {hasRealtimeInfo && (
+              <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+            )}
+          </View>
+          {leavesInText && (
+            <Text style={[
+              styles.leaveInText,
+              minutesUntilDeparture <= 5 && styles.leavesInSoon,
+            ]}>
+              {leavesInText}
+            </Text>
           )}
+        </View>
+        <View style={styles.routeSummaryRow}>
           {itinerary.legs.map((leg, index) => (
             <React.Fragment key={getTripLegKey(leg, index)}>
               {index > 0 && <View style={styles.connector} />}
@@ -263,14 +279,6 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             </React.Fragment>
           ))}
         </View>
-        {leavesInText && (
-          <Text style={[
-            styles.leaveInText,
-            minutesUntilDeparture <= 5 && styles.leavesInSoon,
-          ]}>
-            {leavesInText}
-          </Text>
-        )}
       </View>
 
       {/* On-demand booking note */}
@@ -371,15 +379,26 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: SPACING.xs,
     marginBottom: 6,
+  },
+  topRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
   topRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    flexShrink: 1,
+    paddingRight: SPACING.sm,
+  },
+  routeSummaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    rowGap: SPACING.xs,
   },
   bottomRow: {
     flexDirection: 'row',
@@ -399,6 +418,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.primary,
+    flexShrink: 0,
+    textAlign: 'right',
+    maxWidth: '40%',
   },
   routeBadgeInline: {
     marginHorizontal: 2,
@@ -446,6 +468,7 @@ const styles = StyleSheet.create({
   },
   details: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: SPACING.xs,
   },

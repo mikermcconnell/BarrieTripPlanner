@@ -5,6 +5,7 @@ import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../serv
 import Icon from './Icon';
 import { DelayIndicator } from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
+import { buildTransitStopProgress } from '../utils/transitStopUtils';
 
 /** Format stop name with stop number when available */
 const formatStopName = (stop) => {
@@ -21,6 +22,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
 
   const isWalk = leg.mode === 'WALK';
   const isBus = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
+  const transitStopProgress = isBus ? buildTransitStopProgress(leg) : null;
 
   // Get delay info
   const isRealtime = leg.isRealtime || false;
@@ -75,8 +77,18 @@ const TripStep = ({ leg, isFirst, isLast }) => {
                   )}
                 </View>
                 <Text style={styles.stepSubtitle}>
-                  {duration} • {leg.intermediateStops?.length || 0} stops
+                  {duration} • {transitStopProgress?.totalStopsBetween || 0} stops between
                 </Text>
+                {leg.from?.name ? (
+                  <Text style={styles.stepMetaLine} numberOfLines={1}>
+                    Board at {formatStopName(leg.from)}
+                  </Text>
+                ) : null}
+                {leg.to?.name ? (
+                  <Text style={styles.stepMetaLine} numberOfLines={1}>
+                    Get off at {formatStopName(leg.to)}
+                  </Text>
+                ) : null}
               </View>
             </View>
           )}
@@ -86,7 +98,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
         {isBus && leg.intermediateStops && leg.intermediateStops.length > 0 && (
           <View style={styles.intermediateStops}>
             <Text style={styles.intermediateTitle}>
-              Stops: {leg.intermediateStops.map((s) => s.name).slice(0, 3).join(' → ')}
+              Stops: {leg.intermediateStops.map((s) => formatStopName(s)).slice(0, 3).join(' → ')}
               {leg.intermediateStops.length > 3 && ` + ${leg.intermediateStops.length - 3} more`}
             </Text>
           </View>
@@ -232,6 +244,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  stepMetaLine: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
   intermediateStops: {
     marginLeft: 50,

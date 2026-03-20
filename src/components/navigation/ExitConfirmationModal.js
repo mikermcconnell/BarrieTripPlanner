@@ -34,7 +34,7 @@ const ExitConfirmationModal = ({ visible, onCancel, onConfirm }) => {
               </View>
 
               {/* Title */}
-              <Text style={styles.title}>End Navigation?</Text>
+              <Text style={styles.title}>Exit navigation?</Text>
 
               {/* Message */}
               <Text style={styles.message}>
@@ -48,7 +48,7 @@ const ExitConfirmationModal = ({ visible, onCancel, onConfirm }) => {
                   onPress={onCancel}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cancelButtonText}>Continue Trip</Text>
+                  <Text style={styles.cancelButtonText}>Continue trip</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -56,7 +56,7 @@ const ExitConfirmationModal = ({ visible, onCancel, onConfirm }) => {
                   onPress={onConfirm}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.confirmButtonText}>End Navigation</Text>
+                  <Text style={styles.confirmButtonText}>Exit navigation</Text>
                 </TouchableOpacity>
               </View>
             </View>

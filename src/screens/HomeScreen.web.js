@@ -7,7 +7,7 @@ import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import { MAP_CONFIG, PERFORMANCE_BUDGETS } from '../config/constants';
-import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, TOUCH_TARGET } from '../config/theme';
+import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import { useTripPlanner } from '../hooks/useTripPlanner';
@@ -28,6 +28,7 @@ import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { pointToPolylineDistance } from '../utils/geometryUtils';
 import { shouldRenderRouteShape } from '../utils/detourFocusUtils';
+import { getDetourViewportCoordinates, shouldAutoFitDetourViewport } from '../utils/detourViewport';
 import { escapeHtml } from '../utils/htmlUtils';
 
 // Web-only imports
@@ -43,12 +44,15 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import MapViewModeToggle from '../components/MapViewModeToggle';
+import DetourMapLegend from '../components/DetourMapLegend';
+import TripViewportControls from '../components/TripViewportControls';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
 import DirectionArrows from '../components/DirectionArrows.web';
+import { getTransitLoadingState } from '../utils/systemHealthUI';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 
@@ -230,6 +234,13 @@ const HomeScreen = ({ route }) => {
     getRouteDetour,
     loadVehiclePositions,
   } = useTransitRealtime();
+  const loadingState = useMemo(
+    () => getTransitLoadingState(diagnostics) || {
+      title: 'Getting Barrie Transit ready',
+      detail: 'Loading routes and stops.',
+    },
+    [diagnostics]
+  );
 
   const {
     selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
@@ -239,6 +250,10 @@ const HomeScreen = ({ route }) => {
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
+  const previousDetourViewportRef = useRef({
+    isDetourView: false,
+    focusedRouteId: null,
+  });
   const perfRef = useRef({ lastWarnTs: 0 });
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
   const [showZones, setShowZones] = useState(true);
@@ -317,6 +332,35 @@ const HomeScreen = ({ route }) => {
       setFocusedDetourRouteId(null);
     }
   }, [focusedDetourRouteId, activeDetourRouteIds]);
+
+  useEffect(() => {
+    const previous = previousDetourViewportRef.current;
+    const activeFocusedRouteId = hasDetourFocus ? focusedDetourRouteId : null;
+    const shouldFit = shouldAutoFitDetourViewport({
+      isDetourView,
+      previousIsDetourView: previous.isDetourView,
+      focusedRouteId: activeFocusedRouteId,
+      previousFocusedRouteId: previous.focusedRouteId,
+    });
+
+    previousDetourViewportRef.current = {
+      isDetourView,
+      focusedRouteId: activeFocusedRouteId,
+    };
+
+    if (!shouldFit) return;
+
+    const fitCoords = getDetourViewportCoordinates({
+      activeDetours,
+      focusedRouteId: activeFocusedRouteId,
+    });
+    if (fitCoords.length < 2) return;
+
+    mapRef.current?.fitToCoordinates(fitCoords, {
+      edgePadding: { top: 160, right: 60, bottom: 140, left: 60 },
+      animated: true,
+    });
+  }, [activeDetours, focusedDetourRouteId, hasDetourFocus, isDetourView]);
 
   const detourStopDetailsByRouteId = useMemo(() => {
     if (!detoursEnabled) return {};
@@ -431,13 +475,14 @@ const HomeScreen = ({ route }) => {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
+  const selectedItinerary = isTripPlanningMode
+    ? itineraries[selectedItineraryIndex] ?? itineraries[0] ?? null
+    : null;
 
   const isFocused = useIsFocused();
-  useTripPreviewViewport({
+  const { fitMapToItinerary } = useTripPreviewViewport({
     isFocused,
     isTripPlanningMode,
-    itineraries,
-    selectedItineraryIndex,
     fitToCoordinates: (coordinates, options) => mapRef.current?.fitToCoordinates(coordinates, options),
     edgePadding: { top: 200, right: 50, bottom: 350, left: 50 },
     onBlurInactive: resetTrip,
@@ -729,9 +774,17 @@ const HomeScreen = ({ route }) => {
     );
   }, [mapRegion]);
 
+  const showTripOverview = useCallback(() => {
+    if (!selectedItinerary) {
+      return;
+    }
+
+    fitMapToItinerary(selectedItinerary);
+  }, [fitMapToItinerary, selectedItinerary]);
+
 
   // Trip preview mode - hide regular map elements when viewing trip results
-  const isTripPreviewMode = isTripPlanningMode && itineraries.length > 0;
+  const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
 
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
@@ -990,7 +1043,12 @@ const HomeScreen = ({ route }) => {
       {isLoadingStatic && (
         <View style={styles.loadingBanner}>
           <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={styles.loadingBannerText}>Loading transit data...</Text>
+          <View style={styles.loadingBannerTextWrap}>
+            <Text style={styles.loadingBannerTitle}>{loadingState.title}</Text>
+            {loadingState.detail ? (
+              <Text style={styles.loadingBannerText}>{loadingState.detail}</Text>
+            ) : null}
+          </View>
         </View>
       )}
 
@@ -1099,6 +1157,11 @@ const HomeScreen = ({ route }) => {
             onChange={setMapViewMode}
             detourCount={activeDetourRouteIds.size}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+          />
+
+          <DetourMapLegend
+            visible={!isTripPlanningMode && isDetourView && detourOverlays.length > 0}
+            style={styles.detourLegend}
           />
 
           {/* Center Map Button - Top Right */}
@@ -1211,6 +1274,14 @@ const HomeScreen = ({ route }) => {
         </>
       ) : null}
 
+      {isTripPreviewMode && (
+        <TripViewportControls
+          style={styles.tripViewportControls}
+          onCenterOnUserLocation={centerOnUserLocationOnce}
+          onShowTrip={showTripOverview}
+        />
+      )}
+
       {/* Favorite Stop Quick View */}
       {!isTripPlanningMode && !selectedStop && (
         <FavoriteStopCard
@@ -1295,28 +1366,12 @@ const HomeScreen = ({ route }) => {
           onViewOnMap={() => {
             setFocusedDetourRouteId(detourSheetRouteId);
             setMapViewMode('detour');
-            const fitCoords = ((selectedDetour.segments?.length
-              ? selectedDetour.segments
-              : [{
-                entryPoint: selectedDetour.entryPoint ?? null,
-                exitPoint: selectedDetour.exitPoint ?? null,
-              }]) ?? [])
-              .flatMap((segment) => {
-                const coords = [];
-                if (segment?.entryPoint) {
-                  coords.push({
-                    latitude: segment.entryPoint.latitude || segment.entryPoint.lat,
-                    longitude: segment.entryPoint.longitude || segment.entryPoint.lon,
-                  });
-                }
-                if (segment?.exitPoint) {
-                  coords.push({
-                    latitude: segment.exitPoint.latitude || segment.exitPoint.lat,
-                    longitude: segment.exitPoint.longitude || segment.exitPoint.lon,
-                  });
-                }
-                return coords;
-              });
+            const fitCoords = getDetourViewportCoordinates({
+              activeDetours: detourSheetRouteId && selectedDetour
+                ? { [detourSheetRouteId]: selectedDetour }
+                : {},
+              focusedRouteId: detourSheetRouteId,
+            });
             if (fitCoords.length > 0) {
               mapRef.current?.fitToCoordinates(
                 fitCoords,
@@ -1362,9 +1417,18 @@ const styles = StyleSheet.create({
     zIndex: 1001,
     boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
   },
+  loadingBannerTextWrap: {
+    gap: 2,
+  },
+  loadingBannerTitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    fontFamily: FONT_FAMILIES.semibold,
+  },
   loadingBannerText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+    fontFamily: FONT_FAMILIES.medium,
   },
   // Error State
   errorContainer: {
@@ -1492,6 +1556,10 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.grey600,
     textTransform: 'uppercase',
+  },
+  detourLegend: {
+    top: 118,
+    right: SPACING.sm,
   },
 
   // Route Panel - Collapsed Pill
@@ -1703,6 +1771,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.grey200,
     cursor: 'pointer',
+  },
+  tripViewportControls: {
+    position: 'absolute',
+    top: 116,
+    right: SPACING.sm,
+    zIndex: 999,
   },
 
   // Bottom Action Bar - unified card

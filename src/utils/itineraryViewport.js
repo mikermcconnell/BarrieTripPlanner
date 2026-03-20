@@ -1,3 +1,4 @@
+import { haversineDistance } from './geometryUtils';
 import { decodePolyline } from './polylineUtils';
 
 const normalizeCoordinate = (point) => {
@@ -42,6 +43,57 @@ export const computeCoordinateBounds = (points) => {
     ne: [maxLon, maxLat],
     sw: [minLon, minLat],
   };
+};
+
+export const computeCoordinateBoundsWithMinSpan = (
+  points,
+  {
+    minLatSpan = 0,
+    minLonSpan = 0,
+  } = {}
+) => {
+  const bounds = computeCoordinateBounds(points);
+  if (!bounds) return null;
+
+  let { minLat, maxLat, minLon, maxLon } = bounds;
+  const latSpan = maxLat - minLat;
+  const lonSpan = maxLon - minLon;
+
+  if (latSpan < minLatSpan) {
+    const latPadding = (minLatSpan - latSpan) / 2;
+    minLat -= latPadding;
+    maxLat += latPadding;
+  }
+
+  if (lonSpan < minLonSpan) {
+    const lonPadding = (minLonSpan - lonSpan) / 2;
+    minLon -= lonPadding;
+    maxLon += lonPadding;
+  }
+
+  return {
+    minLat,
+    maxLat,
+    minLon,
+    maxLon,
+    ne: [maxLon, maxLat],
+    sw: [minLon, minLat],
+  };
+};
+
+export const distanceToBoundsMeters = (bounds, point) => {
+  const coordinate = normalizeCoordinate(point);
+  if (!bounds || !coordinate) return Infinity;
+
+  const clampedLatitude = Math.min(Math.max(coordinate.latitude, bounds.minLat), bounds.maxLat);
+  const clampedLongitude = Math.min(Math.max(coordinate.longitude, bounds.minLon), bounds.maxLon);
+
+  return haversineDistance(
+    coordinate.latitude,
+    coordinate.longitude,
+    clampedLatitude,
+    clampedLongitude
+  );
 };
 
 export const computeLegBounds = (leg) => {

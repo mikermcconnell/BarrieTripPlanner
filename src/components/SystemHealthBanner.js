@@ -47,7 +47,12 @@ export default function SystemHealthBanner({
 
   return (
     <View style={[styles.banner, { backgroundColor: tone.backgroundColor, borderLeftColor: tone.borderColor }]}>
-      <Text style={[styles.message, { color: tone.textColor }]}>{banner.message}</Text>
+      <Text style={[styles.title, { color: tone.textColor }]}>{banner.title}</Text>
+      {banner.detail ? (
+        <Text style={[styles.detail, { color: tone.textColor }]}>
+          {banner.detail}
+        </Text>
+      ) : null}
       {banner.actionLabel && typeof handlePress === 'function' && (
         <TouchableOpacity onPress={handlePress} style={styles.actionButton}>
           <Text style={[styles.actionText, { color: tone.actionColor }]}>
@@ -68,7 +73,12 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     ...SHADOWS.small,
   },
-  message: {
+  title: {
+    fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.semibold,
+  },
+  detail: {
+    marginTop: 2,
     fontSize: FONT_SIZES.sm,
     fontFamily: FONT_FAMILIES.medium,
   },

@@ -255,6 +255,8 @@ export default function App() {
     return (
       <View style={appStyles.splash}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={appStyles.splashTitle}>Starting Barrie Transit</Text>
+        <Text style={appStyles.splashDetail}>Opening routes, stops, and schedules.</Text>
       </View>
     );
   }
@@ -294,6 +296,17 @@ const appStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
+  },
+  splashTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  splashDetail: {
+    marginTop: 6,
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
   configErrorContainer: {
     flex: 1,

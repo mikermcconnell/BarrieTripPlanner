@@ -920,8 +920,20 @@ export const planTripAuto = async (params) => {
         message: error.message,
         code: error.code || null,
       };
+      const shouldPreserveLocalRouterResult =
+        error instanceof TripPlanningError &&
+        [
+          TRIP_ERROR_CODES.NO_ROUTES_FOUND,
+          TRIP_ERROR_CODES.NO_SERVICE,
+          TRIP_ERROR_CODES.OUTSIDE_SERVICE_AREA,
+        ].includes(error.code);
+
+      if (shouldPreserveLocalRouterResult) {
+        throw error;
+      }
+
       result = null;
-      // Fall through to OTP
+      // Fall through to OTP for missing data / backend-style failures only
     }
   }
 

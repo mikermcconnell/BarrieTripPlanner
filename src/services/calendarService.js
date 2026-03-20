@@ -61,10 +61,11 @@ const isDateInRange = (date, calendar) => {
  *
  * @param {Array} calendar - Array of calendar entries
  * @param {Array} calendarDates - Array of calendar_dates exceptions
- * @param {number} daysAhead - Number of days to pre-compute (default 30)
+ * @param {number} daysAhead - Number of future days to pre-compute (default 30)
+ * @param {number} daysBack - Number of past days to pre-compute (default 1)
  * @returns {Object} Map of date strings to Set of active service_ids
  */
-export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30) => {
+export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30, daysBack = 1) => {
   const serviceCalendar = {};
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -78,8 +79,8 @@ export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30) =>
     exceptions[cd.date].push(cd);
   });
 
-  // Build service sets for each day
-  for (let i = 0; i < daysAhead; i++) {
+  // Build service sets for each day in the requested window.
+  for (let i = -daysBack; i < daysAhead; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() + i);
     const dateStr = formatGTFSDate(date);

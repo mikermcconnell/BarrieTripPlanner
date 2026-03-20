@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import { MAP_CONFIG, OSM_MAP_STYLE, MIN_NAV_ZOOM } from '../config/constants';
+import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -32,14 +32,14 @@ import NavigationHeader from '../components/navigation/NavigationHeader';
 import WalkingInstructionCard from '../components/navigation/WalkingInstructionCard';
 import BusProximityCard from '../components/navigation/BusProximityCard';
 import BoardingInstructionCard from '../components/navigation/BoardingInstructionCard';
-import NavigationProgressBar from '../components/navigation/NavigationProgressBar';
 import StepOverviewSheet from '../components/navigation/StepOverviewSheet';
 import ExitConfirmationModal from '../components/navigation/ExitConfirmationModal';
-import DestinationBanner from '../components/navigation/DestinationBanner';
+import TransitStopGuideCard from '../components/navigation/TransitStopGuideCard';
 import PulsingSpinner from '../components/PulsingSpinner';
 
 // Context for route shapes
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
+import BusMarker from '../components/BusMarker';
 
 // Hooks
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
@@ -55,13 +55,21 @@ import logger from '../utils/logger';
 import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
 import { haversineDistance, pointToPolylineDistance } from '../utils/geometryUtils';
 import {
-  collectItineraryEndpointCoordinates,
+  collectItineraryViewportCoordinates,
   computeCoordinateBounds,
-  computeLegBounds,
+  distanceToBoundsMeters,
 } from '../utils/itineraryViewport';
+import { buildTransitStopProgress } from '../utils/transitStopUtils';
+import { buildWalkingLandmarkMarkers } from '../utils/navigationMapMarkers';
+import {
+  buildCurrentStepBusPreviewLine,
+  buildRoutePathsByRouteId,
+  getVehicleSnapPath,
+} from '../utils/navigationBusPreview';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
-import Svg, { Circle, Path } from 'react-native-svg';
+import TripViewportControls from '../components/TripViewportControls';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 const trackNavigationEvent = (eventName, params) => {
   try {
@@ -70,12 +78,75 @@ const trackNavigationEvent = (eventName, params) => {
   } catch {}
 };
 
+const MAX_NAVIGATION_LOCATION_DISTANCE_FROM_TRIP_METERS = 25000;
+const GOOGLE_WALK_BLUE = '#4285F4';
+const GOOGLE_WALK_BLUE_DARK = '#1967D2';
+
+const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
+  switch (type) {
+    case 'walk-start':
+      return (
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Circle cx={12} cy={12} r={6} stroke={color} strokeWidth={2.5} fill="none" />
+          <Circle cx={12} cy={12} r={2.5} fill={color} />
+        </Svg>
+      );
+    case 'walk-current':
+      return (
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Path
+            d="M12 3V7M12 17V21M3 12H7M17 12H21"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+          <Circle cx={12} cy={12} r={3} fill={color} />
+        </Svg>
+      );
+    case 'walk-target-stop':
+    case 'bus-stop':
+    case 'transit-next-stop':
+    case 'transit-intermediate-stop':
+      return (
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Rect x={5} y={7} width={14} height={8} rx={2} fill={color} />
+          <Rect x={7} y={9} width={4} height={3} rx={0.5} fill={COLORS.grey900} />
+          <Rect x={13} y={9} width={4} height={3} rx={0.5} fill={COLORS.grey900} />
+          <Circle cx={8.5} cy={17.5} r={1.4} fill={color} />
+          <Circle cx={15.5} cy={17.5} r={1.4} fill={color} />
+        </Svg>
+      );
+    case 'transit-alight-stop':
+      return (
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Path
+            d="M12 20C12 20 17 14.8 17 11.4C17 8.5 14.9 6.5 12 6.5C9.1 6.5 7 8.5 7 11.4C7 14.8 12 20 12 20Z"
+            fill={color}
+          />
+          <Rect x={8.2} y={10.1} width={7.6} height={4.8} rx={1.2} fill={COLORS.white} />
+          <Rect x={9.4} y={11.1} width={2.1} height={1.4} rx={0.3} fill={COLORS.error} />
+          <Rect x={12.5} y={11.1} width={2.1} height={1.4} rx={0.3} fill={COLORS.error} />
+        </Svg>
+      );
+    case 'walk-target-destination':
+      return (
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Path
+            d="M12 20C12 20 17 14.8 17 11.4C17 8.5 14.9 6.5 12 6.5C9.1 6.5 7 8.5 7 11.4C7 14.8 12 20 12 20Z"
+            fill={color}
+          />
+          <Circle cx={12} cy={11.3} r={2} fill={COLORS.error} />
+        </Svg>
+      );
+    default:
+      return <View style={styles.markerInner} />;
+  }
+};
+
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
-  const legZoomedRef = useRef(new Set());
-  const legTransitionTimeRef = useRef(0);
 
   const initialItinerary = route.params?.itinerary;
   const [itinerary, setItinerary] = useState(initialItinerary);
@@ -114,13 +185,11 @@ const NavigationScreen = ({ route }) => {
   if (!itinerary) return null;
 
   // Get route shapes and realtime vehicles from TransitContext
-  const { shapes, routeShapeMapping, ensureRoutingData, stops } = useTransitStatic();
+  const { shapes, routeShapeMapping, tripMapping, ensureRoutingData, stops } = useTransitStatic();
   const { vehicles, onDemandZones } = useTransitRealtime();
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
-  const [followMode, setFollowMode] = useState('full-trip'); // 'my-location' | 'full-trip'
-  const [hasInitializedMap, setHasInitializedMap] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [isOffRoute, setIsOffRoute] = useState(false);
   const offRouteTimerRef = useRef(null);
@@ -138,7 +207,7 @@ const NavigationScreen = ({ route }) => {
   });
 
   const {
-    location: userLocation,
+    location: rawUserLocation,
     error: locationError,
     isTracking,
     startTracking,
@@ -148,10 +217,39 @@ const NavigationScreen = ({ route }) => {
   const [isAcquiringGPS, setIsAcquiringGPS] = useState(true);
 
   useEffect(() => {
-    if (userLocation) {
+    if (rawUserLocation) {
       setIsAcquiringGPS(false);
     }
-  }, [userLocation]);
+  }, [rawUserLocation]);
+
+  const tripViewportCoordinates = useMemo(
+    () => collectItineraryViewportCoordinates(itinerary),
+    [itinerary]
+  );
+  const tripBounds = useMemo(
+    () => computeCoordinateBounds(tripViewportCoordinates),
+    [tripViewportCoordinates]
+  );
+
+  const routePathsByRouteId = useMemo(() => (
+    buildRoutePathsByRouteId({ shapes, routeShapeMapping })
+  ), [shapes, routeShapeMapping]);
+
+  const userLocation = useMemo(() => {
+    if (!rawUserLocation || !tripBounds) return rawUserLocation;
+
+    const distanceFromTripMeters = distanceToBoundsMeters(tripBounds, rawUserLocation);
+    if (distanceFromTripMeters > MAX_NAVIGATION_LOCATION_DISTANCE_FROM_TRIP_METERS) {
+      logger.warn('Ignoring implausible navigation location outside trip area', {
+        distanceFromTripMeters: Math.round(distanceFromTripMeters),
+        latitude: rawUserLocation.latitude,
+        longitude: rawUserLocation.longitude,
+      });
+      return null;
+    }
+
+    return rawUserLocation;
+  }, [rawUserLocation, tripBounds]);
 
   // Step progress management (defined first so we can use isUserOnBoard)
   const {
@@ -199,7 +297,6 @@ const NavigationScreen = ({ route }) => {
   const {
     currentTransitLeg,
     finalDestination,
-    isLastWalkingLeg,
     isOnDemandLeg,
     isTransitLeg,
     isWalkingLeg,
@@ -225,46 +322,6 @@ const NavigationScreen = ({ route }) => {
     false
   );
 
-  // Calculate trip bounds for initial map view
-  const tripBounds = useMemo(() => {
-    return computeCoordinateBounds(collectItineraryEndpointCoordinates(itinerary));
-  }, [itinerary]);
-
-  // Fit map to trip bounds on initial load
-  useEffect(() => {
-    if (!hasInitializedMap && tripBounds && cameraRef.current) {
-      cameraRef.current.setCamera({
-        bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
-        padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
-        animationDuration: 500,
-      });
-      setHasInitializedMap(true);
-    }
-  }, [tripBounds, hasInitializedMap]);
-
-  // Auto-zoom to fit current leg extent on each leg transition (fires once per leg)
-  useEffect(() => {
-    if (legZoomedRef.current.has(currentLegIndex)) return;
-    const bounds = computeLegBounds(currentLeg);
-    if (!bounds) return;
-    if (!cameraRef.current) return;
-
-    cameraRef.current.setCamera({
-      bounds: {
-        ne: bounds.ne,
-        sw: bounds.sw,
-        paddingTop: 100,
-        paddingBottom: 300,
-        paddingLeft: 50,
-        paddingRight: 50,
-      },
-      animationDuration: 600,
-    });
-
-    legZoomedRef.current.add(currentLegIndex);
-    legTransitionTimeRef.current = Date.now();
-  }, [currentLegIndex, currentLeg]);
-
   // Start location tracking and navigation on mount
   useEffect(() => {
     const initNavigation = async () => {
@@ -286,17 +343,13 @@ const NavigationScreen = ({ route }) => {
     };
   }, []);
 
-  // Center map on user location when in follow mode, and apply heading rotation during walking
-  // Skip for 2 seconds after a leg transition so the per-leg zoom isn't immediately overridden
+  // Center map on user location when in follow mode, without changing the rider's zoom level.
   useEffect(() => {
-    if ((isFollowMode || followMode === 'my-location') && userLocation && cameraRef.current) {
-      if (Date.now() - legTransitionTimeRef.current < 2000) return;
-
+    if (isFollowMode && userLocation && cameraRef.current) {
       const now = Date.now();
       const heading = (isHeadingUp && isWalkingLeg && userLocation.heading != null)
         ? userLocation.heading
         : 0;
-      const zoom = isHeadingUp && isWalkingLeg ? 17 : MIN_NAV_ZOOM;
       const previousCamera = followCameraRef.current;
       const movedMeters = previousCamera.latitude == null || previousCamera.longitude == null
         ? Infinity
@@ -330,24 +383,23 @@ const NavigationScreen = ({ route }) => {
 
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: zoom,
         heading,
         animationDuration: Platform.OS === 'android' ? 250 : 500,
       });
     }
-  }, [userLocation, isFollowMode, followMode, isHeadingUp, isWalkingLeg]);
+  }, [userLocation, isFollowMode, isHeadingUp, isWalkingLeg]);
 
   // When heading-up is toggled off (or leg is no longer walking), snap heading back to north
   useEffect(() => {
     if (!isHeadingUp || !isWalkingLeg) {
-      if (cameraRef.current && (isFollowMode || followMode === 'my-location')) {
+      if (cameraRef.current && isFollowMode) {
         cameraRef.current.setCamera({
           heading: 0,
           animationDuration: 300,
         });
       }
     }
-  }, [isHeadingUp, isWalkingLeg]);
+  }, [isFollowMode, isHeadingUp, isWalkingLeg]);
 
   // Handle navigation completion
   useEffect(() => {
@@ -380,15 +432,14 @@ const NavigationScreen = ({ route }) => {
     if (!currentTransitLeg) return;
     if (transitStatus === 'waiting' && busProximity?.hasArrived) {
       // Bus has arrived - the BusProximityCard will show the "I'm on the bus" button
-      // No automatic boarding - user must confirm
       triggerHapticOnce('bus-arrived', Haptics.NotificationFeedbackType.Success);
     }
   }, [currentTransitLeg, transitStatus, busProximity?.hasArrived]);
 
-  // Auto-advance when user should get off the bus
+  // Auto-advance when sustained high-confidence alighting evidence is present
   useEffect(() => {
     if (!currentTransitLeg) return;
-    if (transitStatus === 'on_board' && busProximity?.shouldGetOff) {
+    if (transitStatus === 'on_board' && busProximity?.autoAlightReady) {
       triggerHapticOnce('alight-soon', Haptics.NotificationFeedbackType.Warning);
       // Auto-alight after 3 seconds if user doesn't respond
       const timer = setTimeout(() => {
@@ -396,7 +447,7 @@ const NavigationScreen = ({ route }) => {
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [currentTransitLeg, transitStatus, busProximity?.shouldGetOff, alightBus]);
+  }, [currentTransitLeg, transitStatus, busProximity?.autoAlightReady, alightBus]);
 
   // Stale itinerary check: warn if trip was planned more than 30 minutes ago
   useEffect(() => {
@@ -492,17 +543,22 @@ const NavigationScreen = ({ route }) => {
       const isCurrentLeg = index === currentLegIndex;
       const isCompletedLeg = index < currentLegIndex;
 
+      const isCurrentWalkLeg = isCurrentLeg && isWalk;
       const routeColor = isCompletedLeg
         ? COLORS.grey400
+        : isCurrentWalkLeg
+        ? GOOGLE_WALK_BLUE
         : isWalk
-        ? COLORS.grey600
+        ? COLORS.grey500
         : leg.isOnDemand
         ? (leg.zoneColor || COLORS.primary)
         : (leg.route?.color || COLORS.primary);
 
-      const strokeWidth = isCurrentLeg ? 5 : 3;
-      const lineDashPattern = isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null;
-      const opacity = isCompletedLeg ? 0.5 : 1;
+      const strokeWidth = isCurrentWalkLeg ? 6 : isCurrentLeg ? 7 : 4;
+      const lineDashPattern = isCurrentWalkLeg ? null : isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null;
+      const opacity = isCompletedLeg ? 0.28 : isCurrentLeg ? 1 : 0.62;
+      const outlineWidth = isCurrentWalkLeg ? 4 : 2;
+      const outlineColor = isCurrentWalkLeg ? COLORS.white : undefined;
 
       // For the current leg, split at the user's position into completed (grey) and remaining (colored)
       if (isCurrentLeg && userLocation && coordinates.length > 1) {
@@ -517,10 +573,12 @@ const NavigationScreen = ({ route }) => {
           result.push({
             id: `leg-${index}-completed`,
             coordinates: coordinates.slice(0, splitIdx + 1),
-            color: '#9E9E9E',
+            color: isCurrentWalkLeg ? '#9BBBF9' : '#9E9E9E',
             strokeWidth,
             lineDashPattern,
             opacity: 0.5,
+            outlineWidth,
+            outlineColor,
           });
           // Remaining portion: from user position to end (full route color)
           result.push({
@@ -530,6 +588,8 @@ const NavigationScreen = ({ route }) => {
             strokeWidth,
             lineDashPattern,
             opacity,
+            outlineWidth,
+            outlineColor,
           });
           return;
         }
@@ -542,6 +602,8 @@ const NavigationScreen = ({ route }) => {
         strokeWidth,
         lineDashPattern,
         opacity,
+        outlineWidth,
+        outlineColor,
       });
     });
 
@@ -554,6 +616,10 @@ const NavigationScreen = ({ route }) => {
 
     const result = [];
     const legs = itinerary.legs;
+
+    if (isWalkingLeg && currentLeg?.from && currentLeg?.to) {
+      return result;
+    }
 
     // Origin marker
     if (legs[0]?.from) {
@@ -597,7 +663,55 @@ const NavigationScreen = ({ route }) => {
     }
 
     return result;
-  }, [itinerary, currentLeg, currentLegIndex, currentTransitLeg, transitStatus]);
+  }, [itinerary, currentLeg, currentLegIndex, currentTransitLeg, transitStatus, isWalkingLeg, userLocation]);
+
+  const walkingLandmarkMarkers = useMemo(() => {
+    if (!isWalkingLeg) return [];
+
+    return buildWalkingLandmarkMarkers({
+      itinerary,
+      currentLeg,
+      currentLegIndex,
+      nextTransitLeg,
+    }).map((marker) => ({
+      ...marker,
+      coordinate: [marker.longitude, marker.latitude],
+    }));
+  }, [itinerary, currentLeg, currentLegIndex, isWalkingLeg, nextTransitLeg]);
+
+  const transitStopMarkers = useMemo(() => {
+    if (!currentTransitLeg) return [];
+
+    const progress = buildTransitStopProgress(
+      currentTransitLeg,
+      isUserOnBoard ? busProximity.stopsUntilAlighting : null
+    );
+    const markers = [];
+    const nextStop = progress.nextStop;
+    const exitStop = progress.alightingStop;
+
+    if (nextStop) {
+      markers.push({
+        id: `transit-next-${nextStop.id}`,
+        coordinate: [nextStop.lon, nextStop.lat],
+        type: nextStop.type === 'alighting' ? 'transit-alight-stop' : 'transit-next-stop',
+        title: nextStop.stopCode ? `${nextStop.name} (#${nextStop.stopCode})` : nextStop.name,
+        caption: nextStop.type === 'alighting' ? 'Get off next' : 'Next stop',
+      });
+    }
+
+    if (exitStop && exitStop.id !== nextStop?.id) {
+      markers.push({
+        id: `transit-exit-${exitStop.id}`,
+        coordinate: [exitStop.lon, exitStop.lat],
+        type: 'transit-alight-stop',
+        title: exitStop.stopCode ? `${exitStop.name} (#${exitStop.stopCode})` : exitStop.name,
+        caption: 'Your stop',
+      });
+    }
+
+    return markers;
+  }, [currentTransitLeg, isUserOnBoard, busProximity.stopsUntilAlighting]);
 
   // Get tracked bus marker
   // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
@@ -628,11 +742,24 @@ const NavigationScreen = ({ route }) => {
         vehicle.coordinate.longitude,
         vehicle.coordinate.latitude,
       ],
+      vehicle: {
+        ...vehicle,
+        routeId: vehicle.routeId || routeId,
+        coordinate: {
+          latitude: vehicle.coordinate.latitude,
+          longitude: vehicle.coordinate.longitude,
+        },
+      },
       color: currentTransitLeg.route?.color || COLORS.primary,
+      routeId,
       routeShortName: currentTransitLeg.route?.shortName || '?',
       bearing: vehicle.bearing,
+      snapPath: getVehicleSnapPath({
+        ...vehicle,
+        routeId: vehicle.routeId || routeId,
+      }, routePathsByRouteId),
     };
-  }, [currentTransitLeg, vehicles, busProximity?.vehicle]);
+  }, [currentTransitLeg, vehicles, busProximity?.vehicle, routePathsByRouteId]);
 
   // Bus marker shown during walking legs — looks forward (next transit) then backward (previous)
   const walkingBusMarker = useMemo(() => {
@@ -668,15 +795,49 @@ const NavigationScreen = ({ route }) => {
 
     return {
       id: 'walking-bus',
-      coordinate: [
-        vehicle.coordinate.longitude,
-        vehicle.coordinate.latitude,
-      ],
+      vehicle: {
+        ...vehicle,
+        routeId: vehicle.routeId || transitLeg.route?.id || transitLeg.routeId,
+        coordinate: {
+          latitude: vehicle.coordinate.latitude,
+          longitude: vehicle.coordinate.longitude,
+        },
+      },
       color: transitLeg.route?.color || COLORS.primary,
       routeShortName: transitLeg.route?.shortName || '?',
-      bearing: vehicle.bearing,
+      snapPath: getVehicleSnapPath(
+        {
+          ...vehicle,
+          routeId: vehicle.routeId || transitLeg.route?.id || transitLeg.routeId,
+        },
+        routePathsByRouteId
+      ),
     };
   }, [isWalkingLeg, itinerary, currentLegIndex, nextTransitLeg, vehicles, nextTransitBusProximity?.vehicle]);
+
+  const currentStepBusPreviewLine = useMemo(() => {
+    return buildCurrentStepBusPreviewLine({
+      isWalkingLeg,
+      nextTransitLeg,
+      walkingVehicle: walkingBusMarker?.vehicle,
+      currentTransitLeg,
+      transitVehicle: trackedBusMarker?.vehicle,
+      transitStatus,
+      shapes,
+      tripMapping,
+      routePathsByRouteId,
+    });
+  }, [
+    currentTransitLeg,
+    isWalkingLeg,
+    nextTransitLeg,
+    routePathsByRouteId,
+    shapes,
+    trackedBusMarker,
+    transitStatus,
+    tripMapping,
+    walkingBusMarker,
+  ]);
 
   // Off-route detection: watch user location vs walking leg polyline
   useEffect(() => {
@@ -774,15 +935,12 @@ const NavigationScreen = ({ route }) => {
         fallback_from: routingDiagnostics?.fallbackFrom || 'none',
         fallback_reason: routingDiagnostics?.fallbackReason || 'none',
       });
-      legZoomedRef.current = new Set();
-      legTransitionTimeRef.current = 0;
       staleCheckedRef.current = false;
       missedBusWarningRef.current = false;
       setShowStaleWarning(false);
       setShowMissedBusWarning(false);
       setIsFollowMode(false);
       setFollowMode('full-trip');
-      setHasInitializedMap(false);
       setItinerary(nextItinerary);
       resetNavigation();
       startNavigation();
@@ -831,7 +989,6 @@ const NavigationScreen = ({ route }) => {
     if (!isFollowMode && userLocation) {
       cameraRef.current?.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: 17,
         animationDuration: 500,
       });
     }
@@ -842,7 +999,6 @@ const NavigationScreen = ({ route }) => {
     if (userLocation && cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
-        zoomLevel: 17,
         animationDuration: 500,
       });
     }
@@ -850,9 +1006,8 @@ const NavigationScreen = ({ route }) => {
 
   // Show full trip overview
   const showTripOverview = () => {
-    if (tripBounds && cameraRef.current) {
+    if (tripBounds && cameraRef.current && tripViewportCoordinates.length > 0) {
       setIsFollowMode(false);
-      setFollowMode('full-trip');
       cameraRef.current.setCamera({
         bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
         padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
@@ -860,8 +1015,6 @@ const NavigationScreen = ({ route }) => {
       });
     }
   };
-  const handleBoundsFit = useCallback(() => {}, []);
-  void handleBoundsFit;
 
   // Initial camera settings
   const initialCameraCenter = useMemo(() => {
@@ -896,7 +1049,7 @@ const NavigationScreen = ({ route }) => {
               zoomLevel: 14,
             }}
           />
-          <MapLibreGL.UserLocation visible={true} />
+          <MapLibreGL.UserLocation visible={!isWalkingLeg} />
 
           {/* Route polylines */}
           {routePolylines.map((routeLine) => (
@@ -908,64 +1061,177 @@ const NavigationScreen = ({ route }) => {
               strokeWidth={routeLine.strokeWidth}
               lineDashPattern={routeLine.lineDashPattern}
               opacity={routeLine.opacity}
+              outlineWidth={routeLine.outlineWidth}
+              outlineColor={routeLine.outlineColor}
             />
           ))}
 
+          {currentStepBusPreviewLine && (
+            <RoutePolyline
+              key={currentStepBusPreviewLine.id}
+              id={currentStepBusPreviewLine.id}
+              coordinates={currentStepBusPreviewLine.coordinates}
+              color={currentStepBusPreviewLine.color}
+              strokeWidth={3}
+              lineDashPattern={[8, 6]}
+              opacity={0.7}
+              outlineColor={currentStepBusPreviewLine.color}
+            />
+          )}
+
           {/* Markers */}
           {markers.map((marker) => (
-            <MapLibreGL.PointAnnotation
+            <MapLibreGL.MarkerView
               key={marker.id}
               id={`nav-marker-${marker.id}`}
               coordinate={marker.coordinate}
+              anchor={{ x: 0.5, y: 0.5 }}
             >
               <View
+                collapsable={false}
                 style={[
                   styles.marker,
                   marker.type === 'origin' && styles.markerOrigin,
                   marker.type === 'destination' && styles.markerDestination,
                   marker.type === 'waypoint' && styles.markerWaypoint,
                   marker.type === 'bus-stop' && styles.markerBusStop,
+                  marker.type === 'walk-start' && styles.markerWalkStart,
+                  marker.type === 'walk-target-stop' && styles.markerWalkTargetStop,
+                  marker.type === 'walk-target-destination' && styles.markerWalkTargetDestination,
                 ]}
               >
-                {marker.type === 'bus-stop' ? (
-                  <Icon name="MapPin" size={16} color={COLORS.primary} />
-                ) : (
-                  <View style={styles.markerInner} />
-                )}
+                <NavigationMarkerGlyph type={marker.type} />
               </View>
-            </MapLibreGL.PointAnnotation>
+            </MapLibreGL.MarkerView>
           ))}
+
+          {walkingLandmarkMarkers.map((marker) => (
+            <MapLibreGL.MarkerView
+              key={marker.id}
+              id={`nav-marker-${marker.id}`}
+              coordinate={marker.coordinate}
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <View collapsable={false} style={styles.transitStopMarkerContainer}>
+                <View
+                  style={[
+                    styles.mapStopLabelBubble,
+                    marker.type === 'walk-start' && styles.mapStopLabelBubbleWalkStart,
+                    marker.type !== 'walk-start' && styles.mapStopLabelBubbleWalkTarget,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.mapStopLabelCaption,
+                      marker.type === 'walk-start' && styles.mapStopLabelCaptionWalkStart,
+                      marker.type !== 'walk-start' && styles.mapStopLabelCaptionWalkTarget,
+                    ]}
+                  >
+                    {marker.caption}
+                  </Text>
+                  <Text style={styles.mapStopLabelName} numberOfLines={1}>
+                    {marker.title}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.marker,
+                    marker.type === 'walk-start' && styles.markerWalkStart,
+                    marker.type === 'walk-target-stop' && styles.markerWalkTargetStop,
+                    marker.type === 'walk-target-destination' && styles.markerWalkTargetDestination,
+                  ]}
+                >
+                  <NavigationMarkerGlyph
+                    type={marker.type}
+                    color={marker.type === 'walk-target-stop' ? GOOGLE_WALK_BLUE : COLORS.white}
+                  />
+                </View>
+              </View>
+            </MapLibreGL.MarkerView>
+          ))}
+
+          {transitStopMarkers.map((marker) => (
+            <MapLibreGL.MarkerView
+              key={marker.id}
+              id={`nav-marker-${marker.id}`}
+              coordinate={marker.coordinate}
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <View collapsable={false} style={styles.transitStopMarkerContainer}>
+                <View
+                  style={[
+                    styles.mapStopLabelBubble,
+                    marker.type === 'transit-next-stop' && styles.mapStopLabelBubbleNext,
+                    marker.type === 'transit-alight-stop' && styles.mapStopLabelBubbleExit,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.mapStopLabelCaption,
+                      marker.type === 'transit-next-stop' && styles.mapStopLabelCaptionNext,
+                      marker.type === 'transit-alight-stop' && styles.mapStopLabelCaptionExit,
+                    ]}
+                  >
+                    {marker.caption}
+                  </Text>
+                  <Text style={styles.mapStopLabelName} numberOfLines={1}>
+                    {marker.title}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.marker,
+                    marker.type === 'transit-next-stop' && styles.markerTransitNextStop,
+                    marker.type === 'transit-intermediate-stop' && styles.markerTransitIntermediateStop,
+                    marker.type === 'transit-alight-stop' && styles.markerTransitAlightStop,
+                  ]}
+                >
+                  <NavigationMarkerGlyph type={marker.type} />
+                </View>
+              </View>
+            </MapLibreGL.MarkerView>
+          ))}
+
+          {isWalkingLeg && userLocation && (
+            <MapLibreGL.MarkerView
+              id="nav-marker-current-location"
+              coordinate={[userLocation.longitude, userLocation.latitude]}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View collapsable={false} style={styles.currentLocationMarkerHalo}>
+                <View style={styles.currentLocationMarker}>
+                  <View style={styles.currentLocationMarkerCore} />
+                </View>
+              </View>
+            </MapLibreGL.MarkerView>
+          )}
 
           {/* Tracked Bus Marker */}
           {trackedBusMarker && (
-            <MapLibreGL.PointAnnotation
-              id={`nav-${trackedBusMarker.id}`}
-              coordinate={trackedBusMarker.coordinate}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={styles.busMarkerContainer}>
-                <View style={[styles.busMarker, { backgroundColor: trackedBusMarker.color }]}>
-                  <Text style={styles.busMarkerText}>{trackedBusMarker.routeShortName}</Text>
-                </View>
-                <View style={[styles.busMarkerArrow, { borderBottomColor: trackedBusMarker.color }]} />
-              </View>
-            </MapLibreGL.PointAnnotation>
+            <BusMarker
+              key={trackedBusMarker.id}
+              vehicle={{
+                ...trackedBusMarker.vehicle,
+                id: trackedBusMarker.id,
+              }}
+              color={trackedBusMarker.color}
+              routeLabel={trackedBusMarker.routeShortName}
+              snapPath={trackedBusMarker.snapPath}
+            />
           )}
 
           {/* Next Bus Marker (shown during walking legs) */}
           {walkingBusMarker && (
-            <MapLibreGL.PointAnnotation
-              id={`nav-${walkingBusMarker.id}`}
-              coordinate={walkingBusMarker.coordinate}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={styles.busMarkerContainer}>
-                <View style={[styles.busMarker, { backgroundColor: walkingBusMarker.color }]}>
-                  <Text style={styles.busMarkerText}>{walkingBusMarker.routeShortName}</Text>
-                </View>
-                <View style={[styles.busMarkerArrow, { borderBottomColor: walkingBusMarker.color }]} />
-              </View>
-            </MapLibreGL.PointAnnotation>
+            <BusMarker
+              key={walkingBusMarker.id}
+              vehicle={{
+                ...walkingBusMarker.vehicle,
+                id: walkingBusMarker.id,
+              }}
+              color={walkingBusMarker.color}
+              routeLabel={walkingBusMarker.routeShortName}
+              snapPath={walkingBusMarker.snapPath}
+            />
           )}
         </MapLibreGL.MapView>
       </View>
@@ -976,7 +1242,6 @@ const NavigationScreen = ({ route }) => {
           <View style={styles.gpsCard}>
             <PulsingSpinner size={28} />
             <Text style={styles.gpsText}>Acquiring GPS signal...</Text>
-            <Text style={styles.gpsSubtext}>Move to an open area for better signal</Text>
           </View>
         </View>
       )}
@@ -1022,32 +1287,21 @@ const NavigationScreen = ({ route }) => {
             </Svg>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={[styles.mapControlBtn, followMode === 'my-location' && styles.mapControlBtnActive]}
-          onPress={() => setFollowMode('my-location')}
-          accessibilityLabel="Center on my location"
-        >
-          <Icon name="MapPin" size={20} color={followMode === 'my-location' ? COLORS.white : COLORS.textPrimary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.mapControlBtn, followMode === 'full-trip' && styles.mapControlBtnActive]}
-          onPress={() => { setFollowMode('full-trip'); showTripOverview(); }}
-          accessibilityLabel="Show full trip"
-        >
-          <Icon name="Map" size={20} color={followMode === 'full-trip' ? COLORS.white : COLORS.textPrimary} />
-        </TouchableOpacity>
+        <TripViewportControls
+          onToggleFollow={toggleFollowMode}
+          isFollowActive={isFollowMode}
+          onCenterOnUserLocation={jumpToMyLocation}
+          onShowTrip={showTripOverview}
+        />
       </View>
 
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
-        {/* Destination Banner — only shown during transit legs */}
-        {!isWalkingLeg && (
-          <DestinationBanner
-            currentLeg={currentLeg}
-            nextTransitLeg={nextTransitLeg}
-            distanceRemaining={distanceToDestination}
-            totalLegDistance={currentLeg?.distance || 0}
-            isLastWalkingLeg={isLastWalkingLeg}
+        {isTransitLeg && !isOnDemandLeg && (
+          <TransitStopGuideCard
+            leg={currentLeg}
+            liveStopsRemaining={busProximity.stopsUntilAlighting}
+            isOnBoard={isUserOnBoard}
           />
         )}
 
@@ -1217,22 +1471,6 @@ const NavigationScreen = ({ route }) => {
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.exitNavigationButton}
-          onPress={handleClose}
-          accessibilityRole="button"
-          accessibilityLabel="Exit navigation"
-        >
-          <Icon name="X" size={16} color={COLORS.textPrimary} />
-          <Text style={styles.exitNavigationButtonText}>Exit Navigation</Text>
-        </TouchableOpacity>
-
-        {/* Progress Bar */}
-        <NavigationProgressBar
-          legs={itinerary?.legs || []}
-          currentLegIndex={currentLegIndex}
-        />
-
         {/* Step Overview Sheet */}
         <StepOverviewSheet
           legs={itinerary?.legs || []}
@@ -1282,31 +1520,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-  },
-  exitNavigationButton: {
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.sm,
-    minHeight: 48,
-    borderRadius: BORDER_RADIUS.round,
-    borderWidth: 1,
-    borderColor: COLORS.grey300,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xs,
-    ...SHADOWS.medium,
-  },
-  exitNavigationButtonText: {
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '700',
+    paddingBottom: Platform.OS === 'ios' ? 14 : 10,
   },
   mapControls: {
     position: 'absolute',
     right: 16,
-    bottom: 160,
+    bottom: 176,
     gap: 8,
   },
   mapControlBtn: {
@@ -1353,6 +1572,43 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
   },
+  markerTransitIntermediateStop: {
+    backgroundColor: COLORS.info,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  markerTransitNextStop: {
+    backgroundColor: COLORS.secondary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  markerTransitAlightStop: {
+    backgroundColor: COLORS.error,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  markerWalkStart: {
+    backgroundColor: COLORS.success,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  markerWalkTargetStop: {
+    backgroundColor: COLORS.white,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderColor: GOOGLE_WALK_BLUE,
+  },
+  markerWalkTargetDestination: {
+    backgroundColor: COLORS.error,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
   busStopIcon: {
     fontSize: 16,
   },
@@ -1361,6 +1617,86 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.white,
+  },
+  currentLocationMarkerHalo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(66, 133, 244, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentLocationMarker: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: GOOGLE_WALK_BLUE,
+    borderWidth: 4,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.medium,
+  },
+  currentLocationMarkerCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.white,
+  },
+  transitStopMarkerContainer: {
+    alignItems: 'center',
+  },
+  mapStopLabelBubble: {
+    maxWidth: 180,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginBottom: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.small,
+  },
+  mapStopLabelBubbleNext: {
+    borderColor: COLORS.secondary,
+    backgroundColor: COLORS.secondarySubtle,
+  },
+  mapStopLabelBubbleExit: {
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorSubtle,
+  },
+  mapStopLabelBubbleWalkTarget: {
+    borderColor: 'rgba(66, 133, 244, 0.24)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+  },
+  mapStopLabelBubbleWalkStart: {
+    borderColor: 'rgba(76, 175, 80, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+  },
+  mapStopLabelCaption: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  mapStopLabelCaptionNext: {
+    color: COLORS.secondaryDark,
+  },
+  mapStopLabelCaptionExit: {
+    color: COLORS.error,
+  },
+  mapStopLabelCaptionWalkTarget: {
+    color: GOOGLE_WALK_BLUE_DARK,
+  },
+  mapStopLabelCaptionWalkStart: {
+    color: COLORS.primaryDark,
+  },
+  mapStopLabelName: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginTop: 2,
   },
   busMarkerContainer: {
     alignItems: 'center',
@@ -1527,12 +1863,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginTop: SPACING.md,
-  },
-  gpsSubtext: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    textAlign: 'center',
   },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,

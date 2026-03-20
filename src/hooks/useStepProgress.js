@@ -298,19 +298,36 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     }
   }, [currentLeg, transitStatus, busProximity?.hasArrived]);
 
+  // Auto-board only after sustained high-confidence evidence.
+  useEffect(() => {
+    if (!currentLeg) return;
+    const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
+
+    if (
+      isTransit &&
+      (transitStatus === 'waiting' || transitStatus === 'boarding') &&
+      busProximity?.autoBoardReady
+    ) {
+      const timer = setTimeout(() => {
+        boardBus();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentLeg, transitStatus, busProximity?.autoBoardReady, boardBus]);
+
   // Auto-advance when user should get off the bus
   useEffect(() => {
     if (!currentLeg) return;
     const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
 
-    if (isTransit && transitStatus === 'on_board' && busProximity?.shouldGetOff) {
+    if (isTransit && transitStatus === 'on_board' && busProximity?.autoAlightReady) {
       // Wait a moment then advance
       const timer = setTimeout(() => {
         alightBus();
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [currentLeg, transitStatus, busProximity?.shouldGetOff, alightBus]);
+  }, [currentLeg, transitStatus, busProximity?.autoAlightReady, alightBus]);
 
   return {
     // Current state

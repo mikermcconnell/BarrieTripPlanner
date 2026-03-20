@@ -4,6 +4,7 @@ const {
   extractSkippedSegment,
   extractSkippedSegmentByProgress,
   douglasPeucker,
+  selectRepresentativeDetourPath,
   scoreConfidence,
   buildGeometry,
   reconcileRouteFamilyGeometries,
@@ -192,6 +193,34 @@ describe('douglasPeucker', () => {
   });
 });
 
+describe('selectRepresentativeDetourPath', () => {
+  test('prefers the overlapping majority path over a noisy alternate branch', () => {
+    const cluster = [
+      { latitude: 44.3950, longitude: -79.6990, timestampMs: 1_000, vehicleId: 'bus-1', progressMeters: 100 },
+      { latitude: 44.3968, longitude: -79.6930, timestampMs: 2_000, vehicleId: 'bus-1', progressMeters: 220 },
+      { latitude: 44.3967, longitude: -79.6870, timestampMs: 3_000, vehicleId: 'bus-1', progressMeters: 340 },
+      { latitude: 44.3951, longitude: -79.6810, timestampMs: 4_000, vehicleId: 'bus-1', progressMeters: 460 },
+
+      { latitude: 44.3951, longitude: -79.6988, timestampMs: 1_500, vehicleId: 'bus-2', progressMeters: 105 },
+      { latitude: 44.3969, longitude: -79.6928, timestampMs: 2_500, vehicleId: 'bus-2', progressMeters: 225 },
+      { latitude: 44.3968, longitude: -79.6868, timestampMs: 3_500, vehicleId: 'bus-2', progressMeters: 345 },
+      { latitude: 44.3952, longitude: -79.6808, timestampMs: 4_500, vehicleId: 'bus-2', progressMeters: 465 },
+
+      { latitude: 44.3950, longitude: -79.6990, timestampMs: 1_250, vehicleId: 'bus-3', progressMeters: 100 },
+      { latitude: 44.3986, longitude: -79.6940, timestampMs: 2_250, vehicleId: 'bus-3', progressMeters: 220 },
+      { latitude: 44.3930, longitude: -79.6890, timestampMs: 3_250, vehicleId: 'bus-3', progressMeters: 340 },
+      { latitude: 44.3978, longitude: -79.6840, timestampMs: 4_250, vehicleId: 'bus-3', progressMeters: 460 },
+    ];
+
+    const result = selectRepresentativeDetourPath(cluster);
+
+    expect(result).not.toBeNull();
+    expect(result.length).toBeGreaterThanOrEqual(3);
+    expect(Math.min(...result.map((point) => point.latitude))).toBeGreaterThan(44.3945);
+    expect(Math.max(...result.map((point) => point.latitude))).toBeLessThan(44.3975);
+  });
+});
+
 describe('scoreConfidence', () => {
   const NOW = Date.now();
 
@@ -357,7 +386,62 @@ describe('buildGeometry', () => {
     }
   });
 
-  test('captures same-segment detours when projected span exceeds 500m', () => {
+  test('uses the latest known exit candidate even when newer off-route evidence exists', () => {
+    const entryCandidate = {
+      latitude: 44.39,
+      longitude: -79.6994,
+      timestampMs: DETECTED_AT + 30_000,
+      vehicleId: 'bus-1',
+    };
+    const exitCandidate = {
+      latitude: 44.39,
+      longitude: -79.6988,
+      timestampMs: DETECTED_AT + 90_000,
+      vehicleId: 'bus-1',
+    };
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6994,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6992,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 180_000,
+        vehicleId: 'bus-3',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [entryCandidate],
+        exitCandidates: [exitCandidate],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.exitPoint.longitude).toBeCloseTo(-79.6988, 4);
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.inferredDetourPolyline[0].longitude).toBeCloseTo(-79.6994, 4);
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].longitude).toBeCloseTo(-79.6988, 4);
+  });
+
+  test('captures same-segment detours when projected span exceeds the publish threshold', () => {
     const points = Array.from({ length: 6 }, (_, i) =>
       makeEvidencePoint({
         latitude: 44.395,
@@ -382,11 +466,11 @@ describe('buildGeometry', () => {
     expect(result.entryPoint.longitude).toBeLessThan(result.exitPoint.longitude);
   });
 
-  test('does not publish skipped segment when same-segment span stays below 500m', () => {
+  test('does not publish skipped segment when same-segment span stays below the publish threshold', () => {
     const points = Array.from({ length: 5 }, (_, i) =>
       makeEvidencePoint({
         latitude: 44.395,
-        longitude: -79.699 + i * 0.0005,
+        longitude: -79.699 + i * 0.00015,
         timestampMs: DETECTED_AT + i * 30000,
       })
     );
@@ -403,6 +487,68 @@ describe('buildGeometry', () => {
     expect(result.entryPoint).not.toBeNull();
     expect(result.exitPoint).not.toBeNull();
     expect(result.inferredDetourPolyline).not.toBeNull();
+  });
+
+  test('collapses weak split clusters back into one corridor when the merged span is stronger', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6994,
+        timestampMs: DETECTED_AT + 0,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6992,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6610,
+        timestampMs: DETECTED_AT + 90_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6608,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6606,
+        timestampMs: DETECTED_AT + 150_000,
+        vehicleId: 'bus-2',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      { points },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.segments).toHaveLength(1);
+    expect(result.skippedSegmentPolyline).not.toBeNull();
+    expect(result.entryPoint).not.toBeNull();
+    expect(result.exitPoint).not.toBeNull();
+    expect(result.entryPoint.longitude).toBeLessThan(result.exitPoint.longitude);
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.inferredDetourPolyline[0].latitude).toBeCloseTo(44.39, 3);
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].latitude).toBeCloseTo(44.39, 3);
+    expect(
+      result.inferredDetourPolyline.some((point) => point.latitude > 44.3945 && point.latitude < 44.3975)
+    ).toBe(true);
   });
 
   test('prefers observed trip shape ids over closer sibling shapes', () => {
@@ -491,6 +637,93 @@ describe('buildGeometry', () => {
     expect(result.exitPoint).not.toBeNull();
     expect(result.entryPoint.latitude).toBeCloseTo(44.39, 3);
     expect(result.exitPoint.latitude).toBeCloseTo(44.39, 3);
+  });
+
+  test('builds one clean reroute path from overlapping multi-vehicle evidence', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.3950,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3968,
+        longitude: -79.6930,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3967,
+        longitude: -79.6870,
+        timestampMs: DETECTED_AT + 90_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3951,
+        longitude: -79.6810,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-1',
+      }),
+
+      makeEvidencePoint({
+        latitude: 44.3951,
+        longitude: -79.6988,
+        timestampMs: DETECTED_AT + 45_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3969,
+        longitude: -79.6928,
+        timestampMs: DETECTED_AT + 75_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3968,
+        longitude: -79.6868,
+        timestampMs: DETECTED_AT + 105_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3952,
+        longitude: -79.6808,
+        timestampMs: DETECTED_AT + 135_000,
+        vehicleId: 'bus-2',
+      }),
+
+      makeEvidencePoint({
+        latitude: 44.3950,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 50_000,
+        vehicleId: 'bus-3',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3986,
+        longitude: -79.6940,
+        timestampMs: DETECTED_AT + 80_000,
+        vehicleId: 'bus-3',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3930,
+        longitude: -79.6890,
+        timestampMs: DETECTED_AT + 110_000,
+        vehicleId: 'bus-3',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3978,
+        longitude: -79.6840,
+        timestampMs: DETECTED_AT + 140_000,
+        vehicleId: 'bus-3',
+      }),
+    ];
+
+    const result = buildGeometry('route-1', { points }, shapes, routeShapeMapping, NOW, DETECTED_AT);
+
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.inferredDetourPolyline.length).toBeGreaterThanOrEqual(3);
+    expect(result.inferredDetourPolyline[0].latitude).toBeCloseTo(44.39, 3);
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].latitude).toBeCloseTo(44.39, 3);
+    expect(result.inferredDetourPolyline.some((point) => point.latitude > 44.3945)).toBe(true);
   });
 });
 

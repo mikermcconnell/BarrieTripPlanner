@@ -80,13 +80,20 @@ function loadTripService({
   estimateOnDemandDurationMock = jest.fn(() => 900),
   planTripLocalMock = jest.fn(),
   enrichTripPlanWithWalkingMock = jest.fn(),
+  otpBaseUrl = 'https://otp.example',
   retryFetchMock = jest.fn(async () => ({
     ok: true,
     json: async () => makeOtpPlanResponse(),
   })),
 } = {}) {
   jest.resetModules();
-  process.env.EXPO_PUBLIC_OTP_URL = 'https://otp.example';
+  process.env.EXPO_PUBLIC_OTP_URL = otpBaseUrl;
+  const RoutingErrorMock = class RoutingError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
+    }
+  };
 
   jest.doMock('../utils/logger', () => ({
     __esModule: true,
@@ -104,12 +111,7 @@ function loadTripService({
   }));
   jest.doMock('../services/localRouter', () => ({
     planTripLocal: planTripLocalMock,
-    RoutingError: class RoutingError extends Error {
-      constructor(code, message) {
-        super(message);
-        this.code = code;
-      }
-    },
+    RoutingError: RoutingErrorMock,
     ROUTING_ERROR_CODES: {
       NO_NEARBY_STOPS: 'NO_NEARBY_STOPS',
       NO_SERVICE: 'NO_SERVICE',
@@ -135,7 +137,7 @@ function loadTripService({
       ...actual,
       OTP_CONFIG: {
         ...actual.OTP_CONFIG,
-        BASE_URL: 'https://otp.example',
+        BASE_URL: otpBaseUrl,
         USE_MOCK_IN_DEV: false,
       },
     };
@@ -145,6 +147,7 @@ function loadTripService({
 
   return {
     ...tripService,
+    RoutingErrorMock,
     retryFetchMock,
   };
 }
@@ -420,6 +423,39 @@ describe('trip planner service regressions', () => {
         message: 'local router unavailable',
       }),
     }));
+  });
+
+  test('preserves local-router no-route errors when OTP fallback is unavailable', async () => {
+    let RoutingErrorMockRef;
+    const planTripLocalMock = jest.fn(async () => {
+      throw new RoutingErrorMockRef('NO_ROUTE_FOUND', 'No transit routes found for this trip');
+    });
+    const {
+      planTripAuto,
+      TRIP_ERROR_CODES,
+      RoutingErrorMock,
+    } = loadTripService({
+      otpBaseUrl: '',
+      planTripLocalMock,
+    });
+    RoutingErrorMockRef = RoutingErrorMock;
+
+    await expect(
+      planTripAuto({
+        fromLat: 44.38,
+        fromLon: -79.69,
+        toLat: 44.39,
+        toLon: -79.68,
+        date: new Date('2026-03-06T10:00:00Z'),
+        time: new Date('2026-03-06T10:00:00Z'),
+        routingData: { routesByStop: new Map() },
+        onDemandZones: {},
+        stops: [],
+      })
+    ).rejects.toMatchObject({
+      code: TRIP_ERROR_CODES.NO_ROUTES_FOUND,
+      message: 'No transit routes found for this trip',
+    });
   });
 
   test('mixed zone trips preserve original endpoints and arrive-by timing', async () => {

@@ -1,5 +1,9 @@
 # Barrie Transit Trip Planner — Feature Improvement Plan (Revised)
 
+> Working backlog/reference document, not the top-level source of truth.
+> Some items in this file have since landed in code, been superseded, or changed priority.
+> Read `AGENTS.md` and `README.md` first.
+
 ## Context
 
 The app has a strong technical foundation (RAPTOR routing, real-time GTFS-RT, turn-by-turn navigation, cross-platform parity) but lacks growth, retention, and engagement mechanics. Current score: **6.5/10**. This revised plan incorporates a critical simplification review — cutting over-engineered features, correcting effort estimates, and reordering by actual impact-to-effort ratio.

@@ -1,6 +1,8 @@
-# One-Shot Prompt: Barrie Transit Trip Planner (BTTP)
+# Archived One-Shot Prompt: Barrie Transit Trip Planner (BTTP)
 
-> **Purpose**: This prompt is designed to instruct an expert AI coding agent (Claude, GPT, etc.) to build the entire Barrie Transit Trip Planner app from scratch in a single session. It covers architecture, features, UI/UX, data flows, and platform parity.
+> Archive only. This file describes an earlier greenfield one-session build prompt and should not be used as the current repo contract.
+> Read `AGENTS.md` and `README.md` first for the implemented app's current structure and setup.
+> **Purpose**: This prompt was designed to instruct an expert AI coding agent (Claude, GPT, etc.) to build the entire Barrie Transit Trip Planner app from scratch in a single session. It covers architecture, features, UI/UX, data flows, and platform parity.
 
 ---
 

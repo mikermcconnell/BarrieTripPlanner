@@ -133,7 +133,7 @@ const ProfileScreen = ({ navigation }) => {
           <View style={styles.loginCard}>
             <Icon name="User" size={64} color={COLORS.primary} />
             <View style={styles.loginContent}>
-              <Text style={styles.loginTitle}>Sign in to Barrie Transit</Text>
+              <Text style={styles.loginTitle}>Sign in to your account</Text>
               <Text style={styles.loginSubtitle}>Save favorites and sync across devices</Text>
             </View>
             <TouchableOpacity

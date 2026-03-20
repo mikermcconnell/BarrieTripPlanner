@@ -90,8 +90,8 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].opacity).toBe(0.95);
     expect(result[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
     expect(result[0].inferredDetourPolyline).toBeNull();
-    expect(result[0].skippedColor).toBe('#d92d20');
-    expect(result[0].detourColor).toBe('#d92d20');
+    expect(result[0].skippedColor).toBe('#DE350B');
+    expect(result[0].detourColor).toBe('#2E7D32');
     expect(result[0].routeBaseColor).toBe('#111827');
     expect(result[0].routeStopFillColor).toBe('#ffffff');
     expect(result[0].routeStopStrokeColor).toBe('#111827');

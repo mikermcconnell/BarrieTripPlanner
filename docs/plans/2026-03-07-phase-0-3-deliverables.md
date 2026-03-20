@@ -4,6 +4,9 @@ Date: 2026-03-07
 Status: Completed
 Owner: Codex
 
+> Non-default context. This is a dated cleanup/delivery summary, useful for implementation history and rationale.
+> It does not replace `AGENTS.md`, `README.md`, or implemented code as source of truth.
+
 ## Phase 0: Baseline And Safety
 
 ### Repo Hygiene Policy

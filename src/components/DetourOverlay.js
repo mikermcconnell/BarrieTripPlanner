@@ -2,7 +2,8 @@
  * DetourOverlay (Native)
  *
  * Renders detour geometry on the native MapLibre map:
- * - Red dashed line for the active detour path (or skipped segment fallback)
+ * - Primary detour reroute in deep orange-red with a white halo
+ * - Secondary skipped-route context as a muted dashed line when available
  * - White route stop markers with dark outlines
  * - Red slashed markers for skipped stops
  *
@@ -13,6 +14,37 @@ import { View, Text, StyleSheet } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import RoutePolyline from './RoutePolyline';
 import { COLORS } from '../config/theme';
+import { simplifyPath } from '../utils/geometryUtils';
+
+const DETOUR_LINE_STYLE = {
+  strokeWidth: 4.5,
+  outlineWidth: 2.5,
+  outlineColor: COLORS.white,
+};
+
+const SKIPPED_ROUTE_STYLE = {
+  strokeWidth: 3,
+  outlineWidth: 1.25,
+  outlineColor: COLORS.white,
+  lineDashPattern: [3, 4],
+  opacityMultiplier: 0.8,
+};
+
+const simplifyOverlayPath = (path, minDistanceMeters = 28) => {
+  if (!Array.isArray(path) || path.length < 2) {
+    return null;
+  }
+
+  return simplifyPath(path, minDistanceMeters);
+};
+
+const getPolylineMidpoint = (path) => {
+  if (!Array.isArray(path) || path.length === 0) {
+    return null;
+  }
+
+  return path[Math.floor(path.length / 2)] ?? null;
+};
 
 const styles = StyleSheet.create({
   routeStopMarker: {
@@ -38,7 +70,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
   entryStopMarker: {
-    minWidth: 80,
+    minWidth: 98,
     minHeight: 34,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -68,6 +100,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     lineHeight: 12,
+  },
+  closureBadge: {
+    minWidth: 108,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closureBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.35,
   },
 });
 
@@ -108,30 +155,49 @@ const DetourOverlay = ({
   return (
     <>
       {normalizedSegments.map((segment, index) => {
-        const activeDetourPath =
+        const inferredDetourPath =
           segment?.inferredDetourPolyline?.length >= 2
-            ? segment.inferredDetourPolyline
-            : segment?.skippedSegmentPolyline?.length >= 2
-              ? segment.skippedSegmentPolyline
-              : null;
+            ? simplifyOverlayPath(segment.inferredDetourPolyline, 28)
+            : null;
+        const skippedRoutePath =
+          segment?.skippedSegmentPolyline?.length >= 2
+            ? simplifyOverlayPath(segment.skippedSegmentPolyline, 18)
+            : null;
+        const activeDetourPath = inferredDetourPath || skippedRoutePath;
 
         if (!activeDetourPath) return null;
 
         const pathId = hasMultipleSegments
           ? `detour-path-${routeId}-${index}`
           : `detour-path-${routeId}`;
+        const skippedPathId = hasMultipleSegments
+          ? `detour-context-${routeId}-${index}`
+          : `detour-context-${routeId}`;
 
         return (
-          <RoutePolyline
-            key={pathId}
-            id={pathId}
-            coordinates={activeDetourPath}
-            color={detourColor}
-            strokeWidth={5}
-            lineDashPattern={[10, 8]}
-            opacity={opacity}
-            outlineWidth={1.5}
-          />
+          <React.Fragment key={pathId}>
+            {inferredDetourPath && skippedRoutePath ? (
+              <RoutePolyline
+                id={skippedPathId}
+                coordinates={skippedRoutePath}
+                color={skippedColor}
+                strokeWidth={SKIPPED_ROUTE_STYLE.strokeWidth}
+                lineDashPattern={SKIPPED_ROUTE_STYLE.lineDashPattern}
+                opacity={Math.min(opacity, 0.75) * SKIPPED_ROUTE_STYLE.opacityMultiplier}
+                outlineWidth={SKIPPED_ROUTE_STYLE.outlineWidth}
+                outlineColor={SKIPPED_ROUTE_STYLE.outlineColor}
+              />
+            ) : null}
+            <RoutePolyline
+              id={pathId}
+              coordinates={activeDetourPath}
+              color={detourColor}
+              strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
+              opacity={opacity}
+              outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
+              outlineColor={DETOUR_LINE_STYLE.outlineColor}
+            />
+          </React.Fragment>
         );
       })}
 
@@ -158,10 +224,18 @@ const DetourOverlay = ({
       {showCallouts && normalizedSegments.flatMap((segment, segmentIndex) =>
         [
           {
+            kind: 'closed',
+            point: getPolylineMidpoint(segment?.skippedSegmentPolyline ?? null),
+            label: 'ROUTE CLOSED',
+            fillColor: COLORS.errorSubtle,
+            borderColor: skippedColor,
+            textColor: skippedColor,
+          },
+          {
             kind: 'entry',
             point: segment?.entryPoint ?? null,
-            eyebrow: 'DETOUR',
-            label: 'START',
+            eyebrow: 'BUS DETOUR',
+            label: 'OPEN',
             fillColor: routeBaseColor,
             borderColor: routeStopFillColor,
             textColor: routeStopFillColor,
@@ -170,8 +244,8 @@ const DetourOverlay = ({
           {
             kind: 'exit',
             point: segment?.exitPoint ?? null,
-            eyebrow: 'DETOUR',
-            label: 'END',
+            eyebrow: 'ROUTE',
+            label: 'RESUMES',
             fillColor: routeStopFillColor,
             borderColor: routeBaseColor,
             textColor: routeBaseColor,
@@ -183,6 +257,32 @@ const DetourOverlay = ({
             const entryExitId = hasMultipleSegments
               ? `detour-${anchor.kind}-point-${routeId}-${segmentIndex}`
               : `detour-${anchor.kind}-point-${routeId}`;
+
+            if (anchor.kind === 'closed') {
+              return (
+                <MapLibreGL.PointAnnotation
+                  key={entryExitId}
+                  id={entryExitId}
+                  coordinate={[anchor.point.longitude, anchor.point.latitude]}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                >
+                  <View
+                    style={[
+                      styles.closureBadge,
+                      {
+                        backgroundColor: anchor.fillColor,
+                        borderColor: anchor.borderColor,
+                        opacity,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.closureBadgeText, { color: anchor.textColor }]}>
+                      {anchor.label}
+                    </Text>
+                  </View>
+                </MapLibreGL.PointAnnotation>
+              );
+            }
 
             return (
               <MapLibreGL.PointAnnotation

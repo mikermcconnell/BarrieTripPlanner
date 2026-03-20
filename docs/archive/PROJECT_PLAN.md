@@ -1,5 +1,8 @@
 # Barrie Transit Trip Planner - Project Plan
 
+> Archive only. This file captures an early planning snapshot and includes superseded stack assumptions, including Google Maps-era decisions.
+> Do not use this file as the current repo contract.
+> Read `AGENTS.md` and `README.md` first.
 > Historical planning document. For the current integrated trip flow and route ownership, use
 > `docs/plans/2026-03-07-app-stabilization-roadmap.md` and
 > `docs/plans/2026-03-07-phase-0-3-deliverables.md`.

@@ -96,7 +96,7 @@ const FareInfoPanel = () => {
             accessibilityRole="button"
             accessibilityLabel="Open HotSpot app to buy fare"
           >
-            <Text style={styles.hotspotButtonText}>Open HotSpot App</Text>
+            <Text style={styles.hotspotButtonText}>Buy fare in HotSpot</Text>
           </TouchableOpacity>
 
           {/* Last updated */}

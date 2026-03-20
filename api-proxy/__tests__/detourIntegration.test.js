@@ -144,7 +144,7 @@ describe('detector → publisher: full pipeline', () => {
 
   test('publisher writes DETOUR_DETECTED history event on first publish', async () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
+    for (let i = 0; i < 6; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
     const activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
 
     await publishDetours(activeDetours);
@@ -154,6 +154,9 @@ describe('detector → publisher: full pipeline', () => {
     expect(historyWrites[0].data.eventType).toBe('DETOUR_DETECTED');
     expect(historyWrites[0].data.routeId).toBe('route-1');
     expect(historyWrites[0].data.source).toBe('detour-worker-v2');
+    expect(historyWrites[0].data.entryPoint).toBeDefined();
+    expect(historyWrites[0].data.exitPoint).toBeDefined();
+    expect(historyWrites[0].data.shapeId).toBeDefined();
   });
 
   test('geometry fields written to Firestore when evidence is sufficient', async () => {
@@ -188,6 +191,54 @@ describe('detector → publisher: full pipeline', () => {
 
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     expect(setOps[0].data.vehicleCount).toBe(2);
+  });
+
+  test('same-route detours separated by on-route travel publish as one route doc with two segments', async () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+    const eastA = { latitude: 44.395, longitude: -79.684 };
+    const eastB = { latitude: 44.395, longitude: -79.682 };
+
+    try {
+      Date.now = () => BASE_TIME;
+      [
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_MID,
+        OFF_ROUTE_MID,
+        OFF_ROUTE_WEST,
+        OFF_ROUTE_MID,
+      ].forEach((coordinate) => {
+        processVehicles([makeVehicle({ coordinate })], shapes, routeShapeMapping);
+      });
+
+      Date.now = () => BASE_TIME + 60_000;
+      processVehicles([makeVehicle({ coordinate: ON_ROUTE_COORD })], shapes, routeShapeMapping);
+      processVehicles([makeVehicle({ coordinate: ON_ROUTE_COORD })], shapes, routeShapeMapping);
+
+      Date.now = () => BASE_TIME + 120_000;
+      let activeDetours;
+      [
+        eastA,
+        eastA,
+        eastB,
+        eastB,
+        eastA,
+        eastB,
+      ].forEach((coordinate) => {
+        activeDetours = processVehicles([makeVehicle({ coordinate })], shapes, routeShapeMapping);
+      });
+
+      await publishDetours(activeDetours);
+
+      const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
+      expect(setOps).toHaveLength(1);
+      expect(setOps[0].docId).toBe('route-1');
+      expect(Array.isArray(setOps[0].data.segments)).toBe(true);
+      expect(setOps[0].data.segments).toHaveLength(2);
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 });
 
@@ -284,6 +335,9 @@ describe('state transitions: active → clear-pending → cleared', () => {
     );
     expect(clearedEvent).toBeDefined();
     expect(clearedEvent.data.durationMs).toBeGreaterThan(0);
+    expect(clearedEvent.data.entryPoint).toBeDefined();
+    expect(clearedEvent.data.exitPoint).toBeDefined();
+    expect(clearedEvent.data.shapeId).toBeDefined();
   });
 
   test('reactivation from clear-pending writes DETOUR_UPDATED with state restored', async () => {

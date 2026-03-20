@@ -32,6 +32,16 @@ const StepOverviewSheet = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const animatedHeight = useRef(new Animated.Value(0)).current;
+  const currentLeg = legs[currentLegIndex];
+  const currentLabel = currentLeg
+    ? currentLeg.isOnDemand
+      ? 'On-demand'
+      : currentLeg.mode === 'WALK'
+      ? 'Current walk'
+      : currentLeg.route?.shortName
+      ? `Bus ${currentLeg.route.shortName}`
+      : 'Current leg'
+    : 'Trip steps';
 
   const toggleExpanded = () => {
     Animated.timing(animatedHeight, {
@@ -48,14 +58,16 @@ const StepOverviewSheet = ({
   });
 
   return (
-    <View style={styles.container}>
-      {/* Toggle Header */}
-      <TouchableOpacity style={styles.toggleHeader} onPress={toggleExpanded}>
+    <View style={[styles.container, isExpanded && styles.containerExpanded]}>
+      <TouchableOpacity
+        style={[styles.toggleHeader, isExpanded ? styles.toggleHeaderExpanded : styles.toggleHeaderCollapsed]}
+        onPress={toggleExpanded}
+      >
         <View style={styles.handleBar} />
+        <Text style={styles.toggleLabel}>{isExpanded ? 'Trip steps' : currentLabel}</Text>
       </TouchableOpacity>
 
-      {/* Expandable Content */}
-      <Animated.View style={[styles.content, { maxHeight }]}>
+      <Animated.View style={[styles.content, isExpanded && styles.contentExpanded, { maxHeight }]}>
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
@@ -190,6 +202,9 @@ const StepOverviewSheet = ({
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: 'center',
+  },
+  containerExpanded: {
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: BORDER_RADIUS.xl,
     borderTopRightRadius: BORDER_RADIUS.xl,
@@ -197,21 +212,45 @@ const styles = StyleSheet.create({
   },
   toggleHeader: {
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  toggleHeaderCollapsed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 77, 0.08)',
+    ...SHADOWS.small,
+  },
+  toggleHeaderExpanded: {
+    width: '100%',
   },
   handleBar: {
-    width: 40,
+    width: 26,
     height: 4,
     backgroundColor: COLORS.grey300,
     borderRadius: 2,
-    marginBottom: SPACING.xs,
+  },
+  toggleLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
   },
   content: {
     overflow: 'hidden',
+    width: '100%',
+  },
+  contentExpanded: {
+    width: '100%',
   },
   scrollView: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.sm,
   },
   legItem: {
     flexDirection: 'row',

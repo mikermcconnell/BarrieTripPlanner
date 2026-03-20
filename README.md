@@ -2,6 +2,17 @@
 
 A React Native mobile app for real-time transit information in Barrie, Ontario.
 
+## Documentation Guide
+
+Read docs in this order:
+
+1. [AGENTS.md](./AGENTS.md) for repo context, load order, and what not to trust by default
+2. this README for current setup, scripts, and product surface
+3. [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md) for backend deployment and auth
+4. [docs/AUTO-DETOUR-DETECTION.md](./docs/AUTO-DETOUR-DETECTION.md) for detour feature behavior
+
+Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start with [`docs/plans/README.md`](./docs/plans/README.md) if you need them.
+
 ## Features
 
 - Real-time bus tracking with live vehicle positions
@@ -35,8 +46,8 @@ Supporting features:
 ## Prerequisites
 
 - Node.js 18+ installed
-- Expo Go app on your phone ([iOS](https://apps.apple.com/app/expo-go/id982107779) / [Android](https://play.google.com/store/apps/details?id=host.exp.exponent))
-- Expo account at https://expo.dev
+- Android Studio / emulator if doing native Android development
+- Expo account only if you need EAS builds or Expo-hosted services
 
 ## Setup
 
@@ -54,10 +65,7 @@ Supporting features:
 
    `app.config.js` loads `GOOGLE_SERVICES_JSON` automatically when present.
 
-3. **Start the development server:**
-   ```bash
-   npm start
-   ```
+3. **Configure environment variables:**
 
    For full feature parity in development, copy `.env.example` to `.env` and fill required values:
    - `EXPO_PUBLIC_API_PROXY_URL`
@@ -68,9 +76,24 @@ Supporting features:
    - Keep `EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=false` for production/public builds
    - Keep `EXPO_PUBLIC_API_PROXY_TOKEN` empty for production/public builds
 
-4. **Open the app:**
-   - Scan the QR code with Expo Go on your phone
-   - Or press `a` for Android emulator / `i` for iOS simulator
+4. **Choose a development path:**
+
+   Native Android:
+   ```bash
+   npm run android:dev
+   ```
+
+   Web:
+   ```bash
+   npm run web:dev
+   ```
+
+   General Expo server only:
+   ```bash
+   npm start
+   ```
+
+   `npm start` is useful for generic Expo workflows, but the main day-to-day paths for this repo are `android:dev`, `android:stable`, and `web:dev`.
 
 ## Android Emulator Quick Start (Recommended)
 
@@ -90,6 +113,7 @@ When working in Android emulator, use one of these commands instead of manual Me
   - Development path with live reload.
   - Runs recovery, starts Metro on `8084`, starts a local dev proxy on `8083`, then launches the app.
   - The proxy avoids emulator bundle transfer issues seen with direct Metro streaming.
+  - This is the preferred native development path for the current app.
 
 - `npm run android:dev:direct`
   - Direct Metro on `8083` without proxy.
@@ -105,6 +129,7 @@ When working in Android emulator, use one of these commands instead of manual Me
 ### Web Development (CORS Proxy Required)
 
 Barrie GTFS feeds do not expose browser CORS headers, so web mode must use a proxy.
+The web app uses the repo's MapLibre GL JS renderer and expects proxied GTFS/geocoding access.
 
 Run web with the local proxy:
 ```bash
@@ -144,13 +169,16 @@ src/
 
 Data provided by [Barrie Transit](https://www.barrie.ca/transit).
 
-## Roadmap
+## Planning Notes
 
-Current stabilization roadmap:
+Dated plans and working notes live under [`docs/plans/`](./docs/plans/).
+They are useful background, but they are not default source-of-truth context.
 
-- [docs/plans/2026-03-07-app-stabilization-roadmap.md](./docs/plans/2026-03-07-app-stabilization-roadmap.md)
+Start with:
+
+- [docs/plans/README.md](./docs/plans/README.md)
 - [docs/plans/2026-03-07-phase-0-3-deliverables.md](./docs/plans/2026-03-07-phase-0-3-deliverables.md)
-- [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md)
+- [docs/plans/2026-03-07-app-stabilization-roadmap.md](./docs/plans/2026-03-07-app-stabilization-roadmap.md)
 
 ## Server-Side Detour Feed (New)
 

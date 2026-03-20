@@ -71,7 +71,7 @@ const SignUpScreen = ({ navigation }) => {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.logoContainer}>
             <Icon name="Bus" size={48} color={COLORS.primary} style={{ marginBottom: SPACING.xs }} />
-            <Text style={styles.subtitle}>Join Barrie Transit</Text>
+            <Text style={styles.subtitle}>Create your account</Text>
           </View>
 
           <View style={styles.form}>

@@ -5,125 +5,159 @@
  * Different colors for walk vs transit, with current/completed/upcoming states.
  */
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { COLORS, SPACING } from '../../config/theme';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 
 const NavigationProgressBar = ({ legs, currentLegIndex }) => {
   if (!legs || legs.length === 0) return null;
 
+  const getLegLabel = (leg, index) => {
+    if (leg.isOnDemand) return 'On-demand';
+    if (leg.mode === 'WALK') {
+      return index === legs.length - 1 ? 'Final walk' : 'Walk';
+    }
+    return leg.route?.shortName ? `Bus ${leg.route.shortName}` : 'Bus';
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.progressRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.progressRow}>
         {legs.map((leg, index) => {
           const isCompleted = index < currentLegIndex;
           const isCurrent = index === currentLegIndex;
           const isWalk = leg.mode === 'WALK';
+          const label = getLegLabel(leg, index);
 
           return (
-            <React.Fragment key={index}>
-              {/* Connector line (except before first dot) */}
-              {index > 0 && (
-                <View
-                  style={[
-                    styles.connector,
-                    isCompleted && styles.connectorCompleted,
-                    isCurrent && styles.connectorCurrent,
-                  ]}
-                />
-              )}
-
-              {/* Leg dot */}
+            <View
+              key={`${label}-${index}`}
+              style={[
+                styles.stageChip,
+                isCompleted && styles.stageChipCompleted,
+                isCurrent && styles.stageChipCurrent,
+              ]}
+            >
               <View
                 style={[
-                  styles.dot,
-                  isCurrent && styles.dotCurrent,
-                  isCompleted && styles.dotCompleted,
-                  isWalk ? styles.dotWalk : styles.dotTransit,
-                  isCompleted && isWalk && styles.dotWalkCompleted,
-                  isCompleted && !isWalk && styles.dotTransitCompleted,
+                  styles.stageIcon,
+                  isWalk && styles.stageIconWalk,
+                  !isWalk && !leg.isOnDemand && styles.stageIconTransit,
+                  leg.isOnDemand && styles.stageIconOnDemand,
+                  isCurrent && styles.stageIconCurrent,
+                  isCompleted && styles.stageIconCompleted,
                 ]}
               >
-                {isCurrent && (
-                  <View style={styles.currentIndicator} />
-                )}
+                <View style={styles.stageIconCore} />
               </View>
-            </React.Fragment>
+              <Text
+                style={[
+                  styles.stageLabel,
+                  isCurrent && styles.stageLabelCurrent,
+                  isCompleted && styles.stageLabelCompleted,
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+              {isCurrent ? (
+                <View style={styles.nowPill}>
+                  <Text style={styles.nowPillText}>Now</Text>
+                </View>
+              ) : null}
+            </View>
           );
         })}
-      </View>
-
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    marginHorizontal: SPACING.md,
+    marginBottom: 6,
   },
   progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: 2,
   },
-  connector: {
-    height: 3,
-    flex: 1,
-    maxWidth: 40,
-    backgroundColor: COLORS.grey300,
-    marginHorizontal: 2,
+  stageChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minHeight: 34,
+    ...SHADOWS.small,
   },
-  connectorCompleted: {
-    backgroundColor: COLORS.success,
+  stageChipCurrent: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySubtle,
   },
-  connectorCurrent: {
-    backgroundColor: COLORS.grey300,
+  stageChipCompleted: {
+    borderColor: COLORS.success,
+    backgroundColor: COLORS.successSubtle,
   },
-  dot: {
+  stageIcon: {
     width: 16,
     height: 16,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: SPACING.xs,
+    backgroundColor: COLORS.grey300,
   },
-  dotWalk: {
-    backgroundColor: COLORS.grey400,
-    borderWidth: 2,
-    borderColor: COLORS.grey400,
+  stageIconWalk: {
+    backgroundColor: COLORS.grey500,
   },
-  dotTransit: {
+  stageIconTransit: {
     backgroundColor: COLORS.primary,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
   },
-  dotCurrent: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 3,
-    borderColor: COLORS.primary,
+  stageIconOnDemand: {
+    backgroundColor: COLORS.secondary,
+  },
+  stageIconCurrent: {
+    backgroundColor: COLORS.primaryDark,
+  },
+  stageIconCompleted: {
+    backgroundColor: COLORS.success,
+  },
+  stageIconCore: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: COLORS.white,
   },
-  dotCompleted: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
+  stageLabel: {
+    maxWidth: 82,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '700',
   },
-  dotWalkCompleted: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
+  stageLabelCurrent: {
+    color: COLORS.primaryDark,
   },
-  dotTransitCompleted: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
+  stageLabelCompleted: {
+    color: COLORS.primaryDark,
   },
-  currentIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  nowPill: {
+    marginLeft: 5,
+    borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primary,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  nowPillText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
 });
 

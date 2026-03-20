@@ -58,7 +58,7 @@ const SurveyNudgeBanner = ({ onTakeSurvey, style }) => {
           <Text style={styles.title}>How was your trip?</Text>
           <Text style={styles.subtitle}>Share feedback to help improve transit</Text>
         </View>
-        <Text style={styles.cta}>Rate {'\u203A'}</Text>
+        <Text style={styles.cta}>Share feedback {'\u203A'}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.dismissButton} onPress={handleDismiss}>
         <Text style={styles.dismissText}>{'\u2715'}</Text>

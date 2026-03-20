@@ -150,7 +150,7 @@ const TripBottomSheet = ({
           <Text style={styles.resultsTitle}>
             {itineraries.length} route{itineraries.length !== 1 ? 's' : ''} found
           </Text>
-          <Text style={styles.resultsSubtitle}>Select a route to preview on map</Text>
+          <Text style={styles.resultsSubtitle}>Choose a route to preview on the map</Text>
         </View>
         <View style={styles.resultsList}>
           {itineraries.map((itinerary, index) => (

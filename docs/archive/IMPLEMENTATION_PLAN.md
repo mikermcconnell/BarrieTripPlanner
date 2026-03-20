@@ -1,5 +1,8 @@
 # Barrie Transit Trip Planner - Implementation Plan
 
+> Archive only. This file reflects an earlier Expo Go and Google Maps setup path and is not the current development workflow.
+> Do not use this file as the current repo contract.
+> Read `AGENTS.md` and `README.md` first.
 > Historical planning document. The active product surface and stabilization scope now live in
 > `docs/plans/2026-03-07-app-stabilization-roadmap.md` and
 > `docs/plans/2026-03-07-phase-0-3-deliverables.md`.

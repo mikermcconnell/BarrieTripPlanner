@@ -173,6 +173,11 @@ const NavigationHeader = ({
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
     paddingTop: 50,
     paddingBottom: SPACING.md,
     paddingHorizontal: SPACING.md,

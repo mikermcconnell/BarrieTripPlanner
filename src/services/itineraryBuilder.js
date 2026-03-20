@@ -303,6 +303,7 @@ const mergeSameRouteLegs = (legs, routingData) => {
           lat: mergedLeg.to.lat,
           lon: mergedLeg.to.lon,
           stopId: mergedLeg.to.stopId,
+          stopCode: mergedLeg.to.stopCode || mergedLeg.to.stopId || null,
         });
         // Add the next leg's intermediate stops
         if (next.intermediateStops) {
@@ -498,6 +499,7 @@ const getIntermediateStops = (routingData, tripId, boardingStopId, alightingStop
         lat: stop.latitude,
         lon: stop.longitude,
         stopId: stop.id,
+        stopCode: stop.code || stop.id,
       });
     }
   }
@@ -522,4 +524,3 @@ const getRouteInfo = (routingData, routeId) => {
   }
   return null;
 };
-

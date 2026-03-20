@@ -20,6 +20,9 @@ import { haversineDistance } from '../utils/geometryUtils';
 import { getActiveServicesForDate, formatGTFSDate } from './calendarService';
 import { buildItinerary } from './itineraryBuilder';
 
+const SECONDS_PER_DAY = 24 * 3600;
+const SERVICE_DAY_ROLLOVER_WINDOW_SECONDS = 6 * 3600;
+
 /**
  * Convert a Date to seconds since midnight
  * @param {Date} date - JavaScript Date object
@@ -27,6 +30,80 @@ import { buildItinerary } from './itineraryBuilder';
  */
 const dateToSeconds = (date) => {
   return date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
+};
+
+const addDays = (date, days) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
+const buildServiceDaySearchContexts = (serviceCalendar, date, time) => {
+  const requestedTime = dateToSeconds(time);
+  const contexts = [];
+  const seen = new Set();
+
+  const addContext = (serviceDate, searchTime) => {
+    const activeServices = getActiveServicesForDate(serviceCalendar, serviceDate);
+    if (activeServices.size === 0) return;
+
+    const key = `${formatGTFSDate(serviceDate)}:${searchTime}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    contexts.push({
+      activeServices,
+      searchTime,
+      serviceDate,
+    });
+  };
+
+  addContext(date, requestedTime);
+
+  if (requestedTime < SERVICE_DAY_ROLLOVER_WINDOW_SECONDS) {
+    addContext(addDays(date, -1), requestedTime + SECONDS_PER_DAY);
+  }
+
+  return contexts;
+};
+
+const collectForwardResultsForContext = (
+  routingData,
+  originStops,
+  destStops,
+  departureTime,
+  activeServices
+) => {
+  let results = [];
+  const excludeTrips = new Set();
+  const maxPasses = ROUTING_CONFIG.MAX_ITINERARIES + 2; // safety limit
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    if (results.length >= ROUTING_CONFIG.MAX_ITINERARIES) break;
+
+    const passResults = raptorForward(
+      routingData,
+      originStops,
+      destStops,
+      departureTime,
+      activeServices,
+      excludeTrips.size > 0 ? excludeTrips : null
+    );
+
+    if (passResults.length === 0) break;
+
+    for (const result of passResults) {
+      for (const seg of result.path) {
+        if (seg.type === 'TRANSIT') {
+          excludeTrips.add(seg.tripId);
+        }
+      }
+    }
+
+    results = deduplicateResults([...results, ...passResults]);
+  }
+
+  return results;
 };
 
 /**
@@ -79,13 +156,9 @@ export const planTripLocal = async ({
     );
   }
 
-  // Get departure time in seconds since midnight
-  const departureTime = dateToSeconds(time);
+  const searchContexts = buildServiceDaySearchContexts(routingData.serviceCalendar, date, time);
 
-  // Get active services for the requested date
-  const activeServices = getActiveServicesForDate(routingData.serviceCalendar, date);
-
-  if (activeServices.size === 0) {
+  if (searchContexts.length === 0) {
     throw new RoutingError(
       ROUTING_ERROR_CODES.NO_SERVICE,
       'No transit service on the requested date'
@@ -127,54 +200,39 @@ export const planTripLocal = async ({
   let raptorResults;
 
   if (arriveBy) {
-    raptorResults = raptorReverse(
-      routingData,
-      originStops,
-      destStops,
-      departureTime,
-      activeServices
+    raptorResults = deduplicateResults(
+      searchContexts.flatMap(({ searchTime, activeServices }) => (
+        raptorReverse(
+          routingData,
+          originStops,
+          destStops,
+          searchTime,
+          activeServices
+        )
+      ))
     );
   } else {
-    raptorResults = [];
-    const excludeTrips = new Set();
-    const maxPasses = ROUTING_CONFIG.MAX_ITINERARIES + 2; // safety limit
-
-    for (let pass = 0; pass < maxPasses; pass++) {
-      if (raptorResults.length >= ROUTING_CONFIG.MAX_ITINERARIES) break;
-
-      const passResults = raptorForward(
-        routingData,
-        originStops,
-        destStops,
-        departureTime,
-        activeServices,
-        excludeTrips.size > 0 ? excludeTrips : null
-      );
-
-      if (passResults.length === 0) break;
-
-      // Collect trip IDs from this pass to exclude in next pass
-      for (const result of passResults) {
-        for (const seg of result.path) {
-          if (seg.type === 'TRANSIT') {
-            excludeTrips.add(seg.tripId);
-          }
-        }
-      }
-
-      // Merge with existing results and deduplicate
-      raptorResults = deduplicateResults([...raptorResults, ...passResults]);
-    }
-
-    // Final sort by arrival time, with tiebreaker on walk distance
-    raptorResults.sort((a, b) => {
-      const timeDiff = a.arrivalTime - b.arrivalTime;
-      if (Math.abs(timeDiff) > 120) return timeDiff;
-      return a.walkToDestSeconds - b.walkToDestSeconds;
-    });
-
-    raptorResults = raptorResults.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
+    raptorResults = deduplicateResults(
+      searchContexts.flatMap(({ searchTime, activeServices }) => (
+        collectForwardResultsForContext(
+          routingData,
+          originStops,
+          destStops,
+          searchTime,
+          activeServices
+        )
+      ))
+    );
   }
+
+  // Final sort by arrival time, with tiebreaker on walk distance
+  raptorResults.sort((a, b) => {
+    const timeDiff = a.arrivalTime - b.arrivalTime;
+    if (Math.abs(timeDiff) > 120) return timeDiff;
+    return a.walkToDestSeconds - b.walkToDestSeconds;
+  });
+
+  raptorResults = raptorResults.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
 
   if (raptorResults.length === 0) {
     throw new RoutingError(

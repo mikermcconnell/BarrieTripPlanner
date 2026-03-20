@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
 import logger from '../utils/logger';
+import { haversineDistance } from '../utils/geometryUtils';
 
 const LOCATION_CONFIG = {
   accuracy: Location.Accuracy.High,
@@ -19,6 +20,46 @@ export const useNavigationLocation = () => {
   const [error, setError] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const subscriptionRef = useRef(null);
+  const lastLocationRef = useRef(null);
+
+  const buildLocationPayload = useCallback((coords, timestamp) => {
+    let speed = Number.isFinite(coords?.speed) && coords.speed >= 0 ? coords.speed : null;
+    const previous = lastLocationRef.current;
+
+    if (
+      speed == null &&
+      previous &&
+      Number.isFinite(timestamp) &&
+      Number.isFinite(previous.timestamp) &&
+      timestamp > previous.timestamp
+    ) {
+      const elapsedSeconds = (timestamp - previous.timestamp) / 1000;
+      if (elapsedSeconds >= 1) {
+        const distanceMeters = haversineDistance(
+          previous.latitude,
+          previous.longitude,
+          coords.latitude,
+          coords.longitude
+        );
+        const derivedSpeed = distanceMeters / elapsedSeconds;
+        if (Number.isFinite(derivedSpeed) && derivedSpeed >= 0 && derivedSpeed <= 25) {
+          speed = derivedSpeed;
+        }
+      }
+    }
+
+    const payload = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      heading: coords.heading,
+      accuracy: coords.accuracy,
+      speed,
+      timestamp,
+    };
+
+    lastLocationRef.current = payload;
+    return payload;
+  }, []);
 
   const startTracking = useCallback(async () => {
     setError(null);
@@ -36,25 +77,13 @@ export const useNavigationLocation = () => {
         accuracy: Location.Accuracy.High,
       });
 
-      setLocation({
-        latitude: initialLocation.coords.latitude,
-        longitude: initialLocation.coords.longitude,
-        heading: initialLocation.coords.heading,
-        accuracy: initialLocation.coords.accuracy,
-        timestamp: initialLocation.timestamp,
-      });
+      setLocation(buildLocationPayload(initialLocation.coords, initialLocation.timestamp));
 
       // Start watching for location updates
       subscriptionRef.current = await Location.watchPositionAsync(
         LOCATION_CONFIG,
         (newLocation) => {
-          setLocation({
-            latitude: newLocation.coords.latitude,
-            longitude: newLocation.coords.longitude,
-            heading: newLocation.coords.heading,
-            accuracy: newLocation.coords.accuracy,
-            timestamp: newLocation.timestamp,
-          });
+          setLocation(buildLocationPayload(newLocation.coords, newLocation.timestamp));
         }
       );
 
@@ -65,13 +94,14 @@ export const useNavigationLocation = () => {
       setError(err.message || 'Failed to start location tracking');
       return false;
     }
-  }, []);
+  }, [buildLocationPayload]);
 
   const stopTracking = useCallback(() => {
     if (subscriptionRef.current) {
       subscriptionRef.current.remove();
       subscriptionRef.current = null;
     }
+    lastLocationRef.current = null;
     setIsTracking(false);
   }, []);
 

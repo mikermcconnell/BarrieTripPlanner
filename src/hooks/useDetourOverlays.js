@@ -9,10 +9,11 @@
  * and user-facing detour toggles.
  */
 import { useMemo } from 'react';
+import { COLORS } from '../config/theme';
 
 const DETOUR_COLORS = {
-  SKIPPED: '#d92d20',    // strong red — skipped stops / detour emphasis
-  DETOUR: '#d92d20',     // active detour path matches skipped service alert color
+  SKIPPED: COLORS.error,   // closed regular route segment riders should not expect service on
+  DETOUR: COLORS.ctaGreen, // open reroute path buses are actively using
   ROUTE_BASE: '#111827', // neutral base route, closer to the reference map
   ROUTE_STOP_FILL: '#ffffff',
   ROUTE_STOP_STROKE: '#111827',

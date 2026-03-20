@@ -35,7 +35,7 @@ const SLIDES = [
   },
   {
     id: '4',
-    title: 'Turn-by-Turn Navigation',
+    title: 'Step-by-Step Navigation',
     description: 'Follow along with live guidance from bus stop to destination.',
   },
 ];

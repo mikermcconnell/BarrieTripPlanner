@@ -1,11 +1,52 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import logger from '../utils/logger';
+import { haversineDistance } from '../utils/geometryUtils';
 
 export const useNavigationLocation = () => {
   const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const watchIdRef = useRef(null);
+  const lastLocationRef = useRef(null);
+
+  const buildLocationPayload = useCallback((coords, timestamp = Date.now()) => {
+    let speed = Number.isFinite(coords?.speed) && coords.speed >= 0 ? coords.speed : null;
+    const previous = lastLocationRef.current;
+
+    if (
+      speed == null &&
+      previous &&
+      Number.isFinite(timestamp) &&
+      Number.isFinite(previous.timestamp) &&
+      timestamp > previous.timestamp
+    ) {
+      const elapsedSeconds = (timestamp - previous.timestamp) / 1000;
+      if (elapsedSeconds >= 1) {
+        const distanceMeters = haversineDistance(
+          previous.latitude,
+          previous.longitude,
+          coords.latitude,
+          coords.longitude
+        );
+        const derivedSpeed = distanceMeters / elapsedSeconds;
+        if (Number.isFinite(derivedSpeed) && derivedSpeed >= 0 && derivedSpeed <= 25) {
+          speed = derivedSpeed;
+        }
+      }
+    }
+
+    const payload = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      heading: coords.heading,
+      accuracy: coords.accuracy,
+      speed,
+      timestamp,
+    };
+
+    lastLocationRef.current = payload;
+    return payload;
+  }, []);
 
   const startTracking = useCallback(async () => {
     setError(null);
@@ -18,21 +59,11 @@ export const useNavigationLocation = () => {
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            heading: position.coords.heading,
-            accuracy: position.coords.accuracy,
-          });
+          setLocation(buildLocationPayload(position.coords, position.timestamp));
 
           watchIdRef.current = navigator.geolocation.watchPosition(
             (nextPosition) => {
-              setLocation({
-                latitude: nextPosition.coords.latitude,
-                longitude: nextPosition.coords.longitude,
-                heading: nextPosition.coords.heading,
-                accuracy: nextPosition.coords.accuracy,
-              });
+              setLocation(buildLocationPayload(nextPosition.coords, nextPosition.timestamp));
             },
             (watchError) => {
               logger.warn('Location watch error:', watchError);
@@ -57,13 +88,14 @@ export const useNavigationLocation = () => {
         }
       );
     });
-  }, []);
+  }, [buildLocationPayload]);
 
   const stopTracking = useCallback(() => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+    lastLocationRef.current = null;
     setIsTracking(false);
   }, []);
 

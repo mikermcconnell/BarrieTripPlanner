@@ -58,7 +58,59 @@ function normalizeVehicleCount(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-function makeSnapshot(doc) {
+function cloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function hasOwn(source, key) {
+  return Boolean(source) && Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function hasGeometryPayload(source) {
+  return [
+    'shapeId',
+    'segments',
+    'entryPoint',
+    'exitPoint',
+    'skippedSegmentPolyline',
+    'inferredDetourPolyline',
+  ].some((key) => hasOwn(source, key));
+}
+
+function pickGeometryValue(doc, previousSnapshot, key, fallback = null) {
+  if (hasOwn(doc, key)) return cloneJson(doc[key]) ?? fallback;
+  if (hasOwn(previousSnapshot, key)) return cloneJson(previousSnapshot[key]) ?? fallback;
+  return fallback;
+}
+
+function makeSnapshot(doc, previousSnapshot = null) {
+  const usePreviousGeometry = !hasGeometryPayload(doc) && previousSnapshot;
+  const segments = pickGeometryValue(doc, previousSnapshot, 'segments', []);
+  const shapeId = pickGeometryValue(doc, previousSnapshot, 'shapeId', null);
+  const entryPoint = pickGeometryValue(doc, previousSnapshot, 'entryPoint', null);
+  const exitPoint = pickGeometryValue(doc, previousSnapshot, 'exitPoint', null);
+  const skippedSegmentPolyline = pickGeometryValue(
+    doc,
+    previousSnapshot,
+    'skippedSegmentPolyline',
+    null
+  );
+  const inferredDetourPolyline = pickGeometryValue(
+    doc,
+    previousSnapshot,
+    'inferredDetourPolyline',
+    null
+  );
+  const confidence = hasOwn(doc, 'confidence')
+    ? doc.confidence || null
+    : (previousSnapshot?.confidence || null);
+  const evidencePointCount = hasOwn(doc, 'evidencePointCount')
+    ? (doc.evidencePointCount ?? null)
+    : (previousSnapshot?.evidencePointCount ?? null);
+  const lastEvidenceAt = hasOwn(doc, 'lastEvidenceAt')
+    ? (toMillis(doc.lastEvidenceAt) ?? null)
+    : (previousSnapshot?.lastEvidenceAt ?? null);
+
   return {
     routeId: doc.routeId,
     detectedAtMs: toMillis(doc.detectedAt),
@@ -67,12 +119,19 @@ function makeSnapshot(doc) {
     triggerVehicleId: doc.triggerVehicleId || null,
     vehicleCount: normalizeVehicleCount(doc.vehicleCount),
     state: doc.state || 'active',
-    confidence: doc.confidence || null,
-    evidencePointCount: doc.evidencePointCount ?? null,
-    lastEvidenceAt: toMillis(doc.lastEvidenceAt) ?? null,
-    segmentCount: Array.isArray(doc.segments) ? doc.segments.length : 0,
-    geometrySignature: Array.isArray(doc.segments)
-      ? doc.segments
+    isPersistent: Boolean(doc.isPersistent),
+    shapeId,
+    entryPoint,
+    exitPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    confidence,
+    evidencePointCount,
+    lastEvidenceAt,
+    segments,
+    segmentCount: Array.isArray(segments) ? segments.length : 0,
+    geometrySignature: Array.isArray(segments)
+      ? segments
         .map((segment) => {
           const entry = segment?.entryPoint;
           const exit = segment?.exitPoint;
@@ -85,7 +144,7 @@ function makeSnapshot(doc) {
           ].join(':');
         })
         .join('|')
-      : '',
+      : (usePreviousGeometry ? previousSnapshot?.geometrySignature || '' : ''),
   };
 }
 
@@ -166,19 +225,31 @@ function shouldWriteGeometry(routeId, detour, previousSnapshot, now) {
 }
 
 function buildDetectedEvent(routeId, current, now) {
-  const detectedAt = toMillis(current.detectedAt) ?? now;
-  return {
+  const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? now;
+  const event = {
     eventType: 'DETOUR_DETECTED',
     routeId,
     occurredAt: now,
     detectedAt,
-    lastSeenAt: toMillis(current.lastSeenAt) ?? detectedAt,
+    lastSeenAt: current?.lastSeenAtMs ?? toMillis(current.lastSeenAt) ?? detectedAt,
     triggerVehicleId: current.triggerVehicleId || null,
     vehicleCount: current.vehicleCount,
     confidence: current.confidence || null,
     evidencePointCount: current.evidencePointCount ?? null,
+    lastEvidenceAt: current.lastEvidenceAt ?? null,
     source: 'detour-worker-v2',
   };
+  if (current.shapeId) event.shapeId = current.shapeId;
+  if (current.entryPoint) event.entryPoint = cloneJson(current.entryPoint);
+  if (current.exitPoint) event.exitPoint = cloneJson(current.exitPoint);
+  if (current.skippedSegmentPolyline) {
+    event.skippedSegmentPolyline = cloneJson(current.skippedSegmentPolyline);
+  }
+  if (current.inferredDetourPolyline) {
+    event.inferredDetourPolyline = cloneJson(current.inferredDetourPolyline);
+  }
+  if (current.segmentCount > 0) event.segmentCount = current.segmentCount;
+  return event;
 }
 
 function buildUpdatedEvent(routeId, previous, current, now) {
@@ -196,14 +267,14 @@ function buildUpdatedEvent(routeId, previous, current, now) {
   }
 
   if (changedFields.length === 0) return null;
-  const detectedAt = toMillis(current.detectedAt) ?? previous.detectedAtMs ?? now;
+  const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? previous.detectedAtMs ?? now;
 
   return {
     eventType: 'DETOUR_UPDATED',
     routeId,
     occurredAt: now,
     detectedAt,
-    lastSeenAt: toMillis(current.lastSeenAt) ?? previous.lastSeenAtMs ?? detectedAt,
+    lastSeenAt: current?.lastSeenAtMs ?? toMillis(current.lastSeenAt) ?? previous.lastSeenAtMs ?? detectedAt,
     triggerVehicleId: current.triggerVehicleId || null,
     previousTriggerVehicleId: previous.triggerVehicleId || null,
     vehicleCount: current.vehicleCount,
@@ -215,7 +286,7 @@ function buildUpdatedEvent(routeId, previous, current, now) {
 
 function buildClearedEvent(routeId, previous, now) {
   const detectedAt = previous?.detectedAtMs ?? null;
-  return {
+  const event = {
     eventType: 'DETOUR_CLEARED',
     routeId,
     occurredAt: now,
@@ -224,8 +295,20 @@ function buildClearedEvent(routeId, previous, now) {
     durationMs: detectedAt != null ? Math.max(0, now - detectedAt) : null,
     triggerVehicleId: previous?.triggerVehicleId || null,
     previousVehicleCount: previous?.vehicleCount ?? 0,
+    lastEvidenceAt: previous?.lastEvidenceAt ?? null,
     source: 'detour-worker-v2',
   };
+  if (previous?.shapeId) event.shapeId = previous.shapeId;
+  if (previous?.entryPoint) event.entryPoint = cloneJson(previous.entryPoint);
+  if (previous?.exitPoint) event.exitPoint = cloneJson(previous.exitPoint);
+  if (previous?.skippedSegmentPolyline) {
+    event.skippedSegmentPolyline = cloneJson(previous.skippedSegmentPolyline);
+  }
+  if (previous?.inferredDetourPolyline) {
+    event.inferredDetourPolyline = cloneJson(previous.inferredDetourPolyline);
+  }
+  if (previous?.segmentCount > 0) event.segmentCount = previous.segmentCount;
+  return event;
 }
 
 async function writeHistoryEvent(db, event) {
@@ -402,6 +485,7 @@ async function publishDetours(activeDetours) {
         ? detour.vehiclesOffRoute.size
         : normalizeVehicleCount(detour.vehicleCount),
       state: detour.state || 'active',
+      isPersistent: Boolean(detour.isPersistent),
     };
 
     if (shouldUpdateLastSeen) {
@@ -426,13 +510,14 @@ async function publishDetours(activeDetours) {
 
     try {
       await db.collection(ACTIVE_COLLECTION).doc(routeId).set(doc, { merge: true });
+      const currentSnapshot = makeSnapshot(doc, previousSnapshot);
       if (isNew) {
-        await writeHistoryEvent(db, buildDetectedEvent(routeId, doc, now));
+        await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now));
       } else {
-        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previousSnapshot, doc, now));
+        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now));
       }
       lastPublishedIds.add(routeId);
-      lastPublishedState.set(routeId, makeSnapshot(doc));
+      lastPublishedState.set(routeId, currentSnapshot);
       if (shouldUpdateLastSeen) {
         lastSeenUpdateTime.set(routeId, now);
       }

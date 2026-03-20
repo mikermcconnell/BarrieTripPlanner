@@ -93,7 +93,7 @@ const SettingsScreen = ({ navigation }) => {
     setIsLoading(false);
 
     if (result.success) {
-      Alert.alert('Success', 'Push notifications enabled successfully!');
+      Alert.alert('Notifications', 'Notifications are on.');
     } else {
       Alert.alert('Error', result.error || 'Could not enable notifications');
     }
@@ -111,7 +111,7 @@ const SettingsScreen = ({ navigation }) => {
           onPress: async () => {
             await clearCache();
             loadCacheInfo();
-            Alert.alert('Done', 'Cache cleared successfully');
+            Alert.alert('Cache', 'Cache cleared.');
           },
         },
       ]
@@ -195,7 +195,7 @@ const SettingsScreen = ({ navigation }) => {
               disabled={isLoading}
             >
               <Text style={styles.enableButtonText}>
-                {isLoading ? 'Enabling...' : 'Enable Push Notifications'}
+                {isLoading ? 'Turning on...' : 'Turn on notifications'}
               </Text>
             </TouchableOpacity>
           </>
@@ -206,7 +206,7 @@ const SettingsScreen = ({ navigation }) => {
           <View style={styles.routeChipsContainer}>
             <Text style={styles.routeChipsHint}>
               {subscribedRoutes.length === 0
-                ? 'No routes selected — you will receive all transit news'
+                ? 'No routes selected. You will receive all transit news.'
                 : `Receiving news for ${subscribedRoutes.length} route${subscribedRoutes.length !== 1 ? 's' : ''}`}
             </Text>
             <View style={styles.routeChipsRow}>

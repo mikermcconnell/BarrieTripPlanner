@@ -62,7 +62,7 @@ const SurveyScreen = ({ navigation, route }) => {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No Survey Available</Text>
+          <Text style={styles.emptyTitle}>No survey available right now</Text>
           <Text style={styles.emptySubtitle}>Check back later for a new feedback opportunity.</Text>
         </View>
       </SafeAreaView>
@@ -82,13 +82,13 @@ const SurveyScreen = ({ navigation, route }) => {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>Already Submitted</Text>
+          <Text style={styles.emptyTitle}>You already responded</Text>
           <Text style={styles.emptySubtitle}>You've already shared your feedback. Thank you!</Text>
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => navigation.navigate('SurveyResults', { surveyId: survey.id })}
           >
-            <Text style={styles.primaryButtonText}>View Community Results</Text>
+            <Text style={styles.primaryButtonText}>View survey results</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -110,7 +110,7 @@ const SurveyScreen = ({ navigation, route }) => {
             style={styles.primaryButton}
             onPress={() => navigation.navigate('SurveyResults', { surveyId: survey.id })}
           >
-            <Text style={styles.primaryButtonText}>See How Others Responded</Text>
+            <Text style={styles.primaryButtonText}>View survey results</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.secondaryButton}

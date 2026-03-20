@@ -3,7 +3,7 @@
 import { FONT_FAMILIES } from './fonts';
 
 export const COLORS = {
-  // Primary brand colors (BudgetMe Green - per PROJECT_PLAN.md)
+  // Primary brand colors (BudgetMe Green)
   primary: '#4CAF50',
   primaryLight: '#81C784',
   primaryDark: '#388E3C',

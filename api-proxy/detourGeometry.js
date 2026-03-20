@@ -1,6 +1,6 @@
 'use strict';
 
-const { haversineDistance, pointToSegmentDistance } = require('./geometry');
+const { haversineDistance, pointToPolylineDistance, pointToSegmentDistance } = require('./geometry');
 
 // Minimum evidence points needed for any geometry output
 const MIN_EVIDENCE_FOR_GEOMETRY = 3;
@@ -10,7 +10,7 @@ const MIN_SIMPLIFIED_POINTS = 2;
 const DP_TOLERANCE_METERS = 25;
 // Minimum linear span on the route to publish skipped-segment geometry
 const MIN_LINEAR_SEGMENT_LENGTH_METERS = Number.parseFloat(
-  process.env.DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS || '500'
+  process.env.DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS || '100'
 );
 // Minimum distance between projected evidence clusters before they count as separate detour segments
 const SEGMENT_GAP_METERS = Number.parseFloat(process.env.DETOUR_SEGMENT_GAP_METERS || '400');
@@ -23,6 +23,8 @@ const MEDIUM_CONFIDENCE_POINTS = 5;
 const ROUTE_FAMILY_SEGMENT_MATCH_METERS = Number.parseFloat(
   process.env.DETOUR_ROUTE_FAMILY_SEGMENT_MATCH_METERS || '250'
 );
+const REPRESENTATIVE_PATH_CORRIDOR_METERS = 60;
+const REPRESENTATIVE_PATH_OVERLAP_THRESHOLD = 0.7;
 
 /**
  * Find the closest point on a polyline to a coordinate.
@@ -188,6 +190,136 @@ function dedupeConsecutivePoints(points) {
     });
     return deduped;
   }, []);
+}
+
+function buildPolylineLengthMeters(points) {
+  if (!Array.isArray(points) || points.length < 2) return 0;
+
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += haversineDistance(
+      points[i - 1].latitude,
+      points[i - 1].longitude,
+      points[i].latitude,
+      points[i].longitude
+    );
+  }
+
+  return total;
+}
+
+function getPathOverlapRatio(sourcePath, targetPath) {
+  if (!Array.isArray(sourcePath) || sourcePath.length < 2 || !Array.isArray(targetPath) || targetPath.length < 2) {
+    return 0;
+  }
+
+  let overlappingPointCount = 0;
+  sourcePath.forEach((point) => {
+    if (pointToPolylineDistance(point, targetPath) <= REPRESENTATIVE_PATH_CORRIDOR_METERS) {
+      overlappingPointCount += 1;
+    }
+  });
+
+  return overlappingPointCount / sourcePath.length;
+}
+
+function candidatePathsOverlap(a, b) {
+  if (!a?.rawPath || !b?.rawPath) return false;
+
+  return (
+    getPathOverlapRatio(a.rawPath, b.rawPath) >= REPRESENTATIVE_PATH_OVERLAP_THRESHOLD &&
+    getPathOverlapRatio(b.rawPath, a.rawPath) >= REPRESENTATIVE_PATH_OVERLAP_THRESHOLD
+  );
+}
+
+function buildRepresentativePathCandidates(cluster) {
+  if (!Array.isArray(cluster) || cluster.length === 0) return [];
+
+  const pointsByVehicle = new Map();
+  cluster.forEach((point) => {
+    const vehicleKey = point?.vehicleId ? `vehicle:${point.vehicleId}` : 'vehicle:unknown';
+    if (!pointsByVehicle.has(vehicleKey)) pointsByVehicle.set(vehicleKey, []);
+    pointsByVehicle.get(vehicleKey).push(point);
+  });
+
+  const candidates = [];
+
+  for (const [vehicleKey, vehiclePoints] of pointsByVehicle.entries()) {
+    const sortedPoints = vehiclePoints
+      .slice()
+      .sort((a, b) => a.timestampMs - b.timestampMs);
+    const rawPath = dedupeConsecutivePoints(
+      sortedPoints.map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      }))
+    );
+    if (rawPath.length < 2) continue;
+
+    const simplifiedPath = douglasPeucker(rawPath, DP_TOLERANCE_METERS);
+    if (!Array.isArray(simplifiedPath) || simplifiedPath.length < 2) continue;
+
+    const progressValues = sortedPoints
+      .map((point) => point.progressMeters)
+      .filter(Number.isFinite);
+    const progressSpanMeters = progressValues.length > 0
+      ? Math.max(...progressValues) - Math.min(...progressValues)
+      : 0;
+
+    candidates.push({
+      vehicleKey,
+      rawPath,
+      path: simplifiedPath,
+      evidencePointCount: sortedPoints.length,
+      progressSpanMeters,
+      lastEvidenceAt: sortedPoints[sortedPoints.length - 1]?.timestampMs || 0,
+      pathLengthMeters: buildPolylineLengthMeters(rawPath),
+    });
+  }
+
+  return candidates;
+}
+
+function selectRepresentativeDetourPath(cluster) {
+  const candidates = buildRepresentativePathCandidates(cluster);
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0].path;
+
+  const scoredCandidates = candidates
+    .map((candidate, index) => {
+      let supportCount = 0;
+      let supportWeight = 0;
+
+      candidates.forEach((otherCandidate, otherIndex) => {
+        if (otherIndex === index) return;
+        if (!candidatePathsOverlap(candidate, otherCandidate)) return;
+
+        supportCount += 1;
+        supportWeight += otherCandidate.evidencePointCount || 0;
+      });
+
+      return {
+        ...candidate,
+        supportCount,
+        supportWeight,
+      };
+    })
+    .sort((a, b) => {
+      if (b.supportCount !== a.supportCount) return b.supportCount - a.supportCount;
+      if (b.supportWeight !== a.supportWeight) return b.supportWeight - a.supportWeight;
+      if ((b.progressSpanMeters || 0) !== (a.progressSpanMeters || 0)) {
+        return (b.progressSpanMeters || 0) - (a.progressSpanMeters || 0);
+      }
+      if ((b.evidencePointCount || 0) !== (a.evidencePointCount || 0)) {
+        return (b.evidencePointCount || 0) - (a.evidencePointCount || 0);
+      }
+      if ((b.pathLengthMeters || 0) !== (a.pathLengthMeters || 0)) {
+        return (b.pathLengthMeters || 0) - (a.pathLengthMeters || 0);
+      }
+      return (b.lastEvidenceAt || 0) - (a.lastEvidenceAt || 0);
+    });
+
+  return scoredCandidates[0]?.path || null;
 }
 
 function interpolatePointAlongPolyline(polyline, cumulativeDistances, targetMeters) {
@@ -649,7 +781,59 @@ function selectExitBoundaryCandidate(projectedCandidates, lastEvidenceAt) {
     .filter((candidate) => candidate.timestampMs >= lastEvidenceAt)
     .sort((a, b) => a.timestampMs - b.timestampMs);
 
-  return candidatesAfterSegment[0] || null;
+  if (candidatesAfterSegment.length > 0) {
+    return candidatesAfterSegment[candidatesAfterSegment.length - 1];
+  }
+
+  return projectedCandidates
+    .slice()
+    .sort((a, b) => b.timestampMs - a.timestampMs)[0] || null;
+}
+
+function anchorPolylineToEndpoints(polyline, entryPoint, exitPoint, toleranceMeters = 10) {
+  if (!Array.isArray(polyline) || polyline.length < 2) {
+    return Array.isArray(polyline) ? polyline.slice() : [];
+  }
+
+  const anchored = polyline.slice();
+
+  if (entryPoint?.latitude != null && entryPoint?.longitude != null) {
+    const firstPoint = anchored[0];
+    const firstDistance = firstPoint
+      ? haversineDistance(
+        firstPoint.latitude,
+        firstPoint.longitude,
+        entryPoint.latitude,
+        entryPoint.longitude
+      )
+      : Infinity;
+    if (firstDistance > toleranceMeters) {
+      anchored.unshift({
+        latitude: entryPoint.latitude,
+        longitude: entryPoint.longitude,
+      });
+    }
+  }
+
+  if (exitPoint?.latitude != null && exitPoint?.longitude != null) {
+    const lastPoint = anchored[anchored.length - 1];
+    const lastDistance = lastPoint
+      ? haversineDistance(
+        lastPoint.latitude,
+        lastPoint.longitude,
+        exitPoint.latitude,
+        exitPoint.longitude
+      )
+      : Infinity;
+    if (lastDistance > toleranceMeters) {
+      anchored.push({
+        latitude: exitPoint.latitude,
+        longitude: exitPoint.longitude,
+      });
+    }
+  }
+
+  return dedupeConsecutivePoints(anchored);
 }
 
 function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCandidates = {}) {
@@ -682,14 +866,15 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
     rawExitProjection.progressMeters || 0
   );
 
+  const representativeDetourPath = selectRepresentativeDetourPath(cluster);
   const rawCoords = cluster
     .slice()
     .sort((a, b) => a.timestampMs - b.timestampMs)
     .map((point) => ({ latitude: point.latitude, longitude: point.longitude }));
   const simplified = douglasPeucker(rawCoords, DP_TOLERANCE_METERS);
-  const inferredDetourPolyline = simplified.length >= MIN_SIMPLIFIED_POINTS ? simplified : null;
-
-  const confidence = scoreConfidence(cluster, Math.min(segmentDetectedAtMs, detectedAtMs), now);
+  const inferredDetourPolyline =
+    representativeDetourPath ||
+    (simplified.length >= MIN_SIMPLIFIED_POINTS ? simplified : null);
   const entryPoint = entryProjection.projectedPoint
     ? {
       latitude: entryProjection.projectedPoint.latitude,
@@ -702,12 +887,16 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
       longitude: exitProjection.projectedPoint.longitude,
     }
     : null;
+  const anchoredInferredDetourPolyline = inferredDetourPolyline
+    ? anchorPolylineToEndpoints(inferredDetourPolyline, entryPoint, exitPoint)
+    : null;
+  const confidence = scoreConfidence(cluster, Math.min(segmentDetectedAtMs, detectedAtMs), now);
   const hasRenderableSkippedSegment =
     skippedSegmentPolyline.length >= 2 && spanMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS;
 
   const hasRenderableGeometry =
     hasRenderableSkippedSegment ||
-    (inferredDetourPolyline && inferredDetourPolyline.length >= 2);
+    (anchoredInferredDetourPolyline && anchoredInferredDetourPolyline.length >= 2);
   if (!hasRenderableGeometry) return null;
 
   return {
@@ -715,13 +904,56 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
     exitIndex,
     spanMeters,
     skippedSegmentPolyline: hasRenderableSkippedSegment ? skippedSegmentPolyline : null,
-    inferredDetourPolyline,
+    inferredDetourPolyline: anchoredInferredDetourPolyline,
     entryPoint,
     exitPoint,
     confidence,
     evidencePointCount: cluster.length,
     lastEvidenceAt,
   };
+}
+
+function shouldCollapseWeakClustersIntoSingleSegment(segments, mergedSegment) {
+  if (!Array.isArray(segments) || segments.length < 2 || !mergedSegment) return false;
+
+  const allWeak = segments.every((segment) => {
+    const hasSkipped = Array.isArray(segment?.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2;
+    const spanMeters = Number.isFinite(segment?.spanMeters) ? segment.spanMeters : 0;
+    return !hasSkipped && spanMeters < MIN_LINEAR_SEGMENT_LENGTH_METERS;
+  });
+  if (!allWeak) return false;
+
+  const mergedHasSkipped =
+    Array.isArray(mergedSegment.skippedSegmentPolyline) &&
+    mergedSegment.skippedSegmentPolyline.length >= 2;
+  const mergedSpanMeters = Number.isFinite(mergedSegment.spanMeters) ? mergedSegment.spanMeters : 0;
+  const maxIndividualSpanMeters = segments.reduce(
+    (max, segment) => Math.max(max, Number.isFinite(segment?.spanMeters) ? segment.spanMeters : 0),
+    0
+  );
+
+  const mergedPathLength = buildPolylineLengthMeters(mergedSegment.inferredDetourPolyline || []);
+  const maxIndividualPathLength = segments.reduce(
+    (max, segment) =>
+      Math.max(max, buildPolylineLengthMeters(segment?.inferredDetourPolyline || [])),
+    0
+  );
+
+  const mergedHasDistinctAnchors =
+    mergedSegment.entryPoint &&
+    mergedSegment.exitPoint &&
+    haversineDistance(
+      mergedSegment.entryPoint.latitude,
+      mergedSegment.entryPoint.longitude,
+      mergedSegment.exitPoint.latitude,
+      mergedSegment.exitPoint.longitude
+    ) >= MIN_LINEAR_SEGMENT_LENGTH_METERS;
+
+  return (
+    mergedHasSkipped ||
+    mergedSpanMeters > maxIndividualSpanMeters ||
+    (mergedHasDistinctAnchors && mergedPathLength > maxIndividualPathLength)
+  );
 }
 
 function pickPrimarySegment(segments) {
@@ -864,7 +1096,7 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
   const projectedExitCandidates = projectBoundaryCandidates(evidenceWindow.exitCandidates, bestShape.polyline);
 
   const clusters = clusterProjectedEvidence(bestShape.projectedPoints);
-  const segments = clusters
+  let segments = clusters
     .map((cluster) => buildSegmentGeometry(cluster, bestShape.polyline, now, detectedAtMs, {
       entryCandidates: projectedEntryCandidates,
       exitCandidates: projectedExitCandidates,
@@ -883,6 +1115,35 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
       entryIndex: segment.entryIndex,
       exitIndex: segment.exitIndex,
     }));
+
+  if (segments.length > 1) {
+    const mergedSegment = buildSegmentGeometry(
+      bestShape.projectedPoints,
+      bestShape.polyline,
+      now,
+      detectedAtMs,
+      {
+        entryCandidates: projectedEntryCandidates,
+        exitCandidates: projectedExitCandidates,
+      }
+    );
+
+    if (shouldCollapseWeakClustersIntoSingleSegment(segments, mergedSegment)) {
+      segments = [{
+        shapeId: bestShape.shapeId,
+        skippedSegmentPolyline: mergedSegment.skippedSegmentPolyline,
+        inferredDetourPolyline: mergedSegment.inferredDetourPolyline,
+        entryPoint: mergedSegment.entryPoint,
+        exitPoint: mergedSegment.exitPoint,
+        confidence: mergedSegment.confidence,
+        evidencePointCount: mergedSegment.evidencePointCount,
+        lastEvidenceAt: mergedSegment.lastEvidenceAt,
+        spanMeters: mergedSegment.spanMeters,
+        entryIndex: mergedSegment.entryIndex,
+        exitIndex: mergedSegment.exitIndex,
+      }];
+    }
+  }
 
   if (segments.length === 0) return empty;
 
@@ -922,6 +1183,7 @@ module.exports = {
   extractSkippedSegment,
   extractSkippedSegmentByProgress,
   douglasPeucker,
+  selectRepresentativeDetourPath,
   scoreConfidence,
   buildGeometry,
   MIN_EVIDENCE_FOR_GEOMETRY,
