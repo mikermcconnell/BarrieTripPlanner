@@ -5,7 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 
 const MARKER_SIZE = 44;
-const WRAPPER_SIZE = 80;
+const WRAPPER_SIZE = 88;
 const BORDER_WIDTH = 2.5;
 
 const markerDebugState = new Map();
@@ -74,7 +74,7 @@ const BusMarkerComponent = ({
             style={styles.arrowSvg}
           >
             <Path
-              d={`M${cx} 2 L${cx - 10} 32 L${cx} 22 L${cx + 10} 32 Z`}
+              d={`M${cx} 3 L${cx - 8} 19 L${cx} 13 L${cx + 8} 19 Z`}
               fill="#222222"
               stroke="white"
               strokeWidth={2}

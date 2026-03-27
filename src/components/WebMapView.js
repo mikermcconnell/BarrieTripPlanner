@@ -206,16 +206,16 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
   const resolvedOpacity = dimmed ? 0.42 : 1;
 
   const arrowHtml = hasValidBearing ? `
-    <svg width="80" height="80" viewBox="0 0 80 80"
+    <svg width="88" height="88" viewBox="0 0 88 88"
       style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;opacity:${resolvedOpacity};">
-      <path d="M40 2 L30 32 L40 22 L50 32 Z"
+      <path d="M44 3 L36 19 L44 13 L52 19 Z"
         fill="#222222" stroke="white" stroke-width="2" stroke-linejoin="round"
-        transform="rotate(${bearing}, 40, 40)"/>
+        transform="rotate(${bearing}, 44, 44)"/>
     </svg>
   ` : '';
 
   return `
-    <div style="position:relative;width:80px;height:80px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
+    <div style="position:relative;width:88px;height:88px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
       ${arrowHtml}
       <div style="
         position:absolute;
