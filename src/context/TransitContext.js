@@ -23,6 +23,7 @@ import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
 import { diffDetourRouteIds } from '../utils/detourNotificationUtils';
 import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
+import { getRouteDisplayShapes } from '../utils/routeDisplayGeometry';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -203,6 +204,10 @@ export const TransitProvider = ({ children }) => {
     })();
   }, []);
 
+  const getRenderableShapes = useCallback((data) => (
+    getRouteDisplayShapes(data?.shapes || {})
+  ), []);
+
   /**
    * Apply parsed GTFS data to state (shared by cache-first and network paths)
    */
@@ -242,7 +247,7 @@ export const TransitProvider = ({ children }) => {
     if (cachedData) {
       applyStaticData(cachedData);
       setUsingCachedData(true);
-      processAndStoreShapes(cachedData.shapes || {});
+      processAndStoreShapes(getRenderableShapes(cachedData));
       setIsLoadingStatic(false); // Map can render now
 
       // Phase 2: Background refresh if online
@@ -254,7 +259,7 @@ export const TransitProvider = ({ children }) => {
           applyStaticData(data);
           setUsingCachedData(false);
           setLastStaticRefreshAt(Date.now());
-          processAndStoreShapes(data.shapes);
+          processAndStoreShapes(getRenderableShapes(data));
           // Invalidate stale routing so next trip plan rebuilds
           routingDataRef.current = null;
           setRoutingData(null);
@@ -287,7 +292,7 @@ export const TransitProvider = ({ children }) => {
       gtfsDataRef.current = data;
       applyStaticData(data);
       setLastStaticRefreshAt(Date.now());
-      processAndStoreShapes(data.shapes);
+      processAndStoreShapes(getRenderableShapes(data));
       await cacheGTFSData(data);
     } catch (error) {
       logger.error('Failed to load static data:', error);
@@ -296,7 +301,7 @@ export const TransitProvider = ({ children }) => {
     } finally {
       setIsLoadingStatic(false);
     }
-  }, [applyStaticData, processAndStoreShapes]);
+  }, [applyStaticData, getRenderableShapes, processAndStoreShapes]);
 
   /**
    * Lazily build routing data on first trip plan request.
@@ -324,7 +329,7 @@ export const TransitProvider = ({ children }) => {
           data = await fetchAllStaticData();
           gtfsDataRef.current = data;
           applyStaticData(data);
-          processAndStoreShapes(data.shapes);
+          processAndStoreShapes(getRenderableShapes(data));
           await cacheGTFSData(data);
         }
 
@@ -349,7 +354,7 @@ export const TransitProvider = ({ children }) => {
 
     routingBuildPromiseRef.current = buildPromise;
     return buildPromise;
-  }, [applyStaticData, processAndStoreShapes]);
+  }, [applyStaticData, getRenderableShapes, processAndStoreShapes]);
 
   /**
    * Diff new vehicles against previous snapshot to preserve object references
