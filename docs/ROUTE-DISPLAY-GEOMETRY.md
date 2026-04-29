@@ -30,11 +30,21 @@ npm run generate:route-display-geometry
 Useful environment variables:
 
 ```bash
+# `graphhopper` uses the Map Matching API.
+# `graphhopper-route` uses routing through sampled GTFS points when Map Matching is unavailable.
+ROUTE_DISPLAY_MATCH_PROVIDER=graphhopper-route
+GRAPHHOPPER_API_KEY=your-key
+
+# OSRM/self-hosted fallback
 ROUTE_DISPLAY_MATCH_URL=https://your-osrm-or-valhalla-match-service/match/v1/driving
+
 ROUTE_DISPLAY_MATCH_RADIUS_METERS=35
 ROUTE_DISPLAY_MATCH_TIMEOUT_MS=15000
 ROUTE_DISPLAY_MAX_MATCH_POINTS=95
+ROUTE_DISPLAY_REQUEST_DELAY_MS=8000
 ```
+
+Do not commit API keys. Set them in your shell or local secret manager only.
 
 ## Provider note
 

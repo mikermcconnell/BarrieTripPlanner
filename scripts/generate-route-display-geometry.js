@@ -3,11 +3,17 @@ const path = require('path');
 const JSZip = require('jszip');
 
 const GTFS_URL = 'https://www.myridebarrie.ca/gtfs/Google_transit.zip';
+const MATCH_PROVIDER = (process.env.ROUTE_DISPLAY_MATCH_PROVIDER || 'osrm').toLowerCase();
+const GRAPHHOPPER_KEY = process.env.GRAPHHOPPER_API_KEY || process.env.ROUTE_DISPLAY_GRAPHHOPPER_KEY || '';
+const GRAPHHOPPER_MATCH_URL = process.env.ROUTE_DISPLAY_GRAPHHOPPER_MATCH_URL || 'https://graphhopper.com/api/1/match';
+const GRAPHHOPPER_ROUTE_URL = process.env.ROUTE_DISPLAY_GRAPHHOPPER_ROUTE_URL || 'https://graphhopper.com/api/1/route';
 const OSRM_MATCH_URL = process.env.ROUTE_DISPLAY_MATCH_URL || 'https://router.project-osrm.org/match/v1/driving';
 const MAX_MATCH_POINTS = Number(process.env.ROUTE_DISPLAY_MAX_MATCH_POINTS || 95);
 const MATCH_RADIUS_METERS = Number(process.env.ROUTE_DISPLAY_MATCH_RADIUS_METERS || 35);
 const MIN_SAMPLE_SPACING_METERS = Number(process.env.ROUTE_DISPLAY_MIN_SAMPLE_SPACING_METERS || 160);
 const MATCH_TIMEOUT_MS = Number(process.env.ROUTE_DISPLAY_MATCH_TIMEOUT_MS || 15000);
+const REQUEST_DELAY_MS = Number(process.env.ROUTE_DISPLAY_REQUEST_DELAY_MS || 250);
+const FORCE_REGENERATE = process.env.ROUTE_DISPLAY_FORCE_REGENERATE === 'true';
 const OUTPUT_PATH = path.resolve(__dirname, '..', 'assets', 'route-display-geometry.json');
 const OVERRIDES_PATH = path.resolve(__dirname, '..', 'assets', 'route-display-overrides.json');
 
@@ -140,10 +146,7 @@ function validateMatchedGeometry(original, sampled, matched) {
   return { ok: true, startDrift, endDrift, avgDrift, maxDrift };
 }
 
-async function matchShape(points) {
-  const sampled = sampleShape(points);
-  if (sampled.length < 2) return { status: 'fallback', reason: 'too few points', sourcePointCount: points.length };
-
+async function matchShapeWithOsrm(points, sampled) {
   const coords = sampled.map((point) => `${point.longitude.toFixed(6)},${point.latitude.toFixed(6)}`).join(';');
   const radiuses = sampled.map(() => MATCH_RADIUS_METERS).join(';');
   const url = `${OSRM_MATCH_URL}/${coords}?geometries=geojson&overview=full&gaps=ignore&radiuses=${radiuses}`;
@@ -181,6 +184,159 @@ async function matchShape(points) {
   };
 }
 
+function toGpx(points) {
+  const trkpts = points.map((point) => (
+    `<trkpt lat="${point.latitude.toFixed(6)}" lon="${point.longitude.toFixed(6)}"></trkpt>`
+  )).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="BTTP"><trk><trkseg>${trkpts}</trkseg></trk></gpx>`;
+}
+
+async function matchShapeWithGraphHopper(points, sampled) {
+  if (!GRAPHHOPPER_KEY) {
+    return { status: 'fallback', reason: 'missing GraphHopper key', sourcePointCount: points.length };
+  }
+
+  const params = new URLSearchParams({
+    profile: 'car',
+    points_encoded: 'false',
+    instructions: 'false',
+    calc_points: 'true',
+    gps_accuracy: String(MATCH_RADIUS_METERS),
+    key: GRAPHHOPPER_KEY,
+  });
+  const url = `${GRAPHHOPPER_MATCH_URL}?${params.toString()}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/gpx+xml',
+      'User-Agent': 'BTTP-route-display-generator/1.0',
+    },
+    body: toGpx(sampled),
+    signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = await res.text();
+    } catch {
+      detail = '';
+    }
+    return {
+      status: 'fallback',
+      reason: `GraphHopper HTTP ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ''}`,
+      sourcePointCount: points.length,
+    };
+  }
+
+  const payload = await res.json();
+  const path = Array.isArray(payload.paths) ? payload.paths[0] : null;
+  const coordinates = path?.points?.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return { status: 'fallback', reason: 'GraphHopper returned no path coordinates', sourcePointCount: points.length };
+  }
+
+  const matched = simplifyBySpacing(coordinates.map(([longitude, latitude]) => ({ latitude, longitude })), 8);
+  const validation = validateMatchedGeometry(points, sampled, matched);
+  if (!validation.ok) {
+    return { status: 'fallback', reason: validation.reason, sourcePointCount: points.length };
+  }
+
+  return {
+    status: 'snapped',
+    coordinates: matched,
+    quality: {
+      inputPoints: points.length,
+      sampledPoints: sampled.length,
+      outputPoints: matched.length,
+      avgDriftMeters: Math.round(validation.avgDrift),
+      maxDriftMeters: Math.round(validation.maxDrift),
+      credits: res.headers.get('x-ratelimit-credits') || null,
+      remainingCredits: res.headers.get('x-ratelimit-remaining') || null,
+    },
+  };
+}
+
+async function routeShapeWithGraphHopper(points, sampled) {
+  if (!GRAPHHOPPER_KEY) {
+    return { status: 'fallback', reason: 'missing GraphHopper key', sourcePointCount: points.length };
+  }
+
+  const params = new URLSearchParams({
+    profile: 'car',
+    points_encoded: 'false',
+    instructions: 'false',
+    calc_points: 'true',
+    key: GRAPHHOPPER_KEY,
+  });
+  sampled.forEach((point) => {
+    params.append('point', `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`);
+  });
+
+  const res = await fetch(`${GRAPHHOPPER_ROUTE_URL}?${params.toString()}`, {
+    headers: { 'User-Agent': 'BTTP-route-display-generator/1.0' },
+    signal: AbortSignal.timeout(MATCH_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = await res.text();
+    } catch {
+      detail = '';
+    }
+    return {
+      status: 'fallback',
+      reason: `GraphHopper route HTTP ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ''}`,
+      sourcePointCount: points.length,
+    };
+  }
+
+  const payload = await res.json();
+  const path = Array.isArray(payload.paths) ? payload.paths[0] : null;
+  const coordinates = path?.points?.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return { status: 'fallback', reason: 'GraphHopper route returned no coordinates', sourcePointCount: points.length };
+  }
+
+  const matched = simplifyBySpacing(coordinates.map(([longitude, latitude]) => ({ latitude, longitude })), 8);
+  const validation = validateMatchedGeometry(points, sampled, matched);
+  if (!validation.ok) {
+    return { status: 'fallback', reason: validation.reason, sourcePointCount: points.length };
+  }
+
+  return {
+    status: 'snapped',
+    snapMethod: 'route-through-samples',
+    coordinates: matched,
+    quality: {
+      inputPoints: points.length,
+      sampledPoints: sampled.length,
+      outputPoints: matched.length,
+      avgDriftMeters: Math.round(validation.avgDrift),
+      maxDriftMeters: Math.round(validation.maxDrift),
+      credits: res.headers.get('x-ratelimit-credits') || null,
+      remainingCredits: res.headers.get('x-ratelimit-remaining') || null,
+    },
+  };
+}
+
+async function matchShape(points) {
+  const sampled = sampleShape(points);
+  if (sampled.length < 2) return { status: 'fallback', reason: 'too few points', sourcePointCount: points.length };
+
+  if (MATCH_PROVIDER === 'graphhopper') {
+    return matchShapeWithGraphHopper(points, sampled);
+  }
+  if (MATCH_PROVIDER === 'graphhopper-route') {
+    return routeShapeWithGraphHopper(points, sampled);
+  }
+
+  return matchShapeWithOsrm(points, sampled);
+}
+
 async function loadGtfsShapes() {
   const res = await fetch(GTFS_URL, { headers: { 'User-Agent': 'BTTP-route-display-generator/1.0' } });
   if (!res.ok) throw new Error(`GTFS download failed: HTTP ${res.status}`);
@@ -208,14 +364,30 @@ function readOverrides() {
   return JSON.parse(fs.readFileSync(OVERRIDES_PATH, 'utf8')).shapes || {};
 }
 
+function readPreviousOutput() {
+  if (!fs.existsSync(OUTPUT_PATH)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(OUTPUT_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const shapes = await loadGtfsShapes();
   const overrides = readOverrides();
+  const previousOutput = readPreviousOutput();
+  const previousShapes = previousOutput?.shapes || {};
   const output = {
     version: 1,
     generatedAt: new Date().toISOString(),
     source: GTFS_URL,
-    provider: OSRM_MATCH_URL,
+    provider: MATCH_PROVIDER === 'graphhopper'
+      ? GRAPHHOPPER_MATCH_URL
+      : MATCH_PROVIDER === 'graphhopper-route'
+        ? GRAPHHOPPER_ROUTE_URL
+        : OSRM_MATCH_URL,
+    providerType: MATCH_PROVIDER,
     options: {
       maxMatchPoints: MAX_MATCH_POINTS,
       matchRadiusMeters: MATCH_RADIUS_METERS,
@@ -234,6 +406,12 @@ async function main() {
       console.log(`[${index + 1}/${entries.length}] ${shapeId}: manual override`);
       continue;
     }
+    if (!FORCE_REGENERATE && previousShapes[shapeId]?.status === 'snapped') {
+      output.shapes[shapeId] = previousShapes[shapeId];
+      snapped += 1;
+      console.log(`[${index + 1}/${entries.length}] ${shapeId}: reused snapped`);
+      continue;
+    }
 
     try {
       const result = await matchShape(points);
@@ -247,7 +425,7 @@ async function main() {
       console.log(`[${index + 1}/${entries.length}] ${shapeId}: fallback (${error.message})`);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, REQUEST_DELAY_MS));
   }
 
   output.summary = { total: entries.length, snapped, fallback, manual: Object.keys(overrides).length };
