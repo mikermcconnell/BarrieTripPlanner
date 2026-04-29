@@ -18,7 +18,6 @@
     "proxy": "node proxy-server.js",
     "web:dev": "concurrently -k -n proxy,expo \"node proxy-server.js\" \"expo start --web\"",
     "fetch-addresses": "node scripts/fetchBarrieAddresses.js",
-    "generate:route-display-geometry": "node scripts/generate-route-display-geometry.js",
     "dev:android": "expo start --dev-client",
     "postinstall": "patch-package",
     "test": "npm run test:app",
