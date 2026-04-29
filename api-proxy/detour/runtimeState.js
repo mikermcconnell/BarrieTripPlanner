@@ -1,0 +1,177 @@
+function createRuntimeStatePersistence({
+  vehicleState,
+  activeDetours,
+  detourEvidence,
+  persistentDetourCandidates,
+  getMinVehiclesForDetour,
+  setMinVehiclesForDetour,
+  getWasInService,
+  setWasInService,
+  getLastReportedDetours,
+  setLastReportedDetours,
+  defaultMinVehiclesForDetour,
+  resolveRouteDetectorConfig,
+  getState,
+  cloneJson,
+  toTimestampMs,
+  toDateOrNow,
+  normalizeObservation,
+  normalizeEvidenceEntry,
+}) {
+  function serializeDetectorRuntimeState() {
+    return {
+      version: 1,
+      savedAt: Date.now(),
+      minVehiclesForDetour: getMinVehiclesForDetour(),
+      wasInService: getWasInService(),
+      persistentDetourCandidates: Object.fromEntries(
+        [...persistentDetourCandidates.entries()].map(([routeId, candidate]) => [routeId, {
+          fingerprint: candidate?.fingerprint || null,
+          consecutiveMatches: Number(candidate?.consecutiveMatches) || 0,
+          lastMatchedAt: toTimestampMs(candidate?.lastMatchedAt) || null,
+        }])
+      ),
+      vehicles: [...vehicleState.entries()].map(([vehicleId, state]) => ({
+        vehicleId,
+        routeId: state?.routeId || null,
+        detourSegmentId: state?.detourSegmentId || null,
+        consecutiveOffRoute: Number(state?.consecutiveOffRoute) || 0,
+        consecutiveOnRoute: Number(state?.consecutiveOnRoute) || 0,
+        lastCheckedAt: toTimestampMs(state?.lastCheckedAt) || null,
+        lastOnRouteObservation: normalizeObservation(state?.lastOnRouteObservation),
+        offRouteStreakStart: normalizeObservation(state?.offRouteStreakStart),
+        offRouteStreakPoints: (state?.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+        onRouteStreakStart: normalizeObservation(state?.onRouteStreakStart),
+        tripShapeId: state?.tripShapeId || null,
+        hasReturnedOnRouteSinceDetour: Boolean(state?.hasReturnedOnRouteSinceDetour),
+      })),
+      routes: [...activeDetours.entries()].map(([routeId, routeState]) => ({
+        routeId,
+        nextSegmentOrdinal: Number(routeState?.nextSegmentOrdinal) || 1,
+        segments: [...(routeState?.segments?.values?.() || [])].map((segment) => ({
+          segmentId: segment?.segmentId || null,
+          detectedAt: toTimestampMs(segment?.detectedAt) || null,
+          lastSeenAt: toTimestampMs(segment?.lastSeenAt) || null,
+          triggerVehicleId: segment?.triggerVehicleId || null,
+          vehiclesOffRoute: [...(segment?.vehiclesOffRoute || [])].filter(Boolean),
+          state: segment?.state || 'active',
+          clearPendingAt: toTimestampMs(segment?.clearPendingAt) || null,
+          lastOffRouteEvidenceAt: toTimestampMs(segment?.lastOffRouteEvidenceAt) || null,
+          isPublished: Boolean(segment?.isPublished),
+          isPersistent: Boolean(segment?.isPersistent),
+          persistentFingerprint: segment?.persistentFingerprint || null,
+          persistedGeometry: cloneJson(segment?.persistedGeometry) || null,
+          detourZone: cloneJson(segment?.detourZone) || null,
+          evidence: {
+            points: (segment?.evidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            entryCandidates: (segment?.evidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+            exitCandidates: (segment?.evidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+          },
+          shapeIdHint: segment?.shapeIdHint || null,
+          progressMinMeters: Number.isFinite(segment?.progressMinMeters) ? segment.progressMinMeters : null,
+          progressMaxMeters: Number.isFinite(segment?.progressMaxMeters) ? segment.progressMaxMeters : null,
+        })),
+      })),
+      lastReportedDetours: cloneJson(getLastReportedDetours()),
+    };
+  }
+
+  function hydrateRuntimeState(snapshot = {}) {
+    vehicleState.clear();
+    activeDetours.clear();
+    detourEvidence.clear();
+    persistentDetourCandidates.clear();
+
+    // Deployment config should win over persisted runtime state.
+    // Older snapshots may contain a weaker minimum vehicle threshold, and
+    // hydrating that value can re-enable one-bus false-positive publishing
+    // after the operator has hardened DETOUR_MIN_UNIQUE_VEHICLES.
+    setMinVehiclesForDetour(defaultMinVehiclesForDetour);
+    setWasInService(typeof snapshot?.wasInService === 'boolean' ? snapshot.wasInService : true);
+    setLastReportedDetours(cloneJson(snapshot?.lastReportedDetours) || null);
+
+    for (const [routeId, candidate] of Object.entries(snapshot?.persistentDetourCandidates || {})) {
+      if (!candidate?.fingerprint) continue;
+      persistentDetourCandidates.set(routeId, {
+        fingerprint: candidate.fingerprint,
+        consecutiveMatches: Number(candidate.consecutiveMatches) || 0,
+        lastMatchedAt: toTimestampMs(candidate.lastMatchedAt) || Date.now(),
+      });
+    }
+
+    for (const rawVehicle of snapshot?.vehicles || []) {
+      const vehicleId = rawVehicle?.vehicleId || rawVehicle?.id;
+      const routeId = rawVehicle?.routeId || null;
+      if (!vehicleId || !routeId) continue;
+      vehicleState.set(vehicleId, {
+        id: vehicleId,
+        vehicleId,
+        routeId,
+        detourSegmentId: rawVehicle.detourSegmentId || null,
+        consecutiveOffRoute: Number(rawVehicle.consecutiveOffRoute) || 0,
+        consecutiveOnRoute: Number(rawVehicle.consecutiveOnRoute) || 0,
+        lastCheckedAt: toTimestampMs(rawVehicle.lastCheckedAt) || Date.now(),
+        lastOnRouteObservation: normalizeObservation(rawVehicle.lastOnRouteObservation),
+        offRouteStreakStart: normalizeObservation(rawVehicle.offRouteStreakStart),
+        offRouteStreakPoints: (rawVehicle.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+        onRouteStreakStart: normalizeObservation(rawVehicle.onRouteStreakStart),
+        tripShapeId: rawVehicle.tripShapeId || null,
+        hasReturnedOnRouteSinceDetour: Boolean(rawVehicle.hasReturnedOnRouteSinceDetour),
+      });
+    }
+
+    for (const rawRouteState of snapshot?.routes || []) {
+      const routeId = rawRouteState?.routeId;
+      if (!routeId) continue;
+      const routeConfig = resolveRouteDetectorConfig(routeId);
+      const routeState = {
+        routeId,
+        routeConfig,
+        nextSegmentOrdinal: Number(rawRouteState.nextSegmentOrdinal) || 1,
+        segments: new Map(),
+      };
+
+      for (const rawSegment of rawRouteState.segments || []) {
+        const segmentId = rawSegment?.segmentId;
+        if (!segmentId) continue;
+        routeState.segments.set(segmentId, {
+          segmentId,
+          detectedAt: toDateOrNow(rawSegment.detectedAt),
+          lastSeenAt: toDateOrNow(rawSegment.lastSeenAt),
+          triggerVehicleId: rawSegment.triggerVehicleId || null,
+          vehiclesOffRoute: new Set((rawSegment.vehiclesOffRoute || []).filter(Boolean)),
+          state: rawSegment.state || 'active',
+          clearPendingAt: toTimestampMs(rawSegment.clearPendingAt),
+          lastOffRouteEvidenceAt: toTimestampMs(rawSegment.lastOffRouteEvidenceAt) || Date.now(),
+          routeConfig,
+          isPublished: Boolean(rawSegment.isPublished),
+          isPersistent: Boolean(rawSegment.isPersistent),
+          persistentFingerprint: rawSegment.persistentFingerprint || null,
+          persistedGeometry: cloneJson(rawSegment.persistedGeometry) || null,
+          detourZone: cloneJson(rawSegment.detourZone) || null,
+          evidence: {
+            points: (rawSegment?.evidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            entryCandidates: (rawSegment?.evidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+            exitCandidates: (rawSegment?.evidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+          },
+          shapeIdHint: rawSegment.shapeIdHint || null,
+          progressMinMeters: Number.isFinite(rawSegment.progressMinMeters) ? rawSegment.progressMinMeters : null,
+          progressMaxMeters: Number.isFinite(rawSegment.progressMaxMeters) ? rawSegment.progressMaxMeters : null,
+        });
+      }
+
+      activeDetours.set(routeId, routeState);
+    }
+
+    return getState();
+  }
+
+  return {
+    serializeDetectorRuntimeState,
+    hydrateRuntimeState,
+  };
+}
+
+module.exports = {
+  createRuntimeStatePersistence,
+};

@@ -151,6 +151,7 @@ function Wake-AndroidDevice {
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $recoverScript = Join-Path $PSScriptRoot "android-recover.ps1"
+$detourWorkerScript = Join-Path $PSScriptRoot "start-detour-dev-worker.ps1"
 $env:INIT_CWD = $projectRoot
 $expoCli = Join-Path $projectRoot "node_modules\expo\bin\cli"
 $expoCliArg = "`"$expoCli`""
@@ -171,7 +172,7 @@ if (-not $useProxy -and $Port -ne $MetroPort) {
 
 if (-not $NoRecover) {
     Write-Status "Running recovery first"
-    & $recoverScript -Ports @($Port, $MetroPort, 8081, 8082) -AppId $AppId
+    & $recoverScript -Ports @($Port, $MetroPort, 8081, 8082, 3002) -AppId $AppId
 }
 
 $metroOutLog = Join-Path $projectRoot ".logs-expo-dev-metro-$MetroPort.out.txt"
@@ -219,6 +220,10 @@ if ($apiProxyPort) {
     }
 
     Write-Status "Local API proxy is responding at $apiProxyUrl"
+}
+
+if (Test-Path $detourWorkerScript) {
+    & $detourWorkerScript
 }
 
 if (-not $useProxy) {

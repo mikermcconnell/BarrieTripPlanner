@@ -24,11 +24,6 @@ service cloud.firestore {
       return email is string && email.matches('.*@.*\\..*');
     }
 
-    // Validate timestamp is not in the future
-    function isValidTimestamp(ts) {
-      return ts is timestamp && ts <= request.time;
-    }
-
     // ==================== USERS COLLECTION ====================
 
     match /users/{userId} {
@@ -147,6 +142,20 @@ service cloud.firestore {
     // Backend news worker writes via Admin SDK.
     // All app users can read; direct client writes denied.
     match /transitNews/{newsId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Parsed rider-facing impacts from transit news, such as stop closures.
+    match /transitNewsImpacts/{impactId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ==================== ON-DEMAND ZONES ====================
+
+    // Public rider-facing zone metadata. Backend/admin tooling writes via Admin SDK.
+    match /onDemandZones/{zoneId} {
       allow read: if true;
       allow write: if false;
     }

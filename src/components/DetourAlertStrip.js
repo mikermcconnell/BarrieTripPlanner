@@ -29,6 +29,14 @@ const DetourAlertStrip = ({
 
   if (!shouldRender) return null;
 
+  const handleCollapsedPress = () => {
+    if (routeIds.length === 1) {
+      onPress?.(routeIds[0]);
+      return;
+    }
+    toggleExpanded();
+  };
+
   return (
     <View
       style={[
@@ -42,11 +50,15 @@ const DetourAlertStrip = ({
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
       <TouchableOpacity
         style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
-        onPress={toggleExpanded}
+        onPress={handleCollapsedPress}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? 'Collapse detour list' : 'Expand detour list'}
-        accessibilityHint={countText}
+        accessibilityLabel={
+          routeIds.length === 1
+            ? `Open Route ${getRouteName(routeIds[0])} detour details`
+            : expanded ? 'Collapse detour list' : 'Expand detour list'
+        }
+        accessibilityHint={routeIds.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
         <Icon name="Warning" size={16} color={COLORS.warning} />
         <Text style={styles.countText} numberOfLines={1}>

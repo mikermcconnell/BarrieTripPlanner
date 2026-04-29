@@ -127,7 +127,7 @@ export const validateTripInputs = ({ from, to, fromText, toText, onDemandZones }
     return {
       valid: false,
       errorCode: 'OUTSIDE_SERVICE_AREA',
-      errorMessage: 'Your starting location is outside the Barrie Transit service area.',
+      errorMessage: 'Your starting location is outside Barrie Transit service area. Trip planning works for trips within Barrie and supported on-demand zones.',
     };
   }
 
@@ -137,7 +137,7 @@ export const validateTripInputs = ({ from, to, fromText, toText, onDemandZones }
     return {
       valid: false,
       errorCode: 'OUTSIDE_SERVICE_AREA',
-      errorMessage: 'Your destination is outside the Barrie Transit service area.',
+      errorMessage: 'Your destination is outside Barrie Transit service area. Trip planning works for trips within Barrie and supported on-demand zones.',
     };
   }
 

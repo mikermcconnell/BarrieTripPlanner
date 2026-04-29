@@ -21,10 +21,10 @@ describe('DetourMapLegend', () => {
     const texts = inst.root.findAllByType('Text').map((node) => node.props.children);
 
     expect(texts).toContain('Detour in effect');
-    expect(texts).toContain('Open bus detour');
+    expect(texts).toContain('Likely detour path');
     expect(texts).toContain('Closed regular route');
     expect(texts).toContain('Regular route still open');
-    expect(texts).toContain('Green shows where the bus goes now. Red dashed shows the closed part it skips.');
+    expect(texts).toContain('Route colour with orange outline shows the likely detour path. Red dashed shows the closed part it skips.');
   });
 
   test('renders nothing when hidden', () => {

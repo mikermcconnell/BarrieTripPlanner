@@ -141,8 +141,8 @@ export const getSystemHealthChipState = (diagnostics) => {
   }
 
   return {
-    label: 'READY',
-    accessibilityLabel: 'Transit status ready',
+    label: 'LIVE',
+    accessibilityLabel: 'Transit status live',
     backgroundColor: COLORS.successSubtle,
     dotColor: COLORS.success,
     textColor: COLORS.success,

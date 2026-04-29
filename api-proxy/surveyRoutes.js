@@ -13,54 +13,22 @@
  */
 
 const express = require('express');
-const { getDb } = require('./firebaseAdmin');
 const { updateAggregates } = require('./surveyAggregator');
+const { getSurveyInsights, generateAndStoreSurveyInsight } = require('./surveyInsights');
+const {
+  CONFIG_COLLECTION,
+  RESPONSES_COLLECTION,
+  AGGREGATES_COLLECTION,
+  requireDb,
+  createSurveyAdminGuard,
+  getRespondentId,
+  checkDuplicate,
+} = require('./survey/shared');
 
 const router = express.Router();
-
-const CONFIG_COLLECTION = 'surveyConfig';
-const RESPONSES_COLLECTION = 'surveyResponses';
-const AGGREGATES_COLLECTION = 'surveyAggregates';
-const isProd = process.env.NODE_ENV === 'production';
+const requireSurveyAdmin = createSurveyAdminGuard(process.env);
 
 // ─── Helpers ───────────────────────────────────────────────────
-
-function requireDb(res) {
-  const db = getDb();
-  if (!db) {
-    res.status(503).json({ error: 'Firestore not configured' });
-    return null;
-  }
-  return db;
-}
-
-function requireSurveyAdmin(req, res) {
-  if (!req.clientId) {
-    res.status(401).json({ error: 'Survey admin routes require authenticated API access' });
-    return false;
-  }
-  if (isProd && !req.clientId.startsWith('uid:')) {
-    res.status(403).json({
-      error: 'Survey admin routes require Firebase-authenticated user access in production',
-    });
-    return false;
-  }
-  return true;
-}
-
-/**
- * Extract respondent identity from the request.
- * Logged-in users: req.clientId starts with "uid:"
- * Anonymous users: use x-device-id header
- */
-function getRespondentId(req) {
-  const clientId = req.clientId || '';
-  if (clientId.startsWith('uid:')) {
-    return { uid: clientId.slice(4), anonymousDeviceId: null };
-  }
-  const deviceId = (req.get('x-device-id') || '').trim().slice(0, 128);
-  return { uid: null, anonymousDeviceId: deviceId || null };
-}
 
 // ─── GET /config ───────────────────────────────────────────────
 
@@ -177,6 +145,27 @@ router.get('/aggregates', async (req, res) => {
   } catch (err) {
     console.error('[survey/aggregates] Failed:', err.message);
     return res.status(500).json({ error: 'Failed to load aggregates' });
+  }
+});
+
+// ─── GET /insights ─────────────────────────────────────────────
+
+router.get('/insights', async (req, res) => {
+  if (!requireSurveyAdmin(req, res)) return;
+  const db = requireDb(res);
+  if (!db) return;
+
+  const surveyId = (req.query.surveyId || '').trim();
+  if (!surveyId) {
+    return res.status(400).json({ error: 'surveyId query parameter is required' });
+  }
+
+  try {
+    const insights = await getSurveyInsights(db, surveyId);
+    return res.json({ insights });
+  } catch (err) {
+    console.error('[survey/insights] Failed:', err.message);
+    return res.status(500).json({ error: 'Failed to load survey insights' });
   }
 });
 
@@ -331,6 +320,45 @@ router.post('/admin/toggle', async (req, res) => {
   }
 });
 
+// ─── POST /admin/generate-summary ─────────────────────────────
+
+router.post('/admin/generate-summary', async (req, res) => {
+  if (!requireSurveyAdmin(req, res)) return;
+  const db = requireDb(res);
+  if (!db) return;
+
+  const surveyId = String(req.body?.surveyId || req.query.surveyId || '').trim();
+  const rawWindowHours = req.body?.windowHours ?? req.query.windowHours ?? 24;
+  const rawLimit = req.body?.limit ?? req.query.limit ?? 200;
+
+  const windowHours = Number.parseInt(String(rawWindowHours), 10);
+  const limit = Number.parseInt(String(rawLimit), 10);
+
+  if (!Number.isFinite(windowHours) || windowHours < 1 || windowHours > 24 * 30) {
+    return res.status(400).json({ error: 'windowHours must be between 1 and 720' });
+  }
+
+  if (!Number.isFinite(limit) || limit < 1 || limit > 1000) {
+    return res.status(400).json({ error: 'limit must be between 1 and 1000' });
+  }
+
+  try {
+    const result = await generateAndStoreSurveyInsight(db, {
+      surveyId,
+      windowHours,
+      limit,
+    });
+
+    return res.json({
+      ok: true,
+      ...result,
+    });
+  } catch (err) {
+    console.error('[survey/admin/generate-summary] Failed:', err.message);
+    return res.status(500).json({ error: 'Failed to generate survey summary' });
+  }
+});
+
 // ─── POST /send-digest ─────────────────────────────────────────
 
 router.post('/send-digest', async (req, res) => {
@@ -347,29 +375,5 @@ router.post('/send-digest', async (req, res) => {
     return res.status(500).json({ error: 'Failed to send digest' });
   }
 });
-
-// ─── Dedup Helper ──────────────────────────────────────────────
-
-async function checkDuplicate(db, surveyId, uid, anonymousDeviceId) {
-  let query;
-  if (uid) {
-    query = db
-      .collection(RESPONSES_COLLECTION)
-      .where('surveyId', '==', surveyId)
-      .where('respondentId', '==', uid)
-      .limit(1);
-  } else if (anonymousDeviceId) {
-    query = db
-      .collection(RESPONSES_COLLECTION)
-      .where('surveyId', '==', surveyId)
-      .where('anonymousDeviceId', '==', anonymousDeviceId)
-      .limit(1);
-  } else {
-    return false;
-  }
-
-  const snapshot = await query.get();
-  return !snapshot.empty;
-}
 
 module.exports = router;

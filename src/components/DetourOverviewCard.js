@@ -2,20 +2,31 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../config/theme';
 import Icon from './Icon';
+import { getUniqueDetourSections } from '../utils/detourHelpers';
+
+const uniqueStops = (stops = []) => {
+  const seen = new Set();
+  return stops.filter((stop) => {
+    const key = String(stop?.id ?? stop?.stop_id ?? stop?.code ?? stop?.name ?? '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 const getRouteServiceMessage = (routeId, skippedStopCount) => {
-  if (!routeId) return 'Regular stops between the detour boundaries may not be served.';
+  if (!routeId) return 'Some regular stops may not be served.';
 
   if (skippedStopCount > 0) {
     const noun = skippedStopCount === 1 ? 'stop is' : 'stops are';
-    return `${skippedStopCount} regular Route ${routeId} ${noun} not served during this detour.`;
+    return `${skippedStopCount} regular Route ${routeId} ${noun} not served.`;
   }
 
-  return `Regular Route ${routeId} stops between the detour boundaries are not served during this detour.`;
+  return `Some regular Route ${routeId} stops may not be served.`;
 };
 
 const DetourOverviewCard = ({ routeId, sections = [], roadNames = [], roadsLoading = false }) => {
-  const normalizedSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
+  const normalizedSections = getUniqueDetourSections(sections);
   const firstSection = normalizedSections[0] || null;
   const lastSection = normalizedSections[normalizedSections.length - 1] || null;
 
@@ -29,56 +40,38 @@ const DetourOverviewCard = ({ routeId, sections = [], roadNames = [], roadsLoadi
     'Boundary still resolving';
 
   const skippedStopCount = useMemo(
-    () => normalizedSections.reduce(
-      (sum, section) => sum + (Array.isArray(section?.skippedStops) ? section.skippedStops.length : 0),
-      0
-    ),
+    () => uniqueStops(normalizedSections.flatMap((section) => (
+      Array.isArray(section?.skippedStops) ? section.skippedStops : []
+    ))).length,
     [normalizedSections]
   );
 
+  const compactRoadNames = roadNames.slice(0, 3);
   const roadSummaryText = roadsLoading
-    ? 'Resolving street names...'
-    : roadNames.length > 0
-      ? roadNames.join(' • ')
-      : 'Street names unavailable for this detour yet.';
+    ? 'Resolving likely street names...'
+    : compactRoadNames.length > 0
+      ? compactRoadNames.join(' • ')
+      : 'Likely street names unavailable for this detour yet.';
 
   return (
     <View style={styles.card}>
-      <Text style={styles.heading}>Detour Overview</Text>
-
-      <View style={styles.row}>
-        <View style={[styles.iconWrap, styles.iconWrapStart]}>
-          <Icon name="MapPin" size={14} color={COLORS.success} />
-        </View>
-        <View style={styles.textWrap}>
-          <Text style={styles.label}>Detour start</Text>
-          <Text style={styles.value}>{startLabel}</Text>
-        </View>
-      </View>
+      <Text style={styles.heading}>Route {routeId} detour</Text>
+      <Text style={styles.summaryText}>{getRouteServiceMessage(routeId, skippedStopCount)}</Text>
+      <Text style={styles.hintText}>Use an open stop before the detour starts or after the route rejoins.</Text>
 
       <View style={styles.row}>
         <View style={[styles.iconWrap, styles.iconWrapRoad]}>
           <Icon name="Route" size={14} color={COLORS.primary} />
         </View>
         <View style={styles.textWrap}>
-          <Text style={styles.label}>Detour via</Text>
+          <Text style={styles.label}>Likely detour path</Text>
           <Text style={styles.value}>{roadSummaryText}</Text>
         </View>
       </View>
 
-      <View style={styles.row}>
-        <View style={[styles.iconWrap, styles.iconWrapEnd]}>
-          <Icon name="MapPin" size={14} color={COLORS.warning} />
-        </View>
-        <View style={styles.textWrap}>
-          <Text style={styles.label}>Detour end</Text>
-          <Text style={styles.value}>{endLabel}</Text>
-        </View>
-      </View>
-
-      <View style={styles.notice}>
-        <Icon name="Warning" size={16} color={COLORS.error} />
-        <Text style={styles.noticeText}>{getRouteServiceMessage(routeId, skippedStopCount)}</Text>
+      <View style={styles.boundaryRow}>
+        <Text style={styles.boundaryText}>Starts near {startLabel}</Text>
+        <Text style={styles.boundaryText}>Rejoins near {endLabel}</Text>
       </View>
     </View>
   );
@@ -94,11 +87,20 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   heading: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+  },
+  summaryText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    lineHeight: 20,
+  },
+  hintText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
   },
   row: {
     flexDirection: 'row',
@@ -113,14 +115,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 1,
   },
-  iconWrapStart: {
-    backgroundColor: '#e8f7ee',
-  },
   iconWrapRoad: {
     backgroundColor: '#eef4ff',
-  },
-  iconWrapEnd: {
-    backgroundColor: '#fff3e6',
   },
   textWrap: {
     flex: 1,
@@ -139,19 +135,14 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     lineHeight: 20,
   },
-  notice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACING.sm,
+  boundaryRow: {
+    gap: 2,
     paddingTop: SPACING.xs,
-    borderTopWidth: 1,
-    borderTopColor: '#ffd8b5',
   },
-  noticeText: {
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textPrimary,
-    lineHeight: 20,
+  boundaryText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
   },
 });
 

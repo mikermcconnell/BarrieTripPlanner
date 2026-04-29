@@ -1,4 +1,10 @@
 const request = require('supertest');
+const mockGetDetourHistory = jest.fn();
+
+jest.mock('../detourPublisher', () => ({
+  getDetourHistory: (...args) => mockGetDetourHistory(...args),
+  HISTORY_MAX_LIMIT: 200,
+}));
 
 const ORIGINAL_ENV = process.env;
 jest.setTimeout(20000);
@@ -26,6 +32,8 @@ describe('api-proxy route hardening', () => {
       DETOUR_WORKER_ENABLED: 'false',
       NEWS_WORKER_ENABLED: 'false',
     };
+    mockGetDetourHistory.mockReset();
+    mockGetDetourHistory.mockResolvedValue([]);
 
     global.fetch = jest.fn().mockResolvedValue(makeFetchResponse({ body: [{ ok: true }] }));
   });
@@ -52,18 +60,58 @@ describe('api-proxy route hardening', () => {
 
     expect(response.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toContain('/search?');
+    expect(url).toContain('q=maple');
+    expect(url).toContain('countrycodes=ca');
+    expect(url).toContain('bounded=1');
+    expect(options.headers).toEqual({ 'User-Agent': 'BarrieTransitProxy/1.0' });
   });
 
   test('returns detour logs for authorized requests', async () => {
+    mockGetDetourHistory.mockResolvedValue([
+      { routeId: '8A', eventType: 'DETOUR_DETECTED', timestamp: 1712505600000 },
+    ]);
     const app = require('../index');
     const response = await request(app)
       .get('/api/detour-logs?limit=5')
       .set('x-api-token', 'test-proxy-token');
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body.logs)).toBe(true);
+    expect(response.body.logs).toEqual([
+      expect.objectContaining({ routeId: '8A', eventType: 'DETOUR_DETECTED' }),
+    ]);
     expect(response.body.limit).toBe(5);
+    expect(mockGetDetourHistory).toHaveBeenCalledWith({
+      limit: 5,
+      routeId: '',
+      eventTypes: [],
+      startMs: null,
+      endMs: null,
+    });
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('passes parsed detour log filters through to history query', async () => {
+    const app = require('../index');
+    const response = await request(app)
+      .get('/api/detour-logs?limit=7&routeId=8A&eventType=detour_detected,detour_cleared&start=2026-03-01T12:00:00.000Z&end=2026-03-02T12:00:00.000Z')
+      .set('x-api-token', 'test-proxy-token');
+
+    expect(response.status).toBe(200);
+    expect(mockGetDetourHistory).toHaveBeenCalledWith({
+      limit: 7,
+      routeId: '8A',
+      eventTypes: ['DETOUR_DETECTED', 'DETOUR_CLEARED'],
+      startMs: Date.parse('2026-03-01T12:00:00.000Z'),
+      endMs: Date.parse('2026-03-02T12:00:00.000Z'),
+    });
+    expect(response.body.filters).toEqual({
+      routeId: '8A',
+      eventTypes: ['DETOUR_DETECTED', 'DETOUR_CLEARED'],
+      start: Date.parse('2026-03-01T12:00:00.000Z'),
+      end: Date.parse('2026-03-02T12:00:00.000Z'),
+    });
   });
 
   test('validates detour logs limit range', async () => {
@@ -199,6 +247,7 @@ describe('api-proxy route hardening', () => {
       ALLOW_SHARED_TOKEN_AUTH: 'true',
       DETOUR_WORKER_ENABLED: 'true',
       DETOUR_HISTORY_ENABLED: 'true',
+      LOCAL_AI_ENABLED: 'true',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
     };
 
@@ -221,8 +270,48 @@ describe('api-proxy route hardening', () => {
         detourHistoryEnabled: true,
         surveyAdminUsesApiAuth: true,
         detourDebugKeyEnabled: false,
+        localAiEnabled: true,
+        localAiConfigured: false,
         firebaseAdminConfigured: true,
       }),
+    }));
+  });
+
+  test('ai-status requires auth', async () => {
+    const app = require('../index');
+    const response = await request(app).get('/api/ai-status');
+
+    expect(response.status).toBe(401);
+  });
+
+  test('ai-status returns local AI configuration for authorized requests', async () => {
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'test',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'true',
+      API_PROXY_TOKEN: 'test-proxy-token',
+      REQUIRE_FIREBASE_AUTH: 'false',
+      DETOUR_WORKER_ENABLED: 'false',
+      NEWS_WORKER_ENABLED: 'false',
+      LOCAL_AI_ENABLED: 'true',
+      LOCAL_AI_BASE_URL: 'http://127.0.0.1:11434/v1',
+      LOCAL_AI_MODEL: 'geva-4',
+      LOCAL_AI_TIMEOUT_MS: '4500',
+    };
+
+    const app = require('../index');
+    const response = await request(app)
+      .get('/api/ai-status')
+      .set('x-api-token', 'test-proxy-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      enabled: true,
+      configured: true,
+      provider: 'local-openai-compatible',
+      model: 'geva-4',
+      timeoutMs: 4500,
     }));
   });
 
@@ -251,5 +340,46 @@ describe('api-proxy route hardening', () => {
     const app = require('../index');
     const response = await request(app).post('/api/baseline/clear');
     expect(response.status).toBe(401);
+  });
+
+  test('baseline/routes requires auth', async () => {
+    const app = require('../index');
+    const response = await request(app)
+      .post('/api/baseline/routes')
+      .send({ routeIds: ['12'] });
+    expect(response.status).toBe(401);
+  });
+
+  test('app module can be imported without starting workers', () => {
+    const detourStart = jest.fn();
+    const newsStart = jest.fn();
+
+    jest.doMock('../detourWorker', () => ({
+      start: detourStart,
+      stop: jest.fn(),
+      getStatus: jest.fn(() => ({ running: false })),
+    }));
+    jest.doMock('../newsWorker', () => ({
+      start: newsStart,
+      stop: jest.fn(),
+      getStatus: jest.fn(() => ({ running: false })),
+    }));
+
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'test',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'true',
+      API_PROXY_TOKEN: 'test-proxy-token',
+      REQUIRE_FIREBASE_AUTH: 'false',
+      DETOUR_WORKER_ENABLED: 'true',
+      NEWS_WORKER_ENABLED: 'true',
+    };
+
+    const appModule = require('../app');
+
+    expect(appModule.app).toBeDefined();
+    expect(detourStart).not.toHaveBeenCalled();
+    expect(newsStart).not.toHaveBeenCalled();
   });
 });

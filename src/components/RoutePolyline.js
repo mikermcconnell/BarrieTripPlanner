@@ -5,6 +5,7 @@ import { darkenColor } from '../utils/geometryUtils';
 import { normalizeHexColor, hexToRgba } from '../utils/colorUtils';
 
 let idCounter = 0;
+const POLYLINE_HITBOX = { width: 32, height: 32 };
 
 const RoutePolylineComponent = ({
   coordinates,
@@ -19,6 +20,8 @@ const RoutePolylineComponent = ({
   id,
   showArrows = false,
   routeLabel = null,
+  layerIndex = null,
+  onPress,
 }) => {
   const formattedCoordinates = Array.isArray(coordinates)
     ? coordinates
@@ -47,9 +50,14 @@ const RoutePolylineComponent = ({
 
   const topLayerId = showArrows ? `${sourceId}-arrows` : `${sourceId}-fill`;
 
+  const getLayerIndex = (offset = 0) => (
+    Number.isFinite(layerIndex) ? layerIndex + offset : undefined
+  );
+
   const routeLabelLayer = routeLabel ? (
     <MapLibreGL.SymbolLayer
       id={`${sourceId}-label`}
+      layerIndex={getLayerIndex(showArrows ? 3 : 2)}
       style={{
         symbolPlacement: 'line',
         symbolSpacing: 250,
@@ -80,9 +88,15 @@ const RoutePolylineComponent = ({
     const outlineFill = hexToRgba(resolvedOutlineColor, opacity);
 
     return (
-      <MapLibreGL.ShapeSource id={`${sourceId}-src`} shape={geoJson}>
+      <MapLibreGL.ShapeSource
+        id={`${sourceId}-src`}
+        shape={geoJson}
+        onPress={onPress}
+        hitbox={onPress ? POLYLINE_HITBOX : undefined}
+      >
         <MapLibreGL.LineLayer
           id={`${sourceId}-outline`}
+          layerIndex={getLayerIndex(0)}
           style={{
             lineColor: outlineFill,
             lineWidth: strokeWidth + outlineWidth * 2,
@@ -93,6 +107,7 @@ const RoutePolylineComponent = ({
         />
         <MapLibreGL.LineLayer
           id={`${sourceId}-fill`}
+          layerIndex={getLayerIndex(1)}
           style={{
             lineColor: fillColor,
             lineWidth: strokeWidth,
@@ -105,6 +120,7 @@ const RoutePolylineComponent = ({
         {showArrows && (
           <MapLibreGL.SymbolLayer
             id={`${sourceId}-arrows`}
+            layerIndex={getLayerIndex(2)}
             style={{
               symbolPlacement: 'line',
               symbolSpacing: 80,
@@ -124,9 +140,15 @@ const RoutePolylineComponent = ({
   }
 
   return (
-    <MapLibreGL.ShapeSource id={`${sourceId}-src`} shape={geoJson}>
+    <MapLibreGL.ShapeSource
+      id={`${sourceId}-src`}
+      shape={geoJson}
+      onPress={onPress}
+      hitbox={onPress ? POLYLINE_HITBOX : undefined}
+    >
       <MapLibreGL.LineLayer
         id={`${sourceId}-fill`}
+        layerIndex={getLayerIndex(0)}
         style={{
           lineColor: fillColor,
           lineWidth: strokeWidth,
@@ -138,6 +160,7 @@ const RoutePolylineComponent = ({
       {showArrows && (
         <MapLibreGL.SymbolLayer
           id={`${sourceId}-arrows`}
+          layerIndex={getLayerIndex(1)}
           style={{
             symbolPlacement: 'line',
             symbolSpacing: 80,
@@ -178,6 +201,8 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.outlineColor === next.outlineColor &&
   prev.showArrows === next.showArrows &&
   prev.routeLabel === next.routeLabel &&
+  prev.layerIndex === next.layerIndex &&
+  prev.onPress === next.onPress &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)
 );
 

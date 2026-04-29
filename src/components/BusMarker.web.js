@@ -3,13 +3,14 @@ import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 
 // Web stub - map rendering uses WebBusMarker in WebMapView, which shares
 // the same useAnimatedBusPosition smoothing hook as the native marker.
-const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel, snapPath }) => {
+const BusMarker = ({ vehicle, color = '#E53935', onPress, routeLabel, routeDirectionLabel, snapPath }) => {
   void useAnimatedBusPosition;
   void vehicle;
   // Keep prop + hook parity with native component for check:parity.
   void color;
   void onPress;
   void routeLabel;
+  void routeDirectionLabel;
   void snapPath;
   return null;
 };

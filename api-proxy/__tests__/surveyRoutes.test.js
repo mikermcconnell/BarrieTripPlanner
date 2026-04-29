@@ -10,6 +10,8 @@ const mockSet = jest.fn();
 const mockUpdate = jest.fn();
 const mockVerifyIdToken = jest.fn();
 const mockGetAuth = jest.fn(() => null);
+const mockGetSurveyInsights = jest.fn();
+const mockGenerateAndStoreSurveyInsight = jest.fn();
 
 const mockDocRef = {
   get: mockGet,
@@ -31,6 +33,11 @@ jest.mock('../firebaseAdmin', () => ({
     collection: jest.fn(() => mockCollectionRef),
   })),
   getAuth: mockGetAuth,
+}));
+
+jest.mock('../surveyInsights', () => ({
+  getSurveyInsights: (...args) => mockGetSurveyInsights(...args),
+  generateAndStoreSurveyInsight: (...args) => mockGenerateAndStoreSurveyInsight(...args),
 }));
 
 const MOCK_SURVEY_CONFIG = {
@@ -68,7 +75,15 @@ describe('surveyRoutes', () => {
     mockUpdate.mockReset();
     mockVerifyIdToken.mockReset();
     mockGetAuth.mockReset();
+    mockGetSurveyInsights.mockReset();
+    mockGenerateAndStoreSurveyInsight.mockReset();
     mockGetAuth.mockReturnValue(null);
+    mockGetSurveyInsights.mockResolvedValue(null);
+    mockGenerateAndStoreSurveyInsight.mockResolvedValue({
+      ok: false,
+      skipped: true,
+      reason: 'LOCAL_AI_DISABLED',
+    });
     mockCollectionRef.where.mockReturnThis();
     mockCollectionRef.orderBy.mockReturnThis();
     mockCollectionRef.limit.mockReturnThis();
@@ -220,6 +235,32 @@ describe('surveyRoutes', () => {
     });
   });
 
+  describe('GET /api/survey/insights', () => {
+    test('returns saved survey insights', async () => {
+      mockGetSurveyInsights.mockResolvedValueOnce({
+        summary: 'Most riders want better evening service.',
+        themes: [{ label: 'Evening service', count: 5 }],
+      });
+
+      const res = await request(app)
+        .get('/api/survey/insights?surveyId=survey1')
+        .set('x-api-token', 'test-proxy-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.insights).toEqual(expect.objectContaining({
+        summary: 'Most riders want better evening service.',
+      }));
+    });
+
+    test('requires surveyId parameter', async () => {
+      const res = await request(app)
+        .get('/api/survey/insights')
+        .set('x-api-token', 'test-proxy-token');
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('GET /api/survey/check-submitted', () => {
     test('returns submitted status', async () => {
       mockGet.mockResolvedValueOnce({ empty: false, docs: [{ id: 'resp-1' }] });
@@ -305,7 +346,7 @@ describe('surveyRoutes', () => {
       };
 
       mockGetAuth.mockReturnValue({ verifyIdToken: mockVerifyIdToken });
-      mockVerifyIdToken.mockResolvedValueOnce({ uid: 'admin-user-1' });
+      mockVerifyIdToken.mockResolvedValueOnce({ uid: 'admin-user-1', surveyAdmin: true });
       mockGet.mockResolvedValueOnce({ exists: false });
       mockSet.mockResolvedValueOnce();
 
@@ -323,6 +364,76 @@ describe('surveyRoutes', () => {
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
       expect(mockVerifyIdToken).toHaveBeenCalledWith('production-admin-token');
+    });
+
+    test('POST /admin/config rejects non-admin Firebase users in production', async () => {
+      process.env = {
+        ...ORIGINAL_ENV,
+        NODE_ENV: 'production',
+        LOCATIONIQ_API_KEY: 'test-key',
+        REQUIRE_API_AUTH: 'true',
+        REQUIRE_FIREBASE_AUTH: 'true',
+        ALLOW_SHARED_TOKEN_AUTH: 'false',
+        DETOUR_WORKER_ENABLED: 'false',
+        NEWS_WORKER_ENABLED: 'false',
+        FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
+      };
+
+      mockGetAuth.mockReturnValue({ verifyIdToken: mockVerifyIdToken });
+      mockVerifyIdToken.mockResolvedValueOnce({ uid: 'regular-user-1' });
+
+      jest.resetModules();
+      app = require('../index');
+
+      const res = await request(app)
+        .post('/api/survey/admin/config')
+        .set('authorization', 'Bearer production-user-token')
+        .send({
+          title: 'Prod Survey',
+          questions: [{ id: 'q1', type: 'star_rating', text: 'Rate?', required: true }],
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toMatch(/authorized Firebase admin/i);
+    });
+
+    test('POST /admin/generate-summary validates numeric inputs', async () => {
+      const res = await request(app)
+        .post('/api/survey/admin/generate-summary')
+        .set('x-api-token', 'test-proxy-token')
+        .send({ surveyId: 'survey1', windowHours: 0 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/windowHours/i);
+    });
+
+    test('POST /admin/generate-summary runs survey insights generation for authenticated callers', async () => {
+      mockGenerateAndStoreSurveyInsight.mockResolvedValueOnce({
+        ok: true,
+        skipped: false,
+        insight: {
+          surveyId: 'survey1',
+          responseCount: 12,
+          summary: 'Riders are focused on reliability.',
+        },
+      });
+
+      const res = await request(app)
+        .post('/api/survey/admin/generate-summary')
+        .set('x-api-token', 'test-proxy-token')
+        .send({ surveyId: 'survey1', windowHours: 48, limit: 150 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.insight.surveyId).toBe('survey1');
+      expect(mockGenerateAndStoreSurveyInsight).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          surveyId: 'survey1',
+          windowHours: 48,
+          limit: 150,
+        }
+      );
     });
   });
 });

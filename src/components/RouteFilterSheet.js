@@ -39,7 +39,9 @@ const RouteFilterSheet = ({
             handleIndicatorStyle={styles.handleIndicator}
         >
             <BottomSheetScrollView contentContainerStyle={styles.content}>
-                <Text style={styles.title}>Filter Routes</Text>
+                <Text style={styles.eyebrow}>Map layers</Text>
+                <Text style={styles.title}>Choose routes to show</Text>
+                <Text style={styles.subtitle}>Keep the map calm by focusing on the routes you care about.</Text>
                 <View style={styles.chipGrid}>
                     {/* All chip */}
                     <TouchableOpacity
@@ -94,24 +96,37 @@ const RouteFilterSheet = ({
 
 const styles = StyleSheet.create({
     sheetBackground: {
-        backgroundColor: COLORS.surface,
-        borderTopLeftRadius: BORDER_RADIUS.xl,
-        borderTopRightRadius: BORDER_RADIUS.xl,
+        backgroundColor: COLORS.grey50,
+        borderTopLeftRadius: BORDER_RADIUS.xxl,
+        borderTopRightRadius: BORDER_RADIUS.xxl,
     },
     handleIndicator: {
-        backgroundColor: COLORS.grey300,
-        width: 40,
+        backgroundColor: COLORS.primaryLight,
+        width: 44,
     },
     content: {
         paddingHorizontal: SPACING.lg,
         paddingBottom: SPACING.xxl,
     },
+    eyebrow: {
+        fontSize: FONT_SIZES.xxs,
+        fontWeight: FONT_WEIGHTS.bold,
+        color: COLORS.primaryDark,
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        marginTop: SPACING.xs,
+        marginBottom: 2,
+    },
     title: {
         fontSize: FONT_SIZES.lg,
         fontFamily: FONT_FAMILIES.semibold,
         color: COLORS.textPrimary,
+        marginBottom: 2,
+    },
+    subtitle: {
+        fontSize: FONT_SIZES.sm,
+        color: COLORS.textSecondary,
         marginBottom: SPACING.md,
-        marginTop: SPACING.xs,
     },
     chipGrid: {
         flexDirection: 'row',
@@ -124,7 +139,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 6,
         paddingHorizontal: SPACING.sm + 4,
-        borderRadius: BORDER_RADIUS.xl,
+        borderRadius: BORDER_RADIUS.round,
         backgroundColor: COLORS.white,
         borderWidth: 1.5,
         borderColor: COLORS.grey200,

@@ -32,10 +32,11 @@ function Get-AdbPath {
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $recoverScript = Join-Path $PSScriptRoot "android-recover.ps1"
+$detourWorkerScript = Join-Path $PSScriptRoot "start-detour-dev-worker.ps1"
 $shortpathCmd = Join-Path $PSScriptRoot "android-shortpath.cmd"
 $env:INIT_CWD = $projectRoot
 
-& $recoverScript -Ports @(8081, 8082, 8083, 8084) -AppId $AppId
+& $recoverScript -Ports @(8081, 8082, 8083, 8084, 3002) -AppId $AppId
 
 $adb = Get-AdbPath
 if (-not $adb) {
@@ -43,6 +44,10 @@ if (-not $adb) {
 }
 
 & $adb wait-for-device | Out-Null
+
+if (Test-Path $detourWorkerScript) {
+    & $detourWorkerScript
+}
 
 if (-not $SkipBuild) {
     Write-Status "Building/installing Android release variant"

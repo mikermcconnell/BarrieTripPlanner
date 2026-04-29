@@ -3,14 +3,15 @@
  * Web platform uses HomeScreen.web.js instead
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
-import { MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
+import { useAuth } from '../context/AuthContext';
+import { ANIMATION, MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
@@ -23,10 +24,10 @@ import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
-import { pointToPolylineDistance } from '../utils/geometryUtils';
-import { shouldRenderRouteShape } from '../utils/detourFocusUtils';
-import { getDetourViewportCoordinates, shouldAutoFitDetourViewport } from '../utils/detourViewport';
+import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
+import { pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
+import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
+import { routeIsDetouring } from '../utils/routeDetourMatching';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -36,6 +37,7 @@ import ZoneInfoSheet from '../components/ZoneInfoSheet';
 
 // Native map components
 import BusMarker from '../components/BusMarker';
+import BusDirectionArrow from '../components/BusDirectionArrow';
 import RoutePolyline from '../components/RoutePolyline';
 import DetourOverlay from '../components/DetourOverlay';
 import PulsingSpinner from '../components/PulsingSpinner';
@@ -63,6 +65,9 @@ import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
 import { getTransitLoadingState } from '../utils/systemHealthUI';
+import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
+import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
+import { getForegroundDeviceLocation } from '../utils/currentLocation';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -79,6 +84,54 @@ const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
 );
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
+const MAP_LAYER_INDEX = {
+  ROUTES: 100,
+  REGULAR_STOPS_BORDER: 700,
+  REGULAR_STOPS_FILL: 701,
+  TRIP_ROUTES: 760,
+  BUS_APPROACH_LINES: 770,
+};
+
+const getPerfNow = () => (
+  typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
+    ? global.performance.now()
+    : Date.now()
+);
+
+const normalizeBearing = (bearing) => {
+  const numericBearing = Number(bearing);
+  return Number.isFinite(numericBearing)
+    ? ((numericBearing % 360) + 360) % 360
+    : null;
+};
+
+const getVehicleDirectionBearing = (vehicle, snapPath) => {
+  const directBearing = normalizeBearing(vehicle?.bearing);
+  if (directBearing !== null) {
+    return directBearing;
+  }
+
+  const coordinate = vehicle?.coordinate;
+  if (
+    !Array.isArray(snapPath) ||
+    snapPath.length < 2 ||
+    !Number.isFinite(coordinate?.latitude) ||
+    !Number.isFinite(coordinate?.longitude)
+  ) {
+    return null;
+  }
+
+  const projection = projectPointToPolyline(coordinate, snapPath);
+  if (
+    !projection ||
+    projection.distanceMeters > ANIMATION.BUS_ROUTE_SNAP_MAX_DISTANCE_M ||
+    !Number.isFinite(projection.bearing)
+  ) {
+    return null;
+  }
+
+  return normalizeBearing(projection.bearing);
+};
 
 // Helper: compute bounds from coordinates array [{latitude, longitude}]
 const computeBounds = (coords) => {
@@ -110,6 +163,15 @@ const hasMeaningfulRegionChange = (prevRegion, nextRegion) => {
   );
 };
 
+const MAP_REGION_STATE_THROTTLE_MS = 220;
+const MAP_ZOOM_RENDER_STEP = 0.25;
+
+const getRenderZoom = (zoom) => (
+  Number.isFinite(zoom)
+    ? Math.round(zoom / MAP_ZOOM_RENDER_STEP) * MAP_ZOOM_RENDER_STEP
+    : zoom
+);
+
 const getSelectedRouteLabelThreshold = (selectedRouteCount) => (
   selectedRouteCount === 1 ? 13.4 : 13.6
 );
@@ -117,16 +179,18 @@ const getSelectedRouteLabelThreshold = (selectedRouteCount) => (
 const getBaseRouteVisual = ({ shape, currentZoom }) => ({
   routeOpacity:
     shape.visualType === 'shared_trunk'
-      ? 0.48
+      ? 0.34
       : shape.visualType === 'family'
-        ? 0.56
-        : 0.58,
+        ? 0.42
+        : currentZoom >= 13.8
+          ? 0.52
+          : 0.38,
   routeStrokeWidth:
     shape.visualType === 'shared_trunk'
-      ? 2.8
+      ? 2.2
       : currentZoom >= 14.2
-        ? 3.3
-        : 3,
+        ? 3
+        : 2.4,
   routeColor: shape.color,
   outlineWidth: shape.visualType === 'shared_trunk' ? 0 : currentZoom >= 14.2 ? 1 : 0.5,
   showRouteLabel: false,
@@ -148,7 +212,7 @@ const getRouteVisualState = ({
     return {
       routeOpacity: isFocusedDetour ? 0.98 : isDetouring ? 0.2 : 0.1,
       routeStrokeWidth: isFocusedDetour ? 5 : 2,
-      routeColor: isFocusedDetour ? '#111827' : COLORS.grey400,
+      routeColor: isFocusedDetour ? shape.color : COLORS.grey400,
       outlineWidth: isFocusedDetour ? (currentZoom >= 14.2 ? 2.5 : 1.5) : 0,
       showRouteLabel: false,
       showArrows: false,
@@ -159,7 +223,7 @@ const getRouteVisualState = ({
     return {
       routeOpacity: isDetouring ? 0.82 : 0.18,
       routeStrokeWidth: isDetouring ? 4 : 2,
-      routeColor: isDetouring ? '#111827' : COLORS.grey400,
+      routeColor: isDetouring ? shape.color : COLORS.grey400,
       outlineWidth: isDetouring ? (currentZoom >= 14.2 ? 1.5 : 1) : 0,
       showRouteLabel: false,
       showArrows: false,
@@ -198,6 +262,7 @@ const HomeMapRoutesLayer = React.memo(({
   isDetourView,
   routeShortNameMap,
   detourOverlays,
+  handleDetourOverlayPress,
   zoneOverlays,
   handleZonePress,
 }) => {
@@ -209,15 +274,37 @@ const HomeMapRoutesLayer = React.memo(({
     <>
       {displayedShapes.map((shape) => {
         const isSelected = isRouteSelected(shape.routeId);
-        const isDetouring = activeDetourRouteIds.has(shape.routeId);
+        const isDetouring = routeIsDetouring(shape.routeId, activeDetourRouteIds);
         const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === shape.routeId;
         const shouldRenderShape = shouldRenderRouteShape({
           routeId: shape.routeId,
+          activeDetourRouteIds,
+          isDetourView,
           hasDetourFocus,
           focusedDetourRouteId,
         });
 
         if (!shouldRenderShape) {
+          if (shouldKeepHiddenRouteShapeLayerMounted({
+            routeId: shape.routeId,
+            activeDetourRouteIds,
+            isDetourView,
+          })) {
+            return (
+              <RoutePolyline
+                key={shape.id}
+                id={`route-${shape.id}`}
+                coordinates={shape.coordinates}
+                color={shape.color}
+                strokeWidth={1}
+                opacity={0}
+                outlineWidth={0}
+                showArrows={false}
+                routeLabel={null}
+                layerIndex={MAP_LAYER_INDEX.ROUTES}
+              />
+            );
+          }
           return null;
         }
 
@@ -244,11 +331,17 @@ const HomeMapRoutesLayer = React.memo(({
             outlineWidth={routeVisual.outlineWidth}
             showArrows={routeVisual.showArrows}
             routeLabel={routeVisual.showRouteLabel ? (routeShortNameMap.get(shape.routeId) || null) : null}
+            layerIndex={MAP_LAYER_INDEX.ROUTES}
           />
         );
       })}
       {detourOverlays.map((overlay) => (
-        <DetourOverlay key={`detour-${overlay.routeId}`} {...overlay} />
+        <DetourOverlay
+          key={`detour-${overlay.routeId}`}
+          {...overlay}
+          renderMode="geometry"
+          onPress={() => handleDetourOverlayPress?.(overlay.routeId)}
+        />
       ))}
       {zoneOverlays.map((zone) => (
         <ZoneOverlay
@@ -282,7 +375,7 @@ const HomeMapStopsLayer = React.memo(({
     >
       <MapLibreGL.CircleLayer
         id="home-stops-border"
-        layerIndex={220}
+        layerIndex={MAP_LAYER_INDEX.REGULAR_STOPS_BORDER}
         style={{
           circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 9, 6],
           circleColor: COLORS.white,
@@ -290,15 +383,72 @@ const HomeMapStopsLayer = React.memo(({
       />
       <MapLibreGL.CircleLayer
         id="home-stops-fill"
-        layerIndex={221}
+        layerIndex={MAP_LAYER_INDEX.REGULAR_STOPS_FILL}
         aboveLayerID="home-stops-border"
         style={{
           circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 6, 4],
-          circleColor: ['case', ['==', ['get', 'isSelected'], 1], COLORS.accent, COLORS.primary],
+          circleColor: [
+            'case',
+            ['==', ['get', 'isClosed'], 1],
+            COLORS.error,
+            ['==', ['get', 'isSelected'], 1],
+            COLORS.accent,
+            COLORS.primary,
+          ],
         }}
       />
     </MapLibreGL.ShapeSource>
   );
+});
+
+const HomeMapTopStopsOverlay = React.memo(({
+  isTripPreviewMode,
+  visible,
+  displayedStops,
+  selectedStopId,
+}) => {
+  if (isTripPreviewMode || !visible || !Array.isArray(displayedStops) || displayedStops.length === 0) {
+    return null;
+  }
+
+  return displayedStops
+    .filter((stop) => Number.isFinite(stop?.latitude) && Number.isFinite(stop?.longitude))
+    .map((stop, index) => {
+      const isSelected = selectedStopId != null && stop.id === selectedStopId;
+      const isClosed = Boolean(stop.isClosed);
+      return (
+        <MapLibreGL.MarkerView
+          key={`top-stop-${stop.id ?? 'stop'}-${index}`}
+          id={`top-stop-${stop.id ?? 'stop'}-${index}`}
+          coordinate={[stop.longitude, stop.latitude]}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <View
+            collapsable={false}
+            pointerEvents="none"
+            style={[
+              styles.topStopMarkerFrame,
+              isSelected && styles.topStopMarkerFrameSelected,
+            ]}
+          >
+            <View style={[
+              styles.topStopMarkerOuter,
+              isClosed && styles.topStopMarkerOuterClosed,
+              isSelected && styles.topStopMarkerOuterSelected,
+            ]}>
+              {isClosed ? (
+                <Text style={styles.topStopMarkerClosedText}>!</Text>
+              ) : (
+                <View style={[
+                  styles.topStopMarkerInner,
+                  isSelected && styles.topStopMarkerInnerSelected,
+                ]} />
+              )}
+            </View>
+          </View>
+        </MapLibreGL.MarkerView>
+      );
+    });
 });
 
 const HomeMapVehiclesLayer = React.memo(({
@@ -318,11 +468,11 @@ const HomeMapVehiclesLayer = React.memo(({
   }
 
   // Android emulators degrade badly with a large fleet of rich MarkerView instances.
-  // Use a minimal MarkerView on the always-on home fleet: no SVG arrow, no
-  // JS animation hook, just a plain badge with the route label.
+  // Use a minimal MarkerView on the always-on home fleet: no JS animation hook,
+  // just a plain badge plus a lightweight direction chevron.
   if (Platform.OS === 'android') {
     return displayedVehicles.map((vehicle) => {
-      const isDetouring = activeDetourRouteIds.has(vehicle.routeId);
+      const isDetouring = routeIsDetouring(vehicle.routeId, activeDetourRouteIds);
       const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
       const dimmed = hasDetourFocus
         ? !isFocusedDetour
@@ -330,14 +480,17 @@ const HomeMapVehiclesLayer = React.memo(({
           ? !isDetouring
           : false;
       const markerColor = dimmed ? COLORS.grey400 : getRouteColor(vehicle.routeId);
+      const snapPath = getVehicleSnapPath(vehicle);
 
       return {
         vehicle,
         markerColor,
         dimmed,
         routeLabel: String(getRouteLabel(vehicle) || vehicle.routeId || '?'),
+        routeDirectionLabel: getVehicleRouteDirectionLabel(vehicle, getRouteLabel(vehicle)),
+        directionBearing: getVehicleDirectionBearing(vehicle, snapPath),
       };
-    }).map(({ vehicle, markerColor, dimmed, routeLabel }) => {
+    }).map(({ vehicle, markerColor, dimmed, routeLabel, routeDirectionLabel, directionBearing }) => {
       const markerWidth = routeLabel.length >= 3 ? 42 : routeLabel.length === 2 ? 36 : 30;
 
       return (
@@ -351,6 +504,15 @@ const HomeMapVehiclesLayer = React.memo(({
             collapsable={false}
             style={styles.androidBusMarkerFrame}
           >
+            <BusDirectionArrow
+              bearing={directionBearing}
+              size={44}
+              topOffset={-5}
+              arrowWidth={8}
+              arrowHeight={16}
+              color={markerColor}
+              dimmed={dimmed}
+            />
             <View
               style={[
                 styles.androidBusMarker,
@@ -369,6 +531,11 @@ const HomeMapVehiclesLayer = React.memo(({
               >
                 {routeLabel}
               </Text>
+              {routeDirectionLabel ? (
+                <Text style={styles.androidBusMarkerDirectionLabel}>
+                  {routeDirectionLabel}
+                </Text>
+              ) : null}
             </View>
           </View>
         </MapLibreGL.MarkerView>
@@ -377,7 +544,7 @@ const HomeMapVehiclesLayer = React.memo(({
   }
 
   return displayedVehicles.map((vehicle) => {
-    const isDetouring = activeDetourRouteIds.has(vehicle.routeId);
+    const isDetouring = routeIsDetouring(vehicle.routeId, activeDetourRouteIds);
     const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
     const dimmed = hasDetourFocus
       ? !isFocusedDetour
@@ -392,6 +559,7 @@ const HomeMapVehiclesLayer = React.memo(({
         vehicle={vehicle}
         color={markerColor}
         routeLabel={getRouteLabel(vehicle)}
+        routeDirectionLabel={getVehicleRouteDirectionLabel(vehicle, getRouteLabel(vehicle))}
         snapPath={getVehicleSnapPath(vehicle)}
         dimmed={dimmed}
       />
@@ -424,6 +592,7 @@ const HomeMapTripPreviewLayer = React.memo(({
         opacity={tripRoute.isWalk ? 0.9 : 1}
         outlineColor={tripRoute.isWalk ? tripRoute.color : undefined}
         routeLabel={tripRoute.routeLabel}
+        layerIndex={MAP_LAYER_INDEX.TRIP_ROUTES}
       />
     ))}
 
@@ -461,6 +630,7 @@ const HomeMapTripPreviewLayer = React.memo(({
         lineDashPattern={[8, 6]}
         opacity={0.7}
         outlineColor={line.color}
+        layerIndex={MAP_LAYER_INDEX.BUS_APPROACH_LINES}
       />
     ))}
 
@@ -556,6 +726,7 @@ const HomeMapView = React.memo(({
   cameraRef,
   cameraDefaultSettings,
   handleMapPress,
+  handleRegionWillChange,
   handleRegionChange,
   isTripPreviewMode,
   displayedShapes,
@@ -569,9 +740,12 @@ const HomeMapView = React.memo(({
   isDetourView,
   routeShortNameMap,
   detourOverlays,
+  handleDetourOverlayPress,
   zoneOverlays,
   handleZonePress,
   displayedStopsLength,
+  displayedStops,
+  selectedStopId,
   stopsGeoJson,
   handleStopLayerPress,
   displayedVehicles,
@@ -596,12 +770,14 @@ const HomeMapView = React.memo(({
     attributionPosition={{ bottom: 8, left: 8 }}
     logoEnabled={false}
     onPress={handleMapPress}
+    onRegionWillChange={handleRegionWillChange}
     onRegionDidChange={handleRegionChange}
   >
     <MapLibreGL.Camera
       ref={cameraRef}
       defaultSettings={cameraDefaultSettings}
       followUserLocation={false}
+      followUserMode={null}
     />
     <MapLibreGL.UserLocation visible={true} />
 
@@ -618,6 +794,7 @@ const HomeMapView = React.memo(({
       isDetourView={isDetourView}
       routeShortNameMap={routeShortNameMap}
       detourOverlays={detourOverlays}
+      handleDetourOverlayPress={handleDetourOverlayPress}
       zoneOverlays={zoneOverlays}
       handleZonePress={handleZonePress}
     />
@@ -628,6 +805,22 @@ const HomeMapView = React.memo(({
       stopsGeoJson={stopsGeoJson}
       handleStopLayerPress={handleStopLayerPress}
     />
+
+    <HomeMapTopStopsOverlay
+      isTripPreviewMode={isTripPreviewMode}
+      visible={isDetourView || hasDetourFocus}
+      displayedStops={displayedStops}
+      selectedStopId={selectedStopId}
+    />
+
+    {!isTripPreviewMode && detourOverlays.map((overlay) => (
+      <DetourOverlay
+        key={`detour-stops-${overlay.routeId}`}
+        {...overlay}
+        renderMode="markers"
+        onPress={() => handleDetourOverlayPress?.(overlay.routeId)}
+      />
+    ))}
 
     <HomeMapVehiclesLayer
       isTripPreviewMode={isTripPreviewMode}
@@ -668,10 +861,20 @@ const HomeMapView = React.memo(({
         </View>
       </MapLibreGL.PointAnnotation>
     )}
+
+    {!isTripPreviewMode && detourOverlays.map((overlay) => (
+      <DetourOverlay
+        key={`detour-callouts-${overlay.routeId}`}
+        {...overlay}
+        renderMode="callouts"
+        onPress={() => handleDetourOverlayPress?.(overlay.routeId)}
+      />
+    ))}
   </MapLibreGL.MapView>
 ), (prev, next) => (
   prev.cameraDefaultSettings === next.cameraDefaultSettings &&
   prev.handleMapPress === next.handleMapPress &&
+  prev.handleRegionWillChange === next.handleRegionWillChange &&
   prev.handleRegionChange === next.handleRegionChange &&
   prev.isTripPreviewMode === next.isTripPreviewMode &&
   prev.displayedShapes === next.displayedShapes &&
@@ -685,9 +888,12 @@ const HomeMapView = React.memo(({
   prev.isDetourView === next.isDetourView &&
   prev.routeShortNameMap === next.routeShortNameMap &&
   prev.detourOverlays === next.detourOverlays &&
+  prev.handleDetourOverlayPress === next.handleDetourOverlayPress &&
   prev.zoneOverlays === next.zoneOverlays &&
   prev.handleZonePress === next.handleZonePress &&
   prev.displayedStopsLength === next.displayedStopsLength &&
+  prev.displayedStops === next.displayedStops &&
+  prev.selectedStopId === next.selectedStopId &&
   prev.stopsGeoJson === next.stopsGeoJson &&
   prev.handleStopLayerPress === next.handleStopLayerPress &&
   prev.displayedVehicles === next.displayedVehicles &&
@@ -705,10 +911,14 @@ const HomeMapView = React.memo(({
 ));
 
 const HomeScreen = ({ route }) => {
+  const firstRenderStartedAtRef = useRef(getPerfNow());
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
+  const pendingLocationCenterRef = useRef(0);
+  const locationCenterReleaseTimerRef = useRef(null);
   const routeFilterSheetRef = useRef(null);
   const navigation = useNavigation();
+  const { addTripToHistory } = useAuth();
   const {
     routes,
     stops,
@@ -734,6 +944,7 @@ const HomeScreen = ({ route }) => {
     activeDetours,
     serviceAlerts,
     onDemandZones,
+    transitNewsImpacts,
     getRouteDetour,
     loadVehiclePositions,
   } = useTransitRealtime();
@@ -785,21 +996,70 @@ const HomeScreen = ({ route }) => {
   const perfRef = useRef({
     lastRegionWarnTs: 0,
     lastRegionEventTs: 0,
+    lastRegionStateUpdateTs: 0,
+    pendingRegionTimer: null,
     longRegionHandlers: 0,
   });
   const suppressNextMapTapRef = useRef(false);
-  const previousDetourViewportRef = useRef({
-    isDetourView: false,
-    focusedRouteId: null,
-  });
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const [focusedDetourRouteId, setFocusedDetourRouteId] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('regular');
+  const [secondaryChromeReady, setSecondaryChromeReady] = useState(false);
+  const [mapReadyToMount, setMapReadyToMount] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMapReadyToMount(true);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => () => {
+    const pendingRegionTimer = perfRef.current.pendingRegionTimer;
+    if (pendingRegionTimer) {
+      clearTimeout(pendingRegionTimer);
+      perfRef.current.pendingRegionTimer = null;
+    }
+    if (locationCenterReleaseTimerRef.current) {
+      clearTimeout(locationCenterReleaseTimerRef.current);
+      locationCenterReleaseTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const markReady = () => {
+      if (!cancelled) {
+        setSecondaryChromeReady(true);
+      }
+    };
+    const task = InteractionManager?.runAfterInteractions
+      ? InteractionManager.runAfterInteractions(markReady)
+      : null;
+    const fallbackTimer = task ? null : setTimeout(markReady, 0);
+
+    return () => {
+      cancelled = true;
+      task?.cancel?.();
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!PERF_DEBUG) return;
+    const committedAt = getPerfNow();
+    logger.info(
+      '[perf][home-startup] first chrome committed in %dms',
+      Math.round(committedAt - firstRenderStartedAtRef.current)
+    );
+  }, []);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
     ensureRoutingData,
     applyDelays: applyDelaysToItineraries,
+    onTripPlanned: addTripToHistory,
     onDemandZones,
     stops,
   });
@@ -854,7 +1114,6 @@ const HomeScreen = ({ route }) => {
     fitToCoordinates: (coordinates, options) => compatMapRef.current.fitToCoordinates(coordinates, options),
     edgePadding: { top: 300, right: 50, bottom: 350, left: 50 },
     animated: true,
-    onBlurInactive: resetTrip,
   });
 
   // Pulse animation for live indicator
@@ -918,34 +1177,13 @@ const HomeScreen = ({ route }) => {
     }
   }, [focusedDetourRouteId, activeDetourRouteIds]);
 
-  useEffect(() => {
-    const previous = previousDetourViewportRef.current;
-    const activeFocusedRouteId = hasDetourFocus ? focusedDetourRouteId : null;
-    const shouldFit = shouldAutoFitDetourViewport({
-      isDetourView,
-      previousIsDetourView: previous.isDetourView,
-      focusedRouteId: activeFocusedRouteId,
-      previousFocusedRouteId: previous.focusedRouteId,
-    });
-
-    previousDetourViewportRef.current = {
-      isDetourView,
-      focusedRouteId: activeFocusedRouteId,
-    };
-
-    if (!shouldFit) return;
-
-    const fitCoords = getDetourViewportCoordinates({
-      activeDetours,
-      focusedRouteId: activeFocusedRouteId,
-    });
-    if (fitCoords.length < 2) return;
-
-    compatMapRef.current?.fitToCoordinates(fitCoords, {
-      edgePadding: { top: 180, right: 60, bottom: 140, left: 60 },
-      animated: true,
-    });
-  }, [activeDetours, focusedDetourRouteId, hasDetourFocus, isDetourView]);
+  const useCurrentLocationForTrip = useCallback((searchTo = null) => {
+    useCurrentLocationHook(async () => {
+      return getForegroundDeviceLocation(Location, {
+        accuracy: Location.Accuracy.Balanced,
+      });
+    }, { searchTo });
+  }, [useCurrentLocationHook]);
 
   // Map tap popup
   const {
@@ -954,6 +1192,7 @@ const HomeScreen = ({ route }) => {
     showLocation,
   } = useMapTapPopup({
     enterPlanningMode, setTripFrom, setTripTo,
+    useCurrentLocationForTrip,
     onMapTap: () => setSelectedStop(null),
   });
   const handleCloseMapTapPopup = closeMapTapPopup;
@@ -987,8 +1226,16 @@ const HomeScreen = ({ route }) => {
     vehicles, routes, trips, shapes, processedShapes,
     routeShapeMapping, routeStopsMapping, stops,
     showRoutes, showStops, mapRegion,
-    routeShapeDisplayMode: !hasSelection && !isDetourView && !hasDetourFocus ? 'native_home' : 'default',
+    // Keep the all-routes shape set stable when switching Regular/Detours tabs.
+    // Native MapLibre can briefly leave old route layers visible if the whole
+    // route source set changes at the same time as detour layers mount.
+    routeShapeDisplayMode: !hasSelection && !hasDetourFocus ? 'native_home' : 'default',
   });
+
+  const routeColorByRouteId = useMemo(
+    () => Object.fromEntries((routes || []).filter((route) => route?.id).map((route) => [route.id, getRouteColor(route.id)])),
+    [routes, getRouteColor]
+  );
 
   const routePathsByRouteId = useMemo(() => {
     const shapeSource = Object.keys(processedShapes || {}).length > 0 ? processedShapes : shapes;
@@ -1060,7 +1307,15 @@ const HomeScreen = ({ route }) => {
     enabled: detoursEnabled,
     focusedRouteId: hasDetourFocus ? focusedDetourRouteId : null,
     detourStopDetailsByRouteId,
+    routeColorByRouteId,
   });
+
+  const handleDetourOverlayPress = useCallback((routeId) => {
+    if (!routeId) return;
+    setFocusedDetourRouteId(routeId);
+    setDetourSheetRouteId(routeId);
+    setMapViewMode('detour');
+  }, []);
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
   const selectedDetourStopDetails = useMemo(() => deriveAffectedStopDetailsForDetour({
@@ -1081,17 +1336,38 @@ const HomeScreen = ({ route }) => {
 
   const { zoneOverlays } = useZoneOverlays({ onDemandZones, showZones });
 
+  const activeStopClosureByStopId = useMemo(() => {
+    const map = new Map();
+    (transitNewsImpacts || [])
+      .filter((impact) => (
+        impact?.type === 'stop_closure' &&
+        impact?.status === 'active' &&
+        impact?.stopId
+      ))
+      .forEach((impact) => {
+        map.set(String(impact.stopId), impact);
+      });
+    return map;
+  }, [transitNewsImpacts]);
+
+  const displayedStopsForMap = useMemo(() => (
+    displayedStops.map((stop) => {
+      const closureImpact = activeStopClosureByStopId.get(String(stop.id));
+      return closureImpact ? { ...stop, closureImpact, isClosed: true } : stop;
+    })
+  ), [displayedStops, activeStopClosureByStopId]);
+
   const displayedStopsById = useMemo(() => {
     const map = new Map();
-    displayedStops.forEach((stop) => {
+    displayedStopsForMap.forEach((stop) => {
       map.set(String(stop.id), stop);
     });
     return map;
-  }, [displayedStops]);
+  }, [displayedStopsForMap]);
 
   const stopsGeoJson = useMemo(() => ({
     type: 'FeatureCollection',
-    features: displayedStops.map((stop) => ({
+    features: displayedStopsForMap.map((stop) => ({
       type: 'Feature',
       id: String(stop.id),
       geometry: {
@@ -1101,9 +1377,10 @@ const HomeScreen = ({ route }) => {
       properties: {
         id: String(stop.id),
         isSelected: selectedStop?.id === stop.id ? 1 : 0,
+        isClosed: stop.isClosed ? 1 : 0,
       },
     })),
-  }), [displayedStops, selectedStop]);
+  }), [displayedStopsForMap, selectedStop]);
 
   const handleStopLayerPress = useCallback((event) => {
     const stopFeature = event?.features?.[0];
@@ -1182,6 +1459,25 @@ const HomeScreen = ({ route }) => {
     }
   }, [displayedVehicles.length, displayedStops.length, displayedShapes.length]);
 
+  const stopFollowingUserLocation = useCallback(() => {
+    cameraRef.current?.setCamera({
+      followUserLocation: false,
+      followUserMode: null,
+      animationDuration: 0,
+    });
+  }, []);
+
+  const cancelPendingLocationCenter = useCallback(() => {
+    pendingLocationCenterRef.current += 1;
+    stopFollowingUserLocation();
+  }, [stopFollowingUserLocation]);
+
+  const handleRegionWillChange = useCallback((feature) => {
+    if (feature?.properties?.isUserInteraction) {
+      cancelPendingLocationCenter();
+    }
+  }, [cancelPendingLocationCenter]);
+
   // Handle map region change (MapLibre onRegionDidChange)
   const handleRegionChange = useCallback((feature) => {
     const handlerStart =
@@ -1191,16 +1487,6 @@ const HomeScreen = ({ route }) => {
     const perf = perfRef.current;
     const nowTs = Date.now();
 
-    if (PERF_DEBUG && perf.lastRegionEventTs > 0) {
-      const gapMs = nowTs - perf.lastRegionEventTs;
-      if (gapMs > 40 && nowTs - perf.lastRegionWarnTs > 2000) {
-        logger.warn(
-          '[perf][home-map] Region event gap=%dms (target < 34ms, ~30fps)',
-          gapMs
-        );
-        perf.lastRegionWarnTs = nowTs;
-      }
-    }
     perf.lastRegionEventTs = nowTs;
 
     const properties = feature?.properties;
@@ -1223,14 +1509,34 @@ const HomeScreen = ({ route }) => {
 
     mapRegionRef.current = nextRegion;
 
-    setCurrentZoom((prevZoom) => (Math.abs(prevZoom - zoom) < 0.05 ? prevZoom : zoom));
+    const renderZoom = getRenderZoom(zoom);
+    setCurrentZoom((prevZoom) => (prevZoom === renderZoom ? prevZoom : renderZoom));
 
     // Region state is only needed for viewport stop filtering.
     if (!showStops || selectedRoutes.size > 0) return;
 
-    setMapRegion((prevRegion) =>
-      hasMeaningfulRegionChange(prevRegion, nextRegion) ? nextRegion : prevRegion
-    );
+    const applyRegionState = () => {
+      perf.lastRegionStateUpdateTs = Date.now();
+      perf.pendingRegionTimer = null;
+      const latestRegion = mapRegionRef.current;
+      setMapRegion((prevRegion) =>
+        hasMeaningfulRegionChange(prevRegion, latestRegion) ? latestRegion : prevRegion
+      );
+    };
+
+    const elapsedSinceRegionUpdate = nowTs - perf.lastRegionStateUpdateTs;
+    if (elapsedSinceRegionUpdate >= MAP_REGION_STATE_THROTTLE_MS) {
+      if (perf.pendingRegionTimer) {
+        clearTimeout(perf.pendingRegionTimer);
+        perf.pendingRegionTimer = null;
+      }
+      applyRegionState();
+    } else if (!perf.pendingRegionTimer) {
+      perf.pendingRegionTimer = setTimeout(
+        applyRegionState,
+        MAP_REGION_STATE_THROTTLE_MS - elapsedSinceRegionUpdate
+      );
+    }
 
     const handlerEnd =
       typeof global.performance !== 'undefined' && typeof global.performance.now === 'function'
@@ -1290,10 +1596,15 @@ const HomeScreen = ({ route }) => {
   const handleWhereToSelect = (address) => {
     const destination = { lat: address.lat, lon: address.lon };
     setWhereToText('');
-    enterPlanningMode();
-    setSelectedStop(null);
-    setTripTo(destination, address.shortName || address.displayName);
-    useCurrentLocationForTrip(destination);
+    startTripToDestination({
+      destination,
+      label: address.shortName || address.displayName,
+      beforeEnter: () => setSelectedStop(null),
+      enterPlanningMode,
+      setTripFrom,
+      setTripTo,
+      useCurrentLocationForTrip,
+    });
   };
 
   const handleZonePress = (zoneId) => {
@@ -1302,9 +1613,15 @@ const HomeScreen = ({ route }) => {
   };
 
   const handleZoneDirectionsToHub = (hubStop) => {
-    setSelectedZone(null);
-    enterPlanningMode();
-    setTripTo({ lat: hubStop.latitude, lon: hubStop.longitude }, hubStop.name || 'Hub Stop');
+    startTripToDestination({
+      destination: { lat: hubStop.latitude, lon: hubStop.longitude },
+      label: hubStop.name || 'Hub Stop',
+      beforeEnter: () => setSelectedZone(null),
+      enterPlanningMode,
+      setTripFrom,
+      setTripTo,
+      useCurrentLocationForTrip,
+    });
   };
 
   // Handle "Trip from here" from stop bottom sheet
@@ -1316,43 +1633,55 @@ const HomeScreen = ({ route }) => {
 
   // Handle "Trip to here" from stop bottom sheet
   const handleStopDirectionsTo = (stopInfo) => {
-    setSelectedStop(null);
-    enterPlanningMode();
-    setTripTo({ lat: stopInfo.lat, lon: stopInfo.lon }, stopInfo.name || 'Selected stop');
+    selectStopTripDestination({
+      stopInfo,
+      isTripPlanningMode,
+      tripFromLocation,
+      setSelectedStop,
+      enterPlanningMode,
+      setTripFrom,
+      setTripTo,
+      useCurrentLocationForTrip,
+    });
   };
 
-
-  const useCurrentLocationForTrip = (searchTo = null) => {
-    useCurrentLocationHook(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') throw new Error('Location permission required');
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      return { lat: loc.coords.latitude, lon: loc.coords.longitude };
-    }, { searchTo });
-  };
 
   const centerOnUserLocationOnce = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        return;
-      }
+    const requestId = pendingLocationCenterRef.current + 1;
+    pendingLocationCenterRef.current = requestId;
 
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    try {
+      const loc = await getForegroundDeviceLocation(Location, {
+        accuracy: Location.Accuracy.Balanced,
+      });
+      if (requestId !== pendingLocationCenterRef.current) return;
+
       const latestRegion = mapRegionRef.current || MAP_CONFIG.INITIAL_REGION;
       const nextRegion = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
+        latitude: loc.lat,
+        longitude: loc.lon,
         latitudeDelta: latestRegion.latitudeDelta || MAP_CONFIG.INITIAL_REGION.latitudeDelta,
         longitudeDelta: latestRegion.longitudeDelta || MAP_CONFIG.INITIAL_REGION.longitudeDelta,
       };
 
+      stopFollowingUserLocation();
       cameraRef.current?.setCamera({
+        centerCoordinate: [nextRegion.longitude, nextRegion.latitude],
+        zoomLevel: Math.log2(360 / nextRegion.latitudeDelta),
         followUserLocation: false,
-        animationDuration: 0,
+        followUserMode: null,
+        animationDuration: 500,
       });
-      cameraRef.current?.moveTo([nextRegion.longitude, nextRegion.latitude], 500);
       mapRegionRef.current = nextRegion;
+
+      if (locationCenterReleaseTimerRef.current) {
+        clearTimeout(locationCenterReleaseTimerRef.current);
+      }
+      locationCenterReleaseTimerRef.current = setTimeout(() => {
+        if (requestId === pendingLocationCenterRef.current) {
+          stopFollowingUserLocation();
+        }
+      }, 650);
 
       if (showStops && selectedRoutes.size === 0) {
         setMapRegion((prevRegion) =>
@@ -1362,7 +1691,7 @@ const HomeScreen = ({ route }) => {
     } catch (error) {
       logger.warn('Failed to center on user location', error);
     }
-  }, [selectedRoutes.size, showStops]);
+  }, [selectedRoutes.size, showStops, stopFollowingUserLocation]);
 
   const showTripOverview = useCallback(() => {
     if (!selectedItinerary) {
@@ -1403,42 +1732,50 @@ const HomeScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <HomeMapView
-        mapRef={mapRef}
-        cameraRef={cameraRef}
-        cameraDefaultSettings={cameraDefaultSettings}
-        handleMapPress={handleMapPress}
-        handleRegionChange={handleRegionChange}
-        isTripPreviewMode={isTripPreviewMode}
-        displayedShapes={displayedShapes}
-        isRouteSelected={isRouteSelected}
-        hasSelection={hasSelection}
-        selectedRouteCount={selectedRoutes.size}
-        currentZoom={currentZoom}
-        activeDetourRouteIds={activeDetourRouteIds}
-        hasDetourFocus={hasDetourFocus}
-        focusedDetourRouteId={focusedDetourRouteId}
-        isDetourView={isDetourView}
-        routeShortNameMap={routeShortNameMap}
-        detourOverlays={detourOverlays}
-        zoneOverlays={zoneOverlays}
-        handleZonePress={handleZonePress}
-        displayedStopsLength={displayedStops.length}
-        stopsGeoJson={stopsGeoJson}
-        handleStopLayerPress={handleStopLayerPress}
-        displayedVehicles={displayedVehicles}
-        getRouteColor={getRouteColor}
-        getRouteLabel={getRouteLabel}
-        getVehicleSnapPath={getVehicleSnapPath}
-        tripRouteCoordinates={tripRouteCoordinates}
-        tripEndpointMarkers={tripEndpointMarkers}
-        busApproachLines={busApproachLines}
-        intermediateStopMarkers={intermediateStopMarkers}
-        tripMarkers={tripMarkers}
-        boardingAlightingMarkers={boardingAlightingMarkers}
-        tripVehicles={tripVehicles}
-        mapTapLocation={mapTapLocation}
-      />
+      {mapReadyToMount ? (
+        <HomeMapView
+          mapRef={mapRef}
+          cameraRef={cameraRef}
+          cameraDefaultSettings={cameraDefaultSettings}
+          handleMapPress={handleMapPress}
+          handleRegionWillChange={handleRegionWillChange}
+          handleRegionChange={handleRegionChange}
+          isTripPreviewMode={isTripPreviewMode}
+          displayedShapes={displayedShapes}
+          isRouteSelected={isRouteSelected}
+          hasSelection={hasSelection}
+          selectedRouteCount={selectedRoutes.size}
+          currentZoom={currentZoom}
+          activeDetourRouteIds={activeDetourRouteIds}
+          hasDetourFocus={hasDetourFocus}
+          focusedDetourRouteId={focusedDetourRouteId}
+          isDetourView={isDetourView}
+          routeShortNameMap={routeShortNameMap}
+          detourOverlays={detourOverlays}
+          handleDetourOverlayPress={handleDetourOverlayPress}
+          zoneOverlays={zoneOverlays}
+          handleZonePress={handleZonePress}
+          displayedStopsLength={displayedStopsForMap.length}
+          displayedStops={displayedStopsForMap}
+          selectedStopId={selectedStop?.id ?? null}
+          stopsGeoJson={stopsGeoJson}
+          handleStopLayerPress={handleStopLayerPress}
+          displayedVehicles={displayedVehicles}
+          getRouteColor={getRouteColor}
+          getRouteLabel={getRouteLabel}
+          getVehicleSnapPath={getVehicleSnapPath}
+          tripRouteCoordinates={tripRouteCoordinates}
+          tripEndpointMarkers={tripEndpointMarkers}
+          busApproachLines={busApproachLines}
+          intermediateStopMarkers={intermediateStopMarkers}
+          tripMarkers={tripMarkers}
+          boardingAlightingMarkers={boardingAlightingMarkers}
+          tripVehicles={tripVehicles}
+          mapTapLocation={mapTapLocation}
+        />
+      ) : (
+        <View style={styles.mapPlaceholder} />
+      )}
 
       {!isTripPlanningMode && (
         <View
@@ -1510,7 +1847,7 @@ const HomeScreen = ({ route }) => {
       )}
 
       {/* Post-trip survey nudge */}
-      {!isTripPlanningMode && (
+      {!isTripPlanningMode && secondaryChromeReady && (
         <SurveyNudgeBanner
           onTakeSurvey={() => navigation.getParent()?.navigate('Profile', { screen: 'Survey', params: { trigger: 'post_trip' } })}
         />
@@ -1545,7 +1882,8 @@ const HomeScreen = ({ route }) => {
       )}
 
       <DetourMapLegend
-        visible={!isTripPlanningMode && isDetourView && detourOverlays.length > 0}
+        visible={!isTripPlanningMode && !detourSheetRouteId && isDetourView && detourOverlays.length > 0 && !detourOverlays.some((overlay) => overlay.showCallouts)}
+        openColor={detourOverlays.length === 1 ? detourOverlays[0].detourColor : COLORS.textPrimary}
         style={styles.detourLegend}
       />
 
@@ -1597,7 +1935,7 @@ const HomeScreen = ({ route }) => {
       )}
 
       {/* Favorite Stop Quick View */}
-      {!isTripPlanningMode && (
+      {!isTripPlanningMode && secondaryChromeReady && (
         <FavoriteStopCard
           onPress={(stop) => {
             setSelectedStop(stop);
@@ -1647,30 +1985,32 @@ const HomeScreen = ({ route }) => {
               }
             }}
           />
-          <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
-            <TripBottomSheet
-              itineraries={itineraries}
-              selectedIndex={selectedItineraryIndex}
-              onSelectItinerary={setSelectedItineraryIndex}
-              onViewDetails={viewTripDetails}
-              onStartNavigation={startNavigationDirect}
-              isLoading={isTripLoading}
-              error={tripError}
-              hasSearched={hasTripSearched}
-              recentTrips={recentTrips}
-              onSelectRecentTrip={handleSelectRecentTrip}
-              onRetry={() => {
-                if (tripFromLocation && tripToLocation) {
-                  searchTrips(tripFromLocation, tripToLocation);
-                }
-              }}
-            />
-          </SheetErrorBoundary>
+          {!selectedStop && (
+            <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
+              <TripBottomSheet
+                itineraries={itineraries}
+                selectedIndex={selectedItineraryIndex}
+                onSelectItinerary={setSelectedItineraryIndex}
+                onViewDetails={viewTripDetails}
+                onStartNavigation={startNavigationDirect}
+                isLoading={isTripLoading}
+                error={tripError}
+                hasSearched={hasTripSearched}
+                recentTrips={recentTrips}
+                onSelectRecentTrip={handleSelectRecentTrip}
+                onRetry={() => {
+                  if (tripFromLocation && tripToLocation) {
+                    searchTrips(tripFromLocation, tripToLocation);
+                  }
+                }}
+              />
+            </SheetErrorBoundary>
+          )}
         </>
       )}
 
-      {/* Stop Bottom Sheet - only show when not in trip planning mode */}
-      {!isTripPlanningMode && selectedStop && (
+      {/* Stop Bottom Sheet - available while choosing trip endpoints */}
+      {selectedStop && !isTripPreviewMode && (
         <SheetErrorBoundary fallbackMessage="Stop details failed to load.">
           <StopBottomSheet
             stop={selectedStop}
@@ -1691,18 +2031,6 @@ const HomeScreen = ({ route }) => {
           onViewOnMap={() => {
             setFocusedDetourRouteId(detourSheetRouteId);
             setMapViewMode('detour');
-            const fitCoords = getDetourViewportCoordinates({
-              activeDetours: detourSheetRouteId && selectedDetour
-                ? { [detourSheetRouteId]: selectedDetour }
-                : {},
-              focusedRouteId: detourSheetRouteId,
-            });
-            if (fitCoords.length > 0) {
-              compatMapRef.current?.fitToCoordinates(
-                fitCoords,
-                { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true }
-              );
-            }
             setDetourSheetRouteId(null);
           }}
         />
@@ -1750,6 +2078,10 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    backgroundColor: COLORS.grey50,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -1950,6 +2282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-start',
+    overflow: 'visible',
   },
   androidBusMarker: {
     height: 30,
@@ -1965,6 +2298,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 2,
     elevation: 4,
+    zIndex: 1,
   },
   androidBusMarkerDimmed: {
     opacity: 0.42,
@@ -1972,8 +2306,73 @@ const styles = StyleSheet.create({
   androidBusMarkerLabel: {
     color: COLORS.white,
     fontSize: 12,
+    lineHeight: 13,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  androidBusMarkerDirectionLabel: {
+    color: COLORS.white,
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  topStopMarkerFrame: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    overflow: 'visible',
+    zIndex: 60,
+    elevation: 60,
+  },
+  topStopMarkerFrameSelected: {
+    width: 30,
+    height: 30,
+  },
+  topStopMarkerOuter: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.textPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 4,
+  },
+  topStopMarkerOuterSelected: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderColor: COLORS.accent,
+  },
+  topStopMarkerOuterClosed: {
+    backgroundColor: COLORS.error,
+    borderColor: COLORS.white,
+  },
+  topStopMarkerClosedText: {
+    color: COLORS.white,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 13,
+  },
+  topStopMarkerInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.white,
+  },
+  topStopMarkerInnerSelected: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: COLORS.accent,
   },
   // Trip planning markers
   tripMarker: {

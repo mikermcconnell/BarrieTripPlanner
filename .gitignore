@@ -47,6 +47,9 @@ nul
 # Dev server logs
 .logs-*
 
+# Local review/test artifacts
+.work-artifacts/
+
 # Emulator screenshots
 emulator_*.png
 

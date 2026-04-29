@@ -47,25 +47,24 @@ import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel'
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
 
-// Walking enrichment (fetched on navigation start, not during preview)
-import { enrichItineraryWithWalking } from '../services/walkingService';
 import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import * as Haptics from 'expo-haptics';
 import logger from '../utils/logger';
-import { decodePolyline, findClosestPointIndex, extractShapeSegment } from '../utils/polylineUtils';
+import { decodePolyline } from '../utils/polylineUtils';
 import { haversineDistance, pointToPolylineDistance } from '../utils/geometryUtils';
 import {
   collectItineraryViewportCoordinates,
   computeCoordinateBounds,
   distanceToBoundsMeters,
 } from '../utils/itineraryViewport';
-import { buildTransitStopProgress } from '../utils/transitStopUtils';
-import { buildWalkingLandmarkMarkers } from '../utils/navigationMapMarkers';
 import {
   buildCurrentStepBusPreviewLine,
   buildRoutePathsByRouteId,
-  getVehicleSnapPath,
 } from '../utils/navigationBusPreview';
+import { buildNavigationMapModel } from '../features/navigation/model/buildNavigationMapModel';
+import { buildNavigationRoutePolylines } from '../features/navigation/model/buildNavigationRoutePolylines';
+import { buildNavigationVehicleMarkers } from '../features/navigation/model/buildNavigationVehicleMarkers';
+import { useNavigationItineraryController } from '../features/navigation/useNavigationItineraryController';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
 import TripViewportControls from '../components/TripViewportControls';
@@ -149,38 +148,11 @@ const NavigationScreen = ({ route }) => {
   const cameraRef = useRef(null);
 
   const initialItinerary = route.params?.itinerary;
-  const [itinerary, setItinerary] = useState(initialItinerary);
-
-  // Track navigation start
-  useEffect(() => {
-    if (initialItinerary) {
-      try {
-        const { trackEvent } = require('../services/analyticsService');
-        trackEvent('navigation_started', {
-          leg_count: initialItinerary.legs?.length || 0,
-        });
-      } catch {}
-    }
-  }, []);
-
-  // Guard + enrich: if no itinerary, go back; otherwise fetch walking directions
-  useEffect(() => {
-    if (!initialItinerary) {
-      navigation.goBack();
-      return;
-    }
-
-    let cancelled = false;
-    enrichItineraryWithWalking(initialItinerary)
-      .then(enriched => {
-        if (!cancelled) {
-          logger.log('Walking directions enriched for navigation');
-          setItinerary(enriched);
-        }
-      })
-      .catch(() => {}); // Keep using estimate-based itinerary
-    return () => { cancelled = true; };
-  }, [initialItinerary, navigation]);
+  const { itinerary, setItinerary } = useNavigationItineraryController({
+    initialItinerary,
+    navigation,
+    trackStart: true,
+  });
 
   if (!itinerary) return null;
 
@@ -491,329 +463,130 @@ const NavigationScreen = ({ route }) => {
     setShowMissedBusWarning(true);
   }, [isTransitLeg, transitStatus, currentLeg, busProximity?.vehicle, currentLegIndex]);
 
-  // Get route polylines for map
-  const routePolylines = useMemo(() => {
-    if (!itinerary?.legs) return [];
+  const routePolylines = useMemo(
+    () =>
+      buildNavigationRoutePolylines({
+        itinerary,
+        currentLegIndex,
+        userLocation,
+        shapes,
+        routeShapeMapping,
+      }).map((line) => ({
+        ...line,
+        strokeWidth: line.width,
+        lineDashPattern: line.dashPattern,
+      })),
+    [itinerary, currentLegIndex, userLocation, shapes, routeShapeMapping]
+  );
 
-    const result = [];
-
-    itinerary.legs.forEach((leg, index) => {
-      let coordinates = [];
-      const isWalk = leg.mode === 'WALK';
-      const isTransit = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
-
-      if (leg.legGeometry?.points) {
-        coordinates = decodePolyline(leg.legGeometry.points);
-      } else if (isTransit && leg.route?.id && leg.from && leg.to) {
-        const routeId = leg.route.id;
-        const shapeIds = routeShapeMapping[routeId] || [];
-
-        let bestSegment = [];
-        let bestLength = 0;
-
-        for (const shapeId of shapeIds) {
-          const shapeCoords = shapes[shapeId] || [];
-          if (shapeCoords.length === 0) continue;
-
-          const segment = extractShapeSegment(
-            shapeCoords,
-            leg.from.lat,
-            leg.from.lon,
-            leg.to.lat,
-            leg.to.lon
-          );
-
-          if (segment.length > bestLength) {
-            bestLength = segment.length;
-            bestSegment = segment;
-          }
-        }
-
-        coordinates = bestSegment.length > 0 ? bestSegment : [
-          { latitude: leg.from.lat, longitude: leg.from.lon },
-          { latitude: leg.to.lat, longitude: leg.to.lon },
-        ];
-      } else if (leg.from && leg.to) {
-        coordinates = [
-          { latitude: leg.from.lat, longitude: leg.from.lon },
-          { latitude: leg.to.lat, longitude: leg.to.lon },
-        ];
-      }
-
-      const isCurrentLeg = index === currentLegIndex;
-      const isCompletedLeg = index < currentLegIndex;
-
-      const isCurrentWalkLeg = isCurrentLeg && isWalk;
-      const routeColor = isCompletedLeg
-        ? COLORS.grey400
-        : isCurrentWalkLeg
-        ? GOOGLE_WALK_BLUE
-        : isWalk
-        ? COLORS.grey500
-        : leg.isOnDemand
-        ? (leg.zoneColor || COLORS.primary)
-        : (leg.route?.color || COLORS.primary);
-
-      const strokeWidth = isCurrentWalkLeg ? 6 : isCurrentLeg ? 7 : 4;
-      const lineDashPattern = isCurrentWalkLeg ? null : isWalk ? [10, 5] : leg.isOnDemand ? [8, 6] : null;
-      const opacity = isCompletedLeg ? 0.28 : isCurrentLeg ? 1 : 0.62;
-      const outlineWidth = isCurrentWalkLeg ? 4 : 2;
-      const outlineColor = isCurrentWalkLeg ? COLORS.white : undefined;
-
-      // For the current leg, split at the user's position into completed (grey) and remaining (colored)
-      if (isCurrentLeg && userLocation && coordinates.length > 1) {
-        const splitIdx = findClosestPointIndex(
-          coordinates,
-          userLocation.latitude,
-          userLocation.longitude
-        );
-
-        if (splitIdx > 0 && splitIdx < coordinates.length - 1) {
-          // Completed portion: from start up to user position (grey, lower opacity)
-          result.push({
-            id: `leg-${index}-completed`,
-            coordinates: coordinates.slice(0, splitIdx + 1),
-            color: isCurrentWalkLeg ? '#9BBBF9' : '#9E9E9E',
-            strokeWidth,
-            lineDashPattern,
-            opacity: 0.5,
-            outlineWidth,
-            outlineColor,
-          });
-          // Remaining portion: from user position to end (full route color)
-          result.push({
-            id: `leg-${index}-remaining`,
-            coordinates: coordinates.slice(splitIdx),
-            color: routeColor,
-            strokeWidth,
-            lineDashPattern,
-            opacity,
-            outlineWidth,
-            outlineColor,
-          });
-          return;
-        }
-      }
-
-      result.push({
-        id: `leg-${index}`,
-        coordinates,
-        color: routeColor,
-        strokeWidth,
-        lineDashPattern,
-        opacity,
-        outlineWidth,
-        outlineColor,
-      });
-    });
-
-    return result;
-  }, [itinerary, currentLegIndex, userLocation, shapes, routeShapeMapping]);
+  const navigationMapModel = useMemo(() => buildNavigationMapModel({
+    itinerary,
+    currentLeg,
+    currentLegIndex,
+    isWalkingLeg,
+    currentTransitLeg,
+    nextTransitLeg,
+    nextTransitProximity: nextTransitBusProximity,
+    transitStatus,
+    isUserOnBoard,
+    liveStopsRemaining: busProximity.stopsUntilAlighting,
+  }), [
+    itinerary,
+    currentLeg,
+    currentLegIndex,
+    isWalkingLeg,
+    currentTransitLeg,
+    nextTransitLeg,
+    nextTransitBusProximity,
+    transitStatus,
+    isUserOnBoard,
+    busProximity.stopsUntilAlighting,
+  ]);
 
   // Get markers for map
   const markers = useMemo(() => {
-    if (!itinerary?.legs) return [];
-
-    const result = [];
-    const legs = itinerary.legs;
-
-    if (isWalkingLeg && currentLeg?.from && currentLeg?.to) {
-      return result;
+    const result = [...navigationMapModel.mapMarkers];
+    if (navigationMapModel.busStopMarker) {
+      result.push(navigationMapModel.busStopMarker);
     }
 
-    // Origin marker
-    if (legs[0]?.from) {
-      result.push({
-        id: 'origin',
-        coordinate: [legs[0].from.lon, legs[0].from.lat],
-        type: 'origin',
-        title: 'Start',
-      });
-    }
-
-    // Destination marker
-    const lastLeg = legs[legs.length - 1];
-    if (lastLeg?.to) {
-      result.push({
-        id: 'destination',
-        coordinate: [lastLeg.to.lon, lastLeg.to.lat],
-        type: 'destination',
-        title: 'End',
-      });
-    }
-
-    // Current leg destination (for visual guidance)
-    if (currentLeg?.to && currentLegIndex < legs.length - 1) {
-      result.push({
-        id: 'current-destination',
-        coordinate: [currentLeg.to.lon, currentLeg.to.lat],
-        type: 'waypoint',
-        title: currentLeg.to.name,
-      });
-    }
-
-    // Bus stop marker (boarding point for transit leg)
-    if (currentTransitLeg?.from && transitStatus === 'waiting') {
-      result.push({
-        id: 'bus-stop',
-        coordinate: [currentTransitLeg.from.lon, currentTransitLeg.from.lat],
-        type: 'bus-stop',
-        title: currentTransitLeg.from.name,
-      });
-    }
-
-    return result;
-  }, [itinerary, currentLeg, currentLegIndex, currentTransitLeg, transitStatus, isWalkingLeg, userLocation]);
-
-  const walkingLandmarkMarkers = useMemo(() => {
-    if (!isWalkingLeg) return [];
-
-    return buildWalkingLandmarkMarkers({
-      itinerary,
-      currentLeg,
-      currentLegIndex,
-      nextTransitLeg,
-    }).map((marker) => ({
+    return result.map((marker) => ({
       ...marker,
       coordinate: [marker.longitude, marker.latitude],
     }));
-  }, [itinerary, currentLeg, currentLegIndex, isWalkingLeg, nextTransitLeg]);
+  }, [navigationMapModel]);
 
-  const transitStopMarkers = useMemo(() => {
-    if (!currentTransitLeg) return [];
+  const walkingLandmarkMarkers = useMemo(
+    () =>
+      navigationMapModel.walkingLandmarkMarkers.map((marker) => ({
+        ...marker,
+        coordinate: [marker.longitude, marker.latitude],
+      })),
+    [navigationMapModel]
+  );
 
-    const progress = buildTransitStopProgress(
+  const transitStopMarkers = useMemo(
+    () =>
+      navigationMapModel.transitStopMarkers.map((marker) => ({
+        ...marker,
+        coordinate: [marker.longitude, marker.latitude],
+      })),
+    [navigationMapModel]
+  );
+
+  const navigationVehicleMarkers = useMemo(
+    () =>
+      buildNavigationVehicleMarkers({
+        itinerary,
+        currentLegIndex,
+        isWalkingLeg,
+        currentTransitLeg,
+        nextTransitLeg,
+        vehicles,
+        busProximityVehicle: busProximity?.vehicle,
+        nextTransitProximityVehicle: nextTransitBusProximity?.vehicle,
+        routePathsByRouteId,
+      }),
+    [
+      itinerary,
+      currentLegIndex,
+      isWalkingLeg,
       currentTransitLeg,
-      isUserOnBoard ? busProximity.stopsUntilAlighting : null
-    );
-    const markers = [];
-    const nextStop = progress.nextStop;
-    const exitStop = progress.alightingStop;
+      nextTransitLeg,
+      vehicles,
+      busProximity?.vehicle,
+      nextTransitBusProximity?.vehicle,
+      routePathsByRouteId,
+    ]
+  );
 
-    if (nextStop) {
-      markers.push({
-        id: `transit-next-${nextStop.id}`,
-        coordinate: [nextStop.lon, nextStop.lat],
-        type: nextStop.type === 'alighting' ? 'transit-alight-stop' : 'transit-next-stop',
-        title: nextStop.stopCode ? `${nextStop.name} (#${nextStop.stopCode})` : nextStop.name,
-        caption: nextStop.type === 'alighting' ? 'Get off next' : 'Next stop',
-      });
-    }
+  const trackedBusMarker = useMemo(
+    () =>
+      navigationVehicleMarkers.trackedBusMarker
+        ? {
+            ...navigationVehicleMarkers.trackedBusMarker,
+            coordinate: [
+              navigationVehicleMarkers.trackedBusMarker.longitude,
+              navigationVehicleMarkers.trackedBusMarker.latitude,
+            ],
+          }
+        : null,
+    [navigationVehicleMarkers]
+  );
 
-    if (exitStop && exitStop.id !== nextStop?.id) {
-      markers.push({
-        id: `transit-exit-${exitStop.id}`,
-        coordinate: [exitStop.lon, exitStop.lat],
-        type: 'transit-alight-stop',
-        title: exitStop.stopCode ? `${exitStop.name} (#${exitStop.stopCode})` : exitStop.name,
-        caption: 'Your stop',
-      });
-    }
-
-    return markers;
-  }, [currentTransitLeg, isUserOnBoard, busProximity.stopsUntilAlighting]);
-
-  // Get tracked bus marker
-  // Uses direct vehicle context lookup as primary (immediate), with useBusProximity as fallback.
-  const trackedBusMarker = useMemo(() => {
-    if (!currentTransitLeg) return null;
-
-    const tripId = currentTransitLeg.tripId;
-    const routeId = currentTransitLeg.route?.id || currentTransitLeg.routeId;
-    let vehicle = null;
-
-    if (tripId) {
-      vehicle = vehicles.find(v => v.tripId === tripId);
-    }
-    if (!vehicle && routeId) {
-      const routeVehicles = vehicles.filter(v => v.routeId === routeId);
-      vehicle = routeVehicles[0] || null;
-    }
-
-    if (!vehicle && busProximity?.vehicle) {
-      vehicle = busProximity.vehicle;
-    }
-
-    if (!vehicle?.coordinate) return null;
-
-    return {
-      id: 'tracked-bus',
-      coordinate: [
-        vehicle.coordinate.longitude,
-        vehicle.coordinate.latitude,
-      ],
-      vehicle: {
-        ...vehicle,
-        routeId: vehicle.routeId || routeId,
-        coordinate: {
-          latitude: vehicle.coordinate.latitude,
-          longitude: vehicle.coordinate.longitude,
-        },
-      },
-      color: currentTransitLeg.route?.color || COLORS.primary,
-      routeId,
-      routeShortName: currentTransitLeg.route?.shortName || '?',
-      bearing: vehicle.bearing,
-      snapPath: getVehicleSnapPath({
-        ...vehicle,
-        routeId: vehicle.routeId || routeId,
-      }, routePathsByRouteId),
-    };
-  }, [currentTransitLeg, vehicles, busProximity?.vehicle, routePathsByRouteId]);
-
-  // Bus marker shown during walking legs — looks forward (next transit) then backward (previous)
-  const walkingBusMarker = useMemo(() => {
-    if (!isWalkingLeg || !itinerary?.legs) return null;
-
-    // Find nearest transit leg: forward first, then backward
-    let transitLeg = nextTransitLeg;
-    if (!transitLeg) {
-      for (let i = currentLegIndex - 1; i >= 0; i--) {
-        const leg = itinerary.legs[i];
-        if (leg.mode === 'BUS' || leg.mode === 'TRANSIT') { transitLeg = leg; break; }
-      }
-    }
-    if (!transitLeg) return null;
-
-    const tripId = transitLeg.tripId;
-    const routeId = transitLeg.route?.id || transitLeg.routeId;
-    let vehicle = null;
-
-    if (tripId) {
-      vehicle = vehicles.find(v => v.tripId === tripId);
-    }
-    if (!vehicle && routeId) {
-      const routeVehicles = vehicles.filter(v => v.routeId === routeId);
-      vehicle = routeVehicles[0] || null;
-    }
-
-    if (!vehicle && nextTransitBusProximity?.vehicle) {
-      vehicle = nextTransitBusProximity.vehicle;
-    }
-
-    if (!vehicle?.coordinate) return null;
-
-    return {
-      id: 'walking-bus',
-      vehicle: {
-        ...vehicle,
-        routeId: vehicle.routeId || transitLeg.route?.id || transitLeg.routeId,
-        coordinate: {
-          latitude: vehicle.coordinate.latitude,
-          longitude: vehicle.coordinate.longitude,
-        },
-      },
-      color: transitLeg.route?.color || COLORS.primary,
-      routeShortName: transitLeg.route?.shortName || '?',
-      snapPath: getVehicleSnapPath(
-        {
-          ...vehicle,
-          routeId: vehicle.routeId || transitLeg.route?.id || transitLeg.routeId,
-        },
-        routePathsByRouteId
-      ),
-    };
-  }, [isWalkingLeg, itinerary, currentLegIndex, nextTransitLeg, vehicles, nextTransitBusProximity?.vehicle]);
+  const walkingBusMarker = useMemo(
+    () =>
+      navigationVehicleMarkers.walkingBusMarker
+        ? {
+            ...navigationVehicleMarkers.walkingBusMarker,
+            coordinate: [
+              navigationVehicleMarkers.walkingBusMarker.longitude,
+              navigationVehicleMarkers.walkingBusMarker.latitude,
+            ],
+          }
+        : null,
+    [navigationVehicleMarkers]
+  );
 
   const currentStepBusPreviewLine = useMemo(() => {
     return buildCurrentStepBusPreviewLine({
@@ -1116,6 +889,7 @@ const NavigationScreen = ({ route }) => {
                 <View
                   style={[
                     styles.mapStopLabelBubble,
+                    styles.mapStopLabelBubbleWalkingLandmark,
                     marker.type === 'walk-start' && styles.mapStopLabelBubbleWalkStart,
                     marker.type !== 'walk-start' && styles.mapStopLabelBubbleWalkTarget,
                   ]}
@@ -1129,9 +903,14 @@ const NavigationScreen = ({ route }) => {
                   >
                     {marker.caption}
                   </Text>
-                  <Text style={styles.mapStopLabelName} numberOfLines={1}>
+                  <Text style={[styles.mapStopLabelName, styles.mapStopLabelNameWalkingLandmark]} numberOfLines={2}>
                     {marker.title}
                   </Text>
+                  {marker.detail ? (
+                    <Text style={styles.mapStopLabelDetail} numberOfLines={1}>
+                      {marker.detail}
+                    </Text>
+                  ) : null}
                 </View>
                 <View
                   style={[
@@ -1383,6 +1162,7 @@ const NavigationScreen = ({ route }) => {
             currentStepIndex={currentStepIndex}
             totalSteps={(currentLeg?.steps || []).length}
             nextLegPreview={nextLegPreviewText}
+            nextTransitLeg={nextTransitLeg}
           />
         )}
 
@@ -1657,6 +1437,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderLight,
     ...SHADOWS.small,
   },
+  mapStopLabelBubbleWalkingLandmark: {
+    maxWidth: 240,
+  },
   mapStopLabelBubbleNext: {
     borderColor: COLORS.secondary,
     backgroundColor: COLORS.secondarySubtle,
@@ -1697,6 +1480,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginTop: 2,
+  },
+  mapStopLabelNameWalkingLandmark: {
+    lineHeight: 16,
+  },
+  mapStopLabelDetail: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '700',
+    color: GOOGLE_WALK_BLUE_DARK,
+    marginTop: 4,
   },
   busMarkerContainer: {
     alignItems: 'center',

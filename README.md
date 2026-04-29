@@ -10,6 +10,7 @@ Read docs in this order:
 2. this README for current setup, scripts, and product surface
 3. [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md) for backend deployment and auth
 4. [docs/AUTO-DETOUR-DETECTION.md](./docs/AUTO-DETOUR-DETECTION.md) for detour feature behavior
+5. [docs/TESTING.md](./docs/TESTING.md) for the current automated + manual testing approach
 
 Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start with [`docs/plans/README.md`](./docs/plans/README.md) if you need them.
 
@@ -114,6 +115,7 @@ When working in Android emulator, use one of these commands instead of manual Me
   - Runs recovery, starts Metro on `8084`, starts a local dev proxy on `8083`, then launches the app.
   - The proxy avoids emulator bundle transfer issues seen with direct Metro streaming.
   - This is the preferred native development path for the current app.
+  - If `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true`, it also starts the local auto-detour worker on `http://127.0.0.1:3002`.
 
 - `npm run android:dev:direct`
   - Direct Metro on `8083` without proxy.
@@ -125,6 +127,9 @@ When working in Android emulator, use one of these commands instead of manual Me
 
 - `npm run android:stable:rebuild`
   - Forces a fresh release rebuild/install, then launches.
+
+When auto-detour testing is enabled locally, `npm run android:recover` also stops the local detour worker. Set `DETOUR_DEV_WORKER_ENABLED=false` in `.env` if you want to launch the emulator without starting that worker.
+For rider-visible detour testing, `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` must point to valid Firebase Admin credentials so the worker can publish to Firestore.
 
 ### Web Development (CORS Proxy Required)
 
@@ -159,6 +164,36 @@ src/
 ├── services/       # API and data services
 └── utils/          # Helper functions
 ```
+
+## Testing
+
+BTTP has two separate automated test surfaces:
+
+- app tests from the repo root
+- backend tests for `api-proxy/`
+
+Use:
+
+```bash
+npm test
+```
+
+to run the app suite, or:
+
+```bash
+npm run test:all
+```
+
+to run both the app and API proxy suites.
+
+Additional commands:
+
+```bash
+npm run test:app
+npm run test:api
+```
+
+The full testing strategy, mock guidance, and manual smoke checklist live in [docs/TESTING.md](./docs/TESTING.md).
 
 ## Data Sources
 
@@ -195,13 +230,17 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    ```
 2. Set environment variables:
    - `DETOUR_WORKER_ENABLED=true`
+   - `DETOUR_WORKER_MODE=manual` (recommended for testing; use `interval` only if you explicitly want the legacy always-on loop)
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
+   - `BASELINE_AUTO_INIT=false` (prevents seeding the baseline from live GTFS during an active detour)
+   - `DETOUR_REQUIRE_SAFE_BASELINE=true` (blocks detection until a trusted baseline is loaded)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
    - `LOCATIONIQ_API_KEY=...` (still required for existing proxy routes)
    - `REQUIRE_API_AUTH=true`
    - `REQUIRE_FIREBASE_AUTH=true` (recommended/required for production)
    - `ALLOW_SHARED_TOKEN_AUTH=false` (recommended/required for production)
+   - `SURVEY_ADMIN_UIDS=...` only if you cannot use Firebase admin/surveyAdmin custom claims
    - `ALLOWED_ORIGINS=...` (required for browser clients)
    - Optional non-production token auth: `API_PROXY_TOKEN=...` (or `API_PROXY_TOKENS=token1,token2`)
 3. Start backend:
@@ -211,6 +250,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
 4. Verify worker status:
    - `GET /api/health`
    - `GET /api/detour-status`
+   - `POST /api/detour-run-once` (recommended in manual/scheduled mode)
    - `GET /api/detour-logs?limit=100`
      - Optional filters: `routeId`, `eventType` (comma-separated), `start`, `end`
      - Log event types: `DETOUR_DETECTED`, `DETOUR_UPDATED`, `DETOUR_CLEARED`

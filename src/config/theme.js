@@ -1,20 +1,20 @@
-// Barrie Transit Theme - Enterprise-grade design system
-// Design spec: BudgetMe-inspired with green (#4CAF50) as primary accent
+// Barrie Transit Theme - map-first rider design system
+// Blue leads brand/actions; green is reserved for success/on-time states.
 import { FONT_FAMILIES } from './fonts';
 
 export const COLORS = {
-  // Primary brand colors (BudgetMe Green)
-  primary: '#4CAF50',
-  primaryLight: '#81C784',
-  primaryDark: '#388E3C',
-  primarySubtle: '#E8F5E9',
+  // Primary brand colors (Barrie Transit blue)
+  primary: '#0C8CE5',
+  primaryLight: '#46B7FF',
+  primaryDark: '#005EA8',
+  primarySubtle: '#E6F4FF',
   ctaGreen: '#2E7D32',
 
   // Secondary colors (Transit Blue - for informational elements)
-  secondary: '#0066CC',
-  secondaryLight: '#3399FF',
-  secondaryDark: '#004C99',
-  secondarySubtle: '#E6F2FF',
+  secondary: '#023C69',
+  secondaryLight: '#1A73E8',
+  secondaryDark: '#012B4B',
+  secondarySubtle: '#E8F1FA',
 
   // Accent colors (Warning Yellow)
   accent: '#FF991F',
@@ -58,12 +58,12 @@ export const COLORS = {
   textSecondary: '#6B778C',
   textDisabled: '#A5ADBA',
   textInverse: '#FFFFFF',
-  textBrand: '#4CAF50',
+  textBrand: '#0C8CE5',
 
   // Border colors
   border: '#DFE1E6',
   borderLight: '#EBECF0',
-  borderFocus: '#4CAF50',
+  borderFocus: '#0C8CE5',
 
   // Real-time indicator colors
   realtime: '#4CAF50',
@@ -76,16 +76,16 @@ export const COLORS = {
 };
 
 export const COLORS_DARK = {
-  primary: '#66BB6A',
-  primaryLight: '#81C784',
-  primaryDark: '#4CAF50',
-  primarySubtle: '#1B3A1D',
+  primary: '#46B7FF',
+  primaryLight: '#7ACBFF',
+  primaryDark: '#0C8CE5',
+  primarySubtle: '#0D2744',
   ctaGreen: '#43A047',
 
-  secondary: '#42A5F5',
-  secondaryLight: '#64B5F6',
-  secondaryDark: '#1E88E5',
-  secondarySubtle: '#0D2744',
+  secondary: '#9FD8FF',
+  secondaryLight: '#BFE6FF',
+  secondaryDark: '#46B7FF',
+  secondarySubtle: '#102C42',
 
   accent: '#FFB74D',
   accentLight: '#FFCC02',
@@ -124,11 +124,11 @@ export const COLORS_DARK = {
   textSecondary: '#AAAAAA',
   textDisabled: '#666666',
   textInverse: '#121212',
-  textBrand: '#66BB6A',
+  textBrand: '#46B7FF',
 
   border: '#383838',
   borderLight: '#2C2C2C',
-  borderFocus: '#66BB6A',
+  borderFocus: '#46B7FF',
 
   realtime: '#66BB6A',
   scheduled: '#8A8A8A',

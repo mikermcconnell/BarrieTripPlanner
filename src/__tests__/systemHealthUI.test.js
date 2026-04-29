@@ -81,7 +81,7 @@ describe('systemHealthUI', () => {
       realtimeVehicles: { status: 'healthy' },
     };
 
-    expect(getSystemHealthChipState(diagnostics).label).toBe('READY');
+    expect(getSystemHealthChipState(diagnostics).label).toBe('LIVE');
     expect(getSystemHealthBannerState(diagnostics)).toBeNull();
   });
 });

@@ -36,8 +36,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const walkTime = itinerary.walkTime ? formatDuration(itinerary.walkTime) : null;
 
   // Get transit legs for display
-  const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
+  const transitLegs = itinerary.legs.filter((leg) => leg.mode === 'BUS' || leg.mode === 'TRANSIT');
   const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
+  const rideSummary = [
+    transitLegs.length > 0 ? `${transitLegs.length} bus${transitLegs.length !== 1 ? 'es' : ''}` : null,
+    onDemandLeg ? 'on-demand ride' : null,
+  ].filter(Boolean).join(', ') || 'walking only';
 
   // Get delay info from first transit leg
   const firstTransitLeg = transitLegs[0];
@@ -63,15 +67,15 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const showsInlineActions = isSelected && !!onStartNavigation;
   const containerStyle = [
     styles.container,
-    isSelected && styles.containerSelected,
     isRecommended && styles.containerRecommended,
+    isSelected && styles.containerSelected,
   ];
 
   if (showsInlineActions) {
     return (
       <View
         style={containerStyle}
-        accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${transitLegs.length} bus${transitLegs.length !== 1 ? 'es' : ''}, ${walkDistance} walking`}
+        accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${rideSummary}, ${walkDistance} walking`}
         accessibilityState={{ selected: isSelected }}
       >
         {/* Top Row: Labels */}
@@ -203,7 +207,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
       onPress={onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${transitLegs.length} bus${transitLegs.length !== 1 ? 'es' : ''}, ${walkDistance} walking`}
+      accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${rideSummary}, ${walkDistance} walking`}
       accessibilityState={{ selected: isSelected }}
     >
       {/* Top Row: Labels */}
@@ -317,21 +321,22 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.xl,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
     marginHorizontal: SPACING.sm,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: COLORS.borderLight,
     ...SHADOWS.small,
   },
   containerSelected: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primarySubtle,
+    ...SHADOWS.medium,
   },
   containerRecommended: {
-    borderColor: COLORS.success,
+    borderColor: 'rgba(76, 175, 80, 0.42)',
   },
   labelsRow: {
     flexDirection: 'row',
@@ -341,8 +346,8 @@ const styles = StyleSheet.create({
   },
   labelBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.grey100,
   },
   labelRecommended: {
@@ -380,7 +385,7 @@ const styles = StyleSheet.create({
   },
   topRow: {
     gap: SPACING.xs,
-    marginBottom: 6,
+    marginBottom: SPACING.xs,
   },
   topRowHeader: {
     flexDirection: 'row',
@@ -409,18 +414,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   durationLarge: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.extrabold,
     color: COLORS.textPrimary,
-    marginRight: 8,
+    marginRight: SPACING.sm,
+    letterSpacing: -0.3,
   },
   leaveInText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+    backgroundColor: COLORS.primarySubtle,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
     flexShrink: 0,
     textAlign: 'right',
-    maxWidth: '40%',
+    overflow: 'hidden',
+    maxWidth: '44%',
   },
   routeBadgeInline: {
     marginHorizontal: 2,
@@ -434,8 +445,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   timeRange: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
     marginBottom: 2,
   },
   connector: {
@@ -481,14 +493,15 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
   },
   leavesInSoon: {
-    color: COLORS.success,
+    color: COLORS.white,
+    backgroundColor: COLORS.success,
     fontWeight: FONT_WEIGHTS.bold,
   },
   stepsButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.round,
   },
   stepsButtonText: {
     color: COLORS.white,
@@ -500,21 +513,23 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   detailsButton: {
-    backgroundColor: COLORS.grey200,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   detailsButtonText: {
-    color: COLORS.textPrimary,
+    color: COLORS.primaryDark,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
   },
   goButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.success,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.round,
   },
   goButtonText: {
     color: COLORS.white,

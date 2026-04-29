@@ -5,12 +5,19 @@
  * Auto-advances based on location proximity and handles
  * walking -> waiting -> transit -> walking transitions.
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { safeHaversineDistance as calculateDistance } from '../utils/geometryUtils';
 
 // Threshold for considering arrival at a destination (meters)
 const ARRIVAL_THRESHOLD = 30;
-const WALKING_STEP_THRESHOLD = 20; // Threshold for advancing walking steps
+
+const getStopCode = (stop) => stop?.stopCode || stop?.stopId || stop?.code || null;
+
+const getWalkingDestinationLabel = (leg) => {
+  const stopCode = getStopCode(leg?.to);
+  if (stopCode) return `Stop #${stopCode}`;
+  return leg?.to?.name || 'your stop';
+};
 
 export const useStepProgress = (itinerary, userLocation, busProximity) => {
   const [currentLegIndex, setCurrentLegIndex] = useState(0);
@@ -18,8 +25,6 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
   const [legStatus, setLegStatus] = useState('not_started'); // 'not_started' | 'in_progress' | 'completed'
   const [transitStatus, setTransitStatus] = useState('waiting'); // 'waiting' | 'boarding' | 'on_board'
   const [isNavigationComplete, setIsNavigationComplete] = useState(false);
-  const [distanceTraveled, setDistanceTraveled] = useState(0);
-  const lastLocationRef = useRef(null);
 
   const legs = itinerary?.legs || [];
   const currentLeg = legs[currentLegIndex];
@@ -72,9 +77,9 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
 
     if (isWalking) {
       if (legStatus === 'not_started') {
-        return { type: 'walking', label: `Walk to ${currentLeg.to.name}` };
+        return { type: 'walking', label: `Walk to ${getWalkingDestinationLabel(currentLeg)}` };
       }
-      return { type: 'walking', label: `Walking to ${currentLeg.to.name}` };
+      return { type: 'walking', label: `Walking to ${getWalkingDestinationLabel(currentLeg)}` };
     }
 
     if (isTransit) {
@@ -123,8 +128,8 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     const isWalking = currentLeg.mode === 'WALK';
     const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
 
-    if (isWalking && currentWalkingStep) {
-      return currentWalkingStep.instruction || 'Continue walking';
+    if (isWalking) {
+      return `Walk to ${getWalkingDestinationLabel(currentLeg)}`;
     }
 
     if (isTransit) {
@@ -158,7 +163,7 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     }
 
     return currentLeg.to?.name ? `Head to ${currentLeg.to.name}` : 'Continue';
-  }, [currentLeg, currentWalkingStep, busProximity, transitStatus]);
+  }, [currentLeg, busProximity, transitStatus]);
 
   // Start navigation (marks first leg as in progress)
   const startNavigation = useCallback(() => {
@@ -167,8 +172,6 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     setLegStatus('in_progress');
     setTransitStatus('waiting');
     setIsNavigationComplete(false);
-    setDistanceTraveled(0);
-    lastLocationRef.current = null;
   }, []);
 
   // Advance to next step within a walking leg
@@ -178,7 +181,6 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     const steps = currentLeg.steps || [];
     if (currentStepIndex < steps.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
-      setDistanceTraveled(0); // Reset for new step
     }
   }, [currentLeg, currentStepIndex]);
 
@@ -189,8 +191,6 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
       setCurrentStepIndex(0);
       setLegStatus('in_progress');
       setTransitStatus('waiting');
-      setDistanceTraveled(0);
-      lastLocationRef.current = null;
     } else {
       // Trip complete
       setLegStatus('completed');
@@ -232,8 +232,6 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     setLegStatus('not_started');
     setTransitStatus('waiting');
     setIsNavigationComplete(false);
-    setDistanceTraveled(0);
-    lastLocationRef.current = null;
   }, []);
 
   // Auto-advance when arrived at destination (walking legs)
@@ -249,44 +247,9 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     }
   }, [currentLeg, hasArrivedAtDestination, advanceLeg]);
 
-  // Track distance traveled for walking step advancement
-  useEffect(() => {
-    if (!userLocation || !currentLeg || currentLeg.mode !== 'WALK') return;
-
-    if (lastLocationRef.current) {
-      const dist = calculateDistance(
-        lastLocationRef.current.latitude,
-        lastLocationRef.current.longitude,
-        userLocation.latitude,
-        userLocation.longitude
-      );
-      // Only count significant movements (> 5m) to filter GPS noise
-      if (dist > 5) {
-        setDistanceTraveled(prev => prev + dist);
-        lastLocationRef.current = userLocation;
-      }
-    } else {
-      lastLocationRef.current = userLocation;
-    }
-  }, [userLocation, currentLeg]);
-
-  // Auto-advance walking steps based on distance traveled
-  useEffect(() => {
-    if (!currentLeg || currentLeg.mode !== 'WALK') return;
-
-    const steps = currentLeg.steps || [];
-    if (steps.length === 0) return;
-
-    const currentStep = steps[currentStepIndex];
-    if (currentStep && currentStepIndex < steps.length - 1) {
-      // Advance to next step when we've traveled the step's distance
-      const stepDistance = currentStep.distance || 50;
-      if (distanceTraveled >= stepDistance * 0.8) { // 80% threshold
-        setCurrentStepIndex(prev => prev + 1);
-        setDistanceTraveled(0);
-      }
-    }
-  }, [currentLeg, currentStepIndex, distanceTraveled]);
+  // Do not auto-advance minor walking maneuvers. GPS drift can make tiny
+  // street-level steps noisy; the rider-facing task is simply reaching the
+  // marked stop/destination.
 
   // Auto-update transit status when bus arrives
   useEffect(() => {

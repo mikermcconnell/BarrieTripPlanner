@@ -8,9 +8,11 @@ module.exports = {
     '/dist/',
     '/\\.expo-export-debug/',
     '/\\.expo-export-debug-android/',
+    '[/\\\\]api-proxy[/\\\\]',
   ],
   modulePathIgnorePatterns: ['<rootDir>/\\.claude/'],
   setupFiles: ['<rootDir>/src/__tests__/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setupAfterEnv.js'],
   moduleFileExtensions: ['js', 'ts', 'tsx', 'json'],
   // Transform ES modules using babel
   transform: {

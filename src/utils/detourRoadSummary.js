@@ -2,6 +2,9 @@ const MAX_LOOKUP_POINTS = 5;
 const MAX_ROAD_NAMES = 4;
 
 const getSegmentPath = (segment) => {
+  if (Array.isArray(segment?.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2) {
+    return segment.likelyDetourPolyline;
+  }
   if (Array.isArray(segment?.inferredDetourPolyline) && segment.inferredDetourPolyline.length >= 2) {
     return segment.inferredDetourPolyline;
   }
@@ -111,3 +114,14 @@ export const dedupeRoadNames = (roadNames) => {
 export const buildDetourRoadSummary = (roadNames) =>
   dedupeRoadNames(roadNames).slice(0, MAX_ROAD_NAMES);
 
+export const getPrecomputedDetourRoadNames = (detour) => {
+  const segments = Array.isArray(detour?.segments) && detour.segments.length > 0
+    ? detour.segments
+    : [];
+  return buildDetourRoadSummary([
+    ...(Array.isArray(detour?.likelyDetourRoadNames) ? detour.likelyDetourRoadNames : []),
+    ...segments.flatMap((segment) => (
+      Array.isArray(segment?.likelyDetourRoadNames) ? segment.likelyDetourRoadNames : []
+    )),
+  ]);
+};

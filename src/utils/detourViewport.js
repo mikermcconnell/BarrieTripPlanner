@@ -57,15 +57,3 @@ export function getDetourViewportCoordinates({ activeDetours = {}, focusedRouteI
 
   return coordinates;
 }
-
-export function shouldAutoFitDetourViewport({
-  isDetourView,
-  previousIsDetourView,
-  focusedRouteId,
-  previousFocusedRouteId,
-}) {
-  if (!isDetourView) return false;
-  if (!previousIsDetourView) return true;
-  return focusedRouteId !== previousFocusedRouteId;
-}
-

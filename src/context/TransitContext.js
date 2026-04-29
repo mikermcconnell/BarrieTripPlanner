@@ -12,7 +12,7 @@ import {
   addNetworkListener,
 } from '../utils/offlineCache';
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
-import { subscribeToTransitNews } from '../services/firebase/newsService';
+import { subscribeToTransitNews, subscribeToTransitNewsImpacts } from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
@@ -22,6 +22,7 @@ import { LOCATIONIQ_CONFIG } from '../config/constants';
 import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
 import { diffDetourRouteIds } from '../utils/detourNotificationUtils';
+import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -102,6 +103,7 @@ export const TransitProvider = ({ children }) => {
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
+  const [transitNewsImpacts, setTransitNewsImpacts] = useState([]);
 
   // On-demand zones (server-side, via Firestore)
   const [onDemandZones, setOnDemandZones] = useState({});
@@ -140,6 +142,15 @@ export const TransitProvider = ({ children }) => {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  // Subscribe to parsed rider-facing impacts from transit news
+  useEffect(() => {
+    const unsubscribe = subscribeToTransitNewsImpacts(
+      (impacts) => setTransitNewsImpacts(impacts),
+      (error) => logger.error('News impacts subscription error:', error)
+    );
+    return () => unsubscribe();
   }, []);
 
   /**
@@ -562,12 +573,12 @@ export const TransitProvider = ({ children }) => {
   );
 
   const isRouteDetouring = useCallback(
-    (routeId) => Boolean(activeDetours[routeId]),
+    (routeId) => routeIsDetouring(routeId, new Set(Object.keys(activeDetours))),
     [activeDetours]
   );
 
   const getRouteDetour = useCallback(
-    (routeId) => activeDetours[routeId] ?? null,
+    (routeId) => getRouteDetourFromMap(routeId, activeDetours),
     [activeDetours]
   );
 
@@ -882,6 +893,7 @@ export const TransitProvider = ({ children }) => {
     isRouteDetouring,
     getRouteDetour,
     transitNews,
+    transitNewsImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,
@@ -903,6 +915,7 @@ export const TransitProvider = ({ children }) => {
     isRouteDetouring,
     getRouteDetour,
     transitNews,
+    transitNewsImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,

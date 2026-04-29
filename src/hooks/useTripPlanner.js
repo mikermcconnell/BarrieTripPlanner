@@ -124,7 +124,14 @@ function tripReducer(state, action) {
     case SHOW_TO_SUGGESTIONS:
       return { ...state, showToSuggestions: action.payload };
     case SET_ERROR:
-      return { ...state, error: action.payload };
+      return {
+        ...state,
+        itineraries: [],
+        selectedIndex: 0,
+        isLoading: false,
+        error: action.payload,
+        hasSearched: false,
+      };
     case SET_TIME_MODE:
       return {
         ...state,
@@ -150,11 +157,13 @@ function tripReducer(state, action) {
  * @param {Object} options
  * @param {Function} [options.ensureRoutingData] - Async function that lazily builds and returns routing data
  * @param {Function} [options.onItinerariesReady] - Callback after successful search (e.g. fit map bounds)
+ * @param {Function} [options.onTripPlanned] - Callback after a successful trip search to persist history
  * @param {Function} [options.applyDelays] - Optional function to apply real-time delays to itineraries
  */
 export const useTripPlanner = ({
   ensureRoutingData,
   onItinerariesReady,
+  onTripPlanned,
   applyDelays,
   onDemandZones,
   stops,
@@ -165,6 +174,7 @@ export const useTripPlanner = ({
   const fromRequestSeqRef = useRef(0);
   const toRequestSeqRef = useRef(0);
   const tripSearchSeqRef = useRef(0);
+  const locationRequestSeqRef = useRef(0);
 
   const invalidateTripSearches = useCallback(() => {
     tripSearchSeqRef.current += 1;
@@ -250,6 +260,22 @@ export const useTripPlanner = ({
       if (onItinerariesReady && finalItineraries.length > 0) {
         onItinerariesReady(finalItineraries[0]);
       }
+
+      if (onTripPlanned && finalItineraries.length > 0) {
+        Promise.resolve(onTripPlanned({
+          from: {
+            ...from,
+            name: state.fromText || 'Start',
+          },
+          to: {
+            ...to,
+            name: state.toText || 'Destination',
+          },
+          itineraries: finalItineraries,
+        })).catch((error) => {
+          logger.warn('Could not save trip history', { message: error?.message || String(error) });
+        });
+      }
     } catch (err) {
       if (requestSeq !== tripSearchSeqRef.current) return;
       const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
@@ -280,7 +306,7 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, applyDelays, state.timeMode, state.selectedTime, onDemandZones, stops, invalidateTripSearches]);
+  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
@@ -402,10 +428,14 @@ export const useTripPlanner = ({
     dispatch({ type: CLEAR_RESULTS });
   }, [state.to, searchTrips, invalidateTripSearches]);
 
-  const setTo = useCallback((location, text) => {
+  const setTo = useCallback((location, text, options = {}) => {
     invalidateTripSearches();
     dispatch({ type: SET_TO, payload: location });
     if (text) dispatch({ type: SET_TO_TEXT, payload: text });
+    if (options.suppressAutoSearch) {
+      dispatch({ type: CLEAR_RESULTS });
+      return;
+    }
     if (state.from && location) {
       searchTrips(state.from, location);
       return;
@@ -451,6 +481,7 @@ export const useTripPlanner = ({
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
     fromRequestSeqRef.current += 1;
     toRequestSeqRef.current += 1;
+    locationRequestSeqRef.current += 1;
     invalidateTripSearches();
     dispatch({ type: RESET });
   }, [invalidateTripSearches]);
@@ -462,31 +493,40 @@ export const useTripPlanner = ({
       fromRequestSeqRef.current += 1;
       toRequestSeqRef.current += 1;
       tripSearchSeqRef.current += 1;
+      locationRequestSeqRef.current += 1;
     };
   }, []);
 
   // ─── Use current location ───────────────────────────────────
   const useCurrentLocation = useCallback(async (getCurrentPosition, options = {}) => {
+    const requestSeq = ++locationRequestSeqRef.current;
     try {
       const coords = await getCurrentPosition();
+      if (requestSeq !== locationRequestSeqRef.current) return;
       const loc = { lat: coords.lat, lon: coords.lon };
       invalidateTripSearches();
       dispatch({ type: SET_FROM, payload: loc });
-
-      try {
-        const address = await reverseGeocode(loc.lat, loc.lon);
-        dispatch({ type: SET_FROM_TEXT, payload: address?.shortName || 'Current Location' });
-      } catch {
-        dispatch({ type: SET_FROM_TEXT, payload: 'Current Location' });
-      }
+      dispatch({ type: SET_FROM_TEXT, payload: 'Current Location' });
 
       const destination = options.searchTo || state.to;
       if (destination) {
         searchTrips(loc, destination);
-        return;
+      } else {
+        dispatch({ type: CLEAR_RESULTS });
       }
-      dispatch({ type: CLEAR_RESULTS });
+
+      reverseGeocode(loc.lat, loc.lon)
+        .then((address) => {
+          if (requestSeq !== locationRequestSeqRef.current) return;
+          dispatch({ type: SET_FROM_TEXT, payload: address?.shortName || 'Current Location' });
+        })
+        .catch(() => {
+          if (requestSeq !== locationRequestSeqRef.current) return;
+          dispatch({ type: SET_FROM_TEXT, payload: 'Current Location' });
+        });
     } catch {
+      if (requestSeq !== locationRequestSeqRef.current) return;
+      invalidateTripSearches();
       dispatch({ type: SET_ERROR, payload: 'Could not get your location' });
     }
   }, [state.to, searchTrips, invalidateTripSearches]);

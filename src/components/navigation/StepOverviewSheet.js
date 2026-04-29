@@ -24,6 +24,19 @@ const formatStopName = (stop) => {
   return code ? `${stop.name} (#${code})` : stop.name;
 };
 
+const formatWalkTitle = (leg) => {
+  const code = leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code;
+  if (code) return `Walk to Stop #${code}`;
+  return `Walk to ${formatStopName(leg?.to) || 'destination'}`;
+};
+
+const getCompleteButtonLabel = (leg) => {
+  if (leg?.mode === 'WALK') {
+    return leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code ? 'At stop' : 'Arrived';
+  }
+  return 'Done';
+};
+
 const StepOverviewSheet = ({
   legs,
   currentLegIndex,
@@ -37,7 +50,7 @@ const StepOverviewSheet = ({
     ? currentLeg.isOnDemand
       ? 'On-demand'
       : currentLeg.mode === 'WALK'
-      ? 'Current walk'
+      ? formatWalkTitle(currentLeg)
       : currentLeg.route?.shortName
       ? `Bus ${currentLeg.route.shortName}`
       : 'Current leg'
@@ -154,7 +167,7 @@ const StepOverviewSheet = ({
                       numberOfLines={1}
                     >
                       {isWalk
-                        ? `Walk to ${formatStopName(leg.to)}`
+                        ? formatWalkTitle(leg)
                         : leg.isOnDemand
                         ? `On-demand to ${formatStopName(leg.to)}`
                         : leg.headsign || `Ride to ${formatStopName(leg.to)}`}
@@ -177,7 +190,7 @@ const StepOverviewSheet = ({
                       style={styles.completeButton}
                       onPress={onCompleteLeg}
                     >
-                      <Text style={styles.completeButtonText}>Done</Text>
+                      <Text style={styles.completeButtonText}>{getCompleteButtonLabel(leg)}</Text>
                     </TouchableOpacity>
                   )}
                 </View>

@@ -1,5 +1,9 @@
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+jest.mock('react-native', () => ({
+  Platform: { OS: 'web' },
+}));
+
 const { __TEST_ONLY__ } = require('../components/WebMapView');
 
 const createMockMap = () => {
@@ -85,5 +89,23 @@ describe('WebMapView layer events', () => {
     // Assert
     expect(map.on).not.toHaveBeenCalled();
     expect(map.off).not.toHaveBeenCalled();
+  });
+});
+
+describe('WebMapView bus marker HTML', () => {
+  test('uses a route-colored direction arrow when bearing is valid', () => {
+    const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', 45);
+
+    expect(html).toContain('width="104" height="104"');
+    expect(html).toContain('top:-8px;left:-8px');
+    expect(html).toContain('rotate(45, 52, 52)');
+    expect(html).toContain('fill="#0C8CE5"');
+    expect(html).toContain('fill="rgba(255,255,255,0.96)"');
+  });
+
+  test('omits the direction arrow when bearing is invalid', () => {
+    const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', Number.NaN);
+
+    expect(html).not.toContain('rotate(');
   });
 });

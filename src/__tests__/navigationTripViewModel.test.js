@@ -66,4 +66,38 @@ describe('navigationTripViewModel', () => {
     expect(viewModel.transitPeekAheadText).toContain('for Route 1');
     expect(viewModel.totalRemainingDistance).toBe(4500);
   });
+
+  test('treats a final walk after transit as the last walking leg', () => {
+    const finalWalkItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          route: { shortName: '8A' },
+          from: { name: 'Downtown Terminal', stopCode: '1020' },
+          to: { name: 'Georgian Mall' },
+          distance: 4200,
+        },
+        {
+          mode: 'WALK',
+          from: { name: 'Georgian Mall' },
+          to: { name: '24 Maple Ave' },
+          duration: 240,
+          distance: 320,
+        },
+      ],
+    };
+
+    const viewModel = buildNavigationTripViewModel({
+      itinerary: finalWalkItinerary,
+      currentLegIndex: 1,
+      currentLeg: finalWalkItinerary.legs[1],
+      distanceToDestination: 200,
+    });
+
+    expect(viewModel.isWalkingLeg).toBe(true);
+    expect(viewModel.nextTransitLeg).toBeNull();
+    expect(viewModel.isLastWalkingLeg).toBe(true);
+    expect(viewModel.nextLegPreviewText).toBeNull();
+    expect(viewModel.finalDestination).toBe('24 Maple Ave');
+  });
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import Icon from './Icon';
+import { getUniqueDetourSections } from '../utils/detourHelpers';
 
 /**
  * DetourTimeline — vertical timeline showing how a detour affects a route's stops.
@@ -80,7 +81,7 @@ const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
 };
 
 const DetourTimeline = ({ sections = [] }) => {
-  const normalizedSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
+  const normalizedSections = getUniqueDetourSections(sections);
 
   if (normalizedSections.length === 0) {
     return <TimelineSection affectedStops={[]} entryStopName={null} exitStopName={null} />;
@@ -91,7 +92,7 @@ const DetourTimeline = ({ sections = [] }) => {
       {normalizedSections.map((section, index) => (
         <View key={`detour-section-${index}`} style={styles.sectionWrapper}>
           {normalizedSections.length > 1 && (
-            <Text style={styles.sectionTitle}>Affected Section {index + 1}</Text>
+            <Text style={styles.sectionTitle}>Detour section {index + 1}</Text>
           )}
           <TimelineSection
             affectedStops={section.affectedStops}

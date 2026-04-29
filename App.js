@@ -175,7 +175,7 @@ const linking = {
     screens: {
       Map: {
         screens: {
-          MapMain: 'stop/:stopId',
+          MapMain: '',
         },
       },
     },
@@ -185,17 +185,23 @@ const linking = {
 function StartupConfigErrorScreen({ issues }) {
   return (
     <View style={appStyles.configErrorContainer}>
-      <Text style={appStyles.configErrorTitle}>Configuration Error</Text>
-      <Text style={appStyles.configErrorMessage}>
-        This build is missing required production configuration. Update EAS env vars and rebuild.
-      </Text>
-      <Text style={appStyles.configErrorMessage}>Detected issues:</Text>
-      <View style={appStyles.configErrorList}>
-        {issues.map((issue, index) => (
-          <Text key={`${index}-${issue}`} style={appStyles.configErrorItem}>
-            - {issue}
-          </Text>
-        ))}
+      <View style={appStyles.configErrorCard}>
+        <Text style={appStyles.configErrorIcon}>🚌</Text>
+        <Text style={appStyles.configErrorTitle}>We can’t start the app yet</Text>
+        <Text style={appStyles.configErrorMessage}>
+          This build is missing a required setup step. Please install the latest build or contact support.
+        </Text>
+        <Text style={appStyles.configErrorSupport}>
+          Support code: app configuration incomplete
+        </Text>
+        <Text style={appStyles.configErrorDetailTitle}>Technical details</Text>
+        <View style={appStyles.configErrorList}>
+          {issues.map((issue, index) => (
+            <Text key={`${index}-${issue}`} style={appStyles.configErrorItem}>
+              - {issue}
+            </Text>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -255,8 +261,8 @@ export default function App() {
     return (
       <View style={appStyles.splash}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={appStyles.splashTitle}>Starting Barrie Transit</Text>
-        <Text style={appStyles.splashDetail}>Opening routes, stops, and schedules.</Text>
+        <Text style={appStyles.splashTitle}>Starting My Barrie Transit</Text>
+        <Text style={appStyles.splashDetail}>Loading live buses, stops, and trip options.</Text>
       </View>
     );
   }
@@ -310,12 +316,27 @@ const appStyles = StyleSheet.create({
   },
   configErrorContainer: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.primarySubtle,
     paddingHorizontal: 20,
     paddingVertical: 32,
+    justifyContent: 'center',
+  },
+  configErrorCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  configErrorIcon: {
+    fontSize: 36,
+    marginBottom: 12,
   },
   configErrorTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 12,
@@ -325,6 +346,24 @@ const appStyles = StyleSheet.create({
     lineHeight: 22,
     color: COLORS.textSecondary,
     marginBottom: 8,
+  },
+  configErrorSupport: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.primaryDark,
+    backgroundColor: COLORS.primarySubtle,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  configErrorDetailTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
   },
   configErrorList: {
     marginTop: 8,

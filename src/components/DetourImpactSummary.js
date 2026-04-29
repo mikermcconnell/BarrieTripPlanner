@@ -1,20 +1,31 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../config/theme';
+import { getUniqueDetourSections } from '../utils/detourHelpers';
 
-const StopList = ({ title, subtitle, stops = [], variant = 'default', emptyMessage }) => {
-  const markerStyle = variant === 'warning' ? styles.stopMarkerWarning : styles.stopMarkerDefault;
-  const titleStyle = variant === 'warning' ? styles.listTitleWarning : styles.listTitle;
+const uniqueStops = (stops = []) => {
+  const seen = new Set();
+  return stops.filter((stop) => {
+    const key = String(stop?.id ?? stop?.stop_id ?? stop?.code ?? stop?.name ?? '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const StopList = ({ stops = [], emptyMessage }) => {
+  const displayStops = uniqueStops(stops);
 
   return (
     <View style={styles.listBlock}>
-      <Text style={titleStyle}>{title}</Text>
-      {subtitle ? <Text style={styles.listSubtitle}>{subtitle}</Text> : null}
-      {stops.length > 0 ? (
+      {displayStops.length > 0 ? (
         <View style={styles.stopList}>
-          {stops.map((stop, index) => (
-            <View key={`${title}-${stop?.id ?? stop?.code ?? stop?.name ?? index}-${index}`} style={styles.stopRow}>
-              <View style={[styles.stopMarker, markerStyle]} />
+          {displayStops.map((stop, index) => (
+            <View
+              key={`stop-not-served-${stop?.id ?? stop?.code ?? stop?.name ?? index}-${index}`}
+              style={styles.stopRow}
+            >
+              <View style={[styles.stopMarker, styles.stopMarkerWarning]} />
               <Text style={styles.stopName}>
                 {stop?.name ?? 'Unnamed stop'}
                 {stop?.code ? ` (#${stop.code})` : ''}
@@ -29,63 +40,22 @@ const StopList = ({ title, subtitle, stops = [], variant = 'default', emptyMessa
   );
 };
 
-const getRouteImpactLabel = (routeId) => (routeId ? `Route ${routeId}` : 'this route');
-
-const SegmentSummary = ({ routeId, section, index, showHeading }) => {
-  const affectedStops = Array.isArray(section?.affectedStops) ? section.affectedStops : [];
-  const skippedStops = Array.isArray(section?.skippedStops) ? section.skippedStops : [];
-  const unaffectedStops = Array.isArray(section?.unaffectedStops) ? section.unaffectedStops : [];
-  const startStopName = section?.entryStopName ?? section?.entryStop?.name ?? null;
-  const endStopName = section?.exitStopName ?? section?.exitStop?.name ?? null;
-  const routeLabel = getRouteImpactLabel(routeId);
-
-  return (
-    <View style={styles.card}>
-      {showHeading ? <Text style={styles.cardTitle}>Affected Section {index + 1}</Text> : null}
-
-      <View style={styles.startEndRow}>
-        <View style={styles.startEndCard}>
-          <Text style={styles.startEndLabel}>Detour starts</Text>
-          <Text style={styles.startEndValue}>{startStopName ?? 'Start point still resolving'}</Text>
-        </View>
-        <View style={styles.startEndCard}>
-          <Text style={styles.startEndLabel}>Detour ends</Text>
-          <Text style={styles.startEndValue}>{endStopName ?? 'End point still resolving'}</Text>
-        </View>
-      </View>
-
-      <StopList
-        title={`Impacted stops (${affectedStops.length})`}
-        subtitle={`Stops inside the current ${routeLabel} detour section, including the start and end boundary stops.`}
-        stops={affectedStops}
-        emptyMessage="Impacted stops are still resolving for this detour."
-      />
-
-      <StopList
-        title={`Not served on ${routeLabel} (${skippedStops.length})`}
-        subtitle={`Regular ${routeLabel} stops the detoured bus is skipping right now.`}
-        stops={skippedStops}
-        variant="warning"
-        emptyMessage="No skipped stops were identified inside this detour section."
-      />
-
-      <StopList
-        title={`Still served on ${routeLabel} (${unaffectedStops.length})`}
-        subtitle={`${routeLabel} stops outside the detour section that remain on the scheduled path.`}
-        stops={unaffectedStops}
-        emptyMessage="All known route stops fall inside the current affected section."
-      />
-    </View>
-  );
-};
-
 const DetourImpactSummary = ({ routeId, sections = [] }) => {
-  const normalizedSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
+  const [expanded, setExpanded] = useState(false);
+  const normalizedSections = getUniqueDetourSections(sections);
+  const skippedStops = useMemo(
+    () => uniqueStops(normalizedSections.flatMap((section) => (
+      Array.isArray(section?.skippedStops) ? section.skippedStops : []
+    ))),
+    [normalizedSections]
+  );
+  const skippedCount = skippedStops.length;
+  const routeLabel = routeId ? `Route ${routeId}` : 'This route';
 
   if (normalizedSections.length === 0) {
     return (
       <View style={styles.container}>
-        <Text style={styles.sectionHeading}>Stop Impact</Text>
+        <Text style={styles.cardTitle}>Affected stops</Text>
         <View style={styles.card}>
           <Text style={styles.emptyText}>Detour stop impact is still resolving.</Text>
         </View>
@@ -95,16 +65,35 @@ const DetourImpactSummary = ({ routeId, sections = [] }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionHeading}>Stop Impact</Text>
-      {normalizedSections.map((section, index) => (
-        <SegmentSummary
-          key={`detour-impact-section-${index}`}
-          routeId={routeId}
-          section={section}
-          index={index}
-          showHeading={normalizedSections.length > 1}
-        />
-      ))}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{routeLabel} detour impact</Text>
+        <Text style={styles.guidanceText}>
+          {skippedCount > 0
+            ? `${skippedCount} regular stop${skippedCount === 1 ? '' : 's'} may be missed.`
+            : 'Stop impact is still being confirmed.'}
+        </Text>
+        <Text style={styles.guidanceHint}>
+          Use an open stop before the detour starts or after the route rejoins.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={() => setExpanded((value) => !value)}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Hide stops not served' : 'View stops not served'}
+        >
+          <Text style={styles.expandButtonText}>
+            {expanded ? 'Hide stops' : `View stops not served (${skippedCount})`}
+          </Text>
+        </TouchableOpacity>
+
+        {expanded ? (
+          <StopList
+            stops={skippedStops}
+            emptyMessage="No skipped stops are confirmed yet. Check the map for the active detour area."
+          />
+        ) : null}
+      </View>
     </View>
   );
 };
@@ -113,13 +102,6 @@ const styles = StyleSheet.create({
   container: {
     marginTop: SPACING.lg,
     gap: SPACING.md,
-  },
-  sectionHeading: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.textPrimary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
   },
   card: {
     backgroundColor: COLORS.grey100,
@@ -132,48 +114,33 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
   },
-  startEndRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  startEndCard: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.grey200,
-  },
-  startEndLabel: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginBottom: 2,
-  },
-  startEndValue: {
+  guidanceText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
+    lineHeight: 20,
+  },
+  guidanceHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
   },
   listBlock: {
     gap: SPACING.xs,
   },
-  listTitle: {
+  expandButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.grey300,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  expandButtonText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.textPrimary,
-  },
-  listTitleWarning: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.error,
-  },
-  listSubtitle: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
+    color: COLORS.primary,
   },
   stopList: {
     gap: SPACING.xs,

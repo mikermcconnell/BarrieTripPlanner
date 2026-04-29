@@ -355,6 +355,49 @@ describe('buildGeometry', () => {
     expect(result.exitPoint).not.toBeNull();
     expect(result.entryPoint.longitude).toBeCloseTo(-79.699, 3);
     expect(result.exitPoint.longitude).toBeCloseTo(-79.671, 3);
+    expect(result.segments[0].debug.entryAnchorSource).toBe('boundary-candidate');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
+  });
+
+  test('records fallback anchor debug when boundary candidates are unavailable', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 60_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.69,
+        timestampMs: DETECTED_AT + 90_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.685,
+        timestampMs: DETECTED_AT + 120_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.68,
+        timestampMs: DETECTED_AT + 150_000,
+      }),
+    ];
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [],
+        exitCandidates: [],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.debug.selectedShapeId).toBe('shape-1');
+    expect(result.segments[0].debug.entryAnchorSource).toBe('projected-evidence-fallback');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('projected-evidence-fallback');
   });
 
   test('returns empty geometry for unknown route', () => {
@@ -934,6 +977,76 @@ describe('route family geometry handoff', () => {
     expect(detours['8A'].geometry.segments[0].exitPoint.longitude).toBeCloseTo(-79.698, 3);
     expect(detours['8A'].geometry.segments[1].entryPoint.longitude).toBeCloseTo(-79.684, 3);
     expect(detours['8A'].geometry.segments[1].exitPoint.longitude).toBeCloseTo(-79.688, 3);
+    expect(detours['8A'].geometry.debug.routeFamilyLeaderRouteId).toBe('8B');
+    expect(detours['8A'].geometry.segments[0].debug.projectedFromSiblingShapeId).toBe('shape-8b');
+    expect(detours['8A'].geometry.segments[0].debug.projectedToShapeId).toBe('shape-8a');
+  });
+
+  test('skips sibling route projection when route family handoff is disabled', () => {
+    const originalSetting = process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF;
+    try {
+      process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF = 'false';
+      jest.resetModules();
+
+      const { reconcileRouteFamilyGeometries: reconcileWithoutHandoff } = require('../detourGeometry');
+
+      const familyShapes = new Map([
+        ['shape-8b', [
+          { latitude: 44.39, longitude: -79.70 },
+          { latitude: 44.39, longitude: -79.69 },
+          { latitude: 44.39, longitude: -79.68 },
+        ]],
+        ['shape-8a', [
+          { latitude: 44.39, longitude: -79.68 },
+          { latitude: 44.39, longitude: -79.69 },
+          { latitude: 44.39, longitude: -79.70 },
+        ]],
+      ]);
+      const familyRouteMapping = new Map([
+        ['8A', ['shape-8a']],
+        ['8B', ['shape-8b']],
+      ]);
+      const detours = {
+        '8B': {
+          routeId: '8B',
+          geometry: {
+            segments: [
+              {
+                shapeId: 'shape-8b',
+                skippedSegmentPolyline: [
+                  { latitude: 44.39, longitude: -79.698 },
+                  { latitude: 44.39, longitude: -79.694 },
+                ],
+                inferredDetourPolyline: [
+                  { latitude: 44.392, longitude: -79.698 },
+                  { latitude: 44.392, longitude: -79.694 },
+                ],
+                entryPoint: { latitude: 44.39, longitude: -79.698 },
+                exitPoint: { latitude: 44.39, longitude: -79.694 },
+                confidence: 'medium',
+                evidencePointCount: 6,
+                lastEvidenceAt: 10_000,
+                entryIndex: 0,
+                exitIndex: 1,
+                spanMeters: 350,
+              },
+            ],
+          },
+        },
+      };
+
+      reconcileWithoutHandoff(detours, familyShapes, familyRouteMapping);
+
+      expect(detours['8B']).toBeDefined();
+      expect(detours['8A']).toBeUndefined();
+    } finally {
+      if (originalSetting == null) {
+        delete process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF;
+      } else {
+        process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF = originalSetting;
+      }
+      jest.resetModules();
+    }
   });
 });
 

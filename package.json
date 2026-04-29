@@ -1,6 +1,6 @@
 {
   "name": "barrie-transit-planner",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -20,7 +20,10 @@
     "fetch-addresses": "node scripts/fetchBarrieAddresses.js",
     "dev:android": "expo start --dev-client",
     "postinstall": "patch-package",
-    "test": "jest",
+    "test": "npm run test:app",
+    "test:app": "jest --runInBand",
+    "test:api": "npm --prefix api-proxy test",
+    "test:all": "npm run test:app && npm run test:api",
     "test:watch": "jest --watch",
     "check:parity": "node scripts/check-platform-parity.js",
     "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",

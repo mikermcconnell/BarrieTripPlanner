@@ -719,6 +719,140 @@ describe('useTripPlanner regressions', () => {
     unmount();
   });
 
+  test('destination seeding can suppress stale-origin auto-search while GPS resolves', async () => {
+    const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
+
+    await act(async () => {
+      getHook().setFrom({ lat: 44.38, lon: -79.69 }, 'Old origin');
+      await flushMicrotasks();
+    });
+
+    planTripAutoMock.mockClear();
+
+    act(() => {
+      getHook().setTo(
+        { lat: 44.401, lon: -79.681 },
+        'New destination',
+        { suppressAutoSearch: true }
+      );
+    });
+
+    expect(planTripAutoMock).not.toHaveBeenCalled();
+    expect(getHook().state.toText).toBe('New destination');
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.hasSearched).toBe(false);
+
+    unmount();
+  });
+
+  test('current-location search does not wait for reverse geocoding before routing', async () => {
+    const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
+    const reverseGeocodeDeferred = createDeferred();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock,
+      reverseGeocodeMock: jest.fn(() => reverseGeocodeDeferred.promise),
+    });
+
+    await act(async () => {
+      await getHook().useCurrentLocation(
+        async () => ({ lat: 44.381, lon: -79.691 }),
+        { searchTo: { lat: 44.401, lon: -79.681 } }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(planTripAutoMock).toHaveBeenCalledWith(expect.objectContaining({
+      fromLat: 44.381,
+      fromLon: -79.691,
+      toLat: 44.401,
+      toLon: -79.681,
+    }));
+    expect(getHook().state.fromText).toBe('Current Location');
+
+    reverseGeocodeDeferred.resolve({ shortName: 'My Position' });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('My Position');
+
+    unmount();
+  });
+
+  test('reset cancels pending current-location reverse geocode updates', async () => {
+    const reverseGeocodeDeferred = createDeferred();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      reverseGeocodeMock: jest.fn(() => reverseGeocodeDeferred.promise),
+    });
+
+    await act(async () => {
+      await getHook().useCurrentLocation(async () => ({ lat: 44.381, lon: -79.691 }));
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('Current Location');
+
+    act(() => {
+      getHook().reset();
+    });
+
+    reverseGeocodeDeferred.resolve({ shortName: 'Late Location Name' });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('');
+    expect(getHook().state.from).toBeNull();
+
+    unmount();
+  });
+
+  test('failed current-location lookup clears stale trip results and stops loading', async () => {
+    const itinerary = {
+      id: 'itinerary-1',
+      duration: 600,
+      startTime: 1000,
+      endTime: 1600,
+      walkDistance: 0,
+      walkTime: 0,
+      transitTime: 600,
+      waitingTime: 0,
+      transfers: 0,
+      legs: [],
+    };
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock: jest.fn(async () => ({ itineraries: [itinerary] })),
+    });
+
+    await act(async () => {
+      getHook().setFrom({ lat: 44.38, lon: -79.69 }, 'Origin');
+      await flushMicrotasks();
+    });
+
+    await act(async () => {
+      getHook().setTo({ lat: 44.39, lon: -79.68 }, 'Destination');
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.itineraries).toHaveLength(1);
+    expect(getHook().state.hasSearched).toBe(true);
+
+    await act(async () => {
+      await getHook().useCurrentLocation(async () => {
+        throw new Error('permission denied');
+      });
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.error).toBe('Could not get your location');
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.isLoading).toBe(false);
+    expect(getHook().state.hasSearched).toBe(false);
+
+    unmount();
+  });
+
   test('switching away from now pre-populates a selected time for explicit searches', () => {
     const { getHook, act, unmount } = loadUseTripPlanner();
 

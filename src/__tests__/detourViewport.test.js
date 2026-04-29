@@ -1,6 +1,5 @@
 const {
   getDetourViewportCoordinates,
-  shouldAutoFitDetourViewport,
 } = require('../utils/detourViewport');
 
 describe('getDetourViewportCoordinates', () => {
@@ -95,50 +94,3 @@ describe('getDetourViewportCoordinates', () => {
     ]);
   });
 });
-
-describe('shouldAutoFitDetourViewport', () => {
-  test('returns true when entering detour view', () => {
-    expect(
-      shouldAutoFitDetourViewport({
-        isDetourView: true,
-        previousIsDetourView: false,
-        focusedRouteId: null,
-        previousFocusedRouteId: null,
-      })
-    ).toBe(true);
-  });
-
-  test('returns true when focused detour route changes while already in detour view', () => {
-    expect(
-      shouldAutoFitDetourViewport({
-        isDetourView: true,
-        previousIsDetourView: true,
-        focusedRouteId: '8A',
-        previousFocusedRouteId: null,
-      })
-    ).toBe(true);
-  });
-
-  test('returns false when still in regular view', () => {
-    expect(
-      shouldAutoFitDetourViewport({
-        isDetourView: false,
-        previousIsDetourView: false,
-        focusedRouteId: null,
-        previousFocusedRouteId: null,
-      })
-    ).toBe(false);
-  });
-
-  test('returns false when detour view state and focus are unchanged', () => {
-    expect(
-      shouldAutoFitDetourViewport({
-        isDetourView: true,
-        previousIsDetourView: true,
-        focusedRouteId: '8A',
-        previousFocusedRouteId: '8A',
-      })
-    ).toBe(false);
-  });
-});
-

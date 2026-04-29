@@ -25,7 +25,12 @@ import {
 } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { getContrastTextColor } from '../utils/colorUtils';
+import { buildTransitStopProgress } from '../utils/transitStopUtils';
 import Icon from './Icon';
+
+const isOnDemandLeg = (leg) => leg.mode === 'ON_DEMAND' || leg.isOnDemand;
+const getPlaceName = (place, fallback) => place?.name || fallback;
+const getLegRouteColor = (leg) => leg.route?.color || leg.zoneColor || COLORS.primary;
 
 const TripPreviewModal = ({
   visible,
@@ -40,9 +45,6 @@ const TripPreviewModal = ({
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
-
-  // Get transit legs for route display
-  const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
 
   return (
     <Modal
@@ -96,6 +98,15 @@ const TripPreviewModal = ({
                     <View style={styles.walkIcon}>
                       <Icon name="Walk" size={18} color={COLORS.white} />
                     </View>
+                  ) : isOnDemandLeg(leg) ? (
+                    <View
+                      style={[
+                        styles.busIcon,
+                        { backgroundColor: getLegRouteColor(leg) },
+                      ]}
+                    >
+                      <Icon name="Phone" size={16} color={COLORS.white} />
+                    </View>
                   ) : (
                     <View
                       style={[
@@ -125,7 +136,7 @@ const TripPreviewModal = ({
                         styles.stepDot,
                         index === 0 && styles.stepDotFirst,
                         leg.mode !== 'WALK' && {
-                          backgroundColor: leg.route?.color || COLORS.primary,
+                          backgroundColor: getLegRouteColor(leg),
                         },
                       ]}
                     />
@@ -134,7 +145,7 @@ const TripPreviewModal = ({
                         style={[
                           styles.stepLine,
                           leg.mode !== 'WALK' && {
-                            backgroundColor: leg.route?.color || COLORS.primary,
+                            backgroundColor: getLegRouteColor(leg),
                           },
                         ]}
                       />
@@ -149,10 +160,29 @@ const TripPreviewModal = ({
                     {leg.mode === 'WALK' ? (
                       <View style={styles.stepInfo}>
                         <Text style={styles.stepTitle}>
-                          Walk to {leg.to.name}
+                          Walk to {getPlaceName(leg.to, 'your next stop')}
                         </Text>
                         <Text style={styles.stepSubtitle}>
                           {formatDistance(leg.distance)} • {formatDuration(leg.duration)}
+                        </Text>
+                      </View>
+                    ) : isOnDemandLeg(leg) ? (
+                      <View style={styles.stepInfo}>
+                        <View style={styles.busStepHeader}>
+                          <View
+                            style={[
+                              styles.busStepBadge,
+                              { backgroundColor: getLegRouteColor(leg) },
+                            ]}
+                          >
+                            <Icon name="Phone" size={12} color={COLORS.white} />
+                          </View>
+                          <Text style={styles.stepTitle} numberOfLines={1}>
+                            Book on-demand ride
+                          </Text>
+                        </View>
+                        <Text style={styles.stepSubtitle}>
+                          Pickup: {getPlaceName(leg.from, 'pickup')} • Drop-off: {getPlaceName(leg.to, 'drop-off')}
                         </Text>
                       </View>
                     ) : (
@@ -173,7 +203,7 @@ const TripPreviewModal = ({
                           </Text>
                         </View>
                         <Text style={styles.stepSubtitle}>
-                          {leg.intermediateStops?.length || 0} stops • Get off at {leg.to.name}
+                          Board at {getPlaceName(leg.from, 'your stop')} • {buildTransitStopProgress(leg).totalStopsBetween} stops • Get off at {getPlaceName(leg.to, 'your stop')}
                         </Text>
                       </View>
                     )}

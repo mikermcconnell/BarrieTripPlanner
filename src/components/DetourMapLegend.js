@@ -6,7 +6,8 @@ const CLOSED_DASH_COUNT = 4;
 
 const DetourMapLegend = ({
   visible = false,
-  openColor = COLORS.ctaGreen,
+  openColor = COLORS.primary,
+  openOutlineColor = COLORS.warning,
   closedColor = COLORS.error,
   normalColor = COLORS.textPrimary,
   style,
@@ -20,11 +21,13 @@ const DetourMapLegend = ({
 
         <View style={styles.legendRow}>
           <View style={styles.swatchWrap}>
-            <View style={[styles.openLine, { backgroundColor: openColor }]} />
+            <View style={[styles.openLineOutline, { backgroundColor: openOutlineColor }]}>
+              <View style={[styles.openLine, { backgroundColor: openColor }]} />
+            </View>
           </View>
           <View style={styles.copyWrap}>
-            <Text style={styles.label}>Open bus detour</Text>
-            <Text style={styles.caption}>Buses are travelling on this path now.</Text>
+            <Text style={styles.label}>Likely detour path</Text>
+            <Text style={styles.caption}>Buses appear to be using this path.</Text>
           </View>
         </View>
 
@@ -55,7 +58,7 @@ const DetourMapLegend = ({
           </View>
         </View>
 
-        <Text style={styles.footer}>Green shows where the bus goes now. Red dashed shows the closed part it skips.</Text>
+        <Text style={styles.footer}>Route colour with orange outline shows the likely detour path. Red dashed shows the closed part it skips.</Text>
       </View>
     </View>
   );
@@ -96,9 +99,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   openLine: {
-    width: 52,
-    height: 6,
+    width: 49,
+    height: 5,
     borderRadius: BORDER_RADIUS.round,
+  },
+  openLineOutline: {
+    width: 54,
+    height: 8,
+    borderRadius: BORDER_RADIUS.round,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dashedLine: {
     width: 52,

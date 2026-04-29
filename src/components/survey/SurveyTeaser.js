@@ -36,7 +36,11 @@ const SurveyTeaser = ({ onPress }) => {
   const count = aggregates?.totalResponses || 0;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onPress?.({ survey, alreadySubmitted })}
+      activeOpacity={0.7}
+    >
       <View style={styles.row}>
         <View style={styles.ratingContainer}>
           {average != null ? (

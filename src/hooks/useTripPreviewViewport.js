@@ -8,6 +8,7 @@ export const useTripPreviewViewport = ({
   edgePadding,
   animated,
   onBlurInactive,
+  resetOnBlur = false,
 }) => {
   const fitMapToItinerary = useCallback((itinerary) => {
     if (typeof fitToCoordinates !== 'function') {
@@ -29,10 +30,10 @@ export const useTripPreviewViewport = ({
   }, [animated, edgePadding, fitToCoordinates]);
 
   useEffect(() => {
-    if (!isFocused && isTripPlanningMode) {
+    if (resetOnBlur && !isFocused && isTripPlanningMode) {
       onBlurInactive?.();
     }
-  }, [isFocused, isTripPlanningMode, onBlurInactive]);
+  }, [isFocused, isTripPlanningMode, onBlurInactive, resetOnBlur]);
 
   return {
     fitMapToItinerary,

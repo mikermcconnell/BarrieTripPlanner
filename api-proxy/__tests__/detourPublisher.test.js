@@ -4,6 +4,7 @@ const {
   buildUpdatedEvent,
   buildDetectedEvent,
   buildClearedEvent,
+  buildStaleClearedEvent,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
 
@@ -31,10 +32,23 @@ describe('makeSnapshot', () => {
         { latitude: 44.395, longitude: -79.698 },
         { latitude: 44.395, longitude: -79.690 },
       ],
+      likelyDetourPolyline: [
+        { latitude: 44.396, longitude: -79.698 },
+        { latitude: 44.396, longitude: -79.690 },
+      ],
+      likelyDetourRoadNames: ['Yonge Street', 'Big Bay Point Road'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      detourPathLabel: 'Likely detour path',
       segments: [{
         shapeId: 'shape-8a',
         entryPoint: { latitude: 44.39, longitude: -79.698 },
         exitPoint: { latitude: 44.39, longitude: -79.690 },
+        likelyDetourPolyline: [
+          { latitude: 44.396, longitude: -79.698 },
+          { latitude: 44.396, longitude: -79.690 },
+        ],
+        likelyDetourRoadNames: ['Yonge Street'],
       }],
     };
     const snap = makeSnapshot(doc);
@@ -47,6 +61,10 @@ describe('makeSnapshot', () => {
     expect(snap.shapeId).toBe('shape-8a');
     expect(snap.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
     expect(snap.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
+    expect(snap.likelyDetourPolyline).toHaveLength(2);
+    expect(snap.likelyDetourRoadNames).toEqual(['Yonge Street', 'Big Bay Point Road']);
+    expect(snap.roadMatchConfidence).toBe('high');
+    expect(snap.detourPathLabel).toBe('Likely detour path');
     expect(snap.segmentCount).toBe(1);
   });
 
@@ -76,10 +94,21 @@ describe('makeSnapshot', () => {
         { latitude: 44.395, longitude: -79.698 },
         { latitude: 44.395, longitude: -79.690 },
       ],
+      likelyDetourPolyline: [
+        { latitude: 44.396, longitude: -79.698 },
+        { latitude: 44.396, longitude: -79.690 },
+      ],
+      likelyDetourRoadNames: ['Yonge Street'],
+      roadMatchConfidence: 'medium',
+      detourPathLabel: 'Likely detour path',
       segments: [{
         shapeId: 'shape-8a',
         entryPoint: { latitude: 44.39, longitude: -79.698 },
         exitPoint: { latitude: 44.39, longitude: -79.690 },
+        likelyDetourPolyline: [
+          { latitude: 44.396, longitude: -79.698 },
+          { latitude: 44.396, longitude: -79.690 },
+        ],
       }],
       confidence: 'high',
       evidencePointCount: 15,
@@ -102,6 +131,9 @@ describe('makeSnapshot', () => {
     expect(snap.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
     expect(snap.skippedSegmentPolyline).toHaveLength(2);
     expect(snap.inferredDetourPolyline).toHaveLength(2);
+    expect(snap.likelyDetourPolyline).toHaveLength(2);
+    expect(snap.likelyDetourRoadNames).toEqual(['Yonge Street']);
+    expect(snap.roadMatchConfidence).toBe('medium');
     expect(snap.confidence).toBe('high');
     expect(snap.evidencePointCount).toBe(15);
     expect(snap.lastEvidenceAt).toBe(1704067500000);
@@ -253,6 +285,30 @@ describe('buildUpdatedEvent', () => {
   test('returns null when previous is null', () => {
     const event = buildUpdatedEvent('8A', null, { vehicleCount: 1 }, NOW);
     expect(event).toBeNull();
+  });
+});
+
+describe('buildStaleClearedEvent', () => {
+  test('records stale auto-clear metadata for operations review', () => {
+    const now = Date.parse('2026-04-26T20:00:00Z');
+    const event = buildStaleClearedEvent('8A', {
+      detectedAtMs: now - 4 * 60 * 60 * 1000,
+      vehicleCount: 2,
+      lastEvidenceAt: now - 140 * 60 * 1000,
+    }, now, {
+      reason: 'stale-evidence-with-live-route-family-vehicles',
+      staleAgeMs: 140 * 60 * 1000,
+      thresholdMs: 130 * 60 * 1000,
+      headwayMs: 60 * 60 * 1000,
+      scheduleSource: 'exact-route',
+      serviceDate: '20260426',
+    });
+
+    expect(event.eventType).toBe('DETOUR_AUTO_CLEARED_STALE');
+    expect(event.routeId).toBe('8A');
+    expect(event.clearReason).toBe('stale-evidence-with-live-route-family-vehicles');
+    expect(event.staleThresholdMs).toBe(130 * 60 * 1000);
+    expect(event.scheduledHeadwayMs).toBe(60 * 60 * 1000);
   });
 });
 

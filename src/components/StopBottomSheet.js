@@ -98,6 +98,7 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
   }, [stop]);
 
   if (!stop) return null;
+  const closureImpact = stop.closureImpact || null;
 
   return (
     <BottomSheet
@@ -133,6 +134,16 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Direction Buttons */}
+      {closureImpact && (
+        <View style={styles.closureBanner}>
+          <Text style={styles.closureTitle}>Stop closure reported</Text>
+          <Text style={styles.closureText}>
+            {closureImpact.message || 'This stop is reported closed in Barrie Transit news.'}
+          </Text>
+        </View>
+      )}
 
       {/* Direction Buttons */}
       <View style={styles.directionsContainer}>
@@ -284,6 +295,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  closureBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  closureTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+    marginBottom: SPACING.xxs,
+  },
+  closureText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    lineHeight: 19,
   },
   shareButton: {
     width: 36,

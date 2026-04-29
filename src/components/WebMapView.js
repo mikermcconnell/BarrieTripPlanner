@@ -175,12 +175,16 @@ const resetCursorIfNeeded = (map) => {
   }
 };
 
-const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0 }) => {
+const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0, accessibilityLabel }) => {
   const element = document.createElement('div');
   element.className = className;
   element.style.pointerEvents = 'auto';
   element.style.cursor = onClickRef?.current ? 'pointer' : 'default';
   element.style.zIndex = String(zIndexOffset);
+  if (accessibilityLabel) {
+    element.setAttribute('aria-label', accessibilityLabel);
+    element.setAttribute('role', onClickRef?.current ? 'button' : 'img');
+  }
   element.innerHTML = html;
   element.addEventListener('click', (event) => {
     if (!onClickRef?.current) return;
@@ -192,25 +196,36 @@ const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 
   return element;
 };
 
-const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0 }) => {
+const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, accessibilityLabel }) => {
   if (!element) return;
   element.className = className;
   element.style.zIndex = String(zIndexOffset);
+  if (accessibilityLabel) {
+    element.setAttribute('aria-label', accessibilityLabel);
+  } else {
+    element.removeAttribute('aria-label');
+    element.removeAttribute('role');
+  }
   element.innerHTML = html;
 };
 
-const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false) => {
+const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false, directionLabel = null) => {
   const routeLabel = escapeHtml(routeId || '?');
-  const hasValidBearing = bearing !== null && bearing !== undefined;
+  const routeDirectionLabel = directionLabel ? escapeHtml(directionLabel) : '';
+  const numericBearing = Number(bearing);
+  const hasValidBearing = Number.isFinite(numericBearing);
   const resolvedScale = scale * (dimmed ? 0.84 : 1);
   const resolvedOpacity = dimmed ? 0.42 : 1;
 
   const arrowHtml = hasValidBearing ? `
-    <svg width="88" height="88" viewBox="0 0 88 88"
-      style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;opacity:${resolvedOpacity};">
-      <path d="M44 3 L36 19 L44 13 L52 19 Z"
-        fill="#222222" stroke="white" stroke-width="2" stroke-linejoin="round"
-        transform="rotate(${bearing}, 44, 44)"/>
+    <svg width="104" height="104" viewBox="0 0 104 104"
+      style="position:absolute;top:-8px;left:-8px;pointer-events:none;z-index:1;opacity:${resolvedOpacity};overflow:visible;">
+      <g transform="rotate(${numericBearing}, 52, 52)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22));">
+        <path d="M52 10 L41 32 L52 25 L63 32 Z"
+          fill="rgba(255,255,255,0.96)" />
+        <path d="M52 13 L44 29 L52 23 L60 29 Z"
+          fill="${color}" />
+      </g>
     </svg>
   ` : '';
 
@@ -222,6 +237,7 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
         top:50%;left:50%;
         transform:translate(-50%,-50%);
         display:inline-flex;
+        flex-direction:column;
         align-items:center;
         justify-content:center;
         width:44px;
@@ -236,14 +252,24 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
       ">
         <span style="
           color:white;
-          font-size:17px;
+          font-size:${routeDirectionLabel ? 14 : 17}px;
           font-weight:800;
+          letter-spacing:0.5px;
+          text-shadow:0 1px 2px rgba(0,0,0,0.25);
+          line-height:${routeDirectionLabel ? 0.9 : 1};
+          position:relative;
+          z-index:1;
+        ">${routeLabel}</span>
+        ${routeDirectionLabel ? `<span style="
+          color:white;
+          font-size:11px;
+          font-weight:900;
           letter-spacing:0.5px;
           text-shadow:0 1px 2px rgba(0,0,0,0.25);
           line-height:1;
           position:relative;
           z-index:1;
-        ">${routeLabel}</span>
+        ">${routeDirectionLabel}</span>` : ''}
       </div>
     </div>
   `;
@@ -275,6 +301,7 @@ const WebHtmlMarkerComponent = ({
   zIndexOffset = 0,
   onPress,
   popupHtml,
+  accessibilityLabel,
 }) => {
   const context = useMapContext();
   const markerRef = useRef(null);
@@ -296,6 +323,7 @@ const WebHtmlMarkerComponent = ({
       className,
       onClickRef: onPressRef,
       zIndexOffset,
+      accessibilityLabel,
     });
     const marker = new context.maplibre.Marker({
       element,
@@ -318,7 +346,7 @@ const WebHtmlMarkerComponent = ({
       markerRef.current = null;
       elementRef.current = null;
     };
-  }, [anchor, context?.map, context?.maplibre, hasValidCoordinate, offset]);
+  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, offset]);
 
   useEffect(() => {
     if (!markerRef.current || !hasValidCoordinate) return;
@@ -327,13 +355,16 @@ const WebHtmlMarkerComponent = ({
 
   useEffect(() => {
     if (!elementRef.current) return;
-    updateMarkerElement(elementRef.current, { html, className, zIndexOffset });
-  }, [className, html, zIndexOffset]);
+    updateMarkerElement(elementRef.current, { html, className, zIndexOffset, accessibilityLabel });
+  }, [accessibilityLabel, className, html, zIndexOffset]);
 
   useEffect(() => {
     if (!elementRef.current) return;
     elementRef.current.style.cursor = onPress ? 'pointer' : 'default';
-  }, [onPress]);
+    if (accessibilityLabel) {
+      elementRef.current.setAttribute('role', onPress ? 'button' : 'img');
+    }
+  }, [accessibilityLabel, onPress]);
 
   useEffect(() => {
     if (!markerRef.current) return;
@@ -727,10 +758,11 @@ export const WebPolygon = memo(({
 
 export const __TEST_ONLY__ = {
   applyLayerEvents,
+  createBusHtml,
   resolveLayerCallbacks,
 };
 
-export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, snapPath = null, dimmed = false }) => {
+export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, routeDirectionLabel = null, snapPath = null, dimmed = false }) => {
   if (!vehicle?.coordinate?.latitude || !vehicle?.coordinate?.longitude) return null;
   const label = routeLabelProp || vehicle.routeId;
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
@@ -757,9 +789,10 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
   return (
     <WebHtmlMarker
       coordinate={{ latitude, longitude }}
-      html={createBusHtml(color, label, bearing, scale, dimmed)}
+      html={createBusHtml(color, label, bearing, scale, dimmed, routeDirectionLabel)}
       className="bus-icon"
       popupHtml={`<strong>Route ${escapeHtml(label)}</strong>${vehicle.label ? `<br />Bus ${escapeHtml(vehicle.label)}` : ''}`}
+      accessibilityLabel={`Route ${label} bus${vehicle.label ? ` ${vehicle.label}` : ''}`}
     />
   );
 });
@@ -771,6 +804,7 @@ export const WebStopMarker = memo(({ stop, onPress, isSelected }) => (
     zIndexOffset={isSelected ? 1000 : 500}
     onPress={() => onPress?.(stop)}
     popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}`}
+    accessibilityLabel={`${stop.name}, stop ${stop.code}`}
   />
 ));
 

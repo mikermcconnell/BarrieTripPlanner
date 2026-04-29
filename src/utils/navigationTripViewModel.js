@@ -2,7 +2,7 @@ const isTransitMode = (leg) => leg?.mode === 'BUS' || leg?.mode === 'TRANSIT';
 
 const formatStopLabel = (stop) => {
   const stopName = stop?.name || '';
-  const stopCode = stop?.stopCode;
+  const stopCode = stop?.stopCode || stop?.stopId || stop?.code;
   if (!stopName) {
     return stopCode ? `#${stopCode}` : '';
   }

@@ -56,3 +56,7 @@ These files may still contain useful background, but they do not override the cu
 - Prefer implemented code over historical planning prose when they conflict.
 - Prefer the narrowest doc that owns the concern.
 - Do not treat dated plans as active requirements unless they are explicitly revived by the task.
+
+## Local Development Preferences
+
+- When a local restart is needed to view or verify changes, restart the relevant dev server, proxy, or app process for Mike instead of only telling him to restart it. Keep the restart scoped to this repo and report what was restarted.

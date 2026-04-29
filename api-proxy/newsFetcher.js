@@ -1,13 +1,5 @@
-const crypto = require('crypto');
-
-const NEWS_URL = 'https://www.myridebarrie.ca/News';
-
-/**
- * Generate a stable ID from title + body so we can detect duplicates across fetches.
- */
-function generateId(title, body) {
-  return crypto.createHash('md5').update(`${title}|${body}`).digest('hex');
-}
+const NEWS_PAGE_URL = 'https://www.myridebarrie.ca/News';
+const NEWS_API_URL = 'https://www.myridebarrie.ca/News/GetAllNews';
 
 /**
  * Extract route references like "Route 8", "Route 1A" from text.
@@ -23,79 +15,85 @@ function extractAffectedRoutes(text) {
 }
 
 /**
- * Fetch and parse news items from myridebarrie.ca/News.
- * Returns an array of { id, title, body, date, affectedRoutes, url }.
- *
- * Uses cheerio to parse the HTML. The page is built on Knockout.js
- * and may render "No News" when empty — we handle that gracefully.
+ * Normalize one MyRide /News/GetAllNews item into the app's Firestore shape.
+ */
+function normalizeMyRideNewsItem(item) {
+  if (!item || item.newsId == null) return null;
+
+  const title = String(item.title || '').trim();
+  const body = String(item.summary || '').trim();
+  if (!title && !body) return null;
+
+  const routes = Array.isArray(item.routes)
+    ? item.routes.map((route) => String(route).trim().toUpperCase()).filter(Boolean)
+    : extractAffectedRoutes(`${title} ${body}`);
+
+  const publishedAtMs = item.publishDateUtc
+    ? Date.parse(item.publishDateUtc)
+    : NaN;
+  const friendlyUrl = String(item.friendlyUrl || '').trim();
+  const url = friendlyUrl
+    ? `${NEWS_PAGE_URL}/${encodeURIComponent(item.newsId)}/${encodeURIComponent(friendlyUrl)}/`
+    : NEWS_PAGE_URL;
+
+  return {
+    id: String(item.newsId),
+    title: title || 'Transit News',
+    body,
+    date: item.publishDateUtc || null,
+    affectedRoutes: item.affectsAllRoutes ? [] : routes,
+    affectsAllRoutes: Boolean(item.affectsAllRoutes),
+    url,
+    publishedAt: Number.isFinite(publishedAtMs) ? publishedAtMs : null,
+    source: 'myridebarrie',
+    sourceUrl: NEWS_API_URL,
+  };
+}
+
+/**
+ * Fetch news items from MyRide's public JSON endpoint.
+ * Returns an array of { id, title, body, date, affectedRoutes, url, publishedAt }.
  */
 async function fetchNewsItems() {
-  let cheerio;
+  let res;
   try {
-    cheerio = require('cheerio');
-  } catch {
-    console.error('[newsFetcher] cheerio not installed — run npm install');
-    return [];
-  }
-
-  let html;
-  try {
-    const res = await fetch(NEWS_URL, {
-      headers: { 'User-Agent': 'BarrieTransitApp/1.0' },
+    res = await fetch(NEWS_API_URL, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'BarrieTransitApp/1.0',
+      },
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) {
-      console.error(`[newsFetcher] HTTP ${res.status} from ${NEWS_URL}`);
-      return [];
-    }
-    html = await res.text();
   } catch (err) {
     console.error('[newsFetcher] Fetch failed:', err.message);
     return [];
   }
 
-  const $ = cheerio.load(html);
-  const items = [];
-
-  // The page structure may vary — try common selectors for news articles.
-  // TripSpark typically uses .news-item, .newsItem, article, or similar.
-  const selectors = [
-    '.news-item',
-    '.newsItem',
-    '.news-list-item',
-    'article',
-    '.panel',
-    '[data-bind*="news"]',
-  ];
-
-  let elements = $([]);
-  for (const sel of selectors) {
-    elements = $(sel);
-    if (elements.length > 0) break;
+  if (!res.ok) {
+    console.error(`[newsFetcher] HTTP ${res.status} from ${NEWS_API_URL}`);
+    return [];
   }
 
-  elements.each((_i, el) => {
-    const $el = $(el);
-    const title = ($el.find('h2, h3, h4, .title, .news-title').first().text() || '').trim();
-    const body = ($el.find('.body, .content, .description, p').first().text() || '').trim();
-    const dateText = ($el.find('.date, time, .news-date').first().text() || '').trim();
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (err) {
+    console.error('[newsFetcher] Invalid JSON:', err.message);
+    return [];
+  }
 
-    if (!title && !body) return;
+  if (!Array.isArray(payload)) {
+    console.error('[newsFetcher] Unexpected news response shape');
+    return [];
+  }
 
-    const combinedText = `${title} ${body}`;
-    const affectedRoutes = extractAffectedRoutes(combinedText);
-
-    items.push({
-      id: generateId(title, body),
-      title: title || 'Untitled',
-      body,
-      date: dateText || null,
-      affectedRoutes,
-      url: NEWS_URL,
-    });
-  });
-
-  return items;
+  return payload.map(normalizeMyRideNewsItem).filter(Boolean);
 }
 
-module.exports = { fetchNewsItems, extractAffectedRoutes, generateId };
+module.exports = {
+  fetchNewsItems,
+  extractAffectedRoutes,
+  normalizeMyRideNewsItem,
+  NEWS_API_URL,
+  NEWS_PAGE_URL,
+};

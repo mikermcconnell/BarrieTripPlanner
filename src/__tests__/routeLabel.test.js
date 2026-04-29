@@ -1,4 +1,4 @@
-const { getVehicleRouteLabel } = require('../utils/routeLabel');
+const { getVehicleRouteDirectionLabel, getVehicleRouteLabel } = require('../utils/routeLabel');
 
 describe('getVehicleRouteLabel', () => {
   const routes = [
@@ -68,5 +68,17 @@ describe('getVehicleRouteLabel', () => {
     const vehicle = { routeId: '999', tripId: null };
     const result = getVehicleRouteLabel(vehicle, routes, {});
     expect(result).toBe('999');
+  });
+});
+
+describe('getVehicleRouteDirectionLabel', () => {
+  test('adds north/south only for route 8 family buses', () => {
+    expect(getVehicleRouteDirectionLabel({ routeId: '8A', headsign: 'Northbound to RVH' }, '8A')).toBe('N');
+    expect(getVehicleRouteDirectionLabel({ routeId: '8B', headsign: 'Southbound to Park Place' }, '8B')).toBe('S');
+    expect(getVehicleRouteDirectionLabel({ routeId: '7B', headsign: 'Southbound' }, '7B')).toBeNull();
+  });
+
+  test('returns null when route 8 direction is unknown', () => {
+    expect(getVehicleRouteDirectionLabel({ routeId: '8A', headsign: 'Unknown' }, '8A')).toBeNull();
   });
 });

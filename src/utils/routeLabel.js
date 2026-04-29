@@ -144,3 +144,14 @@ export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {})
 
 export const getVehicleRouteLabel = (vehicle, routes = [], tripMapping = {}) =>
   resolveVehicleRouteLabel(vehicle, routes, tripMapping).label;
+
+export const getVehicleRouteDirectionLabel = (vehicle, routeLabel = '') => {
+  const label = String(routeLabel || vehicle?.routeId || '').trim().toUpperCase();
+  if (!/^8[A-Z]?$/.test(label)) return null;
+
+  const headsign = String(vehicle?.headsign || '').trim().toUpperCase();
+  if (/\b(NORTH|NORTHBOUND|NB)\b/.test(headsign)) return 'N';
+  if (/\b(SOUTH|SOUTHBOUND|SB)\b/.test(headsign)) return 'S';
+
+  return null;
+};

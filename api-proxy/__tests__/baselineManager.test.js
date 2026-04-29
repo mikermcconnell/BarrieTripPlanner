@@ -104,7 +104,7 @@ describe('baselineManager', () => {
 
     const result = await baselineManager.getBaselineData(liveData);
 
-    expect(result.source).toBe('setBaseline');
+    expect(result.source).toBe('auto-init');
     expect(result.shapes.size).toBe(3);
     expect(result.routeShapeMapping.size).toBe(2);
     expect(result.routeShapeMapping.get('8A')).toEqual(['s1', 's2']);
@@ -115,6 +115,8 @@ describe('baselineManager', () => {
 
     const status = baselineManager.getBaselineStatus();
     expect(status.loaded).toBe(true);
+    expect(status.readyForDetours).toBe(false);
+    expect(status.reason).toBe('baseline_auto_initialized_from_live_gtfs');
     expect(status.routeCount).toBe(2);
     expect(status.shapeCount).toBe(3);
   });
@@ -161,7 +163,8 @@ describe('baselineManager', () => {
 
     const status = baselineManager.getBaselineStatus();
     expect(status.loaded).toBe(true);
-    expect(status.source).toBe('setBaseline');
+    expect(status.source).toBe('manual-live');
+    expect(status.readyForDetours).toBe(true);
     expect(status.routeCount).toBe(2);
     expect(status.shapeCount).toBe(2);
   });
@@ -183,6 +186,33 @@ describe('baselineManager', () => {
 
     expect(baselineManager.getBaselineStatus().loaded).toBe(false);
     expect(mockBatchDelete).toHaveBeenCalled();
+  });
+
+  test('setBaselineRoutes replaces selected routes while keeping existing baseline', async () => {
+    const initialData = makeLiveData({ '8A': ['s1'], '12': ['old12'] });
+    await baselineManager.setBaseline(initialData);
+
+    const updatedData = makeLiveData({ '8A': ['s1'], '12': ['new12'] });
+    await baselineManager.setBaselineRoutes(updatedData, ['12']);
+
+    const status = baselineManager.getBaselineStatus();
+    expect(status.loaded).toBe(true);
+    expect(status.source).toBe('manual-route-update');
+    expect(status.readyForDetours).toBe(true);
+
+    const baseline = await baselineManager.getBaselineData(updatedData);
+    expect(baseline.routeShapeMapping.get('8A')).toEqual(['s1']);
+    expect(baseline.routeShapeMapping.get('12')).toEqual(['new12']);
+    expect(mockDocSet).toHaveBeenCalled();
+  });
+
+  test('setBaselineRoutes rejects missing route ids', async () => {
+    const initialData = makeLiveData({ '8A': ['s1'] });
+    await baselineManager.setBaseline(initialData);
+
+    await expect(baselineManager.setBaselineRoutes(initialData, ['12'])).rejects.toThrow(
+      'Route 12 was not found'
+    );
   });
 
   test('logShapeDivergence detects added and removed shapes', async () => {
@@ -242,7 +272,7 @@ describe('baselineManager', () => {
     const result = await baselineManager.getBaselineData(liveData);
 
     // Auto-init still sets cache in memory even without Firestore
-    expect(result.source).toBe('setBaseline');
+    expect(result.source).toBe('auto-init');
     expect(result.shapes.size).toBe(1);
 
     getDb.mockReturnValue(mockDb);
@@ -261,6 +291,7 @@ describe('baselineManager', () => {
 
     // Should fall back to live, not auto-init
     expect(result.source).toBe('live-fallback');
+    expect(bm.getBaselineStatus().readyForDetours).toBe(false);
     expect(mockBatch).not.toHaveBeenCalled();
 
     bm._resetForTesting();

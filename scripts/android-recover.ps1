@@ -68,8 +68,9 @@ foreach ($proc in $nodeProcesses) {
     $isExpoStart = $commandLine -match "expo[\\/]bin[\\/]cli" -and $commandLine -match "\sstart(\s|$)"
     $isMetroProxy = $commandLine -match "\.tmp-metro-proxy\.js" -or $commandLine -match "metro-proxy" -or $commandLine -match "metro-dev-proxy"
     $isApiProxy = $commandLine -match "proxy-server\.js"
+    $isDetourDevWorker = $commandLine -match "api-proxy[\\/]index\.js"
 
-    if ($isRepoProcess -and ($isExpoStart -or $isMetroProxy -or $isApiProxy)) {
+    if ($isRepoProcess -and ($isExpoStart -or $isMetroProxy -or $isApiProxy -or $isDetourDevWorker)) {
         Stop-ProcessSafe -ProcessId $proc.ProcessId -Reason "repo node process"
     }
 }
