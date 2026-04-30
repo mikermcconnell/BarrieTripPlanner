@@ -267,6 +267,11 @@ Deploy updated rules so clients can read:
 - For reproducible cloud builds, set `GOOGLE_SERVICES_JSON` as an EAS file secret (pointing to `google-services.json`).
 - Production EAS builds also require `EXPO_PUBLIC_API_PROXY_URL` and reject insecure env vars (`EXPO_PUBLIC_LOCATIONIQ_API_KEY`, direct LocationIQ mode, and public proxy tokens).
 
+### Google Play AAB versioning
+
+- Before building any Android App Bundle (`.aab`) for Google Play Console, always increment the Android `versionCode`.
+- Keep the Expo config and native Android config in sync: update `android.versionCode` in `app.base.json` and `versionCode` in `android/app/build.gradle`.
+
 ### Client behavior
 
 `TransitContext` now prefers backend detours when the shared feed is live; it falls back to local detector logic if backend feed is unavailable.
