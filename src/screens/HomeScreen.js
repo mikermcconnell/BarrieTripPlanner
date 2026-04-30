@@ -68,6 +68,7 @@ import { getTransitLoadingState } from '../utils/systemHealthUI';
 import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
 import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
 import { getForegroundDeviceLocation } from '../utils/currentLocation';
+import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -451,6 +452,70 @@ const HomeMapTopStopsOverlay = React.memo(({
     });
 });
 
+const AndroidLiveBusMarker = React.memo(({
+  vehicle,
+  markerColor,
+  dimmed,
+  routeLabel,
+  routeDirectionLabel,
+  snapPath,
+}) => {
+  const { latitude, longitude, bearing } = useAnimatedBusPosition(vehicle, { snapPath });
+  const markerWidth = routeLabel.length >= 3 ? 42 : routeLabel.length === 2 ? 36 : 30;
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return (
+    <MapLibreGL.MarkerView
+      key={vehicle.id}
+      id={`home-bus-${vehicle.id}`}
+      coordinate={[longitude, latitude]}
+      anchor={{ x: 0.5, y: 0.5 }}
+    >
+      <View
+        collapsable={false}
+        style={styles.androidBusMarkerFrame}
+      >
+        <BusDirectionArrow
+          bearing={bearing}
+          size={44}
+          topOffset={-5}
+          arrowWidth={8}
+          arrowHeight={16}
+          color={markerColor}
+          dimmed={dimmed}
+        />
+        <View
+          style={[
+            styles.androidBusMarker,
+            dimmed && styles.androidBusMarkerDimmed,
+            {
+              backgroundColor: markerColor,
+              width: markerWidth,
+            },
+          ]}
+        >
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            style={styles.androidBusMarkerLabel}
+          >
+            {routeLabel}
+          </Text>
+          {routeDirectionLabel ? (
+            <Text style={styles.androidBusMarkerDirectionLabel}>
+              {routeDirectionLabel}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </MapLibreGL.MarkerView>
+  );
+});
+
 const HomeMapVehiclesLayer = React.memo(({
   isTripPreviewMode,
   displayedVehicles,
@@ -481,64 +546,18 @@ const HomeMapVehiclesLayer = React.memo(({
           : false;
       const markerColor = dimmed ? COLORS.grey400 : getRouteColor(vehicle.routeId);
       const snapPath = getVehicleSnapPath(vehicle);
-
-      return {
-        vehicle,
-        markerColor,
-        dimmed,
-        routeLabel: String(getRouteLabel(vehicle) || vehicle.routeId || '?'),
-        routeDirectionLabel: getVehicleRouteDirectionLabel(vehicle, getRouteLabel(vehicle)),
-        directionBearing: getVehicleDirectionBearing(vehicle, snapPath),
-      };
-    }).map(({ vehicle, markerColor, dimmed, routeLabel, routeDirectionLabel, directionBearing }) => {
-      const markerWidth = routeLabel.length >= 3 ? 42 : routeLabel.length === 2 ? 36 : 30;
+      const routeLabel = String(getRouteLabel(vehicle) || vehicle.routeId || '?');
 
       return (
-        <MapLibreGL.MarkerView
+        <AndroidLiveBusMarker
           key={vehicle.id}
-          id={`home-bus-${vehicle.id}`}
-          coordinate={[vehicle.coordinate.longitude, vehicle.coordinate.latitude]}
-          anchor={{ x: 0.5, y: 0.5 }}
-        >
-          <View
-            collapsable={false}
-            style={styles.androidBusMarkerFrame}
-          >
-            <BusDirectionArrow
-              bearing={directionBearing}
-              size={44}
-              topOffset={-5}
-              arrowWidth={8}
-              arrowHeight={16}
-              color={markerColor}
-              dimmed={dimmed}
-            />
-            <View
-              style={[
-                styles.androidBusMarker,
-                dimmed && styles.androidBusMarkerDimmed,
-                {
-                  backgroundColor: markerColor,
-                  width: markerWidth,
-                },
-              ]}
-            >
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
-                style={styles.androidBusMarkerLabel}
-              >
-                {routeLabel}
-              </Text>
-              {routeDirectionLabel ? (
-                <Text style={styles.androidBusMarkerDirectionLabel}>
-                  {routeDirectionLabel}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        </MapLibreGL.MarkerView>
+          vehicle={vehicle}
+          markerColor={markerColor}
+          dimmed={dimmed}
+          routeLabel={routeLabel}
+          routeDirectionLabel={getVehicleRouteDirectionLabel(vehicle, routeLabel)}
+          snapPath={snapPath}
+        />
       );
     });
   }
