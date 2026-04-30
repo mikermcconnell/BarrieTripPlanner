@@ -4,8 +4,33 @@ const IS_PRODUCTION_LIKE = !IS_DEV && !IS_TEST;
 
 const hasValue = (value) => typeof value === 'string' && value.trim().length > 0;
 
+// Expo only embeds EXPO_PUBLIC_* values in native bundles when they are
+// referenced statically. Keep this map explicit; do not replace it with
+// dynamic process.env[name] access for app runtime config.
+const PUBLIC_ENV = {
+  EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+  EXPO_PUBLIC_API_PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL,
+  EXPO_PUBLIC_CORS_PROXY_URL: process.env.EXPO_PUBLIC_CORS_PROXY_URL,
+  EXPO_PUBLIC_ENABLE_AUTO_DETOURS: process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS,
+  EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI: process.env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI,
+  EXPO_PUBLIC_SENTRY_DSN: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  EXPO_PUBLIC_LOCATIONIQ_API_KEY: process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY,
+  EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ: process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ,
+  EXPO_PUBLIC_API_PROXY_TOKEN: process.env.EXPO_PUBLIC_API_PROXY_TOKEN,
+  EXPO_PUBLIC_CORS_PROXY_TOKEN: process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN,
+};
+
 const readEnv = (name) => {
-  const value = process.env[name];
+  const value = PUBLIC_ENV[name];
   return hasValue(value) ? value.trim() : '';
 };
 
@@ -53,16 +78,16 @@ if (IS_PRODUCTION_LIKE) {
   }
 
   const insecurePublicVars = [];
-  if (hasValue(process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY)) {
+  if (hasValue(readEnv('EXPO_PUBLIC_LOCATIONIQ_API_KEY'))) {
     insecurePublicVars.push('EXPO_PUBLIC_LOCATIONIQ_API_KEY');
   }
-  if (process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ === 'true') {
+  if (readEnv('EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ') === 'true') {
     insecurePublicVars.push('EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=true');
   }
-  if (hasValue(process.env.EXPO_PUBLIC_API_PROXY_TOKEN)) {
+  if (hasValue(readEnv('EXPO_PUBLIC_API_PROXY_TOKEN'))) {
     insecurePublicVars.push('EXPO_PUBLIC_API_PROXY_TOKEN');
   }
-  if (hasValue(process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN)) {
+  if (hasValue(readEnv('EXPO_PUBLIC_CORS_PROXY_TOKEN'))) {
     insecurePublicVars.push('EXPO_PUBLIC_CORS_PROXY_TOKEN');
   }
 
