@@ -188,6 +188,21 @@ Operational tasks are expected to be driven externally when possible:
 - survey digest is triggered by `POST /api/survey/send-digest`
 - any recurring digest or refresh flow should be run by platform cron/scheduler, not hidden process-local timers
 
+
+### Platform map endpoint
+
+`GET /api/platform-maps/:hubId` returns a cached single-page PNG rendered from Barrie's public platform map PDF.
+
+Supported hub IDs:
+
+- `allandale-terminal`
+- `downtown-hub`
+- `park-place-terminal`
+- `barrie-south-go`
+- `georgian-college`
+
+The endpoint is public because it serves fixed public City of Barrie content and must be loadable by app image components. It does not accept arbitrary source URLs or page numbers.
+
 ### Detour runtime state
 
 Single-tick detour execution persists detector runtime state to Firestore so the next invocation can resume:
