@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { haversineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
+import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 
 const CACHE_PREFIX = 'walk_directions_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -491,8 +492,8 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
     }
   }
 
-  // Sort by arrival time (soonest first)
-  finalItineraries.sort((a, b) => a.endTime - b.endTime);
+  // Sort by rider-friendly generalized cost so transfers need to save enough time.
+  finalItineraries = rankItinerariesForRider(finalItineraries);
 
   // Add recommendation labels
   if (finalItineraries.length > 0) {
@@ -503,14 +504,14 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
       it.walkDistance < best.walkDistance ? it : best, finalItineraries[0]);
     const fewestTransfers = finalItineraries.reduce((best, it) =>
       it.transfers < best.transfers ? it : best, finalItineraries[0]);
-    const soonestArrival = finalItineraries[0]; // Already sorted by arrival
+    const recommendedOption = finalItineraries[0]; // Already sorted by rider cost
 
     // Assign labels (priority: recommended > fastest > least walking)
     finalItineraries = finalItineraries.map((it) => {
       const labels = [];
 
-      // "Recommended" = arrives soonest AND leaves soon AND reasonable walk
-      if (it === soonestArrival && !it.isTomorrow && !it.hasLongWait && !it.hasHighWalk) {
+      // "Recommended" = best rider-cost option AND leaves soon AND reasonable walk
+      if (it === recommendedOption && !it.isTomorrow && !it.hasLongWait && !it.hasHighWalk) {
         labels.push('Recommended');
       } else if (it === fastest && !labels.includes('Recommended')) {
         labels.push('Fastest');

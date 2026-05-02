@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 import { COLORS } from '../config/theme';
 import { getMatchingDetourRouteIds } from '../utils/routeDetourMatching';
 import { getRouteFamilyId, normalizeRouteId } from '../utils/routeDetourMatching';
+import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 
 const DETOUR_COLORS = {
   SKIPPED: COLORS.error,   // closed regular route segment riders should not expect service on
@@ -49,16 +50,17 @@ export function deriveDetourOverlays({
   if (!enabled) return [];
 
   const overlays = [];
+  const riderVisibleDetours = filterRiderVisibleDetours(activeDetours);
 
   // When no routes selected, show ALL active detours
   const routeIds = (selectedRouteIds && selectedRouteIds.size > 0)
     ? new Set(Array.from(selectedRouteIds).flatMap((routeId) => {
-      const matches = getMatchingDetourRouteIds(routeId, activeDetours);
+      const matches = getMatchingDetourRouteIds(routeId, riderVisibleDetours);
       return matches.length > 0 ? matches : [routeId];
     }))
-    : new Set(Object.keys(activeDetours));
+    : new Set(Object.keys(riderVisibleDetours));
   const renderedRouteIds = Array.from(routeIds)
-    .filter((routeId) => activeDetours[routeId])
+    .filter((routeId) => riderVisibleDetours[routeId])
     .sort((a, b) => normalizeRouteId(a).localeCompare(normalizeRouteId(b)));
   const renderedFamilyRouteIds = renderedRouteIds.reduce((acc, routeId) => {
     const familyId = getRouteFamilyId(routeId);
@@ -68,7 +70,7 @@ export function deriveDetourOverlays({
   }, {});
 
   routeIds.forEach((routeId) => {
-    const detour = activeDetours[routeId];
+    const detour = riderVisibleDetours[routeId];
     if (!detour) return;
     const familyRouteIds = renderedFamilyRouteIds[getRouteFamilyId(routeId)] || [routeId];
     const routeLineLabel = familyRouteIds.join('/');

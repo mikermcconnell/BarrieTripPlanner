@@ -10,6 +10,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../../config/theme';
 import Icon from '../Icon';
+import WalkingPaceIcon from './WalkingPaceIcon';
 
 // Calculate ETA based on distance and mode
 const calculateETA = (distanceMeters, mode = 'WALK') => {
@@ -56,12 +57,13 @@ const NavigationHeader = ({
   scheduledArrivalTime = null,
   delaySeconds = 0,
   isRealtime = false,
+  walkingPaceLevel = 'on_pace',
 }) => {
   // Get icon based on navigation state type
   const getIcon = () => {
     switch (navigationState?.type) {
       case 'walking':
-        return <Icon name="Walk" size={28} color={COLORS.white} />;
+        return <WalkingPaceIcon level={walkingPaceLevel} size={36} />;
       case 'waiting':
         return <Icon name="Hourglass" size={28} color={COLORS.white} />;
       case 'boarding':
@@ -143,7 +145,12 @@ const NavigationHeader = ({
         {/* Main Content */}
         <View style={styles.mainContent}>
           <View style={styles.instructionContainer}>
-            <View style={styles.iconWrapper}>{getIcon()}</View>
+            <View style={[
+              styles.iconWrapper,
+              navigationState?.type === 'walking' && styles.walkingIconWrapper,
+            ]}>
+              {getIcon()}
+            </View>
             <View style={styles.textContainer}>
               <Text style={styles.stateLabel}>{getHeaderLabel()}</Text>
               <Text style={styles.destination} numberOfLines={1}>
@@ -155,6 +162,7 @@ const NavigationHeader = ({
           {/* ETA Display */}
           {eta && (
             <View style={styles.etaContainer}>
+              <Text style={styles.etaLabel}>ETA</Text>
               <View style={styles.etaTimeRow}>
                 <Text style={styles.etaTime}>~{eta.time}</Text>
                 {isRealtime && scheduledArrivalTime && (
@@ -216,6 +224,14 @@ const styles = StyleSheet.create({
   iconWrapper: {
     marginRight: SPACING.sm,
   },
+  walkingIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   icon: {
     fontSize: 28,
   },
@@ -242,6 +258,14 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
     borderRadius: BORDER_RADIUS.md,
     marginLeft: SPACING.sm,
+  },
+  etaLabel: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    marginBottom: 1,
   },
   etaTimeRow: {
     flexDirection: 'row',

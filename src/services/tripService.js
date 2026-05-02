@@ -5,6 +5,7 @@ import { analyzeZoneInvolvement, buildZoneAwareTrip, estimateOnDemandDuration } 
 import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
+import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
@@ -12,11 +13,160 @@ const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
   routingDiagnostics,
 });
 
+const isWalkingOnlyItinerary = (itinerary) => (
+  itinerary?.isWalkingOnly ||
+  (
+    Array.isArray(itinerary?.legs) &&
+    itinerary.legs.length === 1 &&
+    String(itinerary.legs[0]?.mode).toUpperCase() === 'WALK'
+  )
+);
+
+const buildWalkingOnlyItinerary = ({
+  fromLat,
+  fromLon,
+  toLat,
+  toLon,
+  date,
+  time,
+  arriveBy = false,
+}) => {
+  const straightDistance = haversineDistance(fromLat, fromLon, toLat, toLon);
+  const walkDistance = Math.round(straightDistance * ROUTING_CONFIG.WALK_DISTANCE_BUFFER);
+  const walkDuration = Math.round(walkDistance / ROUTING_CONFIG.WALK_SPEED);
+  const maxDuration = ROUTING_CONFIG.WALKING_ONLY_MAX_DURATION_SECONDS || 35 * 60;
+  const maxDistance = ROUTING_CONFIG.WALKING_ONLY_MAX_DISTANCE_METERS || 2500;
+
+  if (walkDuration > maxDuration || walkDistance > maxDistance) {
+    return null;
+  }
+
+  const requestedTimeMs = getRequestedTripTimestamp({ date, time });
+  const startTime = arriveBy
+    ? requestedTimeMs - walkDuration * 1000
+    : requestedTimeMs;
+  const endTime = arriveBy
+    ? requestedTimeMs
+    : requestedTimeMs + walkDuration * 1000;
+
+  return {
+    id: 'walking-only',
+    duration: walkDuration,
+    startTime,
+    endTime,
+    walkTime: walkDuration,
+    transitTime: 0,
+    waitingTime: 0,
+    walkDistance,
+    transfers: 0,
+    isWalkingOnly: true,
+    legs: [{
+      mode: 'WALK',
+      startTime,
+      endTime,
+      scheduledStartTime: startTime,
+      scheduledEndTime: endTime,
+      delaySeconds: 0,
+      isRealtime: false,
+      duration: walkDuration,
+      distance: walkDistance,
+      from: {
+        name: 'Origin',
+        lat: fromLat,
+        lon: fromLon,
+      },
+      to: {
+        name: 'Destination',
+        lat: toLat,
+        lon: toLon,
+      },
+      route: null,
+      headsign: null,
+      tripId: null,
+      intermediateStops: null,
+      legGeometry: null,
+      steps: [{
+        instruction: 'Walk to your destination',
+        distance: walkDistance,
+        duration: walkDuration,
+        type: 'depart',
+        modifier: null,
+        name: '',
+      }],
+    }],
+  };
+};
+
+const addWalkingOnlyOption = (tripPlan, tripParams = {}) => {
+  if (
+    !Number.isFinite(tripParams.fromLat) ||
+    !Number.isFinite(tripParams.fromLon) ||
+    !Number.isFinite(tripParams.toLat) ||
+    !Number.isFinite(tripParams.toLon)
+  ) {
+    return tripPlan;
+  }
+
+  const existingItineraries = tripPlan?.itineraries || [];
+  if (existingItineraries.some(isWalkingOnlyItinerary)) {
+    return tripPlan;
+  }
+
+  const walkingOnly = buildWalkingOnlyItinerary(tripParams);
+  if (!walkingOnly) {
+    return tripPlan;
+  }
+
+  const transitItineraries = existingItineraries.filter((itinerary) => !isWalkingOnlyItinerary(itinerary));
+  const fastestTransitDuration = transitItineraries.reduce(
+    (best, itinerary) => Math.min(best, Number(itinerary.duration) || Infinity),
+    Infinity
+  );
+  const recommendationRatio = ROUTING_CONFIG.WALKING_ONLY_RECOMMENDATION_RATIO ?? 0.75;
+  const recommendationEligible =
+    transitItineraries.length === 0 ||
+    walkingOnly.duration <= fastestTransitDuration * recommendationRatio;
+
+  return {
+    ...tripPlan,
+    itineraries: [
+      ...existingItineraries,
+      {
+        ...walkingOnly,
+        recommendationEligible,
+      },
+    ],
+  };
+};
+
+const placeNonRecommendedWalkingAfterTransit = (itineraries = []) => {
+  const nonRecommendedWalking = itineraries.filter((itinerary) => (
+    isWalkingOnlyItinerary(itinerary) && itinerary.recommendationEligible === false
+  ));
+
+  if (nonRecommendedWalking.length === 0) {
+    return itineraries;
+  }
+
+  const otherItineraries = itineraries.filter((itinerary) => (
+    !isWalkingOnlyItinerary(itinerary) || itinerary.recommendationEligible !== false
+  ));
+  const hasTransit = otherItineraries.some((itinerary) => !isWalkingOnlyItinerary(itinerary));
+
+  return hasTransit
+    ? [...otherItineraries, ...nonRecommendedWalking]
+    : itineraries;
+};
+
 /**
  * Add basic metadata to itineraries (used when walking enrichment is skipped)
  * Adds departure time info, tomorrow flag, and filters excessive durations
  */
-const addBasicMetadata = (tripPlan) => {
+const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
+  const { includeWalkingOnly = true } = options;
+  if (includeWalkingOnly) {
+    tripPlan = addWalkingOnlyOption(tripPlan, tripParams);
+  }
   const maxTripDuration = ROUTING_CONFIG.MAX_TRIP_DURATION || 7200;
   const highWalkThreshold = 1000;
   const now = Date.now();
@@ -36,6 +186,8 @@ const addBasicMetadata = (tripPlan) => {
 
     return {
       ...itinerary,
+      labels: null,
+      isRecommended: false,
       minutesUntilDeparture,
       isTomorrow,
       hasHighWalk,
@@ -52,18 +204,24 @@ const addBasicMetadata = (tripPlan) => {
     finalItineraries = filtered;
   } else {
     const sorted = withMetadata.sort((a, b) => a.duration - b.duration);
-    if (sorted[0].duration <= maxTripDuration * 2) {
+    if (sorted.length > 0 && sorted[0].duration <= maxTripDuration * 2) {
       finalItineraries = sorted.slice(0, 3);
     } else {
       finalItineraries = [];
     }
   }
 
-  // Sort by arrival time
-  finalItineraries.sort((a, b) => a.endTime - b.endTime);
+  // Sort by rider-friendly generalized cost so transfers need to save enough time.
+  finalItineraries = placeNonRecommendedWalkingAfterTransit(
+    rankItinerariesForRider(finalItineraries)
+  );
 
   // Add "Recommended" label to first non-tomorrow trip
-  const firstGoodTrip = finalItineraries.find(it => !it.isTomorrow && !it.hasHighWalk);
+  const firstGoodTrip = finalItineraries.find(it => (
+    !it.isTomorrow &&
+    (!it.hasHighWalk || isWalkingOnlyItinerary(it)) &&
+    it.recommendationEligible !== false
+  ));
   if (firstGoodTrip) {
     firstGoodTrip.labels = ['Recommended'];
     firstGoodTrip.isRecommended = true;
@@ -134,8 +292,27 @@ export const planTrip = async ({
   mode = 'TRANSIT,WALK',
   maxWalkDistance = 1000,
   numItineraries = 3,
+  includeWalkingOnly = true,
 }) => {
+  const tripParams = { fromLat, fromLon, toLat, toLon, date, time, arriveBy };
   if (!OTP_CONFIG.BASE_URL) {
+    if (includeWalkingOnly) {
+      const walkingFallback = addBasicMetadata(
+        { from: { name: 'Origin', lat: fromLat, lon: fromLon }, to: { name: 'Destination', lat: toLat, lon: toLon }, itineraries: [] },
+        tripParams
+      );
+      if (walkingFallback.itineraries.length > 0) {
+        return withRoutingDiagnostics(
+          walkingFallback,
+          buildRoutingDiagnostics({
+            source: 'walking_only',
+            fallbackReason: TRIP_ERROR_CODES.OTP_UNAVAILABLE,
+            fallbackFrom: 'otp',
+          })
+        );
+      }
+    }
+
     throw new TripPlanningError(
       TRIP_ERROR_CODES.OTP_UNAVAILABLE,
       'Trip planning backend is not configured'
@@ -214,21 +391,47 @@ export const planTrip = async ({
 
     const result = formatTripPlan(data.plan);
 
-    // Check if no itineraries were returned
-    if (!result.itineraries || result.itineraries.length === 0) {
+    const resultWithMetadata = addBasicMetadata(result, tripParams, { includeWalkingOnly });
+
+    // Check if no itineraries were returned, including walking-only fallback
+    if (!resultWithMetadata.itineraries || resultWithMetadata.itineraries.length === 0) {
       throw new TripPlanningError(
         TRIP_ERROR_CODES.NO_ROUTES_FOUND,
         'No transit routes found for this trip'
       );
     }
 
-    // Add metadata for filtering and display
-    return addBasicMetadata(result);
+    return resultWithMetadata;
   } catch (error) {
     clearTimeout(timeoutId);
 
     // Re-throw TripPlanningError as-is
     if (error instanceof TripPlanningError) {
+      if (
+        [
+          TRIP_ERROR_CODES.NO_ROUTES_FOUND,
+          TRIP_ERROR_CODES.NO_SERVICE,
+          TRIP_ERROR_CODES.OTP_UNAVAILABLE,
+        ].includes(error.code)
+      ) {
+        if (includeWalkingOnly) {
+          const walkingFallback = addBasicMetadata(
+            { from: { name: 'Origin', lat: fromLat, lon: fromLon }, to: { name: 'Destination', lat: toLat, lon: toLon }, itineraries: [] },
+            tripParams
+          );
+          if (walkingFallback.itineraries.length > 0) {
+            return withRoutingDiagnostics(
+              walkingFallback,
+              buildRoutingDiagnostics({
+                source: 'walking_only',
+                fallbackReason: error.code,
+                fallbackFrom: 'otp',
+              })
+            );
+          }
+        }
+      }
+
       // In development mode with mock enabled, return mock data instead
       if (OTP_CONFIG.USE_MOCK_IN_DEV) {
         logger.warn('OTP error, using mock data:', error.message);
@@ -591,7 +794,9 @@ export const planTripWithLocalRouter = async ({
   arriveBy = false,
   routingData,
   enrichWalking = true,
+  includeWalkingOnly = true,
 }) => {
+  const tripParams = { fromLat, fromLon, toLat, toLon, date, time, arriveBy };
   try {
     // Use local RAPTOR router
     const result = await planTripLocal({
@@ -632,13 +837,13 @@ export const planTripWithLocalRouter = async ({
         }
         logger.warn('Walking enrichment failed, using estimates:', walkingError);
         // Still add basic metadata even without walking enrichment
-        return addBasicMetadata(result);
+        return addBasicMetadata(result, tripParams, { includeWalkingOnly });
       }
     }
 
     // Add basic metadata even when not enriching
     return withRoutingDiagnostics(
-      addBasicMetadata(result),
+      addBasicMetadata(result, tripParams, { includeWalkingOnly }),
       buildRoutingDiagnostics({
         source: 'local_router',
         walkingEnrichment: enrichWalking ? 'trip_enrichment' : 'deferred_to_navigation',
@@ -653,9 +858,30 @@ export const planTripWithLocalRouter = async ({
         [ROUTING_ERROR_CODES.NO_ROUTE_FOUND]: TRIP_ERROR_CODES.NO_ROUTES_FOUND,
         [ROUTING_ERROR_CODES.OUTSIDE_SERVICE_AREA]: TRIP_ERROR_CODES.OUTSIDE_SERVICE_AREA,
       };
+      const mappedCode = codeMapping[error.code] || TRIP_ERROR_CODES.NETWORK_ERROR;
+      if (includeWalkingOnly) {
+        const walkingFallback = addBasicMetadata(
+          { from: { name: 'Origin', lat: fromLat, lon: fromLon }, to: { name: 'Destination', lat: toLat, lon: toLon }, itineraries: [] },
+          tripParams
+        );
+        if (walkingFallback.itineraries.length > 0) {
+          return withRoutingDiagnostics(
+            walkingFallback,
+            buildRoutingDiagnostics({
+              source: 'walking_only',
+              fallbackReason: mappedCode,
+              fallbackFrom: 'local_router',
+              localRouterError: {
+                message: error.message,
+                code: error.code || null,
+              },
+            })
+          );
+        }
+      }
 
       throw new TripPlanningError(
-        codeMapping[error.code] || TRIP_ERROR_CODES.NETWORK_ERROR,
+        mappedCode,
         error.message
       );
     }
@@ -888,6 +1114,11 @@ export const planTripAuto = async (params) => {
           toLon: zoneTrip.raptorTo.lon,
         };
       }
+
+      routingParams = {
+        ...routingParams,
+        includeWalkingOnly: false,
+      };
     }
   }
 
@@ -948,6 +1179,7 @@ export const planTripAuto = async (params) => {
   // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
   if (zoneTrip && !zoneTrip.sameZone) {
     result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, originalParams);
+    result = addBasicMetadata(result, originalParams, { includeWalkingOnly: true });
   }
 
   const existingDiagnostics = result.routingDiagnostics || {};
@@ -976,58 +1208,60 @@ export const planTripAuto = async (params) => {
 function spliceOnDemandLegs(tripPlan, zoneTrip, zoneAnalysis, params) {
   if (!tripPlan?.itineraries) return tripPlan;
 
-  const itineraries = tripPlan.itineraries.map((itinerary) => {
-    const legs = [...itinerary.legs];
-    let totalDuration = itinerary.duration;
+  const itineraries = tripPlan.itineraries
+    .filter((itinerary) => !isWalkingOnlyItinerary(itinerary))
+    .map((itinerary) => {
+      const legs = [...itinerary.legs];
+      let totalDuration = itinerary.duration;
 
-    // Prepend ON_DEMAND leg (origin in zone → hub stop)
-    if (zoneTrip.prependLeg) {
-      const { zone, hubStop } = zoneTrip.prependLeg;
-      const firstLeg = legs[0];
-      const startTime = firstLeg ? firstLeg.startTime : Date.now();
-      const duration = estimateOnDemandDuration(
-        params.fromLat, params.fromLon,
-        hubStop.latitude, hubStop.longitude
-      );
-      const odLeg = buildOnDemandLeg({
-        zone,
-        from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
-        to: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
-        estimatedDuration: duration,
-        startTime: startTime - duration * 1000,
-      });
-      legs.unshift(odLeg);
-      totalDuration += duration;
-    }
+      // Prepend ON_DEMAND leg (origin in zone → hub stop)
+      if (zoneTrip.prependLeg) {
+        const { zone, hubStop } = zoneTrip.prependLeg;
+        const firstLeg = legs[0];
+        const startTime = firstLeg ? firstLeg.startTime : Date.now();
+        const duration = estimateOnDemandDuration(
+          params.fromLat, params.fromLon,
+          hubStop.latitude, hubStop.longitude
+        );
+        const odLeg = buildOnDemandLeg({
+          zone,
+          from: { lat: params.fromLat, lon: params.fromLon, name: 'Pickup' },
+          to: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
+          estimatedDuration: duration,
+          startTime: startTime - duration * 1000,
+        });
+        legs.unshift(odLeg);
+        totalDuration += duration;
+      }
 
-    // Append ON_DEMAND leg (hub stop → destination in zone)
-    if (zoneTrip.appendLeg) {
-      const { zone, hubStop } = zoneTrip.appendLeg;
-      const lastLeg = legs[legs.length - 1];
-      const startTime = lastLeg ? lastLeg.endTime : Date.now();
-      const duration = estimateOnDemandDuration(
-        hubStop.latitude, hubStop.longitude,
-        params.toLat, params.toLon
-      );
-      const odLeg = buildOnDemandLeg({
-        zone,
-        from: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
-        to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
-        estimatedDuration: duration,
-        startTime,
-      });
-      legs.push(odLeg);
-      totalDuration += duration;
-    }
+      // Append ON_DEMAND leg (hub stop → destination in zone)
+      if (zoneTrip.appendLeg) {
+        const { zone, hubStop } = zoneTrip.appendLeg;
+        const lastLeg = legs[legs.length - 1];
+        const startTime = lastLeg ? lastLeg.endTime : Date.now();
+        const duration = estimateOnDemandDuration(
+          hubStop.latitude, hubStop.longitude,
+          params.toLat, params.toLon
+        );
+        const odLeg = buildOnDemandLeg({
+          zone,
+          from: { lat: hubStop.latitude, lon: hubStop.longitude, name: hubStop.name },
+          to: { lat: params.toLat, lon: params.toLon, name: 'Drop-off' },
+          estimatedDuration: duration,
+          startTime,
+        });
+        legs.push(odLeg);
+        totalDuration += duration;
+      }
 
-    return {
-      ...itinerary,
-      legs,
-      duration: totalDuration,
-      startTime: legs[0].startTime,
-      endTime: legs[legs.length - 1].endTime,
-    };
-  });
+      return {
+        ...itinerary,
+        legs,
+        duration: totalDuration,
+        startTime: legs[0].startTime,
+        endTime: legs[legs.length - 1].endTime,
+      };
+    });
 
   return { ...tripPlan, itineraries };
 }

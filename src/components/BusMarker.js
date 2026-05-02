@@ -69,10 +69,10 @@ const BusMarkerComponent = ({
           <BusDirectionArrow
             bearing={bearing}
             size={WRAPPER_SIZE}
-            topOffset={6}
-            arrowWidth={10}
-            arrowHeight={20}
-            color={color}
+            topOffset={3}
+            arrowWidth={7}
+            arrowHeight={16}
+            color="#111111"
             dimmed={dimmed}
           />
         )}
@@ -201,6 +201,7 @@ export const areBusMarkerPropsEqual = (prev, next) => {
     prevCoord.latitude === nextCoord.latitude &&
     prevCoord.longitude === nextCoord.longitude &&
     prev.vehicle.routeId === next.vehicle.routeId &&
+    prev.vehicle.shapeId === next.vehicle.shapeId &&
     prev.vehicle.headsign === next.vehicle.headsign &&
     prev.vehicle.bearing === next.vehicle.bearing &&
     prev.color === next.color &&

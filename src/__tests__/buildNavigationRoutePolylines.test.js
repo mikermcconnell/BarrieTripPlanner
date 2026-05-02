@@ -1,5 +1,11 @@
 const { buildNavigationRoutePolylines } = require('../features/navigation/model/buildNavigationRoutePolylines');
 const { encodePolyline } = require('../utils/polylineUtils');
+const {
+  WALKING_ROUTE_DOT_OUTLINE_COLOR,
+  WALKING_ROUTE_DOT_OUTLINE_WIDTH,
+  WALKING_ROUTE_DOT_PATTERN,
+  WALKING_ROUTE_DOT_STROKE_WIDTH,
+} = require('../config/mapLineStyles');
 
 describe('buildNavigationRoutePolylines', () => {
   test('splits the current walking leg at the user location', () => {
@@ -123,6 +129,41 @@ describe('buildNavigationRoutePolylines', () => {
       }),
     ]);
   });
+
+  test('uses polished dotted styling for non-current walking legs', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          route: { id: '1', color: '#123456' },
+          from: { lat: 44.0, lon: -79.0 },
+          to: { lat: 44.01, lon: -79.01 },
+        },
+        {
+          mode: 'WALK',
+          from: { lat: 44.01, lon: -79.01 },
+          to: { lat: 44.02, lon: -79.02 },
+        },
+      ],
+    };
+
+    const lines = buildNavigationRoutePolylines({
+      itinerary,
+      currentLegIndex: 0,
+    });
+
+    expect(lines[1]).toEqual(
+      expect.objectContaining({
+        id: 'leg-1',
+        color: '#A5ADBA',
+        width: WALKING_ROUTE_DOT_STROKE_WIDTH,
+        dashPattern: WALKING_ROUTE_DOT_PATTERN,
+        outlineWidth: WALKING_ROUTE_DOT_OUTLINE_WIDTH,
+        outlineColor: WALKING_ROUTE_DOT_OUTLINE_COLOR,
+      })
+    );
+  });
+
 
   test('applies on-demand styling without walking-specific outline treatment', () => {
     const itinerary = {

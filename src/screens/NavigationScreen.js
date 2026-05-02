@@ -20,11 +20,16 @@ import {
   Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
+import {
+  BUS_APPROACH_LINE_DASH_PATTERN,
+  BUS_APPROACH_LINE_OPACITY,
+} from '../config/mapLineStyles';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -32,7 +37,6 @@ import NavigationHeader from '../components/navigation/NavigationHeader';
 import WalkingInstructionCard from '../components/navigation/WalkingInstructionCard';
 import BusProximityCard from '../components/navigation/BusProximityCard';
 import BoardingInstructionCard from '../components/navigation/BoardingInstructionCard';
-import StepOverviewSheet from '../components/navigation/StepOverviewSheet';
 import ExitConfirmationModal from '../components/navigation/ExitConfirmationModal';
 import TransitStopGuideCard from '../components/navigation/TransitStopGuideCard';
 import PulsingSpinner from '../components/PulsingSpinner';
@@ -46,6 +50,9 @@ import { useNavigationLocation } from '../hooks/useNavigationLocation';
 import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
+import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
 
 import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import * as Haptics from 'expo-haptics';
@@ -107,13 +114,7 @@ const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
     case 'transit-next-stop':
     case 'transit-intermediate-stop':
       return (
-        <Svg width={18} height={18} viewBox="0 0 24 24">
-          <Rect x={5} y={7} width={14} height={8} rx={2} fill={color} />
-          <Rect x={7} y={9} width={4} height={3} rx={0.5} fill={COLORS.grey900} />
-          <Rect x={13} y={9} width={4} height={3} rx={0.5} fill={COLORS.grey900} />
-          <Circle cx={8.5} cy={17.5} r={1.4} fill={color} />
-          <Circle cx={15.5} cy={17.5} r={1.4} fill={color} />
-        </Svg>
+        <Icon name="BusStop" size={19} color={color} />
       );
     case 'transit-alight-stop':
       return (
@@ -144,6 +145,8 @@ const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
 
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
 
@@ -274,6 +277,7 @@ const NavigationScreen = ({ route }) => {
     isWalkingLeg,
     nextLegPreviewText,
     nextTransitLeg,
+    onBoardPeekAheadText,
     totalRemainingDistance,
     transitPeekAheadText,
   } = useNavigationTripViewModel({
@@ -286,12 +290,34 @@ const NavigationScreen = ({ route }) => {
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
 
+  const notifyAutoBoardReady = useCallback(() => {
+    triggerHapticOnce('auto-board', Haptics.NotificationFeedbackType.Success);
+  }, []);
+
+  useAutoBoardBus({
+    currentTransitLeg,
+    transitStatus,
+    busProximity,
+    onBoardBus: boardBus,
+    onAutoBoardReady: notifyAutoBoardReady,
+  });
+
   // Also track bus for the next transit leg while walking
   const nextTransitBusProximity = useBusProximity(
     isWalkingLeg ? nextTransitLeg : null,
     isWalkingLeg && !!nextTransitLeg,
     userLocation,
     false
+  );
+
+  const walkingPaceStatus = useMemo(
+    () => buildWalkPaceStatus({
+      currentLeg,
+      distanceToDestination,
+      nextTransitLeg,
+      nextTransitProximity: nextTransitBusProximity,
+    }),
+    [currentLeg, distanceToDestination, nextTransitLeg, nextTransitBusProximity]
   );
 
   // Start location tracking and navigation on mount
@@ -799,6 +825,12 @@ const NavigationScreen = ({ route }) => {
     return [MAP_CONFIG.INITIAL_REGION.longitude, MAP_CONFIG.INITIAL_REGION.latitude];
   }, [itinerary]);
 
+  const handleMapRegionWillChange = useCallback((feature) => {
+    if (feature?.properties?.isUserInteraction) {
+      setIsFollowMode(false);
+    }
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* Map */}
@@ -810,8 +842,10 @@ const NavigationScreen = ({ route }) => {
           ref={mapRef}
           style={styles.map}
           mapStyle={OSM_MAP_STYLE}
+          scrollEnabled
           rotateEnabled
           pitchEnabled={false}
+          onRegionWillChange={handleMapRegionWillChange}
           attributionPosition={{ bottom: 8, left: 8 }}
           logoEnabled={false}
         >
@@ -846,8 +880,8 @@ const NavigationScreen = ({ route }) => {
               coordinates={currentStepBusPreviewLine.coordinates}
               color={currentStepBusPreviewLine.color}
               strokeWidth={3}
-              lineDashPattern={[8, 6]}
-              opacity={0.7}
+              lineDashPattern={BUS_APPROACH_LINE_DASH_PATTERN}
+              opacity={BUS_APPROACH_LINE_OPACITY}
               outlineColor={currentStepBusPreviewLine.color}
             />
           )}
@@ -937,26 +971,28 @@ const NavigationScreen = ({ route }) => {
               anchor={{ x: 0.5, y: 1 }}
             >
               <View collapsable={false} style={styles.transitStopMarkerContainer}>
-                <View
-                  style={[
-                    styles.mapStopLabelBubble,
-                    marker.type === 'transit-next-stop' && styles.mapStopLabelBubbleNext,
-                    marker.type === 'transit-alight-stop' && styles.mapStopLabelBubbleExit,
-                  ]}
-                >
-                  <Text
+                {marker.showLabel !== false && (
+                  <View
                     style={[
-                      styles.mapStopLabelCaption,
-                      marker.type === 'transit-next-stop' && styles.mapStopLabelCaptionNext,
-                      marker.type === 'transit-alight-stop' && styles.mapStopLabelCaptionExit,
+                      styles.mapStopLabelBubble,
+                      marker.type === 'transit-next-stop' && styles.mapStopLabelBubbleNext,
+                      marker.type === 'transit-alight-stop' && styles.mapStopLabelBubbleExit,
                     ]}
                   >
-                    {marker.caption}
-                  </Text>
-                  <Text style={styles.mapStopLabelName} numberOfLines={1}>
-                    {marker.title}
-                  </Text>
-                </View>
+                    <Text
+                      style={[
+                        styles.mapStopLabelCaption,
+                        marker.type === 'transit-next-stop' && styles.mapStopLabelCaptionNext,
+                        marker.type === 'transit-alight-stop' && styles.mapStopLabelCaptionExit,
+                      ]}
+                    >
+                      {marker.caption}
+                    </Text>
+                    <Text style={styles.mapStopLabelName} numberOfLines={1}>
+                      {marker.title}
+                    </Text>
+                  </View>
+                )}
                 <View
                   style={[
                     styles.marker,
@@ -1038,10 +1074,14 @@ const NavigationScreen = ({ route }) => {
         scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
         delaySeconds={currentLeg?.delaySeconds || 0}
         isRealtime={currentLeg?.isRealtime || false}
+        walkingPaceLevel={walkingPaceStatus?.level || 'on_pace'}
       />
 
       {/* Map control buttons */}
-      <View style={styles.mapControls}>
+      <View style={[
+        styles.mapControls,
+        { bottom: addSafeBottomPadding(176, bottomInset) },
+      ]}>
         {/* Compass / heading-up toggle — only during walking legs */}
         {isWalkingLeg && (
           <TouchableOpacity
@@ -1075,8 +1115,11 @@ const NavigationScreen = ({ route }) => {
       </View>
 
       {/* Bottom Section */}
-      <View style={styles.bottomSection}>
-        {isTransitLeg && !isOnDemandLeg && (
+      <View style={[
+        styles.bottomSection,
+        { paddingBottom: addSafeBottomPadding(10, bottomInset) },
+      ]} pointerEvents="box-none">
+        {isTransitLeg && !isOnDemandLeg && transitStatus !== 'waiting' && (
           <TransitStopGuideCard
             leg={currentLeg}
             liveStopsRemaining={busProximity.stopsUntilAlighting}
@@ -1157,12 +1200,16 @@ const NavigationScreen = ({ route }) => {
             onNextStep={advanceStep}
             destinationName={currentLeg?.to?.name}
             currentLeg={currentLeg}
+            distanceToDestination={distanceToDestination}
             isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
             onNextLeg={advanceLeg}
             currentStepIndex={currentStepIndex}
             totalSteps={(currentLeg?.steps || []).length}
             nextLegPreview={nextLegPreviewText}
             nextTransitLeg={nextTransitLeg}
+            nextTransitProximity={nextTransitBusProximity}
+            onFindNextTrip={handleRecalculate}
+            paceStatus={walkingPaceStatus}
           />
         )}
 
@@ -1171,6 +1218,7 @@ const NavigationScreen = ({ route }) => {
           <>
             {transitStatus === 'waiting' && !busProximity.hasArrived ? (
               <BoardingInstructionCard
+                leg={currentLeg}
                 routeShortName={currentLeg?.route?.shortName}
                 routeColor={currentLeg?.route?.color}
                 headsign={currentLeg?.headsign}
@@ -1201,7 +1249,7 @@ const NavigationScreen = ({ route }) => {
                 scheduledDeparture={currentLeg?.startTime}
                 isRealtime={currentLeg?.isRealtime || false}
                 delaySeconds={currentLeg?.delaySeconds || 0}
-                nextLegPreview={transitPeekAheadText}
+                nextLegPreview={onBoardPeekAheadText}
               />
             )}
           </>
@@ -1251,13 +1299,6 @@ const NavigationScreen = ({ route }) => {
           </View>
         )}
 
-        {/* Step Overview Sheet */}
-        <StepOverviewSheet
-          legs={itinerary?.legs || []}
-          currentLegIndex={currentLegIndex}
-          onSelectLeg={() => {}}
-          onCompleteLeg={completeLeg}
-        />
       </View>
 
       {/* Location Error Overlay */}

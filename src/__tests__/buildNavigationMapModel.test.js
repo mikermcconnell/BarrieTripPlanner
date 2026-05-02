@@ -89,7 +89,7 @@ describe('buildNavigationMapModel', () => {
     ]);
   });
 
-  test('builds bus stop and transit stop markers for an active transit leg', () => {
+  test('builds all onboard transit stop markers for an active transit leg', () => {
     const itinerary = {
       legs: [
         {
@@ -97,8 +97,9 @@ describe('buildNavigationMapModel', () => {
           from: { name: 'Bayfield Mall', stopCode: '100', lat: 44.4, lon: -79.7, stopId: 'STOP-100' },
           intermediateStops: [
             { name: 'Cundles', stopCode: '101', lat: 44.405, lon: -79.695, stopId: 'STOP-101' },
+            { name: 'Wellington', stopCode: '102', lat: 44.407, lon: -79.693, stopId: 'STOP-102' },
           ],
-          to: { name: 'Downtown Terminal', stopCode: '102', lat: 44.41, lon: -79.69, stopId: 'STOP-102' },
+          to: { name: 'Downtown Terminal', stopCode: '103', lat: 44.41, lon: -79.69, stopId: 'STOP-103' },
         },
       ],
     };
@@ -109,26 +110,33 @@ describe('buildNavigationMapModel', () => {
       currentLegIndex: 0,
       isWalkingLeg: false,
       currentTransitLeg: itinerary.legs[0],
-      transitStatus: 'waiting',
+      transitStatus: 'on_board',
       isUserOnBoard: true,
-      liveStopsRemaining: 1,
+      liveStopsRemaining: 2,
     });
 
     expect(model.mapMarkers).toEqual([
       expect.objectContaining({ type: 'origin', title: 'Start' }),
       expect.objectContaining({ type: 'destination', title: 'End' }),
     ]);
-    expect(model.busStopMarker).toEqual(
-      expect.objectContaining({
-        type: 'bus-stop',
-        title: 'Bayfield Mall',
-      })
-    );
+    expect(model.busStopMarker).toBeNull();
     expect(model.transitStopMarkers).toEqual([
       expect.objectContaining({
+        type: 'transit-intermediate-stop',
+        title: 'Cundles (#101)',
+        showLabel: false,
+      }),
+      expect.objectContaining({
+        type: 'transit-next-stop',
+        title: 'Wellington (#102)',
+        caption: 'Next stop',
+        showLabel: true,
+      }),
+      expect.objectContaining({
         type: 'transit-alight-stop',
-        title: 'Downtown Terminal (#102)',
-        caption: 'Get off next',
+        title: 'Downtown Terminal (#103)',
+        caption: 'Your stop',
+        showLabel: true,
       }),
     ]);
   });

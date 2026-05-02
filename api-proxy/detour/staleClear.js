@@ -8,6 +8,12 @@ const DEFAULT_HEADWAY_MS = Number.parseFloat(
   process.env.DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS || String(60 * 60 * 1000)
 );
 const MAX_STALE_MS = Number.parseFloat(process.env.DETOUR_STALE_AUTO_CLEAR_MAX_MS || String(3 * 60 * 60 * 1000));
+const ZERO_VEHICLE_STALE_MS = Number.parseFloat(
+  process.env.DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MS || String(12 * 60 * 1000)
+);
+const ZERO_VEHICLE_MIN_AGE_MS = Number.parseFloat(
+  process.env.DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MIN_AGE_MS || String(10 * 60 * 1000)
+);
 const STALE_AUTO_CLEAR_ENABLED = process.env.DETOUR_STALE_AUTO_CLEAR_ENABLED
   ? process.env.DETOUR_STALE_AUTO_CLEAR_ENABLED === 'true'
   : true;
@@ -36,6 +42,27 @@ function getLatestEvidenceMs(detour, previousSnapshot) {
     toMillis(previousSnapshot?.lastEvidenceAt) ??
     toMillis(detour?.lastSeenAt) ??
     toMillis(previousSnapshot?.lastSeenAtMs) ??
+    null
+  );
+}
+
+function getCurrentVehicleCount(detour) {
+  if (!detour || typeof detour !== 'object') return null;
+  if (detour.vehiclesOffRoute instanceof Set) return detour.vehiclesOffRoute.size;
+  if (Array.isArray(detour.vehiclesOffRoute)) return detour.vehiclesOffRoute.length;
+  if (Object.prototype.hasOwnProperty.call(detour, 'vehicleCount')) {
+    const parsed = Number.parseInt(String(detour.vehicleCount), 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  }
+  return null;
+}
+
+function getDetectedAtMs(detour, previousSnapshot) {
+  return (
+    toMillis(detour?.detectedAt) ??
+    toMillis(detour?.detectedAtMs) ??
+    toMillis(previousSnapshot?.detectedAtMs) ??
+    toMillis(previousSnapshot?.detectedAt) ??
     null
   );
 }
@@ -107,6 +134,44 @@ function shouldAutoClearStaleDetour({
   }
 
   const staleAgeMs = now - evidenceMs;
+  const currentVehicleCount = getCurrentVehicleCount(detour);
+  if (currentVehicleCount === 0) {
+    const detectedAtMs = getDetectedAtMs(detour, previousSnapshot);
+    const detourAgeMs = detectedAtMs == null ? null : now - detectedAtMs;
+
+    if (detourAgeMs != null && detourAgeMs < ZERO_VEHICLE_MIN_AGE_MS) {
+      return {
+        shouldClear: false,
+        reason: 'zero-vehicle-grace-period',
+        staleAgeMs,
+        thresholdMs: ZERO_VEHICLE_STALE_MS,
+        detourAgeMs,
+        minAgeMs: ZERO_VEHICLE_MIN_AGE_MS,
+      };
+    }
+
+    if (staleAgeMs >= ZERO_VEHICLE_STALE_MS) {
+      return {
+        shouldClear: true,
+        reason: 'zero-vehicle-stale-with-live-route-family-vehicles',
+        staleAgeMs,
+        thresholdMs: ZERO_VEHICLE_STALE_MS,
+        lastEvidenceAt: evidenceMs,
+        detourAgeMs,
+        minAgeMs: ZERO_VEHICLE_MIN_AGE_MS,
+      };
+    }
+
+    return {
+      shouldClear: false,
+      reason: 'zero-vehicle-fresh-enough',
+      staleAgeMs,
+      thresholdMs: ZERO_VEHICLE_STALE_MS,
+      detourAgeMs,
+      minAgeMs: ZERO_VEHICLE_MIN_AGE_MS,
+    };
+  }
+
   if (staleAgeMs < threshold.thresholdMs) {
     return {
       shouldClear: false,
@@ -130,12 +195,15 @@ module.exports = {
   computeStaleThresholdMs,
   routeFamilyHasRecentVehicle,
   getLatestEvidenceMs,
+  getCurrentVehicleCount,
   constants: {
     MIN_STALE_MS,
     BUFFER_MS,
     HEADWAY_MULTIPLIER,
     DEFAULT_HEADWAY_MS,
     MAX_STALE_MS,
+    ZERO_VEHICLE_STALE_MS,
+    ZERO_VEHICLE_MIN_AGE_MS,
     STALE_AUTO_CLEAR_ENABLED,
   },
 };

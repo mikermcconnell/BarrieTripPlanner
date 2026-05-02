@@ -32,6 +32,7 @@ const getErrorMessage = (error) => {
 
 const buildFeedDiagnostic = ({
   isLoading = false,
+  isRefreshing = false,
   isOffline = false,
   isAvailable = false,
   usingCachedData = false,
@@ -87,6 +88,7 @@ const buildFeedDiagnostic = ({
   return {
     status,
     reason,
+    isRefreshing,
     isAvailable,
     isOffline,
     usingCachedData,

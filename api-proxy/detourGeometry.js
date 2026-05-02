@@ -36,6 +36,7 @@ const HIGH_CONFIDENCE_POINTS = 10;
 const HIGH_CONFIDENCE_VEHICLES = 2;
 const MEDIUM_CONFIDENCE_DURATION_MS = 2 * 60 * 1000;
 const MEDIUM_CONFIDENCE_POINTS = 5;
+const MEDIUM_CONFIDENCE_VEHICLES = 2;
 const ROUTE_FAMILY_SEGMENT_MATCH_METERS = Number.parseFloat(
   process.env.DETOUR_ROUTE_FAMILY_SEGMENT_MATCH_METERS || '250'
 );
@@ -418,12 +419,18 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
     .sort((a, b) => a.progressMeters - b.progressMeters || a.timestampMs - b.timestampMs);
   const segmentDetectedAtMs = Math.min(...cluster.map((point) => point.timestampMs));
   const lastEvidenceAt = Math.max(...cluster.map((point) => point.timestampMs));
-  const rawEntryProjection =
-    selectEntryBoundaryCandidate(boundaryCandidates.entryCandidates, segmentDetectedAtMs) ||
-    sortedByProgress[0];
-  const rawExitProjection =
-    selectExitBoundaryCandidate(boundaryCandidates.exitCandidates, lastEvidenceAt) ||
-    sortedByProgress[sortedByProgress.length - 1];
+  const selectedEntryBoundaryCandidate = selectEntryBoundaryCandidate(
+    boundaryCandidates.entryCandidates,
+    segmentDetectedAtMs
+  );
+  const selectedExitBoundaryCandidate = selectExitBoundaryCandidate(
+    boundaryCandidates.exitCandidates,
+    lastEvidenceAt
+  );
+  const rawEntryProjection = selectedEntryBoundaryCandidate || sortedByProgress[0];
+  const rawExitProjection = selectedExitBoundaryCandidate || sortedByProgress[sortedByProgress.length - 1];
+  const hasEntryBoundaryCandidate = Boolean(selectedEntryBoundaryCandidate);
+  const hasExitBoundaryCandidate = Boolean(selectedExitBoundaryCandidate);
   const semanticReversed = (rawEntryProjection.progressMeters || 0) > (rawExitProjection.progressMeters || 0);
   const entryProjection = semanticReversed ? rawExitProjection : rawEntryProjection;
   const exitProjection = semanticReversed ? rawEntryProjection : rawExitProjection;
@@ -462,10 +469,15 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
     }
     : null;
   const anchoredInferredDetourPolyline = inferredDetourPolyline
-    ? anchorPolylineToEndpoints(inferredDetourPolyline, entryPoint, exitPoint)
+    ? anchorPolylineToEndpoints(
+      inferredDetourPolyline,
+      hasEntryBoundaryCandidate ? entryPoint : null,
+      hasExitBoundaryCandidate ? exitPoint : null
+    )
     : null;
   const confidence = scoreConfidence(cluster, Math.min(segmentDetectedAtMs, detectedAtMs), now);
   const hasRenderableSkippedSegment =
+    hasExitBoundaryCandidate &&
     skippedSegmentPolyline.length >= 2 && spanMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS;
 
   const hasRenderableGeometry =
@@ -497,6 +509,8 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
       exitCandidateCount: Array.isArray(boundaryCandidates.exitCandidates)
         ? boundaryCandidates.exitCandidates.length
         : 0,
+      hasEntryBoundaryCandidate,
+      hasExitBoundaryCandidate,
       semanticReversed,
       clusterVehicleIds: [...new Set(cluster.map((point) => point.vehicleId).filter(Boolean))],
       usedRepresentativePath: Boolean(representativeDetourPath),
@@ -506,6 +520,26 @@ function buildSegmentGeometry(cluster, polyline, now, detectedAtMs, boundaryCand
 
 function shouldCollapseWeakClustersIntoSingleSegment(segments, mergedSegment) {
   if (!Array.isArray(segments) || segments.length < 2 || !mergedSegment) return false;
+
+  const anchorSignature = (segment) => {
+    const entry = segment?.entryPoint;
+    const exit = segment?.exitPoint;
+    if (!entry || !exit) return '';
+    return [
+      segment?.shapeId || '',
+      Number(entry.latitude).toFixed(6),
+      Number(entry.longitude).toFixed(6),
+      Number(exit.latitude).toFixed(6),
+      Number(exit.longitude).toFixed(6),
+    ].join(':');
+  };
+  const firstAnchorSignature = anchorSignature(segments[0]);
+  const allSegmentsShareAnchors =
+    firstAnchorSignature &&
+    segments.every((segment) => anchorSignature(segment) === firstAnchorSignature);
+  if (allSegmentsShareAnchors) {
+    return true;
+  }
 
   const allWeak = segments.every((segment) => {
     const hasSkipped = Array.isArray(segment?.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2;
@@ -594,7 +628,11 @@ function scoreConfidence(evidencePoints, detectedAtMs, now) {
       uniqueVehicles >= HIGH_CONFIDENCE_VEHICLES) {
     return 'high';
   }
-  if (durationMs >= MEDIUM_CONFIDENCE_DURATION_MS && count >= MEDIUM_CONFIDENCE_POINTS) {
+  if (
+    durationMs >= MEDIUM_CONFIDENCE_DURATION_MS &&
+    count >= MEDIUM_CONFIDENCE_POINTS &&
+    uniqueVehicles >= MEDIUM_CONFIDENCE_VEHICLES
+  ) {
     return 'medium';
   }
   return 'low';

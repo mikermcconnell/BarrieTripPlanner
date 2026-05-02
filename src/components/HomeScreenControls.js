@@ -7,6 +7,17 @@ import Icon from './Icon';
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
+const shouldShowRoutesButtonHighlight = ({ selectedCount, shouldHighlightRoutesButton }) => (
+    shouldHighlightRoutesButton && selectedCount === 0
+);
+
+export const getRouteSummaryChipStyles = ({ selectedCount, shouldHighlightRoutesButton }) => [
+    styles.filterChip,
+    styles.routeSummaryChip,
+    selectedCount > 0 && styles.routeSummaryChipActive,
+    shouldShowRoutesButtonHighlight({ selectedCount, shouldHighlightRoutesButton }) && styles.routeSummaryChipHint,
+].filter(Boolean);
+
 const PulsingDetourDot = () => {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
@@ -53,7 +64,11 @@ const HomeScreenControls = ({
     onToggleZones,
     zoneCount = 0,
     onOpenFilterSheet,
+    highlightRoutesButtonOnOpen = true,
 }) => {
+    const routeHintAnim = React.useRef(new Animated.Value(0)).current;
+    const [showRouteHint, setShowRouteHint] = React.useState(highlightRoutesButtonOnOpen);
+
     const routeAlertsMap = useMemo(() => {
         const map = new Map();
         serviceAlerts.forEach((alert) => {
@@ -77,6 +92,70 @@ const HomeScreenControls = ({
         [routes, isRouteDetouring]
     );
     const selectedCount = selectedRoutes.size;
+    const shouldHighlightRoutesButton = showRouteHint && highlightRoutesButtonOnOpen;
+    const routeSummaryChipStyles = getRouteSummaryChipStyles({
+        selectedCount,
+        shouldHighlightRoutesButton,
+    });
+    const routeSummaryAnimatedStyle = useMemo(() => {
+        if (!shouldShowRoutesButtonHighlight({ selectedCount, shouldHighlightRoutesButton })) {
+            return null;
+        }
+
+        return {
+            backgroundColor: routeHintAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [COLORS.primarySubtle, 'rgba(76, 175, 80, 0.18)'],
+            }),
+            borderColor: routeHintAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(12, 140, 229, 0.28)', 'rgba(76, 175, 80, 0.58)'],
+            }),
+            transform: [{
+                scale: routeHintAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.025],
+                }),
+            }],
+        };
+    }, [routeHintAnim, selectedCount, shouldHighlightRoutesButton]);
+
+    React.useEffect(() => {
+        if (!highlightRoutesButtonOnOpen || selectedCount > 0) {
+            setShowRouteHint(false);
+            return undefined;
+        }
+
+        setShowRouteHint(true);
+        routeHintAnim.setValue(0);
+
+        const animation = Animated.sequence([
+            Animated.delay(500),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(routeHintAnim, {
+                        toValue: 1,
+                        duration: 850,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(routeHintAnim, {
+                        toValue: 0,
+                        duration: 850,
+                        useNativeDriver: false,
+                    }),
+                ]),
+                { iterations: 3 }
+            ),
+        ]);
+
+        animation.start(({ finished } = {}) => {
+            if (finished) {
+                setShowRouteHint(false);
+            }
+        });
+
+        return () => animation.stop();
+    }, [highlightRoutesButtonOnOpen, routeHintAnim, selectedCount]);
 
     return (
         <View style={styles.filterContainer}>
@@ -123,11 +202,7 @@ const HomeScreenControls = ({
 
                 {/* Compact route filter summary. Full route list lives in the sheet. */}
                 <TouchableOpacity
-                    style={[
-                        styles.filterChip,
-                        styles.routeSummaryChip,
-                        selectedCount > 0 && styles.routeSummaryChipActive,
-                    ]}
+                    style={[...routeSummaryChipStyles, routeSummaryAnimatedStyle]}
                     onPress={onOpenFilterSheet}
                     activeOpacity={0.7}
                     accessibilityRole="button"
@@ -257,6 +332,10 @@ const styles = StyleSheet.create({
         minWidth: 92,
         borderColor: 'rgba(12, 140, 229, 0.28)',
         backgroundColor: COLORS.primarySubtle,
+    },
+    routeSummaryChipHint: {
+        borderColor: 'rgba(76, 175, 80, 0.58)',
+        ...SHADOWS.small,
     },
     routeSummaryChipActive: {
         backgroundColor: COLORS.primary,

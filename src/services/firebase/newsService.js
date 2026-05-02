@@ -63,6 +63,7 @@ export function subscribeToTransitNewsImpacts(onUpdate, onError) {
             stopName: data.stopName ?? '',
             latitude: data.latitude ?? null,
             longitude: data.longitude ?? null,
+            mappable: data.mappable ?? data.stopId != null,
             affectedRoutes: data.affectedRoutes ?? [],
             sourceNewsId: data.sourceNewsId ?? null,
             sourceTitle: data.sourceTitle ?? '',

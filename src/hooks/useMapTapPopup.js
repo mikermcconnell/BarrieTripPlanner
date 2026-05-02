@@ -12,7 +12,6 @@ export const useMapTapPopup = ({
   enterPlanningMode,
   setTripFrom,
   setTripTo,
-  useCurrentLocationForTrip,
   onMapTap,
 }) => {
   const [mapTapLocation, setMapTapLocation] = useState(null);
@@ -58,13 +57,11 @@ export const useMapTapPopup = ({
       destination: { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude },
       label: mapTapAddress || 'Selected location',
       enterPlanningMode,
-      setTripFrom,
       setTripTo,
-      useCurrentLocationForTrip,
     });
     setMapTapLocation(null);
     setMapTapAddress('');
-  }, [mapTapLocation, mapTapAddress, enterPlanningMode, setTripFrom, setTripTo, useCurrentLocationForTrip]);
+  }, [mapTapLocation, mapTapAddress, enterPlanningMode, setTripTo]);
 
   // Show a location popup at a specific coordinate with a label
   // (used by navigation param effects to display a pre-geocoded address)

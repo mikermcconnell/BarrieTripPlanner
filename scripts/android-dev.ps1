@@ -6,6 +6,7 @@ param(
     [string]$ManifestHost = "127.0.0.1",
     [switch]$NoRecover,
     [switch]$NoLaunch,
+    [switch]$ClearMetroCache,
     [switch]$Direct,
     [switch]$Proxy
 )
@@ -228,9 +229,13 @@ if (Test-Path $detourWorkerScript) {
 
 if (-not $useProxy) {
     Write-Status "Starting Metro on port $Port for Expo dev client"
+    $metroArgs = @($expoCliArg, "start", "--dev-client", "--port", $Port, "--host", "localhost")
+    if ($ClearMetroCache) {
+        $metroArgs += "--clear"
+    }
     $metroProcess = Start-Process `
         -FilePath "node.exe" `
-        -ArgumentList @($expoCliArg, "start", "--dev-client", "--port", $Port, "--host", "localhost", "--clear") `
+        -ArgumentList $metroArgs `
         -WorkingDirectory $projectRoot `
         -RedirectStandardOutput $metroOutLog `
         -RedirectStandardError $metroErrLog `
@@ -239,9 +244,13 @@ if (-not $useProxy) {
 } else {
     $metroListenPort = $MetroPort
     Write-Status "Starting Metro on port $MetroPort (legacy proxy mode)"
+    $metroArgs = @($expoCliArg, "start", "--dev-client", "--port", $MetroPort, "--host", "localhost")
+    if ($ClearMetroCache) {
+        $metroArgs += "--clear"
+    }
     $metroProcess = Start-Process `
         -FilePath "node.exe" `
-        -ArgumentList @($expoCliArg, "start", "--dev-client", "--port", $MetroPort, "--host", "localhost", "--clear") `
+        -ArgumentList $metroArgs `
         -WorkingDirectory $projectRoot `
         -RedirectStandardOutput $metroOutLog `
         -RedirectStandardError $metroErrLog `

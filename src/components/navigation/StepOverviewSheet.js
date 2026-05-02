@@ -30,6 +30,10 @@ const formatWalkTitle = (leg) => {
   return `Walk to ${formatStopName(leg?.to) || 'destination'}`;
 };
 
+const getWalkIconName = (leg) => (
+  leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code ? 'BusStop' : 'Walk'
+);
+
 const getCompleteButtonLabel = (leg) => {
   if (leg?.mode === 'WALK') {
     return leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code ? 'At stop' : 'Arrived';
@@ -128,7 +132,7 @@ const StepOverviewSheet = ({
                 <View style={styles.legContent}>
                   <View style={styles.legHeader}>
                     {isWalk ? (
-                      <Icon name="Walk" size={18} color={COLORS.white} />
+                      <Icon name={getWalkIconName(leg)} size={19} color={COLORS.white} />
                     ) : leg.isOnDemand ? (
                       <Icon name="Phone" size={18} color={COLORS.white} />
                     ) : (

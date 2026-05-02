@@ -182,6 +182,7 @@ describe('mapActiveDetourDoc', () => {
     const activeDetours = {
       '8A': mapActiveDetourDoc('8A', {
         state: 'active',
+        confidence: 'high',
         skippedSegmentPolyline: [
           { lat: 44.38, lon: -79.69 },
           { latitude: 44.39, longitude: -79.68 },

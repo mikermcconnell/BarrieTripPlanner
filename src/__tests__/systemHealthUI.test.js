@@ -41,13 +41,7 @@ describe('systemHealthUI', () => {
       detail: 'Checking for updates in the background.',
     });
     expect(getSystemHealthChipState(diagnostics).label).toBe('UPDATING');
-    expect(getSystemHealthBannerState(diagnostics)).toEqual({
-      tone: 'neutral',
-      title: 'Opening with saved transit info',
-      detail: 'Checking for updates in the background.',
-      actionLabel: null,
-      actionKey: null,
-    });
+    expect(getSystemHealthBannerState(diagnostics)).toBeNull();
   });
 
   test('shows saved-data fallback guidance after refresh failure', () => {

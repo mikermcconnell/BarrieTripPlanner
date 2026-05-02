@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const RouteFilterSheet = ({
     sheetRef,
@@ -12,6 +14,8 @@ const RouteFilterSheet = ({
     getRouteColor,
     isRouteDetouring,
 }) => {
+    const insets = useSafeAreaInsets();
+    const bottomInset = useSafeBottomInset(insets.bottom);
     const snapPoints = useMemo(() => ['45%'], []);
 
     const renderBackdrop = useCallback(
@@ -38,7 +42,12 @@ const RouteFilterSheet = ({
             backgroundStyle={styles.sheetBackground}
             handleIndicatorStyle={styles.handleIndicator}
         >
-            <BottomSheetScrollView contentContainerStyle={styles.content}>
+            <BottomSheetScrollView
+                contentContainerStyle={[
+                    styles.content,
+                    { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+                ]}
+            >
                 <Text style={styles.eyebrow}>Map layers</Text>
                 <Text style={styles.title}>Choose routes to show</Text>
                 <Text style={styles.subtitle}>Keep the map calm by focusing on the routes you care about.</Text>

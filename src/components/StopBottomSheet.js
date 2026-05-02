@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Alert } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
 import Svg, { Path } from 'react-native-svg';
 import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 // SVG Icons
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
@@ -52,6 +54,8 @@ const DirectionsToIcon = ({ size = 18, color = COLORS.error }) => (
 );
 
 const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
@@ -170,7 +174,12 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
         </TouchableOpacity>
       </View>
 
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <View style={styles.loadingSpinner}>

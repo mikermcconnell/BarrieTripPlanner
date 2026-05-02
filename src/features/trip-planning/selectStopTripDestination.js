@@ -6,9 +6,7 @@ export const selectStopTripDestination = ({
   tripFromLocation = null,
   setSelectedStop,
   enterPlanningMode,
-  setTripFrom,
   setTripTo,
-  useCurrentLocationForTrip,
 }) => {
   if (!stopInfo) return;
 
@@ -27,9 +25,7 @@ export const selectStopTripDestination = ({
     label,
     beforeEnter: () => setSelectedStop?.(null),
     enterPlanningMode,
-    setTripFrom,
     setTripTo,
-    useCurrentLocationForTrip,
   });
 };
 

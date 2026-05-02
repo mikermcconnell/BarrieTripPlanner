@@ -17,6 +17,7 @@ import { formatDuration, formatMinutes, formatTimeFromTimestamp, formatDistance 
 import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 import Icon from './Icon';
+import WalkingPaceIcon from './navigation/WalkingPaceIcon';
 
 const getTripLegKey = (leg, index) => {
   const routeKey = leg.route?.id || leg.route?.shortName || 'route';
@@ -27,6 +28,161 @@ const getTripLegKey = (leg, index) => {
 };
 
 const getLabelKey = (label, index) => `${label || 'label'}-${index}`;
+
+const isTransitRideLeg = (leg) => (
+  leg?.isOnDemand || leg?.mode === 'BUS' || leg?.mode === 'TRANSIT'
+);
+
+export const getTransferWaitSummaries = (legs = []) => {
+  const rideLegs = legs
+    .map((leg, index) => ({ leg, index }))
+    .filter(({ leg }) => isTransitRideLeg(leg));
+
+  return rideLegs.slice(1).map(({ leg }, index) => {
+    const previousLeg = rideLegs[index]?.leg;
+    const waitSeconds = Number.isFinite(previousLeg?.endTime) && Number.isFinite(leg?.startTime)
+      ? Math.max(0, Math.round((leg.startTime - previousLeg.endTime) / 1000))
+      : null;
+    const nextRoute = leg?.route?.shortName || leg?.zoneName || null;
+    const locationName = leg?.from?.name || previousLeg?.to?.name || null;
+
+    return {
+      waitSeconds,
+      label: waitSeconds == null ? null : `${formatDuration(waitSeconds)} transfer`,
+      detail: [
+        nextRoute ? `to ${nextRoute}` : null,
+        locationName ? `at ${locationName}` : null,
+      ].filter(Boolean).join(' · '),
+    };
+  }).filter((summary) => summary.label);
+};
+
+const TransferWaitSummary = ({ summaries }) => {
+  if (!summaries?.length) return null;
+
+  const primaryText = summaries.length === 1
+    ? summaries[0].label
+    : `Transfers: ${summaries.map((summary) => formatDuration(summary.waitSeconds)).join(', ')}`;
+  const detailText = summaries.length === 1
+    ? summaries[0].detail
+    : 'Time between rides';
+
+  return (
+    <View style={styles.transferTimeBox}>
+      <Icon name="Transfer" size={14} color={COLORS.primaryDark} />
+      <View style={styles.transferTimeCopy}>
+        <Text style={styles.transferTimeTitle}>{primaryText}</Text>
+        {!!detailText && (
+          <Text style={styles.transferTimeDetail} numberOfLines={1}>{detailText}</Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const RideRouteSummary = ({ transitLegs, transferWaitSummaries, transfers }) => {
+  if (!transitLegs?.length) return null;
+
+  const routeSequence = transitLegs
+    .map((leg) => leg?.route?.shortName || leg?.zoneName || 'Bus')
+    .join(' → ');
+  const transferText = transfers > 0
+    ? `${transfers} transfer${transfers === 1 ? '' : 's'}`
+    : 'Direct ride';
+  const waitText = transferWaitSummaries?.length
+    ? `Transfer waits: ${transferWaitSummaries.map((summary) => formatDuration(summary.waitSeconds)).join(', ')}`
+    : null;
+
+  return (
+    <View style={styles.rideSummaryBox}>
+      <Text style={styles.rideSummaryRoutes} numberOfLines={1}>{routeSequence}</Text>
+      <Text style={styles.rideSummaryMeta} numberOfLines={1}>
+        {transferText}{waitText ? ` · ${waitText}` : ''}
+      </Text>
+    </View>
+  );
+};
+
+const getStopClosureNoticeCopy = (notices) => {
+  if (notices?.hasTripImpact && notices.impactedStops?.length > 0) {
+    const firstStop = notices.impactedStops[0];
+    const stopLabel = firstStop.stopCode ? `Stop ${firstStop.stopCode}` : (firstStop.stopName || 'A stop');
+    const extraCount = notices.impactedStops.length - 1;
+    return {
+      tone: 'warning',
+      title: `${stopLabel} may be closed for this trip`,
+      detail: extraCount > 0
+        ? `${extraCount + 1} stops in this trip have reported closures.`
+        : firstStop.stopName || 'Check the notice before travelling.',
+    };
+  }
+
+  const routeNoticeCount = notices?.routeNotices?.length || 0;
+  if (routeNoticeCount > 0) {
+    return {
+      tone: 'minor',
+      title: `Route has ${routeNoticeCount} reported stop closure${routeNoticeCount === 1 ? '' : 's'}`,
+      detail: 'Your boarding and exit stops are not impacted.',
+    };
+  }
+
+  return null;
+};
+
+const getDetourNoticeCopy = (itinerary) => {
+  const impacts = itinerary?.detourImpacts || [];
+  if (impacts.length === 0) return null;
+
+  const stopImpact = impacts.find((impact) => impact.severity === 'stop_affected');
+  if (stopImpact) {
+    return {
+      tone: 'warning',
+      title: 'Detour may affect this trip',
+      detail: stopImpact.affectedStopNames?.length
+        ? `Affected: ${stopImpact.affectedStopNames.slice(0, 2).join(', ')}`
+        : stopImpact.message,
+    };
+  }
+
+  return {
+    tone: 'minor',
+    title: 'Route is currently on detour',
+    detail: impacts[0]?.message || 'Check trip details before travelling.',
+  };
+};
+
+const StopClosureNotice = ({ notice }) => {
+  if (!notice) return null;
+  const isWarning = notice.tone === 'warning';
+  return (
+    <View style={[
+      styles.stopClosureNotice,
+      isWarning ? styles.stopClosureNoticeWarning : styles.stopClosureNoticeMinor,
+    ]}>
+      <Text style={[
+        styles.stopClosureNoticeTitle,
+        isWarning ? styles.stopClosureNoticeTitleWarning : styles.stopClosureNoticeTitleMinor,
+      ]}>
+        {isWarning ? '⚠️ ' : ''}{notice.title}
+      </Text>
+      <Text style={styles.stopClosureNoticeDetail}>{notice.detail}</Text>
+    </View>
+  );
+};
+
+const TripTimingSummary = ({ startTime, endTime }) => (
+  <View style={styles.timingRow}>
+    <View style={styles.timingBlock}>
+      <Text style={styles.timingLabel}>Depart</Text>
+      <Text style={styles.timingValue}>{startTime}</Text>
+    </View>
+    <View style={styles.timingDivider} />
+    <View style={styles.timingBlock}>
+      <Text style={styles.timingLabel}>Arrive</Text>
+      <Text style={styles.timingValue}>{endTime}</Text>
+    </View>
+  </View>
+);
 
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -54,13 +210,16 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const hasHighWalk = itinerary.hasHighWalk ?? false;
   const labels = itinerary.labels ?? null;
   const isRecommended = itinerary.isRecommended ?? false;
+  const stopClosureNotice = getStopClosureNoticeCopy(itinerary.stopClosureNotices);
+  const detourNotice = getDetourNoticeCopy(itinerary);
+  const transferWaitSummaries = getTransferWaitSummaries(itinerary.legs);
 
   // Format "leaves in" text
   const getLeavesInText = () => {
     if (isTomorrow) return null; // Show "Tomorrow" badge instead
-    if (minutesUntilDeparture === 0) return 'Leave now';
-    if (minutesUntilDeparture === 1) return 'Leave in 1 min';
-    return `Leave in ${formatMinutes(minutesUntilDeparture)}`;
+    if (minutesUntilDeparture === 0) return 'Depart now';
+    if (minutesUntilDeparture === 1) return 'Depart in 1 min';
+    return `Depart in ${formatMinutes(minutesUntilDeparture)}`;
   };
 
   const leavesInText = getLeavesInText();
@@ -75,7 +234,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
     return (
       <View
         style={containerStyle}
-        accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${rideSummary}, ${walkDistance} walking`}
+        accessibilityLabel={`Trip option: ${duration}, depart ${startTime}, arrive ${endTime}, ${rideSummary}, ${walkDistance} walking`}
         accessibilityState={{ selected: isSelected }}
       >
         {/* Top Row: Labels */}
@@ -126,6 +285,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               </Text>
             )}
           </View>
+          <TripTimingSummary startTime={startTime} endTime={endTime} />
+          <RideRouteSummary
+            transitLegs={transitLegs}
+            transferWaitSummaries={transferWaitSummaries}
+            transfers={itinerary.transfers || 0}
+          />
           <View style={styles.routeSummaryRow}>
             {itinerary.legs.map((leg, index) => (
               <React.Fragment key={getTripLegKey(leg, index)}>
@@ -133,7 +298,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                 <View style={styles.legColumn}>
                   {leg.mode === 'WALK' ? (
                     <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                      <Icon name="Walk" size={16} color={COLORS.textSecondary} />
+                      <WalkingPaceIcon level="on_pace" size={18} />
                     </View>
                   ) : leg.isOnDemand ? (
                     <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
@@ -153,6 +318,8 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           </View>
         </View>
 
+        <TransferWaitSummary summaries={transferWaitSummaries} />
+
         {/* On-demand booking note */}
         {onDemandLeg && (
           <View style={[styles.onDemandNote, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
@@ -163,10 +330,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           </View>
         )}
 
-        {/* Bottom Row: Time Range + Walk/Transfer Details + Action Button */}
+        <StopClosureNotice notice={stopClosureNotice} />
+        <StopClosureNotice notice={detourNotice} />
+
+        {/* Bottom Row: Walk/Transfer Details + Action Button */}
         <View style={styles.bottomRow}>
           <View style={styles.bottomRowContent}>
-            <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
             <View style={styles.details}>
               <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
                 {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
@@ -207,7 +376,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
       onPress={onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Trip option: ${duration}, ${startTime} to ${endTime}, ${rideSummary}, ${walkDistance} walking`}
+      accessibilityLabel={`Trip option: ${duration}, depart ${startTime}, arrive ${endTime}, ${rideSummary}, ${walkDistance} walking`}
       accessibilityState={{ selected: isSelected }}
     >
       {/* Top Row: Labels */}
@@ -258,6 +427,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             </Text>
           )}
         </View>
+        <TripTimingSummary startTime={startTime} endTime={endTime} />
+        <RideRouteSummary
+          transitLegs={transitLegs}
+          transferWaitSummaries={transferWaitSummaries}
+          transfers={itinerary.transfers || 0}
+        />
         <View style={styles.routeSummaryRow}>
           {itinerary.legs.map((leg, index) => (
             <React.Fragment key={getTripLegKey(leg, index)}>
@@ -265,7 +440,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               <View style={styles.legColumn}>
                 {leg.mode === 'WALK' ? (
                   <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                    <Icon name="Walk" size={16} color={COLORS.textSecondary} />
+                    <WalkingPaceIcon level="on_pace" size={18} />
                   </View>
                 ) : leg.isOnDemand ? (
                   <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
@@ -285,6 +460,8 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         </View>
       </View>
 
+      <TransferWaitSummary summaries={transferWaitSummaries} />
+
       {/* On-demand booking note */}
       {onDemandLeg && (
         <View style={[styles.onDemandNote, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
@@ -295,10 +472,12 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
         </View>
       )}
 
-      {/* Bottom Row: Time Range + Walk/Transfer Details + Action Button */}
+      <StopClosureNotice notice={stopClosureNotice} />
+      <StopClosureNotice notice={detourNotice} />
+
+      {/* Bottom Row: Walk/Transfer Details + Action Button */}
       <View style={styles.bottomRow}>
         <View style={styles.bottomRowContent}>
-          <Text style={styles.timeRange}>{startTime} - {endTime}</Text>
           <View style={styles.details}>
             <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
               {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
@@ -399,6 +578,40 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     paddingRight: SPACING.sm,
   },
+  timingRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: COLORS.grey50,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+    overflow: 'hidden',
+  },
+  timingBlock: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  timingLabel: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    marginBottom: 2,
+  },
+  timingValue: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.extrabold,
+    color: COLORS.textPrimary,
+    letterSpacing: -0.2,
+  },
+  timingDivider: {
+    width: 1,
+    backgroundColor: COLORS.borderLight,
+  },
   routeSummaryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -443,12 +656,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.textSecondary,
     marginTop: 1,
-  },
-  timeRange: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: 2,
   },
   connector: {
     width: 12,
@@ -547,6 +754,83 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.primary,
+  },
+  transferTimeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.primarySubtle,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    marginBottom: SPACING.sm,
+  },
+  transferTimeCopy: {
+    flexShrink: 1,
+  },
+  transferTimeTitle: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  transferTimeDetail: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    marginTop: 1,
+    maxWidth: 220,
+  },
+  rideSummaryBox: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  rideSummaryRoutes: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.extrabold,
+    letterSpacing: -0.1,
+  },
+  rideSummaryMeta: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    marginTop: 2,
+  },
+  stopClosureNotice: {
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+  },
+  stopClosureNoticeWarning: {
+    backgroundColor: COLORS.warningSubtle,
+    borderColor: 'rgba(255, 153, 31, 0.35)',
+  },
+  stopClosureNoticeMinor: {
+    backgroundColor: COLORS.grey50,
+    borderColor: COLORS.borderLight,
+  },
+  stopClosureNoticeTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  stopClosureNoticeTitleWarning: {
+    color: COLORS.textPrimary,
+  },
+  stopClosureNoticeTitleMinor: {
+    color: COLORS.textSecondary,
+  },
+  stopClosureNoticeDetail: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    marginTop: 2,
   },
 });
 

@@ -21,8 +21,14 @@ import { getNotificationSettings, showLocalNotification } from '../services/noti
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
-import { diffDetourRouteIds } from '../utils/detourNotificationUtils';
+import {
+  diffDetourRouteIds,
+  filterHighConfidenceDetourRouteIds,
+  filterRelevantDetourRouteIds,
+} from '../utils/detourNotificationUtils';
+import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
+import { useAuth } from './AuthContext';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -52,6 +58,8 @@ export const useTransitRealtime = () => {
 };
 
 export const TransitProvider = ({ children }) => {
+  const { favorites } = useAuth();
+
   // Static GTFS data
   const [routes, setRoutes] = useState([]);
   const [stops, setStops] = useState([]);
@@ -100,6 +108,7 @@ export const TransitProvider = ({ children }) => {
   const prevDetourIdsRef = useRef(new Set());
   const detoursEnabledRef = useRef(detoursEnabled);
   const hasSeenInitialDetourSnapshotRef = useRef(false);
+  const favoriteRoutesRef = useRef([]);
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
@@ -128,6 +137,10 @@ export const TransitProvider = ({ children }) => {
   useEffect(() => {
     detoursEnabledRef.current = detoursEnabled;
   }, [detoursEnabled]);
+
+  useEffect(() => {
+    favoriteRoutesRef.current = Array.isArray(favorites?.routes) ? favorites.routes : [];
+  }, [favorites?.routes]);
 
   useEffect(() => {
     let isMounted = true;
@@ -568,7 +581,7 @@ export const TransitProvider = ({ children }) => {
   }, []);
 
   const activeDetours = useMemo(
-    () => (detoursEnabled ? detourFeed : {}),
+    () => (detoursEnabled ? filterRiderVisibleDetours(detourFeed) : {}),
     [detoursEnabled, detourFeed]
   );
 
@@ -592,8 +605,16 @@ export const TransitProvider = ({ children }) => {
       return;
     }
 
+    const relevantRouteIds = filterRelevantDetourRouteIds({
+      routeIds,
+      favoriteRoutes: favoriteRoutesRef.current,
+    });
+    if (relevantRouteIds.length === 0) {
+      return;
+    }
+
     await Promise.all(
-      routeIds.map((routeId) =>
+      relevantRouteIds.map((routeId) =>
         showLocalNotification({
           title: 'Route ' + routeId + ' Detour',
           body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
@@ -607,8 +628,9 @@ export const TransitProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
       (detourMap) => {
+        const riderVisibleDetourMap = filterRiderVisibleDetours(detourMap);
         const { nextIds, newRouteIds } = diffDetourRouteIds({
-          detourMap,
+          detourMap: riderVisibleDetourMap,
           prevIds: prevDetourIdsRef.current,
           hasSeenInitialSnapshot: hasSeenInitialDetourSnapshotRef.current,
         });
@@ -617,8 +639,13 @@ export const TransitProvider = ({ children }) => {
         prevDetourIdsRef.current = new Set(nextIds);
         setDetourFeed(detourMap);
 
-        if (newRouteIds.length > 0) {
-          void notifyNewDetours(newRouteIds);
+        const highConfidenceNewRouteIds = filterHighConfidenceDetourRouteIds({
+          routeIds: newRouteIds,
+          detourMap: riderVisibleDetourMap,
+        });
+
+        if (highConfidenceNewRouteIds.length > 0) {
+          void notifyNewDetours(highConfidenceNewRouteIds);
         }
       },
       (error) => logger.error('Detour subscription error:', error)

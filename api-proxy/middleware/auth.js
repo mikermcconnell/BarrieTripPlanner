@@ -1,6 +1,11 @@
 const rateLimit = require('express-rate-limit');
 const { getAuth } = require('../firebaseAdmin');
 
+const SCHEDULER_TOKEN_PATHS = new Set([
+  '/detour-run-once',
+  '/survey/send-digest',
+]);
+
 function sanitizeClientKey(raw) {
   if (!raw) return '';
   return String(raw).trim().slice(0, 64).replace(/[^a-zA-Z0-9_.:-]/g, '');
@@ -13,6 +18,7 @@ function createAuthenticateApiRequest({
   allowSharedTokenAuth,
   apiTokens,
   requireFirebaseAuth,
+  schedulerApiToken,
 }) {
   return async function authenticateApiRequest(req, res, next) {
     if (req.path === '/health') return next();
@@ -24,6 +30,17 @@ function createAuthenticateApiRequest({
         req.clientId = 'debug-ops';
         return next();
       }
+    }
+
+    const schedulerToken = req.get('x-scheduler-token');
+    if (
+      schedulerApiToken &&
+      schedulerToken &&
+      schedulerToken === schedulerApiToken &&
+      SCHEDULER_TOKEN_PATHS.has(req.path)
+    ) {
+      req.clientId = `scheduler:${req.path.replace(/^\//, '')}`;
+      return next();
     }
 
     const headerToken = req.get('x-api-token');

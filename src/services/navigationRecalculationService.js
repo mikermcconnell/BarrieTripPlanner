@@ -2,6 +2,32 @@ import { TripPlanningError, TRIP_ERROR_CODES, planTripAuto } from './tripService
 import { enrichItineraryWithWalking } from './walkingService';
 import logger from '../utils/logger';
 
+const isWalkLeg = (leg) => String(leg?.mode).toUpperCase() === 'WALK';
+
+const hasStreetWalkingDetails = (leg) => (
+  Boolean(leg?.legGeometry?.points) &&
+  Array.isArray(leg?.steps) &&
+  leg.steps.length > 0
+);
+
+const needsWalkingPreparation = (itinerary) => (
+  Array.isArray(itinerary?.legs) &&
+  itinerary.legs.some((leg) => isWalkLeg(leg) && !hasStreetWalkingDetails(leg))
+);
+
+export const prepareItineraryForNavigation = async (itinerary) => {
+  if (!needsWalkingPreparation(itinerary)) {
+    return itinerary;
+  }
+
+  try {
+    return await enrichItineraryWithWalking(itinerary);
+  } catch (error) {
+    logger.warn('Could not prepare walking directions before navigation, using selected itinerary:', error);
+    return itinerary;
+  }
+};
+
 export const recalculateNavigationItinerary = async ({
   userLocation,
   destination,

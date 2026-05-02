@@ -9,12 +9,24 @@ const STORAGE_KEYS = {
   NOTIFICATION_SETTINGS: '@barrie_transit_notification_settings',
 };
 
+export const DEFAULT_NOTIFICATION_SETTINGS = {
+  serviceAlerts: true,
+  tripReminders: true,
+  nearbyAlerts: false,
+  transitNews: false,
+};
+
+const normalizeNotificationSettings = (settings = {}) => ({
+  ...DEFAULT_NOTIFICATION_SETTINGS,
+  ...(settings && typeof settings === 'object' ? settings : {}),
+});
+
 // Note: Notification handler is configured in App.js to avoid duplicate configuration
 
 /**
  * Request notification permissions and get push token
  */
-export const registerForPushNotifications = async () => {
+export const registerForPushNotifications = async ({ requestPermission = true } = {}) => {
   // Skip push notification registration on web (requires VAPID key configuration)
   if (Platform.OS === 'web') {
     logger.log('Push notifications not supported on web');
@@ -26,6 +38,9 @@ export const registerForPushNotifications = async () => {
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
+      if (!requestPermission) {
+        return { success: false, error: 'Permission not granted' };
+      }
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
@@ -200,22 +215,12 @@ export const getNotificationSettings = async () => {
   try {
     const settingsJson = await AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATION_SETTINGS);
     if (settingsJson) {
-      return JSON.parse(settingsJson);
+      return normalizeNotificationSettings(JSON.parse(settingsJson));
     }
-    return {
-      serviceAlerts: true,
-      tripReminders: true,
-      nearbyAlerts: false,
-      transitNews: true,
-    };
+    return DEFAULT_NOTIFICATION_SETTINGS;
   } catch (error) {
     logger.error('Error getting notification settings:', error);
-    return {
-      serviceAlerts: true,
-      tripReminders: true,
-      nearbyAlerts: false,
-      transitNews: true,
-    };
+    return DEFAULT_NOTIFICATION_SETTINGS;
   }
 };
 

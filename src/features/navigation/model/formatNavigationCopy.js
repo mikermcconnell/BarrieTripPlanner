@@ -15,18 +15,18 @@ export const formatNavigationLocationLabel = (location, fallback = 'Destination'
 
 export const formatBoardingArrivalDetail = (nextTransitProximity, nowMs = Date.now()) => {
   if (!nextTransitProximity) return null;
-  if (nextTransitProximity.hasArrived) return 'Bus is here';
 
   if (!nextTransitProximity.estimatedArrival) {
-    return null;
+    return nextTransitProximity.hasArrived ? 'Bus is here' : null;
   }
 
   const arrivalTime = new Date(nextTransitProximity.estimatedArrival).getTime();
   if (!Number.isFinite(arrivalTime)) {
-    return null;
+    return nextTransitProximity.hasArrived ? 'Bus is here' : null;
   }
+
+  if (nextTransitProximity.hasArrived && arrivalTime <= nowMs) return 'Bus is here';
 
   const diffMinutes = Math.max(0, Math.floor((arrivalTime - nowMs) / 60000));
   return diffMinutes <= 0 ? 'Bus now' : `Bus in ${diffMinutes} min`;
 };
-

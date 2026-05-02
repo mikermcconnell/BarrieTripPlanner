@@ -112,10 +112,19 @@ When working in Android emulator, use one of these commands instead of manual Me
 
 - `npm run android:dev`
   - Development path with live reload.
-  - Runs recovery, starts Metro on `8084`, starts a local dev proxy on `8083`, then launches the app.
+  - Runs recovery, starts Metro, starts any required local proxy, then launches the app.
   - The proxy avoids emulator bundle transfer issues seen with direct Metro streaming.
   - This is the preferred native development path for the current app.
   - If `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true`, it also starts the local auto-detour worker on `http://127.0.0.1:3002`.
+
+- `npm run android:dev:launch`
+  - Fast relaunch path when Metro is already running.
+  - Reuses the existing dev server, resets adb reverse ports, and opens the Expo dev-client URL.
+  - Use this after a successful `android:dev` when you only need to reopen the app.
+
+- `npm run android:dev:clear`
+  - Same as `android:dev`, but clears the Metro cache first.
+  - Use this only when Metro cache problems are suspected; clearing the cache makes startup slower.
 
 - `npm run android:dev:direct`
   - Direct Metro on `8083` without proxy.

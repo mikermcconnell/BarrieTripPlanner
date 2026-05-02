@@ -56,6 +56,56 @@ export const getTransitLoadingState = (diagnostics) => {
   return null;
 };
 
+export const getTransitStartupProgress = ({
+  isLoadingStatic = false,
+  isRefreshingStatic = false,
+  usingCachedData = false,
+  isLoadingVehicles = false,
+  routesCount = 0,
+  stopsCount = 0,
+  vehiclesCount = 0,
+  diagnostics = null,
+} = {}) => {
+  const hasSavedRoutes = routesCount > 0 && stopsCount > 0;
+  const realtimeVehicles = diagnostics?.realtimeVehicles || {};
+
+  if (isLoadingStatic && !hasSavedRoutes) {
+    const loadingState = getTransitLoadingState(diagnostics) || {
+      title: 'Getting Barrie Transit ready',
+      detail: 'Downloading routes and stops for the first time.',
+    };
+
+    return {
+      variant: 'full',
+      percent: 35,
+      title: loadingState.title,
+      detail: loadingState.detail,
+    };
+  }
+
+  if (hasSavedRoutes && usingCachedData && isRefreshingStatic && !isLoadingVehicles) {
+    return null;
+  }
+
+  if (
+    hasSavedRoutes &&
+    isLoadingVehicles &&
+    vehiclesCount === 0 &&
+    realtimeVehicles?.status !== 'healthy'
+  ) {
+    return {
+      variant: 'card',
+      percent: 75,
+      title: 'Loading live buses',
+      detail: usingCachedData
+        ? 'Showing saved routes while live bus locations load.'
+        : 'Routes are ready. Loading live bus locations now.',
+    };
+  }
+
+  return null;
+};
+
 export const getSystemHealthChipState = (diagnostics) => {
   if (!diagnostics) {
     return {
@@ -200,13 +250,7 @@ export const getSystemHealthBannerState = (diagnostics) => {
   }
 
   if (isRefreshingSavedData) {
-    return {
-      tone: 'neutral',
-      title: 'Opening with saved transit info',
-      detail: 'Checking for updates in the background.',
-      actionLabel: null,
-      actionKey: null,
-    };
+    return null;
   }
 
   if (staticData?.usingCachedData) {

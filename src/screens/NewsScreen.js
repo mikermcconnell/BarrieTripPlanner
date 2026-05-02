@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTransitRealtime } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const MONTHS = {
   january: 0, jan: 0,
@@ -138,6 +139,8 @@ function Section({ title, subtitle, children, emptyText }) {
 }
 
 const NewsScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { transitNews, transitNewsImpacts, activeDetours } = useTransitRealtime();
   const [expandedId, setExpandedId] = useState(null);
 
@@ -213,13 +216,19 @@ const NewsScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Service impacts</Text>
           <Text style={styles.summaryText}>Active closures affect the map. Upcoming notices stay here until they begin.</Text>
         </View>
 
-        <Section title="Active stop closures" subtitle="Shown on the map" emptyText="No active stop closures found.">
+        <Section title="Active stop closures" subtitle="Map marker when matched to a stop" emptyText="No active stop closures found.">
           {buckets.activeStopClosures.map((impact) => (
             <ImpactCard
               key={impact.id}

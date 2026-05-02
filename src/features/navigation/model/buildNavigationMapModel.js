@@ -7,13 +7,48 @@ const hasValidCoordinates = (location) => (
   Number.isFinite(location?.lon)
 );
 
-const buildTransitStopMarkers = (currentTransitLeg, liveStopsRemaining = null) => {
+const buildTransitStopMarkers = (
+  currentTransitLeg,
+  liveStopsRemaining = null,
+  { isUserOnBoard = false } = {}
+) => {
   if (!currentTransitLeg) return [];
 
   const progress = buildTransitStopProgress(currentTransitLeg, liveStopsRemaining);
-  const markers = [];
   const nextStop = progress.nextStop;
   const exitStop = progress.alightingStop;
+
+  if (isUserOnBoard) {
+    return progress.stops
+      .filter(hasValidCoordinates)
+      .map((stop) => {
+        const isNext = stop.isNext || stop.id === nextStop?.id;
+        const isExit = stop.isAlighting;
+        return {
+          id: `transit-stop-${stop.id}`,
+          latitude: stop.lat,
+          longitude: stop.lon,
+          type: isExit
+            ? 'transit-alight-stop'
+            : isNext
+            ? 'transit-next-stop'
+            : 'transit-intermediate-stop',
+          title: formatNavigationLocationLabel(stop, stop.name || 'Transit stop'),
+          caption: isExit
+            ? (isNext ? 'Get off next' : 'Your stop')
+            : isNext
+            ? 'Next stop'
+            : `Stop ${stop.sequenceNumber}`,
+          detail: null,
+          showLabel: isNext || isExit,
+          isPassed: stop.isPassed,
+          isNext,
+          sequenceNumber: stop.sequenceNumber,
+        };
+      });
+  }
+
+  const markers = [];
 
   if (nextStop && hasValidCoordinates(nextStop)) {
     markers.push({
@@ -122,7 +157,8 @@ export const buildNavigationMapModel = ({
 
   const transitStopMarkers = buildTransitStopMarkers(
     currentTransitLeg,
-    isUserOnBoard ? liveStopsRemaining : null
+    isUserOnBoard ? liveStopsRemaining : null,
+    { isUserOnBoard }
   );
 
   return {
@@ -134,4 +170,3 @@ export const buildNavigationMapModel = ({
 };
 
 export default buildNavigationMapModel;
-

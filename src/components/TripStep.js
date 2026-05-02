@@ -31,6 +31,24 @@ const getWalkingTitle = (leg) => {
   return `Walk to ${leg?.to?.name || 'your destination'}`;
 };
 
+const getWalkingIconName = (leg) => (
+  leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code ? 'BusStop' : 'Walk'
+);
+
+const getDetourWarningTone = (detourImpact) => (
+  detourImpact?.severity === 'stop_affected'
+    ? {
+      backgroundColor: COLORS.errorSubtle,
+      borderColor: COLORS.error,
+      color: COLORS.error,
+    }
+    : {
+      backgroundColor: COLORS.warningSubtle,
+      borderColor: COLORS.warning,
+      color: COLORS.warning,
+    }
+);
+
 const TripStep = ({ leg, isFirst, isLast }) => {
   const startTime = formatTimeFromTimestamp(leg.startTime);
   const endTime = formatTimeFromTimestamp(leg.endTime);
@@ -47,6 +65,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
   const routeShortName = leg.route?.shortName || 'Bus';
   const routeDirection = leg.headsign || leg.route?.longName;
   const rideStopCount = transitStopProgress?.totalStopsBetween ?? 0;
+  const detourTone = getDetourWarningTone(leg.detourImpact);
 
   // Get delay info
   const isRealtime = leg.isRealtime || false;
@@ -85,7 +104,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
           {isWalk ? (
             <View>
               <View style={styles.walkContent}>
-                <Icon name="Walk" size={20} color={COLORS.textSecondary} />
+                <Icon name={getWalkingIconName(leg)} size={22} color={COLORS.textSecondary} />
                 <View style={styles.walkDetails}>
                   <Text style={styles.stepTitle}>{getWalkingTitle(leg)}</Text>
                   <Text style={styles.stepSubtitle}>{distance} • about {duration}</Text>
@@ -150,6 +169,31 @@ const TripStep = ({ leg, isFirst, isLast }) => {
                   <Text style={styles.stepMetaLine} numberOfLines={1}>
                     Get off at {formatStopName(leg.to)}
                   </Text>
+                ) : null}
+                {leg.detourImpact ? (
+                  <View style={[
+                    styles.detourWarning,
+                    {
+                      backgroundColor: detourTone.backgroundColor,
+                      borderColor: detourTone.borderColor,
+                    },
+                  ]}>
+                    <Icon name="Warning" size={14} color={detourTone.color} />
+                    <View style={styles.detourWarningTextWrap}>
+                      <Text style={[styles.detourWarningText, { color: detourTone.color }]}>
+                        {leg.detourImpact.message}
+                      </Text>
+                      {leg.detourImpact.affectedStopNames?.length ? (
+                        <Text
+                          style={[styles.detourWarningMeta, { color: detourTone.color }]}
+                          numberOfLines={2}
+                        >
+                          Affected: {leg.detourImpact.affectedStopNames.slice(0, 2).join(', ')}
+                          {leg.detourImpact.affectedStopNames.length > 2 ? ' +' : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
                 ) : null}
               </View>
             </View>
@@ -332,6 +376,26 @@ const styles = StyleSheet.create({
   intermediateTitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+  },
+  detourWarning: {
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.xs,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.xs,
+  },
+  detourWarningTextWrap: {
+    flex: 1,
+  },
+  detourWarningText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  detourWarningMeta: {
+    fontSize: FONT_SIZES.xxs,
+    marginTop: 2,
   },
 });
 

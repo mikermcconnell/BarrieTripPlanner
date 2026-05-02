@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SignInScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { signIn, signInWithGoogle, sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,7 +81,10 @@ const SignInScreen = ({ navigation }) => {
           <View style={styles.placeholder} />
         </View>
 
-        <View style={styles.content}>
+        <View style={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) },
+        ]}>
           <View style={styles.logoContainer}>
             <Icon name="Bus" size={48} color={COLORS.primary} style={{ marginBottom: SPACING.sm }} />
             <Text style={styles.appName}>Barrie Transit</Text>

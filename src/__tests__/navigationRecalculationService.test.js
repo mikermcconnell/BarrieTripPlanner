@@ -85,4 +85,68 @@ describe('navigationRecalculationService', () => {
     }));
     expect(result.routingDiagnostics).toEqual({ source: 'otp' });
   });
+
+  test('prepares selected walking itineraries with street walking directions before navigation', async () => {
+    jest.resetModules();
+
+    const selectedItinerary = {
+      id: 'walking-only',
+      isWalkingOnly: true,
+      legs: [
+        {
+          mode: 'WALK',
+          from: { lat: 44.38, lon: -79.69 },
+          to: { lat: 44.384, lon: -79.69 },
+          legGeometry: null,
+          steps: [{ instruction: 'Walk to your destination' }],
+        },
+      ],
+    };
+    const enrichedItinerary = {
+      ...selectedItinerary,
+      legs: [
+        {
+          ...selectedItinerary.legs[0],
+          legGeometry: { points: 'encoded-real-walk' },
+          steps: [{ instruction: 'Turn left on Grove Street' }],
+        },
+      ],
+    };
+    const enrichItineraryWithWalkingMock = jest.fn(async () => enrichedItinerary);
+
+    jest.doMock('../services/tripService', () => ({
+      planTripAuto: jest.fn(),
+      TRIP_ERROR_CODES: {
+        VALIDATION_ERROR: 'VALIDATION_ERROR',
+        NO_ROUTES_FOUND: 'NO_ROUTES_FOUND',
+      },
+      TripPlanningError: class TripPlanningError extends Error {
+        constructor(code, message) {
+          super(message);
+          this.code = code;
+        }
+      },
+    }));
+    jest.doMock('../services/walkingService', () => ({
+      enrichItineraryWithWalking: enrichItineraryWithWalkingMock,
+    }));
+    jest.doMock('../utils/logger', () => ({
+      __esModule: true,
+      default: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        log: jest.fn(),
+        debug: jest.fn(),
+      },
+    }));
+
+    const { prepareItineraryForNavigation } = require('../services/navigationRecalculationService');
+
+    const result = await prepareItineraryForNavigation(selectedItinerary);
+
+    expect(enrichItineraryWithWalkingMock).toHaveBeenCalledWith(selectedItinerary);
+    expect(result.legs[0].legGeometry).toEqual({ points: 'encoded-real-walk' });
+    expect(result.legs[0].steps[0].instruction).toBe('Turn left on Grove Street');
+  });
 });

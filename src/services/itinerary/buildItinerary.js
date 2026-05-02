@@ -65,6 +65,34 @@ const buildTransitLeg = ({
   steps: null,
 });
 
+const mergeConsecutiveWalkLegs = (legs) => {
+  if (!Array.isArray(legs) || legs.length <= 1) return legs;
+
+  const merged = [];
+
+  legs.forEach((leg) => {
+    const previous = merged[merged.length - 1];
+
+    if (leg?.mode === 'WALK' && previous?.mode === 'WALK') {
+      merged[merged.length - 1] = {
+        ...previous,
+        endTime: leg.endTime,
+        scheduledEndTime: leg.scheduledEndTime,
+        duration: Math.round((leg.endTime - previous.startTime) / 1000),
+        distance: Math.round((previous.distance || 0) + (leg.distance || 0)),
+        to: leg.to,
+        legGeometry: null,
+        steps: null,
+      };
+      return;
+    }
+
+    merged.push(leg);
+  });
+
+  return merged;
+};
+
 const getRouteInfo = (routingData, routeId) => {
   if (routingData.routes) {
     const route = routingData.routes.find((candidate) => candidate.id === routeId);
@@ -228,7 +256,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
     }
   });
 
-  const mergedLegs = mergeTransitLegs(legs, routingData);
+  let mergedLegs = mergeTransitLegs(legs, routingData);
 
   if (walkToDestSeconds > 0) {
     const destStop = stopIndex[destinationStopId];
@@ -264,6 +292,8 @@ export const buildItinerary = (result, routingData, tripInfo) => {
     totalWalkTime += walkToDestSeconds;
     totalWalkDistance += walkDistance;
   }
+
+  mergedLegs = mergeConsecutiveWalkLegs(mergedLegs);
 
   const transitLegs = mergedLegs.filter((leg) => leg.mode === 'BUS');
   const recalcTransitTime = transitLegs.reduce((sum, leg) => sum + leg.duration, 0);

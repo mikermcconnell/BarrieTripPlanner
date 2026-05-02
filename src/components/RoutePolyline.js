@@ -76,9 +76,12 @@ const RoutePolylineComponent = ({
     />
   ) : null;
 
-  const dashArray = lineDashPattern
-    ? lineDashPattern.map((v) => v / strokeWidth)
-    : undefined;
+  const getDashArray = (lineWidth) => (
+    lineDashPattern
+      ? lineDashPattern.map((v) => v / Math.max(lineWidth, 1))
+      : undefined
+  );
+  const fillDashArray = getDashArray(strokeWidth);
 
   if (outlineWidth > 0) {
     const resolvedOutlineColor = normalizeHexColor(
@@ -86,6 +89,8 @@ const RoutePolylineComponent = ({
       darkenColor(normalizedFill, 0.4)
     );
     const outlineFill = hexToRgba(resolvedOutlineColor, opacity);
+    const outlineStrokeWidth = strokeWidth + outlineWidth * 2;
+    const outlineDashArray = getDashArray(outlineStrokeWidth);
 
     return (
       <MapLibreGL.ShapeSource
@@ -99,10 +104,10 @@ const RoutePolylineComponent = ({
           layerIndex={getLayerIndex(0)}
           style={{
             lineColor: outlineFill,
-            lineWidth: strokeWidth + outlineWidth * 2,
+            lineWidth: outlineStrokeWidth,
             lineCap: lineCap,
             lineJoin: lineJoin,
-            ...(dashArray ? { lineDasharray: dashArray } : {}),
+            ...(outlineDashArray ? { lineDasharray: outlineDashArray } : {}),
           }}
         />
         <MapLibreGL.LineLayer
@@ -113,7 +118,7 @@ const RoutePolylineComponent = ({
             lineWidth: strokeWidth,
             lineCap: lineCap,
             lineJoin: lineJoin,
-            ...(dashArray ? { lineDasharray: dashArray } : {}),
+            ...(fillDashArray ? { lineDasharray: fillDashArray } : {}),
           }}
           aboveLayerID={`${sourceId}-outline`}
         />
@@ -154,7 +159,7 @@ const RoutePolylineComponent = ({
           lineWidth: strokeWidth,
           lineCap: lineCap,
           lineJoin: lineJoin,
-          ...(dashArray ? { lineDasharray: dashArray } : {}),
+          ...(fillDashArray ? { lineDasharray: fillDashArray } : {}),
         }}
       />
       {showArrows && (

@@ -68,6 +68,7 @@ const AddressAutocomplete = ({
   rightIcon,
   style,
   inputStyle,
+  rightIconOverlay = false,
   disabled = false,
   accessibilityLabel,
   accessibilityHint,
@@ -265,7 +266,12 @@ const AddressAutocomplete = ({
         {icon && <View style={styles.iconContainer}>{icon}</View>}
 
         <TextInput
-          style={[styles.input, inputStyle, disabled && styles.inputDisabled]}
+          style={[
+            styles.input,
+            rightIconOverlay && rightIcon && styles.inputWithOverlayRightIcon,
+            inputStyle,
+            disabled && styles.inputDisabled,
+          ]}
           value={value}
           onChangeText={handleChangeText}
           onFocus={handleFocus}
@@ -284,11 +290,18 @@ const AddressAutocomplete = ({
           <ActivityIndicator
             size="small"
             color={COLORS.primary}
-            style={styles.loadingIndicator}
+            style={[
+              styles.loadingIndicator,
+              rightIconOverlay && rightIcon && styles.loadingIndicatorWithOverlayIcon,
+            ]}
           />
         )}
 
-        {rightIcon && <View style={styles.rightIconContainer}>{rightIcon}</View>}
+        {rightIcon && (
+          <View style={[styles.rightIconContainer, rightIconOverlay && styles.rightIconContainerOverlay]}>
+            {rightIcon}
+          </View>
+        )}
       </View>
 
       {/* Error Message */}
@@ -346,6 +359,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textPrimary,
   },
+  inputWithOverlayRightIcon: {
+    paddingRight: 44,
+  },
   inputDisabled: {
     backgroundColor: COLORS.grey200,
     color: COLORS.textDisabled,
@@ -354,8 +370,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 56,
   },
+  loadingIndicatorWithOverlayIcon: {
+    right: 48,
+  },
   rightIconContainer: {
     marginLeft: SPACING.xs,
+  },
+  rightIconContainerOverlay: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    marginLeft: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dropdown: {
     position: 'absolute',

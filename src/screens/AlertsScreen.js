@@ -12,16 +12,19 @@ import {
   UIManager,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchServiceAlerts } from '../services/alertService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { getSeverityIcon, getSeverityColor, formatAlertPeriod } from '../utils/alertHelpers';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 const AlertsScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const [alerts, setAlerts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -173,7 +176,10 @@ const AlertsScreen = ({ navigation }) => {
         data={alerts}
         keyExtractor={(item) => item.id}
         renderItem={renderAlert}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

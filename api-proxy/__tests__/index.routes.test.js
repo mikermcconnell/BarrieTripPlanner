@@ -163,6 +163,38 @@ describe('api-proxy route hardening', () => {
     expect(() => require('../index')).toThrow(/Production proxy must use Firebase Bearer auth/);
   });
 
+  test('fails fast when production disables API auth entirely', () => {
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'production',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'false',
+      REQUIRE_FIREBASE_AUTH: 'false',
+      ALLOW_SHARED_TOKEN_AUTH: 'false',
+      DETOUR_WORKER_ENABLED: 'false',
+      NEWS_WORKER_ENABLED: 'false',
+    };
+
+    expect(() => require('../index')).toThrow(/Production proxy must require API auth/);
+  });
+
+  test('fails fast when production allows general shared token auth', () => {
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'production',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'true',
+      REQUIRE_FIREBASE_AUTH: 'true',
+      ALLOW_SHARED_TOKEN_AUTH: 'true',
+      API_PROXY_TOKEN: 'test-proxy-token',
+      FIREBASE_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
+      DETOUR_WORKER_ENABLED: 'false',
+      NEWS_WORKER_ENABLED: 'false',
+    };
+
+    expect(() => require('../index')).toThrow(/Production proxy must disable general shared token auth/);
+  });
+
   test('detour-debug endpoint requires auth', async () => {
     const app = require('../index');
     const response = await request(app).get('/api/detour-debug');

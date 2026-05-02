@@ -37,8 +37,10 @@ Protected `/api/*` routes require `REQUIRE_API_AUTH=true`.
 
 Production expectation:
 
+- `REQUIRE_API_AUTH=true`
 - `REQUIRE_FIREBASE_AUTH=true`
 - `ALLOW_SHARED_TOKEN_AUTH=false`
+- `SCHEDULER_API_TOKEN` may be used only by trusted scheduler jobs on allowlisted job endpoints
 
 Non-production fallback:
 
@@ -65,11 +67,17 @@ These are not public rider endpoints:
 
 ### Production auth hardening
 
+- `NODE_ENV=production`
+- `REQUIRE_API_AUTH=true`
 - `REQUIRE_FIREBASE_AUTH=true`
 - `ALLOW_SHARED_TOKEN_AUTH=false`
+- `SCHEDULER_API_TOKEN=<server-only long random token>` for scheduled job endpoints only
+- `ALLOWED_ORIGINS=<comma-separated production web origins>`
 - `FIREBASE_SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`
 - `SURVEY_ADMIN_UIDS=uid1,uid2` only if admin custom claims are not available
 - Firebase Functions only: `API_PROXY_FUNCTION_INVOKER=private` for production platform auth hardening
+
+Do not ship `API_PROXY_TOKEN`, `API_PROXY_TOKENS`, `EXPO_PUBLIC_API_PROXY_TOKEN`, or `EXPO_PUBLIC_LOCATIONIQ_API_KEY` in public production.
 
 ### Detour worker
 
@@ -85,6 +93,8 @@ These are not public rider endpoints:
   - `DETOUR_STALE_AUTO_CLEAR_BUFFER_MS=600000` adds a 10-minute buffer
   - `DETOUR_STALE_AUTO_CLEAR_MAX_MS=10800000` caps the stale window at 3 hours
   - `DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS=3600000` fallback when GTFS does not have enough nearby trips
+  - `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MS=720000` clears zero-vehicle stale detours sooner when route-family buses are still reporting
+  - `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MIN_AGE_MS=600000` preserves the minimum visibility window before zero-vehicle stale clearing
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
   - `DETOUR_ROAD_MATCHING_BASE_URL=...` for an OSRM-compatible match service
@@ -162,7 +172,7 @@ Baseline endpoints:
 - `POST /api/baseline/routes` with `{ "routeIds": ["12"] }` — replace only selected route baselines from current GTFS
 - `POST /api/baseline/clear`
 
-`GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours.
+`GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours. It also reports suspicious short-lived detours under 15 minutes, grouped by confidence, so operators can review likely false positives that lasted longer than the strict 5-minute threshold.
 
 `GET /api/detour-debug` without `routeId` is the safe summary endpoint. Route-specific debug (`?routeId=...`) can expose vehicle-level evidence and is blocked in production unless the caller has an admin Firebase claim or `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true` is set intentionally.
 
@@ -224,12 +234,13 @@ For this repo, the preferred low-cost detour setup is:
 - create **one Cloud Scheduler HTTP job** that calls `POST /api/detour-run-once`
 - send both:
   - Cloud Scheduler **OIDC auth** for Cloud Run IAM
-  - `x-api-token` header for the app's own `/api/*` auth middleware
+  - `x-scheduler-token` header for the app's own scheduled-job auth middleware
 
 Why both:
 
 - Cloud Run IAM protects the service at the platform boundary
 - `api-proxy` still enforces its own `/api/*` auth middleware
+- scheduled jobs use `SCHEDULER_API_TOKEN`, while rider/client routes use Firebase Bearer auth
 - using both avoids adding Cloud-Run-specific auth exceptions in app code
 
 ### Cloud Run service settings
@@ -253,7 +264,7 @@ Recommended for testing / low-cost validation:
 - `REQUIRE_FIREBASE_AUTH=false` for testing
 - valid Firebase Admin credentials
 
-For public production later, revisit whether `/api/*` should keep shared-token auth enabled.
+For public production, shared-token auth must be disabled and Firebase Bearer auth must be enabled. Use `SCHEDULER_API_TOKEN` only for server-to-server scheduler calls such as `POST /api/detour-run-once`.
 
 ### Example deploy flow
 
@@ -272,7 +283,7 @@ Create a dedicated scheduler service account, grant it `roles/run.invoker` on th
 - URL: `https://<your-cloud-run-service>/api/detour-run-once`
 - auth: OIDC token
 - audience: your Cloud Run service URL
-- headers: `x-api-token=<same API_PROXY_TOKEN>`
+- headers: `x-scheduler-token=<same SCHEDULER_API_TOKEN>`
 
 ### Example `gcloud` commands
 
@@ -301,7 +312,7 @@ gcloud scheduler jobs create http bttp-detour-run-once \
   --time-zone="America/Toronto" \
   --uri="https://YOUR_CLOUD_RUN_URL/api/detour-run-once" \
   --http-method=POST \
-  --headers="x-api-token=YOUR_LONG_RANDOM_TOKEN" \
+  --headers="x-scheduler-token=YOUR_LONG_RANDOM_TOKEN" \
   --oidc-service-account-email="bttp-detour-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --oidc-token-audience="https://YOUR_CLOUD_RUN_URL" \
   --attempt-deadline=30s \

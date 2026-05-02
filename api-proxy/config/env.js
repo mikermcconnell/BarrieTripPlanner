@@ -44,6 +44,7 @@ function buildProxyConfig(env = process.env) {
         .map((token) => token.trim())
         .filter(Boolean)
     ),
+    schedulerApiToken: (env.SCHEDULER_API_TOKEN || '').trim(),
     detourDebugApiKey: (env.DETOUR_DEBUG_API_KEY || '').trim(),
     barrieBounds: '-79.85,44.25,-79.55,44.50',
     allowedOrigins: (
@@ -60,9 +61,21 @@ function validateProxyConfig(config, env = process.env) {
     console.warn('LOCATIONIQ_API_KEY is missing. LocationIQ proxy endpoints will return 503.');
   }
 
-  if (config.isProd && config.requireApiAuth && !config.requireFirebaseAuth) {
+  if (config.isProd && !config.requireApiAuth) {
+    throw new Error(
+      'Production proxy must require API auth. Set REQUIRE_API_AUTH=true.'
+    );
+  }
+
+  if (config.isProd && !config.requireFirebaseAuth) {
     throw new Error(
       'Production proxy must use Firebase Bearer auth. Set REQUIRE_FIREBASE_AUTH=true.'
+    );
+  }
+
+  if (config.isProd && config.allowSharedTokenAuth) {
+    throw new Error(
+      'Production proxy must disable general shared token auth. Set ALLOW_SHARED_TOKEN_AUTH=false.'
     );
   }
 

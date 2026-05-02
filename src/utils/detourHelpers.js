@@ -73,7 +73,7 @@ export function getConfidenceChip(confidence) {
     case 'high':
       return { label: 'Confirmed', color: COLORS.success, bgColor: COLORS.successSubtle };
     case 'medium':
-      return { label: 'Detecting...', color: COLORS.warning, bgColor: COLORS.warningSubtle };
+      return { label: 'Likely detour', color: COLORS.warning, bgColor: COLORS.warningSubtle };
     default:
       return { label: 'Low confidence', color: COLORS.textSecondary, bgColor: COLORS.grey200 };
   }

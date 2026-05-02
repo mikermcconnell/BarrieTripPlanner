@@ -11,6 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import logger from '../utils/logger';
 
 import { MAP_CONFIG } from '../config/constants';
+import {
+  BUS_APPROACH_LINE_DASH_ARRAY,
+  BUS_APPROACH_LINE_OPACITY,
+} from '../config/mapLineStyles';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 
 // Navigation components
@@ -27,6 +31,8 @@ import { useNavigationLocation } from '../hooks/useNavigationLocation';
 import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
+import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
+import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
 
 import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import { decodePolyline } from '../utils/polylineUtils';
@@ -292,6 +298,7 @@ const NavigationScreen = ({ route }) => {
     isWalkingLeg,
     nextLegPreviewText,
     nextTransitLeg,
+    onBoardPeekAheadText,
     totalRemainingDistance,
     transitPeekAheadText,
   } = useNavigationTripViewModel({
@@ -309,12 +316,29 @@ const NavigationScreen = ({ route }) => {
     isUserOnBoard
   );
 
+  useAutoBoardBus({
+    currentTransitLeg,
+    transitStatus,
+    busProximity,
+    onBoardBus: boardBus,
+  });
+
   // Also track bus for the next transit leg while walking
   const nextTransitBusProximity = useBusProximity(
     isWalkingLeg ? nextTransitLeg : null,
     isWalkingLeg && !!nextTransitLeg,
     userLocation,
     false
+  );
+
+  const walkingPaceStatus = useMemo(
+    () => buildWalkPaceStatus({
+      currentLeg,
+      distanceToDestination,
+      nextTransitLeg,
+      nextTransitProximity: nextTransitBusProximity,
+    }),
+    [currentLeg, distanceToDestination, nextTransitLeg, nextTransitBusProximity]
   );
 
   // Track navigation start
@@ -732,6 +756,10 @@ const NavigationScreen = ({ route }) => {
     setShowOverviewTrigger(prev => prev + 1);
   }, []);
 
+  const handleMapUserInteraction = useCallback(() => {
+    setIsFollowMode(false);
+  }, []);
+
   // Detect touch device for compass button visibility
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -784,6 +812,7 @@ const NavigationScreen = ({ route }) => {
         ref={mapRef}
         initialRegion={initialRegion}
         onMapReady={() => setIsMapReady(true)}
+        onUserInteraction={handleMapUserInteraction}
       >
         {routePolylines.map((route) => (
           <WebRoutePolyline
@@ -805,8 +834,8 @@ const NavigationScreen = ({ route }) => {
             coordinates={currentStepBusPreviewLine.coordinates}
             color={currentStepBusPreviewLine.color}
             strokeWidth={3}
-            dashArray="8, 6"
-            opacity={0.7}
+            dashArray={BUS_APPROACH_LINE_DASH_ARRAY}
+            opacity={BUS_APPROACH_LINE_OPACITY}
             outlineWidth={0}
             interactive={false}
           />
@@ -862,8 +891,8 @@ const NavigationScreen = ({ route }) => {
             coordinate={positionToCoordinate(marker.position)}
             html={buildNavMarkerHtml({ type: marker.type })}
             className={`nav-transit-stop-marker nav-transit-stop-marker-${marker.type}`}
-            zIndexOffset={780}
-            popupHtml={marker.name ? `<strong>${escapeHtml(marker.caption || '')}</strong><br/>${escapeHtml(marker.name)}` : null}
+            zIndexOffset={840}
+            popupHtml={marker.showLabel !== false && marker.name ? `<strong>${escapeHtml(marker.caption || '')}</strong><br/>${escapeHtml(marker.name)}` : null}
           />
         ))}
 
@@ -921,6 +950,7 @@ const NavigationScreen = ({ route }) => {
         scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
         delaySeconds={currentLeg?.delaySeconds || 0}
         isRealtime={currentLeg?.isRealtime || false}
+        walkingPaceLevel={walkingPaceStatus?.level || 'on_pace'}
       />
 
       {/* Map control buttons */}
@@ -947,8 +977,8 @@ const NavigationScreen = ({ route }) => {
       </View>
 
       {/* Bottom Section */}
-      <View style={styles.bottomSection}>
-        {isTransitLeg && !isOnDemandLeg && (
+      <View style={styles.bottomSection} pointerEvents="box-none">
+        {isTransitLeg && !isOnDemandLeg && transitStatus !== 'waiting' && (
           <TransitStopGuideCard
             leg={currentLeg}
             liveStopsRemaining={busProximity.stopsUntilAlighting}
@@ -1028,12 +1058,16 @@ const NavigationScreen = ({ route }) => {
             onNextStep={advanceStep}
             destinationName={currentLeg?.to?.name}
             currentLeg={currentLeg}
+            distanceToDestination={distanceToDestination}
             isLastStep={currentStepIndex === (currentLeg?.steps || []).length - 1}
             onNextLeg={advanceLeg}
             currentStepIndex={currentStepIndex}
             totalSteps={(currentLeg?.steps || []).length}
             nextLegPreview={nextLegPreviewText}
             nextTransitLeg={nextTransitLeg}
+            nextTransitProximity={nextTransitBusProximity}
+            onFindNextTrip={handleRecalculate}
+            paceStatus={walkingPaceStatus}
           />
         )}
 
@@ -1042,6 +1076,7 @@ const NavigationScreen = ({ route }) => {
           <>
             {transitStatus === 'waiting' && !busProximity.hasArrived ? (
               <BoardingInstructionCard
+                leg={currentLeg}
                 routeShortName={currentLeg?.route?.shortName}
                 routeColor={currentLeg?.route?.color}
                 headsign={currentLeg?.headsign}
@@ -1072,7 +1107,7 @@ const NavigationScreen = ({ route }) => {
                 scheduledDeparture={currentLeg?.startTime}
                 isRealtime={currentLeg?.isRealtime || false}
                 delaySeconds={currentLeg?.delaySeconds || 0}
-                nextLegPreview={transitPeekAheadText}
+                nextLegPreview={onBoardPeekAheadText}
               />
             )}
           </>

@@ -50,8 +50,8 @@ describe('detourOps rollout health', () => {
     };
 
     const history = [
-      { routeId: '8A', eventType: 'DETOUR_CLEARED', durationMs: 2 * 60 * 1000 },
-      { routeId: '8A', eventType: 'DETOUR_CLEARED', durationMs: 8 * 60 * 1000 },
+      { routeId: '8A', eventType: 'DETOUR_CLEARED', durationMs: 2 * 60 * 1000, confidence: 'low' },
+      { routeId: '8A', eventType: 'DETOUR_CLEARED', durationMs: 8 * 60 * 1000, confidence: 'medium' },
     ];
 
     const ops = createDetourOps({
@@ -87,6 +87,14 @@ describe('detourOps rollout health', () => {
     ]));
     expect(result.flapping.flappingRoutes).toEqual([{ routeId: '8A', clearCount: 2 }]);
     expect(result.falsePositiveCandidates.count).toBe(1);
+    expect(result.suspiciousShortLivedDetours).toMatchObject({
+      count: 2,
+      maxDurationMs: 15 * 60 * 1000,
+      byConfidence: {
+        low: 1,
+        medium: 1,
+      },
+    });
     expect(result.falsePositiveRate).toMatchObject({
       rate: 0.5,
       falsePositiveCount: 1,

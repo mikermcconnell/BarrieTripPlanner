@@ -64,7 +64,39 @@ describe('navigationTripViewModel', () => {
     expect(viewModel.transitPeekAheadText).toContain('Next: Walk 6 min');
     expect(viewModel.transitPeekAheadText).toContain('Bayfield St (#2045)');
     expect(viewModel.transitPeekAheadText).toContain('for Route 1');
+    expect(viewModel.onBoardPeekAheadText).toBe('After this bus: 6 min walk');
     expect(viewModel.totalRemainingDistance).toBe(4500);
+  });
+
+  test('uses compact peek-ahead text for a transit leg followed by a final walk', () => {
+    const finalWalkItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          route: { shortName: '8A' },
+          from: { name: 'Downtown Terminal', stopCode: '1020' },
+          to: { name: 'Georgian Mall' },
+          distance: 4200,
+        },
+        {
+          mode: 'WALK',
+          from: { name: 'Georgian Mall' },
+          to: { name: '24 Maple Ave' },
+          duration: 180,
+          distance: 260,
+        },
+      ],
+    };
+
+    const viewModel = buildNavigationTripViewModel({
+      itinerary: finalWalkItinerary,
+      currentLegIndex: 0,
+      currentLeg: finalWalkItinerary.legs[0],
+      distanceToDestination: 900,
+    });
+
+    expect(viewModel.transitPeekAheadText).toBe('Next: Walk 3 min to 24 Maple Ave');
+    expect(viewModel.onBoardPeekAheadText).toBe('After this bus: 3 min walk');
   });
 
   test('treats a final walk after transit as the last walking leg', () => {

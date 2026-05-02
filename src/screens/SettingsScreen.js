@@ -8,7 +8,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getNotificationSettings,
   saveNotificationSettings,
@@ -21,8 +21,11 @@ import { useTransitRealtime, useTransitStatic } from '../context/TransitContext'
 import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SettingsScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { user, isAuthenticated } = useAuth();
   const { routes } = useTransitStatic();
   const { detoursEnabled, setDetoursEnabled } = useTransitRealtime();
@@ -30,7 +33,7 @@ const SettingsScreen = ({ navigation }) => {
     serviceAlerts: true,
     tripReminders: true,
     nearbyAlerts: false,
-    transitNews: true,
+    transitNews: false,
   });
   const [subscribedRoutes, setSubscribedRoutes] = useState([]);
   const [cacheInfo, setCacheInfo] = useState({ sizeFormatted: 'Calculating...' });
@@ -78,6 +81,9 @@ const SettingsScreen = ({ navigation }) => {
     };
     setNotificationSettings(newSettings);
     await saveNotificationSettings(newSettings);
+    if (isAuthenticated && user) {
+      await userFirestoreService.updateNotificationSettings(user.uid, newSettings);
+    }
   };
 
   const handleDetourToggle = async (enabled) => {
@@ -161,7 +167,11 @@ const SettingsScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) }}
+        showsVerticalScrollIndicator={false}
+      >
         {renderSection(
           'Notifications',
           <>
@@ -185,7 +195,7 @@ const SettingsScreen = ({ navigation }) => {
             )}
             {renderToggleRow(
               'Transit News',
-              'Get notified about transit news updates',
+              'Push only for watched routes or major system-wide updates',
               notificationSettings.transitNews,
               () => handleNotificationToggle('transitNews')
             )}
@@ -206,7 +216,7 @@ const SettingsScreen = ({ navigation }) => {
           <View style={styles.routeChipsContainer}>
             <Text style={styles.routeChipsHint}>
               {subscribedRoutes.length === 0
-                ? 'No routes selected. You will receive all transit news.'
+                ? 'No routes selected. Route-specific news will stay in the app.'
                 : `Receiving news for ${subscribedRoutes.length} route${subscribedRoutes.length !== 1 ? 's' : ''}`}
             </Text>
             <View style={styles.routeChipsRow}>

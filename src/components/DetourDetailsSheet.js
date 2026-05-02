@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import DetourImpactSummary from './DetourImpactSummary';
 import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const getDetourTitle = (routeId, state) => {
   const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
@@ -13,6 +15,8 @@ const getDetourTitle = (routeId, state) => {
 };
 
 const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose, onViewOnMap }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const snapPoints = useMemo(() => ['45%', '78%'], []);
 
@@ -37,7 +41,12 @@ const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose,
       backgroundStyle={styles.sheetBackground}
       handleIndicatorStyle={styles.handleIndicator}
     >
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         <View style={styles.header}>
           <View style={[styles.routeBadge, { backgroundColor: routeColor }]}>
             <Text style={styles.routeBadgeText}>{routeId}</Text>

@@ -81,6 +81,7 @@ describe('buildNavigationVehicleMarkers', () => {
           id: 'vehicle-7',
           tripId: 'trip-previous',
           routeId: 'route-7',
+          bearing: 270,
           coordinate: {
             latitude: 44.42,
             longitude: -79.68,
@@ -101,6 +102,61 @@ describe('buildNavigationVehicleMarkers', () => {
       })
     );
     expect(walkingBusMarker.vehicle.tripId).toBe('trip-previous');
+    expect(walkingBusMarker.bearing).toBe(270);
+  });
+
+  test('buildWalkingBusMarker points the arrow toward the boarding stop while walking to transit', () => {
+    const walkingBusMarker = buildWalkingBusMarker({
+      itinerary: {
+        legs: [
+          { mode: 'WALK' },
+          {
+            mode: 'BUS',
+            tripId: 'trip-next',
+            route: {
+              id: 'route-100',
+              shortName: '100',
+              color: '#AA0000',
+            },
+            from: {
+              lat: 44.4,
+              lon: -79.7,
+            },
+          },
+        ],
+      },
+      currentLegIndex: 0,
+      isWalkingLeg: true,
+      nextTransitLeg: {
+        mode: 'BUS',
+        tripId: 'trip-next',
+        route: {
+          id: 'route-100',
+          shortName: '100',
+          color: '#AA0000',
+        },
+        from: {
+          lat: 44.4,
+          lon: -79.7,
+        },
+      },
+      vehicles: [
+        {
+          id: 'vehicle-100',
+          tripId: 'trip-next',
+          routeId: 'route-100',
+          bearing: 0,
+          coordinate: {
+            latitude: 44.41,
+            longitude: -79.7,
+          },
+        },
+      ],
+      routePathsByRouteId: new Map(),
+    });
+
+    expect(walkingBusMarker.bearing).toBeCloseTo(180, 0);
+    expect(walkingBusMarker.vehicle.bearing).toBeCloseTo(180, 0);
   });
 
   test('buildTrackedBusMarker falls back to route match when trip match is unavailable', () => {

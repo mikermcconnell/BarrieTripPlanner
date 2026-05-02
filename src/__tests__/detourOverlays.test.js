@@ -26,7 +26,7 @@ describe('deriveDetourOverlays', () => {
     const result = deriveDetourOverlays({
       enabled: false,
       selectedRouteIds: new Set(['1']),
-      activeDetours: { '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE } },
+      activeDetours: { '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE } },
     });
     expect(result).toEqual([]);
   });
@@ -35,7 +35,7 @@ describe('deriveDetourOverlays', () => {
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: new Set(),
-      activeDetours: { '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE } },
+      activeDetours: { '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE } },
     });
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('1');
@@ -45,10 +45,48 @@ describe('deriveDetourOverlays', () => {
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: null,
-      activeDetours: { '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE } },
+      activeDetours: { '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE } },
     });
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('1');
+  });
+
+  test('does not render low-confidence detours', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(),
+      activeDetours: {
+        '8A': {
+          state: 'active', confidence: 'high',
+          confidence: 'low',
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+        },
+      },
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  test('renders medium and high confidence detours', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(),
+      activeDetours: {
+        '8A': {
+          state: 'active', confidence: 'high',
+          confidence: 'medium',
+          vehicleCount: 2,
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+        },
+        '8B': {
+          state: 'active', confidence: 'high',
+          confidence: 'high',
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+        },
+      },
+    });
+
+    expect(result.map((overlay) => overlay.routeId).sort()).toEqual(['8A', '8B']);
   });
 
   test('skips routes with no geometry', () => {
@@ -56,7 +94,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['1']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: null, inferredDetourPolyline: null },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: null, inferredDetourPolyline: null },
       },
     });
     expect(result).toEqual([]);
@@ -68,7 +106,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['1']),
       activeDetours: {
         '1': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           skippedSegmentPolyline: [{ latitude: 44.38, longitude: -79.69 }],
           inferredDetourPolyline: null,
         },
@@ -82,7 +120,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['2']),
       activeDetours: {
-        '2': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE, inferredDetourPolyline: null },
+        '2': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE, inferredDetourPolyline: null },
       },
     });
     expect(result).toHaveLength(1);
@@ -104,7 +142,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['3']),
       activeDetours: {
-        '3': { state: 'active', skippedSegmentPolyline: null, inferredDetourPolyline: LONG_POLYLINE },
+        '3': { state: 'active', confidence: 'high', skippedSegmentPolyline: null, inferredDetourPolyline: LONG_POLYLINE },
       },
     });
     expect(result).toHaveLength(0);
@@ -121,7 +159,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['10']),
       activeDetours: {
         '10': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           skippedSegmentPolyline: SAMPLE_POLYLINE,
           inferredDetourPolyline: LONG_POLYLINE,
           likelyDetourPolyline: likelyPolyline,
@@ -139,7 +177,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['3']),
       activeDetours: {
-        '3': { state: 'clear-pending', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '3': { state: 'clear-pending', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
     });
     expect(result).toHaveLength(1);
@@ -152,7 +190,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['1']),
       activeDetours: {
-        '1': { skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '1': { confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
     });
     expect(result[0].state).toBe('active');
@@ -167,7 +205,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['1']),
       activeDetours: {
         '1': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           skippedSegmentPolyline: SAMPLE_POLYLINE,
           entryPoint: entry,
           exitPoint: exit,
@@ -185,7 +223,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['1']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
     });
     expect(result).toHaveLength(1);
@@ -199,7 +237,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['2']),
       activeDetours: {
-        '2': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE, inferredDetourPolyline: LONG_POLYLINE },
+        '2': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE, inferredDetourPolyline: LONG_POLYLINE },
       },
       routeColorByRouteId: {
         '2': '#F48FB1',
@@ -216,9 +254,9 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['1']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '2': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '3': { state: 'active', likelyDetourPolyline: LONG_POLYLINE },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '2': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '3': { state: 'active', confidence: 'high', likelyDetourPolyline: LONG_POLYLINE },
       },
     });
     expect(result).toHaveLength(1);
@@ -230,9 +268,9 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['8']),
       activeDetours: {
-        '8A': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '8B': { state: 'active', skippedSegmentPolyline: LONG_POLYLINE },
-        '10': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '8A': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '8B': { state: 'active', confidence: 'high', skippedSegmentPolyline: LONG_POLYLINE },
+        '10': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
     });
 
@@ -244,8 +282,8 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['8']),
       activeDetours: {
-        '8A': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '8B': { state: 'active', skippedSegmentPolyline: LONG_POLYLINE },
+        '8A': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '8B': { state: 'active', confidence: 'high', skippedSegmentPolyline: LONG_POLYLINE },
       },
     });
 
@@ -266,8 +304,8 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['1', '2']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '2': { state: 'clear-pending', likelyDetourPolyline: LONG_POLYLINE },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '2': { state: 'clear-pending', confidence: 'high', likelyDetourPolyline: LONG_POLYLINE },
       },
     });
     expect(result).toHaveLength(2);
@@ -282,8 +320,8 @@ describe('deriveDetourOverlays', () => {
       focusedRouteId: '2',
       selectedRouteIds: new Set(['1', '2']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
-        '2': { state: 'active', likelyDetourPolyline: LONG_POLYLINE },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '2': { state: 'active', confidence: 'high', likelyDetourPolyline: LONG_POLYLINE },
       },
     });
 
@@ -307,7 +345,7 @@ describe('deriveDetourOverlays', () => {
       focusedRouteId: '8A',
       selectedRouteIds: new Set(['8A']),
       activeDetours: {
-        '8A': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '8A': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
       detourStopDetailsByRouteId: {
         '8A': {
@@ -346,7 +384,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['10']),
       activeDetours: {
         '10': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           segments: [{
             shapeId: 'shape-10',
             skippedSegmentPolyline: SAMPLE_POLYLINE,
@@ -384,7 +422,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['8A']),
       activeDetours: {
         '8A': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           segments: [
             {
               shapeId: 'shape-8a-1',
@@ -429,7 +467,7 @@ describe('deriveDetourOverlays', () => {
       selectedRouteIds: new Set(['8A']),
       activeDetours: {
         '8A': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           skippedSegmentPolyline: LONG_POLYLINE,
           likelyDetourPolyline: roadMatchedPolyline,
           entryPoint: LONG_POLYLINE[0],
@@ -461,7 +499,7 @@ describe('deriveDetourOverlays', () => {
       enabled: true,
       selectedRouteIds: new Set(['5']),
       activeDetours: {
-        '1': { state: 'active', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '1': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
       },
     });
     expect(result).toEqual([]);
@@ -478,7 +516,7 @@ describe('detourService geometry field forwarding', () => {
       detectedAt: { toDate: () => new Date('2025-01-15T10:00:00Z') },
       lastSeenAt: { toDate: () => new Date('2025-01-15T10:05:00Z') },
       vehicleCount: 2,
-      state: 'active',
+      state: 'active', confidence: 'high',
       skippedSegmentPolyline: SAMPLE_POLYLINE,
       inferredDetourPolyline: LONG_POLYLINE,
       entryPoint: { latitude: 44.38, longitude: -79.69 },
@@ -558,7 +596,7 @@ describe('context helpers: getRouteDetour / isRouteDetouring', () => {
   const activeDetours = {
     '8A': {
       routeId: '8A',
-      state: 'active',
+      state: 'active', confidence: 'high',
       skippedSegmentPolyline: SAMPLE_POLYLINE,
       vehicleCount: 2,
     },
@@ -627,7 +665,7 @@ describe('all-routes view', () => {
       selectedRouteIds: new Set(),
       activeDetours: {
         '8A': {
-          state: 'active',
+          state: 'active', confidence: 'high',
           skippedSegmentPolyline: [
             { latitude: 44.39, longitude: -79.70 },
             { latitude: 44.39, longitude: -79.69 },
@@ -648,7 +686,7 @@ describe('all-routes view', () => {
 
   it('returns overlays for multiple detours when no routes selected', () => {
     const makeDetour = () => ({
-      state: 'active',
+      state: 'active', confidence: 'high',
       skippedSegmentPolyline: [
         { latitude: 44.39, longitude: -79.70 },
         { latitude: 44.39, longitude: -79.69 },

@@ -1,3 +1,10 @@
+import runtimeConfig from './runtimeConfig';
+
+const readPublicEnv = (value, fallback = '') => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return fallback;
+};
+
 // Barrie Transit GTFS Data URLs
 // Source: https://www.transit.land/feeds/f-dpzk-barrietransit
 export const GTFS_URLS = {
@@ -111,7 +118,7 @@ export const LOCATIONIQ_CONFIG = {
   API_KEY: process.env.EXPO_PUBLIC_LOCATIONIQ_API_KEY || '',
   BASE_URL: 'https://us1.locationiq.com/v1',
   // Shared API proxy URL for all platforms (web + native)
-  PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL || '',
+  PROXY_URL: readPublicEnv(process.env.EXPO_PUBLIC_API_PROXY_URL, runtimeConfig.proxy.apiBaseUrl),
   // Allow direct client->LocationIQ calls (development fallback only)
   ALLOW_DIRECT: process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ === 'true',
   // Optional auth token for hardened API proxy deployments
@@ -151,6 +158,22 @@ export const ROUTING_CONFIG = {
   // Penalty added to transfer time to prefer fewer transfers (seconds)
   TRANSFER_PENALTY: 180,
 
+  // Rider-facing itinerary ranking penalty for each transfer.
+  // A one-transfer trip must save roughly this much real time to outrank a direct trip.
+  RIDER_TRANSFER_PENALTY_SECONDS: 420,
+
+  // Extra ranking penalty for tight transfer windows.
+  RISKY_TRANSFER_THRESHOLD_SECONDS: 180,
+  RISKY_TRANSFER_PENALTY_SECONDS: 300,
+
+  // Transfer walks longer than this get an extra ranking penalty.
+  LONG_TRANSFER_WALK_THRESHOLD_METERS: 250,
+
+  // Walking-only trip option guardrails.
+  WALKING_ONLY_MAX_DURATION_SECONDS: 35 * 60,
+  WALKING_ONLY_MAX_DISTANCE_METERS: 2500,
+  WALKING_ONLY_RECOMMENDATION_RATIO: 0.75,
+
   // Minimum time needed to make a transfer (seconds)
   MIN_TRANSFER_TIME: 60,
 
@@ -162,10 +185,13 @@ export const ROUTING_CONFIG = {
   // Prevents itineraries where the actual walk is much longer than straight-line estimate
   MAX_ACTUAL_WALK_DISTANCE: 1200,
 
-  // Maximum number of itineraries to return
-  MAX_ITINERARIES: 3,
+    // Maximum number of itineraries to return
+    MAX_ITINERARIES: 3,
 
-  // Time window to search for trips after departure time (seconds)
+    // Internal candidate pool before rider-cost ranking trims display results.
+    ROUTING_CANDIDATE_POOL_SIZE: 6,
+  
+    // Time window to search for trips after departure time (seconds)
   TIME_WINDOW: 7200, // 2 hours
 
   // Maximum trip duration to display (seconds)

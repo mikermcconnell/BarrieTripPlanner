@@ -128,6 +128,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
 - **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, all active detours are cleared and the worker starts fresh when service resumes.
 - **Headway-aware stale clearing** — as a safety net, the publisher clears stale active detour documents only when route-family vehicles are still reporting and the latest detour evidence is older than a schedule-aware threshold. The threshold is roughly two scheduled headways plus a buffer, with a 45-minute minimum, so low-frequency Sunday routes are not cleared just because no bus has reached the affected segment yet.
+- **Zero-vehicle stale clearing** — when a published detour has no vehicles currently off-route but route-family buses are still reporting, the publisher uses a shorter stale-evidence window so false positives do not linger on the map after buses return to normal routing.
 - **Segment-level detour lifecycle under one route document** — same-route detours separated by normal on-route travel are now tracked as separate internal segments with independent clear-pending and clearing behavior.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
@@ -233,6 +234,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_STALE_AUTO_CLEAR_BUFFER_MS` | `600000` | Extra buffer added to the headway-based stale window (10min). |
 | `DETOUR_STALE_AUTO_CLEAR_MAX_MS` | `10800000` | Maximum stale safety window (3h). |
 | `DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS` | `3600000` | Conservative fallback headway when nearby GTFS trips are unavailable but service still appears active. |
+| `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MS` | `720000` | Short stale-evidence window for active detours with `vehicleCount: 0` while route-family vehicles are still reporting (12min). |
+| `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MIN_AGE_MS` | `600000` | Minimum detour age before zero-vehicle stale clearing can remove a published detour (10min). |
 
 ### Publishing & History
 | Variable | Default | Description |
@@ -268,6 +271,7 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `MIN_EVIDENCE_FOR_GEOMETRY` | `3` | detourGeometry.js | Min evidence points to build geometry |
 | `HIGH_CONFIDENCE_VEHICLES` | `2` | detourGeometry.js | Unique vehicles needed for "high" confidence |
 | `HIGH_CONFIDENCE_POINTS` | `10` | detourGeometry.js | Evidence points needed for "high" confidence |
+| `MEDIUM_CONFIDENCE_VEHICLES` | `2` | detourGeometry.js | Unique vehicles needed before a detour can become rider-visible as "likely" |
 | `DP_TOLERANCE_METERS` | `25` | detourGeometry.js | Douglas-Peucker simplification tolerance |
 
 ---

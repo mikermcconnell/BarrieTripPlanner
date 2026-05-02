@@ -24,9 +24,17 @@ function normalizeMyRideNewsItem(item) {
   const body = String(item.summary || '').trim();
   if (!title && !body) return null;
 
-  const routes = Array.isArray(item.routes)
+  const explicitRoutes = Array.isArray(item.routes)
     ? item.routes.map((route) => String(route).trim().toUpperCase()).filter(Boolean)
-    : extractAffectedRoutes(`${title} ${body}`);
+    : [];
+  const extractedRoutes = extractAffectedRoutes(`${title} ${body}`).filter((route) => {
+    if (!/^\d+$/.test(route)) return true;
+    return !explicitRoutes.some((explicitRoute) => new RegExp(`^${route}[A-Z]$`).test(explicitRoute));
+  });
+  const routes = [...new Set([
+    ...explicitRoutes,
+    ...extractedRoutes,
+  ])];
 
   const publishedAtMs = item.publishDateUtc
     ? Date.parse(item.publishDateUtc)

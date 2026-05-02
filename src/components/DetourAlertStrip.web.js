@@ -20,8 +20,8 @@ const DetourAlertStrip = ({
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, routeIds, topOffset, getRouteName,
-    visibleIds, overflowCount, countText, shouldRender,
+    expanded, toggleExpanded, routeIds, routeGroups, topOffset, getRouteName,
+    getDetourStatusLabel, visibleIds, overflowCount, countText, shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
@@ -62,16 +62,16 @@ const DetourAlertStrip = ({
           {countText}
         </Text>
         <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
-          {routeIds.slice(0, 3).map((routeId) => {
-            const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+          {routeGroups.slice(0, 3).map((group) => {
+            const color = ROUTE_COLORS[group.firstRouteId] || ROUTE_COLORS.DEFAULT;
             return (
-              <View key={routeId} style={[styles.routePill, { backgroundColor: color }]}>
-                <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+              <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
+                <Text style={styles.routePillText}>{group.displayName}</Text>
               </View>
             );
           })}
-          {routeIds.length > 3 && (
-            <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
+          {routeGroups.length > 3 && (
+            <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
           )}
         </View>
         <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
@@ -102,7 +102,7 @@ const DetourAlertStrip = ({
                   <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
                 </View>
                 <Text style={styles.detailLabel} numberOfLines={1}>
-                  Route {getRouteName(routeId)} — {isClearPending ? 'Clearing...' : 'On detour'}
+                  Route {getRouteName(routeId)} — {getDetourStatusLabel(routeId)}
                 </Text>
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>

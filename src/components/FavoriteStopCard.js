@@ -7,14 +7,14 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFavoriteStop } from '../hooks/useFavoriteStop';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
-const FavoriteStopCard = ({ onPress }) => {
+const FavoriteStopCard = ({ onPress, bottomInset = 0 }) => {
   const { favoriteStop, nextArrivals, isLoading, isVisible } = useFavoriteStop();
 
   if (!isVisible) return null;
 
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[styles.container, { bottom: 100 + bottomInset }]}
       onPress={() => onPress?.(favoriteStop)}
       activeOpacity={0.85}
       accessibilityRole="button"

@@ -4,7 +4,7 @@ import {
 } from '../utils/tripPlanningFlow';
 
 describe('tripPlanningFlow', () => {
-  test('starts destination trip flow and seeds current location search', () => {
+  test('starts destination trip flow without using current location automatically', () => {
     const enterPlanningMode = jest.fn();
     const setTripFrom = jest.fn();
     const setTripTo = jest.fn();
@@ -24,11 +24,9 @@ describe('tripPlanningFlow', () => {
 
     expect(beforeEnter).toHaveBeenCalledTimes(1);
     expect(enterPlanningMode).toHaveBeenCalledTimes(1);
-    expect(setTripFrom).toHaveBeenCalledWith(null, 'Current Location');
-    expect(setTripTo).toHaveBeenCalledWith(destination, 'Downtown Hub', {
-      suppressAutoSearch: true,
-    });
-    expect(useCurrentLocationForTrip).toHaveBeenCalledWith(destination);
+    expect(setTripFrom).not.toHaveBeenCalled();
+    expect(setTripTo).toHaveBeenCalledWith(destination, 'Downtown Hub');
+    expect(useCurrentLocationForTrip).not.toHaveBeenCalled();
   });
 
   test('falls back to normal destination selection when current location is unavailable', () => {
@@ -112,7 +110,7 @@ describe('tripPlanningFlow', () => {
     );
   });
 
-  test('starts current-location flow when choosing a stop destination without an origin', () => {
+  test('fills stop destination without using current location when choosing a stop destination without an origin', () => {
     const setSelectedStop = jest.fn();
     const enterPlanningMode = jest.fn();
     const setTripFrom = jest.fn();
@@ -130,12 +128,11 @@ describe('tripPlanningFlow', () => {
 
     expect(setSelectedStop).toHaveBeenCalledWith(null);
     expect(enterPlanningMode).toHaveBeenCalledTimes(1);
-    expect(setTripFrom).toHaveBeenCalledWith(null, 'Current Location');
+    expect(setTripFrom).not.toHaveBeenCalled();
     expect(setTripTo).toHaveBeenCalledWith(
       { lat: 44.401, lon: -79.681 },
-      'Downtown Terminal',
-      { suppressAutoSearch: true }
+      'Downtown Terminal'
     );
-    expect(useCurrentLocationForTrip).toHaveBeenCalledWith({ lat: 44.401, lon: -79.681 });
+    expect(useCurrentLocationForTrip).not.toHaveBeenCalled();
   });
 });

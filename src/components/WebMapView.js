@@ -219,12 +219,13 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
 
   const arrowHtml = hasValidBearing ? `
     <svg width="104" height="104" viewBox="0 0 104 104"
-      style="position:absolute;top:-8px;left:-8px;pointer-events:none;z-index:1;opacity:${resolvedOpacity};overflow:visible;">
+      data-heading-tab="true"
+      style="position:absolute;top:-8px;left:-8px;pointer-events:none;z-index:3;opacity:${resolvedOpacity};overflow:visible;">
       <g transform="rotate(${numericBearing}, 52, 52)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22));">
-        <path d="M52 10 L41 32 L52 25 L63 32 Z"
+        <path d="M52 8 L42 30 L49 30 L49 34 L55 34 L55 30 L62 30 Z"
           fill="rgba(255,255,255,0.96)" />
-        <path d="M52 13 L44 29 L52 23 L60 29 Z"
-          fill="${color}" />
+        <path d="M52 12 L46 28 L50 28 L50 30 L54 30 L54 28 L58 28 Z"
+          fill="#111111" />
       </g>
     </svg>
   ` : '';
@@ -275,11 +276,16 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
   `;
 };
 
-const createStopHtml = (isSelected) => {
+const createStopHtml = (isSelected, isClosed = false) => {
   const size = isSelected ? 16 : 12;
   const hitArea = 24;
+  const background = isSelected ? '#1a73e8' : 'white';
+  const border = isSelected ? 'white' : isClosed ? '#FF991F' : '#1a73e8';
+  const closedDash = isClosed
+    ? '<div style="width:7px;height:2px;border-radius:999px;background:#FF991F;"></div>'
+    : '';
 
-  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${isSelected ? '#1a73e8' : 'white'};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${isSelected ? 'white' : '#1a73e8'};box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div></div>`;
+  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${background};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;">${closedDash}</div></div>`;
 };
 
 const buildPopup = (maplibre, popupHtml) => {
@@ -459,6 +465,8 @@ const addLineLayers = ({
   const lineDasharray = parseDashArray(dashArray, strokeWidth);
 
   if (outlineWidth > 0) {
+    const outlineStrokeWidth = strokeWidth + outlineWidth * 2;
+    const outlineDasharray = parseDashArray(dashArray, outlineStrokeWidth);
     map.addLayer({
       id: outlineId,
       type: 'line',
@@ -469,9 +477,9 @@ const addLineLayers = ({
       },
       paint: {
         'line-color': outlineColor || darkenColorHex(color, 0.4),
-        'line-width': strokeWidth + outlineWidth * 2,
+        'line-width': outlineStrokeWidth,
         'line-opacity': opacity,
-        ...(lineDasharray ? { 'line-dasharray': lineDasharray } : {}),
+        ...(outlineDasharray ? { 'line-dasharray': outlineDasharray } : {}),
         ...(offset ? { 'line-offset': offset } : {}),
       },
     });
@@ -800,11 +808,11 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
 export const WebStopMarker = memo(({ stop, onPress, isSelected }) => (
   <WebHtmlMarker
     coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-    html={createStopHtml(isSelected)}
+    html={createStopHtml(isSelected, Boolean(stop.isClosed))}
     zIndexOffset={isSelected ? 1000 : 500}
     onPress={() => onPress?.(stop)}
-    popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}`}
-    accessibilityLabel={`${stop.name}, stop ${stop.code}`}
+    popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}${stop.isClosed ? '<br /><span style="color:#8a5a00;">Stop closure reported</span>' : ''}`}
+    accessibilityLabel={`${stop.name}, stop ${stop.code}${stop.isClosed ? ', stop closure reported' : ''}`}
   />
 ));
 

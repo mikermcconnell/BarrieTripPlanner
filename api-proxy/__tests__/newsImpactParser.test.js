@@ -58,6 +58,31 @@ describe('newsImpactParser', () => {
     });
   });
 
+  test('extractStopClosureImpacts keeps unmatched stop closures as non-mappable notices', async () => {
+    const impacts = await extractStopClosureImpacts([
+      {
+        id: 'tod',
+        title: 'TOD-F Stop Closures',
+        body: 'Transit ON Demand Zone F stops 981 and 153 will also be placed out-of-service.',
+        affectedRoutes: ['TOD-F'],
+        url: 'https://example.test/news',
+        source: 'myridebarrie',
+      },
+    ], { stopsByCode: new Map(), stopsById: new Map() }, { now: '2026-04-29T12:00:00-04:00' });
+
+    expect(impacts).toHaveLength(2);
+    expect(impacts[0]).toMatchObject({
+      id: 'stopClosure_tod_unmatched_981',
+      type: 'stop_closure',
+      stopId: null,
+      stopCode: '981',
+      stopName: '',
+      latitude: null,
+      longitude: null,
+      mappable: false,
+    });
+  });
+
   test('date windows mark future and expired closures correctly', async () => {
     const futureImpacts = await extractStopClosureImpacts([
       {

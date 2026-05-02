@@ -12,6 +12,7 @@
 import React from 'react';
 import { WebHtmlMarker, WebRoutePolyline } from './WebMapView';
 import { simplifyPath } from '../utils/geometryUtils';
+import { getDirectionArrowPoints } from '../utils/detourDirectionArrows';
 
 const DETOUR_LINE_STYLE = {
   strokeWidth: 4.5,
@@ -35,11 +36,12 @@ const CLOSED_ROUTE_MASK_STYLE = {
 
 const MARKER_Z_INDEX = {
   ROUTE_STOP: 660,
+  DETOUR_DIRECTION_ARROW: 1180,
   CLOSURE_POINT: 690,
   SKIPPED_STOP: 700,
-  ENTRY_EXIT_CALLOUT: 710,
-  ROUTE_LINE_LABEL: 1200,
-  CLOSED_CALLOUT: 720,
+  ENTRY_EXIT_CALLOUT: 1320,
+  ROUTE_LINE_LABEL: 1340,
+  CLOSED_CALLOUT: 1330,
 };
 
 const simplifyOverlayPath = (path, minDistanceMeters = 28) => {
@@ -185,6 +187,25 @@ const makeLineLabelHtml = (label, fillColor, borderColor, textColor) => `
   </div>
 `;
 
+const makeDirectionArrowHtml = (color, bearing, opacity = 1) => `
+  <div style="
+    width:26px;
+    height:26px;
+    border-radius:50%;
+    background:${color};
+    border:2px solid #ffffff;
+    box-sizing:border-box;
+    box-shadow:0 2px 8px rgba(15,23,42,0.22);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity:${opacity};
+    transform:rotate(${bearing}deg);
+    color:#ffffff;
+    font:900 15px/1 Avenir, Arial, sans-serif;
+  ">↑</div>
+`;
+
 const DetourOverlay = ({
   routeId,
   skippedSegmentPolyline,
@@ -281,17 +302,29 @@ const DetourOverlay = ({
               </>
             ) : null}
             {inferredDetourPath ? (
-              <WebRoutePolyline
-                coordinates={inferredDetourPath}
-                color={detourColor}
-                strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
-                opacity={opacity}
-                outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
-                outlineColor={DETOUR_LINE_STYLE.outlineColor}
-                interactive={Boolean(onPress)}
-                onPress={onPress}
-                showArrows
-              />
+              <>
+                <WebRoutePolyline
+                  coordinates={inferredDetourPath}
+                  color={detourColor}
+                  strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
+                  opacity={opacity}
+                  outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
+                  outlineColor={DETOUR_LINE_STYLE.outlineColor}
+                  interactive={Boolean(onPress)}
+                  onPress={onPress}
+                  showArrows
+                />
+                {getDirectionArrowPoints(inferredDetourPath).map((arrow, arrowIndex) => (
+                  <WebHtmlMarker
+                    key={`detour-direction-arrow-${routeId}-${index}-${arrowIndex}`}
+                    coordinate={{ latitude: arrow.point.latitude, longitude: arrow.point.longitude }}
+                    anchor="center"
+                    offset={[0, 0]}
+                    html={makeDirectionArrowHtml(detourColor, arrow.bearing, opacity)}
+                    zIndexOffset={MARKER_Z_INDEX.DETOUR_DIRECTION_ARROW}
+                  />
+                ))}
+              </>
             ) : null}
           </React.Fragment>
         );

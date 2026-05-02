@@ -2,8 +2,8 @@ const fs = require('fs');
 
 function hasFirebaseAdminCredentials(env = process.env) {
   if (env.FIREBASE_SERVICE_ACCOUNT_JSON) return true;
-  if (!env.GOOGLE_APPLICATION_CREDENTIALS) return false;
-  return fs.existsSync(env.GOOGLE_APPLICATION_CREDENTIALS);
+  if (env.GOOGLE_APPLICATION_CREDENTIALS) return fs.existsSync(env.GOOGLE_APPLICATION_CREDENTIALS);
+  return Boolean(env.GCLOUD_PROJECT || env.FIREBASE_CONFIG);
 }
 
 function registerHealthRoutes(app, {
@@ -11,6 +11,7 @@ function registerHealthRoutes(app, {
   requireFirebaseAuth,
   allowSharedTokenAuth,
   sharedTokenConfigured,
+  schedulerTokenConfigured,
   hasLocationIQKey,
   isProd,
   detourDebugApiKey,
@@ -26,6 +27,7 @@ function registerHealthRoutes(app, {
         requireFirebaseAuth,
         allowSharedTokenAuth,
         sharedTokenConfigured,
+        schedulerTokenConfigured,
       },
       features: {
         locationIqProxyConfigured: hasLocationIQKey,

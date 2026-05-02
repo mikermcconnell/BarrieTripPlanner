@@ -116,6 +116,50 @@ describe('auth middleware', () => {
     expect(req.auth).toEqual({ uid: 'user-123', admin: true });
   });
 
+  test('accepts scheduler token only for detour run-once', async () => {
+    const middleware = createAuthenticateApiRequest({
+      requireApiAuth: true,
+      isProd: true,
+      detourDebugApiKey: '',
+      allowSharedTokenAuth: false,
+      apiTokens: new Set(),
+      requireFirebaseAuth: true,
+      schedulerApiToken: 'scheduler-secret',
+    });
+    const req = {
+      path: '/detour-run-once',
+      get: jest.fn((header) => (header === 'x-scheduler-token' ? 'scheduler-secret' : '')),
+    };
+    const next = jest.fn();
+
+    await middleware(req, createMockRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.clientId).toBe('scheduler:detour-run-once');
+  });
+
+  test('rejects scheduler token on public client routes', async () => {
+    const middleware = createAuthenticateApiRequest({
+      requireApiAuth: true,
+      isProd: true,
+      detourDebugApiKey: '',
+      allowSharedTokenAuth: false,
+      apiTokens: new Set(),
+      requireFirebaseAuth: true,
+      schedulerApiToken: 'scheduler-secret',
+    });
+    const req = {
+      path: '/geocode',
+      get: jest.fn((header) => (header === 'x-scheduler-token' ? 'scheduler-secret' : '')),
+    };
+    const res = createMockRes();
+
+    await middleware(req, res, jest.fn());
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.body.error).toBe('Unauthorized');
+  });
+
   test('rejects invalid Firebase bearer auth', async () => {
     mockVerifyIdToken.mockRejectedValue(new Error('bad token'));
     const middleware = createAuthenticateApiRequest({

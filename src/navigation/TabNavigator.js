@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 // Import screens
 import HomeScreen from '../screens/HomeScreen';
@@ -83,6 +84,15 @@ const ProfileStack = () => (
 // Main Tab Navigator
 const MainTabs = () => {
   const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
+  const bottomChromeLift = useAndroidBottomChromeLift();
+  const tabBarPaddingBottom = Math.max(bottomInset, 10);
+  const visibleTabBarStyle = {
+    ...styles.tabBar,
+    height: 72 + bottomInset,
+    marginBottom: bottomChromeLift,
+    paddingBottom: tabBarPaddingBottom,
+  };
 
   return (
     <Tab.Navigator
@@ -92,11 +102,7 @@ const MainTabs = () => {
         ),
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.grey500,
-        tabBarStyle: {
-          ...styles.tabBar,
-          height: 72 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-        },
+        tabBarStyle: visibleTabBarStyle,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
         headerShown: false,
@@ -111,7 +117,7 @@ const MainTabs = () => {
 
           return {
             tabBarLabel: 'Map',
-            tabBarStyle: hideTabBar ? { display: 'none' } : undefined,
+            tabBarStyle: hideTabBar ? { display: 'none' } : visibleTabBarStyle,
           };
         }}
       />

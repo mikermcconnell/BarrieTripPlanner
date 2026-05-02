@@ -1,5 +1,51 @@
 import { buildTransitLegGeometry } from './buildTransitLegGeometry';
 import { calculateLegDistance } from './calculateLegDistance';
+import { decodePolyline, encodePolyline } from '../../utils/polylineUtils';
+
+const appendUniqueCoordinates = (target, coordinates) => {
+  coordinates.forEach((coordinate, index) => {
+    if (index === 0 && target.length > 0) {
+      const previous = target[target.length - 1];
+      if (
+        Math.abs(previous.latitude - coordinate.latitude) < 0.00001 &&
+        Math.abs(previous.longitude - coordinate.longitude) < 0.00001
+      ) {
+        return;
+      }
+    }
+
+    target.push(coordinate);
+  });
+};
+
+const buildMergedGeometryFromSegments = (segments = []) => {
+  const coordinates = [];
+
+  if (segments.length < 2) {
+    return null;
+  }
+
+  for (const segment of segments) {
+    const decoded = segment.legGeometry?.points
+      ? decodePolyline(segment.legGeometry.points)
+      : [];
+
+    if (decoded.length < 2) {
+      return null;
+    }
+
+    appendUniqueCoordinates(coordinates, decoded);
+  }
+
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  return {
+    points: encodePolyline(coordinates),
+    length: coordinates.length,
+  };
+};
 
 export const mergeTransitLegs = (legs, routingData) => {
   if (legs.length <= 1) return legs;
@@ -30,7 +76,12 @@ export const mergeTransitLegs = (legs, routingData) => {
       continue;
     }
 
-    let mergedLeg = { ...current, intermediateStops: [...(current.intermediateStops || [])] };
+    const mergedSegments = [current];
+    let mergedLeg = {
+      ...current,
+      intermediateStops: [...(current.intermediateStops || [])],
+      tripIds: current.tripId ? [current.tripId] : [],
+    };
     let nextIndex = index + 1;
 
     while (nextIndex < legs.length) {
@@ -47,6 +98,11 @@ export const mergeTransitLegs = (legs, routingData) => {
       }
 
       if (next.mode === 'BUS' && next.route?.shortName === mergedLeg.route?.shortName) {
+        mergedSegments.push(next);
+        if (next.tripId && !mergedLeg.tripIds.includes(next.tripId)) {
+          mergedLeg.tripIds.push(next.tripId);
+        }
+
         mergedLeg.intermediateStops.push({
           name: mergedLeg.to.name,
           lat: mergedLeg.to.lat,
@@ -78,14 +134,15 @@ export const mergeTransitLegs = (legs, routingData) => {
     }
 
     if (nextIndex > index + 1 && routingData) {
-      mergedLeg.legGeometry = buildTransitLegGeometry({
-        tripId: mergedLeg.tripId,
-        tripIndex: routingData.tripIndex,
-        shapes: routingData.shapes,
-        from: mergedLeg.from,
-        to: mergedLeg.to,
-        intermediateStops: mergedLeg.intermediateStops,
-      });
+      mergedLeg.legGeometry = buildMergedGeometryFromSegments(mergedSegments)
+        || buildTransitLegGeometry({
+          tripId: mergedLeg.tripId,
+          tripIndex: routingData.tripIndex,
+          shapes: routingData.shapes,
+          from: mergedLeg.from,
+          to: mergedLeg.to,
+          intermediateStops: mergedLeg.intermediateStops,
+        });
     }
 
     merged.push(mergedLeg);

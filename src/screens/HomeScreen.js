@@ -3,15 +3,24 @@
  * Web platform uses HomeScreen.web.js instead
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform, InteractionManager } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform, InteractionManager, ActivityIndicator, Alert } from 'react-native';
 import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import { useAuth } from '../context/AuthContext';
 import { ANIMATION, MAP_CONFIG, OSM_MAP_STYLE, PERFORMANCE_BUDGETS } from '../config/constants';
+import {
+  BUS_APPROACH_LINE_DASH_PATTERN,
+  BUS_APPROACH_LINE_OPACITY,
+  WALKING_ROUTE_DOT_OUTLINE_COLOR,
+  WALKING_ROUTE_DOT_OUTLINE_WIDTH,
+  WALKING_ROUTE_DOT_PATTERN,
+  WALKING_ROUTE_DOT_STROKE_WIDTH,
+} from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
 import StopBottomSheet from '../components/StopBottomSheet';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
@@ -25,9 +34,14 @@ import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
+import { getContrastTextColor } from '../utils/colorUtils';
 import { pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
+import {
+  getDetourGeometryOverlayProps,
+  shouldShowDetailedDetourOverlay,
+} from '../utils/detourViewMode';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -41,7 +55,6 @@ import BusDirectionArrow from '../components/BusDirectionArrow';
 import RoutePolyline from '../components/RoutePolyline';
 import DetourOverlay from '../components/DetourOverlay';
 import PulsingSpinner from '../components/PulsingSpinner';
-import LoadingSkeleton from '../components/LoadingSkeleton';
 
 // Trip planning components
 import BottomActionBar from '../components/PlanTripFAB';
@@ -53,6 +66,7 @@ import RouteFilterSheet from '../components/RouteFilterSheet';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import Icon from '../components/Icon';
 import TripViewportControls from '../components/TripViewportControls';
+import TripPreviewMapLegend from '../components/TripPreviewMapLegend';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourAlertStrip from '../components/DetourAlertStrip';
@@ -64,11 +78,14 @@ import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
-import { getTransitLoadingState } from '../utils/systemHealthUI';
+import { getTransitStartupProgress } from '../utils/systemHealthUI';
 import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
 import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
 import { getForegroundDeviceLocation } from '../utils/currentLocation';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
+import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
+import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -85,6 +102,8 @@ const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
 );
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
+const LOCATION_CENTER_ERROR_MESSAGE = 'We could not get your location. Check that location services are on and that Barrie Transit has location permission.';
+
 const MAP_LAYER_INDEX = {
   ROUTES: 100,
   REGULAR_STOPS_BORDER: 700,
@@ -339,7 +358,7 @@ const HomeMapRoutesLayer = React.memo(({
       {detourOverlays.map((overlay) => (
         <DetourOverlay
           key={`detour-${overlay.routeId}`}
-          {...overlay}
+          {...getDetourGeometryOverlayProps({ overlay, isDetourView, hasDetourFocus })}
           renderMode="geometry"
           onPress={() => handleDetourOverlayPress?.(overlay.routeId)}
         />
@@ -390,10 +409,10 @@ const HomeMapStopsLayer = React.memo(({
           circleRadius: ['case', ['==', ['get', 'isSelected'], 1], 6, 4],
           circleColor: [
             'case',
-            ['==', ['get', 'isClosed'], 1],
-            COLORS.error,
             ['==', ['get', 'isSelected'], 1],
             COLORS.accent,
+            ['==', ['get', 'isClosed'], 1],
+            COLORS.grey600,
             COLORS.primary,
           ],
         }}
@@ -438,7 +457,7 @@ const HomeMapTopStopsOverlay = React.memo(({
               isSelected && styles.topStopMarkerOuterSelected,
             ]}>
               {isClosed ? (
-                <Text style={styles.topStopMarkerClosedText}>!</Text>
+                <View style={styles.topStopMarkerClosedDash} />
               ) : (
                 <View style={[
                   styles.topStopMarkerInner,
@@ -481,10 +500,10 @@ const AndroidLiveBusMarker = React.memo(({
         <BusDirectionArrow
           bearing={bearing}
           size={44}
-          topOffset={-5}
-          arrowWidth={8}
-          arrowHeight={16}
-          color={markerColor}
+          topOffset={-6}
+          arrowWidth={5}
+          arrowHeight={10}
+          color="#111111"
           dimmed={dimmed}
         />
         <View
@@ -606,14 +625,30 @@ const HomeMapTripPreviewLayer = React.memo(({
         id={`trip-${tripRoute.id}`}
         coordinates={tripRoute.coordinates}
         color={tripRoute.color}
-        strokeWidth={tripRoute.isWalk ? 4 : tripRoute.isOnDemand ? 4 : 5}
-        lineDashPattern={tripRoute.isWalk ? [2, 8] : tripRoute.isOnDemand ? [12, 6] : null}
+        strokeWidth={tripRoute.isWalk ? WALKING_ROUTE_DOT_STROKE_WIDTH : tripRoute.isOnDemand ? 4 : 5}
+        lineDashPattern={tripRoute.isWalk ? WALKING_ROUTE_DOT_PATTERN : tripRoute.isOnDemand ? [12, 6] : null}
         opacity={tripRoute.isWalk ? 0.9 : 1}
-        outlineColor={tripRoute.isWalk ? tripRoute.color : undefined}
+        outlineColor={tripRoute.isWalk ? WALKING_ROUTE_DOT_OUTLINE_COLOR : undefined}
+        outlineWidth={tripRoute.isWalk ? WALKING_ROUTE_DOT_OUTLINE_WIDTH : undefined}
         routeLabel={tripRoute.routeLabel}
         layerIndex={MAP_LAYER_INDEX.TRIP_ROUTES}
       />
     ))}
+
+    {tripRouteCoordinates
+      .filter((tripRoute) => tripRoute.routeLabel && tripRoute.labelCoordinate)
+      .map((tripRoute) => (
+        <MapLibreGL.MarkerView
+          key={`${tripRoute.id}-label`}
+          coordinate={[tripRoute.labelCoordinate.longitude, tripRoute.labelCoordinate.latitude]}
+        >
+          <View style={[styles.tripRouteBadge, { backgroundColor: tripRoute.color }]}>
+            <Text style={[styles.tripRouteBadgeText, { color: getContrastTextColor(tripRoute.color) }]}>
+              {tripRoute.routeLabel}
+            </Text>
+          </View>
+        </MapLibreGL.MarkerView>
+      ))}
 
     {tripEndpointMarkers.map((marker) => (
       <MapLibreGL.PointAnnotation
@@ -646,8 +681,8 @@ const HomeMapTripPreviewLayer = React.memo(({
         coordinates={line.coordinates}
         color={line.color}
         strokeWidth={3}
-        lineDashPattern={[8, 6]}
-        opacity={0.7}
+        lineDashPattern={BUS_APPROACH_LINE_DASH_PATTERN}
+        opacity={BUS_APPROACH_LINE_OPACITY}
         outlineColor={line.color}
         layerIndex={MAP_LAYER_INDEX.BUS_APPROACH_LINES}
       />
@@ -779,6 +814,8 @@ const HomeMapView = React.memo(({
   boardingAlightingMarkers,
   tripVehicles,
   mapTapLocation,
+  showUserLocation,
+  centeredUserLocation,
 }) => (
   <MapLibreGL.MapView
     ref={mapRef}
@@ -798,7 +835,21 @@ const HomeMapView = React.memo(({
       followUserLocation={false}
       followUserMode={null}
     />
-    <MapLibreGL.UserLocation visible={true} />
+    <MapLibreGL.UserLocation visible={showUserLocation} />
+
+    {showUserLocation && centeredUserLocation && (
+      <MapLibreGL.MarkerView
+        id="home-current-location-marker"
+        coordinate={[centeredUserLocation.longitude, centeredUserLocation.latitude]}
+        anchor={{ x: 0.5, y: 0.5 }}
+      >
+        <View collapsable={false} style={styles.currentLocationMarkerHalo}>
+          <View style={styles.currentLocationMarker}>
+            <View style={styles.currentLocationMarkerCore} />
+          </View>
+        </View>
+      </MapLibreGL.MarkerView>
+    )}
 
     <HomeMapRoutesLayer
       isTripPreviewMode={isTripPreviewMode}
@@ -832,7 +883,7 @@ const HomeMapView = React.memo(({
       selectedStopId={selectedStopId}
     />
 
-    {!isTripPreviewMode && detourOverlays.map((overlay) => (
+    {!isTripPreviewMode && shouldShowDetailedDetourOverlay({ isDetourView, hasDetourFocus }) && detourOverlays.map((overlay) => (
       <DetourOverlay
         key={`detour-stops-${overlay.routeId}`}
         {...overlay}
@@ -881,7 +932,7 @@ const HomeMapView = React.memo(({
       </MapLibreGL.PointAnnotation>
     )}
 
-    {!isTripPreviewMode && detourOverlays.map((overlay) => (
+    {!isTripPreviewMode && shouldShowDetailedDetourOverlay({ isDetourView, hasDetourFocus }) && detourOverlays.map((overlay) => (
       <DetourOverlay
         key={`detour-callouts-${overlay.routeId}`}
         {...overlay}
@@ -926,7 +977,9 @@ const HomeMapView = React.memo(({
   prev.tripMarkers === next.tripMarkers &&
   prev.boardingAlightingMarkers === next.boardingAlightingMarkers &&
   prev.tripVehicles === next.tripVehicles &&
-  prev.mapTapLocation === next.mapTapLocation
+  prev.mapTapLocation === next.mapTapLocation &&
+  prev.showUserLocation === next.showUserLocation &&
+  prev.centeredUserLocation === next.centeredUserLocation
 ));
 
 const HomeScreen = ({ route }) => {
@@ -937,6 +990,10 @@ const HomeScreen = ({ route }) => {
   const locationCenterReleaseTimerRef = useRef(null);
   const routeFilterSheetRef = useRef(null);
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const bottomSafeArea = useSafeBottomInset(insets.bottom);
+  const bottomChromeLift = useAndroidBottomChromeLift();
+  const floatingBottomOffset = Platform.OS === 'android' ? bottomChromeLift : bottomSafeArea;
   const { addTripToHistory } = useAuth();
   const {
     routes,
@@ -949,9 +1006,11 @@ const HomeScreen = ({ route }) => {
     trips,
     tripMapping,
     isLoadingStatic,
+    isRefreshingStatic,
     staticError,
     loadStaticData,
     isOffline,
+    usingCachedData,
     ensureRoutingData,
     diagnostics,
     loadProxyHealth,
@@ -965,14 +1024,30 @@ const HomeScreen = ({ route }) => {
     onDemandZones,
     transitNewsImpacts,
     getRouteDetour,
+    isLoadingVehicles,
     loadVehiclePositions,
   } = useTransitRealtime();
-  const loadingState = useMemo(
-    () => getTransitLoadingState(diagnostics) || {
-      title: 'Getting Barrie Transit ready',
-      detail: 'Loading routes and stops.',
-    },
-    [diagnostics]
+  const startupProgress = useMemo(
+    () => getTransitStartupProgress({
+      isLoadingStatic,
+      isRefreshingStatic,
+      usingCachedData,
+      isLoadingVehicles,
+      routesCount: routes.length,
+      stopsCount: stops.length,
+      vehiclesCount: vehicles.length,
+      diagnostics,
+    }),
+    [
+      diagnostics,
+      isLoadingStatic,
+      isRefreshingStatic,
+      isLoadingVehicles,
+      routes.length,
+      stops.length,
+      usingCachedData,
+      vehicles.length,
+    ]
   );
 
   // Wrap mapRef to provide animateToRegion compatibility for hooks
@@ -1005,6 +1080,8 @@ const HomeScreen = ({ route }) => {
     selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
+  const [isCenteringOnUserLocation, setIsCenteringOnUserLocation] = useState(false);
+  const [centeredUserLocation, setCenteredUserLocation] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [showZones, setShowZones] = useState(true);
@@ -1074,6 +1151,31 @@ const HomeScreen = ({ route }) => {
     );
   }, []);
 
+  const detourStopDetailsByRouteId = useMemo(() => {
+    if (!detoursEnabled) return {};
+
+    return Object.fromEntries(
+      Object.entries(activeDetours || {}).map(([routeId, detour]) => [
+        routeId,
+        deriveAffectedStopDetailsForDetour({
+          routeId,
+          segments: detour?.segments?.length
+            ? detour.segments
+            : [{
+              shapeId: detour?.shapeId ?? null,
+              entryPoint: detour?.entryPoint ?? null,
+              exitPoint: detour?.exitPoint ?? null,
+              skippedSegmentPolyline: detour?.skippedSegmentPolyline ?? null,
+              inferredDetourPolyline: detour?.inferredDetourPolyline ?? null,
+            }],
+          stops,
+          routeStopsMapping,
+          routeStopSequencesMapping,
+        }),
+      ])
+    );
+  }, [activeDetours, detoursEnabled, routeStopSequencesMapping, routeStopsMapping, stops]);
+
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
     ensureRoutingData,
@@ -1081,6 +1183,8 @@ const HomeScreen = ({ route }) => {
     onTripPlanned: addTripToHistory,
     onDemandZones,
     stops,
+    activeDetours: detoursEnabled ? activeDetours : {},
+    detourStopDetailsByRouteId,
   });
   const {
     state: tripState,
@@ -1103,6 +1207,7 @@ const HomeScreen = ({ route }) => {
     isTripPlanningMode,
     from: tripFromLocation,
     to: tripToLocation,
+    fromUsesCurrentLocation: tripFromUsesCurrentLocation,
     fromText: tripFromText,
     toText: tripToText,
     itineraries,
@@ -1122,8 +1227,12 @@ const HomeScreen = ({ route }) => {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
+  const itinerariesWithStopClosureNotices = useMemo(
+    () => annotateItinerariesWithStopClosures(itineraries, transitNewsImpacts),
+    [itineraries, transitNewsImpacts]
+  );
   const selectedItinerary = isTripPlanningMode
-    ? itineraries[selectedItineraryIndex] ?? itineraries[0] ?? null
+    ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
 
   const isFocused = useIsFocused();
@@ -1211,7 +1320,6 @@ const HomeScreen = ({ route }) => {
     showLocation,
   } = useMapTapPopup({
     enterPlanningMode, setTripFrom, setTripTo,
-    useCurrentLocationForTrip,
     onMapTap: () => setSelectedStop(null),
   });
   const handleCloseMapTapPopup = closeMapTapPopup;
@@ -1294,31 +1402,6 @@ const HomeScreen = ({ route }) => {
 
     return bestPath;
   }, [routePathsByRouteId]);
-
-  const detourStopDetailsByRouteId = useMemo(() => {
-    if (!detoursEnabled) return {};
-
-    return Object.fromEntries(
-      Object.entries(activeDetours || {}).map(([routeId, detour]) => [
-        routeId,
-        deriveAffectedStopDetailsForDetour({
-          routeId,
-          segments: detour?.segments?.length
-            ? detour.segments
-            : [{
-              shapeId: detour?.shapeId ?? null,
-              entryPoint: detour?.entryPoint ?? null,
-              exitPoint: detour?.exitPoint ?? null,
-              skippedSegmentPolyline: detour?.skippedSegmentPolyline ?? null,
-              inferredDetourPolyline: detour?.inferredDetourPolyline ?? null,
-            }],
-          stops,
-          routeStopsMapping,
-          routeStopSequencesMapping,
-        }),
-      ])
-    );
-  }, [activeDetours, detoursEnabled, routeStopSequencesMapping, routeStopsMapping, stops]);
 
   const { detourOverlays } = useDetourOverlays({
     selectedRouteIds: selectedRoutes,
@@ -1611,7 +1694,7 @@ const HomeScreen = ({ route }) => {
     setWhereToText('');
   };
 
-  // Handle "Where to?" address selection — open trip planner with destination + current location
+  // Handle "Where to?" address selection — open trip planner with destination only.
   const handleWhereToSelect = (address) => {
     const destination = { lat: address.lat, lon: address.lon };
     setWhereToText('');
@@ -1620,9 +1703,7 @@ const HomeScreen = ({ route }) => {
       label: address.shortName || address.displayName,
       beforeEnter: () => setSelectedStop(null),
       enterPlanningMode,
-      setTripFrom,
       setTripTo,
-      useCurrentLocationForTrip,
     });
   };
 
@@ -1637,9 +1718,7 @@ const HomeScreen = ({ route }) => {
       label: hubStop.name || 'Hub Stop',
       beforeEnter: () => setSelectedZone(null),
       enterPlanningMode,
-      setTripFrom,
       setTripTo,
-      useCurrentLocationForTrip,
     });
   };
 
@@ -1658,16 +1737,17 @@ const HomeScreen = ({ route }) => {
       tripFromLocation,
       setSelectedStop,
       enterPlanningMode,
-      setTripFrom,
       setTripTo,
-      useCurrentLocationForTrip,
     });
   };
 
 
   const centerOnUserLocationOnce = useCallback(async () => {
+    if (isCenteringOnUserLocation) return;
+
     const requestId = pendingLocationCenterRef.current + 1;
     pendingLocationCenterRef.current = requestId;
+    setIsCenteringOnUserLocation(true);
 
     try {
       const loc = await getForegroundDeviceLocation(Location, {
@@ -1676,6 +1756,10 @@ const HomeScreen = ({ route }) => {
       if (requestId !== pendingLocationCenterRef.current) return;
 
       const latestRegion = mapRegionRef.current || MAP_CONFIG.INITIAL_REGION;
+      const centeredLocation = {
+        latitude: loc.lat,
+        longitude: loc.lon,
+      };
       const nextRegion = {
         latitude: loc.lat,
         longitude: loc.lon,
@@ -1683,6 +1767,7 @@ const HomeScreen = ({ route }) => {
         longitudeDelta: latestRegion.longitudeDelta || MAP_CONFIG.INITIAL_REGION.longitudeDelta,
       };
 
+      setCenteredUserLocation(centeredLocation);
       stopFollowingUserLocation();
       cameraRef.current?.setCamera({
         centerCoordinate: [nextRegion.longitude, nextRegion.latitude],
@@ -1709,8 +1794,13 @@ const HomeScreen = ({ route }) => {
       }
     } catch (error) {
       logger.warn('Failed to center on user location', error);
+      Alert.alert('Location unavailable', LOCATION_CENTER_ERROR_MESSAGE);
+    } finally {
+      if (requestId === pendingLocationCenterRef.current) {
+        setIsCenteringOnUserLocation(false);
+      }
     }
-  }, [selectedRoutes.size, showStops, stopFollowingUserLocation]);
+  }, [isCenteringOnUserLocation, selectedRoutes.size, showStops, stopFollowingUserLocation]);
 
   const showTripOverview = useCallback(() => {
     if (!selectedItinerary) {
@@ -1725,12 +1815,13 @@ const HomeScreen = ({ route }) => {
   };
 
   // Start navigation directly from preview (skip details screen)
-  const startNavigationDirect = (itinerary) => {
+  const startNavigationDirect = async (itinerary) => {
     if (!itinerary || !itinerary.legs || itinerary.legs.length === 0) {
       logger.warn('Cannot start navigation: No route data available');
       return;
     }
-    navigation.navigate('Navigation', { itinerary });
+    const preparedItinerary = await prepareItineraryForNavigation(itinerary);
+    navigation.navigate('Navigation', { itinerary: preparedItinerary });
   };
 
 
@@ -1791,6 +1882,8 @@ const HomeScreen = ({ route }) => {
           boardingAlightingMarkers={boardingAlightingMarkers}
           tripVehicles={tripVehicles}
           mapTapLocation={mapTapLocation}
+          showUserLocation={!isTripPlanningMode || tripFromUsesCurrentLocation}
+          centeredUserLocation={centeredUserLocation}
         />
       ) : (
         <View style={styles.mapPlaceholder} />
@@ -1808,21 +1901,47 @@ const HomeScreen = ({ route }) => {
         />
       )}
 
-      {/* Inline loading indicator while transit data loads */}
-      {isLoadingStatic && (
+      {/* First launch loading screen when no saved transit data is ready yet */}
+      {startupProgress?.variant === 'full' && (
+        <View
+          style={styles.startupFullOverlay}
+          accessibilityRole="progressbar"
+          accessibilityLabel={startupProgress.title}
+          accessibilityValue={{ min: 0, max: 100, now: startupProgress.percent }}
+        >
+          <View style={styles.startupFullCard}>
+            <PulsingSpinner size={34} />
+            <Text style={styles.startupFullTitle}>{startupProgress.title}</Text>
+            {startupProgress.detail ? (
+              <Text style={styles.startupFullDetail}>{startupProgress.detail}</Text>
+            ) : null}
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${startupProgress.percent}%` }]} />
+            </View>
+            <Text style={styles.progressLabel}>{startupProgress.percent}% ready</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Compact live-update card after saved routes are visible */}
+      {startupProgress?.variant === 'card' && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingCard}>
             <PulsingSpinner size={24} />
             <View style={styles.loadingCardContent}>
-              <Text style={styles.loadingCardTitle}>{loadingState.title}</Text>
-              {loadingState.detail ? (
-                <Text style={styles.loadingCardDetail}>{loadingState.detail}</Text>
+              <Text style={styles.loadingCardTitle}>{startupProgress.title}</Text>
+              {startupProgress.detail ? (
+                <Text style={styles.loadingCardDetail}>{startupProgress.detail}</Text>
               ) : null}
-              <View style={styles.loadingSkeletonRow}>
-                <LoadingSkeleton width={120} height={12} style={{ marginRight: SPACING.sm }} />
-                <LoadingSkeleton width={80} height={12} />
+              <View
+                style={styles.progressTrack}
+                accessibilityRole="progressbar"
+                accessibilityLabel={startupProgress.title}
+                accessibilityValue={{ min: 0, max: 100, now: startupProgress.percent }}
+              >
+                <View style={[styles.progressFill, { width: `${startupProgress.percent}%` }]} />
               </View>
-              <LoadingSkeleton width={200} height={8} style={{ marginTop: SPACING.xs }} />
+              <Text style={styles.progressLabel}>{startupProgress.percent}% ready</Text>
             </View>
           </View>
         </View>
@@ -1907,16 +2026,22 @@ const HomeScreen = ({ route }) => {
       />
 
       {/* Map Controls (Top Right) */}
-      {!isTripPlanningMode && (
-        <View style={styles.mapControls}>
+      {!isTripPlanningMode && startupProgress?.variant !== 'full' && (
+        <View style={[styles.mapControls, { bottom: 32 + floatingBottomOffset }]}>
           <TouchableOpacity
-            style={styles.mapControlButton}
+            style={[styles.mapControlButton, isCenteringOnUserLocation && styles.mapControlButtonDisabled]}
             onPress={centerOnUserLocationOnce}
             activeOpacity={0.7}
+            disabled={isCenteringOnUserLocation}
             accessibilityRole="button"
             accessibilityLabel="Center on my location"
+            accessibilityState={{ busy: isCenteringOnUserLocation, disabled: isCenteringOnUserLocation }}
           >
-            <CenterIcon size={18} color={COLORS.textPrimary} />
+            {isCenteringOnUserLocation ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <CenterIcon size={18} color={COLORS.textPrimary} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.mapControlButton, showStops && styles.mapControlButtonActive]}
@@ -1935,6 +2060,11 @@ const HomeScreen = ({ route }) => {
           onShowTrip={showTripOverview}
         />
       )}
+
+      <TripPreviewMapLegend
+        visible={isTripPreviewMode}
+        style={styles.tripPreviewMapLegend}
+      />
 
       {/* Route Filter Panel (Horizontal scroll row below search) */}
       {!isTripPlanningMode && (
@@ -1956,6 +2086,7 @@ const HomeScreen = ({ route }) => {
       {/* Favorite Stop Quick View */}
       {!isTripPlanningMode && secondaryChromeReady && (
         <FavoriteStopCard
+          bottomInset={floatingBottomOffset}
           onPress={(stop) => {
             setSelectedStop(stop);
             setShowStops(true);
@@ -1966,6 +2097,7 @@ const HomeScreen = ({ route }) => {
       {/* Primary Action Button */}
       {!isTripPlanningMode && (
         <BottomActionBar
+          bottomInset={floatingBottomOffset}
           onPlanTrip={enterTripPlanningMode}
         />
       )}
@@ -1983,6 +2115,7 @@ const HomeScreen = ({ route }) => {
             onSwap={swapTripLocations}
             onClose={exitTripPlanningMode}
             onUseCurrentLocation={useCurrentLocationForTrip}
+            showUseCurrentLocation={!tripFromLocation}
             isLoading={isTripLoading}
             isTypingFrom={isTypingFrom}
             isTypingTo={isTypingTo}
@@ -2007,7 +2140,7 @@ const HomeScreen = ({ route }) => {
           {!selectedStop && (
             <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
               <TripBottomSheet
-                itineraries={itineraries}
+                itineraries={itinerariesWithStopClosureNotices}
                 selectedIndex={selectedItineraryIndex}
                 onSelectItinerary={setSelectedItineraryIndex}
                 onViewDetails={viewTripDetails}
@@ -2067,6 +2200,7 @@ const HomeScreen = ({ route }) => {
 
       {/* Map Tap Popup - for choosing directions from/to a tapped location */}
       <MapTapPopup
+        bottomInset={floatingBottomOffset}
         visible={!!mapTapLocation}
         coordinate={mapTapLocation}
         address={mapTapAddress}
@@ -2102,6 +2236,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.grey50,
   },
+  startupFullOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 2000,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: SPACING.xl,
+  },
+  startupFullCard: {
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xxl,
+    padding: SPACING.xxl,
+    ...SHADOWS.large,
+  },
+  startupFullTitle: {
+    marginTop: SPACING.lg,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  startupFullDetail: {
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
   loadingOverlay: {
     position: 'absolute',
     top: 140,
@@ -2132,8 +2301,23 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     marginBottom: SPACING.sm,
   },
-  loadingSkeletonRow: {
-    flexDirection: 'row',
+  progressTrack: {
+    width: '100%',
+    height: 8,
+    backgroundColor: COLORS.grey200,
+    borderRadius: BORDER_RADIUS.round,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  progressLabel: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
   },
   errorContainer: {
     flex: 1,
@@ -2289,11 +2473,44 @@ const styles = StyleSheet.create({
   mapControlButtonActive: {
     backgroundColor: COLORS.primarySubtle,
   },
+  mapControlButtonDisabled: {
+    opacity: 0.7,
+  },
+  currentLocationMarkerHalo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(66, 133, 244, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentLocationMarker: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#4285F4',
+    borderWidth: 4,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.medium,
+  },
+  currentLocationMarkerCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.white,
+  },
   tripViewportControls: {
     position: 'absolute',
     top: 152 + STATUS_BAR_OFFSET,
     right: SPACING.sm,
     zIndex: 999,
+  },
+  tripPreviewMapLegend: {
+    top: 232 + STATUS_BAR_OFFSET,
+    right: SPACING.sm,
+    zIndex: 998,
   },
   androidBusMarkerFrame: {
     width: 44,
@@ -2372,14 +2589,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.accent,
   },
   topStopMarkerOuterClosed: {
-    backgroundColor: COLORS.error,
-    borderColor: COLORS.white,
+    backgroundColor: COLORS.white,
+    borderColor: COLORS.warning,
   },
-  topStopMarkerClosedText: {
-    color: COLORS.white,
-    fontSize: 11,
-    fontWeight: '900',
-    lineHeight: 13,
+  topStopMarkerClosedDash: {
+    width: 8,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: COLORS.warning,
   },
   topStopMarkerInner: {
     width: 6,
@@ -2500,6 +2717,21 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
     borderColor: COLORS.white,
+  },
+  tripRouteBadge: {
+    minWidth: 28,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  tripRouteBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.extrabold,
   },
   // Stop label markers (boarding/alighting)
   stopLabelContainer: {

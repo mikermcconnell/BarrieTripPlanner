@@ -7,11 +7,12 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { formatDuration, formatDistance } from '../services/tripService';
 import Icon from '../components/Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const formatTripDate = (value) => {
   if (!value) return 'Recently';
@@ -43,6 +44,8 @@ const getTripSummary = (item) => {
 };
 
 const TripHistoryScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { tripHistory, clearTripHistory } = useAuth();
 
   const handleClearHistory = () => {
@@ -95,7 +98,10 @@ const TripHistoryScreen = ({ navigation }) => {
         data={tripHistory}
         keyExtractor={(item, index) => item.id || `${item.searchedAt || 'trip'}-${index}`}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>

@@ -40,6 +40,26 @@ describe('buildTransitDiagnostics', () => {
     expect(diagnostics.overall.status).toBe(DIAGNOSTIC_STATUS.DEGRADED);
   });
 
+  test('preserves static refresh state for startup status UI', () => {
+    const diagnostics = buildTransitDiagnostics({
+      isOffline: false,
+      now: Date.UTC(2026, 2, 7, 12, 0, 0),
+      staticData: {
+        isAvailable: true,
+        isRefreshing: true,
+        usingCachedData: true,
+      },
+      realtimeVehicles: {
+        isAvailable: true,
+      },
+      routing: {
+        isReady: true,
+      },
+    });
+
+    expect(diagnostics.staticData.isRefreshing).toBe(true);
+  });
+
   test('marks startup failure without static data as error', () => {
     const diagnostics = buildTransitDiagnostics({
       isOffline: false,

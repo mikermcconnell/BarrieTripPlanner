@@ -6,7 +6,7 @@ import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, SHADOWS } from '../config/th
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
-const PlanTripFAB = ({ onPlanTrip }) => {
+const PlanTripFAB = ({ onPlanTrip, bottomInset = 0 }) => {
   // Keep the primary CTA visible immediately. The spring gives a subtle
   // "ready" feel without delaying the button from appearing.
   const scale = useSharedValue(0.98);
@@ -20,7 +20,7 @@ const PlanTripFAB = ({ onPlanTrip }) => {
   }));
 
   return (
-    <View style={styles.fabContainer}>
+    <View style={[styles.fabContainer, { bottom: 32 + bottomInset }]}>
       <AnimatedTouchable
         style={[styles.fab, animStyle]}
         onPress={onPlanTrip}

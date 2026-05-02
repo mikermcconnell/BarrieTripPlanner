@@ -142,6 +142,152 @@ describe('itinerary modules', () => {
     ]);
   });
 
+  test('buildItinerary collapses adjacent final walking legs into one egress walk', () => {
+    const date = new Date('2026-05-01T12:00:00');
+    const routingData = {
+      stopIndex: {
+        ORIGIN_STOP: {
+          id: 'ORIGIN_STOP',
+          name: 'Origin stop',
+          latitude: 44.3800,
+          longitude: -79.7000,
+          code: '100',
+        },
+        ALIGHT_STOP: {
+          id: 'ALIGHT_STOP',
+          name: 'Alight stop',
+          latitude: 44.3900,
+          longitude: -79.7100,
+          code: '200',
+        },
+        DEST_STOP: {
+          id: 'DEST_STOP',
+          name: 'Destination-side stop',
+          latitude: 44.3905,
+          longitude: -79.7105,
+          code: '201',
+        },
+      },
+      tripIndex: {},
+      shapes: {},
+      stopTimes: [
+        { tripId: 'trip-8b', stopId: 'ORIGIN_STOP', stopSequence: 1 },
+        { tripId: 'trip-8b', stopId: 'ALIGHT_STOP', stopSequence: 2 },
+      ],
+      routes: [
+        { id: '8B', shortName: '8B', longName: 'Route 8B', color: '#111111' },
+      ],
+    };
+
+    const itinerary = buildItinerary(
+      {
+        arrivalTime: 2180,
+        walkToDestSeconds: 120,
+        destinationStopId: 'DEST_STOP',
+        path: [
+          { type: 'ORIGIN_WALK', toStopId: 'ORIGIN_STOP', walkSeconds: 780 },
+          {
+            type: 'TRANSIT',
+            tripId: 'trip-8b',
+            routeId: '8B',
+            directionId: 0,
+            headsign: 'Park Place',
+            boardingStopId: 'ORIGIN_STOP',
+            alightingStopId: 'ALIGHT_STOP',
+            boardingTime: 1000,
+            alightingTime: 2000,
+          },
+          {
+            type: 'TRANSFER',
+            fromStopId: 'ALIGHT_STOP',
+            toStopId: 'DEST_STOP',
+            walkSeconds: 60,
+            walkMeters: 70,
+          },
+        ],
+      },
+      routingData,
+      {
+        fromLat: 44.3790,
+        fromLon: -79.6990,
+        toLat: 44.3915,
+        toLon: -79.7115,
+        date,
+      }
+    );
+
+    expect(itinerary.legs.map((leg) => leg.mode)).toEqual(['WALK', 'BUS', 'WALK']);
+    expect(itinerary.legs[2]).toEqual(expect.objectContaining({
+      duration: 180,
+      from: expect.objectContaining({ stopId: 'ALIGHT_STOP' }),
+      to: expect.objectContaining({ name: 'Destination' }),
+    }));
+  });
+
+  test('mergeTransitLegs preserves loop geometry across same-route trip switches', () => {
+    const grove = { latitude: 44.40646, longitude: -79.66828 };
+    const hub = { latitude: 44.38775, longitude: -79.69024 };
+    const maple = { latitude: 44.3904, longitude: -79.69251 };
+    const eden = { latitude: 44.38343, longitude: -79.71934 };
+
+    const legs = [
+      {
+        mode: 'BUS',
+        startTime: 1000000,
+        endTime: 1600000,
+        scheduledEndTime: 1600000,
+        duration: 600,
+        from: { name: 'Grove at Cook', lat: grove.latitude, lon: grove.longitude, stopId: '941', stopCode: '941' },
+        to: { name: 'Downtown Hub', lat: hub.latitude, lon: hub.longitude, stopId: '2', stopCode: '2' },
+        route: { shortName: '10' },
+        tripId: 'trip-before-switch',
+        intermediateStops: [],
+        legGeometry: {
+          points: encodePolyline([grove, hub]),
+          length: 2,
+        },
+      },
+      {
+        mode: 'WALK',
+        startTime: 1600000,
+        endTime: 1660000,
+      },
+      {
+        mode: 'BUS',
+        startTime: 1660000,
+        endTime: 2200000,
+        scheduledEndTime: 2200000,
+        duration: 540,
+        from: { name: 'Downtown Hub', lat: hub.latitude, lon: hub.longitude, stopId: '2', stopCode: '2' },
+        to: { name: 'Eden Drive', lat: eden.latitude, lon: eden.longitude, stopId: '324', stopCode: '324' },
+        route: { shortName: '10' },
+        tripId: 'trip-after-switch',
+        intermediateStops: [{ name: 'Maple at Ross', lat: maple.latitude, lon: maple.longitude, stopId: '485', stopCode: '485' }],
+        legGeometry: {
+          points: encodePolyline([hub, maple, eden]),
+          length: 3,
+        },
+      },
+    ];
+
+    const routingData = {
+      tripIndex: {
+        'trip-before-switch': { shapeId: 'route-10-loop' },
+        'trip-after-switch': { shapeId: 'route-10-loop' },
+      },
+      shapes: {
+        'route-10-loop': [hub, maple, eden, grove, hub],
+      },
+    };
+
+    const merged = mergeTransitLegs(legs, routingData);
+    const decoded = decodePolyline(merged[0].legGeometry.points);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].tripIds).toEqual(['trip-before-switch', 'trip-after-switch']);
+    expect(decoded).toEqual([grove, hub, maple, eden]);
+  });
+
   test('mergeTransitLegs does not merge bus legs on different routes', () => {
     const legs = [
       {

@@ -367,6 +367,8 @@ describe('buildClearedEvent', () => {
         { latitude: 44.395, longitude: -79.698 },
         { latitude: 44.395, longitude: -79.690 },
       ],
+      confidence: 'medium',
+      evidencePointCount: 8,
       lastEvidenceAt: NOW - 30000,
       segmentCount: 1,
     };
@@ -376,6 +378,8 @@ describe('buildClearedEvent', () => {
     expect(event.entryPoint).toEqual({ latitude: 44.39, longitude: -79.698 });
     expect(event.exitPoint).toEqual({ latitude: 44.39, longitude: -79.690 });
     expect(event.shapeId).toBe('shape-8a');
+    expect(event.confidence).toBe('medium');
+    expect(event.evidencePointCount).toBe(8);
     expect(event.lastEvidenceAt).toBe(NOW - 30000);
   });
 });

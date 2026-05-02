@@ -177,6 +177,16 @@ function buildMessage(newsItem, stop) {
   return `${stop?.name || `Stop ${stop?.code || ''}`} is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.`;
 }
 
+function buildUnmatchedStop(stopCode) {
+  return {
+    id: null,
+    code: stopCode,
+    name: '',
+    latitude: null,
+    longitude: null,
+  };
+}
+
 async function extractStopClosureImpacts(newsItems, stopIndex = {}, options = {}) {
   const impacts = [];
   const now = options.now ? new Date(options.now) : new Date();
@@ -194,19 +204,22 @@ async function extractStopClosureImpacts(newsItems, stopIndex = {}, options = {}
     const status = statusForDateWindow(dateWindow, now);
 
     for (const closure of closuresByCode.values()) {
-      const stop = resolveStop(closure.stopCode, stopIndex);
-      if (!stop) continue;
+      const resolvedStop = resolveStop(closure.stopCode, stopIndex);
+      const stop = resolvedStop || buildUnmatchedStop(closure.stopCode);
 
-      const id = `stopClosure_${newsItem.id}_${stop.id}`;
+      const id = resolvedStop
+        ? `stopClosure_${newsItem.id}_${stop.id}`
+        : `stopClosure_${newsItem.id}_unmatched_${closure.stopCode}`;
       impacts.push({
         id,
         type: 'stop_closure',
         status,
-        stopId: stop.id,
+        stopId: resolvedStop ? stop.id : null,
         stopCode: stop.code || closure.stopCode,
         stopName: stop.name || '',
         latitude: Number.isFinite(stop.latitude) ? stop.latitude : null,
         longitude: Number.isFinite(stop.longitude) ? stop.longitude : null,
+        mappable: Boolean(resolvedStop),
         affectedRoutes: uniqueStrings(newsItem.affectedRoutes || []),
         source: newsItem.source || 'myridebarrie',
         sourceNewsId: newsItem.id,

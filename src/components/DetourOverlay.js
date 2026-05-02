@@ -15,6 +15,7 @@ import MapLibreGL from '@maplibre/maplibre-react-native';
 import RoutePolyline from './RoutePolyline';
 import { COLORS } from '../config/theme';
 import { simplifyPath } from '../utils/geometryUtils';
+import { getDirectionArrowPoints } from '../utils/detourDirectionArrows';
 
 const DETOUR_LINE_STYLE = {
   strokeWidth: 4.5,
@@ -38,13 +39,18 @@ const CLOSED_ROUTE_MASK_STYLE = {
 
 const CALLOUT_ANCHOR = { x: 0.5, y: 1.35 };
 const CALLOUT_MARKER_STYLE = {
-  zIndex: 20,
-  elevation: 20,
+  zIndex: 140,
+  elevation: 140,
 };
 
 const LINE_LABEL_MARKER_STYLE = {
-  zIndex: 80,
-  elevation: 80,
+  zIndex: 150,
+  elevation: 150,
+};
+
+const DIRECTION_ARROW_MARKER_STYLE = {
+  zIndex: 110,
+  elevation: 110,
 };
 
 const DETOUR_LAYER_INDEX = {
@@ -190,6 +196,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     textTransform: 'uppercase',
   },
+  directionArrowMarker: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  directionArrowText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 17,
+  },
   stopMarkerFrame: {
     zIndex: 40,
     elevation: 40,
@@ -302,18 +328,44 @@ const DetourOverlay = ({
               </>
             ) : null}
             {inferredDetourPath ? (
-              <RoutePolyline
-                id={pathId}
-                coordinates={inferredDetourPath}
-                color={detourColor}
-                strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
-                opacity={opacity}
-                outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
-                outlineColor={DETOUR_LINE_STYLE.outlineColor}
-                showArrows
-                layerIndex={DETOUR_LAYER_INDEX.DETOUR_LINE}
-                onPress={onPress}
-              />
+              <>
+                <RoutePolyline
+                  id={pathId}
+                  coordinates={inferredDetourPath}
+                  color={detourColor}
+                  strokeWidth={DETOUR_LINE_STYLE.strokeWidth}
+                  opacity={opacity}
+                  outlineWidth={DETOUR_LINE_STYLE.outlineWidth}
+                  outlineColor={DETOUR_LINE_STYLE.outlineColor}
+                  showArrows
+                  layerIndex={DETOUR_LAYER_INDEX.DETOUR_LINE}
+                  onPress={onPress}
+                />
+                {getDirectionArrowPoints(inferredDetourPath).map((arrow, arrowIndex) => (
+                  <MapLibreGL.MarkerView
+                    key={`detour-direction-arrow-${routeId}-${index}-${arrowIndex}`}
+                    id={`detour-direction-arrow-${routeId}-${index}-${arrowIndex}`}
+                    coordinate={[arrow.point.longitude, arrow.point.latitude]}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                  >
+                    <View
+                      collapsable={false}
+                      pointerEvents="none"
+                      style={[
+                        styles.directionArrowMarker,
+                        DIRECTION_ARROW_MARKER_STYLE,
+                        {
+                          backgroundColor: detourColor,
+                          opacity,
+                          transform: [{ rotate: `${arrow.bearing}deg` }],
+                        },
+                      ]}
+                    >
+                      <Text style={styles.directionArrowText}>↑</Text>
+                    </View>
+                  </MapLibreGL.MarkerView>
+                ))}
+              </>
             ) : null}
           </React.Fragment>
         );

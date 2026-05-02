@@ -31,6 +31,11 @@ import Icon from './Icon';
 const isOnDemandLeg = (leg) => leg.mode === 'ON_DEMAND' || leg.isOnDemand;
 const getPlaceName = (place, fallback) => place?.name || fallback;
 const getLegRouteColor = (leg) => leg.route?.color || leg.zoneColor || COLORS.primary;
+const getDetourPreviewLabel = (detourImpact) => (
+  detourImpact?.severity === 'stop_affected'
+    ? 'Stop may be affected by detour'
+    : 'Route is on detour'
+);
 
 const TripPreviewModal = ({
   visible,
@@ -205,6 +210,24 @@ const TripPreviewModal = ({
                         <Text style={styles.stepSubtitle}>
                           Board at {getPlaceName(leg.from, 'your stop')} • {buildTransitStopProgress(leg).totalStopsBetween} stops • Get off at {getPlaceName(leg.to, 'your stop')}
                         </Text>
+                        {leg.detourImpact ? (
+                          <View style={[
+                            styles.detourPill,
+                            leg.detourImpact.severity === 'stop_affected' && styles.detourPillSevere,
+                          ]}>
+                            <Icon
+                              name="Warning"
+                              size={12}
+                              color={leg.detourImpact.severity === 'stop_affected' ? COLORS.error : COLORS.warning}
+                            />
+                            <Text style={[
+                              styles.detourPillText,
+                              leg.detourImpact.severity === 'stop_affected' && styles.detourPillTextSevere,
+                            ]}>
+                              {getDetourPreviewLabel(leg.detourImpact)}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     )}
                   </View>
@@ -446,6 +469,28 @@ const styles = StyleSheet.create({
   busStepBadgeText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
+  },
+  detourPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.xs,
+    paddingVertical: 3,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.warningSubtle,
+  },
+  detourPillSevere: {
+    backgroundColor: COLORS.errorSubtle,
+  },
+  detourPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.warning,
+  },
+  detourPillTextSevere: {
+    color: COLORS.error,
   },
   actions: {
     flexDirection: 'row',

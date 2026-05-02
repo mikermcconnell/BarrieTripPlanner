@@ -11,9 +11,11 @@ import {
   FlatList,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { trackEvent } from '../services/analyticsService';
 import OnboardingScene from '../components/OnboardingScene';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -41,6 +43,8 @@ const SLIDES = [
 ];
 
 const OnboardingScreen = ({ onComplete }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
 
@@ -109,7 +113,10 @@ const OnboardingScreen = ({ onComplete }) => {
       </View>
 
       {/* Bottom buttons */}
-      <View style={styles.bottomBar}>
+      <View style={[
+        styles.bottomBar,
+        { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+      ]}>
         {!isLastSlide ? (
           <>
             <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>

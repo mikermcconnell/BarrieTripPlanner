@@ -25,10 +25,10 @@ describe('tripService configuration and format helpers', () => {
   test('fails fast when OTP backend URL is not configured', async () => {
     await expect(
       planTrip({
-        fromLat: 44.3891,
-        fromLon: -79.6903,
-        toLat: 44.395,
-        toLon: -79.7,
+        fromLat: 44.30,
+        fromLon: -79.80,
+        toLat: 44.49,
+        toLon: -79.56,
       })
     ).rejects.toMatchObject({
       code: TRIP_ERROR_CODES.OTP_UNAVAILABLE,

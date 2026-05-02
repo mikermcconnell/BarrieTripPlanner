@@ -39,6 +39,14 @@ const renderTexts = (element) => {
   return inst.root.findAllByType('Text').flatMap((node) => collectText(node));
 };
 
+const renderTree = (element) => {
+  let inst;
+  act(() => {
+    inst = create(element);
+  });
+  return inst.root;
+};
+
 describe('TripStep', () => {
   test('shows a simple walking destination summary', () => {
     const texts = renderTexts(React.createElement(TripStep, {
@@ -65,6 +73,24 @@ describe('TripStep', () => {
     expect(text).toContain('240 m • about 3 min');
     expect(text).not.toContain('Head east on Mapleview Dr E • 120 m');
     expect(text).not.toContain('Turn right toward the stop • 80 m');
+  });
+
+  test('uses a bus stop icon for walking steps that end at a stop', () => {
+    const root = renderTree(React.createElement(TripStep, {
+      isFirst: true,
+      isLast: false,
+      leg: {
+        mode: 'WALK',
+        startTime: 1000,
+        endTime: 181000,
+        duration: 180,
+        distance: 240,
+        from: { name: 'Current location' },
+        to: { name: 'Barrie Gold Buyer', stopCode: '1234' },
+      },
+    }));
+
+    expect(root.findAllByType('Icon')[0].props.name).toBe('BusStop');
   });
 
   test('shows clear boarding, on-bus, and alighting guidance for bus legs', () => {
@@ -95,6 +121,32 @@ describe('TripStep', () => {
     expect(text).toContain('Stay on bus: 2 stops before yours');
     expect(text).toContain('Get off at Downtown Terminal (#201)');
     expect(text).toContain('On bus: Bayview Drive → Essa Road');
+  });
+
+  test('shows detour warnings on bus legs', () => {
+    const texts = renderTexts(React.createElement(TripStep, {
+      isFirst: false,
+      isLast: false,
+      leg: {
+        mode: 'BUS',
+        startTime: 1000,
+        endTime: 601000,
+        duration: 600,
+        distance: 3000,
+        from: { name: 'Mapleview Stop', stopCode: '101' },
+        to: { name: 'Downtown Terminal', stopCode: '201' },
+        route: { shortName: '10', longName: 'Downtown' },
+        detourImpact: {
+          severity: 'stop_affected',
+          message: 'Route 10 is on detour and your boarding or exit stop may be affected.',
+          affectedStopNames: ['Mapleview Stop'],
+        },
+      },
+    }));
+
+    const text = texts.join('');
+    expect(text).toContain('Route 10 is on detour');
+    expect(text).toContain('Affected: Mapleview Stop');
   });
 
   test('renders on-demand legs as booking steps, not bus steps', () => {

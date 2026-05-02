@@ -73,6 +73,41 @@ describe('stale detour auto-clear policy', () => {
     expect(decision.reason).toBe('stale-evidence-with-live-route-family-vehicles');
   });
 
+  test('clears zero-vehicle detours sooner when route-family vehicles are live', () => {
+    const decision = shouldAutoClearStaleDetour({
+      routeId: '8A',
+      detour: {
+        detectedAt: sundayAt4pmEt - 20 * 60 * 1000,
+        vehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 13 * 60 * 1000 },
+      },
+      vehicles: [{ routeId: '8B' }],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.shouldClear).toBe(true);
+    expect(decision.reason).toBe('zero-vehicle-stale-with-live-route-family-vehicles');
+    expect(decision.thresholdMs).toBe(12 * 60 * 1000);
+  });
+
+  test('keeps zero-vehicle detours during the short stale grace window', () => {
+    const decision = shouldAutoClearStaleDetour({
+      routeId: '8A',
+      detour: {
+        detectedAt: sundayAt4pmEt - 20 * 60 * 1000,
+        vehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 8 * 60 * 1000 },
+      },
+      vehicles: [{ routeId: '8B' }],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('zero-vehicle-fresh-enough');
+  });
+
   test('does not clear when no route-family vehicles are currently reporting', () => {
     const decision = shouldAutoClearStaleDetour({
       routeId: '8A',

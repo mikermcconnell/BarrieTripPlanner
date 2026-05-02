@@ -9,12 +9,14 @@
 import React, { useMemo, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripResultCard from './TripResultCard';
 import TripErrorDisplay from './TripErrorDisplay';
 import FareCard from './FareCard';
 import Svg, { Path } from 'react-native-svg';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const getItineraryKey = (itinerary, index) => {
   const legSignature = Array.isArray(itinerary?.legs)
@@ -60,6 +62,8 @@ const TripBottomSheet = ({
   recentTrips = [],
   onSelectRecentTrip,
 }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const snapPoints = useMemo(() => ['10%', '38%', '85%'], []);
 
@@ -190,7 +194,12 @@ const TripBottomSheet = ({
       handleIndicatorStyle={styles.handleIndicator}
       onAnimate={handleKeyDown}
     >
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         {renderContent()}
       </BottomSheetScrollView>
     </BottomSheet>

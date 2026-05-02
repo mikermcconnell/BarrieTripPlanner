@@ -17,6 +17,34 @@ import runtimeConfig, { GOOGLE_SIGN_IN_DISABLED_MESSAGE } from '../../config/run
 import { userFirestoreService } from './userFirestoreService';
 import logger from '../../utils/logger';
 
+const GOOGLE_NATIVE_ERROR_MESSAGES = {
+  DEVELOPER_ERROR:
+    'Google sign-in is not configured for this Android build. Add this app signing certificate SHA-1 in Firebase/Google Cloud, download the updated google-services.json, and rebuild the app.',
+  PLAY_SERVICES_NOT_AVAILABLE:
+    'Google Play Services is unavailable or out of date on this device. Update Google Play Services and try again.',
+  IN_PROGRESS: 'Google sign-in is already in progress.',
+  SIGN_IN_REQUIRED: 'Choose a Google account to continue.',
+};
+
+const getNativeGoogleErrorMessage = (error) => {
+  const code = error?.code || '';
+  const message = error?.message || '';
+
+  if (GOOGLE_NATIVE_ERROR_MESSAGES[code]) {
+    return GOOGLE_NATIVE_ERROR_MESSAGES[code];
+  }
+
+  if (message.includes('DEVELOPER_ERROR')) {
+    return GOOGLE_NATIVE_ERROR_MESSAGES.DEVELOPER_ERROR;
+  }
+
+  if (message.includes('PLAY_SERVICES_NOT_AVAILABLE')) {
+    return GOOGLE_NATIVE_ERROR_MESSAGES.PLAY_SERVICES_NOT_AVAILABLE;
+  }
+
+  return null;
+};
+
 export const authService = {
   // Sign in with email and password
   async signInWithEmail(email, password) {
@@ -153,11 +181,13 @@ export const authService = {
         if (runtimeConfig.googleAuth.iosClientId) {
           googleSigninConfig.iosClientId = runtimeConfig.googleAuth.iosClientId;
         }
-        if (runtimeConfig.googleAuth.androidClientId) {
-          googleSigninConfig.androidClientId = runtimeConfig.googleAuth.androidClientId;
-        }
         GoogleSignin.configure(googleSigninConfig);
         const signInResult = await GoogleSignin.signIn();
+
+        if (signInResult?.type === 'cancelled') {
+          return { success: false, error: null };
+        }
+
         const idToken = signInResult.data?.idToken;
         if (!idToken) {
           return { success: false, error: 'Failed to get Google credentials.' };
@@ -191,6 +221,12 @@ export const authService = {
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'SIGN_IN_CANCELLED') {
         return { success: false, error: null };
       }
+
+      const nativeErrorMessage = getNativeGoogleErrorMessage(error);
+      if (nativeErrorMessage) {
+        return { success: false, error: nativeErrorMessage };
+      }
+
       return {
         success: false,
         error: this.getErrorMessage(error.code),

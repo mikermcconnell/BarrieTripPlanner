@@ -28,6 +28,20 @@ function hasRenderableGeometry(geometry) {
   return Array.isArray(geometry?.segments) && geometry.segments.some(hasRenderableSegment);
 }
 
+function hasConfirmedBoundaryAnchors(segment) {
+  if (!segment?.entryPoint || !segment?.exitPoint) return false;
+
+  const debug = segment.debug || {};
+  if (debug.exitCandidateCount === 0 || debug.hasExitBoundaryCandidate === false) {
+    return false;
+  }
+  if (debug.exitAnchorSource === 'projected-evidence-fallback') {
+    return false;
+  }
+
+  return Array.isArray(segment.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2;
+}
+
 function createRouteFamilyReconciler({
   enabled,
   segmentMatchMeters,
@@ -145,6 +159,8 @@ function createRouteFamilyReconciler({
   }
 
   function projectSegmentOntoSiblingRoute(segment, shapes, targetShapeIds) {
+    if (!hasConfirmedBoundaryAnchors(segment)) return null;
+
     const bestShape = findBestShapeForSegment(segment, shapes, targetShapeIds);
     if (!bestShape) return null;
 
@@ -242,7 +258,9 @@ function createRouteFamilyReconciler({
         .slice()
         .sort(([, a], [, b]) => compareLeaderScores(scoreRouteFamilyLeader(a), scoreRouteFamilyLeader(b)))[0];
       const [leaderRouteId, leaderDetour] = leaderEntry;
-      const leaderSegments = (leaderDetour.geometry?.segments || []).filter(hasRenderableSegment);
+      const leaderSegments = (leaderDetour.geometry?.segments || []).filter((segment) =>
+        hasRenderableSegment(segment) && hasConfirmedBoundaryAnchors(segment)
+      );
       if (leaderSegments.length === 0) continue;
 
       for (const [routeId, detour] of entries) {
@@ -346,4 +364,5 @@ module.exports = {
   getRouteFamilyKey,
   hasRenderableSegment,
   hasRenderableGeometry,
+  hasConfirmedBoundaryAnchors,
 };

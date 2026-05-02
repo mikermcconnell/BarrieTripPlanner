@@ -19,11 +19,12 @@ afterAll(() => {
 const makeOtpPlanResponse = ({
   startTime = new Date('2026-03-06T10:00:00Z').getTime(),
   endTime = new Date('2026-03-06T10:10:00Z').getTime(),
+  itineraries = null,
 } = {}) => ({
   plan: {
     from: { name: 'Origin', lat: 44.38, lon: -79.69 },
     to: { name: 'Destination', lat: 44.39, lon: -79.68 },
-    itineraries: [
+    itineraries: itineraries || [
       {
         duration: Math.round((endTime - startTime) / 1000),
         startTime,
@@ -195,6 +196,64 @@ function loadUseTripPlanner({
       });
     },
     planTripAutoMock,
+  };
+}
+
+function loadTripSearchHeaderNative(componentProps = {}) {
+  jest.resetModules();
+  const React = require('react');
+  const { create, act } = require('react-test-renderer');
+
+  jest.doMock('react-native', () => ({
+    View: 'View',
+    Text: 'Text',
+    TouchableOpacity: 'TouchableOpacity',
+    ActivityIndicator: 'ActivityIndicator',
+    Animated: {},
+    StyleSheet: { create: (styles) => styles },
+  }));
+  jest.doMock('../components/Icon', () => 'Icon');
+  jest.doMock('../components/TimePicker', () => 'TimePicker');
+  jest.doMock('../components/AddressAutocomplete', () => (props) => (
+    React.createElement('AddressAutocomplete', {
+      value: props.value,
+      placeholder: props.placeholder,
+      accessibilityLabel: props.accessibilityLabel,
+    }, props.rightIcon || null)
+  ));
+
+  const TripSearchHeader = require('../components/TripSearchHeader').default;
+  const defaultProps = {
+    fromText: '',
+    toText: '',
+    onFromChange: jest.fn(),
+    onToChange: jest.fn(),
+    onFromSelect: jest.fn(),
+    onToSelect: jest.fn(),
+    onSwap: jest.fn(),
+    onClose: jest.fn(),
+    onUseCurrentLocation: jest.fn(),
+    onTimeModeChange: jest.fn(),
+    onSelectedTimeChange: jest.fn(),
+    onSearch: jest.fn(),
+  };
+
+  let renderer = null;
+  act(() => {
+    renderer = create(React.createElement(TripSearchHeader, {
+      ...defaultProps,
+      ...componentProps,
+    }));
+  });
+
+  return {
+    root: renderer.root,
+    act,
+    unmount: () => {
+      act(() => {
+        renderer.unmount();
+      });
+    },
   };
 }
 
@@ -442,10 +501,10 @@ describe('trip planner service regressions', () => {
 
     await expect(
       planTripAuto({
-        fromLat: 44.38,
-        fromLon: -79.69,
-        toLat: 44.39,
-        toLon: -79.68,
+        fromLat: 44.30,
+        fromLon: -79.80,
+        toLat: 44.49,
+        toLon: -79.56,
         date: new Date('2026-03-06T10:00:00Z'),
         time: new Date('2026-03-06T10:00:00Z'),
         routingData: { routesByStop: new Map() },
@@ -455,6 +514,46 @@ describe('trip planner service regressions', () => {
     ).rejects.toMatchObject({
       code: TRIP_ERROR_CODES.NO_ROUTES_FOUND,
       message: 'No transit routes found for this trip',
+    });
+  });
+
+  test('local-router no-route errors return walking-only fallback when the walk is reasonable', async () => {
+    const requestedTime = new Date(Date.now() + 10 * 60 * 1000);
+    let RoutingErrorMockRef;
+    const planTripLocalMock = jest.fn(async () => {
+      throw new RoutingErrorMockRef('NO_ROUTE_FOUND', 'No transit routes found for this trip');
+    });
+    const { planTripAuto, RoutingErrorMock } = loadTripService({
+      otpBaseUrl: '',
+      planTripLocalMock,
+    });
+    RoutingErrorMockRef = RoutingErrorMock;
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.384,
+      toLon: -79.69,
+      date: requestedTime,
+      time: requestedTime,
+      routingData: { routesByStop: new Map() },
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(result.itineraries).toHaveLength(1);
+    expect(result.itineraries[0]).toMatchObject({
+      id: 'walking-only',
+      isWalkingOnly: true,
+      isRecommended: true,
+      transfers: 0,
+      legs: [
+        expect.objectContaining({
+          mode: 'WALK',
+          from: expect.objectContaining({ lat: 44.38, lon: -79.69 }),
+          to: expect.objectContaining({ lat: 44.384, lon: -79.69 }),
+        }),
+      ],
     });
   });
 
@@ -563,6 +662,358 @@ describe('trip planner service regressions', () => {
     });
 
     expect(retryFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('OTP itineraries are ranked with transfer penalty while preserving real duration', async () => {
+    const baseTime = new Date('2026-03-06T10:00:00Z').getTime();
+    const transferTrip = {
+      duration: 25 * 60,
+      startTime: baseTime,
+      endTime: baseTime + 25 * 60 * 1000,
+      walkTime: 0,
+      transitTime: 20 * 60,
+      waitingTime: 5 * 60,
+      walkDistance: 0,
+      transfers: 1,
+      legs: [
+        {
+          mode: 'BUS',
+          startTime: baseTime,
+          endTime: baseTime + 10 * 60 * 1000,
+          duration: 10 * 60,
+          distance: 1000,
+          from: { name: 'Origin Stop', lat: 44.38, lon: -79.69, stopId: 'S1' },
+          to: { name: 'Transfer Stop', lat: 44.385, lon: -79.685, stopId: 'S2' },
+          route: '1',
+          routeId: '1',
+          routeShortName: '1',
+          tripId: 'TRIP-TRANSFER-A',
+        },
+        {
+          mode: 'BUS',
+          startTime: baseTime + 15 * 60 * 1000,
+          endTime: baseTime + 25 * 60 * 1000,
+          duration: 10 * 60,
+          distance: 1000,
+          from: { name: 'Transfer Stop', lat: 44.385, lon: -79.685, stopId: 'S2' },
+          to: { name: 'Dest Stop', lat: 44.39, lon: -79.68, stopId: 'S3' },
+          route: '2',
+          routeId: '2',
+          routeShortName: '2',
+          tripId: 'TRIP-TRANSFER-B',
+        },
+      ],
+    };
+    const directTrip = {
+      duration: 30 * 60,
+      startTime: baseTime,
+      endTime: baseTime + 30 * 60 * 1000,
+      walkTime: 0,
+      transitTime: 30 * 60,
+      waitingTime: 0,
+      walkDistance: 0,
+      transfers: 0,
+      legs: [
+        {
+          mode: 'BUS',
+          startTime: baseTime,
+          endTime: baseTime + 30 * 60 * 1000,
+          duration: 30 * 60,
+          distance: 2000,
+          from: { name: 'Origin Stop', lat: 44.38, lon: -79.69, stopId: 'S1' },
+          to: { name: 'Dest Stop', lat: 44.39, lon: -79.68, stopId: 'S3' },
+          route: '10',
+          routeId: '10',
+          routeShortName: '10',
+          tripId: 'TRIP-DIRECT',
+        },
+      ],
+    };
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse({
+        itineraries: [transferTrip, directTrip],
+      }),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+
+    const result = await planTripAuto({
+      fromLat: 44.30,
+      fromLon: -79.80,
+      toLat: 44.49,
+      toLon: -79.56,
+      date: new Date('2026-03-06T10:00:00Z'),
+      time: new Date('2026-03-06T10:00:00Z'),
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(result.itineraries.map((itinerary) => itinerary.id)).toEqual([
+      'itinerary-1',
+      'itinerary-0',
+    ]);
+    expect(result.itineraries[0]).toMatchObject({
+      duration: 30 * 60,
+      transfers: 0,
+      riderCostSeconds: 30 * 60,
+    });
+    expect(result.itineraries[1]).toMatchObject({
+      duration: 25 * 60,
+      transfers: 1,
+      riderCostSeconds: 32 * 60,
+      transferPenaltySeconds: 7 * 60,
+    });
+  });
+
+  test('walking-only is recommended when it is at least 25 percent faster than transit', async () => {
+    const baseTime = Date.now() + 10 * 60 * 1000;
+    const requestedTime = new Date(baseTime);
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse({
+        itineraries: [{
+          duration: 12 * 60,
+          startTime: baseTime,
+          endTime: baseTime + 12 * 60 * 1000,
+          walkTime: 0,
+          transitTime: 12 * 60,
+          waitingTime: 0,
+          walkDistance: 0,
+          transfers: 0,
+          legs: [{
+            mode: 'BUS',
+            startTime: baseTime,
+            endTime: baseTime + 12 * 60 * 1000,
+            duration: 12 * 60,
+            distance: 2000,
+            from: { name: 'Origin Stop', lat: 44.38, lon: -79.69, stopId: 'S1' },
+            to: { name: 'Dest Stop', lat: 44.384, lon: -79.69, stopId: 'S2' },
+            route: '10',
+            routeId: '10',
+            routeShortName: '10',
+            tripId: 'TRIP-DIRECT',
+          }],
+        }],
+      }),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.384,
+      toLon: -79.69,
+      date: requestedTime,
+      time: requestedTime,
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(result.itineraries[0]).toMatchObject({
+      id: 'walking-only',
+      isWalkingOnly: true,
+      isRecommended: true,
+    });
+    expect(result.itineraries[1].id).toBe('itinerary-0');
+  });
+
+  test('walking-only can be recommended even when it crosses the high-walk warning threshold', async () => {
+    const baseTime = Date.now() + 10 * 60 * 1000;
+    const requestedTime = new Date(baseTime);
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse({
+        itineraries: [{
+          duration: 40 * 60,
+          startTime: baseTime,
+          endTime: baseTime + 40 * 60 * 1000,
+          walkTime: 0,
+          transitTime: 40 * 60,
+          waitingTime: 0,
+          walkDistance: 0,
+          transfers: 0,
+          legs: [{
+            mode: 'BUS',
+            startTime: baseTime,
+            endTime: baseTime + 40 * 60 * 1000,
+            duration: 40 * 60,
+            distance: 4000,
+            from: { name: 'Origin Stop', lat: 44.38, lon: -79.69, stopId: 'S1' },
+            to: { name: 'Dest Stop', lat: 44.392, lon: -79.69, stopId: 'S2' },
+            route: '10',
+            routeId: '10',
+            routeShortName: '10',
+            tripId: 'TRIP-DIRECT',
+          }],
+        }],
+      }),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.392,
+      toLon: -79.69,
+      date: requestedTime,
+      time: requestedTime,
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(result.itineraries[0]).toMatchObject({
+      id: 'walking-only',
+      isWalkingOnly: true,
+      hasHighWalk: true,
+      isRecommended: true,
+    });
+  });
+
+  test('walking-only is shown but not recommended when it is less than 25 percent faster', async () => {
+    const baseTime = Date.now() + 10 * 60 * 1000;
+    const requestedTime = new Date(baseTime);
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse({
+        itineraries: [{
+          duration: 9 * 60,
+          startTime: baseTime,
+          endTime: baseTime + 9 * 60 * 1000,
+          walkTime: 0,
+          transitTime: 9 * 60,
+          waitingTime: 0,
+          walkDistance: 0,
+          transfers: 0,
+          legs: [{
+            mode: 'BUS',
+            startTime: baseTime,
+            endTime: baseTime + 9 * 60 * 1000,
+            duration: 9 * 60,
+            distance: 2000,
+            from: { name: 'Origin Stop', lat: 44.38, lon: -79.69, stopId: 'S1' },
+            to: { name: 'Dest Stop', lat: 44.384, lon: -79.69, stopId: 'S2' },
+            route: '10',
+            routeId: '10',
+            routeShortName: '10',
+            tripId: 'TRIP-DIRECT',
+          }],
+        }],
+      }),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.384,
+      toLon: -79.69,
+      date: requestedTime,
+      time: requestedTime,
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(result.itineraries.map((itinerary) => itinerary.id)).toEqual([
+      'itinerary-0',
+      'walking-only',
+    ]);
+    expect(result.itineraries[0].isRecommended).toBe(true);
+    expect(result.itineraries[1]).toMatchObject({
+      isWalkingOnly: true,
+      recommendationEligible: false,
+    });
+    expect(result.itineraries[1].isRecommended).not.toBe(true);
+  });
+
+  test('mixed zone trips add direct walking-only from original endpoints instead of wrapping hub walking with on-demand', async () => {
+    const requestedTime = new Date(Date.now() + 10 * 60 * 1000);
+    const transitStartTime = requestedTime.getTime() + 10 * 60 * 1000;
+    const transitEndTime = transitStartTime + 12 * 60 * 1000;
+    const originalFrom = { lat: 44.38, lon: -79.69 };
+    const originalTo = { lat: 44.386, lon: -79.69 };
+    const fromHub = { lat: 44.381, lon: -79.691 };
+    const toHub = { lat: 44.382, lon: -79.690 };
+    const planTripLocalMock = jest.fn(async () => ({
+      from: { name: 'Origin', lat: fromHub.lat, lon: fromHub.lon },
+      to: { name: 'Destination', lat: toHub.lat, lon: toHub.lon },
+      itineraries: [{
+        id: 'hub-transit',
+        duration: 12 * 60,
+        startTime: transitStartTime,
+        endTime: transitEndTime,
+        walkTime: 0,
+        transitTime: 12 * 60,
+        waitingTime: 0,
+        walkDistance: 0,
+        transfers: 0,
+        legs: [{
+          mode: 'BUS',
+          startTime: transitStartTime,
+          endTime: transitEndTime,
+          duration: 12 * 60,
+          distance: 1000,
+          from: { name: 'From Hub', lat: fromHub.lat, lon: fromHub.lon, stopId: 'H1' },
+          to: { name: 'To Hub', lat: toHub.lat, lon: toHub.lon, stopId: 'H2' },
+          route: '10',
+          routeId: '10',
+          routeShortName: '10',
+          tripId: 'TRIP-HUB',
+        }],
+      }],
+    }));
+    const { planTripAuto } = loadTripService({
+      planTripLocalMock,
+      enrichTripPlanWithWalkingMock: jest.fn(async (tripPlan) => tripPlan),
+      analyzeZoneInvolvementMock: jest.fn(() => ({ needsOnDemand: true })),
+      buildZoneAwareTripMock: jest.fn(() => ({
+        sameZone: false,
+        raptorFrom: fromHub,
+        raptorTo: toHub,
+        prependLeg: {
+          zone: { id: 'south', name: 'South End', color: '#007A5E', bookingPhone: '705-555-1111' },
+          hubStop: { latitude: fromHub.lat, longitude: fromHub.lon, name: 'From Hub' },
+        },
+        appendLeg: {
+          zone: { id: 'north', name: 'North End', color: '#004B91', bookingPhone: '705-555-2222' },
+          hubStop: { latitude: toHub.lat, longitude: toHub.lon, name: 'To Hub' },
+        },
+      })),
+      estimateOnDemandDurationMock: jest.fn(() => 10 * 60),
+    });
+
+    const result = await planTripAuto({
+      fromLat: originalFrom.lat,
+      fromLon: originalFrom.lon,
+      toLat: originalTo.lat,
+      toLon: originalTo.lon,
+      date: requestedTime,
+      time: requestedTime,
+      enrichWalking: false,
+      routingData: { mocked: true },
+      onDemandZones: { south: {}, north: {} },
+      stops: [],
+    });
+
+    expect(planTripLocalMock).toHaveBeenCalledWith(expect.objectContaining({
+      fromLat: fromHub.lat,
+      fromLon: fromHub.lon,
+      toLat: toHub.lat,
+      toLon: toHub.lon,
+    }));
+
+    const walkingOnly = result.itineraries.find((itinerary) => itinerary.isWalkingOnly);
+    const zoneTransit = result.itineraries.find((itinerary) => !itinerary.isWalkingOnly);
+
+    expect(walkingOnly).toBeTruthy();
+    expect(walkingOnly.legs).toHaveLength(1);
+    expect(walkingOnly.legs[0]).toMatchObject({
+      mode: 'WALK',
+      from: expect.objectContaining(originalFrom),
+      to: expect.objectContaining(originalTo),
+    });
+    expect(walkingOnly.legs.some((leg) => leg.mode === 'ON_DEMAND')).toBe(false);
+    expect(zoneTransit.legs[0].mode).toBe('ON_DEMAND');
+    expect(zoneTransit.legs[zoneTransit.legs.length - 1].mode).toBe('ON_DEMAND');
   });
 
   test('zone-adjusted trips do not pollute cache for later plain searches', async () => {
@@ -719,6 +1170,25 @@ describe('useTripPlanner regressions', () => {
     unmount();
   });
 
+  test('current-location origin is tracked separately from manual origin selection', async () => {
+    const { getHook, act, unmount } = loadUseTripPlanner();
+
+    await act(async () => {
+      await getHook().useCurrentLocation(async () => ({ lat: 44.381, lon: -79.691 }));
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromUsesCurrentLocation).toBe(true);
+
+    act(() => {
+      getHook().setFrom({ lat: 44.402, lon: -79.682 }, 'Selected origin');
+    });
+
+    expect(getHook().state.fromUsesCurrentLocation).toBe(false);
+
+    unmount();
+  });
+
   test('destination seeding can suppress stale-origin auto-search while GPS resolves', async () => {
     const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
     const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
@@ -804,6 +1274,57 @@ describe('useTripPlanner regressions', () => {
 
     expect(getHook().state.fromText).toBe('');
     expect(getHook().state.from).toBeNull();
+
+    unmount();
+  });
+
+  test('manual origin selection cancels pending current-location overwrite', async () => {
+    const reverseGeocodeDeferred = createDeferred();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      reverseGeocodeMock: jest.fn(() => reverseGeocodeDeferred.promise),
+    });
+
+    await act(async () => {
+      await getHook().useCurrentLocation(async () => ({ lat: 44.381, lon: -79.691 }));
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('Current Location');
+
+    act(() => {
+      getHook().setFrom({ lat: 44.402, lon: -79.682 }, 'Selected map point');
+    });
+
+    reverseGeocodeDeferred.resolve({ shortName: 'Late GPS Location' });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('Selected map point');
+    expect(getHook().state.from).toEqual({ lat: 44.402, lon: -79.682 });
+
+    unmount();
+  });
+
+  test('manual origin selection cancels pending current-position lookup', async () => {
+    const locationDeferred = createDeferred();
+    const { getHook, act, unmount } = loadUseTripPlanner();
+
+    act(() => {
+      getHook().useCurrentLocation(() => locationDeferred.promise);
+    });
+
+    act(() => {
+      getHook().setFrom({ lat: 44.402, lon: -79.682 }, 'Directions from here');
+    });
+
+    locationDeferred.resolve({ lat: 44.381, lon: -79.691 });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.fromText).toBe('Directions from here');
+    expect(getHook().state.from).toEqual({ lat: 44.402, lon: -79.682 });
 
     unmount();
   });
@@ -948,6 +1469,60 @@ describe('useTripPlanner regressions', () => {
 
     unmount();
   });
+
+  test('annotates planned trip legs when their route is on detour', async () => {
+    const itinerary = {
+      id: 'detour-trip',
+      duration: 600,
+      startTime: 1000,
+      endTime: 1600,
+      walkDistance: 0,
+      walkTime: 0,
+      transitTime: 600,
+      waitingTime: 0,
+      transfers: 0,
+      legs: [{
+        mode: 'BUS',
+        route: { id: '10', shortName: '10' },
+        from: { stopId: 'S1', stopCode: '1001', name: 'Origin Stop' },
+        to: { stopId: 'S2', stopCode: '1002', name: 'Destination Stop' },
+      }],
+    };
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock: jest.fn(async () => ({ itineraries: [itinerary] })),
+      hookOptions: {
+        activeDetours: {
+          10: { routeId: '10', state: 'active' },
+        },
+        detourStopDetailsByRouteId: {
+          10: {
+            segmentStopDetails: [{
+              skippedStops: [{ stopId: 'S1', stopCode: '1001', name: 'Origin Stop' }],
+            }],
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      await getHook().searchTrips(
+        { lat: 44.38, lon: -79.69 },
+        { lat: 44.39, lon: -79.68 }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.itineraries[0]).toMatchObject({
+      hasDetour: true,
+      hasStopDetourImpact: true,
+    });
+    expect(getHook().state.itineraries[0].legs[0].detourImpact).toMatchObject({
+      severity: 'stop_affected',
+      affectedStopRoles: expect.arrayContaining(['boarding']),
+    });
+
+    unmount();
+  });
 });
 
 describe('html escaping helpers', () => {
@@ -992,6 +1567,110 @@ describe('web trip planner regressions', () => {
     });
 
     expect(onFromSelect).toHaveBeenCalledWith(expect.objectContaining({ shortName: 'Origin B' }));
+
+    unmount();
+  });
+
+  test('web search header shows planning feedback while trip search is loading', () => {
+    const { root, unmount } = loadTripSearchHeaderWeb({
+      fromText: 'Current Location',
+      toText: 'Downtown Terminal',
+      isLoading: true,
+    });
+
+    const loadingText = root.findAll(
+      (node) => node.children?.includes('Planning your trip…')
+    );
+    const progressIndicators = root.findAll(
+      (node) => node.props.accessibilityRole === 'progressbar'
+    );
+
+    expect(loadingText).toHaveLength(1);
+    expect(progressIndicators).toHaveLength(1);
+
+    unmount();
+  });
+
+  test('native search header shows an explicit Use current location button', () => {
+    const onUseCurrentLocation = jest.fn();
+    const { root, act, unmount } = loadTripSearchHeaderNative({ onUseCurrentLocation });
+
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Use current location')
+    );
+    expect(visibleLabels).toHaveLength(1);
+
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    expect(locationButtons.length).toBeGreaterThan(0);
+
+    act(() => {
+      locationButtons[0].props.onPress({ nativeEvent: { pageX: 10 } });
+    });
+    expect(onUseCurrentLocation).toHaveBeenCalledTimes(1);
+    expect(onUseCurrentLocation).toHaveBeenCalledWith();
+
+    unmount();
+  });
+
+  test('native search header hides current-location button after From is selected', () => {
+    const { root, unmount } = loadTripSearchHeaderNative({
+      fromText: 'Downtown Terminal',
+      showUseCurrentLocation: false,
+    });
+
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Use current location')
+    );
+
+    expect(locationButtons).toHaveLength(0);
+    expect(visibleLabels).toHaveLength(0);
+
+    unmount();
+  });
+
+  test('web search header shows an explicit Use current location button', () => {
+    const onUseCurrentLocation = jest.fn();
+    const { root, act, unmount } = loadTripSearchHeaderWeb({ onUseCurrentLocation });
+
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Use current location')
+    );
+    expect(visibleLabels).toHaveLength(1);
+
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    expect(locationButtons.length).toBeGreaterThan(0);
+
+    act(() => {
+      locationButtons[0].props.onPress({ nativeEvent: { pageX: 10 } });
+    });
+    expect(onUseCurrentLocation).toHaveBeenCalledTimes(1);
+    expect(onUseCurrentLocation).toHaveBeenCalledWith();
+
+    unmount();
+  });
+
+  test('web search header hides current-location button after From is selected', () => {
+    const { root, unmount } = loadTripSearchHeaderWeb({
+      fromText: 'Downtown Terminal',
+      showUseCurrentLocation: false,
+    });
+
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Use current location')
+    );
+
+    expect(locationButtons).toHaveLength(0);
+    expect(visibleLabels).toHaveLength(0);
 
     unmount();
   });

@@ -4,6 +4,23 @@ const IS_PRODUCTION_LIKE = !IS_DEV && !IS_TEST;
 
 const hasValue = (value) => typeof value === 'string' && value.trim().length > 0;
 
+// These values are public client configuration, not secrets. Keeping a checked-in
+// fallback prevents native builds or cached bundles from failing startup when
+// Expo env injection is unavailable or incomplete.
+const BUILT_IN_PUBLIC_ENV = {
+  EXPO_PUBLIC_FIREBASE_API_KEY: 'AIzaSyB4u2cJOxaqHUH6LY_yFFpQd1Tn-ET8dbs',
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: 'barrie-transit-trip-plan-cc84e.firebaseapp.com',
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID: 'barrie-transit-trip-plan-cc84e',
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: 'barrie-transit-trip-plan-cc84e.firebasestorage.app',
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '648843426695',
+  EXPO_PUBLIC_FIREBASE_APP_ID: '1:648843426695:web:14d220f26fb7001a72f122',
+  EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: 'G-S15LSSF2VM',
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:
+    '648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com',
+  EXPO_PUBLIC_API_PROXY_URL: 'https://apiproxy-r7pziiwpua-uc.a.run.app',
+  EXPO_PUBLIC_ENABLE_AUTO_DETOURS: 'false',
+};
+
 // Expo only embeds EXPO_PUBLIC_* values in native bundles when they are
 // referenced statically. Keep this map explicit; do not replace it with
 // dynamic process.env[name] access for app runtime config.
@@ -30,9 +47,11 @@ const PUBLIC_ENV = {
 };
 
 const readEnv = (name) => {
-  const value = PUBLIC_ENV[name];
+  const value = PUBLIC_ENV[name] || BUILT_IN_PUBLIC_ENV[name];
   return hasValue(value) ? value.trim() : '';
 };
+
+const hasPublicEnvValue = (name) => hasValue(PUBLIC_ENV[name]);
 
 const readBooleanEnv = (name, defaultValue = false) => {
   const value = readEnv(name).toLowerCase();
@@ -122,10 +141,12 @@ const runtimeConfig = {
     corsBaseUrl: readEnv('EXPO_PUBLIC_CORS_PROXY_URL'),
   },
   detours: {
-    enabledByDefault: readBooleanEnv(
-      'EXPO_PUBLIC_ENABLE_AUTO_DETOURS',
-      readBooleanEnv('EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI')
-    ),
+    enabledByDefault: hasPublicEnvValue('EXPO_PUBLIC_ENABLE_AUTO_DETOURS')
+      ? readBooleanEnv('EXPO_PUBLIC_ENABLE_AUTO_DETOURS')
+      : readBooleanEnv(
+        'EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI',
+        readBooleanEnv('EXPO_PUBLIC_ENABLE_AUTO_DETOURS')
+      ),
   },
   googleAuth,
   startup: {

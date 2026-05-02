@@ -13,6 +13,30 @@ function resolveGoogleServicesFile(config) {
   return fs.existsSync(absolutePath) ? configuredPath : null;
 }
 
+function readGoogleWebClientId(googleServicesFile) {
+  if (!googleServicesFile) {
+    return null;
+  }
+
+  try {
+    const absolutePath = path.resolve(__dirname, googleServicesFile);
+    const googleServices = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+    const clients = Array.isArray(googleServices.client) ? googleServices.client : [];
+
+    for (const client of clients) {
+      const oauthClients = Array.isArray(client.oauth_client) ? client.oauth_client : [];
+      const webClient = oauthClients.find((oauthClient) => oauthClient.client_type === 3 && hasValue(oauthClient.client_id));
+      if (webClient) {
+        return String(webClient.client_id).trim();
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 module.exports = ({ config }) => {
   const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || packageJson.version;
   const mergedConfig = {
@@ -23,6 +47,11 @@ module.exports = ({ config }) => {
   const googleServicesFile = resolveGoogleServicesFile(resolvedConfig);
   const isEasBuild = process.env.EAS_BUILD === 'true';
   const isEasProductionBuild = isEasBuild && process.env.EAS_BUILD_PROFILE === 'production';
+  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || readGoogleWebClientId(googleServicesFile);
+
+  if (hasValue(googleWebClientId) && !hasValue(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)) {
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = googleWebClientId;
+  }
 
   if (!googleServicesFile && isEasBuild) {
     throw new Error(
@@ -33,6 +62,12 @@ module.exports = ({ config }) => {
   if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_API_PROXY_URL)) {
     throw new Error(
       'Missing EXPO_PUBLIC_API_PROXY_URL for production EAS build. Set it as an EAS environment variable.'
+    );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production EAS build. Set it as an EAS environment variable or include a web OAuth client in google-services.json.'
     );
   }
 
@@ -75,6 +110,22 @@ module.exports = ({ config }) => {
   } else {
     delete resolvedConfig.android.googleServicesFile;
   }
+
+  resolvedConfig.extra = {
+    ...(resolvedConfig.extra || {}),
+    publicEnv: {
+      EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+      EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      EXPO_PUBLIC_API_PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL,
+      EXPO_PUBLIC_ENABLE_AUTO_DETOURS: process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS,
+    },
+  };
 
   return resolvedConfig;
 };

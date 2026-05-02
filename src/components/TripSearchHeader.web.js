@@ -18,6 +18,9 @@ const getSuggestionKey = (item, index) => [
   index,
 ].join('-');
 
+const FIELD_INDICATOR_WIDTH = 20;
+const FIELD_INDICATOR_GAP = SPACING.sm;
+
 // Close icon
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -48,6 +51,7 @@ const TripSearchHeaderWeb = ({
   onSwap,
   onClose,
   onUseCurrentLocation,
+  showUseCurrentLocation = true,
   isLoading = false,
   timeMode = 'now',
   selectedTime,
@@ -105,7 +109,6 @@ const TripSearchHeaderWeb = ({
     }
   }, [activeSuggestionIndex]);
 
-  void isLoading;
   return (
   <View style={styles.tripPlanHeader}>
     <View style={styles.tripPlanHeaderTop}>
@@ -137,16 +140,22 @@ const TripSearchHeaderWeb = ({
           placeholderTextColor={COLORS.grey500}
           aria-label="Starting location"
         />
+      </View>
+    </View>
+
+    {showUseCurrentLocation && onUseCurrentLocation && (
+      <View style={styles.useLocationRow}>
         <TouchableOpacity
-          style={styles.locationBtn}
-          onPress={onUseCurrentLocation}
+          style={styles.useLocationBtn}
+          onPress={() => onUseCurrentLocation()}
           accessibilityLabel="Use current location"
           accessibilityRole="button"
         >
-          <CenterIcon size={18} color={COLORS.primary} />
+          <CenterIcon size={16} color={COLORS.primary} />
+          <Text style={styles.useLocationText}>Use current location</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    )}
 
     {showFromSuggestions && fromSuggestions.length > 0 && (
         <View style={styles.suggestionsDropdown} role="listbox" aria-label="Origin suggestions">
@@ -227,15 +236,6 @@ const TripSearchHeaderWeb = ({
 
     {/* Swap + Time Row */}
     <View style={styles.controlsRow}>
-      <TouchableOpacity
-        style={styles.swapBtn}
-        onPress={onSwap}
-        accessibilityLabel="Swap origin and destination"
-        accessibilityRole="button"
-      >
-        <Text style={styles.swapBtnText}>Swap</Text>
-      </TouchableOpacity>
-
       {/* Time Mode Picker */}
       <View style={styles.timePickerRow}>
         <select
@@ -287,16 +287,40 @@ const TripSearchHeaderWeb = ({
 
         {timeMode !== 'now' && onSearch && (
           <TouchableOpacity
-            style={styles.searchBtn}
+            style={[styles.searchBtn, isLoading && styles.searchBtnDisabled]}
             onPress={onSearch}
+            disabled={isLoading}
             accessibilityLabel="Search trips"
             accessibilityRole="button"
+            accessibilityState={{ disabled: isLoading, busy: isLoading }}
           >
-            <Text style={styles.searchBtnText}>Search</Text>
+            <Text style={styles.searchBtnText}>{isLoading ? 'Searching…' : 'Search'}</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      <TouchableOpacity
+        style={styles.swapBtn}
+        onPress={onSwap}
+        accessibilityLabel="Swap origin and destination"
+        accessibilityRole="button"
+      >
+        <Text style={styles.swapBtnText}>Swap</Text>
+      </TouchableOpacity>
     </View>
+
+    {isLoading && (
+      <View
+        style={styles.planningStatus}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Planning your trip"
+        aria-busy={true}
+        aria-live="polite"
+      >
+        <ActivityIndicator size="small" color={COLORS.primary} />
+        <Text style={styles.planningStatusText}>Planning your trip…</Text>
+      </View>
+    )}
   </View>
   );
 };
@@ -349,7 +373,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.white,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     minWidth: 44,
@@ -361,9 +385,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   tripInputDot: {
-    width: 20,
+    width: FIELD_INDICATOR_WIDTH,
     alignItems: 'center',
-    marginRight: SPACING.sm,
+    marginRight: FIELD_INDICATOR_GAP,
   },
   dot: {
     width: 10,
@@ -390,13 +414,25 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textPrimary,
   },
-  locationBtn: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
+  useLocationRow: {
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginBottom: SPACING.xs,
+    alignItems: 'flex-start',
+  },
+  useLocationBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 44,
-    minHeight: 44,
+    gap: SPACING.xs,
+    minHeight: 34,
+    paddingVertical: SPACING.xxs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  useLocationText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
   suggestionsDropdown: {
     backgroundColor: COLORS.surface,
@@ -434,13 +470,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: SPACING.xs,
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
     gap: SPACING.sm,
   },
   swapBtn: {
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.round,
-    backgroundColor: COLORS.grey100,
+    backgroundColor: 'transparent',
     minHeight: 34,
     justifyContent: 'center',
   },
@@ -463,9 +500,28 @@ const styles = StyleSheet.create({
     minHeight: 34,
     justifyContent: 'center',
   },
+  searchBtnDisabled: {
+    opacity: 0.75,
+  },
   searchBtnText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  planningStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginTop: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primarySubtle,
+    gap: SPACING.xs,
+  },
+  planningStatusText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primaryDark,
     fontWeight: FONT_WEIGHTS.semibold,
   },
   typingIndicator: {

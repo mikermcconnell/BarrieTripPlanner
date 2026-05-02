@@ -16,7 +16,8 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
         "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "apk"
@@ -34,7 +35,8 @@
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
         "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "apk"
@@ -51,8 +53,9 @@
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "648843426695",
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:648843426695:web:14d220f26fb7001a72f122",
         "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-S15LSSF2VM",
-        "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "true",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_ENABLE_AUTO_DETOURS": "false",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "app-bundle"

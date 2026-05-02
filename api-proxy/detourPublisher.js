@@ -357,6 +357,8 @@ function buildClearedEvent(routeId, previous, now) {
     durationMs: detectedAt != null ? Math.max(0, now - detectedAt) : null,
     triggerVehicleId: previous?.triggerVehicleId || null,
     previousVehicleCount: previous?.vehicleCount ?? 0,
+    confidence: previous?.confidence || null,
+    evidencePointCount: previous?.evidencePointCount ?? null,
     lastEvidenceAt: previous?.lastEvidenceAt ?? null,
     source: 'detour-worker-v2',
   };

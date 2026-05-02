@@ -17,6 +17,8 @@ import { buildTransitStopSequence, findClosestTransitStopIndex } from '../utils/
 import {
   evaluateAutoAlightConfidence,
   evaluateAutoBoardConfidence,
+  evaluateBoardingBusDepartureStatus,
+  shouldTreatBusAsArrivedAtBoarding,
 } from '../utils/navigationAutoProgress';
 
 // Threshold for considering arrival at a stop (meters)
@@ -96,6 +98,8 @@ const createEmptyProximity = () => ({
   autoAlightConfidence: 0,
   autoBoardReady: false,
   autoAlightReady: false,
+  boardingBusStatus: 'none',
+  boardingBusDepartureConfidence: 0,
 });
 
 const updateEvidenceWindow = (ref, isActive, now, minHits, minMs) => {
@@ -358,10 +362,18 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
       ? new Date(Date.now() + stopsAway * 2 * 60 * 1000)
       : null;
 
-    // Determine if bus has arrived at boarding stop
-    const hasArrived = stopsAway === 0 || (vehicle && stopsAway !== null && stopsAway <= 0);
-
     const now = Date.now();
+    // Determine if bus has arrived at boarding stop. A downstream/previous bus
+    // can make stopsAway look like 0, so do not show "Bus is here" unless the
+    // vehicle is physically at the stop or the scheduled boarding time is close.
+    const hasArrived = shouldTreatBusAsArrivedAtBoarding({
+      matchQuality,
+      nowMs: now,
+      scheduledDeparture: transitLeg?.startTime,
+      stopsAway,
+      vehicleStopDistance,
+    });
+
     const autoBoardEvaluation = evaluateAutoBoardConfidence({
       hasArrived,
       locationAccuracy,
@@ -372,6 +384,15 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
       userSpeed,
       userStopDistance,
       userVehicleDistance,
+      vehicleCorridorDistance,
+      vehicleCorridorProgress,
+      vehicleStopDistance,
+    });
+    const boardingBusDepartureStatus = evaluateBoardingBusDepartureStatus({
+      hasArrived,
+      locationAccuracy,
+      matchQuality,
+      previousSnapshot: previousSnapshotRef.current,
       vehicleCorridorDistance,
       vehicleCorridorProgress,
       vehicleStopDistance,
@@ -426,6 +447,8 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
       autoAlightConfidence: autoAlightEvaluation.confidence,
       autoBoardReady,
       autoAlightReady,
+      boardingBusStatus: boardingBusDepartureStatus.status,
+      boardingBusDepartureConfidence: boardingBusDepartureStatus.confidence,
     });
 
     previousSnapshotRef.current = {

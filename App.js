@@ -90,7 +90,7 @@ function NotificationInitializer({ navigationRef }) {
     async function setupNotifications() {
       try {
         if (Device.isDevice) {
-          const result = await registerForPushNotifications();
+          const result = await registerForPushNotifications({ requestPermission: false });
           if (result.success) {
             logger.log('Push token registered:', result.token);
 

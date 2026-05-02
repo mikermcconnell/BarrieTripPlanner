@@ -11,10 +11,10 @@ const normalizeBearing = (bearing) => {
 const BusDirectionArrow = ({
   bearing,
   size = 44,
-  topOffset = 0,
-  arrowWidth = 6,
-  arrowHeight = 12,
-  color = '#E53935',
+  topOffset = 3,
+  arrowWidth = 7,
+  arrowHeight = 16,
+  color = '#111111',
   outlineColor = 'rgba(255,255,255,0.95)',
   dimmed = false,
   style,
@@ -28,6 +28,9 @@ const BusDirectionArrow = ({
   const outlineWidth = arrowWidth + 2;
   const outlineHeight = arrowHeight + 3;
   const centerX = size / 2;
+  const rimConnectorWidth = Math.max(arrowWidth + 1, 8);
+  const rimConnectorHeight = Math.max(Math.round(arrowHeight * 0.32), 4);
+  const rimConnectorTop = topOffset + outlineHeight - Math.ceil(rimConnectorHeight / 2);
 
   return (
     <View
@@ -58,9 +61,22 @@ const BusDirectionArrow = ({
       />
       <View
         style={[
+          styles.rimConnector,
+          {
+            top: rimConnectorTop,
+            left: centerX - rimConnectorWidth / 2,
+            width: rimConnectorWidth,
+            height: rimConnectorHeight,
+            borderRadius: rimConnectorHeight / 2,
+            backgroundColor: outlineColor,
+          },
+        ]}
+      />
+      <View
+        style={[
           styles.triangle,
           {
-            top: topOffset + 2,
+            top: topOffset + 3,
             left: centerX - arrowWidth,
             borderLeftWidth: arrowWidth,
             borderRightWidth: arrowWidth,
@@ -79,8 +95,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     overflow: 'visible',
-    zIndex: 0,
-    elevation: 0,
+    zIndex: 3,
+    elevation: 7,
   },
   triangle: {
     position: 'absolute',
@@ -88,6 +104,9 @@ const styles = StyleSheet.create({
     height: 0,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
+  },
+  rimConnector: {
+    position: 'absolute',
   },
 });
 

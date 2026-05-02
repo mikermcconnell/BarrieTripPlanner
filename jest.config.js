@@ -25,5 +25,6 @@ module.exports = {
   // Mock modules that require native/expo runtime
   moduleNameMapper: {
     '^../config/constants$': '<rootDir>/src/__tests__/__mocks__/constants.js',
+    '\\.(png|jpg|jpeg|gif|webp)$': '<rootDir>/src/__tests__/__mocks__/assetMock.js',
   },
 };

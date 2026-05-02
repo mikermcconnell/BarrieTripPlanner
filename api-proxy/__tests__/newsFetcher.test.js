@@ -43,6 +43,18 @@ describe('newsFetcher', () => {
     });
   });
 
+  test('normalizeMyRideNewsItem combines explicit route data with route references in title and summary', () => {
+    expect(
+      normalizeMyRideNewsItem({
+        newsId: 1637,
+        title: 'Saunders/Welham Detour - Route 12 & TOD-F',
+        summary: 'Transit ON Demand Zone F stops 981 and 153 will also be placed out-of-service.',
+        routes: ['TOD-F'],
+        affectsAllRoutes: false,
+      }).affectedRoutes
+    ).toEqual(['TOD-F', '12']);
+  });
+
   test('fetchNewsItems loads and normalizes the public MyRide JSON endpoint', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

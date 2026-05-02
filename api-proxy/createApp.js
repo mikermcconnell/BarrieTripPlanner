@@ -53,6 +53,7 @@ function createApiProxyApp({
     allowSharedTokenAuth: config.allowSharedTokenAuth,
     apiTokens: config.apiTokens,
     requireFirebaseAuth: config.requireFirebaseAuth,
+    schedulerApiToken: config.schedulerApiToken,
   }));
   app.use('/api/', createApiRateLimiter());
 
@@ -79,6 +80,7 @@ function createApiProxyApp({
     requireFirebaseAuth: config.requireFirebaseAuth,
     allowSharedTokenAuth: config.allowSharedTokenAuth,
     sharedTokenConfigured: config.apiTokens.size > 0,
+    schedulerTokenConfigured: Boolean(config.schedulerApiToken),
     hasLocationIQKey: config.hasLocationIQKey,
     isProd: config.isProd,
     detourDebugApiKey: config.detourDebugApiKey,

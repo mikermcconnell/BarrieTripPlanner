@@ -93,13 +93,18 @@ describe('WebMapView layer events', () => {
 });
 
 describe('WebMapView bus marker HTML', () => {
-  test('uses a route-colored direction arrow when bearing is valid', () => {
+  test('uses a black rim tab with white outline when bearing is valid', () => {
     const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', 45);
 
     expect(html).toContain('width="104" height="104"');
     expect(html).toContain('top:-8px;left:-8px');
     expect(html).toContain('rotate(45, 52, 52)');
-    expect(html).toContain('fill="#0C8CE5"');
+    expect(html).toContain('z-index:3');
+    expect(html).toContain('data-heading-tab="true"');
+    expect(html).toContain('d="M52 8 L42 30 L49 30 L49 34 L55 34 L55 30 L62 30 Z"');
+    expect(html).toContain('d="M52 12 L46 28 L50 28 L50 30 L54 30 L54 28 L58 28 Z"');
+    expect(html).toContain('fill="#111111"');
+    expect(html).not.toContain('fill="#0C8CE5"');
     expect(html).toContain('fill="rgba(255,255,255,0.96)"');
   });
 

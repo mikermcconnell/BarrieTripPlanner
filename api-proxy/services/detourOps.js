@@ -4,6 +4,7 @@ const DEFAULT_ROLLOUT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FALSE_POSITIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_STALE_TICK_MS = 5 * 60 * 1000;
 const FALSE_POSITIVE_DURATION_MS = 5 * 60 * 1000;
+const SUSPICIOUS_SHORT_LIVED_DURATION_MS = 15 * 60 * 1000;
 const MAX_FALSE_POSITIVE_RATE = 0.10;
 const MAX_PUBLISH_FAILURE_RATE = 0.05;
 const MAX_CONSECUTIVE_FAILURES = 2;
@@ -97,6 +98,38 @@ function buildLaunchReadinessChecks({
     checks,
     failedCritical: failedCritical.map((check) => check.id),
     failedWarnings: failedWarnings.map((check) => check.id),
+  };
+}
+
+function normalizeConfidence(value) {
+  const confidence = value == null ? 'unknown' : String(value).trim().toLowerCase();
+  return confidence || 'unknown';
+}
+
+function summarizeShortLivedDetours(events, maxDurationMs) {
+  const shortLived = (Array.isArray(events) ? events : [])
+    .filter((event) =>
+      Number.isFinite(event.durationMs) &&
+      event.durationMs > 0 &&
+      event.durationMs < maxDurationMs
+    )
+    .map((event) => ({
+      routeId: event.routeId || null,
+      durationMs: event.durationMs,
+      confidence: normalizeConfidence(event.confidence),
+      occurredAt: event.occurredAt || event.clearedAt || null,
+    }));
+
+  const byConfidence = shortLived.reduce((counts, event) => {
+    counts[event.confidence] = (counts[event.confidence] || 0) + 1;
+    return counts;
+  }, {});
+
+  return {
+    count: shortLived.length,
+    maxDurationMs,
+    byConfidence,
+    routes: shortLived.slice(0, 20),
   };
 }
 
@@ -212,6 +245,12 @@ function createDetourOps({
     let flapping = { flappingRoutes: [], flappingCount: 0, windowMs: rolloutWindowMs };
     let durationStats = { min: null, avg: null, max: null, count: 0 };
     let falsePositiveCandidates = { count: 0, maxDurationMs: FALSE_POSITIVE_DURATION_MS, routes: [] };
+    let suspiciousShortLivedDetours = {
+      count: 0,
+      maxDurationMs: SUSPICIOUS_SHORT_LIVED_DURATION_MS,
+      byConfidence: {},
+      routes: [],
+    };
     let falsePositiveRate = {
       rate: null,
       falsePositiveCount: 0,
@@ -274,6 +313,10 @@ function createDetourOps({
         maxDurationMs: FALSE_POSITIVE_DURATION_MS,
         routes: shortLived.slice(0, 20),
       };
+      suspiciousShortLivedDetours = summarizeShortLivedDetours(
+        clearedEvents,
+        SUSPICIOUS_SHORT_LIVED_DURATION_MS
+      );
 
       const [falsePositiveClearedEvents, detectedEvents] = await Promise.all([
         queryDetourHistory({
@@ -333,6 +376,7 @@ function createDetourOps({
       flapping,
       durationStats,
       falsePositiveCandidates,
+      suspiciousShortLivedDetours,
       falsePositiveRate,
       launchReadiness,
       featureFlags: {
