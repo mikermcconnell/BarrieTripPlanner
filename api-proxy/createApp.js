@@ -24,6 +24,7 @@ const { registerDetourRoutes } = require('./routes/detourRoutes');
 const { registerBaselineRoutes } = require('./routes/baselineRoutes');
 const { registerNewsRoutes } = require('./routes/newsRoutes');
 const { registerAiRoutes } = require('./routes/aiRoutes');
+const { registerPlatformMapRoutes } = require('./routes/platformMapRoutes');
 const { buildLocalAiConfig } = require('./lib/ai/config');
 
 function loadEnabledWorker(env, flagName, modulePath) {
@@ -87,6 +88,7 @@ function createApiProxyApp({
     localAiConfig: buildLocalAiConfig(env),
   });
   registerAiRoutes(app);
+  registerPlatformMapRoutes(app);
 
   registerDetourRoutes(app, {
     detourWorker,
@@ -110,3 +112,4 @@ function createApiProxyApp({
 module.exports = {
   createApiProxyApp,
 };
+

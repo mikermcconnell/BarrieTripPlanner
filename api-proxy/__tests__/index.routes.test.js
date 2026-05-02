@@ -52,6 +52,26 @@ describe('api-proxy route hardening', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  test('allows public platform map image route without API auth', async () => {
+    jest.doMock('../services/platformMapImageService', () => ({
+      createPlatformMapImageService: () => ({
+        getPlatformMapImage: jest.fn().mockResolvedValue({
+          status: 200,
+          body: Buffer.from('png-bytes'),
+          contentType: 'image/png',
+          hubId: 'georgian-college',
+          pageNumber: 5,
+          fromCache: false,
+        }),
+      }),
+    }));
+
+    const app = require('../index');
+    const response = await request(app).get('/api/platform-maps/georgian-college');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/image\/png/);
+  });
   test('accepts x-api-token and proxies geocode requests', async () => {
     const app = require('../index');
     const response = await request(app)
@@ -415,3 +435,4 @@ describe('api-proxy route hardening', () => {
     expect(newsStart).not.toHaveBeenCalled();
   });
 });
+

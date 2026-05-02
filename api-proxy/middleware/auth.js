@@ -11,6 +11,10 @@ function sanitizeClientKey(raw) {
   return String(raw).trim().slice(0, 64).replace(/[^a-zA-Z0-9_.:-]/g, '');
 }
 
+function isPublicApiPath(path) {
+  return path === '/health' || path.startsWith('/platform-maps/');
+}
+
 function createAuthenticateApiRequest({
   requireApiAuth,
   isProd,
@@ -21,7 +25,7 @@ function createAuthenticateApiRequest({
   schedulerApiToken,
 }) {
   return async function authenticateApiRequest(req, res, next) {
-    if (req.path === '/health') return next();
+    if (isPublicApiPath(req.path)) return next();
     if (!requireApiAuth) return next();
 
     if (!isProd && req.path === '/detour-debug' && detourDebugApiKey) {
@@ -95,3 +99,4 @@ module.exports = {
   createAuthenticateApiRequest,
   createApiRateLimiter,
 };
+
