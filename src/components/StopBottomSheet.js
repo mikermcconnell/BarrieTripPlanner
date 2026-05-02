@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
+import PlatformMapCard from './PlatformMapCard';
 import Svg, { Path } from 'react-native-svg';
 import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
@@ -53,7 +54,7 @@ const DirectionsToIcon = ({ size = 18, color = COLORS.error }) => (
   </Svg>
 );
 
-const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
+const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, platformMap, onOpenPlatformMap }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
@@ -173,6 +174,8 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
           <Text style={styles.directionButtonText}>Trip to here</Text>
         </TouchableOpacity>
       </View>
+
+      <PlatformMapCard platformMap={platformMap} onPress={onOpenPlatformMap} />
 
       <BottomSheetScrollView
         contentContainerStyle={[

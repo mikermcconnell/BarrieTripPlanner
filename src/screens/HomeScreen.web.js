@@ -17,7 +17,9 @@ import {
   WALKING_ROUTE_DOT_STROKE_WIDTH,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
+import { getPlatformMapForStop } from '../config/platformMaps';
 import StopBottomSheet from '../components/StopBottomSheet';
+import PlatformMapViewerModal from '../components/PlatformMapViewerModal';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
@@ -72,6 +74,7 @@ import { startTripToDestination } from '../features/trip-planning/startTripToDes
 import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
 import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
+import { trackEvent } from '../services/analyticsService';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 const LOCATION_CENTER_ERROR_MESSAGE = 'We could not get your location. Check that location services are on and that Barrie Transit has location permission.';
@@ -297,8 +300,24 @@ const HomeScreen = ({ route }) => {
     selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
+  const [activePlatformMap, setActivePlatformMap] = useState(null);
   const [isCenteringOnUserLocation, setIsCenteringOnUserLocation] = useState(false);
   const [centeredUserLocation, setCenteredUserLocation] = useState(null);
+  const selectedStopPlatformMap = useMemo(
+    () => getPlatformMapForStop(selectedStop),
+    [selectedStop]
+  );
+  const handleOpenPlatformMap = useCallback((platformMap) => {
+    setActivePlatformMap(platformMap);
+    trackEvent('platform_map_opened', {
+      hub_id: platformMap.id,
+      hub_name: platformMap.displayName,
+      page_number: platformMap.pageNumber,
+    });
+  }, []);
+  const handleClosePlatformMap = useCallback(() => {
+    setActivePlatformMap(null);
+  }, []);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
@@ -1573,9 +1592,17 @@ const HomeScreen = ({ route }) => {
             onClose={() => setSelectedStop(null)}
             onDirectionsFrom={handleStopDirectionsFrom}
             onDirectionsTo={handleStopDirectionsTo}
+            platformMap={selectedStopPlatformMap}
+            onOpenPlatformMap={handleOpenPlatformMap}
           />
         </SheetErrorBoundary>
       )}
+
+      <PlatformMapViewerModal
+        visible={Boolean(activePlatformMap)}
+        platformMap={activePlatformMap}
+        onClose={handleClosePlatformMap}
+      />
 
       {/* Detour Details Sheet */}
       {detourSheetRouteId && selectedDetour && (

@@ -22,7 +22,9 @@ import {
   WALKING_ROUTE_DOT_STROKE_WIDTH,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
+import { getPlatformMapForStop } from '../config/platformMaps';
 import StopBottomSheet from '../components/StopBottomSheet';
+import PlatformMapViewerModal from '../components/PlatformMapViewerModal';
 import SheetErrorBoundary from '../components/SheetErrorBoundary';
 import { useTripPlanner } from '../hooks/useTripPlanner';
 import { useRouteSelection } from '../hooks/useRouteSelection';
@@ -86,6 +88,7 @@ import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
+import { trackEvent } from '../services/analyticsService';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -1080,8 +1083,24 @@ const HomeScreen = ({ route }) => {
     selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
+  const [activePlatformMap, setActivePlatformMap] = useState(null);
   const [isCenteringOnUserLocation, setIsCenteringOnUserLocation] = useState(false);
   const [centeredUserLocation, setCenteredUserLocation] = useState(null);
+  const selectedStopPlatformMap = useMemo(
+    () => getPlatformMapForStop(selectedStop),
+    [selectedStop]
+  );
+  const handleOpenPlatformMap = useCallback((platformMap) => {
+    setActivePlatformMap(platformMap);
+    trackEvent('platform_map_opened', {
+      hub_id: platformMap.id,
+      hub_name: platformMap.displayName,
+      page_number: platformMap.pageNumber,
+    });
+  }, []);
+  const handleClosePlatformMap = useCallback(() => {
+    setActivePlatformMap(null);
+  }, []);
   const [showRoutes, setShowRoutes] = useState(true);
   const [showStops, setShowStops] = useState(false);
   const [showZones, setShowZones] = useState(true);
@@ -2169,9 +2188,17 @@ const HomeScreen = ({ route }) => {
             onClose={() => setSelectedStop(null)}
             onDirectionsFrom={handleStopDirectionsFrom}
             onDirectionsTo={handleStopDirectionsTo}
+            platformMap={selectedStopPlatformMap}
+            onOpenPlatformMap={handleOpenPlatformMap}
           />
         </SheetErrorBoundary>
       )}
+
+      <PlatformMapViewerModal
+        visible={Boolean(activePlatformMap)}
+        platformMap={activePlatformMap}
+        onClose={handleClosePlatformMap}
+      />
 
       {/* Detour Details Sheet */}
       {detourSheetRouteId && selectedDetour && (
