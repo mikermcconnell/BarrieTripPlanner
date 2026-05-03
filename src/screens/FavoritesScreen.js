@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -15,8 +16,19 @@ import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNaviga
 const FavoritesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { favorites, removeFavoriteStop, removeFavoriteRoute, isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState('stops');
+  const {
+    favorites,
+    savedPlaces,
+    savedTrips,
+    removeFavoriteStop,
+    removeFavoriteRoute,
+    removeSavedPlace,
+    removeSavedTrip,
+    touchSavedPlace,
+    touchSavedTrip,
+    isAuthenticated,
+  } = useAuth();
+  const [activeTab, setActiveTab] = useState('places');
 
   if (!isAuthenticated) {
     return (
@@ -25,14 +37,14 @@ const FavoritesScreen = ({ navigation }) => {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Favorites</Text>
+          <Text style={styles.headerTitle}>My Transit</Text>
           <View style={styles.placeholder} />
         </View>
 
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>⭐</Text>
-          <Text style={styles.emptyText}>Sign in to save favorites</Text>
-          <Text style={styles.emptySubtext}>Your favorite stops and routes will be saved here</Text>
+          <Text style={styles.emptyText}>Sign in to save My Transit</Text>
+          <Text style={styles.emptySubtext}>Your places, trips, stops, and routes will be saved here</Text>
           <TouchableOpacity
             style={styles.signInButton}
             onPress={() => navigation.navigate('SignIn')}
@@ -74,7 +86,98 @@ const FavoritesScreen = ({ navigation }) => {
     </View>
   );
 
-  const activeData = activeTab === 'stops' ? favorites.stops : favorites.routes;
+  const planSavedTrip = (trip) => {
+    touchSavedTrip?.(trip.id);
+    navigation.getParent()?.navigate('Map', {
+      screen: 'MapMain',
+      params: { savedTripToPlan: trip },
+    });
+  };
+
+  const useSavedPlace = (place) => {
+    touchSavedPlace?.(place.id);
+    navigation.getParent()?.navigate('Map', {
+      screen: 'MapMain',
+      params: {
+        selectedCoordinate: { latitude: place.lat, longitude: place.lon },
+        selectedAddressLabel: place.name || place.addressText,
+      },
+    });
+  };
+
+  const confirmRemove = (title, onRemove) => {
+    Alert.alert(title, 'This removes it from My Transit.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: onRemove },
+    ]);
+  };
+
+  const renderPlaceItem = ({ item }) => (
+    <View style={styles.favoriteItem}>
+      <View style={styles.itemIcon}>
+        <Icon name={item.icon || 'MapPin'} size={20} color={COLORS.primary} />
+      </View>
+      <View style={styles.itemContent}>
+        <Text style={styles.itemTitle}>{item.name || 'Saved place'}</Text>
+        <Text style={styles.itemSubtitle} numberOfLines={1}>{item.addressText}</Text>
+      </View>
+      <TouchableOpacity style={styles.useButton} onPress={() => useSavedPlace(item)}>
+        <Text style={styles.useButtonText}>View</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => confirmRemove('Remove saved place?', () => removeSavedPlace(item.id))}
+      >
+        <Text style={styles.removeButtonText}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderTripItem = ({ item }) => (
+    <View style={styles.favoriteItem}>
+      <View style={styles.itemIcon}>
+        <Icon name={item.icon || 'Route'} size={20} color={COLORS.primary} />
+      </View>
+      <View style={styles.itemContent}>
+        <Text style={styles.itemTitle}>{item.name || 'Saved trip'}</Text>
+        <Text style={styles.itemSubtitle} numberOfLines={1}>
+          {item.from?.name || 'Start'} → {item.to?.name || 'Destination'}
+        </Text>
+      </View>
+      <TouchableOpacity style={styles.useButton} onPress={() => planSavedTrip(item)}>
+        <Text style={styles.useButtonText}>Plan</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => confirmRemove('Remove saved trip?', () => removeSavedTrip(item.id))}
+      >
+        <Text style={styles.removeButtonText}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const tabs = [
+    { key: 'places', label: 'Places', count: savedPlaces.length },
+    { key: 'trips', label: 'Trips', count: savedTrips.length },
+    { key: 'stops', label: 'Stops', count: favorites.stops.length },
+    { key: 'routes', label: 'Routes', count: favorites.routes.length },
+  ];
+
+  const activeData = activeTab === 'places'
+    ? savedPlaces
+    : activeTab === 'trips'
+      ? savedTrips
+      : activeTab === 'stops'
+        ? favorites.stops
+        : favorites.routes;
+
+  const renderActiveItem = activeTab === 'places'
+    ? renderPlaceItem
+    : activeTab === 'trips'
+      ? renderTripItem
+      : activeTab === 'stops'
+        ? renderStopItem
+        : renderRouteItem;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,33 +185,28 @@ const FavoritesScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Favorites</Text>
+        <Text style={styles.headerTitle}>My Transit</Text>
         <View style={styles.placeholder} />
       </View>
 
       <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'stops' && styles.tabActive]}
-          onPress={() => setActiveTab('stops')}
-        >
-          <Text style={[styles.tabText, activeTab === 'stops' && styles.tabTextActive]}>
-            Stops ({favorites.stops.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'routes' && styles.tabActive]}
-          onPress={() => setActiveTab('routes')}
-        >
-          <Text style={[styles.tabText, activeTab === 'routes' && styles.tabTextActive]}>
-            Routes ({favorites.routes.length})
-          </Text>
-        </TouchableOpacity>
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+              {tab.label} ({tab.count})
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <FlatList
         data={activeData}
         keyExtractor={(item) => item.id}
-        renderItem={activeTab === 'stops' ? renderStopItem : renderRouteItem}
+        renderItem={renderActiveItem}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) },
@@ -118,10 +216,10 @@ const FavoritesScreen = ({ navigation }) => {
           <View style={styles.emptyListContainer}>
             <Icon name="Bus" size={48} color={COLORS.grey400} style={{ marginBottom: SPACING.md }} />
             <Text style={styles.emptyListText}>
-              No favorite {activeTab === 'stops' ? 'stops' : 'routes'} yet
+              No saved {activeTab} yet
             </Text>
             <Text style={styles.emptyListSubtext}>
-              Tap the star icon to add favorites
+              Save common places, trips, stops, and routes for quick access
             </Text>
           </View>
         }
@@ -165,12 +263,13 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.sm,
   },
   tab: {
-    flex: 1,
+    flexBasis: '25%',
     paddingVertical: SPACING.sm,
     alignItems: 'center',
     borderBottomWidth: 2,
@@ -249,6 +348,18 @@ const styles = StyleSheet.create({
   removeButtonText: {
     fontSize: 14,
     color: COLORS.textSecondary,
+  },
+  useButton: {
+    paddingVertical: 7,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+    marginRight: SPACING.xs,
+  },
+  useButtonText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
   },
   emptyContainer: {
     flex: 1,

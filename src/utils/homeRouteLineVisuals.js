@@ -5,6 +5,7 @@ import {
   simplifyPath,
 } from './geometryUtils';
 import {
+  getRegularPatternShapeIdsForRoute,
   getRepresentativeShapeIds,
   getRepresentativeShapeIdsByDirection,
 } from './routeShapeUtils';
@@ -77,10 +78,16 @@ const getRepresentativePathsForRoute = ({
   routeId,
   routeShapeMapping,
   shapeSource,
+  rawShapeSource = shapeSource,
   shapeDirectionMap,
   maxShapes = 1,
 }) => {
-  const shapeIds = routeShapeMapping[routeId] || [];
+  const shapeIds = getRegularPatternShapeIdsForRoute(
+    routeId,
+    routeShapeMapping[routeId] || [],
+    shapeSource,
+    rawShapeSource
+  );
   const representativeShapeIds = getRepresentativeShapeIdsByDirection(
     shapeIds,
     shapeSource,
@@ -100,12 +107,14 @@ const getRepresentativePathForRoute = ({
   routeId,
   routeShapeMapping,
   shapeSource,
+  rawShapeSource,
   shapeDirectionMap,
 }) => {
   const [path] = getRepresentativePathsForRoute({
     routeId,
     routeShapeMapping,
     shapeSource,
+    rawShapeSource,
     shapeDirectionMap,
     maxShapes: 1,
   });
@@ -158,18 +167,21 @@ const buildLoopPairVisuals = ({
   colorB,
   routeShapeMapping,
   shapeSource,
+  rawShapeSource,
   shapeDirectionMap,
 }) => {
   const repA = getRepresentativePathForRoute({
     routeId: routeA,
     routeShapeMapping,
     shapeSource,
+    rawShapeSource,
     shapeDirectionMap,
   });
   const repB = getRepresentativePathForRoute({
     routeId: routeB,
     routeShapeMapping,
     shapeSource,
+    rawShapeSource,
     shapeDirectionMap,
   });
 
@@ -242,6 +254,7 @@ const buildBranchFamilyDirectionVisuals = ({
   routeIds,
   routeShapeMapping,
   shapeSource,
+  rawShapeSource,
   shapeDirectionMap,
   getRouteColor,
 }) => {
@@ -252,6 +265,7 @@ const buildBranchFamilyDirectionVisuals = ({
       routeId,
       routeShapeMapping,
       shapeSource,
+      rawShapeSource,
       shapeDirectionMap,
       maxShapes: 2,
     });
@@ -283,6 +297,7 @@ export const buildNativeHomeAllRoutesShapes = ({
 }) => {
   const shapeSource =
     processedShapes && Object.keys(processedShapes).length > 0 ? processedShapes : shapes;
+  const rawShapeSource = shapes || {};
   const shapesToDisplay = [];
   const handledRouteIds = new Set();
 
@@ -296,6 +311,7 @@ export const buildNativeHomeAllRoutesShapes = ({
         routeIds: availableRouteIds,
         routeShapeMapping,
         shapeSource,
+        rawShapeSource,
         shapeDirectionMap,
         getRouteColor,
       });
@@ -307,7 +323,14 @@ export const buildNativeHomeAllRoutesShapes = ({
       }
     }
 
-    const familyShapeIds = availableRouteIds.flatMap((routeId) => routeShapeMapping[routeId] || []);
+    const familyShapeIds = availableRouteIds.flatMap((routeId) =>
+      getRegularPatternShapeIdsForRoute(
+        routeId,
+        routeShapeMapping[routeId] || [],
+        shapeSource,
+        rawShapeSource
+      )
+    );
     const [shapeId] = getRepresentativeShapeIds(familyShapeIds, shapeSource, {
       maxShapes: 1,
       precision: 3,
@@ -345,6 +368,7 @@ export const buildNativeHomeAllRoutesShapes = ({
       colorB: getRouteColor(routeB),
       routeShapeMapping,
       shapeSource,
+      rawShapeSource,
       shapeDirectionMap,
     });
 
@@ -358,7 +382,12 @@ export const buildNativeHomeAllRoutesShapes = ({
   Object.keys(routeShapeMapping || {}).forEach((routeId) => {
     if (handledRouteIds.has(routeId)) return;
 
-    const shapeIds = routeShapeMapping[routeId] || [];
+    const shapeIds = getRegularPatternShapeIdsForRoute(
+      routeId,
+      routeShapeMapping[routeId] || [],
+      shapeSource,
+      rawShapeSource
+    );
     const representativeIds = getRepresentativeShapeIdsByDirection(
       shapeIds,
       shapeSource,

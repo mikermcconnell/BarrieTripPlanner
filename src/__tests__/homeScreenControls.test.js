@@ -18,35 +18,46 @@ jest.mock('expo-constants', () => ({
 
 jest.mock('../components/Icon', () => 'Icon');
 
-const { getRouteSummaryChipStyles } = require('../components/HomeScreenControls');
+const {
+  getRouteSummaryChipStyles,
+  shouldShowRoutesTooltip,
+} = require('../components/HomeScreenControls');
 
-describe('HomeScreenControls route summary chip styles', () => {
-  test('adds the startup highlight only when no routes are selected', () => {
+describe('HomeScreenControls route options hint', () => {
+  test('keeps the Routes chip styling calm when the startup hint is enabled', () => {
     const styles = getRouteSummaryChipStyles({
       selectedCount: 0,
-      shouldHighlightRoutesButton: true,
     });
 
     expect(styles).toEqual(expect.arrayContaining([
       expect.objectContaining({
         borderColor: expect.stringContaining('12, 140, 229'),
       }),
+    ]));
+    expect(styles).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         borderColor: expect.stringContaining('76, 175, 80'),
       }),
     ]));
   });
 
-  test('does not add the startup highlight when routes are selected', () => {
-    const styles = getRouteSummaryChipStyles({
-      selectedCount: 1,
-      shouldHighlightRoutesButton: true,
-    });
+  test('shows the one-time tooltip only when no routes are selected', () => {
+    expect(shouldShowRoutesTooltip({
+      selectedCount: 0,
+      showRoutesHint: true,
+      enableRoutesHint: true,
+    })).toBe(true);
 
-    expect(styles).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        borderColor: expect.stringContaining('76, 175, 80'),
-      }),
-    ]));
+    expect(shouldShowRoutesTooltip({
+      selectedCount: 1,
+      showRoutesHint: true,
+      enableRoutesHint: true,
+    })).toBe(false);
+
+    expect(shouldShowRoutesTooltip({
+      selectedCount: 0,
+      showRoutesHint: true,
+      enableRoutesHint: false,
+    })).toBe(false);
   });
 });

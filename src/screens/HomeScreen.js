@@ -37,7 +37,8 @@ import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { getContrastTextColor } from '../utils/colorUtils';
-import { pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
+import { projectPointToPolyline } from '../utils/geometryUtils';
+import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
 import {
@@ -89,6 +90,14 @@ import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/android
 import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 import { trackEvent } from '../services/analyticsService';
+import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
+import {
+  SAVED_PLACE_LABELS,
+  buildSavedPlacePayload,
+  buildSavedTripPayload,
+  getSavedLocationPoint,
+  getSavedPlaceTargetField,
+} from '../utils/savedTransitUtils';
 
 
 // SVG Icons for native replaced with Lucide Icons
@@ -217,7 +226,12 @@ const getBaseRouteVisual = ({ shape, currentZoom }) => ({
   routeColor: shape.color,
   outlineWidth: shape.visualType === 'shared_trunk' ? 0 : currentZoom >= 14.2 ? 1 : 0.5,
   showRouteLabel: false,
-  showArrows: false,
+  showArrows: getOneWayRouteArrowVisibility({
+    routeId: shape.routeId,
+    currentZoom,
+    isSelected: false,
+    hasSelection: false,
+  }),
 });
 
 const getRouteVisualState = ({
@@ -265,7 +279,12 @@ const getRouteVisualState = ({
       routeColor: shape.color,
       outlineWidth: isSelected ? (currentZoom >= 14.2 ? 2 : 1.5) : 0,
       showRouteLabel,
-      showArrows: isSelected && currentZoom >= 14 && selectedRouteCount === 1,
+      showArrows: getOneWayRouteArrowVisibility({
+        routeId: shape.routeId,
+        currentZoom,
+        isSelected,
+        hasSelection,
+      }),
     };
   }
 
@@ -997,7 +1016,16 @@ const HomeScreen = ({ route }) => {
   const bottomSafeArea = useSafeBottomInset(insets.bottom);
   const bottomChromeLift = useAndroidBottomChromeLift();
   const floatingBottomOffset = Platform.OS === 'android' ? bottomChromeLift : bottomSafeArea;
-  const { addTripToHistory } = useAuth();
+  const {
+    addTripToHistory,
+    savedPlaces,
+    savedTrips,
+    addSavedPlace,
+    addSavedTrip,
+    touchSavedPlace,
+    touchSavedTrip,
+    isAuthenticated,
+  } = useAuth();
   const {
     routes,
     stops,
@@ -1227,6 +1255,7 @@ const HomeScreen = ({ route }) => {
     from: tripFromLocation,
     to: tripToLocation,
     fromUsesCurrentLocation: tripFromUsesCurrentLocation,
+    isLocatingFrom,
     fromText: tripFromText,
     toText: tripToText,
     itineraries,
@@ -1325,7 +1354,7 @@ const HomeScreen = ({ route }) => {
   }, [focusedDetourRouteId, activeDetourRouteIds]);
 
   const useCurrentLocationForTrip = useCallback((searchTo = null) => {
-    useCurrentLocationHook(async () => {
+    return useCurrentLocationHook(async () => {
       return getForegroundDeviceLocation(Location, {
         accuracy: Location.Accuracy.Balanced,
       });
@@ -1360,6 +1389,101 @@ const HomeScreen = ({ route }) => {
     searchTrips(trip.from, trip.to);
   };
 
+  const handleSelectSavedPlace = useCallback((place) => {
+    const point = getSavedLocationPoint(place);
+    if (!point) {
+      Alert.alert('Saved place needs an address', 'Please delete and recreate this saved place.');
+      return;
+    }
+
+    const label = place.name || place.addressText || 'Saved place';
+    touchSavedPlace?.(place.id);
+
+    if (getSavedPlaceTargetField({ from: tripFromLocation, to: tripToLocation }) === 'to') {
+      setTripTo(point, label);
+      return;
+    }
+
+    setTripFrom(point, label);
+  }, [touchSavedPlace, tripFromLocation, tripToLocation, setTripFrom, setTripTo]);
+
+  const handleSelectSavedTrip = useCallback((savedTrip) => {
+    const fromPoint = getSavedLocationPoint(savedTrip?.from);
+    const toPoint = getSavedLocationPoint(savedTrip?.to);
+    if (!fromPoint || !toPoint) {
+      Alert.alert('Saved trip needs addresses', 'Please delete and recreate this saved trip.');
+      return;
+    }
+
+    enterPlanningMode();
+    touchSavedTrip?.(savedTrip.id);
+    setTripFrom(fromPoint, savedTrip.from?.name || savedTrip.from?.addressText || 'Start', { suppressAutoSearch: true });
+    setTripTo(toPoint, savedTrip.to?.name || savedTrip.to?.addressText || 'Destination', { suppressAutoSearch: true });
+    searchTrips(fromPoint, toPoint);
+  }, [enterPlanningMode, touchSavedTrip, setTripFrom, setTripTo, searchTrips]);
+
+  const handleSaveCurrentTrip = useCallback(async () => {
+    if (!isAuthenticated) {
+      Alert.alert('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
+      return;
+    }
+    const payload = buildSavedTripPayload({
+      from: { ...tripFromLocation, name: tripFromText || 'Start' },
+      to: { ...tripToLocation, name: tripToText || 'Destination' },
+      itinerary: itineraries?.[selectedItineraryIndex] || itineraries?.[0] || null,
+    });
+    if (!payload) {
+      Alert.alert('Trip not ready', 'Choose a valid origin and destination before saving this trip.');
+      return;
+    }
+    const result = await addSavedTrip(payload);
+    Alert.alert(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
+  }, [isAuthenticated, tripFromLocation, tripFromText, tripToLocation, tripToText, itineraries, selectedItineraryIndex, addSavedTrip]);
+
+  const handleSavePlace = useCallback(async (location, text, label = 'Saved place', labelType = 'custom') => {
+    if (!isAuthenticated) {
+      Alert.alert('Sign in to save places', 'Create or sign in to your account to save places across devices.');
+      return;
+    }
+    const payload = buildSavedPlacePayload({
+      labelType,
+      name: text || label,
+      location: { ...location, name: text || label },
+    });
+    if (!payload) {
+      Alert.alert('Place not ready', 'Choose a valid location before saving it.');
+      return;
+    }
+    const result = await addSavedPlace(payload);
+    Alert.alert(result?.success ? 'Place saved' : 'Could not save place', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
+  }, [addSavedPlace, isAuthenticated]);
+
+  const chooseSavedPlaceLabel = useCallback((location, text, fallbackLabel) => {
+    const saveAs = (labelType) => handleSavePlace(location, text, fallbackLabel, labelType);
+    const showFinalChoices = () => Alert.alert('Save as', 'Choose an icon for this place.', [
+      { text: SAVED_PLACE_LABELS.gym.label, onPress: () => saveAs('gym') },
+      { text: SAVED_PLACE_LABELS.doctor.label, onPress: () => saveAs('doctor') },
+      { text: SAVED_PLACE_LABELS.custom.label, onPress: () => saveAs('custom') },
+    ]);
+    const showMoreChoices = () => Alert.alert('Save as', 'Choose an icon for this place.', [
+      { text: SAVED_PLACE_LABELS.school.label, onPress: () => saveAs('school') },
+      { text: SAVED_PLACE_LABELS.grocery.label, onPress: () => saveAs('grocery') },
+      { text: 'More', onPress: showFinalChoices },
+    ]);
+    Alert.alert('Save as', 'Choose an icon for this place.', [
+      { text: SAVED_PLACE_LABELS.home.label, onPress: () => saveAs('home') },
+      { text: SAVED_PLACE_LABELS.work.label, onPress: () => saveAs('work') },
+      { text: 'More', onPress: showMoreChoices },
+    ]);
+  }, [handleSavePlace]);
+
+  useEffect(() => {
+    const tripToPlan = route?.params?.savedTripToPlan;
+    if (!tripToPlan) return;
+    handleSelectSavedTrip(tripToPlan);
+    navigation.setParams({ savedTripToPlan: undefined });
+  }, [route?.params?.savedTripToPlan, handleSelectSavedTrip, navigation]);
+
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2
   );
@@ -1383,44 +1507,20 @@ const HomeScreen = ({ route }) => {
     [routes, getRouteColor]
   );
 
-  const routePathsByRouteId = useMemo(() => {
-    const shapeSource = Object.keys(processedShapes || {}).length > 0 ? processedShapes : shapes;
-    const map = new Map();
+  const vehicleSnapShapeCandidates = useMemo(
+    () => buildVehicleSnapShapeCandidates({ routeShapeMapping, processedShapes, shapes }),
+    [processedShapes, routeShapeMapping, shapes]
+  );
 
-    Object.entries(routeShapeMapping || {}).forEach(([routeId, shapeIds]) => {
-      const paths = (shapeIds || [])
-        .map((shapeId) => shapeSource[shapeId] || shapes[shapeId])
-        .filter((coords) => Array.isArray(coords) && coords.length >= 2);
-
-      if (paths.length > 0) {
-        map.set(routeId, paths);
-      }
-    });
-
-    return map;
-  }, [processedShapes, routeShapeMapping, shapes]);
-
-  const getVehicleSnapPath = useCallback((vehicle) => {
-    const candidatePaths = routePathsByRouteId.get(vehicle?.routeId);
-    if (!candidatePaths || candidatePaths.length === 0) return null;
-    if (candidatePaths.length === 1) return candidatePaths[0];
-
-    const point = vehicle?.coordinate;
-    if (!point) return candidatePaths[0];
-
-    let bestPath = candidatePaths[0];
-    let bestDistance = pointToPolylineDistance(point, bestPath);
-
-    for (let i = 1; i < candidatePaths.length; i++) {
-      const distance = pointToPolylineDistance(point, candidatePaths[i]);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestPath = candidatePaths[i];
-      }
-    }
-
-    return bestPath;
-  }, [routePathsByRouteId]);
+  const getVehicleSnapPath = useCallback(
+    (vehicle) => resolveVehicleSnapPath(
+      vehicle,
+      displayedShapes,
+      tripMapping,
+      vehicleSnapShapeCandidates
+    ),
+    [displayedShapes, tripMapping, vehicleSnapShapeCandidates]
+  );
 
   const { detourOverlays } = useDetourOverlays({
     selectedRouteIds: selectedRoutes,
@@ -2135,11 +2235,18 @@ const HomeScreen = ({ route }) => {
             onClose={exitTripPlanningMode}
             onUseCurrentLocation={useCurrentLocationForTrip}
             showUseCurrentLocation={!tripFromLocation}
+            isLocatingCurrentLocation={isLocatingFrom}
             isLoading={isTripLoading}
             isTypingFrom={isTypingFrom}
             isTypingTo={isTypingTo}
             fromSuggestions={fromSuggestions}
             toSuggestions={toSuggestions}
+            savedPlaces={savedPlaces}
+            savedTrips={savedTrips}
+            onSelectSavedPlace={handleSelectSavedPlace}
+            onSelectSavedTrip={handleSelectSavedTrip}
+            onSaveFromPlace={tripFromLocation ? () => chooseSavedPlaceLabel(tripFromLocation, tripFromText, 'Start') : null}
+            onSaveToPlace={tripToLocation ? () => chooseSavedPlaceLabel(tripToLocation, tripToText, 'Destination') : null}
             timeMode={timeMode}
             selectedTime={selectedTime}
             onTimeModeChange={setTimeMode}
@@ -2169,6 +2276,9 @@ const HomeScreen = ({ route }) => {
                 hasSearched={hasTripSearched}
                 recentTrips={recentTrips}
                 onSelectRecentTrip={handleSelectRecentTrip}
+                savedTrips={savedTrips}
+                onSelectSavedTrip={handleSelectSavedTrip}
+                onSaveCurrentTrip={handleSaveCurrentTrip}
                 onRetry={() => {
                   if (tripFromLocation && tripToLocation) {
                     searchTrips(tripFromLocation, tripToLocation);

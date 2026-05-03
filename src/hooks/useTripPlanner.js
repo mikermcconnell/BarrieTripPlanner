@@ -38,6 +38,9 @@ const SET_FROM_TYPING = 'SET_FROM_TYPING';
 const SET_TO_TYPING = 'SET_TO_TYPING';
 const CLEAR_RESULTS = 'CLEAR_RESULTS';
 const SET_FROM_USES_CURRENT_LOCATION = 'SET_FROM_USES_CURRENT_LOCATION';
+const CURRENT_LOCATION_START = 'CURRENT_LOCATION_START';
+const CURRENT_LOCATION_SUCCESS = 'CURRENT_LOCATION_SUCCESS';
+const CURRENT_LOCATION_ERROR = 'CURRENT_LOCATION_ERROR';
 
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
@@ -45,6 +48,7 @@ const initialState = {
   from: null,         // { lat, lon }
   to: null,           // { lat, lon }
   fromUsesCurrentLocation: false,
+  isLocatingFrom: false,
   fromText: '',
   toText: '',
   itineraries: [],
@@ -79,7 +83,11 @@ function tripReducer(state, action) {
     case SET_FROM:
       return { ...state, from: action.payload };
     case SET_FROM_USES_CURRENT_LOCATION:
-      return { ...state, fromUsesCurrentLocation: action.payload };
+      return {
+        ...state,
+        fromUsesCurrentLocation: action.payload,
+        isLocatingFrom: action.payload ? state.isLocatingFrom : false,
+      };
     case SET_TO:
       return { ...state, to: action.payload };
     case SET_FROM_TEXT:
@@ -135,6 +143,7 @@ function tripReducer(state, action) {
         itineraries: [],
         selectedIndex: 0,
         isLoading: false,
+        isLocatingFrom: false,
         error: action.payload,
         hasSearched: false,
       };
@@ -152,6 +161,43 @@ function tripReducer(state, action) {
       return { ...state, isTypingTo: action.payload };
     case CLEAR_RESULTS:
       return clearResults(state);
+    case CURRENT_LOCATION_START:
+      return {
+        ...state,
+        from: null,
+        fromUsesCurrentLocation: true,
+        fromText: 'Finding your location…',
+        isLocatingFrom: true,
+        itineraries: [],
+        selectedIndex: 0,
+        isLoading: false,
+        error: null,
+        hasSearched: false,
+        fromSuggestions: [],
+        showFromSuggestions: false,
+        isTypingFrom: false,
+      };
+    case CURRENT_LOCATION_SUCCESS:
+      return {
+        ...state,
+        from: action.payload,
+        fromUsesCurrentLocation: true,
+        fromText: 'Current Location',
+        isLocatingFrom: false,
+      };
+    case CURRENT_LOCATION_ERROR:
+      return {
+        ...state,
+        from: null,
+        fromUsesCurrentLocation: false,
+        fromText: '',
+        isLocatingFrom: false,
+        itineraries: [],
+        selectedIndex: 0,
+        isLoading: false,
+        error: 'Could not get your location',
+        hasSearched: false,
+      };
     default:
       return state;
   }
@@ -192,6 +238,7 @@ export const useTripPlanner = ({
 
   const cancelCurrentLocationUpdates = useCallback(() => {
     locationRequestSeqRef.current += 1;
+    dispatch({ type: SET_FROM_USES_CURRENT_LOCATION, payload: false });
   }, []);
 
   // ─── Search ──────────────────────────────────────────────────
@@ -442,12 +489,16 @@ export const useTripPlanner = ({
   }, [state.from, state.to, searchTrips, cancelCurrentLocationUpdates, invalidateTripSearches]);
 
   // ─── Set locations directly (e.g. from map tap) ──────────────
-  const setFrom = useCallback((location, text) => {
+  const setFrom = useCallback((location, text, options = {}) => {
     cancelCurrentLocationUpdates();
     invalidateTripSearches();
     dispatch({ type: SET_FROM_USES_CURRENT_LOCATION, payload: false });
     dispatch({ type: SET_FROM, payload: location });
     if (text) dispatch({ type: SET_FROM_TEXT, payload: text });
+    if (options.suppressAutoSearch) {
+      dispatch({ type: CLEAR_RESULTS });
+      return;
+    }
     if (state.to && location) {
       searchTrips(location, state.to);
       return;
@@ -529,14 +580,13 @@ export const useTripPlanner = ({
   // ─── Use current location ───────────────────────────────────
   const useCurrentLocation = useCallback(async (getCurrentPosition, options = {}) => {
     const requestSeq = ++locationRequestSeqRef.current;
+    dispatch({ type: CURRENT_LOCATION_START });
     try {
       const coords = await getCurrentPosition();
       if (requestSeq !== locationRequestSeqRef.current) return;
       const loc = { lat: coords.lat, lon: coords.lon };
       invalidateTripSearches();
-      dispatch({ type: SET_FROM_USES_CURRENT_LOCATION, payload: true });
-      dispatch({ type: SET_FROM, payload: loc });
-      dispatch({ type: SET_FROM_TEXT, payload: 'Current Location' });
+      dispatch({ type: CURRENT_LOCATION_SUCCESS, payload: loc });
 
       const destination = options.searchTo || state.to;
       if (destination) {
@@ -557,7 +607,7 @@ export const useTripPlanner = ({
     } catch {
       if (requestSeq !== locationRequestSeqRef.current) return;
       invalidateTripSearches();
-      dispatch({ type: SET_ERROR, payload: 'Could not get your location' });
+      dispatch({ type: CURRENT_LOCATION_ERROR });
     }
   }, [state.to, searchTrips, invalidateTripSearches]);
 

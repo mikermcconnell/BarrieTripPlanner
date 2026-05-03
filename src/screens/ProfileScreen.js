@@ -17,7 +17,7 @@ import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNaviga
 const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { user, isAuthenticated, favorites, tripHistory, signOut } = useAuth();
+  const { user, isAuthenticated, favorites, tripHistory, savedPlaces = [], savedTrips = [], signOut } = useAuth();
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -36,8 +36,8 @@ const ProfileScreen = ({ navigation }) => {
     {
       id: 'favorites',
       icon: 'Star',
-      title: 'Favorites',
-      subtitle: `${favorites.stops.length} stops, ${favorites.routes.length} routes`,
+      title: 'My Transit',
+      subtitle: `${savedPlaces.length} places, ${savedTrips.length} trips, ${favorites.stops.length} stops, ${favorites.routes.length} routes`,
       onPress: () => navigation.navigate('Favorites'),
     },
     {
@@ -139,7 +139,7 @@ const ProfileScreen = ({ navigation }) => {
             <Icon name="User" size={64} color={COLORS.primary} />
             <View style={styles.loginContent}>
               <Text style={styles.loginTitle}>Sign in to your account</Text>
-              <Text style={styles.loginSubtitle}>Save favorites and sync across devices</Text>
+              <Text style={styles.loginSubtitle}>Save places, trips, stops, and routes across devices</Text>
             </View>
             <TouchableOpacity
               style={styles.loginButton}

@@ -13,6 +13,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/t
 import { formatDuration, formatDistance } from '../services/tripService';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { buildSavedTripPayload } from '../utils/savedTransitUtils';
 
 const formatTripDate = (value) => {
   if (!value) return 'Recently';
@@ -46,7 +47,7 @@ const getTripSummary = (item) => {
 const TripHistoryScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { tripHistory, clearTripHistory } = useAuth();
+  const { tripHistory, clearTripHistory, addSavedTrip, isAuthenticated } = useAuth();
 
   const handleClearHistory = () => {
     Alert.alert(
@@ -63,6 +64,39 @@ const TripHistoryScreen = ({ navigation }) => {
     );
   };
 
+  const replanTrip = (item) => {
+    navigation.getParent()?.navigate('Map', {
+      screen: 'MapMain',
+      params: {
+        savedTripToPlan: {
+          id: item.id || item.searchedAt || 'history-trip',
+          name: `${item.from?.name || 'Start'} to ${item.to?.name || 'Destination'}`,
+          from: item.from,
+          to: item.to,
+          icon: 'Route',
+        },
+      },
+    });
+  };
+
+  const saveTrip = async (item) => {
+    if (!isAuthenticated) {
+      Alert.alert('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
+      return;
+    }
+    const payload = buildSavedTripPayload({
+      from: item.from,
+      to: item.to,
+      itinerary: item.summary,
+    });
+    if (!payload) {
+      Alert.alert('Could not save trip', 'This history item is missing a valid origin or destination.');
+      return;
+    }
+    const result = await addSavedTrip(payload);
+    Alert.alert(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
+  };
+
   const renderItem = ({ item }) => (
     <View style={styles.tripCard}>
       <View style={styles.tripIcon}>
@@ -74,6 +108,14 @@ const TripHistoryScreen = ({ navigation }) => {
         </Text>
         <Text style={styles.tripMeta}>{getTripSummary(item)}</Text>
         <Text style={styles.tripDate}>{formatTripDate(item.searchedAt)}</Text>
+        <View style={styles.tripActions}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => replanTrip(item)}>
+            <Text style={styles.actionButtonText}>Re-plan</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => saveTrip(item)}>
+            <Text style={styles.actionButtonText}>Save trip</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -199,6 +241,22 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: FONT_SIZES.xs,
     color: COLORS.grey500,
+  },
+  tripActions: {
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+  },
+  actionButton: {
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  actionButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   emptyContainer: {
     alignItems: 'center',

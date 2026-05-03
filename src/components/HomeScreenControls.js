@@ -7,15 +7,14 @@ import Icon from './Icon';
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
-const shouldShowRoutesButtonHighlight = ({ selectedCount, shouldHighlightRoutesButton }) => (
-    shouldHighlightRoutesButton && selectedCount === 0
+export const shouldShowRoutesTooltip = ({ selectedCount, showRoutesHint, enableRoutesHint }) => (
+    enableRoutesHint && showRoutesHint && selectedCount === 0
 );
 
-export const getRouteSummaryChipStyles = ({ selectedCount, shouldHighlightRoutesButton }) => [
+export const getRouteSummaryChipStyles = ({ selectedCount }) => [
     styles.filterChip,
     styles.routeSummaryChip,
     selectedCount > 0 && styles.routeSummaryChipActive,
-    shouldShowRoutesButtonHighlight({ selectedCount, shouldHighlightRoutesButton }) && styles.routeSummaryChipHint,
 ].filter(Boolean);
 
 const PulsingDetourDot = () => {
@@ -64,10 +63,9 @@ const HomeScreenControls = ({
     onToggleZones,
     zoneCount = 0,
     onOpenFilterSheet,
-    highlightRoutesButtonOnOpen = true,
+    showRoutesTooltipOnOpen = true,
 }) => {
-    const routeHintAnim = React.useRef(new Animated.Value(0)).current;
-    const [showRouteHint, setShowRouteHint] = React.useState(highlightRoutesButtonOnOpen);
+    const [showRoutesHint, setShowRoutesHint] = React.useState(showRoutesTooltipOnOpen);
 
     const routeAlertsMap = useMemo(() => {
         const map = new Map();
@@ -92,70 +90,32 @@ const HomeScreenControls = ({
         [routes, isRouteDetouring]
     );
     const selectedCount = selectedRoutes.size;
-    const shouldHighlightRoutesButton = showRouteHint && highlightRoutesButtonOnOpen;
     const routeSummaryChipStyles = getRouteSummaryChipStyles({
         selectedCount,
-        shouldHighlightRoutesButton,
     });
-    const routeSummaryAnimatedStyle = useMemo(() => {
-        if (!shouldShowRoutesButtonHighlight({ selectedCount, shouldHighlightRoutesButton })) {
-            return null;
-        }
-
-        return {
-            backgroundColor: routeHintAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [COLORS.primarySubtle, 'rgba(76, 175, 80, 0.18)'],
-            }),
-            borderColor: routeHintAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['rgba(12, 140, 229, 0.28)', 'rgba(76, 175, 80, 0.58)'],
-            }),
-            transform: [{
-                scale: routeHintAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.025],
-                }),
-            }],
-        };
-    }, [routeHintAnim, selectedCount, shouldHighlightRoutesButton]);
+    const showRoutesTooltip = shouldShowRoutesTooltip({
+        selectedCount,
+        showRoutesHint,
+        enableRoutesHint: showRoutesTooltipOnOpen,
+    });
 
     React.useEffect(() => {
-        if (!highlightRoutesButtonOnOpen || selectedCount > 0) {
-            setShowRouteHint(false);
+        if (!showRoutesTooltipOnOpen || selectedCount > 0) {
+            setShowRoutesHint(false);
             return undefined;
         }
 
-        setShowRouteHint(true);
-        routeHintAnim.setValue(0);
+        const hideTimer = setTimeout(() => {
+            setShowRoutesHint(false);
+        }, 3000);
 
-        const animation = Animated.sequence([
-            Animated.delay(500),
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(routeHintAnim, {
-                        toValue: 1,
-                        duration: 850,
-                        useNativeDriver: false,
-                    }),
-                    Animated.timing(routeHintAnim, {
-                        toValue: 0,
-                        duration: 850,
-                        useNativeDriver: false,
-                    }),
-                ]),
-                { iterations: 3 }
-            ),
-        ]);
+        return () => clearTimeout(hideTimer);
+    }, [showRoutesTooltipOnOpen, selectedCount]);
 
-        animation.start(({ finished } = {}) => {
-            if (finished) {
-                setShowRouteHint(false);
-            }
-        });
-
-        return () => animation.stop();
-    }, [highlightRoutesButtonOnOpen, routeHintAnim, selectedCount]);
+    const handleOpenFilterSheet = useCallback(() => {
+        setShowRoutesHint(false);
+        onOpenFilterSheet?.();
+    }, [onOpenFilterSheet]);
 
     return (
         <View style={styles.filterContainer}>
@@ -202,8 +162,8 @@ const HomeScreenControls = ({
 
                 {/* Compact route filter summary. Full route list lives in the sheet. */}
                 <TouchableOpacity
-                    style={[...routeSummaryChipStyles, routeSummaryAnimatedStyle]}
-                    onPress={onOpenFilterSheet}
+                    style={routeSummaryChipStyles}
+                    onPress={handleOpenFilterSheet}
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel={`Open route filter${selectedCount ? `, ${selectedCount} selected` : ''}`}
@@ -253,7 +213,7 @@ const HomeScreenControls = ({
                 {selectedCount > 3 && (
                     <TouchableOpacity
                         style={[styles.filterChip, styles.moreRoutesChip]}
-                        onPress={onOpenFilterSheet}
+                        onPress={handleOpenFilterSheet}
                         activeOpacity={0.7}
                         accessibilityRole="button"
                         accessibilityLabel={`Open route filter, ${selectedCount - 3} more selected routes`}
@@ -280,13 +240,19 @@ const HomeScreenControls = ({
             {/* Filter/Grid button at the right end */}
             <TouchableOpacity
                 style={styles.filterIconButton}
-                onPress={onOpenFilterSheet}
+                onPress={handleOpenFilterSheet}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="Open route filter"
             >
                 <Icon name="Settings" size={16} color={COLORS.primaryDark} />
             </TouchableOpacity>
+
+            {showRoutesTooltip && (
+                <View pointerEvents="none" style={styles.routesTooltip}>
+                    <Text style={styles.routesTooltipText}>Routes & map options</Text>
+                </View>
+            )}
         </View>
     );
 };
@@ -332,10 +298,6 @@ const styles = StyleSheet.create({
         minWidth: 92,
         borderColor: 'rgba(12, 140, 229, 0.28)',
         backgroundColor: COLORS.primarySubtle,
-    },
-    routeSummaryChipHint: {
-        borderColor: 'rgba(76, 175, 80, 0.58)',
-        ...SHADOWS.small,
     },
     routeSummaryChipActive: {
         backgroundColor: COLORS.primary,
@@ -465,6 +427,22 @@ const styles = StyleSheet.create({
         flexShrink: 0,
         borderWidth: 1,
         borderColor: 'rgba(223, 225, 230, 0.8)',
+    },
+    routesTooltip: {
+        position: 'absolute',
+        top: 48,
+        left: SPACING.md,
+        paddingVertical: 5,
+        paddingHorizontal: SPACING.sm + 4,
+        borderRadius: BORDER_RADIUS.round,
+        backgroundColor: COLORS.textPrimary,
+        ...SHADOWS.small,
+    },
+    routesTooltipText: {
+        color: COLORS.white,
+        fontSize: FONT_SIZES.xs,
+        fontFamily: FONT_FAMILIES.semibold,
+        letterSpacing: 0.2,
     },
 });
 

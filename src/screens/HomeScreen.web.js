@@ -38,7 +38,7 @@ import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { getContrastTextColor } from '../utils/colorUtils';
-import { pointToPolylineDistance } from '../utils/geometryUtils';
+import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
 import {
@@ -68,13 +68,20 @@ import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
 import useRoutePanel from '../hooks/useRoutePanel';
-import DirectionArrows from '../components/DirectionArrows.web';
 import { getTransitStartupProgress } from '../utils/systemHealthUI';
 import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
 import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
 import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 import { trackEvent } from '../services/analyticsService';
+import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
+import {
+  SAVED_PLACE_LABELS,
+  buildSavedPlacePayload,
+  buildSavedTripPayload,
+  getSavedLocationPoint,
+  getSavedPlaceTargetField,
+} from '../utils/savedTransitUtils';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 const LOCATION_CENTER_ERROR_MESSAGE = 'We could not get your location. Check that location services are on and that Barrie Transit has location permission.';
@@ -238,7 +245,16 @@ const buildMapTapMarkerHtml = () => `
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const navigation = useNavigation();
-  const { addTripToHistory } = useAuth();
+  const {
+    addTripToHistory,
+    savedPlaces,
+    savedTrips,
+    addSavedPlace,
+    addSavedTrip,
+    touchSavedPlace,
+    touchSavedTrip,
+    isAuthenticated,
+  } = useAuth();
   const {
     routes,
     stops,
@@ -541,6 +557,7 @@ const HomeScreen = ({ route }) => {
     isTripPlanningMode,
     from: tripFromLocation,
     to: tripToLocation,
+    isLocatingFrom,
     fromText: tripFromText,
     toText: tripToText,
     itineraries,
@@ -579,12 +596,17 @@ const HomeScreen = ({ route }) => {
   });
 
   const useCurrentLocationForTrip = useCallback((searchTo = null) => {
-    useCurrentLocationHook(
+    return useCurrentLocationHook(
       () => new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('No geolocation'));
         navigator.geolocation.getCurrentPosition(
           (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-          (err) => reject(err)
+          (err) => reject(err),
+          {
+            enableHighAccuracy: false,
+            maximumAge: 30000,
+            timeout: 8000,
+          }
         );
       }),
       { searchTo }
@@ -618,6 +640,100 @@ const HomeScreen = ({ route }) => {
     searchTrips(trip.from, trip.to);
   };
 
+  const showMessage = useCallback((title, message) => {
+    if (typeof window !== 'undefined' && window.alert) {
+      window.alert(message ? `${title}\n\n${message}` : title);
+    }
+  }, []);
+
+  const handleSelectSavedPlace = useCallback((place) => {
+    const point = getSavedLocationPoint(place);
+    if (!point) {
+      showMessage('Saved place needs an address', 'Please delete and recreate this saved place.');
+      return;
+    }
+
+    const label = place.name || place.addressText || 'Saved place';
+    touchSavedPlace?.(place.id);
+
+    if (getSavedPlaceTargetField({ from: tripFromLocation, to: tripToLocation }) === 'to') {
+      setTripTo(point, label);
+      return;
+    }
+
+    setTripFrom(point, label);
+  }, [showMessage, touchSavedPlace, tripFromLocation, tripToLocation, setTripFrom, setTripTo]);
+
+  const handleSelectSavedTrip = useCallback((savedTrip) => {
+    const fromPoint = getSavedLocationPoint(savedTrip?.from);
+    const toPoint = getSavedLocationPoint(savedTrip?.to);
+    if (!fromPoint || !toPoint) {
+      showMessage('Saved trip needs addresses', 'Please delete and recreate this saved trip.');
+      return;
+    }
+
+    enterPlanningMode();
+    touchSavedTrip?.(savedTrip.id);
+    setTripFrom(fromPoint, savedTrip.from?.name || savedTrip.from?.addressText || 'Start', { suppressAutoSearch: true });
+    setTripTo(toPoint, savedTrip.to?.name || savedTrip.to?.addressText || 'Destination', { suppressAutoSearch: true });
+    searchTrips(fromPoint, toPoint);
+  }, [enterPlanningMode, showMessage, touchSavedTrip, setTripFrom, setTripTo, searchTrips]);
+
+  const handleSaveCurrentTrip = useCallback(async () => {
+    if (!isAuthenticated) {
+      showMessage('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
+      return;
+    }
+    const payload = buildSavedTripPayload({
+      from: { ...tripFromLocation, name: tripFromText || 'Start' },
+      to: { ...tripToLocation, name: tripToText || 'Destination' },
+      itinerary: itineraries?.[selectedItineraryIndex] || itineraries?.[0] || null,
+    });
+    if (!payload) {
+      showMessage('Trip not ready', 'Choose a valid origin and destination before saving this trip.');
+      return;
+    }
+    const result = await addSavedTrip(payload);
+    showMessage(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
+  }, [addSavedTrip, isAuthenticated, itineraries, selectedItineraryIndex, showMessage, tripFromLocation, tripFromText, tripToLocation, tripToText]);
+
+  const handleSavePlace = useCallback(async (location, text, label = 'Saved place', labelType = 'custom') => {
+    if (!isAuthenticated) {
+      showMessage('Sign in to save places', 'Create or sign in to your account to save places across devices.');
+      return;
+    }
+    const payload = buildSavedPlacePayload({
+      labelType,
+      name: text || label,
+      location: { ...location, name: text || label },
+    });
+    if (!payload) {
+      showMessage('Place not ready', 'Choose a valid location before saving it.');
+      return;
+    }
+    const result = await addSavedPlace(payload);
+    showMessage(result?.success ? 'Place saved' : 'Could not save place', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
+  }, [addSavedPlace, isAuthenticated, showMessage]);
+
+  const chooseSavedPlaceLabel = useCallback((location, text, fallbackLabel) => {
+    const options = ['home', 'work', 'school', 'grocery', 'gym', 'doctor', 'custom'];
+    const labels = options.map((key, index) => `${index + 1}. ${SAVED_PLACE_LABELS[key].label}`).join('\\n');
+    const response = typeof window !== 'undefined' && window.prompt
+      ? window.prompt(`Save as:\\n${labels}`, '1')
+      : '7';
+    if (response === null) return;
+    const index = Number(response) - 1;
+    const labelType = options[index] || 'custom';
+    handleSavePlace(location, text, fallbackLabel, labelType);
+  }, [handleSavePlace]);
+
+  useEffect(() => {
+    const tripToPlan = route?.params?.savedTripToPlan;
+    if (!tripToPlan) return;
+    handleSelectSavedTrip(tripToPlan);
+    navigation.setParams({ savedTripToPlan: undefined });
+  }, [route?.params?.savedTripToPlan, handleSelectSavedTrip, navigation]);
+
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
@@ -650,44 +766,20 @@ const HomeScreen = ({ route }) => {
     selectedRoutes,
   ]);
 
-  const routePathsByRouteId = useMemo(() => {
-    const shapeSource = Object.keys(processedShapes || {}).length > 0 ? processedShapes : shapes;
-    const map = new Map();
+  const vehicleSnapShapeCandidates = useMemo(
+    () => buildVehicleSnapShapeCandidates({ routeShapeMapping, processedShapes, shapes }),
+    [processedShapes, routeShapeMapping, shapes]
+  );
 
-    Object.entries(routeShapeMapping || {}).forEach(([routeId, shapeIds]) => {
-      const paths = (shapeIds || [])
-        .map((shapeId) => shapeSource[shapeId] || shapes[shapeId])
-        .filter((coords) => Array.isArray(coords) && coords.length >= 2);
-
-      if (paths.length > 0) {
-        map.set(routeId, paths);
-      }
-    });
-
-    return map;
-  }, [processedShapes, routeShapeMapping, shapes]);
-
-  const getVehicleSnapPath = useCallback((vehicle) => {
-    const candidatePaths = routePathsByRouteId.get(vehicle?.routeId);
-    if (!candidatePaths || candidatePaths.length === 0) return null;
-    if (candidatePaths.length === 1) return candidatePaths[0];
-
-    const point = vehicle?.coordinate;
-    if (!point) return candidatePaths[0];
-
-    let bestPath = candidatePaths[0];
-    let bestDistance = pointToPolylineDistance(point, bestPath);
-
-    for (let i = 1; i < candidatePaths.length; i++) {
-      const distance = pointToPolylineDistance(point, candidatePaths[i]);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestPath = candidatePaths[i];
-      }
-    }
-
-    return bestPath;
-  }, [routePathsByRouteId]);
+  const getVehicleSnapPath = useCallback(
+    (vehicle) => resolveVehicleSnapPath(
+      vehicle,
+      displayedShapes,
+      tripMapping,
+      vehicleSnapShapeCandidates
+    ),
+    [displayedShapes, tripMapping, vehicleSnapShapeCandidates]
+  );
 
   // Build vehicle routeId → display label lookup
   const getRouteLabel = useCallback((vehicle) => {
@@ -1023,6 +1115,15 @@ const HomeScreen = ({ route }) => {
           }
 
           const isNewlySelected = newlySelectedRoutes.has(shape.routeId);
+          const showOneWayArrows =
+            !hasDetourFocus &&
+            !(isDetourView && !hasSelection) &&
+            getOneWayRouteArrowVisibility({
+              routeId: shape.routeId,
+              currentZoom,
+              isSelected,
+              hasSelection,
+            });
 
           return (
             <WebRoutePolyline
@@ -1037,20 +1138,10 @@ const HomeScreen = ({ route }) => {
               onMouseOut={() => setHoveredRouteId(null)}
               className={isNewlySelected ? 'polyline-draw-on' : ''}
               routeLabel={routeLabel}
+              showArrows={showOneWayArrows}
             />
           );
         })}
-        {/* Direction arrows on selected route polylines */}
-        {!isTripPreviewMode && hasSelection && displayedShapes
-          .filter(shape => isRouteSelected(shape.routeId))
-          .map(shape => (
-            <DirectionArrows
-              key={`arrows-${shape.id}`}
-              coordinates={shape.coordinates}
-              color={shape.color}
-            />
-          ))
-        }
         {/* Detour geometry overlays — above route polylines */}
         {!isTripPreviewMode && detourOverlays.map((overlay) => (
           <DetourOverlay
@@ -1304,7 +1395,14 @@ const HomeScreen = ({ route }) => {
           onClose={exitTripPlanningMode}
           onUseCurrentLocation={useCurrentLocationForTrip}
           showUseCurrentLocation={!tripFromLocation}
+          isLocatingCurrentLocation={isLocatingFrom}
           isLoading={isTripLoading}
+          savedPlaces={savedPlaces}
+          savedTrips={savedTrips}
+          onSelectSavedPlace={handleSelectSavedPlace}
+          onSelectSavedTrip={handleSelectSavedTrip}
+          onSaveFromPlace={tripFromLocation ? () => chooseSavedPlaceLabel(tripFromLocation, tripFromText, 'Start') : null}
+          onSaveToPlace={tripToLocation ? () => chooseSavedPlaceLabel(tripToLocation, tripToText, 'Destination') : null}
           timeMode={timeMode}
           selectedTime={selectedTime}
           onTimeModeChange={setTimeMode}
@@ -1575,6 +1673,9 @@ const HomeScreen = ({ route }) => {
             hasSearched={hasTripSearched}
             recentTrips={recentTrips}
             onSelectRecentTrip={handleSelectRecentTrip}
+            savedTrips={savedTrips}
+            onSelectSavedTrip={handleSelectSavedTrip}
+            onSaveCurrentTrip={handleSaveCurrentTrip}
             onRetry={() => {
               if (tripFromLocation && tripToLocation) {
                 searchTrips(tripFromLocation, tripToLocation);

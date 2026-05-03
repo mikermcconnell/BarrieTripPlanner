@@ -1170,6 +1170,33 @@ describe('useTripPlanner regressions', () => {
     unmount();
   });
 
+  test('current-location lookup gives immediate feedback while GPS resolves', async () => {
+    const locationDeferred = createDeferred();
+    const { getHook, act, unmount } = loadUseTripPlanner();
+    let lookupPromise;
+
+    act(() => {
+      lookupPromise = getHook().useCurrentLocation(() => locationDeferred.promise);
+    });
+
+    expect(getHook().state.isLocatingFrom).toBe(true);
+    expect(getHook().state.fromUsesCurrentLocation).toBe(true);
+    expect(getHook().state.fromText).toBe('Finding your location…');
+    expect(getHook().state.from).toBeNull();
+
+    locationDeferred.resolve({ lat: 44.381, lon: -79.691 });
+    await act(async () => {
+      await lookupPromise;
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.isLocatingFrom).toBe(false);
+    expect(getHook().state.fromText).toBe('Current Location');
+    expect(getHook().state.from).toEqual({ lat: 44.381, lon: -79.691 });
+
+    unmount();
+  });
+
   test('current-location origin is tracked separately from manual origin selection', async () => {
     const { getHook, act, unmount } = loadUseTripPlanner();
 
@@ -1614,6 +1641,29 @@ describe('web trip planner regressions', () => {
     unmount();
   });
 
+  test('native search header shows immediate current-location feedback', () => {
+    const onUseCurrentLocation = jest.fn();
+    const { root, unmount } = loadTripSearchHeaderNative({
+      onUseCurrentLocation,
+      isLocatingCurrentLocation: true,
+    });
+
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Getting location…')
+    );
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    const progressIndicators = root.findAll((node) => node.type === 'ActivityIndicator');
+
+    expect(visibleLabels).toHaveLength(1);
+    expect(locationButtons[0].props.disabled).toBe(true);
+    expect(locationButtons[0].props.accessibilityState).toEqual({ busy: true, disabled: true });
+    expect(progressIndicators.length).toBeGreaterThan(0);
+
+    unmount();
+  });
+
   test('native search header hides current-location button after From is selected', () => {
     const { root, unmount } = loadTripSearchHeaderNative({
       fromText: 'Downtown Terminal',
@@ -1652,6 +1702,27 @@ describe('web trip planner regressions', () => {
     });
     expect(onUseCurrentLocation).toHaveBeenCalledTimes(1);
     expect(onUseCurrentLocation).toHaveBeenCalledWith();
+
+    unmount();
+  });
+
+  test('web search header shows immediate current-location feedback', () => {
+    const { root, unmount } = loadTripSearchHeaderWeb({
+      isLocatingCurrentLocation: true,
+    });
+
+    const visibleLabels = root.findAll(
+      (node) => node.children?.includes('Getting location…')
+    );
+    const locationButtons = root.findAll(
+      (node) => node.props.accessibilityLabel === 'Use current location'
+    );
+    const progressIndicators = root.findAll((node) => node.type === 'ActivityIndicator');
+
+    expect(visibleLabels).toHaveLength(1);
+    expect(locationButtons[0].props.disabled).toBe(true);
+    expect(locationButtons[0].props.accessibilityState).toEqual({ busy: true, disabled: true });
+    expect(progressIndicators.length).toBeGreaterThan(0);
 
     unmount();
   });

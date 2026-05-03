@@ -10,7 +10,17 @@ async function getFirebaseIdToken() {
     return '';
   }
 
-  const currentUser = firebaseAuth?.currentUser;
+  let currentUser = firebaseAuth?.currentUser;
+  if (!currentUser) {
+    try {
+      const { signInAnonymously } = require('firebase/auth');
+      const credential = await signInAnonymously(firebaseAuth);
+      currentUser = credential?.user || firebaseAuth?.currentUser;
+    } catch {
+      return '';
+    }
+  }
+
   if (!currentUser || typeof currentUser.getIdToken !== 'function') {
     return '';
   }

@@ -9,7 +9,10 @@
  */
 import { useMemo, useCallback } from 'react';
 import { ROUTE_COLORS } from '../config/constants';
-import { getRepresentativeShapeIdsByDirection } from '../utils/routeShapeUtils';
+import {
+  getRegularPatternShapeIdsForRoute,
+  getRepresentativeShapeIdsByDirection,
+} from '../utils/routeShapeUtils';
 import { buildNativeHomeAllRoutesShapes } from '../utils/homeRouteLineVisuals';
 
 export const useDisplayedEntities = ({
@@ -94,7 +97,12 @@ export const useDisplayedEntities = ({
 
     if (selectedRouteIds.size > 0) {
       selectedRouteIds.forEach(routeId => {
-        const shapeIds = routeShapeMapping[routeId] || [];
+        const shapeIds = getRegularPatternShapeIdsForRoute(
+          routeId,
+          routeShapeMapping[routeId] || [],
+          shapeSource,
+          shapes
+        );
         shapeIds.forEach((shapeId) => {
           if (shapeSource[shapeId]) {
             const renderedShapeId = `${routeId}:${shapeId}`;
@@ -120,7 +128,12 @@ export const useDisplayedEntities = ({
       }
 
       Object.keys(routeShapeMapping).forEach((routeId) => {
-        const shapeIds = routeShapeMapping[routeId] || [];
+        const shapeIds = getRegularPatternShapeIdsForRoute(
+          routeId,
+          routeShapeMapping[routeId] || [],
+          shapeSource,
+          shapes
+        );
         const representativeIds = getRepresentativeShapeIdsByDirection(
           shapeIds,
           shapeSource,

@@ -138,6 +138,32 @@ When working in Android emulator, use one of these commands instead of manual Me
 - `npm run android:stable:rebuild`
   - Forces a fresh release rebuild/install, then launches.
 
+### Android Emulator Troubleshooting
+
+- Slow relaunch after Metro is already running:
+  - Use `npm run android:dev:launch`, not a full `android:dev` restart.
+
+- Red console says a package cannot be resolved, but the package exists in `node_modules`:
+  - Example: `Unable to resolve module expo-asset`.
+  - Confirm the package resolves:
+    ```bash
+    node -e "console.log(require.resolve('expo-asset'))"
+    ```
+  - Restart Metro with a clean cache:
+    ```bash
+    npm run android:dev:clear
+    ```
+  - Then relaunch:
+    ```bash
+    npm run android:dev:launch
+    ```
+
+- Emulator boot itself is slow:
+  - Check emulator logs for `Failed to load snapshot 'default_boot'`.
+  - If present, close the emulator and delete only:
+    `C:\Users\Mike McConnell\.android\avd\BTTP_Emulator.avd\snapshots\default_boot`
+  - Start the emulator once, then shut it down cleanly so Android Studio creates a fresh quick-boot snapshot.
+
 When auto-detour testing is enabled locally, `npm run android:recover` also stops the local detour worker. Set `DETOUR_DEV_WORKER_ENABLED=false` in `.env` if you want to launch the emulator without starting that worker.
 For rider-visible detour testing, `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` must point to valid Firebase Admin credentials so the worker can publish to Firestore.
 

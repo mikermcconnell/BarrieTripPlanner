@@ -49,6 +49,8 @@ nul
 
 # Local review/test artifacts
 .work-artifacts/
+.superpowers/
+outputs/app-icon-previews/
 
 # Emulator screenshots
 emulator_*.png

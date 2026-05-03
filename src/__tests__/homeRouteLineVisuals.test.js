@@ -116,6 +116,116 @@ describe('buildNativeHomeAllRoutesShapes', () => {
     ]);
   });
 
+  test('prefers regular Route 8 shapes over Bear Creek special shapes', () => {
+    const shapes = {
+      '8a-regular-north': makePath([
+        [44.374, -79.692],
+        [44.389, -79.681],
+        [44.402, -79.665],
+        [44.416, -79.649],
+      ]),
+      '8a-bear-creek-special': makePath([
+        [44.322, -79.729],
+        [44.328, -79.733],
+        [44.334, -79.721],
+        [44.374, -79.692],
+        [44.416, -79.649],
+      ]),
+      '8b-regular-south': makePath([
+        [44.414, -79.628],
+        [44.392, -79.672],
+        [44.375, -79.719],
+      ]),
+      '8b-regular-north': makePath([
+        [44.351, -79.719],
+        [44.374, -79.692],
+        [44.414, -79.628],
+      ]),
+    };
+
+    const result = buildNativeHomeAllRoutesShapes({
+      routeShapeMapping: {
+        '8A': ['8a-regular-north', '8a-bear-creek-special'],
+        '8B': ['8b-regular-south', '8b-regular-north'],
+      },
+      processedShapes: shapes,
+      shapes,
+      shapeDirectionMap: {
+        '8a-regular-north': new Set(['0']),
+        '8a-bear-creek-special': new Set(['0']),
+        '8b-regular-south': new Set(['0']),
+        '8b-regular-north': new Set(['1']),
+      },
+      getRouteColor,
+    });
+
+    const route8ShapeIds = result
+      .filter((shape) => shape.visualType === 'family' && ['8A', '8B'].includes(shape.routeId))
+      .map((shape) => shape.shapeId);
+
+    expect(route8ShapeIds).toContain('8a-regular-north');
+    expect(route8ShapeIds).not.toContain('8a-bear-creek-special');
+  });
+
+  test('keeps the regular Route 8 Sundew/Marsellus half while skipping the Red Oak special', () => {
+    const shapes = {
+      '8a-regular-sundew': makePath([
+        [44.322, -79.729],
+        [44.329, -79.725],
+        [44.334, -79.721],
+        [44.374, -79.692],
+        [44.416, -79.649],
+      ]),
+      '8a-red-oak-special': makePath([
+        [44.322, -79.729],
+        [44.328, -79.733],
+        [44.329, -79.725],
+        [44.334, -79.721],
+        [44.374, -79.692],
+        [44.416, -79.649],
+      ]),
+      '8a-regular-south': makePath([
+        [44.414, -79.628],
+        [44.392, -79.672],
+        [44.351, -79.719],
+      ]),
+      '8b-regular-north': makePath([
+        [44.351, -79.719],
+        [44.374, -79.692],
+        [44.414, -79.628],
+      ]),
+      '8b-regular-south': makePath([
+        [44.414, -79.628],
+        [44.392, -79.672],
+        [44.375, -79.719],
+      ]),
+    };
+
+    const result = buildNativeHomeAllRoutesShapes({
+      routeShapeMapping: {
+        '8A': ['8a-regular-sundew', '8a-red-oak-special', '8a-regular-south'],
+        '8B': ['8b-regular-north', '8b-regular-south'],
+      },
+      processedShapes: shapes,
+      shapes,
+      shapeDirectionMap: {
+        '8a-regular-sundew': new Set(['0']),
+        '8a-red-oak-special': new Set(['0']),
+        '8a-regular-south': new Set(['1']),
+        '8b-regular-north': new Set(['0']),
+        '8b-regular-south': new Set(['1']),
+      },
+      getRouteColor,
+    });
+
+    const route8ShapeIds = result
+      .filter((shape) => shape.visualType === 'family' && ['8A', '8B'].includes(shape.routeId))
+      .map((shape) => shape.shapeId);
+
+    expect(route8ShapeIds).toContain('8a-regular-sundew');
+    expect(route8ShapeIds).not.toContain('8a-red-oak-special');
+  });
+
   test('keeps differently colored loop pairs as fully separate route lines', () => {
     const sharedTrunk = [
       [44.38, -79.69],

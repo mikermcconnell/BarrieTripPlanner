@@ -79,6 +79,8 @@ These are not public rider endpoints:
 
 Do not ship `API_PROXY_TOKEN`, `API_PROXY_TOKENS`, `EXPO_PUBLIC_API_PROXY_TOKEN`, or `EXPO_PUBLIC_LOCATIONIQ_API_KEY` in public production.
 
+Public rider clients should obtain Firebase ID tokens before calling protected proxy routes. For riders who are not signed in, enable Firebase Anonymous Authentication so the app can mint a low-privilege anonymous Firebase token without exposing a shared proxy secret.
+
 ### Detour worker
 
 - `DETOUR_WORKER_ENABLED=true`

@@ -22,6 +22,8 @@ if (-not (Test-Path $envProd)) {
 # --- Swap .env with .env.production for the build ---
 $swapped = $false
 try {
+    $buildStartedAt = Get-Date
+
     if (Test-Path $envDev) {
         Write-Host "`n=== Swapping .env -> .env.production ===" -ForegroundColor Cyan
         Copy-Item $envDev $envBackup -Force
@@ -44,22 +46,33 @@ try {
     if ($Apk) {
         Write-Host "`n=== Building release APK ===" -ForegroundColor Cyan
         & ./gradlew assembleRelease
+        $gradleExitCode = $LASTEXITCODE
         $output = "android\app\build\outputs\apk\release\app-release.apk"
     } else {
         Write-Host "`n=== Building release AAB ===" -ForegroundColor Cyan
         & ./gradlew bundleRelease
+        $gradleExitCode = $LASTEXITCODE
         $output = "android\app\build\outputs\bundle\release\app-release.aab"
     }
 
     Set-Location $projectRoot
 
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n=== BUILD SUCCESSFUL ===" -ForegroundColor Green
-        Write-Host "Output: $output" -ForegroundColor Green
-    } else {
-        Write-Host "`n=== BUILD FAILED ===" -ForegroundColor Red
-        exit 1
+    if ($gradleExitCode -ne 0) {
+        throw "Gradle release build failed with exit code $gradleExitCode"
     }
+
+    $outputPath = Join-Path $projectRoot $output
+    if (-not (Test-Path $outputPath)) {
+        throw "Gradle reported success but expected output was not found: $output"
+    }
+
+    $outputItem = Get-Item $outputPath
+    if ($outputItem.LastWriteTime -lt $buildStartedAt) {
+        throw "Gradle reported success but output is stale: $output"
+    }
+
+    Write-Host "`n=== BUILD SUCCESSFUL ===" -ForegroundColor Green
+    Write-Host "Output: $output" -ForegroundColor Green
 } finally {
     # --- Always restore .env ---
     if ($swapped -and (Test-Path $envBackup)) {

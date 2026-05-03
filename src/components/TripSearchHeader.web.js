@@ -52,15 +52,24 @@ const TripSearchHeaderWeb = ({
   onClose,
   onUseCurrentLocation,
   showUseCurrentLocation = true,
+  isLocatingCurrentLocation = false,
   isLoading = false,
   timeMode = 'now',
   selectedTime,
   onTimeModeChange,
   onSelectedTimeChange,
   onSearch,
+  savedPlaces = [],
+  savedTrips = [],
+  onSelectSavedPlace,
+  onSelectSavedTrip,
+  onSaveFromPlace,
+  onSaveToPlace,
 }) => {
   const [activeField, setActiveField] = useState(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const visiblePlaces = savedPlaces.slice(0, 5);
+  const visibleTrips = savedTrips.slice(0, 3);
 
   useEffect(() => {
     if (activeField === 'from' && showFromSuggestions && fromSuggestions.length > 0) {
@@ -146,13 +155,21 @@ const TripSearchHeaderWeb = ({
     {showUseCurrentLocation && onUseCurrentLocation && (
       <View style={styles.useLocationRow}>
         <TouchableOpacity
-          style={styles.useLocationBtn}
+          style={[styles.useLocationBtn, isLocatingCurrentLocation && styles.useLocationBtnBusy]}
           onPress={() => onUseCurrentLocation()}
+          disabled={isLocatingCurrentLocation}
           accessibilityLabel="Use current location"
           accessibilityRole="button"
+          accessibilityState={{ busy: isLocatingCurrentLocation, disabled: isLocatingCurrentLocation }}
         >
-          <CenterIcon size={16} color={COLORS.primary} />
-          <Text style={styles.useLocationText}>Use current location</Text>
+          {isLocatingCurrentLocation ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <CenterIcon size={16} color={COLORS.primary} />
+          )}
+          <Text style={styles.useLocationText}>
+            {isLocatingCurrentLocation ? 'Getting location…' : 'Use current location'}
+          </Text>
         </TouchableOpacity>
       </View>
     )}
@@ -231,6 +248,67 @@ const TripSearchHeaderWeb = ({
       <View style={styles.typingIndicator}>
         <ActivityIndicator size="small" color={COLORS.primary} />
         <Text style={styles.typingText}>Searching...</Text>
+      </View>
+    )}
+
+    {(visiblePlaces.length > 0 || visibleTrips.length > 0) && (
+      <View style={styles.shortcutsContainer}>
+        {visiblePlaces.length > 0 && (
+          <View style={styles.shortcutGroup}>
+            <Text style={styles.shortcutTitle}>Saved places</Text>
+            <View style={styles.shortcutChips}>
+              {visiblePlaces.map((place) => (
+                <TouchableOpacity
+                  key={place.id}
+                  style={styles.shortcutChip}
+                  onPress={() => onSelectSavedPlace?.(place)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use saved place ${place.name || place.addressText}`}
+                >
+                  <Text style={styles.shortcutChipText} numberOfLines={1}>
+                    {place.name || place.addressText}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {visibleTrips.length > 0 && (
+          <View style={styles.shortcutGroup}>
+            <Text style={styles.shortcutTitle}>Saved trips</Text>
+            <View style={styles.shortcutChips}>
+              {visibleTrips.map((trip) => (
+                <TouchableOpacity
+                  key={trip.id}
+                  style={styles.shortcutChip}
+                  onPress={() => onSelectSavedTrip?.(trip)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Plan saved trip ${trip.name}`}
+                >
+                  <Text style={styles.shortcutChipText} numberOfLines={1}>
+                    {trip.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    )}
+
+    {(onSaveFromPlace || onSaveToPlace) && (
+      <View style={styles.savePlaceRow}>
+        {onSaveFromPlace && (
+          <TouchableOpacity style={styles.savePlaceButton} onPress={onSaveFromPlace}>
+            <Text style={styles.savePlaceButtonText}>Save start</Text>
+          </TouchableOpacity>
+        )}
+        {onSaveToPlace && (
+          <TouchableOpacity style={styles.savePlaceButton} onPress={onSaveToPlace}>
+            <Text style={styles.savePlaceButtonText}>Save destination</Text>
+          </TouchableOpacity>
+        )}
       </View>
     )}
 
@@ -414,6 +492,55 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textPrimary,
   },
+  shortcutsContainer: {
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginTop: SPACING.xxs,
+    marginBottom: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  shortcutGroup: {
+    gap: 4,
+  },
+  shortcutTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+  },
+  shortcutChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  shortcutChip: {
+    maxWidth: 150,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  shortcutChipText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
+  },
+  savePlaceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginBottom: SPACING.xs,
+  },
+  savePlaceButton: {
+    paddingVertical: 5,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey100,
+  },
+  savePlaceButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+  },
   useLocationRow: {
     marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
     marginBottom: SPACING.xs,
@@ -428,6 +555,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primarySubtle,
+  },
+  useLocationBtnBusy: {
+    opacity: 0.85,
   },
   useLocationText: {
     fontSize: FONT_SIZES.sm,

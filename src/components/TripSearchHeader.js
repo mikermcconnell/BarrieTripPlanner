@@ -31,6 +31,7 @@ const TripSearchHeader = ({
   onClose,
   onUseCurrentLocation,
   showUseCurrentLocation = true,
+  isLocatingCurrentLocation = false,
   isLoading = false,
   fromSuggestions = [],
   toSuggestions = [],
@@ -43,9 +44,17 @@ const TripSearchHeader = ({
   onTimeModeChange,
   onSelectedTimeChange,
   onSearch,
+  savedPlaces = [],
+  savedTrips = [],
+  onSelectSavedPlace,
+  onSelectSavedTrip,
+  onSaveFromPlace,
+  onSaveToPlace,
 }) => {
   void showFromSuggestions;
   void showToSuggestions;
+  const visiblePlaces = savedPlaces.slice(0, 5);
+  const visibleTrips = savedTrips.slice(0, 3);
 
   return (
     <View style={styles.container}>
@@ -86,13 +95,21 @@ const TripSearchHeader = ({
         {showUseCurrentLocation && onUseCurrentLocation && (
           <View style={styles.useLocationRow}>
             <TouchableOpacity
-              style={styles.useLocationButton}
+              style={[styles.useLocationButton, isLocatingCurrentLocation && styles.useLocationButtonBusy]}
               onPress={() => onUseCurrentLocation()}
+              disabled={isLocatingCurrentLocation}
               accessibilityLabel="Use current location"
               accessibilityRole="button"
+              accessibilityState={{ busy: isLocatingCurrentLocation, disabled: isLocatingCurrentLocation }}
             >
-              <Icon name="LocateFixed" size={16} color={COLORS.primary} strokeWidth={2.5} />
-              <Text style={styles.useLocationText}>Use current location</Text>
+              {isLocatingCurrentLocation ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Icon name="LocateFixed" size={16} color={COLORS.primary} strokeWidth={2.5} />
+              )}
+              <Text style={styles.useLocationText}>
+                {isLocatingCurrentLocation ? 'Getting location…' : 'Use current location'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -139,6 +156,71 @@ const TripSearchHeader = ({
           <Icon name="ArrowUpDown" size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
+
+      {(visiblePlaces.length > 0 || visibleTrips.length > 0) && (
+        <View style={styles.shortcutsContainer}>
+          {visiblePlaces.length > 0 && (
+            <View style={styles.shortcutGroup}>
+              <Text style={styles.shortcutTitle}>Saved places</Text>
+              <View style={styles.shortcutChips}>
+                {visiblePlaces.map((place) => (
+                  <TouchableOpacity
+                    key={place.id}
+                    style={styles.shortcutChip}
+                    onPress={() => onSelectSavedPlace?.(place)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use saved place ${place.name || place.addressText}`}
+                  >
+                    <Icon name={place.icon || 'MapPin'} size={14} color={COLORS.primary} />
+                    <Text style={styles.shortcutChipText} numberOfLines={1}>
+                      {place.name || place.addressText}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {visibleTrips.length > 0 && (
+            <View style={styles.shortcutGroup}>
+              <Text style={styles.shortcutTitle}>Saved trips</Text>
+              <View style={styles.shortcutChips}>
+                {visibleTrips.map((trip) => (
+                  <TouchableOpacity
+                    key={trip.id}
+                    style={styles.shortcutChip}
+                    onPress={() => onSelectSavedTrip?.(trip)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Plan saved trip ${trip.name}`}
+                  >
+                    <Icon name={trip.icon || 'Route'} size={14} color={COLORS.primary} />
+                    <Text style={styles.shortcutChipText} numberOfLines={1}>
+                      {trip.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
+      {(onSaveFromPlace || onSaveToPlace) && (
+        <View style={styles.savePlaceRow}>
+          {onSaveFromPlace && (
+            <TouchableOpacity style={styles.savePlaceButton} onPress={onSaveFromPlace}>
+              <Icon name="Star" size={13} color={COLORS.textSecondary} />
+              <Text style={styles.savePlaceButtonText}>Save start</Text>
+            </TouchableOpacity>
+          )}
+          {onSaveToPlace && (
+            <TouchableOpacity style={styles.savePlaceButton} onPress={onSaveToPlace}>
+              <Icon name="Star" size={13} color={COLORS.textSecondary} />
+              <Text style={styles.savePlaceButtonText}>Save destination</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Time picker (Leave Now / Depart At / Arrive By) */}
       <View style={styles.timePickerAligned}>
@@ -220,6 +302,60 @@ const styles = StyleSheet.create({
   searchContainer: {
     position: 'relative',
   },
+  shortcutsContainer: {
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  shortcutGroup: {
+    gap: 4,
+  },
+  shortcutTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+  },
+  shortcutChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  shortcutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: 148,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  shortcutChipText: {
+    flexShrink: 1,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
+  },
+  savePlaceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  savePlaceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey100,
+  },
+  savePlaceButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textSecondary,
+  },
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,6 +412,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primarySubtle,
+  },
+  useLocationButtonBusy: {
+    opacity: 0.85,
   },
   useLocationText: {
     fontSize: FONT_SIZES.sm,

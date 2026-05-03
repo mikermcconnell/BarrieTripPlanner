@@ -2,9 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ANIMATION } from '../config/constants';
 import {
   buildPolylineSegment,
+  calculateBearing,
   haversineDistance,
   projectPointToPolyline,
 } from '../utils/geometryUtils';
+
+const MOVEMENT_BEARING_MIN_DISTANCE_M = 8;
 
 /**
  * Normalize a bearing delta to [-180, 180] for shortest-arc rotation.
@@ -14,6 +17,41 @@ const normalizeBearingDelta = (delta) => {
   if (d > 180) d -= 360;
   if (d < -180) d += 360;
   return d;
+};
+
+const normalizeBearing = (bearing) => {
+  const numericBearing = Number(bearing);
+  return Number.isFinite(numericBearing)
+    ? ((numericBearing % 360) + 360) % 360
+    : null;
+};
+
+const isPerpendicularBearingConflict = (rawBearing, snappedBearing) => {
+  const delta = Math.abs(normalizeBearingDelta(rawBearing - snappedBearing));
+  return delta >= 60 && delta <= 120;
+};
+
+const resolveMovementBearing = (from, to) => {
+  if (
+    !Number.isFinite(from?.latitude) ||
+    !Number.isFinite(from?.longitude) ||
+    !Number.isFinite(to?.latitude) ||
+    !Number.isFinite(to?.longitude)
+  ) {
+    return null;
+  }
+
+  const distanceMeters = haversineDistance(
+    from.latitude,
+    from.longitude,
+    to.latitude,
+    to.longitude
+  );
+  if (distanceMeters < MOVEMENT_BEARING_MIN_DISTANCE_M) {
+    return null;
+  }
+
+  return normalizeBearing(calculateBearing(from, to));
 };
 
 /**
@@ -119,21 +157,41 @@ const resolveSnappedTarget = (point, snapPath) => {
   };
 };
 
-const resolveTargetBearing = ({ currentBearing, vehicle, snappedBearing }) => {
-  const rawBearing = Number.isFinite(vehicle?.bearing) ? vehicle.bearing : null;
+const resolveTargetBearing = ({ currentBearing, vehicle, snappedBearing, movementBearing }) => {
+  const rawBearing = normalizeBearing(vehicle?.bearing);
+  const routeBearing = normalizeBearing(snappedBearing);
+  const measuredMovementBearing = normalizeBearing(movementBearing);
   const speed = vehicle?.speed;
   const isMoving = !Number.isFinite(speed) || speed >= ANIMATION.BUS_BEARING_MIN_SPEED_MPS;
 
-  let nextBearing = currentBearing ?? rawBearing ?? snappedBearing ?? 0;
+  let nextBearing = currentBearing ?? measuredMovementBearing ?? rawBearing ?? routeBearing ?? 0;
 
   if (!isMoving) {
+    if (
+      currentBearing == null &&
+      rawBearing !== null &&
+      routeBearing !== null &&
+      isPerpendicularBearingConflict(rawBearing, routeBearing)
+    ) {
+      return routeBearing;
+    }
     return nextBearing;
   }
 
-  if (rawBearing !== null) {
+  if (
+    measuredMovementBearing !== null
+  ) {
+    nextBearing = measuredMovementBearing;
+  } else if (
+    rawBearing !== null &&
+    routeBearing !== null &&
+    isPerpendicularBearingConflict(rawBearing, routeBearing)
+  ) {
+    nextBearing = routeBearing;
+  } else if (rawBearing !== null) {
     nextBearing = rawBearing;
-  } else if (Number.isFinite(snappedBearing)) {
-    nextBearing = snappedBearing;
+  } else if (routeBearing !== null) {
+    nextBearing = routeBearing;
   }
 
   if (currentBearing != null) {
@@ -144,6 +202,14 @@ const resolveTargetBearing = ({ currentBearing, vehicle, snappedBearing }) => {
   }
 
   return nextBearing;
+};
+
+export const __TEST_ONLY__ = {
+  normalizeBearing,
+  normalizeBearingDelta,
+  isPerpendicularBearingConflict,
+  resolveMovementBearing,
+  resolveTargetBearing,
 };
 
 /**
@@ -193,6 +259,8 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
     startTime: null,
     durationMs: ANIMATION.BUS_POSITION_DURATION_MS,
     lastTargetAt: null,
+    lastRawLat: rawTargetPoint?.latitude ?? null,
+    lastRawLng: rawTargetPoint?.longitude ?? null,
     motionPath: null,
     frameId: null,
     // Whether we've received at least one position
@@ -246,10 +314,16 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
 
     const ref = animRef.current;
     const now = getNow();
+    const previousRawPoint =
+      Number.isFinite(ref.lastRawLat) && Number.isFinite(ref.lastRawLng)
+        ? { latitude: ref.lastRawLat, longitude: ref.lastRawLng }
+        : null;
+    const movementBearing = resolveMovementBearing(previousRawPoint, rawTargetPoint);
     const targetBearing = resolveTargetBearing({
       currentBearing: ref.toBearing,
       vehicle,
       snappedBearing: snappedTarget.snappedBearing,
+      movementBearing,
     });
 
     if (!ref.initialized) {
@@ -262,6 +336,8 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
       ref.toBearing = targetBearing;
       ref.durationMs = ANIMATION.BUS_POSITION_DURATION_MS;
       ref.lastTargetAt = now;
+      ref.lastRawLat = rawTargetPoint?.latitude ?? null;
+      ref.lastRawLng = rawTargetPoint?.longitude ?? null;
       ref.motionPath = null;
       setAnimated({
         latitude: resolvedTargetPoint.latitude,
@@ -283,6 +359,8 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
       ANIMATION.BUS_POSITION_MAX_DURATION_MS
     );
     ref.lastTargetAt = now;
+    ref.lastRawLat = rawTargetPoint?.latitude ?? null;
+    ref.lastRawLng = rawTargetPoint?.longitude ?? null;
 
     setAnimated((current) => {
       const currentPoint = {

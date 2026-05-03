@@ -32,8 +32,42 @@ const dayLabel = (date) => {
   return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
+const startOfDay = (date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
+
+const isSameDay = (a, b) => a.toDateString() === b.toDateString();
+
+const buildCalendarCells = (monthDate) => {
+  const monthStart = startOfMonth(monthDate);
+  const firstWeekday = monthStart.getDay();
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstWeekday; i += 1) {
+    cells.push(null);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), day));
+  }
+
+  return cells;
+};
+
+const formatMonthLabel = (date) => date.toLocaleDateString([], { month: 'long', year: 'numeric' });
+const formatDateAccessibilityLabel = (date) => `Select ${date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}`;
+
 const TimePicker = ({ value, onChange, mode = 'now' }) => {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(startOfMonth(value));
   const [customHour, setCustomHour] = useState(value.getHours());
   const [customMinute, setCustomMinute] = useState(value.getMinutes());
 
@@ -69,6 +103,11 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
     setShowCustomPicker(true);
   };
 
+  const openCalendarPicker = () => {
+    setCalendarMonth(startOfMonth(value));
+    setShowCalendarPicker(true);
+  };
+
   const handleCustomDone = () => {
     const newDate = new Date(value);
     newDate.setHours(customHour, customMinute, 0, 0);
@@ -101,6 +140,16 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
 
   const showTimeOptions = mode === 'depart' || mode === 'arrive';
   const selectedDay = isToday(value) ? 'today' : isTomorrow(value) ? 'tomorrow' : null;
+  const todayStart = startOfDay(new Date());
+  const calendarCells = buildCalendarCells(calendarMonth);
+  const canGoToPreviousMonth = startOfMonth(calendarMonth) > startOfMonth(todayStart);
+
+  const selectCalendarDate = (date) => {
+    const newDate = new Date(value);
+    newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+    onChange(newDate, mode);
+    setShowCalendarPicker(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -156,6 +205,16 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
                 Tomorrow
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dayButton, selectedDay === null && styles.dayButtonActive]}
+              onPress={openCalendarPicker}
+              accessibilityRole="button"
+              accessibilityLabel="Choose date"
+            >
+              <Text style={[styles.dayButtonText, selectedDay === null && styles.dayButtonTextActive]}>
+                Choose date
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Selected time summary */}
@@ -209,6 +268,91 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
 
             <TouchableOpacity style={styles.doneButton} onPress={handleCustomDone}>
               <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Calendar picker modal */}
+      <Modal visible={showCalendarPicker} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCalendarPicker(false)}
+        >
+          <View style={styles.calendarModalContent} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Choose Date</Text>
+
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity
+                style={[styles.monthNavButton, !canGoToPreviousMonth && styles.monthNavButtonDisabled]}
+                onPress={() => canGoToPreviousMonth && setCalendarMonth((prev) => addMonths(prev, -1))}
+                disabled={!canGoToPreviousMonth}
+                accessibilityRole="button"
+                accessibilityLabel="Previous month"
+              >
+                <Text style={[styles.monthNavText, !canGoToPreviousMonth && styles.monthNavTextDisabled]}>
+                  ‹
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.calendarMonthLabel}>{formatMonthLabel(calendarMonth)}</Text>
+              <TouchableOpacity
+                style={styles.monthNavButton}
+                onPress={() => setCalendarMonth((prev) => addMonths(prev, 1))}
+                accessibilityRole="button"
+                accessibilityLabel="Next month"
+              >
+                <Text style={styles.monthNavText}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekdayRow}>
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((weekday, index) => (
+                <Text key={`${weekday}-${index}`} style={styles.weekdayText}>
+                  {weekday}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarCells.map((date, index) => {
+                if (!date) {
+                  return <View key={`empty-${index}`} style={styles.calendarDayPlaceholder} />;
+                }
+
+                const disabled = startOfDay(date) < todayStart;
+                const selected = isSameDay(date, value);
+
+                return (
+                  <TouchableOpacity
+                    key={date.toISOString()}
+                    style={[
+                      styles.calendarDayButton,
+                      selected && styles.calendarDayButtonSelected,
+                      disabled && styles.calendarDayButtonDisabled,
+                    ]}
+                    onPress={() => selectCalendarDate(date)}
+                    disabled={disabled}
+                    accessibilityRole="button"
+                    accessibilityLabel={formatDateAccessibilityLabel(date)}
+                    accessibilityState={{ selected, disabled }}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        selected && styles.calendarDayTextSelected,
+                        disabled && styles.calendarDayTextDisabled,
+                      ]}
+                    >
+                      {date.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowCalendarPicker(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -288,6 +432,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
+    flexWrap: 'wrap',
   },
   dayButton: {
     paddingVertical: SPACING.xs + 2,
@@ -400,6 +545,101 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: '600',
+  },
+
+  // Calendar picker
+  calendarModalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    alignItems: 'stretch',
+    width: 320,
+    ...SHADOWS.large,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.md,
+  },
+  calendarMonthLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  monthNavButton: {
+    width: TOUCH_TARGET.min,
+    height: TOUCH_TARGET.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey100,
+  },
+  monthNavButtonDisabled: {
+    opacity: 0.4,
+  },
+  monthNavText: {
+    fontSize: 30,
+    lineHeight: 32,
+    color: COLORS.textPrimary,
+  },
+  monthNavTextDisabled: {
+    color: COLORS.textSecondary,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    marginBottom: SPACING.xs,
+  },
+  weekdayText: {
+    width: `${100 / 7}%`,
+    textAlign: 'center',
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayPlaceholder: {
+    width: `${100 / 7}%`,
+    height: 42,
+  },
+  calendarDayButton: {
+    width: `${100 / 7}%`,
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.round,
+  },
+  calendarDayButtonSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  calendarDayButtonDisabled: {
+    opacity: 0.35,
+  },
+  calendarDayText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  calendarDayTextSelected: {
+    color: COLORS.white,
+  },
+  calendarDayTextDisabled: {
+    color: COLORS.textSecondary,
+  },
+  cancelButton: {
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 });
 

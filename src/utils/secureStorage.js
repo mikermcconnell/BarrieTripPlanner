@@ -15,6 +15,15 @@ if (Platform.OS !== 'web') {
   SecureStore = require('expo-secure-store');
 }
 
+const SECURE_STORE_KEY_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+const toSecureStoreKey = (key) => {
+  const normalized = String(key || '').replace(/[^A-Za-z0-9._-]/g, '_');
+  return normalized && SECURE_STORE_KEY_PATTERN.test(normalized)
+    ? normalized
+    : 'barrie_transit_key';
+};
+
 /**
  * Save a value securely
  * @param {string} key - Storage key
@@ -22,7 +31,7 @@ if (Platform.OS !== 'web') {
  */
 export const secureSet = async (key, value) => {
   if (SecureStore && Platform.OS !== 'web') {
-    await SecureStore.setItemAsync(key, value);
+    await SecureStore.setItemAsync(toSecureStoreKey(key), value);
   } else {
     await AsyncStorage.setItem(key, value);
   }
@@ -35,7 +44,7 @@ export const secureSet = async (key, value) => {
  */
 export const secureGet = async (key) => {
   if (SecureStore && Platform.OS !== 'web') {
-    return await SecureStore.getItemAsync(key);
+    return await SecureStore.getItemAsync(toSecureStoreKey(key));
   } else {
     return await AsyncStorage.getItem(key);
   }
@@ -47,8 +56,12 @@ export const secureGet = async (key) => {
  */
 export const secureDelete = async (key) => {
   if (SecureStore && Platform.OS !== 'web') {
-    await SecureStore.deleteItemAsync(key);
+    await SecureStore.deleteItemAsync(toSecureStoreKey(key));
   } else {
     await AsyncStorage.removeItem(key);
   }
+};
+
+export const __TEST_ONLY__ = {
+  toSecureStoreKey,
 };

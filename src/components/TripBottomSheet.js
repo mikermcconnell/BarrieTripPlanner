@@ -61,6 +61,9 @@ const TripBottomSheet = ({
   onRetry,
   recentTrips = [],
   onSelectRecentTrip,
+  savedTrips = [],
+  onSelectSavedTrip,
+  onSaveCurrentTrip,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
@@ -109,6 +112,27 @@ const TripBottomSheet = ({
           <EmptyIcon size={48} color={COLORS.grey400} />
           <Text style={styles.emptyTitle}>Plan your trip</Text>
           <Text style={styles.emptySubtext}>Enter where you’re going to see live Barrie Transit options.</Text>
+          {savedTrips.length > 0 && (
+            <View style={styles.recentSection}>
+              <Text style={styles.recentTitle}>Saved Trips</Text>
+              {savedTrips.slice(0, 4).map((trip) => (
+                <TouchableOpacity
+                  key={trip.id}
+                  style={styles.recentTripItem}
+                  onPress={() => onSelectSavedTrip?.(trip)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Saved trip: ${trip.name}`}
+                >
+                  <Icon name={trip.icon || 'Route'} size={16} color={COLORS.primary} />
+                  <View style={styles.recentTripContent}>
+                    <Text style={styles.recentTripText} numberOfLines={1}>
+                      {trip.name}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           {recentTrips.length > 0 && (
             <View style={styles.recentSection}>
               <Text style={styles.recentTitle}>Recent Trips</Text>
@@ -157,6 +181,17 @@ const TripBottomSheet = ({
               Choose your route
             </Text>
             <Text style={styles.resultsSubtitle}>Tap a card to preview it on the map.</Text>
+            {onSaveCurrentTrip && (
+              <TouchableOpacity
+                style={styles.saveTripButton}
+                onPress={onSaveCurrentTrip}
+                accessibilityRole="button"
+                accessibilityLabel="Save this trip"
+              >
+                <Icon name="Star" size={14} color={COLORS.primary} />
+                <Text style={styles.saveTripButtonText}>Save trip</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.resultsCountPill}>
             <Text style={styles.resultsCountText}>
@@ -347,6 +382,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  saveTripButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.sm,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  saveTripButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
   },
   resultsCountPill: {
     minWidth: 62,

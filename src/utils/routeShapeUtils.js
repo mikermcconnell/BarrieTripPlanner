@@ -9,6 +9,14 @@ const DEFAULT_OPTIONS = {
   precision: 3,
 };
 
+const ROUTE_8_IDS = new Set(['8', '8A', '8B']);
+const RED_OAK_SPECIAL_AREA = {
+  minLatitude: 44.324,
+  maxLatitude: 44.331,
+  minLongitude: -79.738,
+  maxLongitude: -79.731,
+};
+
 const roundCoord = (value, precision) => {
   return Number(value).toFixed(precision);
 };
@@ -45,6 +53,49 @@ const branchSignature = (coordinates, precision) => {
 
   const endpoints = canonicalEndpointKey(coordinates, precision) || 'unknown-endpoints';
   return `${endpoints}::${directionalAgnostic}`;
+};
+
+const isPointInBounds = (point, bounds) => (
+  Number.isFinite(point?.latitude) &&
+  Number.isFinite(point?.longitude) &&
+  point.latitude >= bounds.minLatitude &&
+  point.latitude <= bounds.maxLatitude &&
+  point.longitude >= bounds.minLongitude &&
+  point.longitude <= bounds.maxLongitude
+);
+
+const isBearCreekSpecialRoute8Shape = (routeId, coordinates) => (
+  ROUTE_8_IDS.has(String(routeId || '').toUpperCase()) &&
+  Array.isArray(coordinates) &&
+  coordinates.some((point) => isPointInBounds(point, RED_OAK_SPECIAL_AREA))
+);
+
+/**
+ * Returns the route shape IDs that should be used for the normal rider-facing line.
+ *
+ * Barrie's Route 8 GTFS currently includes Bear Creek special trips under the 8A/8B
+ * route IDs. Those shapes are valid GTFS, but they should not win the main map's
+ * regular Route 8 line when regular 8A/8B patterns are also present.
+ */
+export const getRegularPatternShapeIdsForRoute = (
+  routeId,
+  shapeIds,
+  shapeSource = {},
+  fallbackShapeSource = {}
+) => {
+  if (!Array.isArray(shapeIds) || shapeIds.length === 0) return [];
+
+  const normalizedRouteId = String(routeId || '').toUpperCase();
+  if (!ROUTE_8_IDS.has(normalizedRouteId)) {
+    return shapeIds;
+  }
+
+  const regularShapeIds = shapeIds.filter((shapeId) => {
+    const coordinates = fallbackShapeSource[shapeId] || shapeSource[shapeId];
+    return !isBearCreekSpecialRoute8Shape(normalizedRouteId, coordinates);
+  });
+
+  return regularShapeIds.length > 0 ? regularShapeIds : shapeIds;
 };
 
 /**

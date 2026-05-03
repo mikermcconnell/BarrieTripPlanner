@@ -44,6 +44,7 @@ Tester:
 - [ ] Firebase/Google Cloud has an Android OAuth client for `com.barrietransit.planner`
 - [ ] Firebase/Google Cloud includes the release/app-signing SHA-1 fingerprint
 - [ ] Updated `google-services.json` is present locally and as the EAS file secret
+- [ ] Firebase Anonymous Authentication is enabled for non-signed-in proxy access
 - [ ] Cloud Scheduler uses `x-scheduler-token`, not `x-api-token`
 
 ## Result

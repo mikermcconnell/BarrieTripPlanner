@@ -60,3 +60,7 @@ These files may still contain useful background, but they do not override the cu
 ## Local Development Preferences
 
 - When a local restart is needed to view or verify changes, restart the relevant dev server, proxy, or app process for Mike instead of only telling him to restart it. Keep the restart scoped to this repo and report what was restarted.
+- For Android emulator work, avoid repeatedly doing full cold starts. First use `npm run android:dev`; after Metro is running, use `npm run android:dev:launch` for fast app relaunches.
+- Use `npm run android:dev:clear` only for suspected Metro cache or resolver issues. If a red console says a module cannot be resolved but the package exists in `node_modules`, restart Metro with this clear-cache path, then relaunch.
+- If emulator startup itself is slow, check the emulator logs for `Failed to load snapshot 'default_boot'`. A corrupt quick-boot snapshot can force a cold boot; close the emulator, delete only `C:\Users\Mike McConnell\.android\avd\BTTP_Emulator.avd\snapshots\default_boot`, start once, then shut down cleanly to create a fresh snapshot.
+- The `expo-asset` redbox seen on May 2, 2026 was caused by stale/crashed Metro state after dependency changes, not missing app code. Verify with `node -e "console.log(require.resolve('expo-asset'))"`, then restart with `npm run android:dev:clear` and relaunch with `npm run android:dev:launch`.

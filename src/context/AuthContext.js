@@ -4,6 +4,7 @@ import { authService } from '../services/firebase/authService';
 import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { favoritesFirestoreService } from '../services/firebase/favoritesFirestoreService';
 import { tripHistoryFirestoreService } from '../services/firebase/tripHistoryFirestoreService';
+import { savedTransitFirestoreService } from '../services/firebase/savedTransitFirestoreService';
 import { secureSet, secureGet, secureDelete } from '../utils/secureStorage';
 import logger from '../utils/logger';
 
@@ -22,6 +23,8 @@ const STORAGE_KEYS = {
   USER: '@barrie_transit_user',
   FAVORITES: '@barrie_transit_favorites',
   TRIP_HISTORY: '@barrie_transit_history',
+  SAVED_PLACES: '@barrie_transit_saved_places',
+  SAVED_TRIPS: '@barrie_transit_saved_trips',
 };
 
 export const AuthProvider = ({ children }) => {
@@ -30,6 +33,8 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [favorites, setFavorites] = useState({ stops: [], routes: [] });
   const [tripHistory, setTripHistory] = useState([]);
+  const [savedPlaces, setSavedPlaces] = useState([]);
+  const [savedTrips, setSavedTrips] = useState([]);
   const [authError, setAuthError] = useState(null);
 
   // Unsubscribe functions for real-time listeners (ref to avoid stale closures)
@@ -37,6 +42,8 @@ export const AuthProvider = ({ children }) => {
     stops: null,
     routes: null,
     history: null,
+    savedPlaces: null,
+    savedTrips: null,
   });
 
   // Listen to Firebase auth state changes
@@ -45,7 +52,7 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = authService.onAuthStateChanged((firebaseUser) => {
       void (async () => {
         try {
-          if (firebaseUser) {
+          if (firebaseUser && !firebaseUser.isAnonymous) {
             setUser(firebaseUser);
 
             // Load user profile from Firestore
@@ -66,6 +73,8 @@ export const AuthProvider = ({ children }) => {
           } else {
             setUser(null);
             setUserProfile(null);
+            setSavedPlaces([]);
+            setSavedTrips([]);
 
             // Clean up listeners
             cleanupListeners();
@@ -137,10 +146,30 @@ export const AuthProvider = ({ children }) => {
       (error) => logger.error('History listener error:', error)
     );
 
+    const savedPlacesUnsubscribe = savedTransitFirestoreService.subscribeToSavedPlaces(
+      uid,
+      (places) => {
+        setSavedPlaces(places);
+        AsyncStorage.setItem(STORAGE_KEYS.SAVED_PLACES, JSON.stringify(places));
+      },
+      (error) => logger.error('Saved places listener error:', error)
+    );
+
+    const savedTripsUnsubscribe = savedTransitFirestoreService.subscribeToSavedTrips(
+      uid,
+      (trips) => {
+        setSavedTrips(trips);
+        AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRIPS, JSON.stringify(trips));
+      },
+      (error) => logger.error('Saved trips listener error:', error)
+    );
+
     unsubscribersRef.current = {
       stops: stopsUnsubscribe,
       routes: routesUnsubscribe,
       history: historyUnsubscribe,
+      savedPlaces: savedPlacesUnsubscribe,
+      savedTrips: savedTripsUnsubscribe,
     };
   };
 
@@ -149,7 +178,7 @@ export const AuthProvider = ({ children }) => {
     Object.values(unsubscribersRef.current).forEach((unsubscribe) => {
       if (unsubscribe) unsubscribe();
     });
-    unsubscribersRef.current = { stops: null, routes: null, history: null };
+    unsubscribersRef.current = { stops: null, routes: null, history: null, savedPlaces: null, savedTrips: null };
   };
 
   // Load cached data for offline mode
@@ -212,6 +241,9 @@ export const AuthProvider = ({ children }) => {
       if (result.success) {
         setUser(null);
         setUserProfile(null);
+        setSavedPlaces([]);
+        setSavedTrips([]);
+        await AsyncStorage.multiRemove([STORAGE_KEYS.SAVED_PLACES, STORAGE_KEYS.SAVED_TRIPS]);
         // Optionally clear local cache on sign out
         // await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.FAVORITES, STORAGE_KEYS.TRIP_HISTORY]);
       }
@@ -370,6 +402,68 @@ export const AuthProvider = ({ children }) => {
     return await tripHistoryFirestoreService.clearTripHistory(user.uid);
   }, [user]);
 
+  // ==================== SAVED PLACES & TRIPS ====================
+
+  const addSavedPlace = useCallback(
+    async (place) => {
+      if (!user) {
+        return { success: false, error: 'Sign in to save places' };
+      }
+      try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_place_added', { label_type: place?.labelType || 'custom' }); } catch {}
+      return await savedTransitFirestoreService.addSavedPlace(user.uid, place);
+    },
+    [user]
+  );
+
+  const removeSavedPlace = useCallback(
+    async (placeId) => {
+      if (!user) {
+        return { success: false, error: 'Sign in to manage saved places' };
+      }
+      return await savedTransitFirestoreService.removeSavedPlace(user.uid, placeId);
+    },
+    [user]
+  );
+
+  const touchSavedPlace = useCallback(
+    async (placeId) => {
+      if (!user || !placeId) return { success: false, error: 'Not authenticated' };
+      try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_place_used', {}); } catch {}
+      return await savedTransitFirestoreService.touchSavedPlace(user.uid, placeId);
+    },
+    [user]
+  );
+
+  const addSavedTrip = useCallback(
+    async (trip) => {
+      if (!user) {
+        return { success: false, error: 'Sign in to save trips' };
+      }
+      try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_trip_added', {}); } catch {}
+      return await savedTransitFirestoreService.addSavedTrip(user.uid, trip);
+    },
+    [user]
+  );
+
+  const removeSavedTrip = useCallback(
+    async (tripId) => {
+      if (!user) {
+        return { success: false, error: 'Sign in to manage saved trips' };
+      }
+      return await savedTransitFirestoreService.removeSavedTrip(user.uid, tripId);
+    },
+    [user]
+  );
+
+  const touchSavedTrip = useCallback(
+    async (tripId) => {
+      if (!user || !tripId) return { success: false, error: 'Not authenticated' };
+      try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_trip_used', {}); } catch {}
+      return await savedTransitFirestoreService.touchSavedTrip(user.uid, tripId);
+    },
+    [user]
+  );
+
   // ==================== SETTINGS ====================
 
   // Update notification settings
@@ -465,6 +559,16 @@ export const AuthProvider = ({ children }) => {
     tripHistory,
     addTripToHistory,
     clearTripHistory,
+
+    // Saved places and trips
+    savedPlaces,
+    savedTrips,
+    addSavedPlace,
+    removeSavedPlace,
+    touchSavedPlace,
+    addSavedTrip,
+    removeSavedTrip,
+    touchSavedTrip,
 
     // Settings
     updateNotificationSettings,
