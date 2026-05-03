@@ -5,7 +5,15 @@ const CACHE_TTL = 6 * 60 * 60 * 1000;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 4000];
 
-let cache = { shapes: null, tripMapping: null, routeShapeMapping: null, lastRefresh: null };
+let cache = {
+  shapes: null,
+  tripMapping: null,
+  routeShapeMapping: null,
+  scheduleIndex: null,
+  stopsById: null,
+  stopsByCode: null,
+  lastRefresh: null,
+};
 let refreshPromise = null;
 
 const parseCSVLine = (line) => {
@@ -60,9 +68,97 @@ async function fetchWithRetry() {
   throw new Error('All fetch attempts failed');
 }
 
-function buildDataStructures(shapesCSV, tripsCSV) {
+function parseGtfsTimeToSeconds(value) {
+  const parts = String(value || '').split(':').map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  const [hours, minutes, seconds] = parts;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function buildScheduleIndex({ tripsRaw, stopTimesCSV = '', calendarCSV = '', calendarDatesCSV = '' }) {
+  const tripMetaById = new Map();
+  for (const row of tripsRaw) {
+    tripMetaById.set(row.trip_id, {
+      routeId: row.route_id,
+      serviceId: row.service_id,
+      directionId: row.direction_id || '',
+    });
+  }
+
+  const firstStopTimeByTripId = new Map();
+  if (stopTimesCSV) {
+    for (const row of parseCSV(stopTimesCSV)) {
+      const tripId = row.trip_id;
+      if (!tripId || !tripMetaById.has(tripId)) continue;
+      const seconds = parseGtfsTimeToSeconds(row.departure_time || row.arrival_time);
+      if (!Number.isFinite(seconds)) continue;
+      const current = firstStopTimeByTripId.get(tripId);
+      if (current == null || seconds < current) {
+        firstStopTimeByTripId.set(tripId, seconds);
+      }
+    }
+  }
+
+  const tripsByRouteId = new Map();
+  for (const [tripId, meta] of tripMetaById) {
+    const startTimeSeconds = firstStopTimeByTripId.get(tripId);
+    if (!Number.isFinite(startTimeSeconds)) continue;
+    if (!tripsByRouteId.has(meta.routeId)) tripsByRouteId.set(meta.routeId, []);
+    tripsByRouteId.get(meta.routeId).push({
+      tripId,
+      routeId: meta.routeId,
+      serviceId: meta.serviceId,
+      directionId: meta.directionId,
+      startTimeSeconds,
+    });
+  }
+  for (const trips of tripsByRouteId.values()) {
+    trips.sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
+  }
+
+  const calendarByServiceId = new Map();
+  if (calendarCSV) {
+    for (const row of parseCSV(calendarCSV)) {
+      if (!row.service_id) continue;
+      calendarByServiceId.set(row.service_id, {
+        monday: row.monday === '1',
+        tuesday: row.tuesday === '1',
+        wednesday: row.wednesday === '1',
+        thursday: row.thursday === '1',
+        friday: row.friday === '1',
+        saturday: row.saturday === '1',
+        sunday: row.sunday === '1',
+        startDate: row.start_date || '',
+        endDate: row.end_date || '',
+      });
+    }
+  }
+
+  const calendarDatesByServiceId = new Map();
+  if (calendarDatesCSV) {
+    for (const row of parseCSV(calendarDatesCSV)) {
+      if (!row.service_id || !row.date) continue;
+      if (!calendarDatesByServiceId.has(row.service_id)) {
+        calendarDatesByServiceId.set(row.service_id, new Map());
+      }
+      calendarDatesByServiceId
+        .get(row.service_id)
+        .set(row.date, Number.parseInt(row.exception_type, 10));
+    }
+  }
+
+  return {
+    tripsByRouteId,
+    calendarByServiceId,
+    calendarDatesByServiceId,
+    timeZone: process.env.DETOUR_SERVICE_TIMEZONE || 'America/Toronto',
+  };
+}
+
+function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const shapesRaw = parseCSV(shapesCSV);
   const tripsRaw = parseCSV(tripsCSV);
+  const stopsRaw = extra.stopsCSV ? parseCSV(extra.stopsCSV) : [];
 
   const shapes = new Map();
   for (const row of shapesRaw) {
@@ -94,7 +190,30 @@ function buildDataStructures(shapesCSV, tripsCSV) {
     routeShapeMapping.set(routeId, Array.from(shapeSet));
   }
 
-  return { shapes, tripMapping, routeShapeMapping };
+  const scheduleIndex = buildScheduleIndex({
+    tripsRaw,
+    stopTimesCSV: extra.stopTimesCSV,
+    calendarCSV: extra.calendarCSV,
+    calendarDatesCSV: extra.calendarDatesCSV,
+  });
+
+  const stopsById = new Map();
+  const stopsByCode = new Map();
+  for (const row of stopsRaw) {
+    const id = String(row.stop_id || '').trim();
+    if (!id) continue;
+    const stop = {
+      id,
+      code: String(row.stop_code || row.stop_id || '').trim(),
+      name: String(row.stop_name || '').trim(),
+      latitude: Number.parseFloat(row.stop_lat),
+      longitude: Number.parseFloat(row.stop_lon),
+    };
+    stopsById.set(stop.id, stop);
+    if (stop.code) stopsByCode.set(stop.code, stop);
+  }
+
+  return { shapes, tripMapping, routeShapeMapping, scheduleIndex, stopsById, stopsByCode };
 }
 
 async function refreshData() {
@@ -106,11 +225,20 @@ async function refreshData() {
     if (!shapesFile || !tripsFile) {
       throw new Error('ZIP missing shapes.txt or trips.txt');
     }
-    const [shapesCSV, tripsCSV] = await Promise.all([
+    const [shapesCSV, tripsCSV, stopsCSV, stopTimesCSV, calendarCSV, calendarDatesCSV] = await Promise.all([
       shapesFile.async('string'),
       tripsFile.async('string'),
+      zip.file('stops.txt')?.async('string') || Promise.resolve(''),
+      zip.file('stop_times.txt')?.async('string') || Promise.resolve(''),
+      zip.file('calendar.txt')?.async('string') || Promise.resolve(''),
+      zip.file('calendar_dates.txt')?.async('string') || Promise.resolve(''),
     ]);
-    const data = buildDataStructures(shapesCSV, tripsCSV);
+    const data = buildDataStructures(shapesCSV, tripsCSV, {
+      stopsCSV,
+      stopTimesCSV,
+      calendarCSV,
+      calendarDatesCSV,
+    });
     const prevShapeCount = cache.shapes ? cache.shapes.size : 0;
     const prevTripCount = cache.tripMapping ? cache.tripMapping.size : 0;
     const dataChanged = data.shapes.size !== prevShapeCount || data.tripMapping.size !== prevTripCount;
@@ -135,7 +263,15 @@ async function ensureLoaded() {
 
 async function getStaticData() {
   await ensureLoaded();
-  return { shapes: cache.shapes, tripMapping: cache.tripMapping, routeShapeMapping: cache.routeShapeMapping, lastRefresh: cache.lastRefresh };
+  return {
+    shapes: cache.shapes,
+    tripMapping: cache.tripMapping,
+    routeShapeMapping: cache.routeShapeMapping,
+    scheduleIndex: cache.scheduleIndex,
+    stopsById: cache.stopsById,
+    stopsByCode: cache.stopsByCode,
+    lastRefresh: cache.lastRefresh,
+  };
 }
 
 async function forceRefresh() {
@@ -144,4 +280,4 @@ async function forceRefresh() {
   return refreshPromise;
 }
 
-module.exports = { getStaticData, forceRefresh };
+module.exports = { getStaticData, forceRefresh, buildDataStructures, parseGtfsTimeToSeconds };

@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
+import PlatformMapCard from './PlatformMapCard';
 import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 
@@ -55,7 +56,7 @@ const DirectionsToIcon = ({ size = 20, color = COLORS.error }) => (
   </svg>
 );
 
-const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
+const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, platformMap, onOpenPlatformMap }) => {
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
   const [slideAnim] = useState(new Animated.Value(100)); // Start off-screen (100%)
   const handleSheetChanges = useCallback(() => {}, []);
@@ -187,6 +188,8 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
             <ShareIcon size={16} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
+
+        <PlatformMapCard platformMap={platformMap} onPress={onOpenPlatformMap} />
 
         {/* Arrivals Section */}
         <View style={styles.arrivalsHeader}>

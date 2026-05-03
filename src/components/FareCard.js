@@ -43,11 +43,13 @@ const FareCard = () => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: COLORS.secondarySubtle,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   accent: {
     width: 4,
@@ -76,7 +78,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xxs,
   },
   button: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.round,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,

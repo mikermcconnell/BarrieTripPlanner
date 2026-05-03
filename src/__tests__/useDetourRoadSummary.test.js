@@ -2,6 +2,7 @@ import {
   extractRoadName,
   getDetourLookupPoints,
   buildDetourRoadSummary,
+  getPrecomputedDetourRoadNames,
 } from '../utils/detourRoadSummary';
 
 describe('useDetourRoadSummary helpers', () => {
@@ -53,6 +54,39 @@ describe('useDetourRoadSummary helpers', () => {
     expect(result).toHaveLength(4);
     expect(result[0]).toEqual({ latitude: 44.3800, longitude: -79.6900 });
     expect(result[result.length - 1]).toEqual({ latitude: 44.3900, longitude: -79.6800 });
+  });
+
+  test('getDetourLookupPoints prefers the likely detour path when available', () => {
+    const likelyPath = [
+      { latitude: 44.3800, longitude: -79.6900 },
+      { latitude: 44.3810, longitude: -79.6890 },
+      { latitude: 44.3820, longitude: -79.6880 },
+    ];
+    const result = getDetourLookupPoints({
+      entryPoint: { latitude: 44.3800, longitude: -79.6900 },
+      exitPoint: { latitude: 44.3820, longitude: -79.6880 },
+      likelyDetourPolyline: likelyPath,
+      inferredDetourPolyline: [
+        { latitude: 45, longitude: -80 },
+        { latitude: 45.1, longitude: -80.1 },
+      ],
+    });
+
+    expect(result).toContainEqual({ latitude: 44.3810, longitude: -79.6890 });
+    expect(result).not.toContainEqual({ latitude: 45.1, longitude: -80.1 });
+  });
+
+  test('getPrecomputedDetourRoadNames dedupes top-level and segment road names', () => {
+    expect(getPrecomputedDetourRoadNames({
+      likelyDetourRoadNames: ['Yonge Street', 'Mapleview Drive East'],
+      segments: [
+        { likelyDetourRoadNames: ['yonge street', 'Big Bay Point Road'] },
+      ],
+    })).toEqual([
+      'Yonge Street',
+      'Mapleview Drive East',
+      'Big Bay Point Road',
+    ]);
   });
 
   test('getDetourLookupPoints merges multi-segment detours without duplicate coordinates', () => {

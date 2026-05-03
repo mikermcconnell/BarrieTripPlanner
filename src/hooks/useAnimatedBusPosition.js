@@ -1,13 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
 import { ANIMATION } from '../config/constants';
 import {
   buildPolylineSegment,
   haversineDistance,
   projectPointToPolyline,
 } from '../utils/geometryUtils';
-
-const SHOULD_SKIP_JS_MARKER_ANIMATION = Platform.OS === 'android';
 
 /**
  * Normalize a bearing delta to [-180, 180] for shortest-arc rotation.
@@ -20,10 +17,9 @@ const normalizeBearingDelta = (delta) => {
 };
 
 /**
- * Cubic ease-out: fast start, smooth deceleration.
- * f(t) = 1 - (1 - t)^3
+ * Smooth ease-in/out so bus markers start and stop without a visible jump.
  */
-const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutSine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -222,7 +218,7 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
       return;
     }
 
-    const t = easeOutCubic(elapsed / duration);
+    const t = easeInOutSine(elapsed / duration);
     const pathPoint = interpolateMeasuredPath(ref.motionPath, t);
     const lat = pathPoint
       ? pathPoint.latitude
@@ -255,32 +251,6 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
       vehicle,
       snappedBearing: snappedTarget.snappedBearing,
     });
-
-    if (SHOULD_SKIP_JS_MARKER_ANIMATION) {
-      if (ref.frameId) {
-        cancelAnimationFrame(ref.frameId);
-        ref.frameId = null;
-      }
-
-      ref.initialized = true;
-      ref.fromLat = resolvedTargetPoint.latitude;
-      ref.fromLng = resolvedTargetPoint.longitude;
-      ref.fromBearing = targetBearing;
-      ref.toLat = resolvedTargetPoint.latitude;
-      ref.toLng = resolvedTargetPoint.longitude;
-      ref.toBearing = targetBearing;
-      ref.durationMs = 0;
-      ref.lastTargetAt = now;
-      ref.motionPath = null;
-
-      setAnimated({
-        latitude: resolvedTargetPoint.latitude,
-        longitude: resolvedTargetPoint.longitude,
-        bearing: targetBearing,
-        scale: 1,
-      });
-      return undefined;
-    }
 
     if (!ref.initialized) {
       ref.initialized = true;

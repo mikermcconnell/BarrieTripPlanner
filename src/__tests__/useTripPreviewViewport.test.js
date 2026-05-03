@@ -102,4 +102,57 @@ describe('useTripPreviewViewport', () => {
     expect(hookApi.fitMapToItinerary({ legs: [{}] })).toBe(false);
     expect(fitToCoordinates).not.toHaveBeenCalled();
   });
+
+  test('does not reset trip planning on transient screen blur unless explicitly enabled', () => {
+    const onBlurInactive = jest.fn();
+
+    function Harness({ isFocused }) {
+      useTripPreviewViewport({
+        isFocused,
+        isTripPlanningMode: true,
+        fitToCoordinates: jest.fn(),
+        edgePadding: { top: 0, right: 0, bottom: 0, left: 0 },
+        onBlurInactive,
+      });
+
+      return null;
+    }
+
+    act(() => {
+      renderer = create(React.createElement(Harness, { isFocused: true }));
+    });
+
+    act(() => {
+      renderer.update(React.createElement(Harness, { isFocused: false }));
+    });
+
+    expect(onBlurInactive).not.toHaveBeenCalled();
+  });
+
+  test('can still reset trip planning on blur when explicitly enabled', () => {
+    const onBlurInactive = jest.fn();
+
+    function Harness({ isFocused }) {
+      useTripPreviewViewport({
+        isFocused,
+        isTripPlanningMode: true,
+        fitToCoordinates: jest.fn(),
+        edgePadding: { top: 0, right: 0, bottom: 0, left: 0 },
+        onBlurInactive,
+        resetOnBlur: true,
+      });
+
+      return null;
+    }
+
+    act(() => {
+      renderer = create(React.createElement(Harness, { isFocused: true }));
+    });
+
+    act(() => {
+      renderer.update(React.createElement(Harness, { isFocused: false }));
+    });
+
+    expect(onBlurInactive).toHaveBeenCalledTimes(1);
+  });
 });

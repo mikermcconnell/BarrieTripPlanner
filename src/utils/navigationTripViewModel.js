@@ -2,7 +2,7 @@ const isTransitMode = (leg) => leg?.mode === 'BUS' || leg?.mode === 'TRANSIT';
 
 const formatStopLabel = (stop) => {
   const stopName = stop?.name || '';
-  const stopCode = stop?.stopCode;
+  const stopCode = stop?.stopCode || stop?.stopId || stop?.code;
   if (!stopName) {
     return stopCode ? `#${stopCode}` : '';
   }
@@ -52,11 +52,15 @@ export const buildNavigationTripViewModel = ({
   }
 
   let transitPeekAheadText = null;
+  let onBoardPeekAheadText = null;
   if (isTransitLeg) {
     const nextLeg = legs[currentLegIndex + 1];
     if (nextLeg?.mode === 'WALK') {
       const durationMin = nextLeg.duration ? Math.ceil(nextLeg.duration / 60) : null;
       const durationLabel = durationMin ? `${durationMin} min` : '';
+      onBoardPeekAheadText = durationLabel
+        ? `After this bus: ${durationLabel} walk`
+        : 'After this bus: walk';
       const legAfterWalk = legs[currentLegIndex + 2];
       if (isTransitMode(legAfterWalk)) {
         const routeName = legAfterWalk.route?.shortName || legAfterWalk.routeShortName || '';
@@ -95,6 +99,7 @@ export const buildNavigationTripViewModel = ({
     isWalkingLeg,
     nextLegPreviewText,
     nextTransitLeg,
+    onBoardPeekAheadText,
     totalRemainingDistance,
     transitPeekAheadText,
   };

@@ -1,8 +1,10 @@
 const {
   evaluateAutoBoardConfidence,
   evaluateAutoAlightConfidence,
+  evaluateBoardingBusDepartureStatus,
   getBoardingStopThresholdMeters,
   getUserVehicleThresholdMeters,
+  shouldTreatBusAsArrivedAtBoarding,
 } = require('../utils/navigationAutoProgress');
 
 describe('navigationAutoProgress', () => {
@@ -86,5 +88,87 @@ describe('navigationAutoProgress', () => {
     expect(getBoardingStopThresholdMeters(80)).toBe(70);
     expect(getUserVehicleThresholdMeters(10)).toBe(50);
     expect(getUserVehicleThresholdMeters(80)).toBe(90);
+  });
+
+  test('shows a soft at-stop status when a real-time bus is near the boarding stop', () => {
+    const result = evaluateBoardingBusDepartureStatus({
+      hasArrived: true,
+      matchQuality: 'trip_id',
+      vehicleStopDistance: 28,
+    });
+
+    expect(result.status).toBe('at_stop');
+    expect(result.confidence).toBeGreaterThan(0.6);
+  });
+
+  test('warns when the matched real-time bus was at the stop and then moves away', () => {
+    const result = evaluateBoardingBusDepartureStatus({
+      hasArrived: true,
+      locationAccuracy: 18,
+      matchQuality: 'trip_id',
+      previousSnapshot: {
+        vehicleCorridorProgress: 4,
+        vehicleStopDistance: 34,
+      },
+      vehicleCorridorDistance: 12,
+      vehicleCorridorProgress: 64,
+      vehicleStopDistance: 122,
+    });
+
+    expect(result.status).toBe('likely_departed');
+    expect(result.confidence).toBeGreaterThanOrEqual(0.72);
+    expect(result.signals.vehicleDepartedStop).toBe(true);
+    expect(result.signals.vehicleProgressingAlongCorridor).toBe(true);
+  });
+
+  test('does not warn on route-nearest matches because the vehicle identity is uncertain', () => {
+    const result = evaluateBoardingBusDepartureStatus({
+      matchQuality: 'route_nearest',
+      previousSnapshot: {
+        vehicleCorridorProgress: 4,
+        vehicleStopDistance: 34,
+      },
+      vehicleCorridorDistance: 12,
+      vehicleCorridorProgress: 64,
+      vehicleStopDistance: 122,
+    });
+
+    expect(result.status).toBe('none');
+  });
+
+  test('does not show bus-is-here when the matched bus is downstream but departure is still far away', () => {
+    const nowMs = new Date('2026-05-01T12:00:00Z').getTime();
+
+    expect(shouldTreatBusAsArrivedAtBoarding({
+      matchQuality: 'trip_id',
+      nowMs,
+      scheduledDeparture: nowMs + 12 * 60 * 1000,
+      stopsAway: 0,
+      vehicleStopDistance: 240,
+    })).toBe(false);
+  });
+
+  test('shows bus-is-here when the scheduled boarding time is within one minute', () => {
+    const nowMs = new Date('2026-05-01T12:00:00Z').getTime();
+
+    expect(shouldTreatBusAsArrivedAtBoarding({
+      matchQuality: 'trip_id',
+      nowMs,
+      scheduledDeparture: nowMs + 60 * 1000,
+      stopsAway: 0,
+      vehicleStopDistance: 240,
+    })).toBe(true);
+  });
+
+  test('shows bus-is-here when the vehicle is physically at the boarding stop', () => {
+    const nowMs = new Date('2026-05-01T12:00:00Z').getTime();
+
+    expect(shouldTreatBusAsArrivedAtBoarding({
+      matchQuality: 'route_nearest',
+      nowMs,
+      scheduledDeparture: nowMs + 12 * 60 * 1000,
+      stopsAway: 0,
+      vehicleStopDistance: 32,
+    })).toBe(true);
   });
 });

@@ -11,7 +11,7 @@ describe('runtimeConfig', () => {
     jest.resetModules();
   });
 
-  test('flags missing production startup configuration as critical', () => {
+  test('uses built-in public config fallback when production env is missing', () => {
     process.env.NODE_ENV = 'production';
     delete process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
     delete process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -22,12 +22,12 @@ describe('runtimeConfig', () => {
 
     const { default: runtimeConfig, hasCriticalStartupIssues } = loadRuntimeConfig();
 
-    expect(hasCriticalStartupIssues).toBe(true);
-    expect(runtimeConfig.startup.criticalIssues[0]).toContain('EXPO_PUBLIC_FIREBASE_API_KEY');
-    expect(runtimeConfig.startup.criticalIssues[0]).toContain('EXPO_PUBLIC_API_PROXY_URL');
+    expect(hasCriticalStartupIssues).toBe(false);
+    expect(runtimeConfig.firebase.isConfigured).toBe(true);
+    expect(runtimeConfig.proxy.apiBaseUrl).toBe('https://apiproxy-r7pziiwpua-uc.a.run.app');
   });
 
-  test('adds a follow-up issue when Google sign-in config is absent', () => {
+  test('uses built-in Google sign-in fallback when Google env is absent', () => {
     process.env.NODE_ENV = 'production';
     process.env.EXPO_PUBLIC_FIREBASE_API_KEY = 'firebase-key';
     process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN = 'barrie.firebaseapp.com';
@@ -40,9 +40,8 @@ describe('runtimeConfig', () => {
     const { default: runtimeConfig, hasCriticalStartupIssues } = loadRuntimeConfig();
 
     expect(hasCriticalStartupIssues).toBe(false);
-    expect(runtimeConfig.startup.followUpIssues).toContain(
-      'Google sign-in is disabled for this build because EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not configured.'
-    );
+    expect(runtimeConfig.startup.followUpIssues).toEqual([]);
+    expect(runtimeConfig.googleAuth.webClientId).toContain('.apps.googleusercontent.com');
   });
 
   test('reads detour feature defaults from public env flags', () => {

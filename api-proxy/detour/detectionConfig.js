@@ -1,0 +1,119 @@
+const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '75');
+const OFF_ROUTE_THRESHOLD_METERS = Number.isFinite(configuredThreshold) && configuredThreshold > 0
+  ? configuredThreshold
+  : 75;
+
+const configuredOnRouteThreshold = Number.parseFloat(process.env.DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS || '40');
+const ON_ROUTE_CLEAR_THRESHOLD_METERS =
+  Number.isFinite(configuredOnRouteThreshold) && configuredOnRouteThreshold > 0
+    ? configuredOnRouteThreshold
+    : 40;
+
+const configuredClearGraceMs = Number.parseFloat(process.env.DETOUR_CLEAR_GRACE_MS || '600000');
+const DETOUR_CLEAR_GRACE_MS =
+  Number.isFinite(configuredClearGraceMs) && configuredClearGraceMs >= 0
+    ? configuredClearGraceMs
+    : 600_000;
+
+const workerMode = String(process.env.DETOUR_WORKER_MODE || 'interval').trim().toLowerCase();
+const defaultClearConsecutiveOnRoute = workerMode === 'scheduled' ? 4 : 6;
+const configuredClearConsecutive = Number.parseInt(
+  process.env.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE || String(defaultClearConsecutiveOnRoute),
+  10
+);
+const DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE =
+  Number.isFinite(configuredClearConsecutive) && configuredClearConsecutive > 0
+    ? configuredClearConsecutive
+    : defaultClearConsecutiveOnRoute;
+
+const configuredNoVehicleTimeoutMs = Number.parseFloat(
+  process.env.DETOUR_NO_VEHICLE_TIMEOUT_MS || String(30 * 60 * 1000)
+);
+const DETOUR_NO_VEHICLE_TIMEOUT_MS =
+  Number.isFinite(configuredNoVehicleTimeoutMs) && configuredNoVehicleTimeoutMs > 0
+    ? configuredNoVehicleTimeoutMs
+    : 30 * 60 * 1000;
+
+const configuredConsecutiveReadings = Number.parseInt(process.env.DETOUR_CONSECUTIVE_READINGS || '4', 10);
+const CONSECUTIVE_READINGS_REQUIRED =
+  Number.isFinite(configuredConsecutiveReadings) && configuredConsecutiveReadings > 0
+    ? configuredConsecutiveReadings
+    : 4;
+
+const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+const configuredMinUniqueVehicles = Number.parseInt(process.env.DETOUR_MIN_UNIQUE_VEHICLES || '1', 10);
+const DEFAULT_MIN_VEHICLES_FOR_DETOUR =
+  Number.isFinite(configuredMinUniqueVehicles) && configuredMinUniqueVehicles > 0
+    ? configuredMinUniqueVehicles
+    : 1;
+
+const configuredEvidenceWindowMs = Number.parseFloat(
+  process.env.DETOUR_EVIDENCE_WINDOW_MS || String(15 * 60 * 1000)
+);
+const EVIDENCE_WINDOW_MS =
+  Number.isFinite(configuredEvidenceWindowMs) && configuredEvidenceWindowMs > 0
+    ? configuredEvidenceWindowMs
+    : 15 * 60 * 1000;
+
+const configuredPersistConsecutiveMatches = Number.parseInt(
+  process.env.DETOUR_PERSIST_CONSECUTIVE_MATCHES || '10',
+  10
+);
+const DETOUR_PERSIST_CONSECUTIVE_MATCHES =
+  Number.isFinite(configuredPersistConsecutiveMatches) && configuredPersistConsecutiveMatches > 0
+    ? configuredPersistConsecutiveMatches
+    : 10;
+
+const configuredPersistMinAgeMs = Number.parseFloat(
+  process.env.DETOUR_PERSIST_MIN_AGE_MS || String(5 * 60 * 60 * 1000)
+);
+const DETOUR_PERSIST_MIN_AGE_MS =
+  Number.isFinite(configuredPersistMinAgeMs) && configuredPersistMinAgeMs > 0
+    ? configuredPersistMinAgeMs
+    : 5 * 60 * 60 * 1000;
+
+const SERVICE_START_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_START_HOUR || '5', 10);
+const SERVICE_END_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_END_HOUR || '1', 10);
+const SERVICE_TIMEZONE = process.env.DETOUR_SERVICE_TIMEZONE || 'America/Toronto';
+
+const BASE_ROUTE_DETECTOR_CONFIG = Object.freeze({
+  offRouteThresholdMeters: OFF_ROUTE_THRESHOLD_METERS,
+  onRouteClearThresholdMeters: ON_ROUTE_CLEAR_THRESHOLD_METERS,
+  consecutiveReadingsRequired: CONSECUTIVE_READINGS_REQUIRED,
+  clearConsecutiveOnRoute: DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
+  clearGraceMs: DETOUR_CLEAR_GRACE_MS,
+  noVehicleTimeoutMs: DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  evidenceWindowMs: EVIDENCE_WINDOW_MS,
+});
+
+function isWithinServiceHours(nowMs) {
+  const d = new Date(nowMs);
+  const hour = Number.parseInt(
+    d.toLocaleString('en-US', { timeZone: SERVICE_TIMEZONE, hour: 'numeric', hour12: false }),
+    10
+  );
+  if (SERVICE_START_HOUR > SERVICE_END_HOUR) {
+    return hour >= SERVICE_START_HOUR || hour < SERVICE_END_HOUR;
+  }
+  return hour >= SERVICE_START_HOUR && hour < SERVICE_END_HOUR;
+}
+
+module.exports = {
+  OFF_ROUTE_THRESHOLD_METERS,
+  ON_ROUTE_CLEAR_THRESHOLD_METERS,
+  DETOUR_CLEAR_GRACE_MS,
+  DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
+  DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  CONSECUTIVE_READINGS_REQUIRED,
+  STALE_VEHICLE_TIMEOUT_MS,
+  DEFAULT_MIN_VEHICLES_FOR_DETOUR,
+  EVIDENCE_WINDOW_MS,
+  DETOUR_PERSIST_CONSECUTIVE_MATCHES,
+  DETOUR_PERSIST_MIN_AGE_MS,
+  SERVICE_START_HOUR,
+  SERVICE_END_HOUR,
+  SERVICE_TIMEZONE,
+  BASE_ROUTE_DETECTOR_CONFIG,
+  isWithinServiceHours,
+};

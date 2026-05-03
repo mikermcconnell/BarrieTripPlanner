@@ -28,6 +28,7 @@ export const userFirestoreService = {
             serviceAlerts: true,
             tripReminders: true,
             nearbyAlerts: false,
+            transitNews: false,
           },
           preferences: {
             defaultMapType: 'standard',

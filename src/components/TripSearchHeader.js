@@ -16,6 +16,9 @@ import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } fro
 
 const PICKER_TO_HOOK = { now: 'now', depart: 'departAt', arrive: 'arriveBy' };
 const HOOK_TO_PICKER = { now: 'now', departAt: 'depart', arriveBy: 'arrive' };
+const FIELD_INDICATOR_WIDTH = 20;
+const FIELD_INDICATOR_GAP = SPACING.xs;
+const FIELD_ACTION_GUTTER = 40;
 
 const TripSearchHeader = ({
   fromText,
@@ -27,6 +30,7 @@ const TripSearchHeader = ({
   onSwap,
   onClose,
   onUseCurrentLocation,
+  showUseCurrentLocation = true,
   isLoading = false,
   fromSuggestions = [],
   toSuggestions = [],
@@ -40,7 +44,6 @@ const TripSearchHeader = ({
   onSelectedTimeChange,
   onSearch,
 }) => {
-  void isLoading;
   void showFromSuggestions;
   void showToSuggestions;
 
@@ -67,7 +70,7 @@ const TripSearchHeader = ({
             <View style={styles.fromDot} />
             <View style={styles.connectorLine} />
           </View>
-          <View style={[styles.fieldWrapper, { zIndex: 2 }]}>
+          <View style={[styles.fieldWrapper, styles.fieldWrapperWithActionGutter, { zIndex: 2 }]}>
             <AddressAutocomplete
               value={fromText}
               onChangeText={onFromChange}
@@ -76,19 +79,23 @@ const TripSearchHeader = ({
               inputStyle={styles.input}
               accessibilityLabel="Starting location"
               accessibilityHint="Enter an address to search"
-              rightIcon={
-                <TouchableOpacity
-                  style={styles.locationButton}
-                  onPress={onUseCurrentLocation}
-                  accessibilityLabel="Use current location"
-                  accessibilityRole="button"
-                >
-                  <Icon name="LocateFixed" size={20} color={COLORS.primary} strokeWidth={2.5} />
-                </TouchableOpacity>
-              }
             />
           </View>
         </View>
+
+        {showUseCurrentLocation && onUseCurrentLocation && (
+          <View style={styles.useLocationRow}>
+            <TouchableOpacity
+              style={styles.useLocationButton}
+              onPress={() => onUseCurrentLocation()}
+              accessibilityLabel="Use current location"
+              accessibilityRole="button"
+            >
+              <Icon name="LocateFixed" size={16} color={COLORS.primary} strokeWidth={2.5} />
+              <Text style={styles.useLocationText}>Use current location</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {isTypingFrom && fromSuggestions.length === 0 && (
           <View style={styles.typingIndicator}>
@@ -102,7 +109,7 @@ const TripSearchHeader = ({
           <View style={styles.fieldIndicator}>
             <View style={styles.toDot} />
           </View>
-          <View style={[styles.fieldWrapper, { zIndex: 1, paddingRight: 40 }]}>
+          <View style={[styles.fieldWrapper, styles.fieldWrapperWithActionGutter, { zIndex: 1 }]}>
             <AddressAutocomplete
               value={toText}
               onChangeText={onToChange}
@@ -134,24 +141,45 @@ const TripSearchHeader = ({
       </View>
 
       {/* Time picker (Leave Now / Depart At / Arrive By) */}
-      <TimePicker
-        value={selectedTime || new Date()}
-        mode={HOOK_TO_PICKER[timeMode] || 'now'}
-        onChange={(newTime, pickerMode) => {
-          const hookMode = PICKER_TO_HOOK[pickerMode] || 'now';
-          if (onTimeModeChange) onTimeModeChange(hookMode);
-          if (hookMode === 'now') {
-            onSelectedTimeChange && onSelectedTimeChange(null);
-          } else {
-            onSelectedTimeChange && onSelectedTimeChange(newTime);
-          }
-        }}
-      />
+      <View style={styles.timePickerAligned}>
+        <TimePicker
+          value={selectedTime || new Date()}
+          mode={HOOK_TO_PICKER[timeMode] || 'now'}
+          onChange={(newTime, pickerMode) => {
+            const hookMode = PICKER_TO_HOOK[pickerMode] || 'now';
+            if (onTimeModeChange) onTimeModeChange(hookMode);
+            if (hookMode === 'now') {
+              onSelectedTimeChange && onSelectedTimeChange(null);
+            } else {
+              onSelectedTimeChange && onSelectedTimeChange(newTime);
+            }
+          }}
+        />
+      </View>
+
+      {isLoading && (
+        <View
+          style={styles.planningStatus}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Planning your trip"
+          accessibilityLiveRegion="polite"
+        >
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.planningStatusText}>Planning your trip…</Text>
+        </View>
+      )}
 
       {/* Search button (shown for non-'now' modes) */}
       {timeMode !== 'now' && onSearch && (
-        <TouchableOpacity style={styles.searchBtn} onPress={onSearch} accessibilityLabel="Search trips" accessibilityRole="button">
-          <Text style={styles.searchBtnText}>Search</Text>
+        <TouchableOpacity
+          style={[styles.searchBtn, isLoading && styles.searchBtnDisabled]}
+          onPress={onSearch}
+          disabled={isLoading}
+          accessibilityLabel="Search trips"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isLoading, busy: isLoading }}
+        >
+          <Text style={styles.searchBtnText}>{isLoading ? 'Searching…' : 'Search'}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -185,7 +213,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.grey100,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -198,9 +226,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xxs,
   },
   fieldIndicator: {
-    width: 20,
+    width: FIELD_INDICATOR_WIDTH,
     alignItems: 'center',
-    marginRight: SPACING.xs,
+    marginRight: FIELD_INDICATOR_GAP,
   },
   fromDot: {
     width: 10,
@@ -223,6 +251,9 @@ const styles = StyleSheet.create({
   fieldWrapper: {
     flex: 1,
   },
+  fieldWrapperWithActionGutter: {
+    paddingRight: FIELD_ACTION_GUTTER,
+  },
   input: {
     backgroundColor: COLORS.grey100,
     borderRadius: BORDER_RADIUS.sm,
@@ -230,11 +261,46 @@ const styles = StyleSheet.create({
     height: 38,
     fontSize: FONT_SIZES.sm,
   },
-  locationButton: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
+  useLocationRow: {
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginRight: FIELD_ACTION_GUTTER,
+    marginBottom: SPACING.xs,
+    alignItems: 'flex-start',
+  },
+  useLocationButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
+    minHeight: 34,
+    paddingVertical: SPACING.xxs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  useLocationText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
+  },
+  timePickerAligned: {
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginRight: FIELD_ACTION_GUTTER,
+  },
+  planningStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginTop: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primarySubtle,
+    gap: SPACING.xs,
+  },
+  planningStatusText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primaryDark,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
   swapButton: {
     position: 'absolute',
@@ -244,12 +310,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    ...SHADOWS.small,
   },
   searchBtn: {
     backgroundColor: COLORS.primary,
@@ -257,6 +320,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     marginLeft: 'auto',
+  },
+  searchBtnDisabled: {
+    opacity: 0.75,
   },
   searchBtnText: {
     color: COLORS.white,

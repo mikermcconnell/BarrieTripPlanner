@@ -63,18 +63,24 @@ async function publishNews(items) {
       body: item.body,
       date: item.date,
       affectedRoutes: item.affectedRoutes,
+      affectsAllRoutes: Boolean(item.affectsAllRoutes),
       url: item.url,
+      source: item.source || null,
+      sourceUrl: item.sourceUrl || null,
       updatedAt: now,
       archivedAt: null,
     };
 
     try {
       if (isNew) {
-        doc.publishedAt = now;
+        doc.publishedAt = item.publishedAt ?? now;
         await db.collection(COLLECTION).doc(item.id).set(doc);
         knownNewsIds.add(item.id);
         newItems.push(item);
       } else {
+        if (item.publishedAt != null) {
+          doc.publishedAt = item.publishedAt;
+        }
         await db.collection(COLLECTION).doc(item.id).update(doc);
       }
     } catch (err) {

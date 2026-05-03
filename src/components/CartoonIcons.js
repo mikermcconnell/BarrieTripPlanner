@@ -12100,10 +12100,49 @@ z" />
   </Svg>
 );
 
-// BusStop — vertical pole with horizontal bar at top
-export const BusStop = ({ size = 24, color = '#172B4D' }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path d="M12 2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6m0-12h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6m0-12v12m0 2v6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+// BusStop — cartoon roadside stop sign
+export const BusStop = ({ size = 24, color = '#172B4D', ...props }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+    <Path
+      d="M7.25 21.1C8.2 20.5 10 20.2 12 20.2C14 20.2 15.8 20.5 16.75 21.1C15.95 21.7 8.05 21.7 7.25 21.1Z"
+      fill="#DDE8D2"
+    />
+    <Path
+      d="M12 10.9V20"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M8.45 21H15.55"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M6.85 3.25C9.75 2.75 14.2 2.75 17.15 3.25C18.2 3.45 18.95 4.35 18.95 5.4V10.35C18.95 11.35 18.25 12.2 17.3 12.4C14 13.05 10 13.05 6.7 12.4C5.75 12.2 5.05 11.35 5.05 10.35V5.4C5.05 4.35 5.8 3.45 6.85 3.25Z"
+      fill={color}
+    />
+    <Path
+      d="M7.35 4.65C9.9 4.25 14.1 4.25 16.65 4.65C17.1 4.75 17.45 5.15 17.45 5.65V10.1C17.45 10.55 17.15 10.9 16.7 11C13.85 11.5 10.15 11.5 7.3 11C6.85 10.9 6.55 10.55 6.55 10.1V5.65C6.55 5.15 6.9 4.75 7.35 4.65Z"
+      fill="#FFCC4D"
+    />
+    <Path
+      d="M8.35 7.6C8.35 6.75 8.95 6.15 9.8 6.15H14.2C15.05 6.15 15.65 6.75 15.65 7.6V8.75C15.65 9.35 15.2 9.8 14.6 9.8H9.4C8.8 9.8 8.35 9.35 8.35 8.75V7.6Z"
+      fill={color}
+    />
+    <Path
+      d="M9.3 7.15H11.35V8.25H9.3V7.15ZM12.65 7.15H14.7V8.25H12.65V7.15Z"
+      fill="#F7FBFF"
+    />
+    <Circle cx={9.85} cy={9.75} r={0.45} fill="#F7FBFF" />
+    <Circle cx={14.15} cy={9.75} r={0.45} fill="#F7FBFF" />
+    <Path
+      d="M16.2 4.95C16.75 5.1 17.05 5.45 17.05 5.95V6.45"
+      stroke="#FFE9A8"
+      strokeWidth={1}
+      strokeLinecap="round"
+    />
   </Svg>
 );
 

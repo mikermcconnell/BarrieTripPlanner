@@ -11,8 +11,43 @@ import { buildTransitStopProgress } from '../utils/transitStopUtils';
 const formatStopName = (stop) => {
   if (!stop) return '';
   const code = stop.stopCode || stop.stopId;
-  return code ? `${stop.name} (#${code})` : stop.name;
+  const name = stop.name || 'this stop';
+  return code ? `${name} (#${code})` : name;
 };
+
+const isTransitMode = (leg) => leg.mode === 'BUS' || leg.mode === 'TRANSIT';
+const isOnDemandMode = (leg) => leg.mode === 'ON_DEMAND' || leg.isOnDemand;
+
+const getStopCountLabel = (count) => {
+  if (!Number.isFinite(count)) return 'ride to your stop';
+  if (count === 0) return 'direct to your stop';
+  if (count === 1) return '1 stop before yours';
+  return `${count} stops before yours`;
+};
+
+const getWalkingTitle = (leg) => {
+  const code = leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code;
+  if (code) return `Walk to Stop #${code}`;
+  return `Walk to ${leg?.to?.name || 'your destination'}`;
+};
+
+const getWalkingIconName = (leg) => (
+  leg?.to?.stopCode || leg?.to?.stopId || leg?.to?.code ? 'BusStop' : 'Walk'
+);
+
+const getDetourWarningTone = (detourImpact) => (
+  detourImpact?.severity === 'stop_affected'
+    ? {
+      backgroundColor: COLORS.errorSubtle,
+      borderColor: COLORS.error,
+      color: COLORS.error,
+    }
+    : {
+      backgroundColor: COLORS.warningSubtle,
+      borderColor: COLORS.warning,
+      color: COLORS.warning,
+    }
+);
 
 const TripStep = ({ leg, isFirst, isLast }) => {
   const startTime = formatTimeFromTimestamp(leg.startTime);
@@ -21,8 +56,16 @@ const TripStep = ({ leg, isFirst, isLast }) => {
   const distance = formatDistance(leg.distance);
 
   const isWalk = leg.mode === 'WALK';
-  const isBus = leg.mode === 'BUS' || leg.mode === 'TRANSIT';
+  const isBus = isTransitMode(leg);
+  const isOnDemand = isOnDemandMode(leg);
+  const routeColor = leg.route?.color || COLORS.primary;
   const transitStopProgress = isBus ? buildTransitStopProgress(leg) : null;
+  const destinationName = leg.to?.name || 'your destination';
+  const originName = leg.from?.name || (isOnDemand ? 'Pickup' : 'your start point');
+  const routeShortName = leg.route?.shortName || 'Bus';
+  const routeDirection = leg.headsign || leg.route?.longName;
+  const rideStopCount = transitStopProgress?.totalStopsBetween ?? 0;
+  const detourTone = getDetourWarningTone(leg.detourImpact);
 
   // Get delay info
   const isRealtime = leg.isRealtime || false;
@@ -33,7 +76,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
       {/* Timeline */}
       <View style={styles.timeline}>
         <View style={[styles.dot, isFirst && styles.dotFirst]} />
-        {!isLast && <View style={[styles.line, isBus && { backgroundColor: leg.route?.color || COLORS.primary }]} />}
+        {!isLast && <View style={[styles.line, isBus && { backgroundColor: routeColor }]} />}
       </View>
 
       {/* Content */}
@@ -45,30 +88,65 @@ const TripStep = ({ leg, isFirst, isLast }) => {
             {isBus && <DelayIndicator delaySeconds={delaySeconds} isRealtime={isRealtime} />}
           </View>
           <Text style={styles.location} numberOfLines={1}>
-            {formatStopName(leg.from)}
+            {formatStopName(leg.from) || originName}
           </Text>
         </View>
 
         {/* Step Details */}
-        <View style={[styles.stepCard, isBus && styles.stepCardBus]}>
+        <View
+          style={[
+            styles.stepCard,
+            isBus && styles.stepCardBus,
+            isBus && { borderLeftColor: routeColor },
+            isOnDemand && styles.stepCardOnDemand,
+          ]}
+        >
           {isWalk ? (
-            <View style={styles.walkContent}>
-              <Icon name="Walk" size={20} color={COLORS.textSecondary} />
-              <View style={styles.walkDetails}>
-                <Text style={styles.stepTitle}>Walk {distance}</Text>
-                <Text style={styles.stepSubtitle}>{duration}</Text>
+            <View>
+              <View style={styles.walkContent}>
+                <Icon name={getWalkingIconName(leg)} size={22} color={COLORS.textSecondary} />
+                <View style={styles.walkDetails}>
+                  <Text style={styles.stepTitle}>{getWalkingTitle(leg)}</Text>
+                  <Text style={styles.stepSubtitle}>{distance} • about {duration}</Text>
+                  {leg.to?.name && (leg.to?.stopCode || leg.to?.stopId || leg.to?.code) ? (
+                    <Text style={styles.stepMetaLine} numberOfLines={1}>
+                      {leg.to.name}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             </View>
-          ) : (
+          ) : isOnDemand ? (
+            <View style={styles.busContent}>
+              <View style={[styles.routeBadge, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+                <Icon name="Phone" size={16} color={COLORS.white} />
+              </View>
+              <View style={styles.busDetails}>
+                <Text style={styles.stepTitle}>Book on-demand ride</Text>
+                <Text style={styles.stepSubtitle}>
+                  {duration} • {leg.zoneName || 'on-demand zone'}
+                </Text>
+                <Text style={styles.stepMetaLine} numberOfLines={1}>
+                  Pickup at {formatStopName(leg.from) || originName}
+                </Text>
+                <Text style={styles.stepMetaLine} numberOfLines={1}>
+                  Drop off at {formatStopName(leg.to) || destinationName}
+                </Text>
+                {leg.bookingPhone ? (
+                  <Text style={styles.stepMetaLine}>Call {leg.bookingPhone} to book</Text>
+                ) : null}
+              </View>
+            </View>
+          ) : isBus ? (
             <View style={styles.busContent}>
               <View
-                style={[styles.routeBadge, { backgroundColor: leg.route?.color || COLORS.primary }]}
+                style={[styles.routeBadge, { backgroundColor: routeColor }]}
               >
-                <Text style={[styles.routeText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
+                <Text style={[styles.routeText, { color: getContrastTextColor(routeColor) }]}>{routeShortName}</Text>
               </View>
               <View style={styles.busDetails}>
                 <View style={styles.busTitleRow}>
-                  <Text style={styles.stepTitle}>{leg.headsign || leg.route?.longName || 'Bus'}</Text>
+                  <Text style={styles.stepTitle}>Board Route {routeShortName}</Text>
                   {isRealtime && (
                     <View style={styles.realtimeIndicator}>
                       <View style={styles.realtimeDot} />
@@ -77,18 +155,54 @@ const TripStep = ({ leg, isFirst, isLast }) => {
                   )}
                 </View>
                 <Text style={styles.stepSubtitle}>
-                  {duration} • {transitStopProgress?.totalStopsBetween || 0} stops between
+                  {routeDirection ? `Toward ${routeDirection} • ` : ''}{duration}
                 </Text>
                 {leg.from?.name ? (
                   <Text style={styles.stepMetaLine} numberOfLines={1}>
                     Board at {formatStopName(leg.from)}
                   </Text>
                 ) : null}
+                <Text style={styles.stepMetaLine} numberOfLines={1}>
+                  Stay on bus: {getStopCountLabel(rideStopCount)}
+                </Text>
                 {leg.to?.name ? (
                   <Text style={styles.stepMetaLine} numberOfLines={1}>
                     Get off at {formatStopName(leg.to)}
                   </Text>
                 ) : null}
+                {leg.detourImpact ? (
+                  <View style={[
+                    styles.detourWarning,
+                    {
+                      backgroundColor: detourTone.backgroundColor,
+                      borderColor: detourTone.borderColor,
+                    },
+                  ]}>
+                    <Icon name="Warning" size={14} color={detourTone.color} />
+                    <View style={styles.detourWarningTextWrap}>
+                      <Text style={[styles.detourWarningText, { color: detourTone.color }]}>
+                        {leg.detourImpact.message}
+                      </Text>
+                      {leg.detourImpact.affectedStopNames?.length ? (
+                        <Text
+                          style={[styles.detourWarningMeta, { color: detourTone.color }]}
+                          numberOfLines={2}
+                        >
+                          Affected: {leg.detourImpact.affectedStopNames.slice(0, 2).join(', ')}
+                          {leg.detourImpact.affectedStopNames.length > 2 ? ' +' : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.walkContent}>
+              <Icon name="Route" size={20} color={COLORS.textSecondary} />
+              <View style={styles.walkDetails}>
+                <Text style={styles.stepTitle}>Continue to {destinationName}</Text>
+                <Text style={styles.stepSubtitle}>{duration}</Text>
               </View>
             </View>
           )}
@@ -98,7 +212,7 @@ const TripStep = ({ leg, isFirst, isLast }) => {
         {isBus && leg.intermediateStops && leg.intermediateStops.length > 0 && (
           <View style={styles.intermediateStops}>
             <Text style={styles.intermediateTitle}>
-              Stops: {leg.intermediateStops.map((s) => formatStopName(s)).slice(0, 3).join(' → ')}
+              On bus: {leg.intermediateStops.map((s) => formatStopName(s)).slice(0, 3).join(' → ')}
               {leg.intermediateStops.length > 3 && ` + ${leg.intermediateStops.length - 3} more`}
             </Text>
           </View>
@@ -182,6 +296,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
   },
+  stepCardOnDemand: {
+    backgroundColor: COLORS.primarySubtle,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
   walkContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -195,7 +314,7 @@ const styles = StyleSheet.create({
   },
   busContent: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   routeBadge: {
     paddingHorizontal: SPACING.sm,
@@ -257,6 +376,26 @@ const styles = StyleSheet.create({
   intermediateTitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+  },
+  detourWarning: {
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.xs,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.xs,
+  },
+  detourWarningTextWrap: {
+    flex: 1,
+  },
+  detourWarningText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  detourWarningMeta: {
+    fontSize: FONT_SIZES.xxs,
+    marginTop: 2,
   },
 });
 

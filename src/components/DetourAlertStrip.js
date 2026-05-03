@@ -23,11 +23,19 @@ const DetourAlertStrip = ({
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, routeIds, topOffset, getRouteName,
-    visibleIds, overflowCount, countText, shouldRender,
+    expanded, toggleExpanded, routeIds, routeGroups, topOffset, getRouteName,
+    getDetourStatusLabel, visibleIds, overflowCount, countText, shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
+
+  const handleCollapsedPress = () => {
+    if (routeIds.length === 1) {
+      onPress?.(routeIds[0]);
+      return;
+    }
+    toggleExpanded();
+  };
 
   return (
     <View
@@ -42,11 +50,15 @@ const DetourAlertStrip = ({
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
       <TouchableOpacity
         style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
-        onPress={toggleExpanded}
+        onPress={handleCollapsedPress}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? 'Collapse detour list' : 'Expand detour list'}
-        accessibilityHint={countText}
+        accessibilityLabel={
+          routeIds.length === 1
+            ? `Open Route ${getRouteName(routeIds[0])} detour details`
+            : expanded ? 'Collapse detour list' : 'Expand detour list'
+        }
+        accessibilityHint={routeIds.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
         <Icon name="Warning" size={16} color={COLORS.warning} />
         <Text style={styles.countText} numberOfLines={1}>
@@ -54,16 +66,16 @@ const DetourAlertStrip = ({
         </Text>
         {!inline && (
           <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
-            {routeIds.slice(0, 3).map((routeId) => {
-              const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+            {routeGroups.slice(0, 3).map((group) => {
+              const color = ROUTE_COLORS[group.firstRouteId] || ROUTE_COLORS.DEFAULT;
               return (
-                <View key={routeId} style={[styles.routePill, { backgroundColor: color }]}>
-                  <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+                <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
+                  <Text style={styles.routePillText}>{group.displayName}</Text>
                 </View>
               );
             })}
-            {routeIds.length > 3 && (
-              <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
+            {routeGroups.length > 3 && (
+              <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
             )}
           </View>
         )}
@@ -95,7 +107,7 @@ const DetourAlertStrip = ({
                   <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
                 </View>
                 <Text style={styles.detailLabel} numberOfLines={1}>
-                  Route {getRouteName(routeId)} — {isClearPending ? 'Clearing...' : 'On detour'}
+                  Route {getRouteName(routeId)} — {getDetourStatusLabel(routeId)}
                 </Text>
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>

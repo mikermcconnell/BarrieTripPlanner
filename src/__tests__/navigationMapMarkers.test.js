@@ -4,6 +4,10 @@ const {
 } = require('../utils/navigationMapMarkers');
 
 describe('navigationMapMarkers', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('formats stop labels with stop codes when available', () => {
     expect(
       formatNavigationLocationLabel({ name: 'Downtown Terminal', stopCode: '1020' }, 'Fallback')
@@ -43,6 +47,7 @@ describe('navigationMapMarkers', () => {
         type: 'walk-start',
         title: '440 TIFFIN ST',
         caption: 'Started here',
+        detail: null,
       },
       {
         id: 'walk-target-stop-0',
@@ -51,8 +56,75 @@ describe('navigationMapMarkers', () => {
         type: 'walk-target-stop',
         title: 'Ferndale at Tiffin (#837)',
         caption: 'Board here',
+        detail: null,
       },
     ]);
+  });
+
+  test('adds boarding-stop ETA detail when a bus is on the way', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-20T12:00:00Z'));
+
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { name: 'Origin', lat: 44.3801, lon: -79.7021 },
+          to: { name: 'Boarding stop', lat: 44.381, lon: -79.703 },
+        },
+        {
+          mode: 'BUS',
+          from: { name: 'Grizzlies Way at Duckworth', stopCode: '245', lat: 44.3814, lon: -79.7042 },
+          to: { name: 'Downtown Terminal', stopCode: '1020', lat: 44.39, lon: -79.69 },
+        },
+      ],
+    };
+
+    const markers = buildWalkingLandmarkMarkers({
+      itinerary,
+      currentLeg: itinerary.legs[0],
+      currentLegIndex: 0,
+      nextTransitLeg: itinerary.legs[1],
+      nextTransitProximity: {
+        estimatedArrival: new Date('2026-03-20T12:04:00Z'),
+        hasArrived: false,
+      },
+    });
+
+    expect(markers[1]).toEqual(expect.objectContaining({
+      detail: 'Bus in 4 min',
+    }));
+  });
+
+  test('shows that the bus is here when the next bus has arrived', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { name: 'Origin', lat: 44.3801, lon: -79.7021 },
+          to: { name: 'Boarding stop', lat: 44.381, lon: -79.703 },
+        },
+        {
+          mode: 'BUS',
+          from: { name: 'Grizzlies Way at Duckworth', stopCode: '245', lat: 44.3814, lon: -79.7042 },
+          to: { name: 'Downtown Terminal', stopCode: '1020', lat: 44.39, lon: -79.69 },
+        },
+      ],
+    };
+
+    const markers = buildWalkingLandmarkMarkers({
+      itinerary,
+      currentLeg: itinerary.legs[0],
+      currentLegIndex: 0,
+      nextTransitLeg: itinerary.legs[1],
+      nextTransitProximity: {
+        estimatedArrival: new Date('2026-03-20T12:00:00Z'),
+        hasArrived: true,
+      },
+    });
+
+    expect(markers[1]).toEqual(expect.objectContaining({
+      detail: 'Bus is here',
+    }));
   });
 
   test('falls back to the current leg start for later walking legs', () => {
@@ -90,7 +162,8 @@ describe('navigationMapMarkers', () => {
         longitude: -79.69,
         type: 'walk-start',
         title: 'Downtown Terminal (#1020)',
-        caption: 'Walk starts',
+        caption: 'Get off here',
+        detail: null,
       },
       {
         id: 'walk-target-destination-2',
@@ -98,7 +171,8 @@ describe('navigationMapMarkers', () => {
         longitude: -79.6881,
         type: 'walk-target-destination',
         title: '24 Maple Ave',
-        caption: 'Destination',
+        caption: 'Walk here',
+        detail: null,
       },
     ]);
   });

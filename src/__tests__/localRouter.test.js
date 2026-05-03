@@ -190,14 +190,36 @@ jest.mock('../services/itineraryBuilder', () => ({
     const transitLegs = result.path.filter((p) => p.type === 'TRANSIT');
     const tripIds = transitLegs.map((t) => t.tripId);
     const boardingTimes = transitLegs.map((t) => t.boardingTime);
+    const startSeconds = Math.min(...boardingTimes);
+    const endSeconds = result.arrivalTime;
+    const baseTime = new Date(opts.date);
+    baseTime.setHours(0, 0, 0, 0);
+    const startTime = baseTime.getTime() + startSeconds * 1000;
+    const endTime = baseTime.getTime() + endSeconds * 1000;
     return {
       id: `itin-${tripIds.join('-')}`,
       tripIds,
       boardingTimes,
+      duration: endSeconds - startSeconds,
+      startTime,
+      endTime,
+      transfers: Math.max(0, transitLegs.length - 1),
+      walkDistance: 0,
       arrivalTime: result.arrivalTime,
       walkToDestSeconds: result.walkToDestSeconds,
       destinationStopId: result.destinationStopId,
-      legs: result.path,
+      legs: result.path.map((segment) => (
+        segment.type === 'TRANSIT'
+          ? {
+              mode: 'BUS',
+              startTime: baseTime.getTime() + segment.boardingTime * 1000,
+              endTime: baseTime.getTime() + segment.alightingTime * 1000,
+              duration: segment.alightingTime - segment.boardingTime,
+              tripId: segment.tripId,
+              routeId: segment.routeId,
+            }
+          : segment
+      )),
     };
   },
 }));
@@ -415,5 +437,117 @@ describe('localRouter — edge cases', () => {
     expect(result.itineraries).toHaveLength(1);
     expect(result.itineraries[0].tripIds).toContain('trip-overnight');
     expect(result.itineraries[0].boardingTimes[0]).toBe(89280);
+  });
+
+  test('keeps a rider-best direct candidate discovered after the first three arrivals', async () => {
+    const serviceId = 'weekday';
+    const stops = {
+      O: makeStop('O', 44.389, -79.700, 'Origin Stop'),
+      X1: makeStop('X1', 44.394, -79.690, 'Transfer Alight'),
+      X2: makeStop('X2', 44.3941, -79.6899, 'Transfer Board'),
+      D: makeStop('D', 44.400, -79.680, 'Destination Stop'),
+    };
+    const trips = {
+      'transfer-a-1': { routeId: '1', directionId: 0, serviceId, headsign: 'Transfer' },
+      'transfer-a-2': { routeId: '2', directionId: 0, serviceId, headsign: 'Destination' },
+      'transfer-b-1': { routeId: '1', directionId: 0, serviceId, headsign: 'Transfer' },
+      'transfer-b-2': { routeId: '2', directionId: 0, serviceId, headsign: 'Destination' },
+      'transfer-c-1': { routeId: '1', directionId: 0, serviceId, headsign: 'Transfer' },
+      'transfer-c-2': { routeId: '2', directionId: 0, serviceId, headsign: 'Destination' },
+      'direct-trip': { routeId: '10', directionId: 0, serviceId, headsign: 'Direct' },
+    };
+    const tripStopTimes = {
+      'transfer-a-1': [
+        { stopId: 'O', arrivalTime: 36060, departureTime: 36060 },
+        { stopId: 'X1', arrivalTime: 36360, departureTime: 36360 },
+      ],
+      'transfer-a-2': [
+        { stopId: 'X2', arrivalTime: 36480, departureTime: 36480 },
+        { stopId: 'D', arrivalTime: 37200, departureTime: 37200 },
+      ],
+      'transfer-b-1': [
+        { stopId: 'O', arrivalTime: 36120, departureTime: 36120 },
+        { stopId: 'X1', arrivalTime: 36420, departureTime: 36420 },
+      ],
+      'transfer-b-2': [
+        { stopId: 'X2', arrivalTime: 36540, departureTime: 36540 },
+        { stopId: 'D', arrivalTime: 37260, departureTime: 37260 },
+      ],
+      'transfer-c-1': [
+        { stopId: 'O', arrivalTime: 36180, departureTime: 36180 },
+        { stopId: 'X1', arrivalTime: 36480, departureTime: 36480 },
+      ],
+      'transfer-c-2': [
+        { stopId: 'X2', arrivalTime: 36600, departureTime: 36600 },
+        { stopId: 'D', arrivalTime: 37320, departureTime: 37320 },
+      ],
+      'direct-trip': [
+        { stopId: 'O', arrivalTime: 36300, departureTime: 36300 },
+        { stopId: 'D', arrivalTime: 37380, departureTime: 37380 },
+      ],
+    };
+    const stopDepartures = {};
+    Object.entries(tripStopTimes).forEach(([tripId, stopTimes]) => {
+      stopTimes.forEach((stopTime) => {
+        stopDepartures[stopTime.stopId] = stopDepartures[stopTime.stopId] || [];
+        stopDepartures[stopTime.stopId].push({
+          tripId,
+          routeId: trips[tripId].routeId,
+          directionId: trips[tripId].directionId,
+          serviceId,
+          departureTime: stopTime.departureTime,
+          headsign: trips[tripId].headsign,
+          pickupType: 0,
+        });
+      });
+    });
+    Object.values(stopDepartures).forEach((departures) => {
+      departures.sort((a, b) => a.departureTime - b.departureTime);
+    });
+    const stopTimesIndex = {};
+    Object.entries(tripStopTimes).forEach(([tripId, stopTimes]) => {
+      stopTimes.forEach((stopTime) => {
+        stopTimesIndex[`${tripId}_${stopTime.stopId}`] = {
+          arrivalTime: stopTime.arrivalTime,
+          departureTime: stopTime.departureTime,
+        };
+      });
+    });
+
+    const result = await planTripLocal({
+      fromLat: 44.389,
+      fromLon: -79.700,
+      toLat: 44.400,
+      toLon: -79.680,
+      date: new Date('2025-06-11T00:00:00'),
+      time: new Date('2025-06-11T10:00:00'),
+      arriveBy: false,
+      routingData: {
+        stops,
+        stopIndex: stops,
+        stopDepartures,
+        stopTimesIndex,
+        routeStopSequences: {
+          1: { 0: ['O', 'X1'] },
+          2: { 0: ['X2', 'D'] },
+          10: { 0: ['O', 'D'] },
+        },
+        stopRoutes: {
+          O: new Set(['1', '10']),
+          X1: new Set(['1']),
+          X2: new Set(['2']),
+          D: new Set(['2', '10']),
+        },
+        transfers: {
+          X1: [{ toStopId: 'X2', walkSeconds: 60, walkMeters: 70 }],
+        },
+        serviceCalendar: {},
+        tripIndex: trips,
+      },
+    });
+
+    expect(result.itineraries.length).toBeLessThanOrEqual(ROUTING_CONFIG.MAX_ITINERARIES);
+    expect(result.itineraries[0].tripIds).toEqual(['direct-trip']);
+    expect(result.itineraries.map((itinerary) => itinerary.tripIds.join('|'))).toContain('direct-trip');
   });
 });

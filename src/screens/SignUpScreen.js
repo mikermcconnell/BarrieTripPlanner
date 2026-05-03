@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../config/theme';
 import Icon from '../components/Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SignUpScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { signUp } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -68,7 +71,11 @@ const SignUpScreen = ({ navigation }) => {
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={{ paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) }}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.logoContainer}>
             <Icon name="Bus" size={48} color={COLORS.primary} style={{ marginBottom: SPACING.xs }} />
             <Text style={styles.subtitle}>Create your account</Text>

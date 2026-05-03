@@ -112,8 +112,12 @@ Follow the repo-local hierarchy:
 
 - App tests live under `src/**/__tests__`
 - Backend tests live under `api-proxy/__tests__`
-- Root Jest and backend Jest are separate test surfaces, but the root test run can still discover backend tests
+- Root Jest ignores `api-proxy/` so app and backend test runs stay separate
 - Tests are mostly unit / integration style with mocked network, Firebase, time, and storage dependencies
+- Primary commands:
+  - `npm test` / `npm run test:app`
+  - `npm run test:api`
+  - `npm run test:all`
 
 ## Known fragile / non-obvious areas
 

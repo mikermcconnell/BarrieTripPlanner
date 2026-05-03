@@ -16,11 +16,12 @@ const MapTapPopup = ({
   onDirectionsFrom,
   onDirectionsTo,
   onClose,
+  bottomInset = 0,
 }) => {
   if (!visible || !coordinate) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { bottom: 120 + bottomInset }]}>
       <View style={styles.popup}>
         {/* Close button */}
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>

@@ -7,14 +7,16 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
 import Icon from '../components/Icon';
-import SurveyTeaser from '../components/survey/SurveyTeaser';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const ProfileScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { user, isAuthenticated, favorites, tripHistory, signOut } = useAuth();
 
   const handleSignOut = () => {
@@ -43,7 +45,7 @@ const ProfileScreen = ({ navigation }) => {
       icon: 'Clock',
       title: 'Trip History',
       subtitle: `${tripHistory.length} recent trips`,
-      onPress: () => Alert.alert('Coming Soon', 'Trip history details coming soon'),
+      onPress: () => navigation.navigate('TripHistory'),
     },
     {
       id: 'alerts',
@@ -104,7 +106,10 @@ const ProfileScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) }}
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
         </View>
@@ -172,11 +177,6 @@ const ProfileScreen = ({ navigation }) => {
             </View>
           </View>
         )}
-
-        {/* Survey Teaser */}
-        <SurveyTeaser
-          onPress={() => navigation.navigate('Survey')}
-        />
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>{menuItems.map(renderMenuItem)}</View>

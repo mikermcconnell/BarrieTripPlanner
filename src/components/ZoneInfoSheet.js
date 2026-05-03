@@ -1,9 +1,11 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { isZoneOperating, formatZoneHours } from '../utils/zoneUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -37,6 +39,8 @@ const StopIcon = ({ size = 16, color = COLORS.textSecondary }) => (
 );
 
 const ZoneInfoSheet = ({ zone, onClose, onDirectionsToHub }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const snapPoints = useMemo(() => ['30%', '55%', '90%'], []);
 
@@ -99,7 +103,12 @@ const ZoneInfoSheet = ({ zone, onClose, onDirectionsToHub }) => {
         </TouchableOpacity>
       </View>
 
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         {zone.bookingPhone && (
           <TouchableOpacity style={styles.bookingRow} onPress={handleCallBooking} activeOpacity={0.7}>
             <PhoneIcon size={18} color={COLORS.primary} />

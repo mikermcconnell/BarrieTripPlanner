@@ -4,6 +4,7 @@ import {
   buildDetourRoadSummary,
   extractRoadName,
   getDetourLookupPoints,
+  getPrecomputedDetourRoadNames,
 } from '../utils/detourRoadSummary';
 
 export const useDetourRoadSummary = ({ detour, enabled = true }) => {
@@ -17,7 +18,16 @@ export const useDetourRoadSummary = ({ detour, enabled = true }) => {
     enabled ? getDetourLookupPoints(detour) : []
   ), [detour, enabled]);
 
+  const precomputedRoadNames = useMemo(() => (
+    enabled ? getPrecomputedDetourRoadNames(detour) : []
+  ), [detour, enabled]);
+
   useEffect(() => {
+    if (precomputedRoadNames.length > 0) {
+      setState({ roadNames: precomputedRoadNames, loading: false });
+      return undefined;
+    }
+
     if (!enabled || lookupPoints.length === 0) {
       setState({ roadNames: [], loading: false });
       return undefined;
@@ -52,7 +62,7 @@ export const useDetourRoadSummary = ({ detour, enabled = true }) => {
     return () => {
       cancelled = true;
     };
-  }, [enabled, lookupPoints]);
+  }, [enabled, lookupPoints, precomputedRoadNames]);
 
   return state;
 };

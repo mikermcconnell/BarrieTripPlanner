@@ -10,6 +10,7 @@ jest.mock('../config/firebase', () => ({
 const {
   normalizeDetourCoordinate,
   normalizeDetourPolyline,
+  normalizeRoadNames,
   normalizeDetourSegment,
   mapActiveDetourDoc,
 } = require('../services/firebase/detourService');
@@ -54,6 +55,13 @@ describe('detourService normalization helpers', () => {
     ]);
   });
 
+  test('normalizes road names', () => {
+    expect(normalizeRoadNames(['Yonge Street', '', null, ' Big Bay Point Road '])).toEqual([
+      'Yonge Street',
+      'Big Bay Point Road',
+    ]);
+  });
+
   test('normalizes nested detour segments', () => {
     expect(
       normalizeDetourSegment({
@@ -68,6 +76,12 @@ describe('detourService normalization helpers', () => {
           { latitude: 44.381, longitude: -79.691 },
           { lat: 44.389, lon: -79.681 },
         ],
+        likelyDetourPolyline: [
+          { latitude: 44.382, longitude: -79.692 },
+          { lat: 44.388, lon: -79.682 },
+        ],
+        likelyDetourRoadNames: ['Yonge Street'],
+        roadMatchConfidence: 'high',
       })
     ).toEqual({
       shapeId: 'shape-8a',
@@ -81,6 +95,14 @@ describe('detourService normalization helpers', () => {
         { latitude: 44.381, longitude: -79.691 },
         { latitude: 44.389, longitude: -79.681 },
       ],
+      likelyDetourPolyline: [
+        { latitude: 44.382, longitude: -79.692 },
+        { latitude: 44.388, longitude: -79.682 },
+      ],
+      likelyDetourRoadNames: ['Yonge Street'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: null,
+      detourPathLabel: 'Likely detour path',
     });
   });
 });
@@ -101,6 +123,12 @@ describe('mapActiveDetourDoc', () => {
         { latitude: 44.381, longitude: -79.691 },
         { lat: 44.389, lon: -79.681 },
       ],
+      likelyDetourPolyline: [
+        { latitude: 44.382, longitude: -79.692 },
+        { lat: 44.388, lon: -79.682 },
+      ],
+      likelyDetourRoadNames: ['Yonge Street', 'Big Bay Point Road'],
+      roadMatchConfidence: 'high',
       segments: [
         {
           shapeId: 'shape-8a-a',
@@ -114,6 +142,11 @@ describe('mapActiveDetourDoc', () => {
             { latitude: 44.381, longitude: -79.691 },
             { latitude: 44.389, longitude: -79.681 },
           ],
+          likelyDetourPolyline: [
+            { latitude: 44.382, longitude: -79.692 },
+            { latitude: 44.388, longitude: -79.682 },
+          ],
+          likelyDetourRoadNames: ['Yonge Street'],
         },
       ],
     });
@@ -128,20 +161,37 @@ describe('mapActiveDetourDoc', () => {
       { latitude: 44.381, longitude: -79.691 },
       { latitude: 44.389, longitude: -79.681 },
     ]);
+    expect(mapped.likelyDetourPolyline).toEqual([
+      { latitude: 44.382, longitude: -79.692 },
+      { latitude: 44.388, longitude: -79.682 },
+    ]);
+    expect(mapped.likelyDetourRoadNames).toEqual(['Yonge Street', 'Big Bay Point Road']);
+    expect(mapped.roadMatchConfidence).toBe('high');
+    expect(mapped.detourPathLabel).toBe('Likely detour path');
     expect(mapped.segments).toHaveLength(1);
     expect(mapped.segments[0].entryPoint).toEqual({ latitude: 44.38, longitude: -79.69 });
     expect(mapped.segments[0].exitPoint).toEqual({ latitude: 44.39, longitude: -79.68 });
+    expect(mapped.segments[0].likelyDetourPolyline).toEqual([
+      { latitude: 44.382, longitude: -79.692 },
+      { latitude: 44.388, longitude: -79.682 },
+    ]);
+    expect(mapped.segments[0].likelyDetourRoadNames).toEqual(['Yonge Street']);
   });
 
   test('normalized mixed-format detours still produce overlays', () => {
     const activeDetours = {
       '8A': mapActiveDetourDoc('8A', {
         state: 'active',
+        confidence: 'high',
         skippedSegmentPolyline: [
           { lat: 44.38, lon: -79.69 },
           { latitude: 44.39, longitude: -79.68 },
         ],
         inferredDetourPolyline: [
+          { lat: 44.381, lon: -79.691 },
+          { latitude: 44.389, longitude: -79.681 },
+        ],
+        likelyDetourPolyline: [
           { lat: 44.381, lon: -79.691 },
           { latitude: 44.389, longitude: -79.681 },
         ],
@@ -163,7 +213,7 @@ describe('mapActiveDetourDoc', () => {
       { latitude: 44.38, longitude: -79.69 },
       { latitude: 44.39, longitude: -79.68 },
     ]);
-    expect(overlays[0].inferredDetourPolyline).toEqual([
+    expect(overlays[0].likelyDetourPolyline).toEqual([
       { latitude: 44.381, longitude: -79.691 },
       { latitude: 44.389, longitude: -79.681 },
     ]);

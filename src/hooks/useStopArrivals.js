@@ -8,14 +8,19 @@ import { useState, useCallback, useEffect } from 'react';
 import { useTransitStatic } from '../context/TransitContext';
 import { fetchTripUpdates, getArrivalsForStop } from '../services/arrivalService';
 
-export const useStopArrivals = (stop) => {
+export const useStopArrivals = (stop, options = {}) => {
+  const { initialDelayMs = 0 } = options;
   const { routes, tripMapping } = useTransitStatic();
   const [arrivals, setArrivals] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(stop));
   const [error, setError] = useState(null);
 
   const loadArrivals = useCallback(async () => {
-    if (!stop) return;
+    if (!stop) {
+      setArrivals([]);
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -33,12 +38,22 @@ export const useStopArrivals = (stop) => {
   }, [stop, routes, tripMapping]);
 
   useEffect(() => {
-    loadArrivals();
+    if (!stop) {
+      setArrivals([]);
+      setIsLoading(false);
+      return undefined;
+    }
+
+    setIsLoading(true);
+    const timeout = setTimeout(loadArrivals, Math.max(0, initialDelayMs));
 
     // Refresh every 30 seconds
     const interval = setInterval(loadArrivals, 30000);
-    return () => clearInterval(interval);
-  }, [loadArrivals]);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [initialDelayMs, loadArrivals, stop]);
 
   return { arrivals, isLoading, error, loadArrivals };
 };

@@ -2,9 +2,9 @@
   "expo": {
     "name": "My Barrie Transit",
     "slug": "barrie-transit-planner",
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "barrie-transit",
@@ -32,10 +32,10 @@
       }
     },
     "android": {
-      "versionCode": 8,
+      "versionCode": 16,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#0c8ce5"
       },
       "package": "com.barrietransit.planner",
       "googleServicesFile": "./google-services.json",
@@ -46,7 +46,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/app-icon-favicon.png"
     },
     "plugins": [
       [

@@ -2,7 +2,7 @@ const { getDb } = require('./firebaseAdmin');
 
 const COLLECTION = 'baselineShapes';
 const META_DOC = '_meta';
-const AUTO_INIT = process.env.BASELINE_AUTO_INIT !== 'false'; // default true
+const AUTO_INIT = process.env.BASELINE_AUTO_INIT === 'true'; // default false
 
 let baselineCache = null;
 let hydratePromise = null;
@@ -24,6 +24,14 @@ function serializeShapes(shapes, routeShapeMapping) {
     docs[routeId] = { routeId, shapeIds: [...shapeIds], shapes: routeShapes };
   }
   return docs;
+}
+
+function countRouteShapes(routeShapeMapping) {
+  let shapeCount = 0;
+  for (const shapeIds of routeShapeMapping.values()) {
+    shapeCount += Array.isArray(shapeIds) ? shapeIds.length : 0;
+  }
+  return shapeCount;
 }
 
 function deserializeDocs(routeDocs) {
@@ -97,8 +105,8 @@ async function ensureHydrated(liveData) {
       }
 
       if (AUTO_INIT && liveData && liveData.shapes && liveData.routeShapeMapping) {
-        console.log('[baselineManager] No baseline in Firestore — auto-initializing from live GTFS');
-        await setBaseline(liveData);
+        console.warn('[baselineManager] No baseline in Firestore — auto-initializing from live GTFS');
+        await setBaseline(liveData, { source: 'auto-init' });
       }
     })();
   }
@@ -121,7 +129,40 @@ async function getBaselineData(liveData) {
   };
 }
 
-async function setBaseline(liveData) {
+function getBaselineReadiness(status = getBaselineStatus()) {
+  if (!status.loaded) {
+    return {
+      readyForDetours: false,
+      reason: 'baseline_not_loaded',
+      message: 'No stored baseline route shapes are loaded.',
+    };
+  }
+
+  if (status.source === 'live-fallback') {
+    return {
+      readyForDetours: false,
+      reason: 'using_live_gtfs_fallback',
+      message: 'Detector would compare buses against current live GTFS, which may already include active detours.',
+    };
+  }
+
+  if (status.source === 'auto-init') {
+    return {
+      readyForDetours: false,
+      reason: 'baseline_auto_initialized_from_live_gtfs',
+      message: 'Baseline was auto-created from current live GTFS and may already include active detours.',
+    };
+  }
+
+  return {
+    readyForDetours: true,
+    reason: 'stored_baseline_loaded',
+    message: 'Stored baseline route shapes are loaded.',
+  };
+}
+
+async function setBaseline(liveData, options = {}) {
+  const source = options.source || 'manual-live';
   const now = new Date().toISOString();
   const routeDocs = serializeShapes(liveData.shapes, liveData.routeShapeMapping);
   const routeCount = Object.keys(routeDocs).length;
@@ -145,7 +186,7 @@ async function setBaseline(liveData) {
         if (i === 0) {
           batch.set(db.collection(COLLECTION).doc(META_DOC), {
             createdAt: now,
-            source: 'setBaseline',
+            source,
             routeCount,
             shapeCount,
           });
@@ -159,7 +200,61 @@ async function setBaseline(liveData) {
   }
 
   const { shapes, routeShapeMapping } = deserializeDocs(routeDocs);
-  baselineCache = { shapes, routeShapeMapping, loadedAt: now, source: 'setBaseline' };
+  baselineCache = { shapes, routeShapeMapping, loadedAt: now, source };
+}
+
+async function setBaselineRoutes(liveData, routeIds, options = {}) {
+  const normalizedRouteIds = [...new Set((routeIds || []).map((id) => String(id).trim()).filter(Boolean))];
+  if (normalizedRouteIds.length === 0) {
+    throw new Error('At least one routeId is required.');
+  }
+
+  await ensureHydrated(liveData);
+  if (!baselineCache) {
+    await setBaseline(liveData, options);
+    return;
+  }
+
+  const source = options.source || 'manual-route-update';
+  const now = new Date().toISOString();
+  const liveDocs = serializeShapes(liveData.shapes, liveData.routeShapeMapping);
+  const db = getDb();
+
+  for (const routeId of normalizedRouteIds) {
+    const doc = liveDocs[routeId];
+    if (!doc) {
+      throw new Error(`Route ${routeId} was not found in live GTFS.`);
+    }
+
+    baselineCache.routeShapeMapping.set(routeId, doc.shapeIds || []);
+    for (const [shapeId, pts] of Object.entries(doc.shapes || {})) {
+      baselineCache.shapes.set(
+        shapeId,
+        pts.map((p) => ({
+          latitude: p.lat,
+          longitude: p.lon,
+          sequence: p.seq,
+        }))
+      );
+    }
+
+    if (db) {
+      await db.collection(COLLECTION).doc(routeId).set(doc);
+    }
+  }
+
+  baselineCache.loadedAt = now;
+  baselineCache.source = source;
+
+  if (db) {
+    await db.collection(COLLECTION).doc(META_DOC).set({
+      createdAt: now,
+      source,
+      routeCount: baselineCache.routeShapeMapping.size,
+      shapeCount: countRouteShapes(baselineCache.routeShapeMapping),
+      updatedRoutes: normalizedRouteIds,
+    });
+  }
 }
 
 async function clearBaseline() {
@@ -188,15 +283,17 @@ async function clearBaseline() {
 
 function getBaselineStatus() {
   if (!baselineCache) {
-    return { loaded: false, loadedAt: null, source: null, routeCount: 0, shapeCount: 0 };
+    const status = { loaded: false, loadedAt: null, source: null, routeCount: 0, shapeCount: 0 };
+    return { ...status, ...getBaselineReadiness(status), autoInitEnabled: AUTO_INIT };
   }
-  return {
+  const status = {
     loaded: true,
     loadedAt: baselineCache.loadedAt,
     source: baselineCache.source,
     routeCount: baselineCache.routeShapeMapping.size,
     shapeCount: baselineCache.shapes.size,
   };
+  return { ...status, ...getBaselineReadiness(status), autoInitEnabled: AUTO_INIT };
 }
 
 function logShapeDivergence(liveData) {
@@ -248,8 +345,10 @@ function _resetForTesting() {
 module.exports = {
   getBaselineData,
   setBaseline,
+  setBaselineRoutes,
   clearBaseline,
   getBaselineStatus,
+  getBaselineReadiness,
   logShapeDivergence,
   _resetForTesting,
 };

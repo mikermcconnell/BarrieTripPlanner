@@ -37,6 +37,13 @@ export function normalizeDetourPolyline(polyline) {
   return normalized;
 }
 
+export function normalizeRoadNames(roadNames) {
+  if (!Array.isArray(roadNames)) return [];
+  return roadNames
+    .map((roadName) => String(roadName || '').trim())
+    .filter(Boolean);
+}
+
 export function normalizeDetourSegment(segment) {
   if (!segment || typeof segment !== 'object') return null;
 
@@ -46,6 +53,11 @@ export function normalizeDetourSegment(segment) {
     exitPoint: normalizeDetourCoordinate(segment.exitPoint),
     skippedSegmentPolyline: normalizeDetourPolyline(segment.skippedSegmentPolyline),
     inferredDetourPolyline: normalizeDetourPolyline(segment.inferredDetourPolyline),
+    likelyDetourPolyline: normalizeDetourPolyline(segment.likelyDetourPolyline),
+    likelyDetourRoadNames: normalizeRoadNames(segment.likelyDetourRoadNames),
+    roadMatchConfidence: segment.roadMatchConfidence ?? null,
+    roadMatchSource: segment.roadMatchSource ?? null,
+    detourPathLabel: segment.detourPathLabel ?? 'Likely detour path',
   };
 }
 
@@ -62,6 +74,12 @@ export function mapActiveDetourDoc(docId, data) {
       : [],
     skippedSegmentPolyline: normalizeDetourPolyline(data.skippedSegmentPolyline),
     inferredDetourPolyline: normalizeDetourPolyline(data.inferredDetourPolyline),
+    likelyDetourPolyline: normalizeDetourPolyline(data.likelyDetourPolyline),
+    likelyDetourRoadNames: normalizeRoadNames(data.likelyDetourRoadNames),
+    roadMatchConfidence: data.roadMatchConfidence ?? null,
+    roadMatchRawConfidence: data.roadMatchRawConfidence ?? null,
+    roadMatchSource: data.roadMatchSource ?? null,
+    detourPathLabel: data.detourPathLabel ?? 'Likely detour path',
     entryPoint: normalizeDetourCoordinate(data.entryPoint),
     exitPoint: normalizeDetourCoordinate(data.exitPoint),
     confidence: data.confidence ?? null,

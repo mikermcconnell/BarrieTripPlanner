@@ -11,43 +11,67 @@ import { useDetourAlertStrip } from '../hooks/useDetourAlertStrip';
  * All state and logic lives in useDetourAlertStrip; this file is rendering only.
  * Differs from native only in styles (boxShadow, cursor).
  */
-const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes = [], style }) => {
+const DetourAlertStrip = ({
+  activeDetours,
+  onPress,
+  alertBannerVisible,
+  routes = [],
+  style,
+  inline = false,
+}) => {
   const {
-    expanded, toggleExpanded, routeIds, topOffset, getRouteName,
-    visibleIds, overflowCount, countText, shouldRender,
+    expanded, toggleExpanded, routeIds, routeGroups, topOffset, getRouteName,
+    getDetourStatusLabel, visibleIds, overflowCount, countText, shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
 
+  const handleCollapsedPress = () => {
+    if (routeIds.length === 1) {
+      onPress?.(routeIds[0]);
+      return;
+    }
+    toggleExpanded();
+  };
+
   return (
     <View
-      style={[styles.container, { top: topOffset }, style]}
+      style={[
+        styles.container,
+        !inline && { top: topOffset },
+        inline && styles.containerInline,
+        style,
+      ]}
       pointerEvents="box-none"
     >
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
       <TouchableOpacity
-        style={styles.collapsedBar}
-        onPress={toggleExpanded}
+        style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
+        onPress={handleCollapsedPress}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={expanded ? 'Collapse detour list' : 'Expand detour list'}
-        accessibilityHint={countText}
+        accessibilityLabel={
+          routeIds.length === 1
+            ? `Open Route ${getRouteName(routeIds[0])} detour details`
+            : expanded ? 'Collapse detour list' : 'Expand detour list'
+        }
+        accessibilityHint={routeIds.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
         <Icon name="Warning" size={16} color={COLORS.warning} />
         <Text style={styles.countText} numberOfLines={1}>
           {countText}
         </Text>
-        <View style={styles.pillsRow}>
-          {routeIds.slice(0, 3).map((routeId) => {
-            const color = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+        <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
+          {routeGroups.slice(0, 3).map((group) => {
+            const color = ROUTE_COLORS[group.firstRouteId] || ROUTE_COLORS.DEFAULT;
             return (
-              <View key={routeId} style={[styles.routePill, { backgroundColor: color }]}>
-                <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+              <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
+                <Text style={styles.routePillText}>{group.displayName}</Text>
               </View>
             );
           })}
-          {routeIds.length > 3 && (
-            <Text style={styles.pillOverflow}>+{routeIds.length - 3}</Text>
+          {routeGroups.length > 3 && (
+            <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
           )}
         </View>
         <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
@@ -55,7 +79,7 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
 
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
-        <View style={styles.expandedPanel}>
+        <View style={[styles.expandedPanel, inline && styles.expandedPanelInline]}>
           {visibleIds.map((routeId) => {
             const routeColor = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
             const detour = activeDetours[routeId];
@@ -78,7 +102,7 @@ const DetourAlertStrip = ({ activeDetours, onPress, alertBannerVisible, routes =
                   <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
                 </View>
                 <Text style={styles.detailLabel} numberOfLines={1}>
-                  Route {getRouteName(routeId)} — {isClearPending ? 'Clearing...' : 'On detour'}
+                  Route {getRouteName(routeId)} — {getDetourStatusLabel(routeId)}
                 </Text>
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>
@@ -109,6 +133,12 @@ const styles = StyleSheet.create({
     right: SPACING.md,
     zIndex: 996,
   },
+  containerInline: {
+    position: 'relative',
+    left: undefined,
+    right: undefined,
+    flex: 1,
+  },
 
   // ── Collapsed bar ────────────────────────────────────────────────
   collapsedBar: {
@@ -125,6 +155,15 @@ const styles = StyleSheet.create({
     boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
     cursor: 'pointer',
   },
+  collapsedBarInline: {
+    alignSelf: 'stretch',
+    minHeight: 40,
+    borderLeftWidth: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.18)',
+    backgroundColor: 'rgba(255, 248, 236, 0.94)',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+  },
   countText: {
     flex: 1,
     fontSize: FONT_SIZES.sm,
@@ -136,6 +175,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  pillsRowInline: {
+    marginLeft: 'auto',
   },
   routePill: {
     paddingHorizontal: SPACING.sm,
@@ -170,6 +212,10 @@ const styles = StyleSheet.create({
     borderLeftColor: COLORS.warning,
     overflow: 'hidden',
     boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+  },
+  expandedPanelInline: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.14)',
   },
   detailRow: {
     flexDirection: 'row',

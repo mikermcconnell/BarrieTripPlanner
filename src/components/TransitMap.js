@@ -3,10 +3,17 @@ import { StyleSheet, View } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { MAP_CONFIG, ROUTE_COLORS, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SHADOWS } from '../config/theme';
+import {
+    WALKING_ROUTE_DOT_OUTLINE_COLOR,
+    WALKING_ROUTE_DOT_OUTLINE_WIDTH,
+    WALKING_ROUTE_DOT_PATTERN,
+    WALKING_ROUTE_DOT_STROKE_WIDTH,
+} from '../config/mapLineStyles';
 
 // Components
 import BusMarker from './BusMarker';
 import RoutePolyline from './RoutePolyline';
+import { resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 
 const TransitMapComponent = forwardRef(({
     displayedShapes,
@@ -19,6 +26,7 @@ const TransitMapComponent = forwardRef(({
     onRegionChange,
     onStopPress,
     getRouteColor,
+    showUserLocation = true,
 }, ref) => {
     const cameraRef = useRef(null);
 
@@ -52,6 +60,14 @@ const TransitMapComponent = forwardRef(({
         }
     };
 
+    const vehicleSnapPaths = useMemo(() => {
+        const map = new Map();
+        displayedVehicles.forEach((vehicle) => {
+            map.set(vehicle.id, resolveVehicleSnapPath(vehicle, displayedShapes));
+        });
+        return map;
+    }, [displayedVehicles, displayedShapes]);
+
     return (
         <MapLibreGL.MapView
             ref={ref}
@@ -67,7 +83,7 @@ const TransitMapComponent = forwardRef(({
                 ref={cameraRef}
                 defaultSettings={cameraDefaultSettings}
             />
-            <MapLibreGL.UserLocation visible={true} />
+            <MapLibreGL.UserLocation visible={showUserLocation} />
 
             {/* --- Line layers first (rendered below annotations) --- */}
 
@@ -89,9 +105,11 @@ const TransitMapComponent = forwardRef(({
                     id={`transit-trip-${route.id}`}
                     coordinates={route.coordinates}
                     color={route.color}
-                    strokeWidth={route.isWalk ? 6 : 10}
-                    lineDashPattern={route.isWalk ? [10, 5] : null}
+                    strokeWidth={route.isWalk ? WALKING_ROUTE_DOT_STROKE_WIDTH : 10}
+                    lineDashPattern={route.isWalk ? WALKING_ROUTE_DOT_PATTERN : null}
                     opacity={1}
+                    outlineColor={route.isWalk ? WALKING_ROUTE_DOT_OUTLINE_COLOR : undefined}
+                    outlineWidth={route.isWalk ? WALKING_ROUTE_DOT_OUTLINE_WIDTH : undefined}
                 />
             ))}
 
@@ -131,6 +149,7 @@ const TransitMapComponent = forwardRef(({
                     key={vehicle.id}
                     vehicle={vehicle}
                     color={getRouteColor(vehicle.routeId)}
+                    snapPath={vehicleSnapPaths.get(vehicle.id)}
                 />
             ))}
 

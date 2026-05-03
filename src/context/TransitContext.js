@@ -12,7 +12,7 @@ import {
   addNetworkListener,
 } from '../utils/offlineCache';
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
-import { subscribeToTransitNews } from '../services/firebase/newsService';
+import { subscribeToTransitNews, subscribeToTransitNewsImpacts } from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
@@ -21,7 +21,14 @@ import { getNotificationSettings, showLocalNotification } from '../services/noti
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
-import { diffDetourRouteIds } from '../utils/detourNotificationUtils';
+import {
+  diffDetourRouteIds,
+  filterHighConfidenceDetourRouteIds,
+  filterRelevantDetourRouteIds,
+} from '../utils/detourNotificationUtils';
+import { filterRiderVisibleDetours } from '../utils/detourVisibility';
+import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
+import { useAuth } from './AuthContext';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -51,6 +58,8 @@ export const useTransitRealtime = () => {
 };
 
 export const TransitProvider = ({ children }) => {
+  const { favorites } = useAuth();
+
   // Static GTFS data
   const [routes, setRoutes] = useState([]);
   const [stops, setStops] = useState([]);
@@ -99,9 +108,11 @@ export const TransitProvider = ({ children }) => {
   const prevDetourIdsRef = useRef(new Set());
   const detoursEnabledRef = useRef(detoursEnabled);
   const hasSeenInitialDetourSnapshotRef = useRef(false);
+  const favoriteRoutesRef = useRef([]);
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
+  const [transitNewsImpacts, setTransitNewsImpacts] = useState([]);
 
   // On-demand zones (server-side, via Firestore)
   const [onDemandZones, setOnDemandZones] = useState({});
@@ -128,6 +139,10 @@ export const TransitProvider = ({ children }) => {
   }, [detoursEnabled]);
 
   useEffect(() => {
+    favoriteRoutesRef.current = Array.isArray(favorites?.routes) ? favorites.routes : [];
+  }, [favorites?.routes]);
+
+  useEffect(() => {
     let isMounted = true;
 
     void (async () => {
@@ -140,6 +155,15 @@ export const TransitProvider = ({ children }) => {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  // Subscribe to parsed rider-facing impacts from transit news
+  useEffect(() => {
+    const unsubscribe = subscribeToTransitNewsImpacts(
+      (impacts) => setTransitNewsImpacts(impacts),
+      (error) => logger.error('News impacts subscription error:', error)
+    );
+    return () => unsubscribe();
   }, []);
 
   /**
@@ -557,17 +581,17 @@ export const TransitProvider = ({ children }) => {
   }, []);
 
   const activeDetours = useMemo(
-    () => (detoursEnabled ? detourFeed : {}),
+    () => (detoursEnabled ? filterRiderVisibleDetours(detourFeed) : {}),
     [detoursEnabled, detourFeed]
   );
 
   const isRouteDetouring = useCallback(
-    (routeId) => Boolean(activeDetours[routeId]),
+    (routeId) => routeIsDetouring(routeId, new Set(Object.keys(activeDetours))),
     [activeDetours]
   );
 
   const getRouteDetour = useCallback(
-    (routeId) => activeDetours[routeId] ?? null,
+    (routeId) => getRouteDetourFromMap(routeId, activeDetours),
     [activeDetours]
   );
 
@@ -581,8 +605,16 @@ export const TransitProvider = ({ children }) => {
       return;
     }
 
+    const relevantRouteIds = filterRelevantDetourRouteIds({
+      routeIds,
+      favoriteRoutes: favoriteRoutesRef.current,
+    });
+    if (relevantRouteIds.length === 0) {
+      return;
+    }
+
     await Promise.all(
-      routeIds.map((routeId) =>
+      relevantRouteIds.map((routeId) =>
         showLocalNotification({
           title: 'Route ' + routeId + ' Detour',
           body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
@@ -596,8 +628,9 @@ export const TransitProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
       (detourMap) => {
+        const riderVisibleDetourMap = filterRiderVisibleDetours(detourMap);
         const { nextIds, newRouteIds } = diffDetourRouteIds({
-          detourMap,
+          detourMap: riderVisibleDetourMap,
           prevIds: prevDetourIdsRef.current,
           hasSeenInitialSnapshot: hasSeenInitialDetourSnapshotRef.current,
         });
@@ -606,8 +639,13 @@ export const TransitProvider = ({ children }) => {
         prevDetourIdsRef.current = new Set(nextIds);
         setDetourFeed(detourMap);
 
-        if (newRouteIds.length > 0) {
-          void notifyNewDetours(newRouteIds);
+        const highConfidenceNewRouteIds = filterHighConfidenceDetourRouteIds({
+          routeIds: newRouteIds,
+          detourMap: riderVisibleDetourMap,
+        });
+
+        if (highConfidenceNewRouteIds.length > 0) {
+          void notifyNewDetours(highConfidenceNewRouteIds);
         }
       },
       (error) => logger.error('Detour subscription error:', error)
@@ -882,6 +920,7 @@ export const TransitProvider = ({ children }) => {
     isRouteDetouring,
     getRouteDetour,
     transitNews,
+    transitNewsImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,
@@ -903,6 +942,7 @@ export const TransitProvider = ({ children }) => {
     isRouteDetouring,
     getRouteDetour,
     transitNews,
+    transitNewsImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,

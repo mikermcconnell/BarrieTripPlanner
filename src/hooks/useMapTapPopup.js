@@ -6,6 +6,7 @@
  */
 import { useState, useCallback } from 'react';
 import { reverseGeocode } from '../services/locationIQService';
+import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
 
 export const useMapTapPopup = ({
   enterPlanningMode,
@@ -52,11 +53,12 @@ export const useMapTapPopup = ({
   // Use tapped location as trip destination
   const handleDirectionsTo = useCallback(() => {
     if (!mapTapLocation) return;
-    enterPlanningMode();
-    setTripTo(
-      { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude },
-      mapTapAddress || 'Selected location'
-    );
+    startTripToDestination({
+      destination: { lat: mapTapLocation.latitude, lon: mapTapLocation.longitude },
+      label: mapTapAddress || 'Selected location',
+      enterPlanningMode,
+      setTripTo,
+    });
     setMapTapLocation(null);
     setMapTapAddress('');
   }, [mapTapLocation, mapTapAddress, enterPlanningMode, setTripTo]);

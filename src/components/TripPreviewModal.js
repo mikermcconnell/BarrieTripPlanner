@@ -25,7 +25,17 @@ import {
 } from '../config/theme';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { getContrastTextColor } from '../utils/colorUtils';
+import { buildTransitStopProgress } from '../utils/transitStopUtils';
 import Icon from './Icon';
+
+const isOnDemandLeg = (leg) => leg.mode === 'ON_DEMAND' || leg.isOnDemand;
+const getPlaceName = (place, fallback) => place?.name || fallback;
+const getLegRouteColor = (leg) => leg.route?.color || leg.zoneColor || COLORS.primary;
+const getDetourPreviewLabel = (detourImpact) => (
+  detourImpact?.severity === 'stop_affected'
+    ? 'Stop may be affected by detour'
+    : 'Route is on detour'
+);
 
 const TripPreviewModal = ({
   visible,
@@ -40,9 +50,6 @@ const TripPreviewModal = ({
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
-
-  // Get transit legs for route display
-  const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
 
   return (
     <Modal
@@ -96,6 +103,15 @@ const TripPreviewModal = ({
                     <View style={styles.walkIcon}>
                       <Icon name="Walk" size={18} color={COLORS.white} />
                     </View>
+                  ) : isOnDemandLeg(leg) ? (
+                    <View
+                      style={[
+                        styles.busIcon,
+                        { backgroundColor: getLegRouteColor(leg) },
+                      ]}
+                    >
+                      <Icon name="Phone" size={16} color={COLORS.white} />
+                    </View>
                   ) : (
                     <View
                       style={[
@@ -125,7 +141,7 @@ const TripPreviewModal = ({
                         styles.stepDot,
                         index === 0 && styles.stepDotFirst,
                         leg.mode !== 'WALK' && {
-                          backgroundColor: leg.route?.color || COLORS.primary,
+                          backgroundColor: getLegRouteColor(leg),
                         },
                       ]}
                     />
@@ -134,7 +150,7 @@ const TripPreviewModal = ({
                         style={[
                           styles.stepLine,
                           leg.mode !== 'WALK' && {
-                            backgroundColor: leg.route?.color || COLORS.primary,
+                            backgroundColor: getLegRouteColor(leg),
                           },
                         ]}
                       />
@@ -149,10 +165,29 @@ const TripPreviewModal = ({
                     {leg.mode === 'WALK' ? (
                       <View style={styles.stepInfo}>
                         <Text style={styles.stepTitle}>
-                          Walk to {leg.to.name}
+                          Walk to {getPlaceName(leg.to, 'your next stop')}
                         </Text>
                         <Text style={styles.stepSubtitle}>
                           {formatDistance(leg.distance)} • {formatDuration(leg.duration)}
+                        </Text>
+                      </View>
+                    ) : isOnDemandLeg(leg) ? (
+                      <View style={styles.stepInfo}>
+                        <View style={styles.busStepHeader}>
+                          <View
+                            style={[
+                              styles.busStepBadge,
+                              { backgroundColor: getLegRouteColor(leg) },
+                            ]}
+                          >
+                            <Icon name="Phone" size={12} color={COLORS.white} />
+                          </View>
+                          <Text style={styles.stepTitle} numberOfLines={1}>
+                            Book on-demand ride
+                          </Text>
+                        </View>
+                        <Text style={styles.stepSubtitle}>
+                          Pickup: {getPlaceName(leg.from, 'pickup')} • Drop-off: {getPlaceName(leg.to, 'drop-off')}
                         </Text>
                       </View>
                     ) : (
@@ -173,8 +208,26 @@ const TripPreviewModal = ({
                           </Text>
                         </View>
                         <Text style={styles.stepSubtitle}>
-                          {leg.intermediateStops?.length || 0} stops • Get off at {leg.to.name}
+                          Board at {getPlaceName(leg.from, 'your stop')} • {buildTransitStopProgress(leg).totalStopsBetween} stops • Get off at {getPlaceName(leg.to, 'your stop')}
                         </Text>
+                        {leg.detourImpact ? (
+                          <View style={[
+                            styles.detourPill,
+                            leg.detourImpact.severity === 'stop_affected' && styles.detourPillSevere,
+                          ]}>
+                            <Icon
+                              name="Warning"
+                              size={12}
+                              color={leg.detourImpact.severity === 'stop_affected' ? COLORS.error : COLORS.warning}
+                            />
+                            <Text style={[
+                              styles.detourPillText,
+                              leg.detourImpact.severity === 'stop_affected' && styles.detourPillTextSevere,
+                            ]}>
+                              {getDetourPreviewLabel(leg.detourImpact)}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     )}
                   </View>
@@ -416,6 +469,28 @@ const styles = StyleSheet.create({
   busStepBadgeText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
+  },
+  detourPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.xs,
+    paddingVertical: 3,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.warningSubtle,
+  },
+  detourPillSevere: {
+    backgroundColor: COLORS.errorSubtle,
+  },
+  detourPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.warning,
+  },
+  detourPillTextSevere: {
+    color: COLORS.error,
   },
   actions: {
     flexDirection: 'row',

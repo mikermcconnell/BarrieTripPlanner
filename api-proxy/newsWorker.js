@@ -1,8 +1,9 @@
 const { fetchNewsItems } = require('./newsFetcher');
 const { publishNews, getKnownNewsIds } = require('./newsPublisher');
+const { publishNewsImpacts } = require('./newsImpactPublisher');
 const { notifyUsersOfNews } = require('./pushNotifier');
 
-const TICK_INTERVAL = 15 * 60 * 1000; // 15 minutes
+const TICK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
 
 let interval = null;
 let running = false;
@@ -18,6 +19,7 @@ async function tick() {
   try {
     const items = await fetchNewsItems();
     const newItems = await publishNews(items);
+    await publishNewsImpacts(items);
 
     if (newItems.length > 0) {
       await notifyUsersOfNews(newItems);
@@ -44,7 +46,7 @@ async function tick() {
 function start() {
   if (interval) return;
   running = true;
-  console.log('[newsWorker] Starting news polling loop (15min interval)');
+  console.log('[newsWorker] Starting news polling loop (6h interval)');
   tick();
   interval = setInterval(tick, TICK_INTERVAL);
 }
@@ -63,8 +65,9 @@ function getStatus() {
     lastSuccessfulTick,
     consecutiveFailureCount,
     lastItemCount,
+    tickIntervalMs: TICK_INTERVAL,
     knownNewsIds: [...getKnownNewsIds()],
   };
 }
 
-module.exports = { start, stop, getStatus };
+module.exports = { start, stop, getStatus, tick };

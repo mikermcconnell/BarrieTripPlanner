@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 // Import screens
 import HomeScreen from '../screens/HomeScreen';
@@ -16,6 +17,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import TripHistoryScreen from '../screens/TripHistoryScreen';
 import AlertsScreen from '../screens/AlertsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import NewsScreen from '../screens/NewsScreen';
@@ -71,6 +73,7 @@ const ProfileStack = () => (
     <Stack.Screen name="SignIn" component={SignInScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="SignUp" component={SignUpScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} />
+    <Stack.Screen name="TripHistory" component={TripHistoryScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="News" component={NewsScreen} />
     <Stack.Screen name="Survey" component={SurveyScreen} />
@@ -81,6 +84,15 @@ const ProfileStack = () => (
 // Main Tab Navigator
 const MainTabs = () => {
   const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
+  const bottomChromeLift = useAndroidBottomChromeLift();
+  const tabBarPaddingBottom = Math.max(bottomInset, 10);
+  const visibleTabBarStyle = {
+    ...styles.tabBar,
+    height: 72 + bottomInset,
+    marginBottom: bottomChromeLift,
+    paddingBottom: tabBarPaddingBottom,
+  };
 
   return (
     <Tab.Navigator
@@ -90,11 +102,7 @@ const MainTabs = () => {
         ),
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.grey500,
-        tabBarStyle: {
-          ...styles.tabBar,
-          height: 72 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-        },
+        tabBarStyle: visibleTabBarStyle,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
         headerShown: false,
@@ -109,7 +117,7 @@ const MainTabs = () => {
 
           return {
             tabBarLabel: 'Map',
-            tabBarStyle: hideTabBar ? { display: 'none' } : undefined,
+            tabBarStyle: hideTabBar ? { display: 'none' } : visibleTabBarStyle,
           };
         }}
       />

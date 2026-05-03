@@ -58,7 +58,7 @@ async function loadPersistentDetours() {
         });
       } catch (error) {
         console.error('[persistentDetourStore] Failed to hydrate persistent detours:', error.message);
-        throw error;
+        return {};
       }
       return records;
     })();
@@ -74,32 +74,36 @@ async function syncPersistentDetours(records = {}) {
     return;
   }
 
-  await loadPersistentDetours();
+  try {
+    await loadPersistentDetours();
 
-  const currentIds = new Set(Object.keys(records || {}));
-  const removedIds = [...lastSyncedIds].filter((routeId) => !currentIds.has(routeId));
+    const currentIds = new Set(Object.keys(records || {}));
+    const removedIds = [...lastSyncedIds].filter((routeId) => !currentIds.has(routeId));
 
-  for (const routeId of removedIds) {
-    await db.collection(COLLECTION).doc(routeId).delete();
-    lastSyncedIds.delete(routeId);
-  }
+    for (const routeId of removedIds) {
+      await db.collection(COLLECTION).doc(routeId).delete();
+      lastSyncedIds.delete(routeId);
+    }
 
-  for (const [routeId, rawRecord] of Object.entries(records || {})) {
-    if (!rawRecord?.fingerprint) continue;
-    const record = normalizeRecord(routeId, rawRecord);
-    await db.collection(COLLECTION).doc(routeId).set({
-      routeId,
-      fingerprint: record.fingerprint,
-      detectedAt: record.detectedAt,
-      learnedAt: record.learnedAt,
-      updatedAt: Date.now(),
-      lastSeenAt: record.lastSeenAt,
-      lastEvidenceAt: record.lastEvidenceAt,
-      triggerVehicleId: record.triggerVehicleId,
-      geometry: record.geometry,
-      detourZone: record.detourZone,
-    });
-    lastSyncedIds.add(routeId);
+    for (const [routeId, rawRecord] of Object.entries(records || {})) {
+      if (!rawRecord?.fingerprint) continue;
+      const record = normalizeRecord(routeId, rawRecord);
+      await db.collection(COLLECTION).doc(routeId).set({
+        routeId,
+        fingerprint: record.fingerprint,
+        detectedAt: record.detectedAt,
+        learnedAt: record.learnedAt,
+        updatedAt: Date.now(),
+        lastSeenAt: record.lastSeenAt,
+        lastEvidenceAt: record.lastEvidenceAt,
+        triggerVehicleId: record.triggerVehicleId,
+        geometry: record.geometry,
+        detourZone: record.detourZone,
+      });
+      lastSyncedIds.add(routeId);
+    }
+  } catch (error) {
+    console.error('[persistentDetourStore] Failed to sync persistent detours:', error.message);
   }
 }
 

@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSurveyAggregates } from '../hooks/useSurveyAggregates';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SurveyResultsScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const surveyId = route?.params?.surveyId;
   const { aggregates, loading } = useSurveyAggregates(surveyId);
 
@@ -53,7 +56,10 @@ const SurveyResultsScreen = ({ navigation, route }) => {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxxl, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Total responses badge */}

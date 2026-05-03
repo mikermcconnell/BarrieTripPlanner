@@ -8,7 +8,7 @@ describe('formatVehiclesForMap', () => {
   test('dedupes duplicate vehicle ids and keeps the newer snapshot', () => {
     const tripMapping = {
       tripA: { routeId: '100', headsign: 'Downtown' },
-      tripB: { routeId: '100', headsign: 'Waterfront' },
+      tripB: { routeId: '100', headsign: 'Waterfront', shapeId: 'shape-b' },
     };
 
     const vehicles = [
@@ -48,6 +48,7 @@ describe('formatVehiclesForMap', () => {
       tripId: 'tripB',
       routeId: '100',
       headsign: 'Waterfront',
+      shapeId: 'shape-b',
       currentStatus: 2,
       stopId: 'stop-2',
       coordinate: {
@@ -57,3 +58,4 @@ describe('formatVehiclesForMap', () => {
     });
   });
 });
+

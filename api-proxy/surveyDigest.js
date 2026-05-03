@@ -12,6 +12,7 @@
 const CONFIG_COLLECTION = 'surveyConfig';
 const RESPONSES_COLLECTION = 'surveyResponses';
 const AGGREGATES_COLLECTION = 'surveyAggregates';
+const { generateSurveyInsight, buildSurveyInsightHtml } = require('./surveyInsights');
 
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const DIGEST_RECIPIENTS = (process.env.SURVEY_DIGEST_RECIPIENTS || '')
@@ -31,7 +32,6 @@ async function generateAndSendDigest(db) {
     return { skipped: true, reason: 'No recipients configured' };
   }
 
-  // Find active survey
   const configSnapshot = await db
     .collection(CONFIG_COLLECTION)
     .where('isActive', '==', true)
@@ -45,11 +45,9 @@ async function generateAndSendDigest(db) {
   const surveyDoc = configSnapshot.docs[0];
   const survey = { id: surveyDoc.id, ...surveyDoc.data() };
 
-  // Get aggregates
   const aggDoc = await db.collection(AGGREGATES_COLLECTION).doc(survey.id).get();
   const aggregates = aggDoc.exists ? aggDoc.data() : null;
 
-  // Get responses from last 24 hours
   const since = Date.now() - 24 * 60 * 60 * 1000;
   const recentSnapshot = await db
     .collection(RESPONSES_COLLECTION)
@@ -62,14 +60,24 @@ async function generateAndSendDigest(db) {
   const recentCount = recentSnapshot.size;
   const recentResponses = recentSnapshot.docs.map((d) => d.data());
 
-  // Build email HTML
-  const html = buildDigestHtml(survey, aggregates, recentCount, recentResponses);
+  const insightResult = await generateSurveyInsight({
+    survey,
+    aggregates,
+    responses: recentResponses,
+    windowHours: 24,
+  });
+  const surveyInsight = insightResult.ok ? insightResult.insight : null;
 
-  // Send via Resend
+  if (surveyInsight) {
+    await db.collection('surveyInsights').doc(survey.id).set(surveyInsight, { merge: true });
+  }
+
+  const html = buildDigestHtml(survey, aggregates, recentCount, recentResponses, surveyInsight);
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -90,13 +98,11 @@ async function generateAndSendDigest(db) {
     recipients: DIGEST_RECIPIENTS.length,
     recentResponses: recentCount,
     totalResponses: aggregates?.totalResponses || 0,
+    surveyInsightGenerated: Boolean(surveyInsight),
   };
 }
 
-/**
- * Build the digest email HTML.
- */
-function buildDigestHtml(survey, aggregates, recentCount, recentResponses) {
+function buildDigestHtml(survey, aggregates, recentCount, recentResponses, surveyInsight = null) {
   const totalResponses = aggregates?.totalResponses || 0;
   const stats = aggregates?.questionStats || {};
   const questions = survey.questions || [];
@@ -136,7 +142,6 @@ function buildDigestHtml(survey, aggregates, recentCount, recentResponses) {
     }
   }
 
-  // Recent open text feedback
   let recentFeedbackHtml = '';
   const openTextQuestions = questions.filter((q) => q.type === 'open_text').map((q) => q.id);
   const recentTexts = [];
@@ -182,6 +187,7 @@ function buildDigestHtml(survey, aggregates, recentCount, recentResponses) {
         <tbody>${statsHtml}</tbody>
       </table>
 
+      ${buildSurveyInsightHtml(surveyInsight)}
       ${recentFeedbackHtml}
 
       <p style="color:#A5ADBA;font-size:12px;margin-top:32px;border-top:1px solid #EBECF0;padding-top:12px;">

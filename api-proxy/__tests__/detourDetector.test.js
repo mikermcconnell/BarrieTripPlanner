@@ -6,6 +6,8 @@ const {
   getDetourEvidence,
   getPersistentDetours,
   hydratePersistentDetours,
+  serializeDetectorRuntimeState,
+  hydrateRuntimeState,
   CONSECUTIVE_READINGS_REQUIRED,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
@@ -617,6 +619,41 @@ describe('minimum unique vehicle env config', () => {
       jest.resetModules();
     }
   });
+
+  test('current DETOUR_MIN_UNIQUE_VEHICLES overrides weaker persisted runtime state', () => {
+    const originalMinVehicles = process.env.DETOUR_MIN_UNIQUE_VEHICLES;
+
+    try {
+      process.env.DETOUR_MIN_UNIQUE_VEHICLES = '2';
+      jest.resetModules();
+
+      const detector = require('../detourDetector');
+      detector.clearVehicleState();
+      detector.hydrateRuntimeState({
+        version: 1,
+        savedAt: Date.now(),
+        minVehiclesForDetour: 1,
+        vehicles: [],
+        routes: [],
+      });
+
+      const vehicle = makeVehicle({ id: 'persisted-threshold-bus-1', coordinate: OFF_ROUTE_COORD });
+      let result = {};
+      for (let i = 0; i < detector.CONSECUTIVE_READINGS_REQUIRED + 2; i++) {
+        result = detector.processVehicles([vehicle], shapes, routeShapeMapping);
+      }
+
+      expect(Object.keys(result)).toHaveLength(0);
+      expect(detector.getState().activeDetourCount).toBe(0);
+    } finally {
+      if (originalMinVehicles === undefined) {
+        delete process.env.DETOUR_MIN_UNIQUE_VEHICLES;
+      } else {
+        process.env.DETOUR_MIN_UNIQUE_VEHICLES = originalMinVehicles;
+      }
+      jest.resetModules();
+    }
+  });
 });
 
 describe('vehicle with no matching shapes', () => {
@@ -699,8 +736,8 @@ describe('evidence capture', () => {
 
     const evidence = getDetourEvidence();
     expect(evidence['route-1']).toBeDefined();
-    // Only tick 3 triggers addVehicleToDetour (when consecutiveOffRoute hits 3)
-    expect(evidence['route-1'].pointCount).toBe(1);
+    // The confirming snapshot includes the pre-confirmation off-route streak.
+    expect(evidence['route-1'].pointCount).toBe(CONSECUTIVE_READINGS_REQUIRED);
   });
 
   test('evidence is cleared by clearVehicleState', () => {
@@ -717,12 +754,12 @@ describe('evidence capture', () => {
 
   test('evidence accumulates across multiple ticks', () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    confirmDetour(offVehicle); // 1 point on the confirming tick
+    confirmDetour(offVehicle); // includes the pre-confirmation streak
     // 3 more ticks — each adds 1 evidence point (consecutiveOffRoute >= threshold)
     runTicks([offVehicle], 3);
 
     const evidence = getDetourEvidence();
-    expect(evidence['route-1'].pointCount).toBe(4); // 1 initial + 3 more
+    expect(evidence['route-1'].pointCount).toBe(CONSECUTIVE_READINGS_REQUIRED + 3);
   });
 
   test('evidence from multiple vehicles is captured', () => {
@@ -731,8 +768,8 @@ describe('evidence capture', () => {
     runTicks([bus1, bus2], CONSECUTIVE_READINGS_REQUIRED);
 
     const evidence = getDetourEvidence();
-    // Each vehicle hits threshold on the confirming tick, contributing 1 point each = 2 total
-    expect(evidence['route-1'].pointCount).toBe(2);
+    // Each vehicle contributes its pre-confirmation streak on the confirming tick.
+    expect(evidence['route-1'].pointCount).toBe(CONSECUTIVE_READINGS_REQUIRED * 2);
   });
 
   test('stale evidence is pruned after evidence window', () => {
@@ -743,7 +780,7 @@ describe('evidence capture', () => {
     try {
       Date.now = () => BASE_TIME;
       confirmDetour(offVehicle);
-      expect(getDetourEvidence()['route-1'].pointCount).toBe(1);
+      expect(getDetourEvidence()['route-1'].pointCount).toBe(CONSECUTIVE_READINGS_REQUIRED);
 
       // Advance past evidence window
       Date.now = () => BASE_TIME + EVIDENCE_WINDOW_MS + 1000;
@@ -808,6 +845,40 @@ describe('geometry in snapshot', () => {
     expect(geo).toHaveProperty('confidence');
     expect(geo).toHaveProperty('evidencePointCount');
     expect(geo).toHaveProperty('lastEvidenceAt');
+  });
+
+  test('first confirmed detour includes pre-confirmation off-route evidence for renderable geometry', () => {
+    const realDateNow = Date.now;
+    const baseTime = realDateNow();
+    const coordinates = [
+      OFF_ROUTE_WEST,
+      OFF_ROUTE_MID,
+      OFF_ROUTE_EAST,
+      OFF_ROUTE_EAST,
+    ];
+
+    try {
+      let result = {};
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED; i++) {
+        Date.now = () => baseTime + i * 30_000;
+        result = processVehicles([
+          makeVehicle({
+            coordinate: coordinates[i] || OFF_ROUTE_EAST,
+          }),
+        ], shapes, routeShapeMapping);
+      }
+
+      const geo = result['route-1']?.geometry;
+      expect(geo).toBeDefined();
+      expect(geo.evidencePointCount).toBeGreaterThanOrEqual(3);
+      expect(geo.segments.length).toBeGreaterThanOrEqual(1);
+      expect(
+        geo.skippedSegmentPolyline?.length >= 2 ||
+        geo.inferredDetourPolyline?.length >= 2
+      ).toBe(true);
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 
   test('geometry is present on clear-pending snapshots', () => {
@@ -1402,6 +1473,79 @@ describe('learned persistent detours', () => {
       result = processVehicles([onVehicle], shapes, routeShapeMapping);
       expect(Object.keys(result)).toHaveLength(0);
       expect(getPersistentDetours()['route-1']).toBeUndefined();
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+});
+
+describe('runtime state persistence', () => {
+  test('serializes pre-confirmation off-route evidence between run-once ticks', () => {
+    const realDateNow = Date.now;
+    const baseTime = realDateNow();
+    const coordinates = [
+      OFF_ROUTE_WEST,
+      OFF_ROUTE_MID,
+      OFF_ROUTE_EAST,
+      OFF_ROUTE_EAST,
+    ];
+
+    try {
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED - 1; i++) {
+        Date.now = () => baseTime + i * 30_000;
+        processVehicles([
+          makeVehicle({
+            coordinate: coordinates[i],
+          }),
+        ], shapes, routeShapeMapping);
+      }
+
+      const snapshot = serializeDetectorRuntimeState();
+      expect(snapshot.vehicles[0].offRouteStreakPoints.length).toBeGreaterThanOrEqual(3);
+
+      clearVehicleState();
+      hydrateRuntimeState(snapshot);
+
+      Date.now = () => baseTime + (CONSECUTIVE_READINGS_REQUIRED - 1) * 30_000;
+      const result = processVehicles([
+        makeVehicle({
+          coordinate: coordinates[CONSECUTIVE_READINGS_REQUIRED - 1] || OFF_ROUTE_EAST,
+        }),
+      ], shapes, routeShapeMapping);
+
+      const geo = result['route-1']?.geometry;
+      expect(geo).toBeDefined();
+      expect(geo.evidencePointCount).toBeGreaterThanOrEqual(3);
+      expect(geo.segments.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('serializes and hydrates in-flight detector state for run-once execution', () => {
+    const realDateNow = Date.now;
+    const baseTime = realDateNow();
+
+    try {
+      Date.now = () => baseTime;
+      confirmDetourWithZone();
+
+      Date.now = () => baseTime + DETOUR_CLEAR_GRACE_MS + 1000;
+      runTicks([makeVehicle({ coordinate: ON_ROUTE_IN_ZONE })], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+
+      const snapshot = serializeDetectorRuntimeState();
+
+      clearVehicleState();
+      expect(Object.keys(getState().detours || {})).toHaveLength(0);
+
+      hydrateRuntimeState(snapshot);
+      const restoredState = getState();
+      expect(restoredState.detours['route-1']).toBeDefined();
+      expect(restoredState.detours['route-1'].state).toBe('clear-pending');
+
+      Date.now = () => baseTime + DETOUR_CLEAR_GRACE_MS + 2000;
+      const result = processVehicles([makeVehicle({ coordinate: ON_ROUTE_IN_ZONE })], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
     } finally {
       Date.now = realDateNow;
     }

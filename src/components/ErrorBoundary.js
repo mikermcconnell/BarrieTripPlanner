@@ -4,6 +4,8 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../config/theme';
 import logger from '../utils/logger';
 import { getStartupFatal, recordStartupFatal } from '../utils/startupDiagnostics';
 
+const SHOW_DIAGNOSTICS = typeof __DEV__ !== 'undefined' && __DEV__;
+
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -47,17 +49,17 @@ class ErrorBoundary extends Component {
           <Text style={styles.message}>
             {this.props.fallbackMessage || 'An unexpected error occurred. Please try again.'}
           </Text>
-          {diagnosticMessage ? (
+          {SHOW_DIAGNOSTICS && diagnosticMessage ? (
             <Text style={styles.errorDetail} numberOfLines={4}>
               Error details: {diagnosticMessage}
             </Text>
           ) : null}
-          {diagnosticStack ? (
+          {SHOW_DIAGNOSTICS && diagnosticStack ? (
             <Text style={styles.diagnosticStack} numberOfLines={6}>
               Stack: {diagnosticStack}
             </Text>
           ) : null}
-          {diagnosticComponentStack ? (
+          {SHOW_DIAGNOSTICS && diagnosticComponentStack ? (
             <Text style={styles.diagnosticStack} numberOfLines={6}>
               Component stack: {diagnosticComponentStack}
             </Text>

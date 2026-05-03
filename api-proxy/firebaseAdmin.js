@@ -14,6 +14,8 @@ function initFirebase() {
       admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       admin.initializeApp({ credential: admin.credential.applicationDefault() });
+    } else if (process.env.GCLOUD_PROJECT || process.env.FIREBASE_CONFIG) {
+      admin.initializeApp();
     } else {
       console.warn('[firebaseAdmin] No Firebase credentials configured — Firestore publishing disabled');
       return;

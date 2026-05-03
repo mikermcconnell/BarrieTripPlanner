@@ -19,9 +19,15 @@ import {
 import { haversineDistance } from '../utils/geometryUtils';
 import { getActiveServicesForDate, formatGTFSDate } from './calendarService';
 import { buildItinerary } from './itineraryBuilder';
+import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 
 const SECONDS_PER_DAY = 24 * 3600;
 const SERVICE_DAY_ROLLOVER_WINDOW_SECONDS = 6 * 3600;
+
+const getCandidatePoolSize = () => Math.max(
+  ROUTING_CONFIG.MAX_ITINERARIES,
+  ROUTING_CONFIG.ROUTING_CANDIDATE_POOL_SIZE || ROUTING_CONFIG.MAX_ITINERARIES * 2
+);
 
 /**
  * Convert a Date to seconds since midnight
@@ -76,10 +82,11 @@ const collectForwardResultsForContext = (
 ) => {
   let results = [];
   const excludeTrips = new Set();
-  const maxPasses = ROUTING_CONFIG.MAX_ITINERARIES + 2; // safety limit
+  const candidatePoolSize = getCandidatePoolSize();
+  const maxPasses = candidatePoolSize + 2; // safety limit
 
   for (let pass = 0; pass < maxPasses; pass++) {
-    if (results.length >= ROUTING_CONFIG.MAX_ITINERARIES) break;
+    if (results.length >= candidatePoolSize) break;
 
     const passResults = raptorForward(
       routingData,
@@ -225,14 +232,15 @@ export const planTripLocal = async ({
     );
   }
 
-  // Final sort by arrival time, with tiebreaker on walk distance
+  // Keep a larger arrival-time candidate pool, then rank the built
+  // itineraries by rider cost so transfer penalties can beat early arrivals.
   raptorResults.sort((a, b) => {
     const timeDiff = a.arrivalTime - b.arrivalTime;
     if (Math.abs(timeDiff) > 120) return timeDiff;
     return a.walkToDestSeconds - b.walkToDestSeconds;
   });
 
-  raptorResults = raptorResults.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
+  raptorResults = raptorResults.slice(0, getCandidatePoolSize());
 
   if (raptorResults.length === 0) {
     throw new RoutingError(
@@ -242,7 +250,7 @@ export const planTripLocal = async ({
   }
 
   // Build itineraries from RAPTOR results
-  const itineraries = raptorResults.map((result, index) =>
+  const itineraries = rankItinerariesForRider(raptorResults.map((result, index) =>
     buildItinerary(result, routingData, {
       fromLat,
       fromLon,
@@ -250,7 +258,7 @@ export const planTripLocal = async ({
       toLon,
       date,
     })
-  );
+  )).slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
 
   return {
     from: { name: 'Origin', lat: fromLat, lon: fromLon },
@@ -542,11 +550,17 @@ const getTripArrivalAtStop = (stopTimesIndex, tripId, stopId) => {
 const reconstructPath = (labels, endStopId, tau) => {
   const path = [];
   let currentStopId = endStopId;
+  let round = labels.length - 1;
+  let guard = 0;
 
   // Work backwards through rounds
-  for (let round = labels.length - 1; round >= 0; round--) {
+  while (round >= 0 && guard < labels.length * 4) {
+    guard += 1;
     const label = labels[round].get(currentStopId);
-    if (!label) continue;
+    if (!label) {
+      round -= 1;
+      continue;
+    }
 
     if (label.type === 'TRANSIT') {
       path.unshift({
@@ -561,6 +575,7 @@ const reconstructPath = (labels, endStopId, tau) => {
         alightingTime: label.alightingTime,
       });
       currentStopId = label.boardingStopId;
+      round -= 1;
     } else if (label.type === 'TRANSFER') {
       path.unshift({
         type: 'TRANSFER',
@@ -570,6 +585,9 @@ const reconstructPath = (labels, endStopId, tau) => {
         walkMeters: label.walkMeters,
       });
       currentStopId = label.fromStopId;
+      // Transfer labels are written in the same RAPTOR round as the transit
+      // arrival that made the transfer possible, so keep the same round and
+      // continue backtracking from the pre-transfer stop.
     } else if (label.type === 'ORIGIN_WALK') {
       path.unshift({
         type: 'ORIGIN_WALK',
@@ -577,6 +595,8 @@ const reconstructPath = (labels, endStopId, tau) => {
         walkSeconds: label.walkSeconds,
       });
       return path;
+    } else {
+      round -= 1;
     }
   }
 

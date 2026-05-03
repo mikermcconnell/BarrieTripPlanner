@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="320" viewBox="0 0 960 320">
+  <rect width="960" height="320" fill="#f7fbff"/>
+  <style>
+    .label{font-family:Inter,Arial,sans-serif;font-size:18px;font-weight:800;fill:#17324d}
+    .sub{font-family:Inter,Arial,sans-serif;font-size:13px;font-weight:600;fill:#64748b}
+    .tile{fill:#fff;stroke:#d8e8f8;stroke-width:2;rx:28}
+    .blue{stroke:#1592e6}.green{stroke:#3bb969}.orange{stroke:#ff931e}.navy{stroke:#17324d}
+  </style>
+
+  <g transform="translate(24 24)">
+    <rect class="tile" width="210" height="272" rx="28"/>
+    <g transform="translate(105 112)" fill="none" stroke="#1592e6" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="0" cy="-58" r="15" fill="#1592e6" stroke="none"/>
+      <path d="M-2 -36 L-14 5"/>
+      <path d="M-10 -18 L-42 2"/>
+      <path d="M-10 2 L-38 55"/>
+      <path d="M-8 3 L31 48"/>
+      <path d="M-9 -31 L32 -14"/>
+    </g>
+    <text class="label" x="105" y="224" text-anchor="middle">A. Friendly stride</text>
+    <text class="sub" x="105" y="246" text-anchor="middle">soft, readable, rider-friendly</text>
+  </g>
+
+  <g transform="translate(258 24)">
+    <rect class="tile" width="210" height="272" rx="28"/>
+    <g transform="translate(105 112)" fill="none" stroke="#17324d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="1" cy="-58" r="14" fill="#17324d" stroke="none"/>
+      <path d="M0 -36 L-2 0"/>
+      <path d="M-1 -24 L-35 -10"/>
+      <path d="M-1 -24 L30 -4"/>
+      <path d="M-2 0 L-31 50"/>
+      <path d="M-1 0 L34 45"/>
+      <path d="M-48 62 H-21"/>
+      <path d="M19 58 H46"/>
+    </g>
+    <text class="label" x="105" y="224" text-anchor="middle">B. Clean transit</text>
+    <text class="sub" x="105" y="246" text-anchor="middle">simple silhouette, app-like</text>
+  </g>
+
+  <g transform="translate(492 24)">
+    <rect class="tile" width="210" height="272" rx="28"/>
+    <g transform="translate(105 112)" fill="none" stroke="#3bb969" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="-2" cy="-58" r="14" fill="#3bb969" stroke="none"/>
+      <path d="M-3 -36 C-18 -20 -18 0 -5 11"/>
+      <path d="M-14 -23 L-45 -4"/>
+      <path d="M-9 -6 L31 -22"/>
+      <path d="M-5 11 L-39 51"/>
+      <path d="M-4 11 L36 44"/>
+      <path d="M-54 62 H-25"/>
+      <path d="M22 56 H50"/>
+    </g>
+    <text class="label" x="105" y="224" text-anchor="middle">C. Active walker</text>
+    <text class="sub" x="105" y="246" text-anchor="middle">more motion, optimistic</text>
+  </g>
+
+  <g transform="translate(726 24)">
+    <rect class="tile" width="210" height="272" rx="28"/>
+    <g transform="translate(105 112)" fill="none" stroke="#ff931e" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="0" cy="-58" r="14" fill="#ff931e" stroke="none"/>
+      <path d="M0 -36 L-10 -2"/>
+      <path d="M-6 -25 L-35 -39"/>
+      <path d="M-7 -23 L26 -6"/>
+      <path d="M-10 -2 L-43 43"/>
+      <path d="M-8 -2 L33 26 L49 53"/>
+      <path d="M-58 55 H-32"/>
+      <path d="M36 63 H62"/>
+      <path d="M62 -2 L82 -2" stroke-width="7"/>
+      <path d="M72 -12 L82 -2 L72 8" stroke-width="7"/>
+    </g>
+    <text class="label" x="105" y="224" text-anchor="middle">D. Turn-by-turn</text>
+    <text class="sub" x="105" y="246" text-anchor="middle">best for navigation steps</text>
+  </g>
+</svg>

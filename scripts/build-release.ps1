@@ -29,6 +29,12 @@ try {
         $swapped = $true
     }
 
+    Write-Host "`n=== Running Android production env preflight ===" -ForegroundColor Cyan
+    & node scripts/preflight-android-production-env.js --profile production
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android production env preflight failed"
+    }
+
     # Also set env vars for Gradle/Sentry
     [Environment]::SetEnvironmentVariable("SENTRY_DISABLE_AUTO_UPLOAD", "true", "Process")
 

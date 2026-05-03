@@ -179,4 +179,32 @@ describe('authService.signInWithGoogle', () => {
     expect(updateLastLogin).toHaveBeenCalledWith('user-existing');
     expect(createUser).not.toHaveBeenCalled();
   });
+
+  test('treats native Google cancellation as a quiet cancellation', async () => {
+    const { authService } = loadAuthService({
+      os: 'android',
+      nativeGoogleSignInResult: { type: 'cancelled' },
+    });
+
+    const result = await authService.signInWithGoogle();
+
+    expect(result).toEqual({ success: false, error: null });
+  });
+
+  test('returns actionable native setup message for Google developer errors', async () => {
+    const { authService } = loadAuthService({
+      os: 'android',
+      nativeGoogleSignInError: {
+        code: 'DEVELOPER_ERROR',
+        message: 'DEVELOPER_ERROR: Follow troubleshooting instructions',
+      },
+    });
+
+    const result = await authService.signInWithGoogle();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Google sign-in is not configured for this Android build/);
+    expect(result.error).toMatch(/SHA-1/);
+    expect(result.error).not.toMatch(/unexpected error/i);
+  });
 });

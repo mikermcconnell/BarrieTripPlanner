@@ -6,12 +6,15 @@ import {
   FlatList,
   TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const FavoritesScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { favorites, removeFavoriteStop, removeFavoriteRoute, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('stops');
 
@@ -106,7 +109,10 @@ const FavoritesScreen = ({ navigation }) => {
         data={activeData}
         keyExtractor={(item) => item.id}
         renderItem={activeTab === 'stops' ? renderStopItem : renderRouteItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.xl, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyListContainer}>

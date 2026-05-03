@@ -1,11 +1,14 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Alert } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
+import PlatformMapCard from './PlatformMapCard';
 import Svg, { Path } from 'react-native-svg';
 import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 // SVG Icons
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
@@ -51,7 +54,9 @@ const DirectionsToIcon = ({ size = 18, color = COLORS.error }) => (
   </Svg>
 );
 
-const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) => {
+const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, platformMap, onOpenPlatformMap }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
@@ -98,6 +103,7 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
   }, [stop]);
 
   if (!stop) return null;
+  const closureImpact = stop.closureImpact || null;
 
   return (
     <BottomSheet
@@ -135,6 +141,16 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
       </View>
 
       {/* Direction Buttons */}
+      {closureImpact && (
+        <View style={styles.closureBanner}>
+          <Text style={styles.closureTitle}>Stop closure reported</Text>
+          <Text style={styles.closureText}>
+            {closureImpact.message || 'This stop is reported closed in Barrie Transit news.'}
+          </Text>
+        </View>
+      )}
+
+      {/* Direction Buttons */}
       <View style={styles.directionsContainer}>
         <TouchableOpacity
           style={[styles.directionButton, styles.fromButton]}
@@ -159,7 +175,14 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo }) =>
         </TouchableOpacity>
       </View>
 
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <PlatformMapCard platformMap={platformMap} onPress={onOpenPlatformMap} />
+
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <View style={styles.loadingSpinner}>
@@ -284,6 +307,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  closureBanner: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  closureTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+    marginBottom: SPACING.xxs,
+  },
+  closureText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    lineHeight: 19,
   },
   shareButton: {
     width: 36,

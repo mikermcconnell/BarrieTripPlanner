@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTransitStatic } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
@@ -20,8 +20,11 @@ import {
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { trackEvent } from '../services/analyticsService';
 import Icon from '../components/Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SearchScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const { stops, routes, isLoadingStatic } = useTransitStatic();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState('stops'); // 'stops', 'routes', or 'addresses'
@@ -296,7 +299,10 @@ const SearchScreen = ({ navigation }) => {
         keyExtractor={(item) => item.id?.toString()}
         renderItem={getRenderItem()}
         style={styles.resultsList}
-        contentContainerStyle={styles.resultsContent}
+        contentContainerStyle={[
+          styles.resultsContent,
+          { paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={showRecent && hasRecent ? (
           <View style={styles.recentSection}>

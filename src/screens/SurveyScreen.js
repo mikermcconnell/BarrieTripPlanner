@@ -7,14 +7,17 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSurvey } from '../hooks/useSurvey';
 import StarRatingInput from '../components/survey/StarRatingInput';
 import SingleSelectInput from '../components/survey/SingleSelectInput';
 import OpenTextInput from '../components/survey/OpenTextInput';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SurveyScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const trigger = route?.params?.trigger || 'profile';
   const {
     survey,
@@ -146,7 +149,10 @@ const SurveyScreen = ({ navigation, route }) => {
       {/* Question */}
       <ScrollView
         style={styles.content}
-        contentContainerStyle={styles.contentInner}
+        contentContainerStyle={[
+          styles.contentInner,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxxl, bottomInset) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.questionText}>{currentQuestion?.text}</Text>
@@ -182,7 +188,10 @@ const SurveyScreen = ({ navigation, route }) => {
       </ScrollView>
 
       {/* Navigation buttons */}
-      <View style={styles.footer}>
+      <View style={[
+        styles.footer,
+        { paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) },
+      ]}>
         {currentIndex > 0 ? (
           <TouchableOpacity style={styles.backNavButton} onPress={goBack}>
             <Text style={styles.backNavText}>Back</Text>

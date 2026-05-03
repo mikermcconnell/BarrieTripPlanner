@@ -1,11 +1,11 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import Svg, { Path } from 'react-native-svg';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
+import BusDirectionArrow from './BusDirectionArrow';
 
 const MARKER_SIZE = 44;
-const WRAPPER_SIZE = 80;
+const WRAPPER_SIZE = 88;
 const BORDER_WIDTH = 2.5;
 
 const markerDebugState = new Map();
@@ -16,6 +16,7 @@ const BusMarkerComponent = ({
   color = '#E53935',
   onPress,
   routeLabel: routeLabelProp,
+  routeDirectionLabel,
   snapPath = null,
   dimmed = false,
 }) => {
@@ -26,7 +27,9 @@ const BusMarkerComponent = ({
   }
 
   const routeLabel = routeLabelProp || vehicle.routeId || '?';
-  const hasValidBearing = vehicle.bearing !== null && vehicle.bearing !== undefined;
+  const hasDirectionBearing =
+    Number.isFinite(bearing) &&
+    (Number.isFinite(Number(vehicle.bearing)) || (Array.isArray(snapPath) && snapPath.length >= 2));
 
   if (ROUTE_LABEL_DEBUG) {
     const raw = String(vehicle.routeId || '').trim();
@@ -45,9 +48,6 @@ const BusMarkerComponent = ({
     }
   }
 
-  const cx = WRAPPER_SIZE / 2;
-  const cy = WRAPPER_SIZE / 2;
-
   return (
     <MapLibreGL.MarkerView
       id={`bus-${vehicle.id}`}
@@ -65,23 +65,16 @@ const BusMarkerComponent = ({
         ]}
         onTouchEnd={() => onPress?.(vehicle)}
       >
-        {/* Direction arrow — notched arrowhead, rotates behind the pill */}
-        {hasValidBearing && (
-          <Svg
-            width={WRAPPER_SIZE}
-            height={WRAPPER_SIZE}
-            viewBox={`0 0 ${WRAPPER_SIZE} ${WRAPPER_SIZE}`}
-            style={styles.arrowSvg}
-          >
-            <Path
-              d={`M${cx} 2 L${cx - 10} 32 L${cx} 22 L${cx + 10} 32 Z`}
-              fill="#222222"
-              stroke="white"
-              strokeWidth={2}
-              strokeLinejoin="round"
-              transform={`rotate(${bearing}, ${cx}, ${cy})`}
-            />
-          </Svg>
+        {hasDirectionBearing && (
+          <BusDirectionArrow
+            bearing={bearing}
+            size={WRAPPER_SIZE}
+            topOffset={3}
+            arrowWidth={7}
+            arrowHeight={16}
+            color="#111111"
+            dimmed={dimmed}
+          />
         )}
 
         {/* Circle body */}
@@ -110,7 +103,14 @@ const BusMarkerComponent = ({
           />
           {/* Top edge gleam — glass-like rim */}
           <View style={styles.edgeGleam} />
-          <Text style={styles.routeLabel}>{routeLabel}</Text>
+          <View style={styles.labelStack}>
+            <Text style={[styles.routeLabel, routeDirectionLabel && styles.routeLabelStacked]}>
+              {routeLabel}
+            </Text>
+            {routeDirectionLabel ? (
+              <Text style={styles.routeDirectionLabel}>{routeDirectionLabel}</Text>
+            ) : null}
+          </View>
         </View>
       </View>
     </MapLibreGL.MarkerView>
@@ -125,11 +125,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
-  arrowSvg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
   circle: {
     borderColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
@@ -141,6 +136,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 6,
+    zIndex: 1,
   },
   highlight: {
     position: 'absolute',
@@ -157,6 +153,11 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.22)',
     borderRadius: 0.5,
+  },
+  labelStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   routeLabel: {
     color: 'white',
@@ -177,6 +178,18 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  routeLabelStacked: {
+    fontSize: 14,
+    lineHeight: 15,
+  },
+  routeDirectionLabel: {
+    color: 'white',
+    fontSize: 11,
+    lineHeight: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
 });
 
 export const areBusMarkerPropsEqual = (prev, next) => {
@@ -188,9 +201,12 @@ export const areBusMarkerPropsEqual = (prev, next) => {
     prevCoord.latitude === nextCoord.latitude &&
     prevCoord.longitude === nextCoord.longitude &&
     prev.vehicle.routeId === next.vehicle.routeId &&
+    prev.vehicle.shapeId === next.vehicle.shapeId &&
+    prev.vehicle.headsign === next.vehicle.headsign &&
     prev.vehicle.bearing === next.vehicle.bearing &&
     prev.color === next.color &&
     prev.routeLabel === next.routeLabel &&
+    prev.routeDirectionLabel === next.routeDirectionLabel &&
     prev.snapPath === next.snapPath &&
     prev.dimmed === next.dimmed
   );

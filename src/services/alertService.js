@@ -367,6 +367,11 @@ export const fetchServiceAlerts = async () => {
     // Use fetchWithCORS to handle web browser CORS restrictions
     const response = await fetchWithCORS(GTFS_URLS.SERVICE_ALERTS);
     if (!response.ok) {
+      // Barrie sometimes returns 404 when there are no active GTFS-RT alerts.
+      // Treat that as an empty feed so startup stays quiet and responsive.
+      if (response.status === 404) {
+        return [];
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 

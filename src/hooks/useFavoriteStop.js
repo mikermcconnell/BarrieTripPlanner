@@ -14,7 +14,7 @@ export const useFavoriteStop = () => {
 
   const favoriteStop = favorites.stops.length > 0 ? favorites.stops[0] : null;
   const stop = isFocused && favoriteStop ? favoriteStop : null;
-  const { arrivals, isLoading } = useStopArrivals(stop);
+  const { arrivals, isLoading } = useStopArrivals(stop, { initialDelayMs: 900 });
 
   const isVisible = !!favoriteStop && (isLoading || arrivals.length > 0);
   const nextArrivals = arrivals.slice(0, 2);

@@ -9,12 +9,14 @@
 import React, { useMemo, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TripResultCard from './TripResultCard';
 import TripErrorDisplay from './TripErrorDisplay';
 import FareCard from './FareCard';
 import Svg, { Path } from 'react-native-svg';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
+import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const getItineraryKey = (itinerary, index) => {
   const legSignature = Array.isArray(itinerary?.legs)
@@ -60,6 +62,8 @@ const TripBottomSheet = ({
   recentTrips = [],
   onSelectRecentTrip,
 }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
   const snapPoints = useMemo(() => ['10%', '38%', '85%'], []);
 
@@ -73,8 +77,8 @@ const TripBottomSheet = ({
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingTitle}>Finding routes...</Text>
-          <Text style={styles.loadingSubtext}>Calculating the best options</Text>
+          <Text style={styles.loadingTitle}>Finding your best route…</Text>
+          <Text style={styles.loadingSubtext}>Checking live buses and walking time.</Text>
         </View>
       );
     }
@@ -104,7 +108,7 @@ const TripBottomSheet = ({
         <View style={styles.centerContainer}>
           <EmptyIcon size={48} color={COLORS.grey400} />
           <Text style={styles.emptyTitle}>Plan your trip</Text>
-          <Text style={styles.emptySubtext}>Enter your destination above to see available routes</Text>
+          <Text style={styles.emptySubtext}>Enter where you’re going to see live Barrie Transit options.</Text>
           {recentTrips.length > 0 && (
             <View style={styles.recentSection}>
               <Text style={styles.recentTitle}>Recent Trips</Text>
@@ -139,7 +143,7 @@ const TripBottomSheet = ({
         <View style={styles.centerContainer}>
           <EmptyIcon size={48} color={COLORS.grey400} />
           <Text style={styles.emptyTitle}>No routes available</Text>
-          <Text style={styles.emptySubtext}>Try a different time or destination</Text>
+          <Text style={styles.emptySubtext}>Try a nearby stop, a different time, or check alerts before you go.</Text>
         </View>
       );
     }
@@ -147,10 +151,21 @@ const TripBottomSheet = ({
     return (
       <>
         <View style={styles.resultsHeader}>
-          <Text style={styles.resultsTitle}>
-            {itineraries.length} route{itineraries.length !== 1 ? 's' : ''} found
-          </Text>
-          <Text style={styles.resultsSubtitle}>Choose a route to preview on the map</Text>
+          <View style={styles.resultsHeaderText}>
+            <Text style={styles.resultsEyebrow}>Live trip options</Text>
+            <Text style={styles.resultsTitle}>
+              Choose your route
+            </Text>
+            <Text style={styles.resultsSubtitle}>Tap a card to preview it on the map.</Text>
+          </View>
+          <View style={styles.resultsCountPill}>
+            <Text style={styles.resultsCountText}>
+              {itineraries.length}
+            </Text>
+            <Text style={styles.resultsCountLabel}>
+              route{itineraries.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
         </View>
         <View style={styles.resultsList}>
           {itineraries.map((itinerary, index) => (
@@ -179,7 +194,12 @@ const TripBottomSheet = ({
       handleIndicatorStyle={styles.handleIndicator}
       onAnimate={handleKeyDown}
     >
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: addSafeBottomPadding(SPACING.xxl, bottomInset) },
+        ]}
+      >
         {renderContent()}
       </BottomSheetScrollView>
     </BottomSheet>
@@ -188,14 +208,14 @@ const TripBottomSheet = ({
 
 const styles = StyleSheet.create({
   background: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.grey50,
     borderTopLeftRadius: BORDER_RADIUS.xxl,
     borderTopRightRadius: BORDER_RADIUS.xxl,
     ...SHADOWS.elevated,
   },
   handleIndicator: {
-    backgroundColor: COLORS.grey300,
-    width: 36,
+    backgroundColor: COLORS.primaryLight,
+    width: 44,
     height: 4,
     borderRadius: 2,
     marginTop: SPACING.sm,
@@ -297,23 +317,60 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
+  resultsHeaderText: {
+    flex: 1,
+    paddingRight: SPACING.md,
+  },
+  resultsEyebrow: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
   resultsTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
   },
   resultsSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  resultsCountPill: {
+    minWidth: 62,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: COLORS.primarySubtle,
+    alignItems: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(12, 140, 229, 0.18)',
+  },
+  resultsCountText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.extrabold,
+    color: COLORS.primaryDark,
+    lineHeight: 20,
+  },
+  resultsCountLabel: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primaryDark,
+  },
   resultsList: {
-    paddingTop: SPACING.xs,
+    paddingTop: SPACING.sm,
   },
 });
 

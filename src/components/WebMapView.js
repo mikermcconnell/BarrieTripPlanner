@@ -175,12 +175,16 @@ const resetCursorIfNeeded = (map) => {
   }
 };
 
-const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0 }) => {
+const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0, accessibilityLabel }) => {
   const element = document.createElement('div');
   element.className = className;
   element.style.pointerEvents = 'auto';
   element.style.cursor = onClickRef?.current ? 'pointer' : 'default';
   element.style.zIndex = String(zIndexOffset);
+  if (accessibilityLabel) {
+    element.setAttribute('aria-label', accessibilityLabel);
+    element.setAttribute('role', onClickRef?.current ? 'button' : 'img');
+  }
   element.innerHTML = html;
   element.addEventListener('click', (event) => {
     if (!onClickRef?.current) return;
@@ -192,36 +196,49 @@ const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 
   return element;
 };
 
-const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0 }) => {
+const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, accessibilityLabel }) => {
   if (!element) return;
   element.className = className;
   element.style.zIndex = String(zIndexOffset);
+  if (accessibilityLabel) {
+    element.setAttribute('aria-label', accessibilityLabel);
+  } else {
+    element.removeAttribute('aria-label');
+    element.removeAttribute('role');
+  }
   element.innerHTML = html;
 };
 
-const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false) => {
+const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false, directionLabel = null) => {
   const routeLabel = escapeHtml(routeId || '?');
-  const hasValidBearing = bearing !== null && bearing !== undefined;
+  const routeDirectionLabel = directionLabel ? escapeHtml(directionLabel) : '';
+  const numericBearing = Number(bearing);
+  const hasValidBearing = Number.isFinite(numericBearing);
   const resolvedScale = scale * (dimmed ? 0.84 : 1);
   const resolvedOpacity = dimmed ? 0.42 : 1;
 
   const arrowHtml = hasValidBearing ? `
-    <svg width="80" height="80" viewBox="0 0 80 80"
-      style="position:absolute;top:0;left:0;pointer-events:none;z-index:1;opacity:${resolvedOpacity};">
-      <path d="M40 2 L30 32 L40 22 L50 32 Z"
-        fill="#222222" stroke="white" stroke-width="2" stroke-linejoin="round"
-        transform="rotate(${bearing}, 40, 40)"/>
+    <svg width="104" height="104" viewBox="0 0 104 104"
+      data-heading-tab="true"
+      style="position:absolute;top:-8px;left:-8px;pointer-events:none;z-index:3;opacity:${resolvedOpacity};overflow:visible;">
+      <g transform="rotate(${numericBearing}, 52, 52)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22));">
+        <path d="M52 8 L42 30 L49 30 L49 34 L55 34 L55 30 L62 30 Z"
+          fill="rgba(255,255,255,0.96)" />
+        <path d="M52 12 L46 28 L50 28 L50 30 L54 30 L54 28 L58 28 Z"
+          fill="#111111" />
+      </g>
     </svg>
   ` : '';
 
   return `
-    <div style="position:relative;width:80px;height:80px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
+    <div style="position:relative;width:88px;height:88px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
       ${arrowHtml}
       <div style="
         position:absolute;
         top:50%;left:50%;
         transform:translate(-50%,-50%);
         display:inline-flex;
+        flex-direction:column;
         align-items:center;
         justify-content:center;
         width:44px;
@@ -236,24 +253,39 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
       ">
         <span style="
           color:white;
-          font-size:17px;
+          font-size:${routeDirectionLabel ? 14 : 17}px;
           font-weight:800;
+          letter-spacing:0.5px;
+          text-shadow:0 1px 2px rgba(0,0,0,0.25);
+          line-height:${routeDirectionLabel ? 0.9 : 1};
+          position:relative;
+          z-index:1;
+        ">${routeLabel}</span>
+        ${routeDirectionLabel ? `<span style="
+          color:white;
+          font-size:11px;
+          font-weight:900;
           letter-spacing:0.5px;
           text-shadow:0 1px 2px rgba(0,0,0,0.25);
           line-height:1;
           position:relative;
           z-index:1;
-        ">${routeLabel}</span>
+        ">${routeDirectionLabel}</span>` : ''}
       </div>
     </div>
   `;
 };
 
-const createStopHtml = (isSelected) => {
+const createStopHtml = (isSelected, isClosed = false) => {
   const size = isSelected ? 16 : 12;
   const hitArea = 24;
+  const background = isSelected ? '#1a73e8' : 'white';
+  const border = isSelected ? 'white' : isClosed ? '#FF991F' : '#1a73e8';
+  const closedDash = isClosed
+    ? '<div style="width:7px;height:2px;border-radius:999px;background:#FF991F;"></div>'
+    : '';
 
-  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${isSelected ? '#1a73e8' : 'white'};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${isSelected ? 'white' : '#1a73e8'};box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div></div>`;
+  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${background};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;">${closedDash}</div></div>`;
 };
 
 const buildPopup = (maplibre, popupHtml) => {
@@ -275,6 +307,7 @@ const WebHtmlMarkerComponent = ({
   zIndexOffset = 0,
   onPress,
   popupHtml,
+  accessibilityLabel,
 }) => {
   const context = useMapContext();
   const markerRef = useRef(null);
@@ -296,6 +329,7 @@ const WebHtmlMarkerComponent = ({
       className,
       onClickRef: onPressRef,
       zIndexOffset,
+      accessibilityLabel,
     });
     const marker = new context.maplibre.Marker({
       element,
@@ -318,7 +352,7 @@ const WebHtmlMarkerComponent = ({
       markerRef.current = null;
       elementRef.current = null;
     };
-  }, [anchor, context?.map, context?.maplibre, hasValidCoordinate, offset]);
+  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, offset]);
 
   useEffect(() => {
     if (!markerRef.current || !hasValidCoordinate) return;
@@ -327,13 +361,16 @@ const WebHtmlMarkerComponent = ({
 
   useEffect(() => {
     if (!elementRef.current) return;
-    updateMarkerElement(elementRef.current, { html, className, zIndexOffset });
-  }, [className, html, zIndexOffset]);
+    updateMarkerElement(elementRef.current, { html, className, zIndexOffset, accessibilityLabel });
+  }, [accessibilityLabel, className, html, zIndexOffset]);
 
   useEffect(() => {
     if (!elementRef.current) return;
     elementRef.current.style.cursor = onPress ? 'pointer' : 'default';
-  }, [onPress]);
+    if (accessibilityLabel) {
+      elementRef.current.setAttribute('role', onPress ? 'button' : 'img');
+    }
+  }, [accessibilityLabel, onPress]);
 
   useEffect(() => {
     if (!markerRef.current) return;
@@ -428,6 +465,8 @@ const addLineLayers = ({
   const lineDasharray = parseDashArray(dashArray, strokeWidth);
 
   if (outlineWidth > 0) {
+    const outlineStrokeWidth = strokeWidth + outlineWidth * 2;
+    const outlineDasharray = parseDashArray(dashArray, outlineStrokeWidth);
     map.addLayer({
       id: outlineId,
       type: 'line',
@@ -438,9 +477,9 @@ const addLineLayers = ({
       },
       paint: {
         'line-color': outlineColor || darkenColorHex(color, 0.4),
-        'line-width': strokeWidth + outlineWidth * 2,
+        'line-width': outlineStrokeWidth,
         'line-opacity': opacity,
-        ...(lineDasharray ? { 'line-dasharray': lineDasharray } : {}),
+        ...(outlineDasharray ? { 'line-dasharray': outlineDasharray } : {}),
         ...(offset ? { 'line-offset': offset } : {}),
       },
     });
@@ -727,10 +766,11 @@ export const WebPolygon = memo(({
 
 export const __TEST_ONLY__ = {
   applyLayerEvents,
+  createBusHtml,
   resolveLayerCallbacks,
 };
 
-export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, snapPath = null, dimmed = false }) => {
+export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, routeDirectionLabel = null, snapPath = null, dimmed = false }) => {
   if (!vehicle?.coordinate?.latitude || !vehicle?.coordinate?.longitude) return null;
   const label = routeLabelProp || vehicle.routeId;
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
@@ -757,9 +797,10 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
   return (
     <WebHtmlMarker
       coordinate={{ latitude, longitude }}
-      html={createBusHtml(color, label, bearing, scale, dimmed)}
+      html={createBusHtml(color, label, bearing, scale, dimmed, routeDirectionLabel)}
       className="bus-icon"
       popupHtml={`<strong>Route ${escapeHtml(label)}</strong>${vehicle.label ? `<br />Bus ${escapeHtml(vehicle.label)}` : ''}`}
+      accessibilityLabel={`Route ${label} bus${vehicle.label ? ` ${vehicle.label}` : ''}`}
     />
   );
 });
@@ -767,10 +808,11 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
 export const WebStopMarker = memo(({ stop, onPress, isSelected }) => (
   <WebHtmlMarker
     coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-    html={createStopHtml(isSelected)}
+    html={createStopHtml(isSelected, Boolean(stop.isClosed))}
     zIndexOffset={isSelected ? 1000 : 500}
     onPress={() => onPress?.(stop)}
-    popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}`}
+    popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}${stop.isClosed ? '<br /><span style="color:#8a5a00;">Stop closure reported</span>' : ''}`}
+    accessibilityLabel={`${stop.name}, stop ${stop.code}${stop.isClosed ? ', stop closure reported' : ''}`}
   />
 ));
 

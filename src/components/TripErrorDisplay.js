@@ -17,7 +17,7 @@ const TripErrorDisplay = ({ error, onRetry }) => {
   // Map icon names to Icon components
   const getIcon = (iconName) => {
     const iconSize = 32;
-    const iconColor = COLORS.error;
+    const iconColor = COLORS.primary;
     switch (iconName) {
       case 'server':
         return <Text style={styles.icon}>🖥️</Text>;
@@ -50,7 +50,7 @@ const TripErrorDisplay = ({ error, onRetry }) => {
       {/* Suggestions */}
       {config.suggestions && config.suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
-          <Text style={styles.suggestionsTitle}>Suggestions:</Text>
+          <Text style={styles.suggestionsTitle}>Try this</Text>
           {config.suggestions.map((suggestion, index) => (
             <View key={index} style={styles.suggestionRow}>
               <Text style={styles.bullet}>•</Text>
@@ -73,7 +73,7 @@ const TripErrorDisplay = ({ error, onRetry }) => {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
     marginHorizontal: SPACING.md,
     marginVertical: SPACING.md,
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: COLORS.errorSubtle,
+    backgroundColor: COLORS.primarySubtle,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.md,
@@ -108,8 +108,8 @@ const styles = StyleSheet.create({
   },
   suggestionsContainer: {
     width: '100%',
-    backgroundColor: COLORS.grey50,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.grey100,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
   },

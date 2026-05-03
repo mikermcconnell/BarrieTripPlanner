@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { haversineDistance } from '../utils/geometryUtils';
 import { getRouteStopSequence } from '../utils/gtfsStopSequences';
+import { getUniqueDetourSections } from '../utils/detourHelpers';
 
 /**
  * Pure derivation — exported for testing without React.
@@ -92,7 +93,7 @@ export function deriveAffectedStopDetailsForDetour({
     };
   }
 
-  const segmentStopDetails = normalizedSegments.map((segment) => ({
+  const segmentStopDetails = getUniqueDetourSections(normalizedSegments.map((segment) => ({
     ...segment,
     ...deriveAffectedStops({
       routeId,
@@ -103,7 +104,7 @@ export function deriveAffectedStopDetailsForDetour({
       routeStopsMapping,
       routeStopSequencesMapping,
     }),
-  }));
+  })));
 
   const routeStops =
     segmentStopDetails.find((segment) => Array.isArray(segment.routeStops) && segment.routeStops.length > 0)?.routeStops ??

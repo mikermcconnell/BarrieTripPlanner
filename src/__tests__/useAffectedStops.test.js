@@ -1,4 +1,4 @@
-import { deriveAffectedStops } from '../hooks/useAffectedStops';
+import { deriveAffectedStopDetailsForDetour, deriveAffectedStops } from '../hooks/useAffectedStops';
 import { createRouteStopSequencesMapping } from '../utils/gtfsStopSequences';
 import {
   barrieBranchStops,
@@ -130,6 +130,29 @@ describe('deriveAffectedStops', () => {
     expect(result.unaffectedStops.map(s => s.id)).toEqual(['s1', 's5']);
   });
 
+  it('uses the opposite-direction shape sequence instead of the default stop order', () => {
+    const result = deriveAffectedStops({
+      routeId: 'R1',
+      shapeId: 'shape-1-reverse',
+      entryPoint: { latitude: 44.384, longitude: -79.690 },
+      exitPoint: { latitude: 44.396, longitude: -79.690 },
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping: {
+        R1: {
+          __default__: ['s1', 's2', 's3', 's4', 's5'],
+          'shape-1-reverse': ['s5', 's4', 's3', 's2', 's1'],
+        },
+      },
+    });
+
+    expect(result.routeStops.map(s => s.id)).toEqual(['s5', 's4', 's3', 's2', 's1']);
+    expect(result.affectedStops.map(s => s.id)).toEqual(['s4', 's3', 's2']);
+    expect(result.skippedStops.map(s => s.id)).toEqual(['s3']);
+    expect(result.entryStop.id).toBe('s4');
+    expect(result.exitStop.id).toBe('s2');
+  });
+
   it('resolves stop objects even when stops array has extra stops', () => {
     const allStops = [
       ...stops,
@@ -197,5 +220,56 @@ describe('deriveAffectedStops', () => {
     expect(result.affectedStops.map((stop) => stop.id)).toEqual(BARRIE_8A_BRANCH_STOP_IDS.slice(0, 10));
     expect(result.entryStopName).toBe('Barrie Allandale Transit Terminal Platform 5');
     expect(result.exitStopName).toBe('Poyntz Street');
+  });
+});
+
+describe('deriveAffectedStopDetailsForDetour', () => {
+  it('deduplicates repeated detour sections with the same affected stops', () => {
+    const repeatedSegment = {
+      shapeId: 'shape-1',
+      entryPoint: { latitude: 44.396, longitude: -79.690 },
+      exitPoint: { latitude: 44.384, longitude: -79.690 },
+    };
+
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        repeatedSegment,
+        { ...repeatedSegment, evidencePointCount: 8 },
+        { ...repeatedSegment, likelyDetourPolyline: [[44.396, -79.690], [44.384, -79.690]] },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails).toHaveLength(1);
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.segmentStopDetails[0].skippedStops.map((stop) => stop.id)).toEqual(['s3']);
+  });
+
+  it('keeps genuinely different detour sections', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          entryPoint: { latitude: 44.396, longitude: -79.690 },
+          exitPoint: { latitude: 44.384, longitude: -79.690 },
+        },
+        {
+          shapeId: 'shape-1',
+          entryPoint: { latitude: 44.390, longitude: -79.690 },
+          exitPoint: { latitude: 44.379, longitude: -79.690 },
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails).toHaveLength(2);
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.segmentStopDetails[1].affectedStops.map((stop) => stop.id)).toEqual(['s3', 's4', 's5']);
   });
 });

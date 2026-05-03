@@ -21,6 +21,7 @@ async function loadUsersWithPushTokens(db) {
       if (!data.pushToken) return;
       users.push({
         pushToken: data.pushToken,
+        transitNewsEnabled: data.settings?.notifications?.transitNews === true,
         subscribedRoutes: Array.isArray(data.subscribedRoutes)
           ? data.subscribedRoutes.map((route) => String(route).toUpperCase())
           : [],
@@ -42,35 +43,37 @@ async function loadUsersWithPushTokens(db) {
 
 function buildSubscriberIndex(users) {
   const index = new Map();
-  const allNewsTokens = new Set();
+  const allTransitNewsTokens = new Set();
 
   for (const user of users) {
-    if (!user.pushToken) continue;
+    if (!user.pushToken || user.transitNewsEnabled !== true) continue;
+    allTransitNewsTokens.add(user.pushToken);
+
     const routeList = user.subscribedRoutes || [];
-    if (routeList.length === 0) {
-      allNewsTokens.add(user.pushToken);
-      continue;
-    }
     for (const routeId of routeList) {
       if (!index.has(routeId)) index.set(routeId, new Set());
       index.get(routeId).add(user.pushToken);
     }
   }
 
-  return { allNewsTokens, index };
+  return { allTransitNewsTokens, routeIndex: index };
 }
 
-function resolveRecipients(newsItem, allNewsTokens, routeIndex) {
-  const recipients = new Set(allNewsTokens);
+function resolveRecipients(newsItem, subscriberIndex) {
+  const recipients = new Set();
+  const { allTransitNewsTokens = new Set(), routeIndex = new Map() } = subscriberIndex || {};
   const affectedRoutes = Array.isArray(newsItem.affectedRoutes)
     ? newsItem.affectedRoutes.map((route) => String(route).toUpperCase())
     : [];
 
-  // If no route scoping exists, notify all token-bearing users.
+  // Only true system-wide items are broad enough for a push to all opted-in users.
+  if (newsItem.affectsAllRoutes === true) {
+    for (const token of allTransitNewsTokens) recipients.add(token);
+    return recipients;
+  }
+
+  // General news belongs in-app unless it is explicitly system-wide.
   if (affectedRoutes.length === 0) {
-    for (const tokenSet of routeIndex.values()) {
-      for (const token of tokenSet) recipients.add(token);
-    }
     return recipients;
   }
 
@@ -108,10 +111,10 @@ async function notifyUsersOfNews(newItems) {
     return;
   }
 
-  const { allNewsTokens, index: routeIndex } = buildSubscriberIndex(users);
+  const subscriberIndex = buildSubscriberIndex(users);
 
   for (const newsItem of newItems) {
-    const recipients = resolveRecipients(newsItem, allNewsTokens, routeIndex);
+    const recipients = resolveRecipients(newsItem, subscriberIndex);
     const messages = [...recipients].map((token) => ({
       to: token,
       sound: 'default',
@@ -148,4 +151,9 @@ async function notifyUsersOfNews(newItems) {
   }
 }
 
-module.exports = { notifyUsersOfNews };
+module.exports = {
+  notifyUsersOfNews,
+  buildSubscriberIndex,
+  resolveRecipients,
+  loadUsersWithPushTokens,
+};

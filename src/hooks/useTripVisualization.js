@@ -8,6 +8,9 @@ import { useMemo } from 'react';
 import { COLORS } from '../config/theme';
 import { decodePolyline, findClosestPointIndex } from '../utils/polylineUtils';
 import { haversineDistance } from '../utils/geometryUtils';
+import { WALKING_ROUTE_COLOR } from '../config/mapLineStyles';
+
+const BOARDING_PROGRESS_TOLERANCE_METERS = 80;
 
 /** Snap a lat/lon to the nearest point on a decoded polyline */
 const snapToPolyline = (lat, lon, polylineCoords) => {
@@ -162,6 +165,260 @@ export const buildTripEndpointMarkers = ({
   return markers;
 };
 
+const getTransitLegs = (itinerary) => (
+  Array.isArray(itinerary?.legs)
+    ? itinerary.legs.filter((leg) => leg.mode !== 'WALK' && !leg.isOnDemand)
+    : []
+);
+
+const isTransitMapLeg = (leg) => (
+  !!leg && leg.mode !== 'WALK' && !leg.isOnDemand
+);
+
+const isWalkBetweenTransit = (legs, index) => (
+  legs?.[index]?.mode === 'WALK' &&
+  isTransitMapLeg(legs?.[index - 1]) &&
+  isTransitMapLeg(legs?.[index + 1])
+);
+
+const getMiddleCoordinate = (coordinates) => {
+  if (!Array.isArray(coordinates) || coordinates.length === 0) {
+    return null;
+  }
+  return coordinates[Math.floor((coordinates.length - 1) / 2)] ?? null;
+};
+
+export const buildTripRouteCoordinates = ({
+  itinerary,
+  decodedLegPolylines = [],
+}) => {
+  if (!itinerary) return [];
+
+  const routes = [];
+  itinerary.legs.forEach((leg, index) => {
+    const decoded = decodedLegPolylines[index];
+    const coords = [];
+
+    if (decoded && decoded.length > 0) {
+      coords.push(...decoded);
+    } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
+      if (leg.from) {
+        coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      }
+      leg.intermediateStops.forEach((stop) => {
+        if (stop.lat && stop.lon) {
+          coords.push({ latitude: stop.lat, longitude: stop.lon });
+        }
+      });
+      if (leg.to) {
+        coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      }
+    } else if (leg.from && leg.to) {
+      coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
+      coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+    }
+
+    if (coords.length > 0) {
+      const isWalk = leg.mode === 'WALK';
+      const isOnDemand = !!leg.isOnDemand;
+      routes.push({
+        id: `trip-leg-${index}`,
+        coordinates: coords,
+        color: isWalk ? WALKING_ROUTE_COLOR
+          : isOnDemand ? (leg.zoneColor || COLORS.primary)
+          : (leg.route?.color || COLORS.primary),
+        mode: leg.mode,
+        isWalk,
+        isOnDemand,
+        isTransferWalk: isWalkBetweenTransit(itinerary.legs, index),
+        lineStyle: isWalk ? 'dotted' : isOnDemand ? 'dashed' : 'solid',
+        routeLabel: !isWalk && !isOnDemand ? (leg.route?.shortName || null) : null,
+        labelCoordinate: !isWalk && !isOnDemand ? getMiddleCoordinate(coords) : null,
+      });
+    }
+  });
+
+  return routes;
+};
+
+const getLegTripIds = (leg) => {
+  if (Array.isArray(leg?.tripIds) && leg.tripIds.length > 0) {
+    return leg.tripIds;
+  }
+
+  return leg?.tripId ? [leg.tripId] : [];
+};
+
+const normalizeRouteKey = (routeId) => (
+  routeId == null ? '' : String(routeId).trim().toUpperCase()
+);
+
+const getLegRouteId = (leg) => leg?.route?.id || leg?.routeId || null;
+
+const getLegDirectionId = (leg, tripMapping = {}) => {
+  if (leg?.directionId !== null && leg?.directionId !== undefined) {
+    return leg.directionId;
+  }
+  if (leg?.tripId && tripMapping?.[leg.tripId]?.directionId !== undefined) {
+    return tripMapping[leg.tripId].directionId;
+  }
+  return null;
+};
+
+const directionsMatch = (leg, vehicle, tripMapping = {}) => {
+  const legDirectionId = getLegDirectionId(leg, tripMapping);
+  if (legDirectionId === null || legDirectionId === undefined) {
+    return true;
+  }
+  if (vehicle?.directionId === null || vehicle?.directionId === undefined) {
+    return true;
+  }
+  return String(vehicle.directionId) === String(legDirectionId);
+};
+
+const getShapeForLeg = (leg, shapes = {}, tripMapping = {}) => {
+  const shapeId = leg?.tripId ? tripMapping?.[leg.tripId]?.shapeId : null;
+  if (shapeId && Array.isArray(shapes?.[shapeId]) && shapes[shapeId].length >= 2) {
+    return shapes[shapeId];
+  }
+
+  if (leg?.legGeometry?.points) {
+    const decoded = decodePolyline(leg.legGeometry.points);
+    if (decoded.length >= 2) {
+      return decoded;
+    }
+  }
+
+  return null;
+};
+
+const getShapeProgress = (shapeCoords, lat, lon) => {
+  if (!Array.isArray(shapeCoords) || shapeCoords.length < 2) {
+    return null;
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  const index = findClosestPointIndex(shapeCoords, lat, lon);
+  let meters = 0;
+  for (let i = 1; i <= index; i += 1) {
+    meters += haversineDistance(
+      shapeCoords[i - 1].latitude,
+      shapeCoords[i - 1].longitude,
+      shapeCoords[i].latitude,
+      shapeCoords[i].longitude
+    );
+  }
+
+  return { index, meters };
+};
+
+const getVehicleRouteFallbackMatch = ({
+  leg,
+  vehicle,
+  shapes,
+  tripMapping,
+}) => {
+  const legRouteId = normalizeRouteKey(getLegRouteId(leg));
+  const vehicleRouteId = normalizeRouteKey(vehicle?.routeId);
+  if (!legRouteId || !vehicleRouteId || legRouteId !== vehicleRouteId) {
+    return { keep: false, evaluated: false, score: Infinity };
+  }
+
+  if (!directionsMatch(leg, vehicle, tripMapping)) {
+    return { keep: false, evaluated: false, score: Infinity };
+  }
+
+  const shapeCoords = getShapeForLeg(leg, shapes, tripMapping);
+  const vehicleCoord = vehicle?.coordinate;
+
+  if (!shapeCoords || !hasCoordinate(leg?.from) || !hasCoordinate(leg?.to) || !hasMarkerCoordinate(vehicleCoord)) {
+    return { keep: true, evaluated: false, score: Infinity };
+  }
+
+  const boardProgress = getShapeProgress(shapeCoords, leg.from.lat, leg.from.lon);
+  const alightProgress = getShapeProgress(shapeCoords, leg.to.lat, leg.to.lon);
+  const vehicleProgress = getShapeProgress(
+    shapeCoords,
+    vehicleCoord.latitude,
+    vehicleCoord.longitude
+  );
+
+  if (!boardProgress || !alightProgress || !vehicleProgress || boardProgress.index === alightProgress.index) {
+    return { keep: true, evaluated: false, score: Infinity };
+  }
+
+  const travelIncreasing = boardProgress.meters <= alightProgress.meters;
+  const hasPassedBoarding = travelIncreasing
+    ? vehicleProgress.meters > boardProgress.meters + BOARDING_PROGRESS_TOLERANCE_METERS
+    : vehicleProgress.meters < boardProgress.meters - BOARDING_PROGRESS_TOLERANCE_METERS;
+
+  return {
+    keep: !hasPassedBoarding,
+    evaluated: true,
+    score: Math.abs(boardProgress.meters - vehicleProgress.meters),
+  };
+};
+
+export const selectTripPreviewVehicles = ({
+  selectedItinerary,
+  vehicles = [],
+  shapes = {},
+  tripMapping = {},
+}) => {
+  if (!selectedItinerary || vehicles.length === 0) return [];
+
+  const transitLegs = getTransitLegs(selectedItinerary);
+  const tripIds = new Set(transitLegs.flatMap(getLegTripIds).filter(Boolean));
+
+  if (tripIds.size > 0) {
+    const byTripId = vehicles.filter((vehicle) => tripIds.has(vehicle.tripId));
+    if (byTripId.length > 0) return byTripId;
+  }
+
+  const candidates = new Map();
+  let hasEvaluatedCandidates = false;
+
+  transitLegs.forEach((leg) => {
+    vehicles.forEach((vehicle) => {
+      const match = getVehicleRouteFallbackMatch({
+        leg,
+        vehicle,
+        shapes,
+        tripMapping,
+      });
+
+      if (match.evaluated) {
+        hasEvaluatedCandidates = true;
+      }
+
+      if (!match.keep) {
+        return;
+      }
+
+      const key = vehicle.id || `${vehicle.routeId}-${vehicle.tripId || 'trip'}-${vehicle.vehicleLabel || candidates.size}`;
+      const existing = candidates.get(key);
+      if (!existing || match.score < existing.score) {
+        candidates.set(key, { vehicle, score: match.score });
+      }
+    });
+  });
+
+  const fallbackVehicles = Array.from(candidates.values())
+    .sort((a, b) => a.score - b.score)
+    .map((entry) => entry.vehicle);
+
+  if (hasEvaluatedCandidates) {
+    return fallbackVehicles;
+  }
+
+  const tripRouteIds = new Set(
+    transitLegs.map((leg) => normalizeRouteKey(getLegRouteId(leg))).filter(Boolean)
+  );
+  return vehicles.filter((vehicle) => tripRouteIds.has(normalizeRouteKey(vehicle.routeId)));
+};
+
 export const buildBusApproachLines = ({
   legs = [],
   tripVehicles = [],
@@ -247,49 +504,12 @@ export const useTripVisualization = ({
   }, [selectedItinerary]);
 
   // Decoded polyline segments for each leg
-  const tripRouteCoordinates = useMemo(() => {
-    if (!selectedItinerary) return [];
-
-    const routes = [];
-    selectedItinerary.legs.forEach((leg, index) => {
-      const decoded = decodedLegPolylines[index];
-      const coords = [];
-
-      if (decoded && decoded.length > 0) {
-        coords.push(...decoded);
-      } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
-        if (leg.from) {
-          coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-        }
-        leg.intermediateStops.forEach((stop) => {
-          if (stop.lat && stop.lon) {
-            coords.push({ latitude: stop.lat, longitude: stop.lon });
-          }
-        });
-        if (leg.to) {
-          coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-        }
-      } else if (leg.from && leg.to) {
-        coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-        coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      }
-
-      if (coords.length > 0) {
-        routes.push({
-          id: `trip-leg-${index}`,
-          coordinates: coords,
-          color: leg.mode === 'WALK' ? '#4285F4'
-            : leg.isOnDemand ? (leg.zoneColor || COLORS.primary)
-            : (leg.route?.color || COLORS.primary),
-          isWalk: leg.mode === 'WALK',
-          isOnDemand: !!leg.isOnDemand,
-          routeLabel: leg.mode !== 'WALK' ? (leg.route?.shortName || null) : null,
-        });
-      }
-    });
-
-    return routes;
-  }, [selectedItinerary, decodedLegPolylines]);
+  const tripRouteCoordinates = useMemo(() => (
+    buildTripRouteCoordinates({
+      itinerary: selectedItinerary,
+      decodedLegPolylines,
+    })
+  ), [selectedItinerary, decodedLegPolylines]);
 
   // Origin + destination markers with stop info
   const tripMarkers = useMemo(() => {
@@ -373,31 +593,15 @@ export const useTripVisualization = ({
     return markers;
   }, [selectedItinerary, decodedLegPolylines]);
 
-  // Vehicles matching the selected itinerary's trips
+  // Vehicles matching the selected itinerary's trips, or approaching buses on the same route
   const tripVehicles = useMemo(() => {
-    if (!selectedItinerary || vehicles.length === 0) return [];
-
-    const tripIds = new Set();
-    selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && !leg.isOnDemand && leg.tripId) {
-        tripIds.add(leg.tripId);
-      }
+    return selectTripPreviewVehicles({
+      selectedItinerary,
+      vehicles,
+      shapes,
+      tripMapping,
     });
-
-    if (tripIds.size === 0) return [];
-
-    const byTripId = vehicles.filter(v => tripIds.has(v.tripId));
-    if (byTripId.length > 0) return byTripId;
-
-    // Fallback: filter by route IDs
-    const tripRouteIds = new Set();
-    selectedItinerary.legs.forEach(leg => {
-      if (leg.mode !== 'WALK' && !leg.isOnDemand && leg.route?.id) {
-        tripRouteIds.add(leg.route.id);
-      }
-    });
-    return vehicles.filter(v => tripRouteIds.has(v.routeId));
-  }, [selectedItinerary, vehicles]);
+  }, [selectedItinerary, vehicles, shapes, tripMapping]);
 
   // Dashed approach lines: bus current position → boarding stop (following GTFS shape)
   const busApproachLines = useMemo(() => {

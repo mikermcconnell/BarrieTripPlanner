@@ -236,9 +236,19 @@ describe('scoreConfidence', () => {
     expect(scoreConfidence(points, NOW - 60000, NOW)).toBe('low');
   });
 
-  test('returns medium for moderate evidence', () => {
+  test('keeps single-vehicle moderate evidence low', () => {
     const points = Array.from({ length: 6 }, (_, i) =>
       makeEvidencePoint({ vehicleId: 'bus-1', timestampMs: NOW - 150000 + i * 30000 })
+    );
+    expect(scoreConfidence(points, NOW - 150000, NOW)).toBe('low');
+  });
+
+  test('returns medium for moderate multi-vehicle evidence', () => {
+    const points = Array.from({ length: 6 }, (_, i) =>
+      makeEvidencePoint({
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+        timestampMs: NOW - 150000 + i * 30000,
+      })
     );
     expect(scoreConfidence(points, NOW - 150000, NOW)).toBe('medium');
   });
@@ -292,7 +302,21 @@ describe('buildGeometry', () => {
         vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
       }));
     }
-    const evidence = { points };
+    const evidence = {
+      points,
+      entryCandidates: [{
+        latitude: 44.39,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT - 30_000,
+        vehicleId: 'bus-1',
+      }],
+      exitCandidates: [{
+        latitude: 44.39,
+        longitude: -79.677,
+        timestampMs: DETECTED_AT + 10 * 30_000,
+        vehicleId: 'bus-1',
+      }],
+    };
     const result = buildGeometry('route-1', evidence, shapes, routeShapeMapping, NOW, DETECTED_AT);
 
     expect(result.skippedSegmentPolyline).not.toBeNull();
@@ -355,6 +379,88 @@ describe('buildGeometry', () => {
     expect(result.exitPoint).not.toBeNull();
     expect(result.entryPoint.longitude).toBeCloseTo(-79.699, 3);
     expect(result.exitPoint.longitude).toBeCloseTo(-79.671, 3);
+    expect(result.segments[0].debug.entryAnchorSource).toBe('boundary-candidate');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
+  });
+
+  test('records fallback anchor debug when boundary candidates are unavailable', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 60_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.69,
+        timestampMs: DETECTED_AT + 90_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.685,
+        timestampMs: DETECTED_AT + 120_000,
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.68,
+        timestampMs: DETECTED_AT + 150_000,
+      }),
+    ];
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [],
+        exitCandidates: [],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.debug.selectedShapeId).toBe('shape-1');
+    expect(result.segments[0].debug.entryAnchorSource).toBe('projected-evidence-fallback');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('projected-evidence-fallback');
+  });
+
+  test('does not publish skipped route geometry until a return-to-route exit is observed', () => {
+    const points = Array.from({ length: 5 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.699 + i * 0.004,
+        timestampMs: DETECTED_AT + i * 30_000,
+        vehicleId: 'bus-1',
+      })
+    );
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT - 30_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.segments[0].skippedSegmentPolyline).toBeNull();
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].latitude).toBeCloseTo(44.395, 3);
+    expect(result.segments[0].debug.entryAnchorSource).toBe('boundary-candidate');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('projected-evidence-fallback');
+    expect(result.segments[0].debug.exitCandidateCount).toBe(0);
   });
 
   test('returns empty geometry for unknown route', () => {
@@ -452,7 +558,21 @@ describe('buildGeometry', () => {
     );
     const result = buildGeometry(
       'route-coarse',
-      { points },
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.699,
+          timestampMs: DETECTED_AT - 30_000,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.690,
+          timestampMs: DETECTED_AT + 6 * 30_000,
+          vehicleId: 'bus-1',
+        }],
+      },
       coarseShapes,
       coarseRouteMapping,
       NOW,
@@ -531,7 +651,21 @@ describe('buildGeometry', () => {
 
     const result = buildGeometry(
       'route-1',
-      { points },
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.6994,
+          timestampMs: DETECTED_AT - 30_000,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.6606,
+          timestampMs: DETECTED_AT + 180_000,
+          vehicleId: 'bus-2',
+        }],
+      },
       shapes,
       routeShapeMapping,
       NOW,
@@ -717,7 +851,28 @@ describe('buildGeometry', () => {
       }),
     ];
 
-    const result = buildGeometry('route-1', { points }, shapes, routeShapeMapping, NOW, DETECTED_AT);
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.699,
+          timestampMs: DETECTED_AT,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.681,
+          timestampMs: DETECTED_AT + 150_000,
+          vehicleId: 'bus-1',
+        }],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
 
     expect(result.inferredDetourPolyline).not.toBeNull();
     expect(result.inferredDetourPolyline.length).toBeGreaterThanOrEqual(3);
@@ -934,6 +1089,147 @@ describe('route family geometry handoff', () => {
     expect(detours['8A'].geometry.segments[0].exitPoint.longitude).toBeCloseTo(-79.698, 3);
     expect(detours['8A'].geometry.segments[1].entryPoint.longitude).toBeCloseTo(-79.684, 3);
     expect(detours['8A'].geometry.segments[1].exitPoint.longitude).toBeCloseTo(-79.688, 3);
+    expect(detours['8A'].geometry.debug.routeFamilyLeaderRouteId).toBe('8B');
+    expect(detours['8A'].geometry.segments[0].debug.projectedFromSiblingShapeId).toBe('shape-8b');
+    expect(detours['8A'].geometry.segments[0].debug.projectedToShapeId).toBe('shape-8a');
+  });
+
+  test('skips sibling route projection when route family handoff is disabled', () => {
+    const originalSetting = process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF;
+    try {
+      process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF = 'false';
+      jest.resetModules();
+
+      const { reconcileRouteFamilyGeometries: reconcileWithoutHandoff } = require('../detourGeometry');
+
+      const familyShapes = new Map([
+        ['shape-8b', [
+          { latitude: 44.39, longitude: -79.70 },
+          { latitude: 44.39, longitude: -79.69 },
+          { latitude: 44.39, longitude: -79.68 },
+        ]],
+        ['shape-8a', [
+          { latitude: 44.39, longitude: -79.68 },
+          { latitude: 44.39, longitude: -79.69 },
+          { latitude: 44.39, longitude: -79.70 },
+        ]],
+      ]);
+      const familyRouteMapping = new Map([
+        ['8A', ['shape-8a']],
+        ['8B', ['shape-8b']],
+      ]);
+      const detours = {
+        '8B': {
+          routeId: '8B',
+          geometry: {
+            segments: [
+              {
+                shapeId: 'shape-8b',
+                skippedSegmentPolyline: [
+                  { latitude: 44.39, longitude: -79.698 },
+                  { latitude: 44.39, longitude: -79.694 },
+                ],
+                inferredDetourPolyline: [
+                  { latitude: 44.392, longitude: -79.698 },
+                  { latitude: 44.392, longitude: -79.694 },
+                ],
+                entryPoint: { latitude: 44.39, longitude: -79.698 },
+                exitPoint: { latitude: 44.39, longitude: -79.694 },
+                confidence: 'medium',
+                evidencePointCount: 6,
+                lastEvidenceAt: 10_000,
+                entryIndex: 0,
+                exitIndex: 1,
+                spanMeters: 350,
+              },
+            ],
+          },
+        },
+      };
+
+      reconcileWithoutHandoff(detours, familyShapes, familyRouteMapping);
+
+      expect(detours['8B']).toBeDefined();
+      expect(detours['8A']).toBeUndefined();
+    } finally {
+      if (originalSetting == null) {
+        delete process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF;
+      } else {
+        process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF = originalSetting;
+      }
+      jest.resetModules();
+    }
+  });
+
+  test('does not create a sibling detour from fallback-only exit geometry', () => {
+    const familyShapes = new Map([
+      ['shape-7a', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+      ]],
+      ['shape-7b', [
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.70 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['7A', ['shape-7a']],
+      ['7B', ['shape-7b']],
+    ]);
+    const detours = {
+      '7A': {
+        routeId: '7A',
+        vehicleCount: 0,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 9,
+          lastEvidenceAt: 10_000,
+          segments: [
+            {
+              shapeId: 'shape-7a',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.699 },
+                { latitude: 44.39, longitude: -79.681 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.699 },
+                { latitude: 44.392, longitude: -79.681 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.699 },
+              exitPoint: { latitude: 44.39, longitude: -79.681 },
+              confidence: 'medium',
+              evidencePointCount: 9,
+              lastEvidenceAt: 10_000,
+              entryIndex: 0,
+              exitIndex: 1,
+              spanMeters: 1400,
+              debug: {
+                entryAnchorSource: 'boundary-candidate',
+                exitAnchorSource: 'projected-evidence-fallback',
+                entryCandidateCount: 1,
+                exitCandidateCount: 0,
+              },
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.699 },
+            { latitude: 44.39, longitude: -79.681 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.392, longitude: -79.699 },
+            { latitude: 44.392, longitude: -79.681 },
+          ],
+          entryPoint: { latitude: 44.39, longitude: -79.699 },
+          exitPoint: { latitude: 44.39, longitude: -79.681 },
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+
+    expect(detours['7B']).toBeUndefined();
   });
 });
 
