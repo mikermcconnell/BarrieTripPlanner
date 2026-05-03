@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install root dependencies
@@ -32,7 +32,7 @@ jobs:
         run: npm run check:parity
 
       - name: Audit root production dependencies
-        run: npm audit --omit=dev
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Install api-proxy dependencies
         run: npm --prefix api-proxy ci
@@ -41,4 +41,4 @@ jobs:
         run: npm --prefix api-proxy test
 
       - name: Audit api-proxy production dependencies
-        run: npm --prefix api-proxy audit --omit=dev
+        run: npm --prefix api-proxy audit --omit=dev --audit-level=high
