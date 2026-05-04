@@ -21,23 +21,40 @@ Use a cheap open-source model for answer writing, but make the backend responsib
 - validate the response shape
 - return a concise answer with freshness and confidence
 
-Recommended starting model stack:
+Recommended model stack:
 
-- Chat model: `Qwen/Qwen3-4B-Instruct-2507`
-- Embedding model: `Qwen/Qwen3-Embedding-0.6B`
+- **Phase 1 chat model:** `Qwen/Qwen3-4B-Instruct-2507`
+- **Phase 1 retrieval:** static keyword retrieval only
+- **Phase 2 embedding model:** `Qwen/Qwen3-Embedding-0.6B`
+- **Fallback model to test:** `microsoft/Phi-4-mini-instruct`
 
-Reasons:
+Use Qwen3 4B first because it has the best fit for Ask BTTP's constraints: small enough to run cheaply, Apache 2.0 licensed, strong instruction following, good tool/RAG fit, and compatible with OpenAI-style hosted or self-hosted inference. Treat it as the answer writer, not the source of truth. BTTP's backend must still provide all transit facts.
 
-- good small-model instruction following
-- cheap enough for production experiments
-- Apache 2.0 license
-- strong long-context support for compact transit context packets
-- same model family for chat and retrieval simplifies hosting choices
+Do not use the model's full context window as a reason to send large GTFS payloads. Phase 1 should target compact 8K-32K context packets and short answers.
+
+Recommended runtime defaults:
+
+- `LOCAL_AI_MODEL=Qwen/Qwen3-4B-Instruct-2507`
+- `TRANSIT_ASSISTANT_MAX_ANSWER_CHARS=900`
+- `LOCAL_AI_TIMEOUT_MS=5000`
+- `temperature=0.0-0.1`
+- `max_tokens=500-700`
+
+Model notes:
+
+- `microsoft/Phi-4-mini-instruct` is a good backup to test, but not the first choice because small-model factual limits and function-call hallucination risk are especially important for transit trust.
+- `google/gemma-3-4b-it` is capable, but its access/terms and multimodal strengths are less useful for Phase 1 than Qwen's Apache 2.0 text-first fit.
+- `meta-llama/Llama-3.2-3B-Instruct` is viable but likely weaker for nuanced grounded answers.
+- `mistralai/Mistral-Small-3.2-24B-Instruct-2506` is stronger, but too heavy and costly for the first production version.
 
 References:
 
 - https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
 - https://huggingface.co/Qwen/Qwen3-Embedding-0.6B
+- https://huggingface.co/microsoft/Phi-4-mini-instruct
+- https://huggingface.co/google/gemma-3-4b-it
+- https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct
+- https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506
 
 ## Product Name
 
@@ -447,10 +464,11 @@ Add `/api/ai-status` details only for safe operational metadata. Do not expose m
 2. Use `api-proxy` as the only model boundary.
 3. Start with deterministic/rule-based intent classification.
 4. Start with static keyword retrieval, not embeddings, unless quality is poor.
-5. Use Qwen3 4B as the recommended first chat model.
+5. Use `Qwen/Qwen3-4B-Instruct-2507` as the Phase 1 chat model.
 6. Do not fine-tune for Phase 1.
 7. Do not send saved places, full trip history, or personal profile data to the model in Phase 1.
 8. Keep answers short and source-labeled.
+9. Use static keyword retrieval in Phase 1; add `Qwen/Qwen3-Embedding-0.6B` only if retrieval quality requires it.
 
 ## Open Questions Deferred Until Build
 

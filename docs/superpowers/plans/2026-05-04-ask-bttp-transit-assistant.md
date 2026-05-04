@@ -6,7 +6,7 @@
 
 **Architecture:** Add a protected assistant endpoint to `api-proxy`, keep live-data gathering and prompt construction server-side, and add a dedicated React Native chat screen reached from Profile. The app sends a short user message and safe screen context; the backend classifies intent, gathers deterministic context, calls the configured OpenAI-compatible local/hosted model, validates JSON, and returns a concise answer with source and freshness metadata.
 
-**Tech Stack:** Expo SDK 54, React Native, Firebase Auth/anonymous auth, Express API proxy, Jest, Supertest, OpenAI-compatible local AI client, GTFS/GTFS-RT data sources, Firestore detour feed.
+**Tech Stack:** Expo SDK 54, React Native, Firebase Auth/anonymous auth, Express API proxy, Jest, Supertest, OpenAI-compatible local AI client, `Qwen/Qwen3-4B-Instruct-2507` for Phase 1 chat, GTFS/GTFS-RT data sources, Firestore detour feed.
 
 ---
 
@@ -51,6 +51,32 @@
 - Modify `src/screens/ProfileScreen.js`: add Ask BTTP entry card.
 - Modify `src/config/constants.js`: add assistant enablement flag and backend path constants if needed.
 - Add app tests under `src/__tests__/`.
+
+---
+
+## Model Decision
+
+Use `Qwen/Qwen3-4B-Instruct-2507` as the Phase 1 chat model. Keep retrieval keyword-based in Phase 1. Add `Qwen/Qwen3-Embedding-0.6B` in Phase 2 only if static retrieval is not good enough.
+
+Recommended runtime defaults:
+
+```text
+LOCAL_AI_MODEL=Qwen/Qwen3-4B-Instruct-2507
+TRANSIT_ASSISTANT_MAX_ANSWER_CHARS=900
+LOCAL_AI_TIMEOUT_MS=5000
+temperature=0.0-0.1
+max_tokens=500-700
+context packet target=8K-32K
+```
+
+Do not send large GTFS payloads to the model. The backend should build compact evidence packets and keep the model limited to answer writing.
+
+Fallback models to evaluate only after Qwen is tested:
+
+- `microsoft/Phi-4-mini-instruct` as the closest small-model backup.
+- `mistralai/Mistral-Small-3.2-24B-Instruct-2506` only if quality is insufficient and hosting cost is acceptable.
+
+Avoid starting with `google/gemma-3-4b-it` or `meta-llama/Llama-3.2-3B-Instruct` unless deployment constraints force a change.
 
 ---
 
@@ -1038,7 +1064,7 @@ Keep `TRANSIT_ASSISTANT_ENABLED=false` until:
 - app tests pass
 - web smoke passes
 - Android smoke passes
-- production model endpoint is selected
+- production model endpoint for `Qwen/Qwen3-4B-Instruct-2507` is selected
 - privacy logging setting is confirmed
 
 - [ ] **Step 7: Final commit if verification docs changed**
