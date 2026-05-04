@@ -962,6 +962,55 @@ describe('multiple same-route detour segments', () => {
   });
 });
 
+describe('recurring short deviations', () => {
+  test('publishes a detour after repeated short off-route streaks across trips', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+    const tripMapping = new Map([
+      ['trip-short-1', { routeId: 'route-1', shapeId: 'shape-1', headsign: 'Loop', directionId: 0 }],
+      ['trip-short-2', { routeId: 'route-1', shapeId: 'shape-1', headsign: 'Loop', directionId: 0 }],
+      ['trip-short-3', { routeId: 'route-1', shapeId: 'shape-1', headsign: 'Loop', directionId: 0 }],
+    ]);
+
+    const runShortDeviation = (index) => {
+      const id = `short-bus-${index}`;
+      const tripId = `trip-short-${index}`;
+      const offset = (index - 1) * 20 * 60_000;
+
+      Date.now = () => BASE_TIME + offset;
+      let result = processVehicles([
+        makeVehicle({ id, tripId, coordinate: OFF_ROUTE_WEST }),
+      ], shapes, routeShapeMapping, tripMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+
+      Date.now = () => BASE_TIME + offset + 30_000;
+      result = processVehicles([
+        makeVehicle({ id, tripId, coordinate: OFF_ROUTE_MID }),
+      ], shapes, routeShapeMapping, tripMapping);
+      expect(Object.keys(result)).toHaveLength(0);
+
+      Date.now = () => BASE_TIME + offset + 60_000;
+      return processVehicles([
+        makeVehicle({ id, tripId, coordinate: ON_ROUTE_IN_ZONE }),
+      ], shapes, routeShapeMapping, tripMapping);
+    };
+
+    try {
+      expect(Object.keys(runShortDeviation(1))).toHaveLength(0);
+      expect(Object.keys(runShortDeviation(2))).toHaveLength(0);
+
+      const result = runShortDeviation(3);
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].vehicleCount).toBe(0);
+      expect(result['route-1'].geometry.evidencePointCount).toBeGreaterThanOrEqual(6);
+      expect(result['route-1'].geometry.segments.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+});
+
 describe('zone-aware clearing', () => {
   test('on-route outside zone core does NOT clear detour', () => {
     const onVehicleOutsideZone = makeVehicle({ coordinate: ON_ROUTE_OUTSIDE_ZONE });

@@ -20,7 +20,7 @@ The system detects detours automatically by watching real-time GPS positions —
 **How it works under the hood:**
 1. A server-side worker processes GTFS-RT vehicle positions on each detection tick
 2. Each vehicle's GPS is compared against its route's published shape
-3. When consecutive off-route readings are observed, a detour is confirmed
+3. When consecutive off-route readings are observed, or the same short deviation repeats across trips/vehicles, a detour is confirmed
 4. Detour geometry (skipped segment + inferred path) is published to Firestore
 5. The app subscribes in real time and shows the detour on the main map
 
@@ -41,7 +41,7 @@ GTFS-RT Feed (vehicle positions)
 ┌─────────────────────┐
 │  detourDetector.js   │  Route-level wrapper with segment-level state machines:
 │  (core algorithm)    │  (accumulating) → active → clear-pending → cleared
-│                      │  Per-vehicle tracking with consecutive reading thresholds
+│                      │  Per-vehicle thresholds + recurring short-deviation aggregation
 └────────┬────────────┘
          │
          ▼
@@ -126,6 +126,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 ### What's built (backend — complete)
 - Detection worker supports a legacy 30s interval loop and a newer manual/scheduled single-tick mode
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
+- **Recurring short-deviation detection** — repeated short off-route streaks on the same route segment can publish a detour even when no single bus stays off-route long enough to hit the normal consecutive-reading threshold. This is meant for short downtown jogs such as temporary market closures.
 - **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, all active detours are cleared and the worker starts fresh when service resumes.
 - **Headway-aware stale clearing** — as a safety net, the publisher clears stale active detour documents only when route-family vehicles are still reporting and the latest detour evidence is older than a schedule-aware threshold. The threshold is roughly two scheduled headways plus a buffer, with a 45-minute minimum, so low-frequency Sunday routes are not cleared just because no bus has reached the affected segment yet.
 - **Zero-vehicle stale clearing** — when a published detour has no vehicles currently off-route but route-family buses are still reporting, the publisher uses a shorter stale-evidence window so false positives do not linger on the map after buses return to normal routing.
@@ -144,6 +145,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 ### Most recent findings
 - **Fixed 2026-03-15: same-route detours were merging into one giant lifecycle** — The detector used to keep one active lifecycle per route, so two separate detours on the same route could collapse into one record and then clear when the bus served normal stops between them. The detector now keeps segment-level state internally and publishes both sections in one route document.
 - **Fixed 2026-03-20: noisy multi-vehicle detour geometry could render overlapping reroute branches** — The geometry builder used to simplify one timestamp-ordered list of all evidence points, which could weave together multiple buses and draw a messy inferred path. The backend now scores per-vehicle trajectories and publishes one representative reroute line so riders see a cleaner detour overlay.
+- **Fixed 2026-05-04: very short recurring detours could be missed** — The detector used to require one vehicle to stay off route for the full consecutive-reading window. It now also aggregates repeated short deviations across vehicles/trips within the same route segment.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are now segment-aware, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B and both directions of travel.
 
 ### What's missing to go public
@@ -208,6 +210,12 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF` | `true` | Allows sibling route projection (for example 8A/8B). Set to `false` while debugging route-assignment errors. |
 | `DETOUR_OFF_ROUTE_THRESHOLD_METERS` | `75` | Distance from shape to count as "off route" |
 | `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming (4 × 30s = 2min) |
+| `DETOUR_RECURRING_SHORT_DEVIATION_ENABLED` | `true` | Enables aggregation of repeated short off-route streaks across trips/vehicles. Set to `false` to disable. |
+| `DETOUR_RECURRING_SHORT_DEVIATION_WINDOW_MS` | `10800000` | Time window for grouping repeated short deviations (3h). |
+| `DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS` | `3` | Short-deviation observations required before publishing. |
+| `DETOUR_RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES` | `2` | Minimum unique trips/vehicles required before publishing. |
+| `DETOUR_RECURRING_SHORT_DEVIATION_MAX_GAP_METERS` | `350` | Maximum projected route-distance gap for short deviations to be grouped together. |
+| `DETOUR_RECURRING_SHORT_DEVIATION_MAX_STREAK_READINGS` | `3` | Longest off-route streak eligible for short-deviation aggregation. Longer streaks use the normal detector path. |
 | `DETOUR_EVIDENCE_WINDOW_MS` | `900000` | Time window for geometry evidence points (15min) |
 | `DETOUR_SEGMENT_GAP_METERS` | `400` | Minimum projected gap before geometry evidence is split into separate published detour segments |
 | `DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS` | `100` | Minimum skipped-route span before route-aligned skipped-segment geometry is published |
@@ -397,6 +405,15 @@ curl -X POST http://localhost:3001/api/detour-simulate \
   -d "{\"routeId\":\"1\"}"
 ```
 
+To publish the Farmers Market test detour for routes 10 and 11:
+
+```bash
+curl -X POST http://localhost:3001/api/detour-simulate \
+  -H "Content-Type: application/json" \
+  -H "x-api-token: YOUR_TOKEN" \
+  -d "{\"preset\":\"farmers-market\",\"durationMinutes\":15}"
+```
+
 Open the app and confirm the detour banner, map overlay, and details sheet render.
 
 Clear it when done:
@@ -406,6 +423,20 @@ curl -X POST http://localhost:3001/api/detour-simulate/clear \
   -H "Content-Type: application/json" \
   -H "x-api-token: YOUR_TOKEN" \
   -d "{\"routeId\":\"1\"}"
+```
+
+For the Farmers Market test, clear both route documents:
+
+```bash
+curl -X POST http://localhost:3001/api/detour-simulate/clear \
+  -H "Content-Type: application/json" \
+  -H "x-api-token: YOUR_TOKEN" \
+  -d "{\"routeId\":\"10\"}"
+
+curl -X POST http://localhost:3001/api/detour-simulate/clear \
+  -H "Content-Type: application/json" \
+  -H "x-api-token: YOUR_TOKEN" \
+  -d "{\"routeId\":\"11\"}"
 ```
 
 Safety notes:

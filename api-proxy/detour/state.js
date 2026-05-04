@@ -3,6 +3,7 @@ const activeDetours = new Map();
 const detourEvidence = new Map();
 const persistentDetourCandidates = new Map();
 const learnedPersistentDetours = new Map();
+const recurringShortDeviationCandidates = new Map();
 
 function clearDetourState() {
   vehicleState.clear();
@@ -10,6 +11,7 @@ function clearDetourState() {
   detourEvidence.clear();
   persistentDetourCandidates.clear();
   learnedPersistentDetours.clear();
+  recurringShortDeviationCandidates.clear();
 }
 
 module.exports = {
@@ -18,5 +20,6 @@ module.exports = {
   detourEvidence,
   persistentDetourCandidates,
   learnedPersistentDetours,
+  recurringShortDeviationCandidates,
   clearDetourState,
 };

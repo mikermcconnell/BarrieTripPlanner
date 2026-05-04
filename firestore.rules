@@ -100,6 +100,27 @@ service cloud.firestore {
         allow delete: if isAuthenticated() && isOwner(userId);
       }
 
+      // ==================== SAVED PLACES ====================
+
+      match /savedPlaces/{placeId} {
+        // User can read their own saved places
+        allow read: if isAuthenticated() && isOwner(userId);
+
+        // User can create saved places
+        allow create: if isAuthenticated()
+          && isOwner(userId)
+          && isNonEmptyString(request.resource.data.id)
+          && isNonEmptyString(request.resource.data.name)
+          && request.resource.data.lat is number
+          && request.resource.data.lon is number;
+
+        // User can update their saved places
+        allow update: if isAuthenticated() && isOwner(userId);
+
+        // User can delete their saved places
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
+
       // ==================== SAVED TRIPS (Future Feature) ====================
 
       match /savedTrips/{tripId} {

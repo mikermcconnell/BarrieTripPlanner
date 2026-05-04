@@ -143,6 +143,13 @@ describe('buildNavigationRoutePolylines', () => {
           mode: 'WALK',
           from: { lat: 44.01, lon: -79.01 },
           to: { lat: 44.02, lon: -79.02 },
+          legGeometry: {
+            points: encodePolyline([
+              { latitude: 44.01, longitude: -79.01 },
+              { latitude: 44.015, longitude: -79.015 },
+              { latitude: 44.02, longitude: -79.02 },
+            ]),
+          },
         },
       ],
     };
@@ -162,6 +169,25 @@ describe('buildNavigationRoutePolylines', () => {
         outlineColor: WALKING_ROUTE_DOT_OUTLINE_COLOR,
       })
     );
+  });
+
+  test('does not draw a straight walking corridor when street geometry is missing', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { lat: 44.01, lon: -79.01 },
+          to: { lat: 44.02, lon: -79.02 },
+        },
+      ],
+    };
+
+    const lines = buildNavigationRoutePolylines({
+      itinerary,
+      currentLegIndex: 0,
+    });
+
+    expect(lines).toEqual([]);
   });
 
 

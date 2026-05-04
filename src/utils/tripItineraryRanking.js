@@ -1,4 +1,9 @@
 import { ROUTING_CONFIG } from '../config/constants';
+import {
+  getEffectiveTransferCount,
+  getTransitRideLegsWithIndexes,
+  isSameBusContinuation,
+} from './routeContinuity';
 
 const DEFAULT_TRANSFER_PENALTY_SECONDS = 7 * 60;
 const DEFAULT_RISKY_TRANSFER_THRESHOLD_SECONDS = 3 * 60;
@@ -9,16 +14,8 @@ const isNumber = (value) => Number.isFinite(Number(value));
 
 const toSeconds = (milliseconds) => Math.round(Number(milliseconds) / 1000);
 
-const getTransitLegs = (legs = []) => legs.filter((leg) => (
-  leg?.mode && !['WALK', 'ON_DEMAND'].includes(String(leg.mode).toUpperCase())
-));
-
 const getTransferCount = (itinerary) => {
-  if (isNumber(itinerary?.transfers)) {
-    return Math.max(0, Number(itinerary.transfers));
-  }
-
-  return Math.max(0, getTransitLegs(itinerary?.legs).length - 1);
+  return getEffectiveTransferCount(itinerary);
 };
 
 const getDurationSeconds = (itinerary) => {
@@ -46,7 +43,7 @@ const getEndTimeSeconds = (itinerary, durationSeconds) => {
 };
 
 const getRiskyTransferPenaltySeconds = (legs = [], options) => {
-  const transitLegs = getTransitLegs(legs);
+  const transitLegs = getTransitRideLegsWithIndexes(legs);
   if (transitLegs.length < 2) return 0;
 
   const thresholdSeconds = options.riskyTransferThresholdSeconds;
@@ -54,8 +51,12 @@ const getRiskyTransferPenaltySeconds = (legs = [], options) => {
   let totalPenalty = 0;
 
   for (let index = 1; index < transitLegs.length; index += 1) {
-    const previousLeg = transitLegs[index - 1];
-    const nextLeg = transitLegs[index];
+    const previousEntry = transitLegs[index - 1];
+    const nextEntry = transitLegs[index];
+    if (isSameBusContinuation(previousEntry, nextEntry, legs)) continue;
+
+    const previousLeg = previousEntry.leg;
+    const nextLeg = nextEntry.leg;
     if (!isNumber(previousLeg?.endTime) || !isNumber(nextLeg?.startTime)) continue;
 
     const transferWindowSeconds = toSeconds(Number(nextLeg.startTime) - Number(previousLeg.endTime));
@@ -149,3 +150,20 @@ export const rankItinerariesForRider = (itineraries = [], options = {}) => (
     ))
 );
 
+const hasRecommendedLabel = (itinerary) => (
+  itinerary?.isRecommended === true ||
+  (Array.isArray(itinerary?.labels) && itinerary.labels.includes('Recommended'))
+);
+
+export const sortRecommendedItineraryFirst = (itineraries = []) => {
+  const recommendedIndex = itineraries.findIndex(hasRecommendedLabel);
+  if (recommendedIndex <= 0) {
+    return itineraries;
+  }
+
+  return [
+    itineraries[recommendedIndex],
+    ...itineraries.slice(0, recommendedIndex),
+    ...itineraries.slice(recommendedIndex + 1),
+  ];
+};

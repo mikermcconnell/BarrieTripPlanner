@@ -144,7 +144,7 @@ describe('buildTripEndpointMarkers', () => {
 });
 
 describe('buildTripRouteCoordinates', () => {
-  test('keeps every bus leg solid in a double-transfer trip and marks only walks as dotted', () => {
+  test('keeps bus and walking legs solid in a double-transfer trip', () => {
     const itinerary = {
       legs: [
         {
@@ -188,21 +188,91 @@ describe('buildTripRouteCoordinates', () => {
       ],
     };
 
-    const routes = buildTripRouteCoordinates({ itinerary, decodedLegPolylines: [] });
+    const decodedLegPolylines = itinerary.legs.map((leg) => (
+      leg.mode === 'WALK'
+        ? [
+            { latitude: leg.from.lat, longitude: leg.from.lon },
+            { latitude: (leg.from.lat + leg.to.lat) / 2, longitude: (leg.from.lon + leg.to.lon) / 2 },
+            { latitude: leg.to.lat, longitude: leg.to.lon },
+          ]
+        : []
+    ));
+    const routes = buildTripRouteCoordinates({ itinerary, decodedLegPolylines });
 
     expect(routes.map((route) => route.lineStyle)).toEqual([
-      'dotted',
       'solid',
-      'dotted',
       'solid',
-      'dotted',
       'solid',
-      'dotted',
+      'solid',
+      'solid',
+      'solid',
+      'solid',
     ]);
     expect(routes.filter((route) => route.mode === 'BUS').map((route) => route.routeLabel)).toEqual(['7', '8A', '2B']);
     expect(routes.filter((route) => route.mode === 'BUS').every((route) => route.lineStyle === 'solid')).toBe(true);
     expect(routes.filter((route) => route.mode === 'BUS').every((route) => route.labelCoordinate)).toBe(true);
     expect(routes.filter((route) => route.isTransferWalk)).toHaveLength(2);
+  });
+
+  test('does not draw straight walking preview legs when street geometry is unavailable', () => {
+    const routes = buildTripRouteCoordinates({
+      itinerary: {
+        legs: [
+          {
+            mode: 'WALK',
+            from: { lat: 44.381, lon: -79.701 },
+            to: { lat: 44.382, lon: -79.700 },
+          },
+          {
+            mode: 'BUS',
+            route: { shortName: '7', color: '#AA0000' },
+            from: { lat: 44.382, lon: -79.700 },
+            to: { lat: 44.386, lon: -79.696 },
+          },
+        ],
+      },
+      decodedLegPolylines: [],
+    });
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].mode).toBe('BUS');
+  });
+
+  test('treats fixed-route bus legs as solid even if an on-demand flag is present', () => {
+    const routes = buildTripRouteCoordinates({
+      itinerary: {
+        legs: [
+          {
+            mode: 'BUS',
+            isOnDemand: true,
+            tripId: 'TRIP-12A',
+            route: { id: '12A', shortName: '12A', color: '#F39AC2' },
+            from: { lat: 44.381, lon: -79.701 },
+            to: { lat: 44.385, lon: -79.697 },
+          },
+          {
+            mode: 'ON_DEMAND',
+            isOnDemand: true,
+            zoneName: 'Flex Zone',
+            zoneColor: '#FF8800',
+            from: { lat: 44.385, lon: -79.697 },
+            to: { lat: 44.389, lon: -79.693 },
+          },
+        ],
+      },
+      decodedLegPolylines: [],
+    });
+
+    expect(routes[0]).toEqual(expect.objectContaining({
+      isOnDemand: false,
+      lineStyle: 'solid',
+      routeLabel: '12A',
+    }));
+    expect(routes[1]).toEqual(expect.objectContaining({
+      isOnDemand: true,
+      lineStyle: 'dashed',
+      routeLabel: null,
+    }));
   });
 });
 
@@ -333,9 +403,198 @@ describe('selectTripPreviewVehicles', () => {
       tripMapping: {},
     })).toEqual([switchedVehicle]);
   });
+
+  test('does not keep a passed first-leg route bus when progress filtering says it is downstream of pickup', () => {
+    const selectedItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'PLANNED-12A',
+          from: { name: 'Boarding Stop', lat: 44.2, lon: -79.8 },
+          to: { name: 'Destination Stop', lat: 44.5, lon: -79.5 },
+          route: { id: '12A', shortName: '12A' },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'TRANSFER-7A',
+          from: { name: 'Transfer Stop', lat: 44.5, lon: -79.5 },
+          to: { name: 'End Stop', lat: 44.7, lon: -79.3 },
+          route: { id: '7A', shortName: '7A' },
+        },
+      ],
+    };
+
+    const firstLegBus = {
+      id: 'closest-first-leg-bus',
+      routeId: '12A',
+      tripId: 'LIVE-OTHER-12A',
+      directionId: 1,
+      coordinate: { latitude: 44.35, longitude: -79.65 },
+    };
+
+    expect(selectTripPreviewVehicles({
+      selectedItinerary,
+      vehicles: [
+        firstLegBus,
+        {
+          id: 'transfer-bus',
+          routeId: '7A',
+          tripId: 'LIVE-OTHER-7A',
+          directionId: 1,
+          coordinate: { latitude: 44.55, longitude: -79.45 },
+        },
+      ],
+      shapes: {
+        shape12A: [
+          { latitude: 44.0, longitude: -80.0 },
+          { latitude: 44.2, longitude: -79.8 },
+          { latitude: 44.35, longitude: -79.65 },
+          { latitude: 44.5, longitude: -79.5 },
+        ],
+      },
+      tripMapping: {
+        'PLANNED-12A': {
+          routeId: '12A',
+          directionId: 1,
+          shapeId: 'shape12A',
+        },
+      },
+    })).toEqual([]);
+  });
+
+  test('keeps first-leg route fallback bus when a later transfer leg has an exact trip match', () => {
+    const selectedItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'SCHEDULED-100',
+          directionId: 0,
+          from: { name: 'U-Dash', lat: 44.382, lon: -79.7 },
+          to: { name: 'Downtown Terminal', lat: 44.386, lon: -79.696 },
+          route: { id: '100', shortName: '100', color: '#910005' },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'TRANSFER-8A',
+          directionId: 1,
+          from: { name: 'Downtown Terminal', lat: 44.386, lon: -79.696 },
+          to: { name: 'Destination', lat: 44.39, lon: -79.692 },
+          route: { id: '8A', shortName: '8A', color: '#0057b8' },
+        },
+      ],
+    };
+
+    const vehicles = [
+      {
+        id: 'route-100-approaching',
+        routeId: '100',
+        tripId: 'LIVE-OTHER-100',
+        directionId: 0,
+        coordinate: { latitude: 44.381, longitude: -79.701 },
+      },
+      {
+        id: 'transfer-exact',
+        routeId: '8A',
+        tripId: 'TRANSFER-8A',
+        directionId: 1,
+        coordinate: { latitude: 44.387, longitude: -79.695 },
+      },
+    ];
+
+    const shapes = {
+      shape100: [
+        { latitude: 44.38, longitude: -79.702 },
+        { latitude: 44.381, longitude: -79.701 },
+        { latitude: 44.382, longitude: -79.7 },
+        { latitude: 44.384, longitude: -79.698 },
+        { latitude: 44.386, longitude: -79.696 },
+      ],
+    };
+
+    const tripMapping = {
+      'SCHEDULED-100': { routeId: '100', directionId: 0, shapeId: 'shape100' },
+      'TRANSFER-8A': { routeId: '8A', directionId: 1, shapeId: 'shape8A' },
+    };
+
+    const selectedVehicles = selectTripPreviewVehicles({
+      selectedItinerary,
+      vehicles,
+      shapes,
+      tripMapping,
+    });
+
+    expect(selectedVehicles.map((vehicle) => vehicle.id)).toEqual([
+      'route-100-approaching',
+      'transfer-exact',
+    ]);
+    expect(buildBusApproachLines({
+      legs: selectedItinerary.legs,
+      tripVehicles: selectedVehicles,
+      shapes,
+      tripMapping,
+    })).toEqual([
+      {
+        id: 'bus-approach-SCHEDULED-100',
+        coordinates: [
+          { latitude: 44.381, longitude: -79.701 },
+          { latitude: 44.382, longitude: -79.7 },
+        ],
+        color: '#910005',
+      },
+    ]);
+  });
 });
 
 describe('buildBusApproachLines', () => {
+  test('uses a route-matched live bus when the scheduled trip id does not match realtime', () => {
+    const legs = [
+      {
+        mode: 'BUS',
+        tripId: 'SCHEDULED-11',
+        route: { id: '11', color: '#B7DD2A' },
+        directionId: 0,
+        from: { name: 'Pickup', lat: 44.382, lon: -79.7 },
+        to: { name: 'Dropoff', lat: 44.386, lon: -79.696 },
+      },
+    ];
+
+    const shapes = {
+      shape11: [
+        { latitude: 44.38, longitude: -79.702 },
+        { latitude: 44.381, longitude: -79.701 },
+        { latitude: 44.382, longitude: -79.7 },
+        { latitude: 44.384, longitude: -79.698 },
+        { latitude: 44.386, longitude: -79.696 },
+      ],
+    };
+
+    expect(buildBusApproachLines({
+      legs,
+      tripVehicles: [
+        {
+          id: 'live-route-11',
+          routeId: '11',
+          tripId: 'REALTIME-OTHER',
+          directionId: 0,
+          coordinate: { latitude: 44.381, longitude: -79.701 },
+        },
+      ],
+      shapes,
+      tripMapping: {
+        'SCHEDULED-11': { shapeId: 'shape11', directionId: 0 },
+      },
+    })).toEqual([
+      {
+        id: 'bus-approach-SCHEDULED-11',
+        coordinates: [
+          { latitude: 44.381, longitude: -79.701 },
+          { latitude: 44.382, longitude: -79.7 },
+        ],
+        color: '#B7DD2A',
+      },
+    ]);
+  });
+
   test('returns only the first boarding approach line for transfer itineraries', () => {
     const legs = [
       {
@@ -438,6 +697,98 @@ describe('buildBusApproachLines', () => {
       },
       tripMapping: {
         'TRIP-1': { shapeId: 'shapeA' },
+      },
+    })).toEqual([]);
+  });
+
+  test('uses the first transit leg route bus and direct fallback when no trip shape is available', () => {
+    const line = buildBusApproachLines({
+      legs: [
+        {
+          mode: 'WALK',
+          from: { name: 'Origin', lat: 44.1, lon: -79.9 },
+          to: { name: 'Boarding Stop', lat: 44.2, lon: -79.8 },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'SCHEDULED-12A',
+          route: { id: '12A', color: '#F39AC2' },
+          directionId: 1,
+          from: { name: 'Boarding Stop', lat: 44.2, lon: -79.8 },
+          to: { name: 'Transfer Stop', lat: 44.5, lon: -79.5 },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'TRANSFER-7A',
+          route: { id: '7A', color: '#F58220' },
+          directionId: 1,
+          from: { name: 'Transfer Stop', lat: 44.5, lon: -79.5 },
+          to: { name: 'End Stop', lat: 44.7, lon: -79.3 },
+        },
+      ],
+      tripVehicles: [
+        {
+          id: 'first-leg-live-bus',
+          routeId: '12A',
+          tripId: 'LIVE-OTHER-12A',
+          directionId: 1,
+          coordinate: { latitude: 44.19, longitude: -79.81 },
+        },
+        {
+          id: 'transfer-live-bus',
+          routeId: '7A',
+          tripId: 'LIVE-OTHER-7A',
+          directionId: 1,
+          coordinate: { latitude: 44.49, longitude: -79.51 },
+        },
+      ],
+      shapes: {},
+      tripMapping: {},
+    });
+
+    expect(line).toEqual([
+      {
+        id: 'bus-approach-SCHEDULED-12A',
+        coordinates: [
+          { latitude: 44.19, longitude: -79.81 },
+          { latitude: 44.2, longitude: -79.8 },
+        ],
+        color: '#F39AC2',
+      },
+    ]);
+  });
+
+  test('does not draw a route fallback approach line from a bus already past the first boarding stop', () => {
+    expect(buildBusApproachLines({
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'SCHEDULED-7B',
+          route: { id: '7B', color: '#F58220' },
+          directionId: 1,
+          from: { name: 'Pickup', lat: 44.2, lon: -79.8 },
+          to: { name: 'Dropoff', lat: 44.5, lon: -79.5 },
+        },
+      ],
+      tripVehicles: [
+        {
+          id: 'downstream-route-bus',
+          routeId: '7B',
+          tripId: 'LIVE-OTHER-7B',
+          directionId: 1,
+          coordinate: { latitude: 44.35, longitude: -79.65 },
+        },
+      ],
+      shapes: {
+        shape7B: [
+          { latitude: 44.0, longitude: -80.0 },
+          { latitude: 44.2, longitude: -79.8 },
+          { latitude: 44.35, longitude: -79.65 },
+          { latitude: 44.5, longitude: -79.5 },
+        ],
+      },
+      tripMapping: {
+        'SCHEDULED-7B': { shapeId: 'shape7B', directionId: 1 },
       },
     })).toEqual([]);
   });

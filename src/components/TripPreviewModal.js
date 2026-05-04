@@ -26,6 +26,7 @@ import {
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import { getContrastTextColor } from '../utils/colorUtils';
 import { buildTransitStopProgress } from '../utils/transitStopUtils';
+import { getEffectiveTransferCount } from '../utils/routeContinuity';
 import Icon from './Icon';
 
 const isOnDemandLeg = (leg) => leg.mode === 'ON_DEMAND' || leg.isOnDemand;
@@ -50,6 +51,7 @@ const TripPreviewModal = ({
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
+  const effectiveTransfers = getEffectiveTransferCount(itinerary);
 
   return (
     <Modal
@@ -82,7 +84,7 @@ const TripPreviewModal = ({
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{itinerary.transfers}</Text>
+                <Text style={styles.summaryValue}>{effectiveTransfers}</Text>
                 <Text style={styles.summaryLabel}>Transfers</Text>
               </View>
             </View>

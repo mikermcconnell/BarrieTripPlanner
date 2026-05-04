@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS } from '../config/theme';
+import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
 import { darkenColor } from '../utils/geometryUtils';
 import { normalizeHexColor, hexToRgba } from '../utils/colorUtils';
 
@@ -60,13 +61,14 @@ const RoutePolylineComponent = ({
       layerIndex={getLayerIndex(showArrows ? 3 : 2)}
       style={{
         symbolPlacement: 'line',
-        symbolSpacing: 250,
+        symbolSpacing: ROUTE_LINE_LABEL_STYLE.spacing,
         textField: routeLabel,
-        textSize: 11,
-        textColor: normalizedFill,
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 2,
-        textOpacity: 0.75,
+        textSize: ROUTE_LINE_LABEL_STYLE.size,
+        textColor: ROUTE_LINE_LABEL_STYLE.color,
+        textHaloColor: ROUTE_LINE_LABEL_STYLE.haloColor,
+        textHaloWidth: ROUTE_LINE_LABEL_STYLE.haloWidth,
+        textOpacity: ROUTE_LINE_LABEL_STYLE.opacity,
+        textOffset: ROUTE_LINE_LABEL_STYLE.offset,
         textAllowOverlap: false,
         textIgnorePlacement: false,
         textRotationAlignment: 'map',

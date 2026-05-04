@@ -13,6 +13,7 @@ import { planTripAuto, TripPlanningError } from '../services/tripService';
 import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
 import { validateTripInputs } from '../utils/tripValidation';
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
+import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
 
 // ─── Action Types ─────────────────────────────────────────────────
@@ -111,14 +112,16 @@ function tripReducer(state, action) {
         itineraries: [],
         hasSearched: true,
       };
-    case SEARCH_SUCCESS:
+    case SEARCH_SUCCESS: {
+      const sortedItineraries = sortRecommendedItineraryFirst(action.payload);
       return {
         ...state,
         isLoading: false,
-        itineraries: action.payload,
+        itineraries: sortedItineraries,
         selectedIndex: 0,
-        error: action.payload.length === 0 ? 'No routes found for this trip' : null,
+        error: sortedItineraries.length === 0 ? 'No routes found for this trip' : null,
       };
+    }
     case SEARCH_ERROR:
       return {
         ...state,
@@ -276,7 +279,7 @@ export const useTripPlanner = ({
         time: tripTime,
         arriveBy: state.timeMode === 'arriveBy',
         routingData: routing,
-        enrichWalking: false, // Skip walking API calls for preview; enrich on navigation start
+        enrichWalking: true, // Fetch walking geometry for the preview map; navigation can reuse it
         onDemandZones,
         stops,
       });

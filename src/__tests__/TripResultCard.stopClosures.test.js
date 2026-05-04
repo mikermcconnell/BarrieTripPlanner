@@ -98,8 +98,8 @@ describe('TripResultCard stop closure notices', () => {
       onPress: jest.fn(),
     }));
 
-    expect(texts.join(' ')).toContain('Route has 1 reported stop closure');
-    expect(texts.join(' ')).toContain('Your boarding and exit stops are not impacted.');
+    expect(texts.join(' ')).toContain('Your route has one stop closure');
+    expect(texts.join(' ')).toContain('Your trip is not impacted.');
     expect(texts.join(' ')).not.toContain('not flagged');
   });
 
@@ -151,11 +151,12 @@ describe('TripResultCard stop closure notices', () => {
       onPress: jest.fn(),
     }));
 
-    expect(texts.join(' ')).toContain('5 min transfer');
-    expect(texts.join(' ')).toContain('to 8A');
+    expect(texts.join(' ')).not.toContain('100 → 8A');
+    expect(texts.join(' ')).toContain('1 transfer');
+    expect(texts.join(' ')).toContain('Tight transfer: 5 min between buses');
   });
 
-  test('summarizes double-transfer trips as a bus route sequence', () => {
+  test('summarizes double-transfer trips without repeating the route sequence text', () => {
     const texts = renderTexts(React.createElement(TripResultCard, {
       itinerary: {
         ...baseItinerary,
@@ -191,9 +192,103 @@ describe('TripResultCard stop closure notices', () => {
     }));
 
     const text = texts.join(' ');
-    expect(text).toContain('7 → 8A → 2B');
+    expect(text).not.toContain('7 → 8A → 2B');
     expect(text).toContain('2 transfers');
-    expect(text).toContain('Transfer waits: 6 min, 10 min');
+    expect(text).toContain('waits 6 min, 10 min');
+    expect(text).not.toContain('Transfer waits: 6 min, 10 min');
+  });
+
+  test('warns when a transfer has no buffer', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        transfers: 1,
+        legs: [
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 0,
+            endTime: 600000,
+            route: { shortName: '12A', color: '#A50000' },
+          },
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 600000,
+            endTime: 1200000,
+            route: { shortName: '7A', color: '#32475C' },
+          },
+        ],
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('No transfer buffer');
+  });
+
+  test('treats an A/B branch flip as staying on the same bus', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        transfers: 1,
+        legs: [
+          { mode: 'WALK', duration: 120, startTime: 0, endTime: 120000 },
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 120000,
+            endTime: 720000,
+            route: { shortName: '7A', color: '#F58220' },
+            headsign: 'North',
+          },
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 720000,
+            endTime: 1320000,
+            route: { shortName: '7B', color: '#F58220' },
+            headsign: 'South',
+          },
+          { mode: 'WALK', duration: 60, startTime: 1320000, endTime: 1380000 },
+        ],
+      },
+      onPress: jest.fn(),
+    }));
+
+    const text = texts.join(' ');
+    expect(text).toContain('7A → 7B');
+    expect(text).toContain('Stay on the bus — route changes to 7B');
+    expect(text).not.toContain('1 transfer');
+    expect(text).not.toContain('No transfer buffer');
+  });
+
+  test('still treats a branch change with a transfer walk as a real transfer', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        transfers: 1,
+        legs: [
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 0,
+            endTime: 600000,
+            route: { shortName: '7A', color: '#F58220' },
+          },
+          { mode: 'WALK', duration: 180, distance: 120, startTime: 600000, endTime: 780000 },
+          {
+            mode: 'BUS',
+            duration: 600,
+            startTime: 780000,
+            endTime: 1380000,
+            route: { shortName: '7B', color: '#F58220' },
+          },
+        ],
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('1 transfer');
   });
 
   test('puts depart and arrive times in prominent preview fields', () => {

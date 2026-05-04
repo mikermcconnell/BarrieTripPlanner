@@ -21,26 +21,30 @@ const LegendLine = ({ variant, color }) => (
   </View>
 );
 
-const TripPreviewMapLegend = ({ visible, style }) => {
+const TripPreviewMapLegend = ({ visible, style, routeColor = COLORS.primary, variant = 'floating' }) => {
   if (!visible) return null;
 
   return (
     <View
-      style={[styles.container, style]}
+      style={[
+        styles.container,
+        variant === 'inline' && styles.inlineContainer,
+        style,
+      ]}
       accessibilityRole="summary"
       accessibilityLabel="Trip map key"
     >
       <Text style={styles.title}>Trip map key</Text>
       <View style={styles.row}>
-        <LegendLine variant="solid" color={COLORS.primary} />
+        <LegendLine variant="solid" color={routeColor} />
         <Text style={styles.label}>Solid route colour = bus ride</Text>
       </View>
       <View style={styles.row}>
-        <LegendLine variant="dotted" color="#2563EB" />
-        <Text style={styles.label}>Dotted blue = walk or transfer</Text>
+        <LegendLine variant="solid" color="#2563EB" />
+        <Text style={styles.label}>Solid blue = walk or transfer</Text>
       </View>
       <View style={styles.row}>
-        <LegendLine variant="dashed" color={COLORS.primary} />
+        <LegendLine variant="dashed" color={routeColor} />
         <Text style={styles.label}>Dashed route colour = bus approaching pickup</Text>
       </View>
     </View>
@@ -58,6 +62,15 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     gap: 5,
     ...SHADOWS.small,
+  },
+  inlineContainer: {
+    position: 'relative',
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.xs,
+    marginTop: SPACING.xs,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   title: {
     fontSize: FONT_SIZES.xxs,

@@ -348,7 +348,7 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
         longitude: vehicle.longitude,
       },
       bearing: vehicle.bearing,
-      speed: vehicle.speed || 0,
+      speed: Number.isFinite(vehicle.speed) ? vehicle.speed : null,
       tripId: vehicle.tripId,
       routeId: tripInfo.routeId || vehicle.routeId,
       shapeId: tripInfo.shapeId || null,

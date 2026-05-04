@@ -20,6 +20,9 @@ const normalizeBearingDelta = (delta) => {
 };
 
 const normalizeBearing = (bearing) => {
+  if (bearing === null || bearing === undefined || bearing === '') {
+    return null;
+  }
   const numericBearing = Number(bearing);
   return Number.isFinite(numericBearing)
     ? ((numericBearing % 360) + 360) % 360

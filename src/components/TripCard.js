@@ -5,12 +5,14 @@ import Icon from './Icon';
 import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
+import { getEffectiveTransferCount } from '../utils/routeContinuity';
 
 const TripCard = ({ itinerary, onPress, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
+  const effectiveTransfers = getEffectiveTransferCount(itinerary);
 
   // Get transit legs for display
   const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
@@ -66,11 +68,11 @@ const TripCard = ({ itinerary, onPress, isSelected = false }) => {
           <Text style={styles.detailText}>{walkDistance} walk</Text>
         </View>
 
-        {itinerary.transfers > 0 && (
+        {effectiveTransfers > 0 && (
           <View style={styles.detailItem}>
             <Icon name="Transfer" size={16} color={COLORS.textSecondary} />
             <Text style={styles.detailText}>
-              {itinerary.transfers} transfer{itinerary.transfers > 1 ? 's' : ''}
+              {effectiveTransfers} transfer{effectiveTransfers > 1 ? 's' : ''}
             </Text>
           </View>
         )}

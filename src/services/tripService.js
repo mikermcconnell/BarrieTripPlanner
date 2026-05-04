@@ -5,7 +5,7 @@ import { analyzeZoneInvolvement, buildZoneAwareTrip, estimateOnDemandDuration } 
 import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
-import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
+import { rankItinerariesForRider, sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
@@ -226,6 +226,7 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
     firstGoodTrip.labels = ['Recommended'];
     firstGoodTrip.isRecommended = true;
   }
+  finalItineraries = sortRecommendedItineraryFirst(finalItineraries);
 
   return {
     ...tripPlan,
@@ -912,6 +913,7 @@ function getTripCacheKey({
   toLon,
   requestedTimeMs,
   arriveBy = false,
+  enrichWalking = true,
 }) {
   const timeRounded = Math.floor(requestedTimeMs / TRIP_CACHE_TTL_MS);
   return [
@@ -921,6 +923,7 @@ function getTripCacheKey({
     toLon.toFixed(4),
     timeRounded,
     arriveBy ? 'arrive' : 'depart',
+    enrichWalking === false ? 'walk-deferred' : 'walk-enriched',
   ].join(',');
 }
 
@@ -1131,6 +1134,7 @@ export const planTripAuto = async (params) => {
         toLon: routingParams.toLon,
         requestedTimeMs: getRequestedTripTimestamp(routingParams),
         arriveBy: Boolean(routingParams.arriveBy),
+        enrichWalking: routingParams.enrichWalking !== false,
       })
     : null;
   const cached = cacheKey ? getCachedTrip(cacheKey) : null;
@@ -1174,6 +1178,24 @@ export const planTripAuto = async (params) => {
     result = await planTrip({
       ...otpRequestParams,
     });
+
+    if (routingParams.enrichWalking !== false) {
+      try {
+        const enrichedResult = await enrichTripPlanWithWalking(result);
+        if (!enrichedResult.itineraries || enrichedResult.itineraries.length === 0) {
+          throw new TripPlanningError(
+            TRIP_ERROR_CODES.NO_ROUTES_FOUND,
+            'No reasonable transit routes found within 2 hours'
+          );
+        }
+        result = enrichedResult;
+      } catch (walkingError) {
+        if (walkingError instanceof TripPlanningError) {
+          throw walkingError;
+        }
+        logger.warn('OTP walking enrichment failed, using OTP walking estimates:', walkingError);
+      }
+    }
   }
 
   // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
@@ -1192,6 +1214,9 @@ export const planTripAuto = async (params) => {
     localRouterError: existingDiagnostics.localRouterError || localRouterError,
     zoneAdjusted: existingDiagnostics.zoneAdjusted || Boolean(zoneTrip?.raptorFrom || zoneTrip?.raptorTo || zoneTrip?.sameZone),
     onDemandDirect: existingDiagnostics.onDemandDirect || Boolean(zoneTrip?.sameZone),
+    walkingEnrichment: existingDiagnostics.walkingEnrichment || (
+      routingParams.enrichWalking === false ? 'deferred_to_navigation' : 'trip_enrichment'
+    ),
   });
 
   logger.info('Trip planning route selected', result.routingDiagnostics);

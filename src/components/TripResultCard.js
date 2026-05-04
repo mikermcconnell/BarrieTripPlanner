@@ -18,6 +18,13 @@ import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 import Icon from './Icon';
 import WalkingPaceIcon from './navigation/WalkingPaceIcon';
+import {
+  getEffectiveTransferCount,
+  getRouteDisplayName,
+  getSameBusContinuationPairs,
+  getTransitRideLegsWithIndexes,
+  isTransitRideLeg,
+} from '../utils/routeContinuity';
 
 const getTripLegKey = (leg, index) => {
   const routeKey = leg.route?.id || leg.route?.shortName || 'route';
@@ -29,17 +36,18 @@ const getTripLegKey = (leg, index) => {
 
 const getLabelKey = (label, index) => `${label || 'label'}-${index}`;
 
-const isTransitRideLeg = (leg) => (
-  leg?.isOnDemand || leg?.mode === 'BUS' || leg?.mode === 'TRANSIT'
-);
-
 export const getTransferWaitSummaries = (legs = []) => {
-  const rideLegs = legs
-    .map((leg, index) => ({ leg, index }))
-    .filter(({ leg }) => isTransitRideLeg(leg));
+  const rideLegs = getTransitRideLegsWithIndexes(legs);
+  const sameBusKeys = new Set(
+    getSameBusContinuationPairs(legs).map((pair) => `${pair.previousIndex}-${pair.nextIndex}`)
+  );
 
-  return rideLegs.slice(1).map(({ leg }, index) => {
-    const previousLeg = rideLegs[index]?.leg;
+  return rideLegs.slice(1).map(({ leg, index: legIndex }, index) => {
+    const previousEntry = rideLegs[index];
+    const previousLeg = previousEntry?.leg;
+    if (sameBusKeys.has(`${previousEntry?.index}-${legIndex}`)) {
+      return null;
+    }
     const waitSeconds = Number.isFinite(previousLeg?.endTime) && Number.isFinite(leg?.startTime)
       ? Math.max(0, Math.round((leg.startTime - previousLeg.endTime) / 1000))
       : null;
@@ -54,7 +62,135 @@ export const getTransferWaitSummaries = (legs = []) => {
         locationName ? `at ${locationName}` : null,
       ].filter(Boolean).join(' · '),
     };
-  }).filter((summary) => summary.label);
+  }).filter((summary) => summary?.label);
+};
+
+export const getStayOnBusDisplay = (legs = []) => {
+  const continuations = getSameBusContinuationPairs(legs);
+  if (!continuations.length) return null;
+
+  const first = continuations[0];
+  if (continuations.length === 1) {
+    return `Stay on the bus — route changes to ${first.nextRoute}`;
+  }
+
+  return 'Stay on the bus through route changes';
+};
+
+const getLegDurationMinutes = (legs = []) => (
+  Math.max(1, Math.round(
+    legs.reduce((total, leg) => total + (Number.isFinite(leg?.duration) ? Number(leg.duration) : 0), 0) / 60
+  ))
+);
+
+const getRoutePreviewItems = (legs = []) => {
+  const continuationsByStart = new Map(
+    getSameBusContinuationPairs(legs).map((pair) => [pair.previousIndex, pair])
+  );
+  const items = [];
+
+  for (let index = 0; index < legs.length; index += 1) {
+    const continuation = continuationsByStart.get(index);
+    if (!continuation) {
+      items.push({
+        type: 'leg',
+        key: getTripLegKey(legs[index], index),
+        legs: [legs[index]],
+        leg: legs[index],
+      });
+      continue;
+    }
+
+    const groupedLegs = [legs[index]];
+    const routeLabels = [getRouteDisplayName(legs[index])];
+    let lastIndex = continuation.nextIndex;
+
+    groupedLegs.push(legs[lastIndex]);
+    routeLabels.push(getRouteDisplayName(legs[lastIndex]));
+
+    while (continuationsByStart.has(lastIndex)) {
+      const chainedContinuation = continuationsByStart.get(lastIndex);
+      lastIndex = chainedContinuation.nextIndex;
+      groupedLegs.push(legs[lastIndex]);
+      routeLabels.push(getRouteDisplayName(legs[lastIndex]));
+    }
+
+    items.push({
+      type: 'same_bus',
+      key: `same-bus-${index}-${lastIndex}`,
+      legs: groupedLegs,
+      leg: legs[index],
+      label: routeLabels.join(' → '),
+    });
+    index = lastIndex;
+  }
+
+  return items;
+};
+
+const RoutePreviewItem = ({ item }) => {
+  const leg = item.leg;
+  const durationMinutes = getLegDurationMinutes(item.legs);
+
+  return (
+    <View style={styles.legColumn}>
+      {item.type === 'same_bus' ? (
+        <View
+          style={[styles.busIcon, styles.sameBusIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
+        >
+          <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>
+            {item.label}
+          </Text>
+        </View>
+      ) : leg.mode === 'WALK' ? (
+        <View style={[styles.walkIcon, styles.routeBadgeInline]}>
+          <WalkingPaceIcon level="on_pace" size={18} />
+        </View>
+      ) : leg.isOnDemand ? (
+        <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
+          <Icon name="Phone" size={14} color={COLORS.white} />
+        </View>
+      ) : (
+        <View
+          style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
+        >
+          <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
+        </View>
+      )}
+      <Text style={styles.legDurationText}>{durationMinutes} min</Text>
+    </View>
+  );
+};
+
+export const getTransferWaitDisplay = (summaries = []) => {
+  if (!summaries.length) {
+    return { text: null, tone: null };
+  }
+
+  if (summaries.length > 1) {
+    const hasNoBuffer = summaries.some((summary) => summary.waitSeconds === 0);
+    const hasVeryTightTransfer = summaries.some((summary) => summary.waitSeconds > 0 && summary.waitSeconds <= 120);
+    const hasTightTransfer = summaries.some((summary) => summary.waitSeconds > 120 && summary.waitSeconds <= 300);
+    const tone = hasNoBuffer || hasVeryTightTransfer ? 'urgent' : hasTightTransfer ? 'warning' : null;
+
+    return {
+      text: `${tone ? '⚠️ ' : ''}waits ${summaries.map((summary) => formatDuration(summary.waitSeconds)).join(', ')}`,
+      tone,
+    };
+  }
+
+  const waitSeconds = summaries[0].waitSeconds;
+  if (waitSeconds === 0) {
+    return { text: '⚠️ No transfer buffer', tone: 'urgent' };
+  }
+  if (waitSeconds <= 120) {
+    return { text: `⚠️ Very tight transfer: ${formatDuration(waitSeconds)} between buses`, tone: 'urgent' };
+  }
+  if (waitSeconds <= 300) {
+    return { text: `Tight transfer: ${formatDuration(waitSeconds)} between buses`, tone: 'warning' };
+  }
+
+  return { text: `${formatDuration(waitSeconds)} between buses`, tone: null };
 };
 
 const TransferWaitSummary = ({ summaries }) => {
@@ -121,8 +257,8 @@ const getStopClosureNoticeCopy = (notices) => {
   if (routeNoticeCount > 0) {
     return {
       tone: 'minor',
-      title: `Route has ${routeNoticeCount} reported stop closure${routeNoticeCount === 1 ? '' : 's'}`,
-      detail: 'Your boarding and exit stops are not impacted.',
+      title: `Your route has ${routeNoticeCount === 1 ? 'one stop closure' : `${routeNoticeCount} stop closures`}`,
+      detail: 'Your trip is not impacted.',
     };
   }
 
@@ -154,6 +290,8 @@ const getDetourNoticeCopy = (itinerary) => {
 const StopClosureNotice = ({ notice }) => {
   if (!notice) return null;
   const isWarning = notice.tone === 'warning';
+  const noticeText = notice.detail ? `${notice.title} · ${notice.detail}` : notice.title;
+
   return (
     <View style={[
       styles.stopClosureNotice,
@@ -162,10 +300,9 @@ const StopClosureNotice = ({ notice }) => {
       <Text style={[
         styles.stopClosureNoticeTitle,
         isWarning ? styles.stopClosureNoticeTitleWarning : styles.stopClosureNoticeTitleMinor,
-      ]}>
-        {isWarning ? '⚠️ ' : ''}{notice.title}
+      ]} numberOfLines={1}>
+        {isWarning ? '⚠️ ' : ''}{noticeText}
       </Text>
-      <Text style={styles.stopClosureNoticeDetail}>{notice.detail}</Text>
     </View>
   );
 };
@@ -192,7 +329,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const walkTime = itinerary.walkTime ? formatDuration(itinerary.walkTime) : null;
 
   // Get transit legs for display
-  const transitLegs = itinerary.legs.filter((leg) => leg.mode === 'BUS' || leg.mode === 'TRANSIT');
+  const transitLegs = itinerary.legs.filter((leg) => isTransitRideLeg(leg));
   const onDemandLeg = itinerary.legs.find((leg) => leg.isOnDemand);
   const rideSummary = [
     transitLegs.length > 0 ? `${transitLegs.length} bus${transitLegs.length !== 1 ? 'es' : ''}` : null,
@@ -213,6 +350,13 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const stopClosureNotice = getStopClosureNoticeCopy(itinerary.stopClosureNotices);
   const detourNotice = getDetourNoticeCopy(itinerary);
   const transferWaitSummaries = getTransferWaitSummaries(itinerary.legs);
+  const effectiveTransfers = getEffectiveTransferCount(itinerary);
+  const transferText = effectiveTransfers > 0
+    ? `${effectiveTransfers} transfer${effectiveTransfers > 1 ? 's' : ''}`
+    : null;
+  const transferWaitDisplay = getTransferWaitDisplay(transferWaitSummaries);
+  const stayOnBusDisplay = getStayOnBusDisplay(itinerary.legs);
+  const routePreviewItems = getRoutePreviewItems(itinerary.legs);
 
   // Format "leaves in" text
   const getLeavesInText = () => {
@@ -286,39 +430,15 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             )}
           </View>
           <TripTimingSummary startTime={startTime} endTime={endTime} />
-          <RideRouteSummary
-            transitLegs={transitLegs}
-            transferWaitSummaries={transferWaitSummaries}
-            transfers={itinerary.transfers || 0}
-          />
           <View style={styles.routeSummaryRow}>
-            {itinerary.legs.map((leg, index) => (
-              <React.Fragment key={getTripLegKey(leg, index)}>
+            {routePreviewItems.map((item, index) => (
+              <React.Fragment key={item.key}>
                 {index > 0 && <View style={styles.connector} />}
-                <View style={styles.legColumn}>
-                  {leg.mode === 'WALK' ? (
-                    <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                      <WalkingPaceIcon level="on_pace" size={18} />
-                    </View>
-                  ) : leg.isOnDemand ? (
-                    <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
-                      <Icon name="Phone" size={14} color={COLORS.white} />
-                    </View>
-                  ) : (
-                    <View
-                      style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
-                    >
-                      <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.legDurationText}>{Math.max(1, Math.round(leg.duration / 60))} min</Text>
-                </View>
+                <RoutePreviewItem item={item} />
               </React.Fragment>
             ))}
           </View>
         </View>
-
-        <TransferWaitSummary summaries={transferWaitSummaries} />
 
         {/* On-demand booking note */}
         {onDemandLeg && (
@@ -340,9 +460,21 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
                 {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
               </Text>
-              {itinerary.transfers > 0 && (
-                <Text style={styles.detailText}>
-                  • {itinerary.transfers} transfer{itinerary.transfers > 1 ? 's' : ''}
+              {transferText && (
+                <Text style={styles.detailText}>• {transferText}</Text>
+              )}
+              {!transferText && stayOnBusDisplay && (
+                <Text style={styles.detailText}>• {stayOnBusDisplay}</Text>
+              )}
+              {transferWaitDisplay.text && (
+                <Text
+                  style={[
+                    styles.detailText,
+                    transferWaitDisplay.tone === 'warning' && styles.transferWaitWarningText,
+                    transferWaitDisplay.tone === 'urgent' && styles.transferWaitUrgentText,
+                  ]}
+                >
+                  • {transferWaitDisplay.text}
                 </Text>
               )}
             </View>
@@ -428,39 +560,15 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           )}
         </View>
         <TripTimingSummary startTime={startTime} endTime={endTime} />
-        <RideRouteSummary
-          transitLegs={transitLegs}
-          transferWaitSummaries={transferWaitSummaries}
-          transfers={itinerary.transfers || 0}
-        />
         <View style={styles.routeSummaryRow}>
-          {itinerary.legs.map((leg, index) => (
-            <React.Fragment key={getTripLegKey(leg, index)}>
+          {routePreviewItems.map((item, index) => (
+            <React.Fragment key={item.key}>
               {index > 0 && <View style={styles.connector} />}
-              <View style={styles.legColumn}>
-                {leg.mode === 'WALK' ? (
-                  <View style={[styles.walkIcon, styles.routeBadgeInline]}>
-                    <WalkingPaceIcon level="on_pace" size={18} />
-                  </View>
-                ) : leg.isOnDemand ? (
-                  <View style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.zoneColor || COLORS.primary }]}>
-                    <Icon name="Phone" size={14} color={COLORS.white} />
-                  </View>
-                ) : (
-                  <View
-                    style={[styles.busIcon, styles.routeBadgeInline, { backgroundColor: leg.route?.color || COLORS.primary }]}
-                  >
-                    <Text style={[styles.busIconText, { color: getContrastTextColor(leg.route?.color || COLORS.primary) }]}>{leg.route?.shortName || '?'}</Text>
-                  </View>
-                )}
-                <Text style={styles.legDurationText}>{Math.max(1, Math.round(leg.duration / 60))} min</Text>
-              </View>
+              <RoutePreviewItem item={item} />
             </React.Fragment>
           ))}
         </View>
       </View>
-
-      <TransferWaitSummary summaries={transferWaitSummaries} />
 
       {/* On-demand booking note */}
       {onDemandLeg && (
@@ -482,9 +590,21 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             <Text style={[styles.detailText, hasHighWalk && styles.detailTextWarning]}>
               {hasHighWalk ? '⚠️ ' : ''}{walkDistance}{walkTime ? ` (${walkTime})` : ''} walk
             </Text>
-            {itinerary.transfers > 0 && (
-              <Text style={styles.detailText}>
-                • {itinerary.transfers} transfer{itinerary.transfers > 1 ? 's' : ''}
+            {transferText && (
+              <Text style={styles.detailText}>• {transferText}</Text>
+            )}
+            {!transferText && stayOnBusDisplay && (
+              <Text style={styles.detailText}>• {stayOnBusDisplay}</Text>
+            )}
+            {transferWaitDisplay.text && (
+              <Text
+                style={[
+                  styles.detailText,
+                  transferWaitDisplay.tone === 'warning' && styles.transferWaitWarningText,
+                  transferWaitDisplay.tone === 'urgent' && styles.transferWaitUrgentText,
+                ]}
+              >
+                • {transferWaitDisplay.text}
               </Text>
             )}
           </View>
@@ -500,11 +620,11 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.xl,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
     marginHorizontal: SPACING.sm,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
     borderWidth: 2,
     borderColor: COLORS.borderLight,
     ...SHADOWS.small,
@@ -521,7 +641,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.xxs,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.xxs,
   },
   labelBadge: {
     paddingHorizontal: SPACING.sm,
@@ -563,8 +683,8 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   topRow: {
-    gap: SPACING.xs,
-    marginBottom: SPACING.xs,
+    gap: SPACING.xxs,
+    marginBottom: SPACING.xxs,
   },
   topRowHeader: {
     flexDirection: 'row',
@@ -582,17 +702,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: COLORS.grey50,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.xs,
+    marginTop: SPACING.xxs,
+    marginBottom: SPACING.xxs,
     overflow: 'hidden',
   },
   timingBlock: {
     flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
   },
   timingLabel: {
     fontSize: FONT_SIZES.xxs,
@@ -603,7 +723,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   timingValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.extrabold,
     color: COLORS.textPrimary,
     letterSpacing: -0.2,
@@ -627,20 +747,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   durationLarge: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.extrabold,
     color: COLORS.textPrimary,
     marginRight: SPACING.sm,
     letterSpacing: -0.3,
   },
   leaveInText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primaryDark,
     backgroundColor: COLORS.primarySubtle,
     borderRadius: BORDER_RADIUS.round,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingVertical: 3,
     flexShrink: 0,
     textAlign: 'right',
     overflow: 'hidden',
@@ -655,7 +775,7 @@ const styles = StyleSheet.create({
   legDurationText: {
     fontSize: 10,
     color: COLORS.textSecondary,
-    marginTop: 1,
+    marginTop: 0,
   },
   connector: {
     width: 12,
@@ -664,9 +784,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   walkIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: COLORS.grey200,
     justifyContent: 'center',
     alignItems: 'center',
@@ -676,10 +796,14 @@ const styles = StyleSheet.create({
   },
   busIcon: {
     paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
+    paddingVertical: 1,
     borderRadius: BORDER_RADIUS.xs,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sameBusIcon: {
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
   },
   busIconText: {
     fontSize: FONT_SIZES.xs,
@@ -699,6 +823,14 @@ const styles = StyleSheet.create({
     color: COLORS.warning,
     fontWeight: FONT_WEIGHTS.semibold,
   },
+  transferWaitWarningText: {
+    color: COLORS.warning,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  transferWaitUrgentText: {
+    color: COLORS.error,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
   leavesInSoon: {
     color: COLORS.white,
     backgroundColor: COLORS.success,
@@ -706,8 +838,8 @@ const styles = StyleSheet.create({
   },
   stepsButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.round,
   },
   stepsButtonText: {
@@ -721,8 +853,8 @@ const styles = StyleSheet.create({
   },
   detailsButton: {
     backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -734,8 +866,8 @@ const styles = StyleSheet.create({
   },
   goButton: {
     backgroundColor: COLORS.success,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.round,
   },
   goButtonText: {
@@ -804,8 +936,8 @@ const styles = StyleSheet.create({
   stopClosureNotice: {
     borderRadius: BORDER_RADIUS.md,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 7,
-    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginBottom: SPACING.xs,
     borderWidth: 1,
   },
   stopClosureNoticeWarning: {

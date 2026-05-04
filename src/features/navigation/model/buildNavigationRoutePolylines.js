@@ -56,11 +56,18 @@ const buildTransitLegCoordinates = (leg, shapes = {}, routeShapeMapping = {}) =>
 
 const resolveLegCoordinates = (leg, shapes = {}, routeShapeMapping = {}) => {
   if (leg?.legGeometry?.points) {
-    return decodePolyline(leg.legGeometry.points);
+    const decoded = decodePolyline(leg.legGeometry.points);
+    if (decoded.length >= 2) {
+      return decoded;
+    }
   }
 
   if (isTransitLeg(leg)) {
     return buildTransitLegCoordinates(leg, shapes, routeShapeMapping);
+  }
+
+  if (leg?.mode === 'WALK') {
+    return [];
   }
 
   return buildFallbackCoordinates(leg);
@@ -105,6 +112,10 @@ export const buildNavigationRoutePolylines = ({
 
   itinerary.legs.forEach((leg, index) => {
     const coordinates = resolveLegCoordinates(leg, shapes, routeShapeMapping);
+    if (coordinates.length < 2) {
+      return;
+    }
+
     const style = buildLineStyle({ leg, index, currentLegIndex });
 
     if (style.isCurrentLeg && userLocation && coordinates.length > 1) {

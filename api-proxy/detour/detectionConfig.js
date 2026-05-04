@@ -73,6 +73,57 @@ const DETOUR_PERSIST_MIN_AGE_MS =
     ? configuredPersistMinAgeMs
     : 5 * 60 * 60 * 1000;
 
+const RECURRING_SHORT_DEVIATION_ENABLED =
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_ENABLED !== 'false';
+
+const configuredRecurringShortDeviationWindowMs = Number.parseFloat(
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_WINDOW_MS || String(3 * 60 * 60 * 1000)
+);
+const RECURRING_SHORT_DEVIATION_WINDOW_MS =
+  Number.isFinite(configuredRecurringShortDeviationWindowMs) && configuredRecurringShortDeviationWindowMs > 0
+    ? configuredRecurringShortDeviationWindowMs
+    : 3 * 60 * 60 * 1000;
+
+const configuredRecurringShortDeviationMinObservations = Number.parseInt(
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS || '3',
+  10
+);
+const RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS =
+  Number.isFinite(configuredRecurringShortDeviationMinObservations) &&
+  configuredRecurringShortDeviationMinObservations > 0
+    ? configuredRecurringShortDeviationMinObservations
+    : 3;
+
+const configuredRecurringShortDeviationMinUniqueSignatures = Number.parseInt(
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES || '2',
+  10
+);
+const RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES =
+  Number.isFinite(configuredRecurringShortDeviationMinUniqueSignatures) &&
+  configuredRecurringShortDeviationMinUniqueSignatures > 0
+    ? configuredRecurringShortDeviationMinUniqueSignatures
+    : 2;
+
+const configuredRecurringShortDeviationMaxGapMeters = Number.parseFloat(
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MAX_GAP_METERS || '350'
+);
+const RECURRING_SHORT_DEVIATION_MAX_GAP_METERS =
+  Number.isFinite(configuredRecurringShortDeviationMaxGapMeters) &&
+  configuredRecurringShortDeviationMaxGapMeters > 0
+    ? configuredRecurringShortDeviationMaxGapMeters
+    : 350;
+
+const configuredRecurringShortDeviationMaxStreakReadings = Number.parseInt(
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MAX_STREAK_READINGS ||
+    String(Math.max(1, CONSECUTIVE_READINGS_REQUIRED - 1)),
+  10
+);
+const RECURRING_SHORT_DEVIATION_MAX_STREAK_READINGS =
+  Number.isFinite(configuredRecurringShortDeviationMaxStreakReadings) &&
+  configuredRecurringShortDeviationMaxStreakReadings > 0
+    ? configuredRecurringShortDeviationMaxStreakReadings
+    : Math.max(1, CONSECUTIVE_READINGS_REQUIRED - 1);
+
 const SERVICE_START_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_START_HOUR || '5', 10);
 const SERVICE_END_HOUR = Number.parseInt(process.env.DETOUR_SERVICE_END_HOUR || '1', 10);
 const SERVICE_TIMEZONE = process.env.DETOUR_SERVICE_TIMEZONE || 'America/Toronto';
@@ -111,6 +162,12 @@ module.exports = {
   EVIDENCE_WINDOW_MS,
   DETOUR_PERSIST_CONSECUTIVE_MATCHES,
   DETOUR_PERSIST_MIN_AGE_MS,
+  RECURRING_SHORT_DEVIATION_ENABLED,
+  RECURRING_SHORT_DEVIATION_WINDOW_MS,
+  RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS,
+  RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES,
+  RECURRING_SHORT_DEVIATION_MAX_GAP_METERS,
+  RECURRING_SHORT_DEVIATION_MAX_STREAK_READINGS,
   SERVICE_START_HOUR,
   SERVICE_END_HOUR,
   SERVICE_TIMEZONE,

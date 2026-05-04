@@ -35,6 +35,7 @@ import {
 import { autocompleteAddress, getDistanceFromBarrie } from '../services/locationIQService';
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
+import { findMatchingSavedPlaces } from '../utils/savedTransitUtils';
 import Icon from './Icon';
 
 const getSuggestionKey = (item, index) => [
@@ -72,6 +73,7 @@ const AddressAutocomplete = ({
   disabled = false,
   accessibilityLabel,
   accessibilityHint,
+  savedPlaces = [],
 }) => {
   // State for suggestions dropdown
   const [suggestions, setSuggestions] = useState([]);
@@ -98,11 +100,13 @@ const AddressAutocomplete = ({
       clearTimeout(debounceTimerRef.current);
     }
 
-    // Don't search for very short queries
+    const savedPlaceMatches = findMatchingSavedPlaces(searchText, savedPlaces);
+
+    // Don't search remote addresses for very short queries, but still show saved places.
     if (!searchText || searchText.trim().length < 3) {
       requestSeqRef.current += 1;
-      setSuggestions([]);
-      setShowDropdown(false);
+      setSuggestions(savedPlaceMatches);
+      setShowDropdown(isFocusedRef.current && savedPlaceMatches.length > 0);
       return;
     }
 
@@ -128,7 +132,10 @@ const AddressAutocomplete = ({
           const distB = getDistanceFromBarrie(b.lat, b.lon);
           return distA - distB;
         });
-        const uniqueResults = dedupeSuggestions(sortedResults);
+        const uniqueResults = dedupeSuggestions([
+          ...savedPlaceMatches,
+          ...sortedResults,
+        ]);
 
         setSuggestions(uniqueResults);
         setShowDropdown(isFocusedRef.current && uniqueResults.length > 0);
@@ -143,7 +150,7 @@ const AddressAutocomplete = ({
         }
       }
     }, LOCATIONIQ_CONFIG.DEBOUNCE_MS);
-  }, []);
+  }, [savedPlaces]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -199,6 +206,8 @@ const AddressAutocomplete = ({
       displayName: item.displayName,
       shortName: item.shortName,
       address: item.address,
+      source: item.source,
+      savedPlaceId: item.savedPlaceId,
     });
   };
 
@@ -244,7 +253,11 @@ const AddressAutocomplete = ({
         activeOpacity={0.7}
       >
         <View style={styles.suggestionIcon}>
-          <Icon name="MapPin" size={16} color={COLORS.textSecondary} />
+          <Icon
+            name={item.source === 'saved_place' ? (item.icon || 'MapPin') : 'MapPin'}
+            size={16}
+            color={item.source === 'saved_place' ? COLORS.primary : COLORS.textSecondary}
+          />
         </View>
         <View style={styles.suggestionContent}>
           <Text style={styles.suggestionMain} numberOfLines={1}>

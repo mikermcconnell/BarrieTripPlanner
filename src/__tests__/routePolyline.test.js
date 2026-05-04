@@ -10,6 +10,7 @@ jest.mock('@maplibre/maplibre-react-native', () => ({
 }));
 
 const RoutePolyline = require('../components/RoutePolyline').default;
+const { ROUTE_LINE_LABEL_STYLE } = require('../config/routeLineLabels');
 
 describe('RoutePolyline', () => {
   const coordinates = [
@@ -54,5 +55,30 @@ describe('RoutePolyline', () => {
       102,
       103,
     ]);
+  });
+
+  test('renders route labels as passive inline text instead of route-colored badges', () => {
+    const inst = render({
+      color: '#D82710',
+      routeLabel: '100',
+    });
+
+    const labelLayer = inst.root.findAllByType('SymbolLayer')
+      .find((layer) => layer.props.id === 'route-test-label');
+
+    expect(labelLayer.props.style).toEqual(
+      expect.objectContaining({
+        symbolPlacement: 'line',
+        symbolSpacing: ROUTE_LINE_LABEL_STYLE.spacing,
+        textField: '100',
+        textSize: ROUTE_LINE_LABEL_STYLE.size,
+        textColor: ROUTE_LINE_LABEL_STYLE.color,
+        textHaloColor: ROUTE_LINE_LABEL_STYLE.haloColor,
+        textHaloWidth: ROUTE_LINE_LABEL_STYLE.haloWidth,
+        textOpacity: ROUTE_LINE_LABEL_STYLE.opacity,
+        textOffset: ROUTE_LINE_LABEL_STYLE.offset,
+      })
+    );
+    expect(labelLayer.props.style.textColor).not.toBe('#D82710');
   });
 });

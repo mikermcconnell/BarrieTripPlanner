@@ -21,6 +21,8 @@ function makeStaticData() {
 
   const routeShapeMapping = new Map();
   routeShapeMapping.set('1', ['shape-1']);
+  routeShapeMapping.set('10', ['shape-1']);
+  routeShapeMapping.set('11', ['shape-1']);
 
   return { shapes, routeShapeMapping, tripMapping: new Map() };
 }
@@ -102,6 +104,38 @@ describe('detourSimulation', () => {
       vehicleCount: 1,
       segments: expect.any(Array),
     }));
+  });
+
+  test('farmers market preset writes simulated Route 10 and 11 detours', async () => {
+    const db = makeDbMock();
+    const ops = createDetourSimulationOps({
+      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      loadStaticData: async () => makeStaticData(),
+      getFirestore: () => db,
+    });
+
+    const result = await ops.create({ preset: 'farmers-market', durationMinutes: 15 });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual(expect.objectContaining({
+      ok: true,
+      simulated: true,
+      preset: 'farmers-market',
+      routeIds: ['10', '11'],
+    }));
+    expect(db._writes).toHaveLength(2);
+    expect(db._writes.map((write) => write.docId)).toEqual(['10', '11']);
+    expect(db._writes[0].data).toEqual(expect.objectContaining({
+      routeId: '10',
+      confidence: 'high',
+      vehicleCount: 2,
+      simulated: true,
+      testPreset: 'farmers-market',
+      title: "Farmer's Market Detour - Route 10 and 11",
+      likelyDetourPolyline: expect.any(Array),
+      segments: expect.any(Array),
+    }));
+    expect(db._writes[0].data.likelyDetourPolyline.length).toBeGreaterThanOrEqual(3);
   });
 
   test('create decorates simulated geometry with road-matched path when available', async () => {

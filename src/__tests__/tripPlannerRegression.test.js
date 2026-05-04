@@ -80,7 +80,7 @@ function loadTripService({
   })),
   estimateOnDemandDurationMock = jest.fn(() => 900),
   planTripLocalMock = jest.fn(),
-  enrichTripPlanWithWalkingMock = jest.fn(),
+  enrichTripPlanWithWalkingMock = jest.fn(async (tripPlan) => tripPlan),
   otpBaseUrl = 'https://otp.example',
   retryFetchMock = jest.fn(async () => ({
     ok: true,
@@ -219,6 +219,7 @@ function loadTripSearchHeaderNative(componentProps = {}) {
       value: props.value,
       placeholder: props.placeholder,
       accessibilityLabel: props.accessibilityLabel,
+      savedPlaces: props.savedPlaces,
     }, props.rightIcon || null)
   ));
 
@@ -482,6 +483,78 @@ describe('trip planner service regressions', () => {
         message: 'local router unavailable',
       }),
     }));
+  });
+
+  test('OTP fallback still enriches walking geometry when requested', async () => {
+    const otpResult = makeOtpPlanResponse({
+      itineraries: [
+        {
+          duration: 600,
+          startTime: new Date('2026-03-06T10:00:00Z').getTime(),
+          endTime: new Date('2026-03-06T10:10:00Z').getTime(),
+          walkTime: 300,
+          transitTime: 300,
+          waitingTime: 0,
+          walkDistance: 350,
+          transfers: 0,
+          legs: [
+            {
+              mode: 'WALK',
+              startTime: new Date('2026-03-06T10:00:00Z').getTime(),
+              endTime: new Date('2026-03-06T10:05:00Z').getTime(),
+              duration: 300,
+              distance: 350,
+              from: { name: 'Origin', lat: 44.38, lon: -79.69 },
+              to: { name: 'Stop', lat: 44.382, lon: -79.688 },
+              legGeometry: null,
+              steps: [],
+            },
+          ],
+        },
+      ],
+    });
+    const enrichedResult = {
+      itineraries: [
+        {
+          id: 'enriched',
+          legs: [
+            {
+              mode: 'WALK',
+              legGeometry: { points: 'encoded-street-walk' },
+              walkingSource: 'locationiq',
+            },
+          ],
+        },
+      ],
+    };
+    const enrichTripPlanWithWalkingMock = jest.fn(async () => enrichedResult);
+    const { planTripAuto } = loadTripService({
+      planTripLocalMock: jest.fn(async () => {
+        throw new Error('local router unavailable');
+      }),
+      retryFetchMock: jest.fn(async () => ({
+        ok: true,
+        json: async () => otpResult,
+      })),
+      enrichTripPlanWithWalkingMock,
+    });
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.39,
+      toLon: -79.68,
+      date: new Date('2026-03-06T10:00:00Z'),
+      time: new Date('2026-03-06T10:00:00Z'),
+      enrichWalking: true,
+      routingData: { routesByStop: new Map() },
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(enrichTripPlanWithWalkingMock).toHaveBeenCalledTimes(1);
+    expect(result.itineraries[0].legs[0].legGeometry).toEqual({ points: 'encoded-street-walk' });
+    expect(result.routingDiagnostics.walkingEnrichment).toBe('trip_enrichment');
   });
 
   test('preserves local-router no-route errors when OTP fallback is unavailable', async () => {
@@ -1073,6 +1146,25 @@ describe('useTripPlanner regressions', () => {
     jest.clearAllMocks();
   });
 
+  test('trip preview searches request walking geometry', async () => {
+    const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
+
+    await act(async () => {
+      await getHook().searchTrips(
+        { lat: 44.38, lon: -79.69 },
+        { lat: 44.39, lon: -79.68 }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(planTripAutoMock).toHaveBeenCalledWith(expect.objectContaining({
+      enrichWalking: true,
+    }));
+
+    unmount();
+  });
+
   test('editing a selected location clears stale coordinates and results', async () => {
     const itinerary = {
       id: 'itinerary-1',
@@ -1618,6 +1710,89 @@ describe('web trip planner regressions', () => {
     unmount();
   });
 
+  test('native search header gives address fields saved places for instant work/home matches', () => {
+    const savedPlaces = [
+      { id: 'work', name: 'Work', addressText: '70 Collier St', lat: 44.389, lon: -79.69 },
+    ];
+    const { root, unmount } = loadTripSearchHeaderNative({ savedPlaces });
+
+    const addressFields = root.findAll((node) => node.type === 'AddressAutocomplete');
+
+    expect(addressFields).toHaveLength(2);
+    expect(addressFields[0].props.savedPlaces).toBe(savedPlaces);
+    expect(addressFields[1].props.savedPlaces).toBe(savedPlaces);
+
+    unmount();
+  });
+
+  test('web search header lets typing work select a saved place in the destination field', () => {
+    const onToSelect = jest.fn();
+    const { root, act, unmount } = loadTripSearchHeaderWeb({
+      toText: 'work',
+      savedPlaces: [
+        { id: 'work', name: 'Work', addressText: '70 Collier St', lat: 44.389, lon: -79.69 },
+      ],
+      onToSelect,
+    });
+
+    const savedWorkOption = root.find(
+      (node) => node.props.accessibilityLabel === 'Saved place: Work'
+    );
+
+    act(() => {
+      savedWorkOption.props.onPress();
+    });
+
+    expect(onToSelect).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'saved_place',
+      shortName: 'Work',
+      lat: 44.389,
+      lon: -79.69,
+    }));
+
+    unmount();
+  });
+
+  test('native search header compacts after trip results and can be edited', () => {
+    const { root, act, unmount } = loadTripSearchHeaderNative({
+      compact: true,
+      fromText: 'Current Location',
+      toText: 'Downtown Terminal',
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Trip planned'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Use current location'))).toHaveLength(0);
+
+    const editButton = root.find((node) => node.props.accessibilityLabel === 'Edit trip search');
+    act(() => {
+      editButton.props.onPress();
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Plan Your Trip'))).toHaveLength(1);
+
+    unmount();
+  });
+
+  test('web search header compacts after trip results and can be edited', () => {
+    const { root, act, unmount } = loadTripSearchHeaderWeb({
+      compact: true,
+      fromText: 'Current Location',
+      toText: 'Downtown Terminal',
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Trip planned'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Use current location'))).toHaveLength(0);
+
+    const editButton = root.find((node) => node.props.accessibilityLabel === 'Edit trip search');
+    act(() => {
+      editButton.props.onPress();
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Plan Your Trip'))).toHaveLength(1);
+
+    unmount();
+  });
+
   test('native search header shows an explicit Use current location button', () => {
     const onUseCurrentLocation = jest.fn();
     const { root, act, unmount } = loadTripSearchHeaderNative({ onUseCurrentLocation });
@@ -1762,6 +1937,58 @@ describe('web trip planner regressions', () => {
       container.props.onKeyDown({ key: 'Escape' });
     });
     expect(getHeightStyleValue(container.props.style)).toBe('10%');
+
+    unmount();
+  });
+
+  test('web trip bottom sheet makes saved and recent trips obvious before a search', () => {
+    const { root, unmount } = loadTripBottomSheetWeb({
+      savedTrips: [{ id: 'saved-1', name: 'Morning commute' }],
+      recentTrips: [{ fromText: 'Home', toText: 'Work' }],
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Quick trips'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Saved routes'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Recent routes'))).toHaveLength(1);
+
+    unmount();
+  });
+
+  test('web trip bottom sheet uses clearer save route wording after results', () => {
+    const { root, unmount } = loadTripBottomSheetWeb({
+      itineraries: [{ id: 'itinerary-1', legs: [], startTime: 1, endTime: 2, duration: 60 }],
+      hasSearched: true,
+      onSaveCurrentTrip: jest.fn(),
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Save this route'))).toHaveLength(1);
+
+    unmount();
+  });
+
+  test('web trip bottom sheet suggests saving a repeatedly planned route', () => {
+    const onSaveCurrentTrip = jest.fn();
+    const { root, act, unmount } = loadTripBottomSheetWeb({
+      itineraries: [{ id: 'itinerary-1', legs: [], startTime: 1, endTime: 2, duration: 60 }],
+      hasSearched: true,
+      onSaveCurrentTrip,
+      repeatTripSuggestion: {
+        name: 'Home to Work',
+        count: 2,
+      },
+    });
+
+    expect(root.findAll((node) => node.children?.includes('Save Home to Work?'))).toHaveLength(1);
+
+    const saveRepeatButton = root.find(
+      (node) => node.props.accessibilityLabel === 'Save recurring route Home to Work'
+    );
+
+    act(() => {
+      saveRepeatButton.props.onPress();
+    });
+
+    expect(onSaveCurrentTrip).toHaveBeenCalledTimes(1);
 
     unmount();
   });

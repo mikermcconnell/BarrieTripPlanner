@@ -621,7 +621,9 @@ function scoreConfidence(evidencePoints, detectedAtMs, now) {
 
   const count = evidencePoints.length;
   const durationMs = now - detectedAtMs;
-  const uniqueVehicles = new Set(evidencePoints.map(p => p.vehicleId)).size;
+  const uniqueVehicles = new Set(
+    evidencePoints.map(p => p.recurringObservationId || p.vehicleId)
+  ).size;
 
   if (durationMs >= HIGH_CONFIDENCE_DURATION_MS &&
       count >= HIGH_CONFIDENCE_POINTS &&

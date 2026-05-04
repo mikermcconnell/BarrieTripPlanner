@@ -14,6 +14,10 @@ import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../serv
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import {
+  getEffectiveTransferCount,
+  isSameBusContinuation,
+} from '../utils/routeContinuity';
 
 const isRideLeg = (leg) => (
   leg?.isOnDemand ||
@@ -42,6 +46,15 @@ const getTransferAfterLeg = (legs, index) => {
   if (nextRideIndex === -1) return null;
 
   const nextRideLeg = legs[nextRideIndex];
+  if (
+    isSameBusContinuation(
+      { leg: currentLeg, index },
+      { leg: nextRideLeg, index: nextRideIndex },
+      legs
+    )
+  ) {
+    return null;
+  }
   if (!Number.isFinite(currentLeg.endTime) || !Number.isFinite(nextRideLeg.startTime)) return null;
 
   const transferSeconds = Math.max(0, Math.round((nextRideLeg.startTime - currentLeg.endTime) / 1000));
@@ -112,6 +125,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
   const walkTime = formatDuration(itinerary.walkTime);
+  const effectiveTransfers = getEffectiveTransferCount(itinerary);
   const transferSteps = new Map();
   let transferStepCount = 0;
   itinerary.legs.forEach((_, index) => {
@@ -170,10 +184,10 @@ const TripDetailsScreen = ({ route, navigation }) => {
               <Icon name="Walk" size={16} color={COLORS.textSecondary} />
               <Text style={styles.chipText}>{walkDistance} walk</Text>
             </View>
-            {itinerary.transfers > 0 && (
+            {effectiveTransfers > 0 && (
               <View style={styles.chip}>
                 <Icon name="Transfer" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.chipText}>{itinerary.transfers} transfer{itinerary.transfers !== 1 ? 's' : ''}</Text>
+                <Text style={styles.chipText}>{effectiveTransfers} transfer{effectiveTransfers !== 1 ? 's' : ''}</Text>
               </View>
             )}
           </View>

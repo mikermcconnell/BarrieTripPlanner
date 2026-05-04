@@ -11,10 +11,6 @@ import { MAP_CONFIG, PERFORMANCE_BUDGETS } from '../config/constants';
 import {
   BUS_APPROACH_LINE_DASH_ARRAY,
   BUS_APPROACH_LINE_OPACITY,
-  WALKING_ROUTE_DOT_DASH_ARRAY,
-  WALKING_ROUTE_DOT_OUTLINE_COLOR,
-  WALKING_ROUTE_DOT_OUTLINE_WIDTH,
-  WALKING_ROUTE_DOT_STROKE_WIDTH,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
 import { getPlatformMapForStop } from '../config/platformMaps';
@@ -37,7 +33,6 @@ import { useDetourOverlays } from '../hooks/useDetourOverlays';
 import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
-import { getContrastTextColor } from '../utils/colorUtils';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
@@ -46,9 +41,14 @@ import {
   shouldShowDetailedDetourOverlay,
 } from '../utils/detourViewMode';
 import { escapeHtml } from '../utils/htmlUtils';
+import {
+  getRouteLineBadgeDimensions,
+  getRouteLineBadgeTextColor,
+} from '../components/RouteLineBadge';
+import { buildRouteLineLabelMarkers } from '../utils/routeLineLabelMarkers';
 
 // Web-only imports
-import WebMapView, { WebBusMarker, WebHtmlMarker, WebRoutePolyline, WebStopMarker, RouteLineLabels } from '../components/WebMapView';
+import WebMapView, { WebBusMarker, WebHtmlMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
 import FavoriteStopCard from '../components/FavoriteStopCard';
 import DetourOverlay from '../components/DetourOverlay.web';
 import { useZoneOverlays } from '../hooks/useZoneOverlays';
@@ -62,7 +62,6 @@ import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import MapViewModeToggle from '../components/MapViewModeToggle';
 import DetourMapLegend from '../components/DetourMapLegend';
 import TripViewportControls from '../components/TripViewportControls';
-import TripPreviewMapLegend from '../components/TripPreviewMapLegend';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
@@ -76,11 +75,16 @@ import { prepareItineraryForNavigation } from '../services/navigationRecalculati
 import { trackEvent } from '../services/analyticsService';
 import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
 import {
-  SAVED_PLACE_LABELS,
   buildSavedPlacePayload,
   buildSavedTripPayload,
+  clusterSavedPlaceMapMarkers,
   getSavedLocationPoint,
+  getSavedPlaceMapMarkers,
   getSavedPlaceTargetField,
+  getSavedPlacePickerOptions,
+  getRankedSavedPlaces,
+  getRankedSavedTrips,
+  getRecurringTripSuggestion,
 } from '../utils/savedTransitUtils';
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
@@ -214,14 +218,14 @@ const buildBoardingMarkerHtml = (marker) => {
   const routeName = escapeHtml(marker.routeName || '');
   const stopCode = escapeHtml(marker.stopCode || '');
   const stopName = escapeHtml(marker.stopName || '');
+  const bubbleSide = marker.type === 'boarding' ? 'right:34px;' : 'left:34px;';
 
   return `
-    <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-      <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};margin-bottom:4px;white-space:nowrap;max-width:180px;">
+    <div style="position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;top:-42px;${bubbleSide}background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${marker.routeColor};white-space:nowrap;min-width:132px;max-width:180px;">
         <div style="font-size:10px;font-weight:bold;color:${marker.routeColor};text-transform:uppercase;">${marker.type === 'boarding' ? 'Board' : 'Exit'} ${routeName ? `Route ${routeName}` : ''}</div>
         <div style="font-size:11px;font-weight:600;color:#333;overflow:hidden;text-overflow:ellipsis;">#${stopCode} - ${stopName}</div>
       </div>
-      <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${marker.routeColor};"></div>
     </div>
   `;
 };
@@ -229,18 +233,86 @@ const buildBoardingMarkerHtml = (marker) => {
 const buildTripRouteBadgeHtml = (route) => {
   const label = escapeHtml(route.routeLabel || '');
   const color = route.color || COLORS.primary;
-  const textColor = getContrastTextColor(color);
 
   return `
-    <div style="min-width:28px;height:24px;border-radius:999px;padding:0 8px;background:${color};color:${textColor};border:2px solid white;box-shadow:0 4px 10px rgba(15,23,42,0.18);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;">
+    <div style="width:28px;height:28px;border-radius:4px;background:${color};color:white;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;box-sizing:border-box;">
       ${label}
     </div>
+  `;
+};
+
+const buildRouteLineBadgeHtml = (marker) => {
+  const label = escapeHtml(marker.label || '');
+  const color = marker.color || '#1A73E8';
+  const textColor = getRouteLineBadgeTextColor(color);
+  const dimensions = getRouteLineBadgeDimensions(label);
+
+  return `
+    <div aria-label="Route ${label}" style="
+      width:${dimensions.width}px;
+      height:${dimensions.height}px;
+      border-radius:${dimensions.borderRadius}px;
+      background:${color};
+      color:${textColor};
+      border:2.5px solid #FFFFFF;
+      box-shadow:0 2px 7px rgba(15,23,42,0.24);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:12px;
+      font-weight:800;
+      line-height:1;
+      letter-spacing:0.1px;
+      pointer-events:none;
+      user-select:none;
+      box-sizing:border-box;
+    ">${label}</div>
   `;
 };
 
 const buildMapTapMarkerHtml = () => `
   <div style="background:#1a73e8;width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>
 `;
+
+const SAVED_PLACE_MAP_GLYPHS = {
+  Home: '⌂',
+  Work: '💼',
+  School: '🎓',
+  Grocery: '🛒',
+  Gym: '🏋',
+  Doctor: '✚',
+  Route: '↔',
+  MapPin: '📍',
+};
+
+const buildSavedPlaceMarkerHtml = (marker) => {
+  if (marker.isCluster) {
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;min-width:54px;pointer-events:auto;">
+        <div style="width:38px;height:38px;border-radius:19px;background:#0b57d0;border:3px solid white;box-shadow:0 8px 18px rgba(15,23,42,0.22);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:800;line-height:1;">
+          ${marker.count}
+        </div>
+        <div style="margin-top:3px;max-width:92px;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,0.94);box-shadow:0 2px 8px rgba(15,23,42,0.12);font-size:10px;font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          saved places
+        </div>
+      </div>
+    `;
+  }
+
+  const glyph = escapeHtml(SAVED_PLACE_MAP_GLYPHS[marker.icon] || SAVED_PLACE_MAP_GLYPHS.MapPin);
+  const label = escapeHtml(marker.name || 'Saved place');
+
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:54px;pointer-events:auto;">
+      <div style="width:34px;height:34px;border-radius:17px;background:white;border:2px solid rgba(26,115,232,0.22);box-shadow:0 8px 18px rgba(15,23,42,0.18);display:flex;align-items:center;justify-content:center;color:#0b57d0;font-size:17px;font-weight:800;line-height:1;">
+        ${glyph}
+      </div>
+      <div style="margin-top:3px;max-width:82px;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,0.94);box-shadow:0 2px 8px rgba(15,23,42,0.12);font-size:10px;font-weight:700;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${label}
+      </div>
+    </div>
+  `;
+};
 
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
@@ -255,6 +327,12 @@ const HomeScreen = ({ route }) => {
     touchSavedTrip,
     isAuthenticated,
   } = useAuth();
+  const rankedSavedPlaces = useMemo(() => getRankedSavedPlaces(savedPlaces), [savedPlaces]);
+  const rankedSavedTrips = useMemo(() => getRankedSavedTrips(savedTrips), [savedTrips]);
+  const savedPlaceMapMarkers = useMemo(
+    () => clusterSavedPlaceMapMarkers(getSavedPlaceMapMarkers(rankedSavedPlaces)),
+    [rankedSavedPlaces]
+  );
   const {
     routes,
     stops,
@@ -578,7 +656,18 @@ const HomeScreen = ({ route }) => {
   const {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
     boardingAlightingMarkers, tripVehicles, busApproachLines,
-  } = useTripVisualization({ isTripPlanningMode, itineraries, selectedItineraryIndex, vehicles, shapes, tripMapping, tripFrom: tripFromLocation, tripTo: tripToLocation });
+  } = useTripVisualization({
+    isTripPlanningMode,
+    itineraries,
+    selectedItineraryIndex,
+    vehicles,
+    shapes,
+    routeShapeMapping,
+    tripMapping,
+    tripFrom: tripFromLocation,
+    tripTo: tripToLocation,
+  });
+
   const itinerariesWithStopClosureNotices = useMemo(
     () => annotateItinerariesWithStopClosures(itineraries, transitNewsImpacts),
     [itineraries, transitNewsImpacts]
@@ -586,13 +675,15 @@ const HomeScreen = ({ route }) => {
   const selectedItinerary = isTripPlanningMode
     ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
+  const shouldCompactTripSearchHeader =
+    hasTripSearched && !isTripLoading && itinerariesWithStopClosureNotices.length > 0;
 
   const isFocused = useIsFocused();
   const { fitMapToItinerary } = useTripPreviewViewport({
     isFocused,
     isTripPlanningMode,
     fitToCoordinates: (coordinates, options) => mapRef.current?.fitToCoordinates(coordinates, options),
-    edgePadding: { top: 200, right: 50, bottom: 350, left: 50 },
+    edgePadding: { top: shouldCompactTripSearchHeader ? 100 : 200, right: 50, bottom: 350, left: 50 },
   });
 
   const useCurrentLocationForTrip = useCallback((searchTo = null) => {
@@ -633,6 +724,10 @@ const HomeScreen = ({ route }) => {
   // Search history for recent trips
   const { addToHistory, getHistory } = useSearchHistory();
   const recentTrips = getHistory('trips');
+  const repeatTripSuggestion = useMemo(
+    () => getRecurringTripSuggestion({ recentTrips, savedTrips: rankedSavedTrips }),
+    [recentTrips, rankedSavedTrips]
+  );
 
   const handleSelectRecentTrip = (trip) => {
     setTripFrom(trip.from, trip.fromText);
@@ -715,17 +810,27 @@ const HomeScreen = ({ route }) => {
     showMessage(result?.success ? 'Place saved' : 'Could not save place', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
   }, [addSavedPlace, isAuthenticated, showMessage]);
 
+  const handleChooseSavedPlaceOption = useCallback((pendingPlace, labelType) => {
+    if (!pendingPlace) return;
+    handleSavePlace(
+      pendingPlace.location,
+      pendingPlace.text,
+      pendingPlace.fallbackLabel,
+      labelType
+    );
+  }, [handleSavePlace]);
+
   const chooseSavedPlaceLabel = useCallback((location, text, fallbackLabel) => {
-    const options = ['home', 'work', 'school', 'grocery', 'gym', 'doctor', 'custom'];
-    const labels = options.map((key, index) => `${index + 1}. ${SAVED_PLACE_LABELS[key].label}`).join('\\n');
+    const options = getSavedPlacePickerOptions();
+    const labels = options.map((option, index) => `${index + 1}. ${option.label}`).join('\\n');
     const response = typeof window !== 'undefined' && window.prompt
       ? window.prompt(`Save as:\\n${labels}`, '1')
-      : '7';
+      : String(options.length);
     if (response === null) return;
     const index = Number(response) - 1;
-    const labelType = options[index] || 'custom';
-    handleSavePlace(location, text, fallbackLabel, labelType);
-  }, [handleSavePlace]);
+    const labelType = options[index]?.labelType || 'custom';
+    handleChooseSavedPlaceOption({ location, text, fallbackLabel }, labelType);
+  }, [handleChooseSavedPlaceOption]);
 
   useEffect(() => {
     const tripToPlan = route?.params?.savedTripToPlan;
@@ -1004,6 +1109,27 @@ const HomeScreen = ({ route }) => {
   // Trip preview mode - hide regular map elements when viewing trip results
   const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
 
+  const routeLineLabelMarkers = useMemo(() => buildRouteLineLabelMarkers({
+    shapes: displayedShapes,
+    currentZoom,
+    routeShortNameMap,
+    selectedRouteIds: selectedRoutes,
+    hoveredRouteId,
+    isTripPreviewMode,
+    hasDetourFocus,
+    isDetourView,
+    maxLabels: hasDetourFocus || isDetourView ? 8 : 28,
+  }), [
+    displayedShapes,
+    currentZoom,
+    routeShortNameMap,
+    selectedRoutes,
+    hoveredRouteId,
+    isTripPreviewMode,
+    hasDetourFocus,
+    isDetourView,
+  ]);
+
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
   };
@@ -1053,6 +1179,18 @@ const HomeScreen = ({ route }) => {
             accessibilityLabel="My location"
           />
         )}
+        {!isTripPreviewMode && savedPlaceMapMarkers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            html={buildSavedPlaceMarkerHtml(marker)}
+            className="saved-place-marker"
+            zIndexOffset={850}
+            onPress={marker.isCluster ? undefined : () => handleSelectSavedPlace(marker.rawPlace)}
+            popupHtml={`<strong>${escapeHtml(marker.name)}</strong><br />${escapeHtml(marker.addressText)}`}
+            accessibilityLabel={marker.isCluster ? marker.name : `Saved place ${marker.name}`}
+          />
+        ))}
         {/* Regular route shapes - hide when in trip preview mode */}
         {!isTripPreviewMode && displayedShapes.map((shape) => {
           const isHovering = hoveredRouteId !== null;
@@ -1104,11 +1242,11 @@ const HomeScreen = ({ route }) => {
           } else if (hasSelection) {
             opacity = isSelected ? 1.0 : 0.15;
             outlineW = isSelected ? (currentZoom >= 14 ? 4 : 3) : 0;
-            routeLabel = isSelected ? (routeShortNameMap.get(shape.routeId) || null) : null;
+            // Square route labels are rendered as WebHtmlMarker badges below.
           } else if (isHovering) {
             opacity = isThisHovered ? 0.9 : 0.24;
             outlineW = isThisHovered ? (currentZoom >= 14 ? 2 : 1) : 0;
-            routeLabel = isThisHovered ? (routeShortNameMap.get(shape.routeId) || null) : null;
+            // Square route labels are rendered as WebHtmlMarker badges below.
           } else {
             opacity = currentZoom >= 14 ? 0.58 : 0.42;
             outlineW = currentZoom >= 15 ? 1 : 0;
@@ -1142,6 +1280,17 @@ const HomeScreen = ({ route }) => {
             />
           );
         })}
+        {!isTripPreviewMode && routeLineLabelMarkers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            html={buildRouteLineBadgeHtml(marker)}
+            className="route-line-badge"
+            anchor="center"
+            zIndexOffset={650}
+            accessibilityLabel={`Route ${marker.label}`}
+          />
+        ))}
         {/* Detour geometry overlays — above route polylines */}
         {!isTripPreviewMode && detourOverlays.map((overlay) => (
           <DetourOverlay
@@ -1216,18 +1365,15 @@ const HomeScreen = ({ route }) => {
             <WebRoutePolyline
               coordinates={route.coordinates}
               color={route.color}
-              strokeWidth={route.isWalk ? WALKING_ROUTE_DOT_STROKE_WIDTH : route.isOnDemand ? 5 : 6}
-              dashArray={route.isWalk ? WALKING_ROUTE_DOT_DASH_ARRAY : route.isOnDemand ? '12, 6' : null}
+              strokeWidth={route.isWalk ? 4 : route.isOnDemand ? 5 : 6}
+              dashArray={route.isOnDemand ? '12, 6' : null}
               lineCap="round"
               lineJoin="round"
               opacity={route.isWalk ? 0.9 : 1}
-              outlineWidth={route.isWalk ? WALKING_ROUTE_DOT_OUTLINE_WIDTH : 0}
-              outlineColor={route.isWalk ? WALKING_ROUTE_DOT_OUTLINE_COLOR : undefined}
+              outlineWidth={0}
+              outlineColor={undefined}
               interactive={false}
             />
-            {route.routeLabel && (
-              <RouteLineLabels coordinates={route.coordinates} color={route.color} routeLabel={route.routeLabel} />
-            )}
           </React.Fragment>
         ))}
 
@@ -1397,8 +1543,8 @@ const HomeScreen = ({ route }) => {
           showUseCurrentLocation={!tripFromLocation}
           isLocatingCurrentLocation={isLocatingFrom}
           isLoading={isTripLoading}
-          savedPlaces={savedPlaces}
-          savedTrips={savedTrips}
+          savedPlaces={rankedSavedPlaces}
+          savedTrips={rankedSavedTrips}
           onSelectSavedPlace={handleSelectSavedPlace}
           onSelectSavedTrip={handleSelectSavedTrip}
           onSaveFromPlace={tripFromLocation ? () => chooseSavedPlaceLabel(tripFromLocation, tripFromText, 'Start') : null}
@@ -1407,6 +1553,7 @@ const HomeScreen = ({ route }) => {
           selectedTime={selectedTime}
           onTimeModeChange={setTimeMode}
           onSelectedTimeChange={setSelectedTime}
+          compact={shouldCompactTripSearchHeader}
           onSearch={() => {
             if (tripFromLocation && tripToLocation) {
               addToHistory('trips', {
@@ -1428,6 +1575,7 @@ const HomeScreen = ({ route }) => {
               onChangeText={setWhereToText}
               onSelect={handleWhereToSelect}
               placeholder="Where to?"
+              savedPlaces={rankedSavedPlaces}
               icon={<SearchIcon size={18} color={COLORS.grey500} />}
               style={styles.whereToAutocomplete}
               inputStyle={styles.whereToInput}
@@ -1611,11 +1759,6 @@ const HomeScreen = ({ route }) => {
         />
       )}
 
-      <TripPreviewMapLegend
-        visible={isTripPreviewMode}
-        style={styles.tripPreviewMapLegend}
-      />
-
       {/* Favorite Stop Quick View */}
       {!isTripPlanningMode && !selectedStop && (
         <FavoriteStopCard
@@ -1673,9 +1816,10 @@ const HomeScreen = ({ route }) => {
             hasSearched={hasTripSearched}
             recentTrips={recentTrips}
             onSelectRecentTrip={handleSelectRecentTrip}
-            savedTrips={savedTrips}
+            savedTrips={rankedSavedTrips}
             onSelectSavedTrip={handleSelectSavedTrip}
             onSaveCurrentTrip={handleSaveCurrentTrip}
+            repeatTripSuggestion={repeatTripSuggestion}
             onRetry={() => {
               if (tripFromLocation && tripToLocation) {
                 searchTrips(tripFromLocation, tripToLocation);
@@ -2175,12 +2319,6 @@ const styles = StyleSheet.create({
     right: SPACING.sm,
     zIndex: 999,
   },
-  tripPreviewMapLegend: {
-    top: 196,
-    right: SPACING.sm,
-    zIndex: 998,
-  },
-
   // Bottom Action Bar - unified card
   bottomActionBar: {
     position: 'absolute',

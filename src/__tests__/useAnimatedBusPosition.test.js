@@ -53,6 +53,17 @@ describe('useAnimatedBusPosition bearing resolution', () => {
     expect(bearing).toBe(0);
   });
 
+  test('uses a changed feed bearing when speed is missing from the live feed', () => {
+    const bearing = __TEST_ONLY__.resolveTargetBearing({
+      currentBearing: 0,
+      vehicle: { bearing: 147.53, speed: null },
+      snappedBearing: null,
+      movementBearing: null,
+    });
+
+    expect(bearing).toBeCloseTo(147.53, 2);
+  });
+
   test('does not derive movement bearing from tiny GPS drift', () => {
     const movementBearing = __TEST_ONLY__.resolveMovementBearing(
       { latitude: 44.389, longitude: -79.69 },

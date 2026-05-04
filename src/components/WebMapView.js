@@ -15,6 +15,7 @@ import React, {
 } from 'react';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import { OSM_MAP_STYLE } from '../config/constants';
+import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
 import { escapeHtml } from '../utils/htmlUtils';
 
 const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css';
@@ -530,18 +531,19 @@ const addLineLayers = ({
       source: sourceId,
       layout: {
         'symbol-placement': 'line',
-        'symbol-spacing': 250,
+        'symbol-spacing': ROUTE_LINE_LABEL_STYLE.spacing,
         'text-field': routeLabel,
-        'text-size': 11,
+        'text-size': ROUTE_LINE_LABEL_STYLE.size,
+        'text-offset': ROUTE_LINE_LABEL_STYLE.offset,
         'text-rotation-alignment': 'map',
         'text-allow-overlap': false,
         'text-ignore-placement': false,
       },
       paint: {
-        'text-color': color,
-        'text-halo-color': '#FFFFFF',
-        'text-halo-width': 2,
-        'text-opacity': 0.75,
+        'text-color': ROUTE_LINE_LABEL_STYLE.color,
+        'text-halo-color': ROUTE_LINE_LABEL_STYLE.haloColor,
+        'text-halo-width': ROUTE_LINE_LABEL_STYLE.haloWidth,
+        'text-opacity': ROUTE_LINE_LABEL_STYLE.opacity,
       },
     });
   }

@@ -6,6 +6,15 @@ const { haversineDistance, pointToPolylineDistance } = require('../geometry');
 const DEFAULT_OFFSET_METERS = 275;
 const DEFAULT_ROAD_MATCH_OFFSET_CANDIDATES_METERS = [275, 600, 1000, 1500, 1800];
 const DEFAULT_ROUTE_ID = null;
+const FARMERS_MARKET_PRESET = 'farmers-market';
+const FARMERS_MARKET_ROUTE_IDS = ['10', '11'];
+
+const FARMERS_MARKET_POINTS = {
+  collierMulcaster: { latitude: 44.38932, longitude: -79.6878 },
+  collierOwen: { latitude: 44.3895, longitude: -79.6905 },
+  worsleyOwen: { latitude: 44.39045, longitude: -79.68986 },
+  worsleyMulcaster: { latitude: 44.39048, longitude: -79.6877 },
+};
 
 function isFiniteCoordinate(point) {
   return (
@@ -114,6 +123,84 @@ function buildSyntheticGeometry(shape, shapeId, offsetMeters = DEFAULT_OFFSET_ME
         confidence: 'medium',
         evidencePointCount: inferredDetourPolyline.length,
         lastEvidenceAt: new Date(),
+      },
+    ],
+  };
+}
+
+function normalizePreset(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isFarmersMarketPreset(options = {}) {
+  return normalizePreset(options.preset) === FARMERS_MARKET_PRESET;
+}
+
+function getFarmersMarketRouteIds(options = {}) {
+  if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
+    return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
+  }
+  if (options.routeId) return [String(options.routeId).trim()];
+  return FARMERS_MARKET_ROUTE_IDS;
+}
+
+function selectExactRouteAndShape(staticData, routeId) {
+  const normalizedRouteId = String(routeId);
+  if (!staticData?.routeShapeMapping?.has(normalizedRouteId)) {
+    throw new Error(`Route ${normalizedRouteId} is not available in static GTFS data`);
+  }
+  return selectRouteAndShape(staticData, normalizedRouteId);
+}
+
+function buildFarmersMarketGeometry(routeId, shapeId) {
+  const {
+    collierMulcaster,
+    collierOwen,
+    worsleyOwen,
+    worsleyMulcaster,
+  } = FARMERS_MARKET_POINTS;
+  const isRoute10 = String(routeId) === '10';
+  const skippedSegmentPolyline = isRoute10
+    ? [worsleyMulcaster, collierMulcaster]
+    : [collierMulcaster, worsleyMulcaster];
+  const inferredDetourPolyline = isRoute10
+    ? [worsleyMulcaster, worsleyOwen, collierOwen, collierMulcaster]
+    : [collierMulcaster, collierOwen, worsleyOwen, worsleyMulcaster];
+  const likelyDetourPolyline = inferredDetourPolyline;
+  const entryPoint = skippedSegmentPolyline[0];
+  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const lastEvidenceAt = new Date();
+
+  return {
+    shapeId,
+    entryPoint,
+    exitPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    likelyDetourPolyline,
+    likelyDetourRoadNames: ['Owen Street', 'Worsley Street'],
+    roadMatchConfidence: 'medium',
+    roadMatchSource: 'farmers-market-preset',
+    detourPathLabel: "Farmer's Market test detour",
+    confidence: 'medium',
+    evidencePointCount: inferredDetourPolyline.length,
+    lastEvidenceAt,
+    segments: [
+      {
+        segmentId: 'farmers-market-simulated-1',
+        shapeId,
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline,
+        likelyDetourPolyline,
+        likelyDetourRoadNames: ['Owen Street', 'Worsley Street'],
+        roadMatchConfidence: 'medium',
+        roadMatchSource: 'farmers-market-preset',
+        detourPathLabel: "Farmer's Market test detour",
+        confidence: 'medium',
+        evidencePointCount: inferredDetourPolyline.length,
+        lastEvidenceAt,
       },
     ],
   };
@@ -315,6 +402,53 @@ function createDetourSimulationOps({
     }
 
     const staticData = await loadStaticData();
+    if (isFarmersMarketPreset(options)) {
+      const requestedRouteIds = getFarmersMarketRouteIds(options);
+      const availableRouteIds = Array.from(staticData.routeShapeMapping.keys()).sort();
+      const writes = [];
+
+      for (const requestedRouteId of requestedRouteIds) {
+        const { routeId, shapeId } = selectExactRouteAndShape(staticData, requestedRouteId);
+        const geometry = buildFarmersMarketGeometry(routeId, shapeId);
+        const doc = {
+          ...createSimulatedDetourDocument({
+            routeId,
+            shapeId,
+            geometry,
+            durationMinutes: options.durationMinutes,
+          }),
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: Array.isArray(geometry.segments)
+            ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
+            : geometry.segments,
+          testPreset: FARMERS_MARKET_PRESET,
+          title: "Farmer's Market Detour - Route 10 and 11",
+          description: 'Test detour for the Saturday Farmers Market closure on Mulcaster Street.',
+          affectedStops: ['191', '192', '556', '557'],
+        };
+
+        await db.collection('activeDetours').doc(routeId).set(doc, { merge: true });
+        writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          enabled: true,
+          simulated: true,
+          preset: FARMERS_MARKET_PRESET,
+          routeIds: writes.map((write) => write.routeId),
+          shapeIds: writes.map((write) => write.shapeId),
+          segmentCount: writes.length,
+          expiresAt: writes[0]?.expiresAt || null,
+          availableRouteIds,
+          message: "Simulated Farmer's Market detours published for routes 10 and 11.",
+        },
+      };
+    }
+
     const { routeId, shapeId, shape, availableRouteIds } = selectRouteAndShape(staticData, options.routeId);
     const geometry = await buildMatchedSimulationGeometry({
       shape,

@@ -5,12 +5,13 @@
  * when trip planning mode is active.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text, Animated, ActivityIndicator } from 'react-native';
 import Icon from './Icon';
 import AddressAutocomplete from './AddressAutocomplete';
 import TimePicker from './TimePicker';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
+import { getSavedPlaceIconName } from '../utils/savedTransitUtils';
 
 // Using centralized Icon component for rendering icons
 
@@ -19,6 +20,15 @@ const HOOK_TO_PICKER = { now: 'now', departAt: 'depart', arriveBy: 'arrive' };
 const FIELD_INDICATOR_WIDTH = 20;
 const FIELD_INDICATOR_GAP = SPACING.xs;
 const FIELD_ACTION_GUTTER = 40;
+
+const formatTripTimeSummary = (timeMode, selectedTime) => {
+  if (timeMode === 'now') return 'Leave now';
+
+  const prefix = timeMode === 'arriveBy' ? 'Arrive by' : 'Depart at';
+  const date = selectedTime ? new Date(selectedTime) : new Date();
+  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${prefix} ${time}`;
+};
 
 const TripSearchHeader = ({
   fromText,
@@ -50,17 +60,79 @@ const TripSearchHeader = ({
   onSelectSavedTrip,
   onSaveFromPlace,
   onSaveToPlace,
+  compact = false,
 }) => {
   void showFromSuggestions;
   void showToSuggestions;
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const visiblePlaces = savedPlaces.slice(0, 5);
   const visibleTrips = savedTrips.slice(0, 3);
+
+  useEffect(() => {
+    if (!compact) {
+      setIsEditingSearch(false);
+    }
+  }, [compact]);
+
+  if (compact && !isEditingSearch) {
+    return (
+      <View style={[styles.container, styles.compactContainer]}>
+        <View style={styles.compactHeader}>
+          <View style={styles.compactTitleGroup}>
+            <Text style={styles.compactEyebrow}>Trip planned</Text>
+            <Text style={styles.compactTime}>{formatTripTimeSummary(timeMode, selectedTime)}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={onClose}
+            accessibilityLabel="Close trip planner"
+            accessibilityRole="button"
+          >
+            <Icon name="X" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.compactRouteRow}>
+          <View style={styles.compactDots}>
+            <View style={styles.fromDot} />
+            <View style={styles.compactConnectorLine} />
+            <View style={styles.toDot} />
+          </View>
+          <View style={styles.compactRouteText}>
+            <Text style={styles.compactPlaceText} numberOfLines={1}>
+              {fromText || 'Your location'}
+            </Text>
+            <Text style={styles.compactPlaceText} numberOfLines={1}>
+              {toText || 'Destination'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => setIsEditingSearch(true)}
+            accessibilityLabel="Edit trip search"
+            accessibilityRole="button"
+          >
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Header with close button */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Plan Your Trip</Text>
+        {compact && (
+          <TouchableOpacity
+            style={styles.doneEditingButton}
+            onPress={() => setIsEditingSearch(false)}
+            accessibilityLabel="Show compact trip search"
+            accessibilityRole="button"
+          >
+            <Text style={styles.doneEditingButtonText}>Done</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.closeButton}
           onPress={onClose}
@@ -88,6 +160,7 @@ const TripSearchHeader = ({
               inputStyle={styles.input}
               accessibilityLabel="Starting location"
               accessibilityHint="Enter an address to search"
+              savedPlaces={savedPlaces}
             />
           </View>
         </View>
@@ -135,6 +208,7 @@ const TripSearchHeader = ({
               inputStyle={styles.input}
               accessibilityLabel="Destination"
               accessibilityHint="Enter an address to search"
+              savedPlaces={savedPlaces}
             />
           </View>
         </View>
@@ -171,7 +245,7 @@ const TripSearchHeader = ({
                     accessibilityRole="button"
                     accessibilityLabel={`Use saved place ${place.name || place.addressText}`}
                   >
-                    <Icon name={place.icon || 'MapPin'} size={14} color={COLORS.primary} />
+                    <Icon name={getSavedPlaceIconName(place)} size={14} color={COLORS.primary} />
                     <Text style={styles.shortcutChipText} numberOfLines={1}>
                       {place.name || place.addressText}
                     </Text>
@@ -280,16 +354,89 @@ const styles = StyleSheet.create({
     ...SHADOWS.elevated,
     zIndex: 1000,
   },
+  compactContainer: {
+    padding: SPACING.xs,
+  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.xs,
   },
   headerTitle: {
+    flex: 1,
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
+  },
+  doneEditingButton: {
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+    marginRight: SPACING.xs,
+  },
+  doneEditingButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
+  },
+  compactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xxs,
+  },
+  compactTitleGroup: {
+    flex: 1,
+    paddingRight: SPACING.xs,
+  },
+  compactEyebrow: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  compactTime: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+    marginTop: 1,
+  },
+  compactRouteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  compactDots: {
+    width: 18,
+    alignItems: 'center',
+  },
+  compactConnectorLine: {
+    width: 2,
+    height: 16,
+    backgroundColor: COLORS.grey300,
+    marginVertical: 2,
+  },
+  compactRouteText: {
+    flex: 1,
+    gap: 2,
+  },
+  compactPlaceText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+  },
+  editButton: {
+    paddingVertical: 7,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  editButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
   },
   closeButton: {
     width: 28,
@@ -339,6 +486,8 @@ const styles = StyleSheet.create({
   savePlaceRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: SPACING.xs,
     marginBottom: SPACING.xs,
   },

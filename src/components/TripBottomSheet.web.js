@@ -11,6 +11,7 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView
 import TripResultCard from './TripResultCard';
 import TripErrorDisplay from './TripErrorDisplay';
 import FareCard from './FareCard';
+import TripPreviewMapLegend from './TripPreviewMapLegend';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
 
@@ -73,9 +74,11 @@ const TripBottomSheet = ({
   savedTrips = [],
   onSelectSavedTrip,
   onSaveCurrentTrip,
+  repeatTripSuggestion = null,
 }) => {
   // Match native sheet sizing: 'peek' (10%), 'default' (38%), 'expanded' (85%)
   const [sheetState, setSheetState] = useState('default');
+  const [isMapKeyExpanded, setIsMapKeyExpanded] = useState(false);
   const handleSheetChanges = useCallback((_nextState) => {}, []);
 
   const getSheetHeight = () => {
@@ -145,11 +148,11 @@ const TripBottomSheet = ({
       return (
         <View style={styles.centerContainer}>
           <EmptyIcon size={48} color={COLORS.grey400} />
-          <Text style={styles.emptyTitle}>Plan your trip</Text>
-          <Text style={styles.emptySubtext}>Enter your destination above to see available routes</Text>
+          <Text style={styles.emptyTitle}>Quick trips</Text>
+          <Text style={styles.emptySubtext}>Pick a saved or recent route, or enter your destination above.</Text>
           {savedTrips.length > 0 && (
             <View style={styles.recentSection}>
-              <Text style={styles.recentTitle}>Saved Trips</Text>
+              <Text style={styles.recentTitle}>Saved routes</Text>
               {savedTrips.slice(0, 4).map((trip) => (
                 <TouchableOpacity
                   key={trip.id}
@@ -170,7 +173,7 @@ const TripBottomSheet = ({
           )}
           {recentTrips.length > 0 && (
             <View style={styles.recentSection}>
-              <Text style={styles.recentTitle}>Recent Trips</Text>
+              <Text style={styles.recentTitle}>Recent routes</Text>
               {recentTrips.slice(0, 5).map((trip, idx) => (
                 <TouchableOpacity
                   key={`recent-trip-${idx}`}
@@ -214,17 +217,53 @@ const TripBottomSheet = ({
             {itineraries.length} route{itineraries.length !== 1 ? 's' : ''} found
           </Text>
           <Text style={styles.resultsSubtitle}>Choose a route to preview on the map</Text>
+          {repeatTripSuggestion && onSaveCurrentTrip && (
+            <View style={styles.repeatTripPrompt}>
+              <View style={styles.repeatTripPromptText}>
+                <Text style={styles.repeatTripPromptTitle}>
+                  {`Save ${repeatTripSuggestion.name}?`}
+                </Text>
+                <Text style={styles.repeatTripPromptSubtext}>
+                  You’ve planned this route {repeatTripSuggestion.count} times. Save it for one-tap access.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.repeatTripPromptButton}
+                onPress={onSaveCurrentTrip}
+                accessibilityRole="button"
+                accessibilityLabel={`Save recurring route ${repeatTripSuggestion.name}`}
+              >
+                <Text style={styles.repeatTripPromptButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {onSaveCurrentTrip && (
             <TouchableOpacity
               style={styles.saveTripButton}
               onPress={onSaveCurrentTrip}
               accessibilityRole="button"
-              accessibilityLabel="Save this trip"
-            >
-              <Icon name="Star" size={14} color={COLORS.primary} />
-              <Text style={styles.saveTripButtonText}>Save trip</Text>
-            </TouchableOpacity>
+            accessibilityLabel="Save this route"
+          >
+            <Icon name="Star" size={14} color={COLORS.primary} />
+            <Text style={styles.saveTripButtonText}>Save this route</Text>
+          </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={styles.mapKeyToggle}
+            onPress={() => setIsMapKeyExpanded((expanded) => !expanded)}
+            accessibilityRole="button"
+            accessibilityLabel={isMapKeyExpanded ? 'Hide trip map key' : 'Show trip map key'}
+            aria-expanded={isMapKeyExpanded}
+          >
+            <Text style={styles.mapKeyToggleIcon}>ⓘ</Text>
+            <Text style={styles.mapKeyToggleText}>Map key</Text>
+            <Text style={styles.mapKeyToggleIcon}>{isMapKeyExpanded ? '⌃' : '⌄'}</Text>
+          </TouchableOpacity>
+          <TripPreviewMapLegend
+            visible={isMapKeyExpanded}
+            variant="inline"
+            style={styles.inlineMapKey}
+          />
         </View>
         <ScrollView style={styles.resultsList} contentContainerStyle={styles.resultsContent}>
           {itineraries.map((itinerary, index) => (
@@ -417,6 +456,41 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  repeatTripPrompt: {
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primarySubtle,
+    borderWidth: 1,
+    borderColor: 'rgba(26, 115, 232, 0.16)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  repeatTripPromptText: {
+    flex: 1,
+  },
+  repeatTripPromptTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
+  },
+  repeatTripPromptSubtext: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  repeatTripPromptButton: {
+    paddingVertical: 7,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primary,
+  },
+  repeatTripPromptButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.white,
+  },
   saveTripButton: {
     alignSelf: 'center',
     flexDirection: 'row',
@@ -432,6 +506,31 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.primary,
+  },
+  mapKeyToggle: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.xs,
+    paddingVertical: 4,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.secondarySubtle,
+    cursor: 'pointer',
+  },
+  mapKeyToggleText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primaryDark,
+  },
+  mapKeyToggleIcon: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+  },
+  inlineMapKey: {
+    alignSelf: 'stretch',
   },
   resultsList: {
     flex: 1,

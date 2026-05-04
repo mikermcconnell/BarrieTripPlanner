@@ -3,6 +3,7 @@ function createRuntimeStatePersistence({
   activeDetours,
   detourEvidence,
   persistentDetourCandidates,
+  recurringShortDeviationCandidates,
   getMinVehiclesForDetour,
   setMinVehiclesForDetour,
   getWasInService,
@@ -31,6 +32,35 @@ function createRuntimeStatePersistence({
           lastMatchedAt: toTimestampMs(candidate?.lastMatchedAt) || null,
         }])
       ),
+      recurringShortDeviationCandidates: Object.fromEntries(
+        [...recurringShortDeviationCandidates.entries()].map(([key, candidate]) => [key, {
+          routeId: candidate?.routeId || null,
+          shapeId: candidate?.shapeId || null,
+          progressMinMeters: Number.isFinite(candidate?.progressMinMeters) ? candidate.progressMinMeters : null,
+          progressMaxMeters: Number.isFinite(candidate?.progressMaxMeters) ? candidate.progressMaxMeters : null,
+          lastSeenAt: toTimestampMs(candidate?.lastSeenAt) || null,
+          observations: (candidate?.observations || []).map((observation) => ({
+            routeId: observation?.routeId || null,
+            shapeId: observation?.shapeId || null,
+            progressMinMeters: Number.isFinite(observation?.progressMinMeters)
+              ? observation.progressMinMeters
+              : null,
+            progressMaxMeters: Number.isFinite(observation?.progressMaxMeters)
+              ? observation.progressMaxMeters
+              : null,
+            timestampMs: toTimestampMs(observation?.timestampMs) || null,
+            vehicleId: observation?.vehicleId || null,
+            tripId: observation?.tripId || null,
+            tripShapeId: observation?.tripShapeId || null,
+            signature: observation?.signature || null,
+            entryObservation: normalizeObservation(observation?.entryObservation),
+            exitObservation: normalizeObservation(observation?.exitObservation),
+            evidencePoints: (observation?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+            lastCoordinate: observation?.lastCoordinate || null,
+          })),
+          evidencePoints: (candidate?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+        }])
+      ),
       vehicles: [...vehicleState.entries()].map(([vehicleId, state]) => ({
         vehicleId,
         routeId: state?.routeId || null,
@@ -43,6 +73,7 @@ function createRuntimeStatePersistence({
         offRouteStreakPoints: (state?.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
         onRouteStreakStart: normalizeObservation(state?.onRouteStreakStart),
         tripShapeId: state?.tripShapeId || null,
+        tripId: state?.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(state?.hasReturnedOnRouteSinceDetour),
       })),
       routes: [...activeDetours.entries()].map(([routeId, routeState]) => ({
@@ -81,6 +112,7 @@ function createRuntimeStatePersistence({
     activeDetours.clear();
     detourEvidence.clear();
     persistentDetourCandidates.clear();
+    recurringShortDeviationCandidates.clear();
 
     // Deployment config should win over persisted runtime state.
     // Older snapshots may contain a weaker minimum vehicle threshold, and
@@ -116,7 +148,51 @@ function createRuntimeStatePersistence({
         offRouteStreakPoints: (rawVehicle.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
         onRouteStreakStart: normalizeObservation(rawVehicle.onRouteStreakStart),
         tripShapeId: rawVehicle.tripShapeId || null,
+        tripId: rawVehicle.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(rawVehicle.hasReturnedOnRouteSinceDetour),
+      });
+    }
+
+    for (const [key, rawCandidate] of Object.entries(snapshot?.recurringShortDeviationCandidates || {})) {
+      const routeId = rawCandidate?.routeId || null;
+      const shapeId = rawCandidate?.shapeId || null;
+      if (!routeId || !shapeId) continue;
+      recurringShortDeviationCandidates.set(key, {
+        routeId,
+        shapeId,
+        progressMinMeters: Number.isFinite(rawCandidate.progressMinMeters)
+          ? rawCandidate.progressMinMeters
+          : null,
+        progressMaxMeters: Number.isFinite(rawCandidate.progressMaxMeters)
+          ? rawCandidate.progressMaxMeters
+          : null,
+        lastSeenAt: toTimestampMs(rawCandidate.lastSeenAt) || null,
+        observations: (rawCandidate.observations || [])
+          .map((observation) => ({
+            routeId: observation?.routeId || routeId,
+            shapeId: observation?.shapeId || shapeId,
+            progressMinMeters: Number.isFinite(observation?.progressMinMeters)
+              ? observation.progressMinMeters
+              : null,
+            progressMaxMeters: Number.isFinite(observation?.progressMaxMeters)
+              ? observation.progressMaxMeters
+              : null,
+            timestampMs: toTimestampMs(observation?.timestampMs) || null,
+            vehicleId: observation?.vehicleId || null,
+            tripId: observation?.tripId || null,
+            tripShapeId: observation?.tripShapeId || null,
+            signature: observation?.signature || null,
+            entryObservation: normalizeObservation(observation?.entryObservation),
+            exitObservation: normalizeObservation(observation?.exitObservation),
+            evidencePoints: (observation?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+            lastCoordinate: observation?.lastCoordinate || null,
+          }))
+          .filter((observation) =>
+            Number.isFinite(observation.progressMinMeters) &&
+            Number.isFinite(observation.progressMaxMeters) &&
+            Number.isFinite(observation.timestampMs)
+          ),
+        evidencePoints: (rawCandidate.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
       });
     }
 
