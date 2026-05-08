@@ -27,6 +27,16 @@ export const TRIP_ERROR_MESSAGES = {
       'Check service alerts before you go',
     ],
   },
+  NO_NEARBY_STOPS: {
+    title: 'No nearby bus stops',
+    message: 'This location is in the service area, but it is far from the nearest bus stop.',
+    icon: 'map-marker-off',
+    retryable: false,
+    suggestions: [
+      'Try using a nearby stop or major intersection',
+      'Choose a start or destination closer to a bus route',
+    ],
+  },
   OUTSIDE_SERVICE_AREA: {
     title: 'Outside Service Area',
     message: 'Trip planning works for trips within Barrie and supported on-demand zones.',

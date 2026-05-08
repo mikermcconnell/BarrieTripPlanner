@@ -260,6 +260,33 @@ describe('localRouter — trip deduplication and time diversity', () => {
     expect(uniqueTripIds.size).toBe(result.itineraries.length);
   });
 
+  test('uses a long-walk fallback when the origin is inside Barrie but more than the normal walk limit from a stop', async () => {
+    const result = await planTripLocal({
+      ...tripParams,
+      // About 890m south of O1: outside the normal 800m walk-to-transit search,
+      // but still close enough for the long-walk fallback.
+      fromLat: 44.381,
+      fromLon: -79.700,
+    });
+
+    expect(result.itineraries.length).toBeGreaterThan(0);
+    expect(result.accessWalkFallback).toEqual(expect.objectContaining({
+      origin: true,
+      destination: false,
+    }));
+  });
+
+  test('throws no-nearby-stops instead of outside-service-area when no stop is close enough', async () => {
+    await expect(planTripLocal({
+      ...tripParams,
+      fromLat: 44.25,
+      fromLon: -79.70,
+    })).rejects.toMatchObject({
+      code: 'NO_NEARBY_STOPS',
+      message: 'No bus stops are close enough to your starting location',
+    });
+  });
+
   test('no two itineraries use the same tripId (anti-regression)', async () => {
     const result = await planTripLocal(tripParams);
 

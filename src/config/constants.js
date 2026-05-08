@@ -149,6 +149,10 @@ export const ROUTING_CONFIG = {
   // Maximum walking distance to reach a transit stop from origin (meters)
   MAX_WALK_TO_TRANSIT: 800,
 
+  // Fallback walking distance when a rider is within Barrie but not close
+  // to a stop. These results are still shown as long-walk options.
+  MAX_LONG_WALK_TO_TRANSIT: 2500,
+
   // Maximum walking distance for transfers between stops (meters)
   MAX_WALK_FOR_TRANSFER: 400,
 

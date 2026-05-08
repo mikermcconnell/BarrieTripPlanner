@@ -25,4 +25,14 @@ describe('trip validation messaging', () => {
       ]),
     }));
   });
+
+  test('no-nearby-stops error card does not say the rider is outside Barrie', () => {
+    expect(getErrorConfig('NO_NEARBY_STOPS')).toEqual(expect.objectContaining({
+      title: 'No nearby bus stops',
+      message: 'This location is in the service area, but it is far from the nearest bus stop.',
+      suggestions: expect.arrayContaining([
+        'Try using a nearby stop or major intersection',
+      ]),
+    }));
+  });
 });

@@ -131,6 +131,35 @@ export const ROUTING_ERROR_CODES = {
   OUTSIDE_SERVICE_AREA: 'OUTSIDE_SERVICE_AREA',
 };
 
+const findAccessStops = (routingData, lat, lon) => {
+  const normalStops = findNearbyStops(
+    routingData.stops,
+    lat,
+    lon,
+    ROUTING_CONFIG.MAX_WALK_TO_TRANSIT
+  );
+
+  if (normalStops.length > 0) {
+    return {
+      stops: normalStops,
+      usedLongWalkFallback: false,
+    };
+  }
+
+  const longWalkLimit = ROUTING_CONFIG.MAX_LONG_WALK_TO_TRANSIT || ROUTING_CONFIG.WALKING_ONLY_MAX_DISTANCE_METERS || 2500;
+  const longWalkStops = findNearbyStops(
+    routingData.stops,
+    lat,
+    lon,
+    longWalkLimit
+  );
+
+  return {
+    stops: longWalkStops,
+    usedLongWalkFallback: longWalkStops.length > 0,
+  };
+};
+
 /**
  * Main entry point for local trip planning
  * Matches the signature expected by tripService.js
@@ -172,32 +201,25 @@ export const planTripLocal = async ({
     );
   }
 
-  // Find nearby stops for origin and destination
-  const originStops = findNearbyStops(
-    routingData.stops,
-    fromLat,
-    fromLon,
-    ROUTING_CONFIG.MAX_WALK_TO_TRANSIT
-  );
-
-  const destStops = findNearbyStops(
-    routingData.stops,
-    toLat,
-    toLon,
-    ROUTING_CONFIG.MAX_WALK_TO_TRANSIT
-  );
+  // Find nearby stops for origin and destination. If the rider is within
+  // Barrie but just far from a stop, retry with a long-walk radius instead
+  // of reporting the location as outside the service area.
+  const originAccess = findAccessStops(routingData, fromLat, fromLon);
+  const destAccess = findAccessStops(routingData, toLat, toLon);
+  const originStops = originAccess.stops;
+  const destStops = destAccess.stops;
 
   if (originStops.length === 0) {
     throw new RoutingError(
-      ROUTING_ERROR_CODES.OUTSIDE_SERVICE_AREA,
-      'No transit stops near your starting location'
+      ROUTING_ERROR_CODES.NO_NEARBY_STOPS,
+      'No bus stops are close enough to your starting location'
     );
   }
 
   if (destStops.length === 0) {
     throw new RoutingError(
-      ROUTING_ERROR_CODES.OUTSIDE_SERVICE_AREA,
-      'No transit stops near your destination'
+      ROUTING_ERROR_CODES.NO_NEARBY_STOPS,
+      'No bus stops are close enough to your destination'
     );
   }
 
@@ -264,6 +286,12 @@ export const planTripLocal = async ({
     from: { name: 'Origin', lat: fromLat, lon: fromLon },
     to: { name: 'Destination', lat: toLat, lon: toLon },
     itineraries,
+    accessWalkFallback: {
+      origin: originAccess.usedLongWalkFallback,
+      destination: destAccess.usedLongWalkFallback,
+      maxNormalWalkMeters: ROUTING_CONFIG.MAX_WALK_TO_TRANSIT,
+      maxFallbackWalkMeters: ROUTING_CONFIG.MAX_LONG_WALK_TO_TRANSIT || ROUTING_CONFIG.WALKING_ONLY_MAX_DISTANCE_METERS || 2500,
+    },
   };
 };
 
