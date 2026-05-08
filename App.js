@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,7 +7,6 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
 import { Platform, View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
 import {
   Outfit_400Regular,
@@ -19,10 +18,8 @@ import { TransitProvider } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
-import OnboardingScreen from './src/screens/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { COLORS } from './src/config/theme';
-import { ONBOARDING_KEY } from './src/config/constants';
 import {
   registerForPushNotifications,
   addNotificationReceivedListener,
@@ -209,8 +206,6 @@ function StartupConfigErrorScreen({ issues }) {
 
 export default function App() {
   const navigationRef = useRef();
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Outfit_400Regular,
@@ -221,17 +216,6 @@ export default function App() {
 
   useEffect(() => {
     const uninstallDiagnostics = installStartupDiagnostics();
-
-    (async () => {
-      try {
-        const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
-        if (!seen) setShowOnboarding(true);
-      } catch {
-        // If storage fails, skip onboarding
-      } finally {
-        setOnboardingChecked(true);
-      }
-    })();
 
     return () => {
       if (typeof uninstallDiagnostics === 'function') {
@@ -248,30 +232,13 @@ export default function App() {
     );
   }
 
-  const handleOnboardingComplete = async () => {
-    try {
-      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-    } catch {
-      // Non-critical
-    }
-    setShowOnboarding(false);
-  };
-
-  if (!onboardingChecked || !fontsLoaded) {
+  if (!fontsLoaded) {
     return (
       <View style={appStyles.splash}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={appStyles.splashTitle}>Starting My Barrie Transit</Text>
         <Text style={appStyles.splashDetail}>Loading live buses, stops, and trip options.</Text>
       </View>
-    );
-  }
-
-  if (showOnboarding) {
-    return (
-      <SafeAreaProvider>
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-      </SafeAreaProvider>
     );
   }
 

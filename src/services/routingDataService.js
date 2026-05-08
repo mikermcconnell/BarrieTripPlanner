@@ -15,6 +15,7 @@
 import { ROUTING_CONFIG } from '../config/constants';
 import { buildServiceCalendar } from './calendarService';
 import { haversineDistance } from '../utils/geometryUtils';
+import { pickCanonicalStopSequence } from '../utils/gtfsStopSequences';
 import logger from '../utils/logger';
 
 /**
@@ -52,6 +53,7 @@ export const buildStopDeparturesIndex = (stopTimes, trips) => {
       routeId: trip.routeId,
       serviceId: trip.serviceId,
       directionId: trip.directionId,
+      blockId: trip.blockId || null,
       headsign: trip.headsign,
       departureTime: st.departureTime,
       arrivalTime: st.arrivalTime,
@@ -78,8 +80,9 @@ export const buildStopDeparturesIndex = (stopTimes, trips) => {
  * @param {Array} trips - Array of trip objects
  * @returns {Object} Route stop sequences
  */
-export const buildRouteStopSequences = (stopTimes, trips) => {
+export const buildRouteStopSequenceData = (stopTimes, trips) => {
   const sequences = {};
+  const routePatternTripIds = {};
 
   // Create trip lookup
   const tripMap = {};
@@ -99,6 +102,8 @@ export const buildRouteStopSequences = (stopTimes, trips) => {
     });
   });
 
+  const patternsByRouteDirection = {};
+
   // For each trip, extract the stop sequence
   Object.keys(tripStops).forEach((tripId) => {
     const trip = tripMap[tripId];
@@ -110,19 +115,62 @@ export const buildRouteStopSequences = (stopTimes, trips) => {
     // Sort stops by sequence
     tripStops[tripId].sort((a, b) => a.sequence - b.sequence);
     const stopSequence = tripStops[tripId].map((s) => s.stopId);
+    if (stopSequence.length === 0) return;
 
-    // Initialize route if needed
-    if (!sequences[routeId]) {
-      sequences[routeId] = {};
+    if (!patternsByRouteDirection[routeId]) {
+      patternsByRouteDirection[routeId] = {};
+    }
+    if (!patternsByRouteDirection[routeId][directionId]) {
+      patternsByRouteDirection[routeId][directionId] = new Map();
     }
 
-    // Store this direction's sequence (use first trip as canonical)
-    if (!sequences[routeId][directionId]) {
-      sequences[routeId][directionId] = stopSequence;
-    }
+    const signature = stopSequence.join('|');
+    const patterns = patternsByRouteDirection[routeId][directionId];
+    const existing = patterns.get(signature);
+    patterns.set(signature, {
+      signature,
+      stopIds: stopSequence,
+      count: (existing?.count || 0) + 1,
+      tripIds: existing?.tripIds || new Set(),
+    });
+    patterns.get(signature).tripIds.add(tripId);
   });
 
-  return sequences;
+  Object.entries(patternsByRouteDirection).forEach(([routeId, directions]) => {
+    sequences[routeId] = {};
+    routePatternTripIds[routeId] = {};
+
+    Object.entries(directions).forEach(([directionId, patternMap]) => {
+      const canonical = pickCanonicalStopSequence(patternMap);
+      const canonicalSignature = canonical.join('|');
+      sequences[routeId][directionId] = canonical;
+      routePatternTripIds[routeId][directionId] = patternMap.get(canonicalSignature)?.tripIds || new Set();
+
+      let alternateIndex = 1;
+      Array.from(patternMap.values())
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          if (b.stopIds.length !== a.stopIds.length) return b.stopIds.length - a.stopIds.length;
+          return a.signature.localeCompare(b.signature);
+        })
+        .forEach((pattern) => {
+          if (pattern.signature === canonicalSignature) return;
+          const sequenceKey = `${directionId}:${alternateIndex}`;
+          sequences[routeId][sequenceKey] = pattern.stopIds;
+          routePatternTripIds[routeId][sequenceKey] = pattern.tripIds;
+          alternateIndex += 1;
+        });
+    });
+  });
+
+  return {
+    routeStopSequences: sequences,
+    routePatternTripIds,
+  };
+};
+
+export const buildRouteStopSequences = (stopTimes, trips) => {
+  return buildRouteStopSequenceData(stopTimes, trips).routeStopSequences;
 };
 
 /**
@@ -325,7 +373,7 @@ export const buildRoutingData = (gtfsData) => {
 
   // Build all indexes
   const stopDepartures = buildStopDeparturesIndex(stopTimes, trips);
-  const routeStopSequences = buildRouteStopSequences(stopTimes, trips);
+  const { routeStopSequences, routePatternTripIds } = buildRouteStopSequenceData(stopTimes, trips);
   const transfers = buildTransferGraph(stops);
   const tripIndex = buildTripIndex(trips);
   const stopIndex = buildStopIndex(stops);
@@ -344,6 +392,7 @@ export const buildRoutingData = (gtfsData) => {
     stopRoutes,
     serviceCalendar,
     stopTimesIndex,
+    routePatternTripIds,
     // Keep raw data for certain operations
     stops,
     trips,

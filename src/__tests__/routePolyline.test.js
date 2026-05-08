@@ -57,6 +57,22 @@ describe('RoutePolyline', () => {
     ]);
   });
 
+  test('keeps requested dash caps on both native line layers', () => {
+    const inst = render({
+      strokeWidth: 5,
+      outlineWidth: 2,
+      lineDashPattern: [8, 7],
+      lineCap: 'butt',
+    });
+
+    const layers = inst.root.findAllByType('LineLayer');
+
+    expect(layers[0].props.style.lineCap).toBe('butt');
+    expect(layers[1].props.style.lineCap).toBe('butt');
+    expect(layers[0].props.style.lineDasharray).toEqual([8 / 9, 7 / 9]);
+    expect(layers[1].props.style.lineDasharray).toEqual([8 / 5, 7 / 5]);
+  });
+
   test('renders route labels as passive inline text instead of route-colored badges', () => {
     const inst = render({
       color: '#D82710',

@@ -3,6 +3,7 @@ const { getAuth } = require('../firebaseAdmin');
 
 const SCHEDULER_TOKEN_PATHS = new Set([
   '/detour-run-once',
+  '/news-run-once',
   '/survey/send-digest',
 ]);
 

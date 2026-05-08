@@ -13,6 +13,7 @@ const RouteFilterSheet = ({
     onRouteSelect,
     getRouteColor,
     isRouteDetouring,
+    onSheetChange,
 }) => {
     const insets = useSafeAreaInsets();
     const bottomInset = useSafeBottomInset(insets.bottom);
@@ -41,6 +42,7 @@ const RouteFilterSheet = ({
             backdropComponent={renderBackdrop}
             backgroundStyle={styles.sheetBackground}
             handleIndicatorStyle={styles.handleIndicator}
+            onChange={onSheetChange}
         >
             <BottomSheetScrollView
                 contentContainerStyle={[

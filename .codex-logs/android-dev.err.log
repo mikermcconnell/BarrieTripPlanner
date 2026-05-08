@@ -1,0 +1,11 @@
+adb.exe: error: no devices/emulators found
+adb.exe: no devices/emulators found
+Firebase Admin credentials are required for rider-visible detour testing. Set FIREBASE_SERVICE_ACCOUNT_JSON or 
+GOOGLE_APPLICATION_CREDENTIALS in .env.
+At C:\Users\Mike McConnell\Documents\mike_apps\BTTP\scripts\start-detour-dev-worker.ps1:107 char:5
++     throw "Firebase Admin credentials are required for rider-visible  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Firebase Admin ...NTIALS in .env.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Firebase Admin credentials are required for rider-visible detour testing. Set FIREBASE_S 
+   ERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS in .env.
+ 

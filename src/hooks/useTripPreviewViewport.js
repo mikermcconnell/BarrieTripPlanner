@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { collectItineraryViewportCoordinates } from '../utils/itineraryViewport';
+import { collectTripPreviewViewportCoordinates } from '../utils/itineraryViewport';
 
 export const useTripPreviewViewport = ({
   isFocused,
@@ -10,12 +10,14 @@ export const useTripPreviewViewport = ({
   onBlurInactive,
   resetOnBlur = false,
 }) => {
-  const fitMapToItinerary = useCallback((itinerary) => {
+  const fitMapToItinerary = useCallback((itinerary, extraCoordinates = []) => {
     if (typeof fitToCoordinates !== 'function') {
       return false;
     }
 
-    const coordinates = collectItineraryViewportCoordinates(itinerary);
+    const coordinates = collectTripPreviewViewportCoordinates(itinerary, [
+      { id: 'extra-preview-coordinates', coordinates: extraCoordinates },
+    ]);
     if (coordinates.length === 0) {
       return false;
     }

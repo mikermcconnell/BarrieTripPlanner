@@ -1,0 +1,48 @@
+<svg width="900" height="520" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" role="img">
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.24"/>
+    </filter>
+    <linearGradient id="mapBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef7f4"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#d7e2e0" stroke-width="1" opacity="0.55"/>
+    </pattern>
+    <style>
+      .title { font: 900 30px Inter, Segoe UI, Arial, sans-serif; fill: #102a43; }
+      .subtitle { font: 600 16px Inter, Segoe UI, Arial, sans-serif; fill: #486581; }
+      .route { font: 900 36px Inter, Segoe UI, Arial, sans-serif; fill: #fff; letter-spacing: -1px; }
+      .arrow { font: 900 34px Inter, Segoe UI, Arial, sans-serif; fill: #fff; }
+      .mini { font: 800 14px Inter, Segoe UI, Arial, sans-serif; fill: #0b5cad; letter-spacing: .08em; }
+      .note { font: 600 15px Inter, Segoe UI, Arial, sans-serif; fill: #52616b; }
+      .blue { fill: #0b5cad; }
+      .pale { fill: #dbeafe; }
+      .line { stroke: #0b5cad; stroke-width: 14; stroke-linecap: round; opacity: .28; }
+    </style>
+  </defs>
+  <rect width="900" height="520" fill="#f8fbff"/>
+  <rect x="36" y="34" width="828" height="452" rx="30" fill="url(#mapBg)"/>
+  <rect x="36" y="34" width="828" height="452" rx="30" fill="url(#grid)" opacity=".9"/>
+  <path d="M66 330 C 190 245, 292 345, 424 262 S 648 178, 824 286" fill="none" stroke="#bfdbfe" stroke-width="10" stroke-linecap="round" opacity=".85"/>
+  <path d="M72 390 C 194 312, 306 408, 436 348 S 646 260, 820 346" fill="none" stroke="#fecdd3" stroke-width="8" stroke-linecap="round" opacity=".70"/>
+  <text x="70" y="92" class="title">Iteration 2: directional caps</text>
+  <text x="70" y="122" class="subtitle">Both route tabs are blue; the tab shape itself points in the travel direction.</text>
+    <g transform="translate(192 206)" filter="url(#shadow)">
+    <line x1="24" y1="46" x2="492" y2="46" class="line"/>
+    <path d="M0 46 L44 0 H224 Q248 0 248 24 V68 Q248 92 224 92 H44 Z" class="blue"/>
+    <path d="M500 46 L456 0 H276 Q252 0 252 24 V68 Q252 92 276 92 H456 Z" class="blue"/>
+    <text x="30" y="59" class="arrow">←</text>
+    <text x="102" y="60" class="route">7A</text>
+    <text x="332" y="60" class="route">7B</text>
+    <text x="430" y="59" class="arrow">→</text>
+    <path d="M112 104 l12 14 l12 -14" class="blue"/>
+    <path d="M364 104 l12 14 l12 -14" class="blue"/>
+  </g>
+  <g transform="translate(254 342)">
+    <text x="0" y="0" class="mini">A branch points left</text>
+    <text x="262" y="0" class="mini">B branch points right</text>
+  </g>
+  <text x="70" y="458" class="note">Best if we want the marker shape—not only the icon—to communicate direction.</text>
+</svg>

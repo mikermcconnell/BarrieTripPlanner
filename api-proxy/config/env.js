@@ -57,6 +57,10 @@ function buildProxyConfig(env = process.env) {
 }
 
 function validateProxyConfig(config, env = process.env) {
+  if (env.FUNCTIONS_CONTROL_API === 'true') {
+    return;
+  }
+
   if (!config.hasLocationIQKey) {
     console.warn('LOCATIONIQ_API_KEY is missing. LocationIQ proxy endpoints will return 503.');
   }

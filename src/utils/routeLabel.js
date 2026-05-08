@@ -1,4 +1,54 @@
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
+const routeIndexCache = new WeakMap();
+
+const normalize = (value) => String(value || '').trim().toUpperCase();
+const hasBranchSuffix = (value) => /[A-Z]$/.test(normalize(value));
+
+const getBranchBase = (value) => {
+  const normalized = normalize(value);
+  return hasBranchSuffix(normalized) ? normalized.replace(/[A-Z]$/, '') : null;
+};
+
+const addUniqueBranchCandidate = (branchCandidatesByBase, base, route) => {
+  if (!base || !route) return;
+  const candidates = branchCandidatesByBase.get(base) || [];
+  if (!candidates.includes(route)) {
+    candidates.push(route);
+    branchCandidatesByBase.set(base, candidates);
+  }
+};
+
+const buildRouteIndex = (routes = []) => {
+  const routeById = new Map();
+  const branchCandidatesByBase = new Map();
+
+  routes.forEach((route) => {
+    const idKey = normalize(route?.id);
+    const shortKey = normalize(route?.shortName);
+
+    if (idKey) {
+      routeById.set(idKey, route);
+      addUniqueBranchCandidate(branchCandidatesByBase, getBranchBase(idKey), route);
+    }
+
+    addUniqueBranchCandidate(branchCandidatesByBase, getBranchBase(shortKey), route);
+  });
+
+  return { routeById, branchCandidatesByBase };
+};
+
+const getRouteIndex = (routes = []) => {
+  if (!Array.isArray(routes)) {
+    return buildRouteIndex([]);
+  }
+
+  const cached = routeIndexCache.get(routes);
+  if (cached) return cached;
+
+  const index = buildRouteIndex(routes);
+  routeIndexCache.set(routes, index);
+  return index;
+};
 
 /**
  * Resolve a rider-facing route label for a live vehicle.
@@ -11,9 +61,8 @@ const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.e
 export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {}) => {
   const rawRouteId = vehicle?.routeId ? String(vehicle.routeId).trim() : '';
   const rawTripId = vehicle?.tripId ? String(vehicle.tripId).trim() : '';
-  const normalize = (value) => String(value || '').trim().toUpperCase();
-  const hasBranchSuffix = (value) => /[A-Z]$/.test(normalize(value));
   const debugRoutes = ROUTE_LABEL_DEBUG && /^(2|2A|2B|7|7A|7B)$/i.test(rawRouteId);
+  const routeIndex = getRouteIndex(routes);
 
   if (!rawRouteId && !rawTripId) {
     return {
@@ -27,7 +76,7 @@ export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {})
 
   const findByRouteId = (routeId) => {
     if (!routeId) return null;
-    return routes.find((r) => String(r.id).trim() === String(routeId).trim()) || null;
+    return routeIndex.routeById.get(normalize(routeId)) || null;
   };
 
   const pickRouteLabel = (route, fallbackRouteId) => {
@@ -71,10 +120,10 @@ export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {})
   if (exactRoute) {
     // If the raw route ID is branchless (e.g. "2") and branch routes exist (e.g. "2A"/"2B"),
     // skip the exact match so the branch heuristic below can pick the correct branch.
-    const isBaseThatHasBranches = !hasBranchSuffix(rawRouteId) && routes.some((r) => {
-      const rid = normalize(r.id);
-      return rid !== rawNorm && rid.startsWith(rawNorm) && hasBranchSuffix(rid);
-    });
+    const isBaseThatHasBranches =
+      !hasBranchSuffix(rawRouteId) &&
+      (routeIndex.branchCandidatesByBase.get(rawNorm) || [])
+        .some((route) => normalize(route?.id) !== rawNorm);
 
     if (!isBaseThatHasBranches) {
       const label = pickRouteLabel(exactRoute, rawRouteId);
@@ -107,13 +156,7 @@ export const resolveVehicleRouteLabel = (vehicle, routes = [], tripMapping = {})
   // Some feeds emit a branchless base route ID ("7") while static GTFS contains "7A"/"7B".
   if (rawRouteId) {
     const base = rawRouteId.toUpperCase();
-    const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const branchPattern = new RegExp(`^${escapedBase}[A-Z]$`);
-    const branchCandidates = routes.filter((r) => {
-      const rid = String(r.id || '').trim().toUpperCase();
-      const short = String(r.shortName || '').trim().toUpperCase();
-      return branchPattern.test(rid) || branchPattern.test(short);
-    });
+    const branchCandidates = routeIndex.branchCandidatesByBase.get(base) || [];
 
     if (branchCandidates.length > 0) {
       const aBranch = branchCandidates.find((r) => {

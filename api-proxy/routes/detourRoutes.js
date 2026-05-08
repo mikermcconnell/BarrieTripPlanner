@@ -1,5 +1,7 @@
 const { createDetourOps, HISTORY_MAX_LIMIT } = require('../services/detourOps');
+const { getBaselineStatusWithDivergence } = require('../services/baselineOps');
 const { createDetourSimulationOps } = require('../services/detourSimulation');
+const { requireDetourAdmin } = require('../middleware/detourAdmin');
 
 function parseDetourLogFilters(req, parseOptionalTimestamp) {
   let limit = 50;
@@ -42,7 +44,7 @@ function parseDetourLogFilters(req, parseOptionalTimestamp) {
 function registerDetourRoutes(app, {
   detourWorker,
   parseOptionalTimestamp,
-  detourOps = createDetourOps({ detourWorker }),
+  detourOps = createDetourOps({ detourWorker, getBaselineStatusWithDivergence }),
   detourSimulationOps = createDetourSimulationOps(),
   isProd = process.env.NODE_ENV === 'production',
   allowDetailedRouteDebug = process.env.DETOUR_DEBUG_ROUTE_DETAILS_ENABLED === 'true',
@@ -51,8 +53,14 @@ function registerDetourRoutes(app, {
     return res.json(detourOps.getStatus());
   });
 
-  app.post('/api/detour-run-once', async (_req, res) => {
+  app.post('/api/detour-run-once', async (req, res) => {
     try {
+      if (detourWorker && !requireDetourAdmin(req, res, {
+        isProd,
+        schedulerAction: 'detour-run-once',
+      })) {
+        return;
+      }
       const result = await detourOps.runOnce();
       return res.status(result.status).json(result.body);
     } catch (err) {

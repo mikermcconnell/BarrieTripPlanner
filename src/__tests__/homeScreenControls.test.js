@@ -20,11 +20,10 @@ jest.mock('../components/Icon', () => 'Icon');
 
 const {
   getRouteSummaryChipStyles,
-  shouldShowRoutesTooltip,
 } = require('../components/HomeScreenControls');
 
-describe('HomeScreenControls route options hint', () => {
-  test('keeps the Routes chip styling calm when the startup hint is enabled', () => {
+describe('HomeScreenControls route chip', () => {
+  test('keeps the Routes chip styling calm', () => {
     const styles = getRouteSummaryChipStyles({
       selectedCount: 0,
     });
@@ -39,25 +38,5 @@ describe('HomeScreenControls route options hint', () => {
         borderColor: expect.stringContaining('76, 175, 80'),
       }),
     ]));
-  });
-
-  test('shows the one-time tooltip only when no routes are selected', () => {
-    expect(shouldShowRoutesTooltip({
-      selectedCount: 0,
-      showRoutesHint: true,
-      enableRoutesHint: true,
-    })).toBe(true);
-
-    expect(shouldShowRoutesTooltip({
-      selectedCount: 1,
-      showRoutesHint: true,
-      enableRoutesHint: true,
-    })).toBe(false);
-
-    expect(shouldShowRoutesTooltip({
-      selectedCount: 0,
-      showRoutesHint: true,
-      enableRoutesHint: false,
-    })).toBe(false);
   });
 });

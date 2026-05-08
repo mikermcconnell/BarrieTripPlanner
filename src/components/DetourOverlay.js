@@ -16,6 +16,7 @@ import RoutePolyline from './RoutePolyline';
 import { COLORS } from '../config/theme';
 import { simplifyPath } from '../utils/geometryUtils';
 import { getDirectionArrowPoints } from '../utils/detourDirectionArrows';
+import { placeDetourLabels } from '../utils/detourLabelPlacement';
 
 const DETOUR_LINE_STYLE = {
   strokeWidth: 4.5,
@@ -43,11 +44,6 @@ const CALLOUT_MARKER_STYLE = {
   elevation: 140,
 };
 
-const LINE_LABEL_MARKER_STYLE = {
-  zIndex: 150,
-  elevation: 150,
-};
-
 const DIRECTION_ARROW_MARKER_STYLE = {
   zIndex: 110,
   elevation: 110,
@@ -57,6 +53,20 @@ const DETOUR_LAYER_INDEX = {
   CLOSED_MASK: 300,
   CLOSED_LINE: 304,
   DETOUR_LINE: 320,
+  LINE_LABELS: 340,
+};
+
+const DETOUR_LINE_LABEL_STYLE = {
+  color: ['match', ['get', 'kind'], 'closed', '#991B1B', 'detour', '#92400E', '#374151'],
+  haloColor: '#FFFBEB',
+  haloWidth: 2.4,
+  opacity: 0.98,
+  size: 12,
+  spacing: 420,
+  offset: [0, 0],
+  padding: 6,
+  letterSpacing: 0.015,
+  maxAngle: 35,
 };
 
 const simplifyOverlayPath = (path, minDistanceMeters = 28) => {
@@ -99,7 +109,199 @@ const isFiniteStopCoordinate = (point) => (
   Number.isFinite(Number(point?.longitude))
 );
 
+const toLineStringFeature = ({ id, path, label, kind, priority, sortKey }) => {
+  const coordinates = Array.isArray(path)
+    ? path
+        .filter((point) => Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude))
+        .map((point) => [point.longitude, point.latitude])
+    : [];
+
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  return {
+    type: 'Feature',
+    id,
+    properties: {
+      id,
+      label,
+      kind,
+      priority,
+      sortKey,
+    },
+    geometry: {
+      type: 'LineString',
+      coordinates,
+    },
+  };
+};
+
+const formatRouteLineLabel = (routeId, routeLineLabel) => {
+  const rawLabel = String(routeLineLabel || routeId || '').trim();
+  if (!rawLabel) return 'Route detour';
+  const friendlyRouteLabel = /^route\b/i.test(rawLabel) ? rawLabel : `Route ${rawLabel}`;
+  return `${friendlyRouteLabel} detour`;
+};
+
+const buildLineLabelFeatures = ({
+  normalizedSegments,
+  hasMultipleSegments,
+  routeId,
+  routeLineLabel,
+  showLineLabels,
+  showCallouts,
+  labelDensity,
+}) => {
+  const detourLabel = formatRouteLineLabel(routeId, routeLineLabel);
+  const shouldShowClosedLabel = showCallouts && (labelDensity === 'medium' || labelDensity === 'full');
+  const features = [];
+
+  normalizedSegments.forEach((segment, segmentIndex) => {
+    const likelyDetourPolyline =
+      segment?.likelyDetourPolyline?.length >= 2
+        ? segment.likelyDetourPolyline
+        : segment?.inferredDetourPolyline;
+    const segmentKey = hasMultipleSegments ? `-${segmentIndex}` : '';
+
+    if (showLineLabels) {
+      const feature = toLineStringFeature({
+        id: `detour-line-label-detour-${routeId}${segmentKey}`,
+        path: likelyDetourPolyline,
+        label: detourLabel,
+        kind: 'detour',
+        priority: 100,
+        sortKey: 0,
+      });
+      if (feature) features.push(feature);
+    }
+
+    if (shouldShowClosedLabel) {
+      const feature = toLineStringFeature({
+        id: `detour-line-label-closed-${routeId}${segmentKey}`,
+        path: segment?.skippedSegmentPolyline ?? null,
+        label: 'Route closed',
+        kind: 'closed',
+        priority: 80,
+        sortKey: 20,
+      });
+      if (feature) features.push(feature);
+    }
+  });
+
+  return features;
+};
+
+const DetourLineLabelLayer = ({ routeId, features }) => {
+  if (!Array.isArray(features) || features.length === 0) {
+    return null;
+  }
+
+  const sourceId = `detour-line-labels-${routeId}`;
+
+  return (
+    <MapLibreGL.ShapeSource
+      id={sourceId}
+      shape={{
+        type: 'FeatureCollection',
+        features,
+      }}
+    >
+      <MapLibreGL.SymbolLayer
+        id={`${sourceId}-symbols`}
+        layerIndex={DETOUR_LAYER_INDEX.LINE_LABELS}
+        style={{
+          symbolPlacement: 'line',
+          symbolSpacing: DETOUR_LINE_LABEL_STYLE.spacing,
+          symbolSortKey: ['get', 'sortKey'],
+          textField: ['get', 'label'],
+          textSize: DETOUR_LINE_LABEL_STYLE.size,
+          textColor: DETOUR_LINE_LABEL_STYLE.color,
+          textHaloColor: DETOUR_LINE_LABEL_STYLE.haloColor,
+          textHaloWidth: DETOUR_LINE_LABEL_STYLE.haloWidth,
+          textOpacity: DETOUR_LINE_LABEL_STYLE.opacity,
+          textOffset: DETOUR_LINE_LABEL_STYLE.offset,
+          textPadding: DETOUR_LINE_LABEL_STYLE.padding,
+          textLetterSpacing: DETOUR_LINE_LABEL_STYLE.letterSpacing,
+          textMaxAngle: DETOUR_LINE_LABEL_STYLE.maxAngle,
+          textKeepUpright: true,
+          textAllowOverlap: false,
+          textIgnorePlacement: false,
+          textRotationAlignment: 'map',
+          textPitchAlignment: 'viewport',
+        }}
+      />
+    </MapLibreGL.ShapeSource>
+  );
+};
+
+const buildCalloutLabelPlacements = ({
+  normalizedSegments,
+  hasMultipleSegments,
+  routeId,
+  showCallouts,
+  routeBaseColor,
+  routeStopFillColor,
+  currentZoom,
+  labelDensity,
+}) => {
+  const shouldShowEntryExitLabels = labelDensity === 'full';
+  const candidates = normalizedSegments.flatMap((segment, segmentIndex) => {
+    const segmentKey = hasMultipleSegments ? `-${segmentIndex}` : '';
+    const labels = [];
+
+    if (showCallouts && shouldShowEntryExitLabels) {
+      labels.push(
+        {
+          id: `exit${segmentKey}`,
+          markerId: hasMultipleSegments
+            ? `detour-exit-point-${routeId}-${segmentIndex}`
+            : `detour-exit-point-${routeId}`,
+          renderKind: 'entryExit',
+          kind: 'exit',
+          point: segment?.exitPoint ?? null,
+          eyebrow: 'ROUTE',
+          label: 'RESUMES',
+          priority: 70,
+          width: 104,
+          height: 32,
+          fillColor: routeStopFillColor,
+          borderColor: routeBaseColor,
+          textColor: routeBaseColor,
+          dotColor: routeBaseColor,
+        },
+        {
+          id: `entry${segmentKey}`,
+          markerId: hasMultipleSegments
+            ? `detour-entry-point-${routeId}-${segmentIndex}`
+            : `detour-entry-point-${routeId}`,
+          renderKind: 'entryExit',
+          kind: 'entry',
+          point: segment?.entryPoint ?? null,
+          eyebrow: 'DETOUR',
+          label: 'ROUTE',
+          priority: 60,
+          width: 104,
+          height: 32,
+          fillColor: routeBaseColor,
+          borderColor: routeStopFillColor,
+          textColor: routeStopFillColor,
+          dotColor: routeStopFillColor,
+        }
+      );
+    }
+
+    return labels;
+  }).filter((label) => label.point);
+
+  return placeDetourLabels(candidates, { zoom: currentZoom });
+};
+
 const styles = StyleSheet.create({
+  calloutOffsetFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   routeStopMarker: {
     width: 14,
     height: 14,
@@ -163,39 +365,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     lineHeight: 12,
   },
-  closureBadge: {
-    width: 104,
-    minHeight: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-  },
-  closureBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.35,
-  },
-  lineLabelBadge: {
-    minWidth: 72,
-    maxWidth: 136,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-  },
-  lineLabelText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-  },
   directionArrowMarker: {
     width: 26,
     height: 26,
@@ -247,6 +416,8 @@ const DetourOverlay = ({
   showStopMarkers,
   onPress,
   renderMode = 'all',
+  currentZoom,
+  labelDensity = 'full',
 }) => {
   const shouldRenderGeometry = renderMode === 'all' || renderMode === 'geometry';
   const shouldRenderCallouts = renderMode === 'all' || renderMode === 'callouts';
@@ -271,9 +442,39 @@ const DetourOverlay = ({
   const openStopPoints = showStopMarkers
     ? (Array.isArray(routeStops) ? routeStops.filter(isFiniteStopCoordinate) : [])
     : [];
+  const calloutLabelPlacements = shouldRenderCallouts
+    ? buildCalloutLabelPlacements({
+      normalizedSegments,
+      hasMultipleSegments,
+      routeId,
+      showCallouts,
+      routeBaseColor,
+      routeStopFillColor,
+      currentZoom,
+      labelDensity,
+    })
+    : [];
+  const lineLabelFeatures = shouldRenderCallouts
+    ? buildLineLabelFeatures({
+      normalizedSegments,
+      hasMultipleSegments,
+      routeId,
+      routeLineLabel,
+      showLineLabels,
+      showCallouts,
+      labelDensity,
+    })
+    : [];
 
   return (
     <>
+      {shouldRenderCallouts && (
+        <DetourLineLabelLayer
+          routeId={routeId}
+          features={lineLabelFeatures}
+        />
+      )}
+
       {shouldRenderGeometry && normalizedSegments.map((segment, index) => {
         const likelyDetourPolyline =
           segment?.likelyDetourPolyline?.length >= 2
@@ -424,147 +625,48 @@ const DetourOverlay = ({
         </MapLibreGL.MarkerView>
       ))}
 
-      {shouldRenderCallouts && showLineLabels && normalizedSegments.flatMap((segment, segmentIndex) => {
-        const likelyDetourPolyline =
-          segment?.likelyDetourPolyline?.length >= 2
-            ? segment.likelyDetourPolyline
-            : segment?.inferredDetourPolyline;
-        const detourLabelPoint = getPolylineMidpoint(likelyDetourPolyline);
-        const labelPrefix = routeLineLabel || routeId;
+      {shouldRenderCallouts && calloutLabelPlacements.filter((label) => label.visible).map((label) => {
+        const markerId = label.markerId || `detour-callout-${label.id}-${routeId}`;
+        const offsetStyle = {
+          transform: [
+            { translateX: label.offset?.[0] ?? 0 },
+            { translateY: label.offset?.[1] ?? 0 },
+          ],
+        };
 
-        return [
-          {
-            key: 'detour',
-            point: detourLabelPoint,
-            label: `${labelPrefix} DETOUR`,
-            fillColor: routeBaseColor,
-            borderColor: routeStopFillColor,
-            textColor: routeStopFillColor,
-          },
-        ]
-          .filter((item) => item.point)
-          .map((item) => (
-            <MapLibreGL.MarkerView
-              key={`detour-line-label-${item.key}-${routeId}-${segmentIndex}`}
-              id={`detour-line-label-${item.key}-${routeId}-${segmentIndex}`}
-              coordinate={[item.point.longitude, item.point.latitude]}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
+        return (
+          <MapLibreGL.MarkerView
+            key={markerId}
+            id={markerId}
+            coordinate={[label.point.longitude, label.point.latitude]}
+            anchor={CALLOUT_ANCHOR}
+          >
+            <View style={[styles.calloutOffsetFrame, offsetStyle]} pointerEvents="none">
               <View
                 style={[
-                  styles.lineLabelBadge,
-                  LINE_LABEL_MARKER_STYLE,
+                  styles.entryStopMarker,
+                  CALLOUT_MARKER_STYLE,
                   {
-                    backgroundColor: item.fillColor,
-                    borderColor: item.borderColor,
+                    backgroundColor: label.fillColor,
+                    borderColor: label.borderColor,
                     opacity,
                   },
                 ]}
               >
-                <Text style={[styles.lineLabelText, { color: item.textColor }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-              </View>
-            </MapLibreGL.MarkerView>
-          ));
-      })}
-
-      {shouldRenderCallouts && showCallouts && normalizedSegments.flatMap((segment, segmentIndex) =>
-        [
-          {
-            kind: 'closed',
-            point: getPolylineMidpoint(segment?.skippedSegmentPolyline ?? null),
-            label: 'ROUTE CLOSED',
-            fillColor: COLORS.errorSubtle,
-            borderColor: skippedColor,
-            textColor: skippedColor,
-          },
-          {
-            kind: 'entry',
-            point: segment?.entryPoint ?? null,
-            eyebrow: 'DETOUR',
-            label: 'PATH',
-            fillColor: routeBaseColor,
-            borderColor: routeStopFillColor,
-            textColor: routeStopFillColor,
-            dotColor: routeStopFillColor,
-          },
-          {
-            kind: 'exit',
-            point: segment?.exitPoint ?? null,
-            eyebrow: 'ROUTE',
-            label: 'RESUMES',
-            fillColor: routeStopFillColor,
-            borderColor: routeBaseColor,
-            textColor: routeBaseColor,
-            dotColor: routeBaseColor,
-          },
-        ]
-          .filter((anchor) => anchor.point)
-          .map((anchor) => {
-            const entryExitId = hasMultipleSegments
-              ? `detour-${anchor.kind}-point-${routeId}-${segmentIndex}`
-              : `detour-${anchor.kind}-point-${routeId}`;
-
-            if (anchor.kind === 'closed') {
-              return (
-                <MapLibreGL.MarkerView
-                  key={entryExitId}
-                  id={entryExitId}
-                  coordinate={[anchor.point.longitude, anchor.point.latitude]}
-                  anchor={CALLOUT_ANCHOR}
-                >
-                  <View
-                    style={[
-                      styles.closureBadge,
-                      CALLOUT_MARKER_STYLE,
-                      {
-                        backgroundColor: anchor.fillColor,
-                        borderColor: anchor.borderColor,
-                        opacity,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.closureBadgeText, { color: anchor.textColor }]}>
-                      {anchor.label}
-                    </Text>
-                  </View>
-                </MapLibreGL.MarkerView>
-              );
-            }
-
-            return (
-              <MapLibreGL.MarkerView
-                key={entryExitId}
-                id={entryExitId}
-                coordinate={[anchor.point.longitude, anchor.point.latitude]}
-                anchor={CALLOUT_ANCHOR}
-              >
-                <View
-                  style={[
-                    styles.entryStopMarker,
-                    CALLOUT_MARKER_STYLE,
-                    {
-                      backgroundColor: anchor.fillColor,
-                      borderColor: anchor.borderColor,
-                      opacity,
-                    },
-                  ]}
-                >
-                  <View style={[styles.entryStopDot, { backgroundColor: anchor.dotColor }]} />
-                  <View style={styles.entryStopLabelWrap}>
-                    <Text style={[styles.entryStopEyebrow, { color: anchor.textColor }]}>
-                      {anchor.eyebrow}
-                    </Text>
-                    <Text style={[styles.entryStopLabel, { color: anchor.textColor }]} numberOfLines={1}>
-                      {anchor.label}
-                    </Text>
-                  </View>
+                <View style={[styles.entryStopDot, { backgroundColor: label.dotColor }]} />
+                <View style={styles.entryStopLabelWrap}>
+                  <Text style={[styles.entryStopEyebrow, { color: label.textColor }]}>
+                    {label.eyebrow}
+                  </Text>
+                  <Text style={[styles.entryStopLabel, { color: label.textColor }]} numberOfLines={1}>
+                    {label.label}
+                  </Text>
                 </View>
-              </MapLibreGL.MarkerView>
-            );
-          })
-      )}
+              </View>
+            </View>
+          </MapLibreGL.MarkerView>
+        );
+      })}
 
     </>
   );

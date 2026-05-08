@@ -89,14 +89,14 @@ function registerLocationIqRoutes(app, {
       return res.status(400).json({ error: error.message });
     }
 
+    const coords = `${fromCoord.lon},${fromCoord.lat};${toCoord.lon},${toCoord.lat}`;
     const params = new URLSearchParams({
-      coordinates: `${fromCoord.lon},${fromCoord.lat};${toCoord.lon},${toCoord.lat}`,
       steps: 'true',
       overview: 'full',
       geometries: 'polyline',
     });
 
-    return proxyRequest('directions/walking', params, res);
+    return proxyRequest(`directions/walking/${coords}`, params, res, { includeFormat: false });
   });
 }
 

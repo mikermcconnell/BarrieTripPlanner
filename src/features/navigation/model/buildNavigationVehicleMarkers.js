@@ -15,16 +15,16 @@ const resolveVehicleForTransitLeg = ({
   const routeId = transitLeg.route?.id || transitLeg.routeId;
   let vehicle = null;
 
+  if (proximityVehicle?.coordinate) {
+    vehicle = proximityVehicle;
+  }
+
   if (tripId) {
-    vehicle = vehicles.find((candidate) => candidate.tripId === tripId) || null;
+    vehicle = vehicle || vehicles.find((candidate) => candidate.tripId === tripId) || null;
   }
 
   if (!vehicle && routeId) {
     vehicle = vehicles.find((candidate) => candidate.routeId === routeId) || null;
-  }
-
-  if (!vehicle && proximityVehicle) {
-    vehicle = proximityVehicle;
   }
 
   if (!vehicle?.coordinate) {

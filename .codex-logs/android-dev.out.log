@@ -1,0 +1,12 @@
+
+> barrie-transit-planner@1.0.6 android:dev
+> powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1
+
+[android:dev] Running recovery first
+[android:recover] Project root: C:\Users\Mike McConnell\Documents\mike_apps\BTTP
+[android:recover] Stopped PID 28404 (port 8081 listener)
+[android:recover] Stopped PID 28404 (port 8081 listener)
+[android:recover] Stopped PID 28404 (repo node process)
+[android:recover] Cleared adb reverse mappings
+[android:recover] Force-stopped com.barrietransit.planner
+[android:recover] Recovery complete

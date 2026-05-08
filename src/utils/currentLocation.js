@@ -13,26 +13,41 @@ export const getForegroundDeviceLocation = async (
     return { lat: coords.latitude, lon: coords.longitude };
   };
 
+  const withTimeout = (promiseFactory) => {
+    let timeoutId = null;
+    return Promise.race([
+      Promise.resolve().then(promiseFactory),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Location lookup timed out')), timeoutMs);
+      }),
+    ]).finally(() => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
+  };
+
+  const getLastKnownCoords = async () => {
+    if (typeof LocationApi.getLastKnownPositionAsync !== 'function') return null;
+    const lastKnownLocation = await withTimeout(() => LocationApi.getLastKnownPositionAsync());
+    return toCoords(lastKnownLocation);
+  };
+
   try {
-    const currentLocation = await Promise.race([
+    const currentLocation = await withTimeout(() =>
       LocationApi.getCurrentPositionAsync({
         accuracy: accuracy ?? LocationApi.Accuracy?.Balanced,
-      }),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Location lookup timed out')), timeoutMs);
-      }),
-    ]);
+      })
+    );
     const currentCoords = toCoords(currentLocation);
     if (currentCoords) return currentCoords;
   } catch (currentError) {
-    const lastKnownLocation = await LocationApi.getLastKnownPositionAsync?.();
-    const lastKnownCoords = toCoords(lastKnownLocation);
+    const lastKnownCoords = await getLastKnownCoords();
     if (lastKnownCoords) return lastKnownCoords;
     throw currentError;
   }
 
-  const lastKnownLocation = await LocationApi.getLastKnownPositionAsync?.();
-  const lastKnownCoords = toCoords(lastKnownLocation);
+  const lastKnownCoords = await getLastKnownCoords();
   if (lastKnownCoords) return lastKnownCoords;
 
   throw new Error('Location unavailable');

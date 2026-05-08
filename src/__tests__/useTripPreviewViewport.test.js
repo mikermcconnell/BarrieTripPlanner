@@ -80,6 +80,40 @@ describe('useTripPreviewViewport', () => {
     );
   });
 
+  test('fits itinerary plus extra preview coordinates', () => {
+    const fitToCoordinates = jest.fn();
+    let hookApi = null;
+
+    function Harness() {
+      hookApi = useTripPreviewViewport({
+        isFocused: true,
+        isTripPlanningMode: true,
+        fitToCoordinates,
+        edgePadding: { top: 1, right: 2, bottom: 3, left: 4 },
+      });
+
+      return null;
+    }
+
+    act(() => {
+      renderer = create(React.createElement(Harness));
+    });
+
+    hookApi.fitMapToItinerary(
+      { legs: [{ from: { lat: 44.2, lon: -79.8 }, to: { lat: 44.3, lon: -79.7 } }] },
+      [{ latitude: 44.1, longitude: -79.9 }]
+    );
+
+    expect(fitToCoordinates).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        { latitude: 44.1, longitude: -79.9 },
+        { latitude: 44.2, longitude: -79.8 },
+        { latitude: 44.3, longitude: -79.7 },
+      ]),
+      { edgePadding: { top: 1, right: 2, bottom: 3, left: 4 } }
+    );
+  });
+
   test('returns false when itinerary has no mappable coordinates', () => {
     const fitToCoordinates = jest.fn();
     let hookApi = null;

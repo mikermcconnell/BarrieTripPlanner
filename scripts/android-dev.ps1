@@ -4,6 +4,7 @@ param(
     [string]$AppId = "com.barrietransit.planner",
     [string]$Scheme,
     [string]$ManifestHost = "127.0.0.1",
+    [int]$BundleWarmupAttempts = 3,
     [switch]$NoRecover,
     [switch]$NoLaunch,
     [switch]$ClearMetroCache,
@@ -12,6 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 function Write-Status {
     param([string]$Message)
@@ -127,19 +129,33 @@ function Get-LocalApiProxyPort {
 }
 
 function Warm-ExpoAndroidBundle {
-    param([string]$BaseUrl)
+    param(
+        [string]$BaseUrl,
+        [int]$Attempts = 3
+    )
 
     $bundleUrl = "${BaseUrl}/node_modules/expo/AppEntry.bundle?platform=android&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable"
     Write-Status "Priming Android bundle at $bundleUrl"
 
-    try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $bundleUrl -TimeoutSec 180
-        if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
-            throw "Unexpected status code $($response.StatusCode)"
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -DisableKeepAlive -Uri $bundleUrl -TimeoutSec 240
+            if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
+                throw "Unexpected status code $($response.StatusCode)"
+            }
+            Write-Status "Android bundle primed"
+            return
+        } catch {
+            $lastError = $_.Exception.Message
+            if ($attempt -lt $Attempts) {
+                Write-Status "Bundle warmup attempt $attempt failed: $lastError. Retrying..."
+                Start-Sleep -Seconds ([Math]::Min(10, 2 * $attempt))
+            }
         }
-    } catch {
-        throw "Expo Android bundle warmup failed at $bundleUrl. $($_.Exception.Message)"
     }
+
+    throw "Expo Android bundle warmup failed at $bundleUrl after $Attempts attempts. $lastError"
 }
 
 function Wake-AndroidDevice {
@@ -261,14 +277,23 @@ if (-not $useProxy) {
     $proxyErrLog = Join-Path $projectRoot ".logs-expo-dev-proxy-$Port.err.txt"
     Remove-Item $proxyOutLog, $proxyErrLog -ErrorAction SilentlyContinue
 
-    $proxyProcess = Start-Process `
-        -FilePath "node.exe" `
-        -ArgumentList @("scripts/metro-dev-proxy.js") `
-        -WorkingDirectory $projectRoot `
-        -RedirectStandardOutput $proxyOutLog `
-        -RedirectStandardError $proxyErrLog `
-        -WindowStyle Hidden `
-        -PassThru
+    $previousMetroProxyPort = [Environment]::GetEnvironmentVariable("METRO_PROXY_PORT", "Process")
+    $previousMetroTargetPort = [Environment]::GetEnvironmentVariable("METRO_TARGET_PORT", "Process")
+    [Environment]::SetEnvironmentVariable("METRO_PROXY_PORT", [string]$Port, "Process")
+    [Environment]::SetEnvironmentVariable("METRO_TARGET_PORT", [string]$MetroPort, "Process")
+    try {
+        $proxyProcess = Start-Process `
+            -FilePath "node.exe" `
+            -ArgumentList @("scripts/metro-dev-proxy.js") `
+            -WorkingDirectory $projectRoot `
+            -RedirectStandardOutput $proxyOutLog `
+            -RedirectStandardError $proxyErrLog `
+            -WindowStyle Hidden `
+            -PassThru
+    } finally {
+        [Environment]::SetEnvironmentVariable("METRO_PROXY_PORT", $previousMetroProxyPort, "Process")
+        [Environment]::SetEnvironmentVariable("METRO_TARGET_PORT", $previousMetroTargetPort, "Process")
+    }
 }
 
 $isListening = $false
@@ -312,27 +337,29 @@ if (-not $useProxy) {
 }
 Write-Status "Metro logs: $metroOutLog"
 
-if (-not $useProxy) {
-    $manifestUrl = "http://${ManifestHost}:$Port"
-    $httpReady = $false
+$manifestUrl = "http://${ManifestHost}:$Port"
+$httpReady = $false
 
-    for ($i = 0; $i -lt 30; $i++) {
-        if (Test-HttpReady -Url $manifestUrl) {
-            $httpReady = $true
-            break
-        }
-        Start-Sleep -Seconds 2
+for ($i = 0; $i -lt 60; $i++) {
+    if (Test-HttpReady -Url $manifestUrl) {
+        $httpReady = $true
+        break
     }
-
-    if (-not $httpReady) {
-        throw "Expo dev server did not start responding at $manifestUrl. Check $metroErrLog"
-    }
-
-    # Let Expo finish its first round of initialization before the dev client asks for the project URL.
-    Start-Sleep -Seconds 3
-    Warm-ExpoAndroidBundle -BaseUrl $manifestUrl
-    Write-Status "Expo dev server is responding at $manifestUrl"
+    Start-Sleep -Seconds 2
 }
+
+if (-not $httpReady) {
+    if (-not $useProxy) {
+        throw "Expo dev server did not start responding at $manifestUrl. Check $metroErrLog"
+    } else {
+        throw "Expo dev proxy did not start responding at $manifestUrl. Check .logs-expo-dev-proxy-$Port.err.txt and $metroErrLog"
+    }
+}
+
+# Let Expo finish its first round of initialization before the dev client asks for the project URL.
+Start-Sleep -Seconds 3
+Warm-ExpoAndroidBundle -BaseUrl $manifestUrl -Attempts $BundleWarmupAttempts
+Write-Status "Expo dev server is responding at $manifestUrl"
 
 if ($NoLaunch) {
     Write-Status "Skipping app launch (-NoLaunch)"
@@ -356,17 +383,12 @@ if ($apiProxyPort) {
 }
 & $adb shell am force-stop $AppId | Out-Null
 
-if (-not $useProxy) {
-    $resolvedScheme = Get-DevClientScheme -ProjectRoot $projectRoot -ExplicitScheme $Scheme
-    $devClientUrl = "${resolvedScheme}://expo-development-client/?url=$([System.Uri]::EscapeDataString($manifestUrl))"
-    Write-Status "Opening Expo dev client URL $devClientUrl"
-    $launchResult = & $adb shell am start -W -a android.intent.action.VIEW -d $devClientUrl $AppId 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -or $launchResult -match "Error:" -or $launchResult -match "unable to resolve Intent") {
-        throw "Failed to open dev client URL. adb output: $launchResult"
-    }
-} else {
-    Write-Status "Using launcher intent in proxy mode"
-    & $adb shell monkey -p $AppId -c android.intent.category.LAUNCHER 1 | Out-Null
+$resolvedScheme = Get-DevClientScheme -ProjectRoot $projectRoot -ExplicitScheme $Scheme
+$devClientUrl = "${resolvedScheme}://expo-development-client/?url=$([System.Uri]::EscapeDataString($manifestUrl))"
+Write-Status "Opening Expo dev client URL $devClientUrl"
+$launchResult = & $adb shell am start -W -a android.intent.action.VIEW -d $devClientUrl $AppId 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0 -or $launchResult -match "Error:" -or $launchResult -match "unable to resolve Intent") {
+    throw "Failed to open dev client URL. adb output: $launchResult"
 }
 
 Write-Status "Done"

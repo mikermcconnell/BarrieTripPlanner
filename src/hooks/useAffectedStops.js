@@ -95,15 +95,26 @@ export function deriveAffectedStopDetailsForDetour({
 
   const segmentStopDetails = getUniqueDetourSections(normalizedSegments.map((segment) => ({
     ...segment,
-    ...deriveAffectedStops({
-      routeId,
-      shapeId: segment?.shapeId,
-      entryPoint: segment?.entryPoint,
-      exitPoint: segment?.exitPoint,
-      stops,
-      routeStopsMapping,
-      routeStopSequencesMapping,
-    }),
+    ...(segment?.suppressStopDerivation
+      ? {
+        routeStops: [],
+        affectedStops: [],
+        skippedStops: [],
+        unaffectedStops: [],
+        entryStop: null,
+        exitStop: null,
+        entryStopName: null,
+        exitStopName: null,
+      }
+      : deriveAffectedStops({
+        routeId,
+        shapeId: segment?.shapeId,
+        entryPoint: segment?.entryPoint,
+        exitPoint: segment?.exitPoint,
+        stops,
+        routeStopsMapping,
+        routeStopSequencesMapping,
+      })),
   })));
 
   const routeStops =

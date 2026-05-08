@@ -36,20 +36,98 @@ const CenterIcon = ({ size = 20, color = COLORS.textPrimary }) => (
   </svg>
 );
 
-const SAVED_PLACE_GLYPHS = {
-  Home: '🏠',
-  Work: '💼',
-  School: '🎓',
-  Grocery: '🛒',
-  Gym: '🏋️',
-  Doctor: '✚',
-  MapPin: '📍',
+const ShortcutCartoonIcon = ({ name, size = 18 }) => {
+  const color = '#172B4D';
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    style: { flexShrink: 0 },
+  };
+
+  if (name === 'Home') {
+    return (
+      <svg {...common}>
+        <path d="M4.3 21.05C6.05 21.55 17.95 21.55 19.7 21.05C18.1 20.45 5.9 20.45 4.3 21.05Z" fill="#DDE8D2" />
+        <path d="M4.55 10.85L12 4.2L19.45 10.85V19.35H4.55V10.85Z" fill="#8BD67A" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M2.8 11.05L12 3.1L21.2 11.05" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M8.05 12.3H10.55V14.8H8.05V12.3ZM13.45 12.3H15.95V14.8H13.45V12.3Z" fill="#DDF3FF" stroke={color} strokeWidth="1.25" strokeLinejoin="round" />
+        <path d="M10.2 19.35V16.35C11.05 15.9 12.95 15.9 13.8 16.35V19.35" fill="#FFD166" stroke={color} strokeWidth="1.35" strokeLinejoin="round" />
+        <path d="M15.9 5.9V3.8H18.05V7.75" fill="#F26D6D" stroke={color} strokeWidth="1.3" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (name === 'Work') {
+    return (
+      <svg {...common}>
+        <path d="M6.2 21.05C7.55 21.6 16.45 21.6 17.8 21.05C16.65 20.45 7.35 20.45 6.2 21.05Z" fill="#DDE8D2" />
+        <path d="M7.55 7.25V6.2C7.55 4.75 8.75 3.65 10.2 3.65H13.8C15.25 3.65 16.45 4.75 16.45 6.2V7.25" stroke={color} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4.35 8.45C7.75 7.75 16.25 7.75 19.65 8.45C20.45 8.62 21.05 9.35 21.05 10.2V17.3C21.05 18.3 20.35 19.1 19.4 19.3C15.15 20.1 8.85 20.1 4.6 19.3C3.65 19.1 2.95 18.3 2.95 17.3V10.2C2.95 9.35 3.55 8.62 4.35 8.45Z" fill="#D86D3B" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M3.8 12.15C7.6 13.35 16.4 13.35 20.2 12.15" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
+        <path d="M9.25 13.2C10.7 13.55 13.3 13.55 14.75 13.2V15.05C13.55 15.55 10.45 15.55 9.25 15.05V13.2Z" fill="#FFD166" stroke={color} strokeWidth="1.35" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (name === 'School') {
+    return (
+      <svg {...common}>
+        <path d="M4.5 21.05C6.15 21.55 17.85 21.55 19.5 21.05C17.95 20.45 6.05 20.45 4.5 21.05Z" fill="#DDE8D2" />
+        <path d="M4.45 10.8L12 4.15L19.55 10.8V19.35H4.45V10.8Z" fill="#F26D6D" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M2.8 11.05L12 3.05L21.2 11.05" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M8 12.35H10.5V14.75H8V12.35ZM13.5 12.35H16V14.75H13.5V12.35Z" fill="#DDF3FF" stroke={color} strokeWidth="1.25" strokeLinejoin="round" />
+        <path d="M10.15 19.35V16.3C11.05 15.85 12.95 15.85 13.85 16.3V19.35" fill="#FFE08A" stroke={color} strokeWidth="1.35" strokeLinejoin="round" />
+        <circle cx="12" cy="8.95" r="1.35" fill="#FFF7D6" stroke={color} strokeWidth="1.25" />
+      </svg>
+    );
+  }
+
+  if (name === 'Grocery') {
+    return (
+      <svg {...common}>
+        <path d="M6.35 21.1C7.75 21.55 17.45 21.55 18.85 21.1C17.55 20.55 7.65 20.55 6.35 21.1Z" fill="#DDE8D2" />
+        <path d="M3.2 5.15H5.35L7.75 16.55H18.45C19.15 14.3 19.85 11 20.05 8.75H6.2" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7.15 8.95C10.35 8.35 16.45 8.35 19.05 8.95C18.9 10.85 18.45 13.1 17.85 14.9H8.45L7.15 8.95Z" fill="#76D672" />
+        <path d="M9 11.35C11.35 10.95 15.15 10.95 17.5 11.35" stroke="#D9FFD6" strokeWidth="1.15" strokeLinecap="round" />
+        <circle cx="9.25" cy="18.85" r="1.45" fill="#FFD166" stroke={color} strokeWidth="1.35" />
+        <circle cx="17.2" cy="18.85" r="1.45" fill="#FFD166" stroke={color} strokeWidth="1.35" />
+        <circle cx="11.25" cy="7.2" r="1.25" fill="#F05454" stroke={color} strokeWidth="1.1" />
+      </svg>
+    );
+  }
+
+  if (name === 'Gym') {
+    return (
+      <svg {...common}>
+        <path d="M5.2 21.05C6.6 21.55 17.4 21.55 18.8 21.05C17.45 20.48 6.55 20.48 5.2 21.05Z" fill="#DDE8D2" />
+        <path d="M6.15 14.55L14.55 6.15" stroke={color} strokeWidth="3.2" strokeLinecap="round" />
+        <path d="M4.7 9.65L9.65 4.7" stroke="#7AC7FF" strokeWidth="3.8" strokeLinecap="round" />
+        <path d="M3.15 8.1L8.1 3.15M6.35 11.3L11.3 6.35" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M14.35 19.3L19.3 14.35" stroke="#7AC7FF" strokeWidth="3.8" strokeLinecap="round" />
+        <path d="M12.8 17.75L17.75 12.8M15.95 20.85L20.85 15.95" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (name === 'Doctor') {
+    return (
+      <svg {...common}>
+        <path d="M5.2 21.05C6.65 21.55 17.35 21.55 18.8 21.05C17.45 20.48 6.55 20.48 5.2 21.05Z" fill="#DDE8D2" />
+        <path d="M8.2 7.55V6.05C8.2 4.7 9.25 3.75 10.65 3.75H13.35C14.75 3.75 15.8 4.7 15.8 6.05V7.55" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4.45 8.4C7.9 7.75 16.1 7.75 19.55 8.4C20.45 8.58 21.05 9.35 21.05 10.25V17.2C21.05 18.25 20.3 19.08 19.3 19.28C15.05 20.1 8.95 20.1 4.7 19.28C3.7 19.08 2.95 18.25 2.95 17.2V10.25C2.95 9.35 3.55 8.58 4.45 8.4Z" fill="#F7FBFF" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M10.65 11.15H13.35V13.35H15.55V16.05H13.35V18.25H10.65V16.05H8.45V13.35H10.65V11.15Z" fill="#F05454" stroke={color} strokeWidth="1.15" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  return <Text style={styles.shortcutFallbackIcon}>●</Text>;
 };
 
 const SavedPlaceGlyph = ({ place }) => (
-  <Text style={styles.shortcutChipIcon}>
-    {SAVED_PLACE_GLYPHS[getSavedPlaceIconName(place)] || SAVED_PLACE_GLYPHS.MapPin}
-  </Text>
+  <ShortcutCartoonIcon name={getSavedPlaceIconName(place)} />
 );
 
 const formatTripTimeSummary = (timeMode, selectedTime) => {
@@ -710,8 +788,9 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primarySubtle,
   },
-  shortcutChipIcon: {
+  shortcutFallbackIcon: {
     fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
   },
   shortcutChipText: {
     flexShrink: 1,

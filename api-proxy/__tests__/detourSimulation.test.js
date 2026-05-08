@@ -1,5 +1,7 @@
 const {
+  buildFarmersMarketGeometry,
   buildMatchedSimulationGeometry,
+  buildSaundersWelhamGeometry,
   buildSyntheticGeometry,
   createDetourSimulationOps,
   getSimulationOffsetCandidates,
@@ -23,6 +25,8 @@ function makeStaticData() {
   routeShapeMapping.set('1', ['shape-1']);
   routeShapeMapping.set('10', ['shape-1']);
   routeShapeMapping.set('11', ['shape-1']);
+  routeShapeMapping.set('12A', ['shape-1']);
+  routeShapeMapping.set('12B', ['shape-1']);
 
   return { shapes, routeShapeMapping, tripMapping: new Map() };
 }
@@ -106,7 +110,7 @@ describe('detourSimulation', () => {
     }));
   });
 
-  test('farmers market preset writes simulated Route 10 and 11 detours', async () => {
+  test('farmers market preset writes simulated Route 11 detour', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
       env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
@@ -121,21 +125,104 @@ describe('detourSimulation', () => {
       ok: true,
       simulated: true,
       preset: 'farmers-market',
-      routeIds: ['10', '11'],
+      routeIds: ['11'],
     }));
-    expect(db._writes).toHaveLength(2);
-    expect(db._writes.map((write) => write.docId)).toEqual(['10', '11']);
+    expect(db._writes).toHaveLength(1);
+    expect(db._writes.map((write) => write.docId)).toEqual(['11']);
     expect(db._writes[0].data).toEqual(expect.objectContaining({
-      routeId: '10',
+      routeId: '11',
       confidence: 'high',
       vehicleCount: 2,
       simulated: true,
       testPreset: 'farmers-market',
-      title: "Farmer's Market Detour - Route 10 and 11",
+      title: "Farmer's Market Detour - Route 11",
       likelyDetourPolyline: expect.any(Array),
       segments: expect.any(Array),
     }));
     expect(db._writes[0].data.likelyDetourPolyline.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('farmers market geometry uses Owen, McDonald, and Mulcaster for Route 11', () => {
+    const route11 = buildFarmersMarketGeometry('11', 'shape-1');
+
+    expect(route11.entryPoint).toEqual({ latitude: 44.39043, longitude: -79.69007 });
+    expect(route11.exitPoint).toEqual({ latitude: 44.39267, longitude: -79.68558 });
+    expect(route11.skippedSegmentPolyline).toEqual([
+      { latitude: 44.39047, longitude: -79.6855 },
+      { latitude: 44.39267, longitude: -79.68558 },
+    ]);
+    expect(route11.likelyDetourRoadNames).toEqual(['Owen Street', 'McDonald Street', 'Mulcaster Street']);
+    expect(route11.likelyDetourPolyline).toEqual([
+      { latitude: 44.39043, longitude: -79.69007 },
+      { latitude: 44.39262, longitude: -79.68792 },
+      { latitude: 44.39267, longitude: -79.68558 },
+    ]);
+    expect(route11.segments[0].suppressStopDerivation).toBe(true);
+  });
+
+  test('saunders welham preset writes simulated Route 12A and 12B detours', async () => {
+    const db = makeDbMock();
+    const ops = createDetourSimulationOps({
+      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      loadStaticData: async () => makeStaticData(),
+      getFirestore: () => db,
+    });
+
+    const result = await ops.create({ preset: 'saunders-welham', durationMinutes: 20 });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual(expect.objectContaining({
+      ok: true,
+      simulated: true,
+      preset: 'saunders-welham',
+      routeIds: ['12A', '12B'],
+      segmentCount: 2,
+    }));
+    expect(db._writes).toHaveLength(2);
+    expect(db._writes.map((write) => write.docId)).toEqual(['12A', '12B']);
+    expect(db._writes[0].data).toEqual(expect.objectContaining({
+      routeId: '12A',
+      confidence: 'high',
+      vehicleCount: 2,
+      simulated: true,
+      testPreset: 'saunders-welham',
+      title: 'Saunders/Welham Detour - Route 12',
+      description: 'Test detour around the Saunders Road and Welham Road intersection closure.',
+      detourPathLabel: 'Saunders/Welham test detour',
+      likelyDetourPolyline: expect.any(Array),
+      skippedSegmentPolyline: expect.any(Array),
+      segments: expect.any(Array),
+    }));
+    expect(db._writes[0].data.likelyDetourRoadNames).toEqual(['Welham Road', 'Mapleview Drive East', 'Bayview Drive']);
+    expect(db._writes[1].data.likelyDetourRoadNames).toEqual(['Bayview Drive', 'Mapleview Drive East', 'Welham Road']);
+  });
+
+  test('saunders welham geometry bypasses the closed intersection through Mapleview and Welham', () => {
+    const route12A = buildSaundersWelhamGeometry('12A', 'shape-1');
+    const route12B = buildSaundersWelhamGeometry('12B', 'shape-1');
+
+    expect(route12A.skippedSegmentPolyline).toEqual([
+      { latitude: 44.33425, longitude: -79.66897 },
+      { latitude: 44.33229, longitude: -79.6773 },
+    ]);
+    expect(route12A.likelyDetourPolyline).toEqual([
+      { latitude: 44.33425, longitude: -79.66897 },
+      { latitude: 44.33922, longitude: -79.67001 },
+      { latitude: 44.33651, longitude: -79.6785 },
+      { latitude: 44.33229, longitude: -79.6773 },
+    ]);
+
+    expect(route12B.skippedSegmentPolyline).toEqual([
+      { latitude: 44.33289, longitude: -79.67783 },
+      { latitude: 44.3341, longitude: -79.66898 },
+    ]);
+    expect(route12B.likelyDetourPolyline).toEqual([
+      { latitude: 44.33289, longitude: -79.67783 },
+      { latitude: 44.33651, longitude: -79.6785 },
+      { latitude: 44.33937, longitude: -79.66986 },
+      { latitude: 44.3341, longitude: -79.66898 },
+    ]);
+    expect(route12B.likelyDetourRoadNames).toEqual(['Bayview Drive', 'Mapleview Drive East', 'Welham Road']);
   });
 
   test('create decorates simulated geometry with road-matched path when available', async () => {

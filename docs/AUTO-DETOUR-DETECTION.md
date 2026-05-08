@@ -152,7 +152,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 
 **Deploy steps:**
 1. **Turn on the rider feature flag** — Set `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` to `true`.
-2. **Pass rollout health checks** — Confirm `/api/detour-rollout-health` reports `launchReadiness.status` as `pilot_ready` or `pilot_ready_with_cautions`.
+2. **Pass rollout health checks** — Confirm `/api/detour-rollout-health` reports `launchReadiness.status` as `pilot_ready` or `pilot_ready_with_cautions`. Treat baseline divergence as a launch blocker and review recent stale auto-clears before enabling the rider UI.
 
 **Build work:**
 3. Validate the current alert strip, map overlay, and details sheet together in production-like builds.
@@ -160,7 +160,8 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 
 **Security / operations:**
 5. Keep route-specific `/api/detour-debug?routeId=...` disabled for non-admin production callers unless a trusted operator explicitly enables `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true`.
-6. Monitor short-lived detections, repeated clears, and publish failures in rollout health during the first live validation window.
+6. Keep baseline mutation endpoints restricted to detour admins. Use scheduler auth or a detour-admin token for `POST /api/detour-run-once`.
+7. Monitor short-lived detections, repeated clears, stale auto-clears, and publish failures in rollout health during the first live validation window.
 
 **Should-haves:**
 7. **Push notifications** — Alert riders who have favorited a route when a new detour is detected.
@@ -405,7 +406,7 @@ curl -X POST http://localhost:3001/api/detour-simulate \
   -d "{\"routeId\":\"1\"}"
 ```
 
-To publish the Farmers Market test detour for routes 10 and 11:
+To publish the Farmers Market test detour for route 11:
 
 ```bash
 curl -X POST http://localhost:3001/api/detour-simulate \
@@ -413,6 +414,21 @@ curl -X POST http://localhost:3001/api/detour-simulate \
   -H "x-api-token: YOUR_TOKEN" \
   -d "{\"preset\":\"farmers-market\",\"durationMinutes\":15}"
 ```
+
+This simulates the Mulcaster Street closure between Collier Street and Worsley Street.
+The visible detour path leaves the normal route at Collier Street and Owen Street, then uses Owen Street and McDonald Street, ending at McDonald Street and Mulcaster Street.
+
+To publish the Saunders/Welham test detour for routes 12A and 12B:
+
+```bash
+curl -X POST http://localhost:3001/api/detour-simulate \
+  -H "Content-Type: application/json" \
+  -H "x-api-token: YOUR_TOKEN" \
+  -d "{\"preset\":\"saunders-welham\",\"durationMinutes\":20}"
+```
+
+This simulates the Saunders Road and Welham Road intersection closure.
+The visible detour path uses Welham Road, Mapleview Drive East, and Bayview Drive.
 
 Open the app and confirm the detour banner, map overlay, and details sheet render.
 
@@ -425,18 +441,27 @@ curl -X POST http://localhost:3001/api/detour-simulate/clear \
   -d "{\"routeId\":\"1\"}"
 ```
 
-For the Farmers Market test, clear both route documents:
+For the Farmers Market test, clear the route 11 document:
 
 ```bash
 curl -X POST http://localhost:3001/api/detour-simulate/clear \
   -H "Content-Type: application/json" \
   -H "x-api-token: YOUR_TOKEN" \
-  -d "{\"routeId\":\"10\"}"
+  -d "{\"routeId\":\"11\"}"
+```
+
+For the Saunders/Welham test, clear both route documents:
+
+```bash
+curl -X POST http://localhost:3001/api/detour-simulate/clear \
+  -H "Content-Type: application/json" \
+  -H "x-api-token: YOUR_TOKEN" \
+  -d "{\"routeId\":\"12A\"}"
 
 curl -X POST http://localhost:3001/api/detour-simulate/clear \
   -H "Content-Type: application/json" \
   -H "x-api-token: YOUR_TOKEN" \
-  -d "{\"routeId\":\"11\"}"
+  -d "{\"routeId\":\"12B\"}"
 ```
 
 Safety notes:

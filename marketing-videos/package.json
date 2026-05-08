@@ -1,0 +1,21 @@
+{
+  "name": "bttp-marketing-videos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "still:farmers": "remotion still src/index.ts FarmersMarketDetour --frame=450 --output=out/farmers-market-detour-still.png",
+    "render:farmers": "remotion render src/index.ts FarmersMarketDetour out/farmers-market-detour.mp4 --codec=h264 --crf=18",
+    "still:event": "remotion still src/index.ts FarmersMarketDetour --frame=165 --output=out/farmers-market-event-popup-still.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "latest",
+    "@remotion/media-utils": "latest",
+    "remotion": "latest",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  }
+}

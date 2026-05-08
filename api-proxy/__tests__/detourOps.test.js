@@ -143,4 +143,90 @@ describe('detourOps rollout health', () => {
     expect(result.launchReadiness.failedWarnings).not.toContain('false_positive_rate_under_target');
     expect(result.launchReadiness.status).toBe('pilot_ready');
   });
+
+  test('blocks launch when the stored baseline diverges from live GTFS', async () => {
+    const now = Date.parse('2026-05-05T12:00:00Z');
+    const detourWorker = {
+      getStatus: () => ({
+        running: false,
+        mode: 'scheduled',
+        tickCount: 20,
+        lastSuccessfulTick: new Date(now - 60 * 1000).toISOString(),
+        consecutiveFailureCount: 0,
+        activeDetours: {},
+        baseline: { readyForDetours: true, source: 'firestore' },
+        errors: { publishFailures: 0 },
+      }),
+    };
+
+    const ops = createDetourOps({
+      detourWorker,
+      queryDetourHistory: jest.fn().mockResolvedValue([]),
+      getBaselineStatusWithDivergence: jest.fn().mockResolvedValue({
+        readyForDetours: true,
+        divergence: {
+          hasChanges: true,
+          added: [{ routeId: '8A', shapes: ['new-shape'] }],
+          removed: [],
+        },
+      }),
+      now: () => now,
+      env: {
+        DETOUR_WORKER_ENABLED: 'true',
+      },
+    });
+
+    const result = await ops.getRolloutHealth();
+
+    expect(result.baselineDivergence.hasChanges).toBe(true);
+    expect(result.launchReadiness.status).toBe('not_ready');
+    expect(result.launchReadiness.failedCritical).toContain('baseline_matches_live_gtfs');
+  });
+
+  test('counts stale auto-clears as rollout warning evidence', async () => {
+    const now = Date.parse('2026-05-05T12:00:00Z');
+    const detourWorker = {
+      getStatus: () => ({
+        running: false,
+        mode: 'scheduled',
+        tickCount: 20,
+        lastSuccessfulTick: new Date(now - 60 * 1000).toISOString(),
+        consecutiveFailureCount: 0,
+        activeDetours: {},
+        baseline: { readyForDetours: true, source: 'firestore' },
+        errors: { publishFailures: 0 },
+      }),
+    };
+
+    const staleClear = {
+      routeId: '2A',
+      eventType: 'DETOUR_AUTO_CLEARED_STALE',
+      durationMs: 12 * 60 * 1000,
+      confidence: 'low',
+    };
+
+    const ops = createDetourOps({
+      detourWorker,
+      queryDetourHistory: jest
+        .fn()
+        .mockResolvedValueOnce([staleClear])
+        .mockResolvedValueOnce([staleClear])
+        .mockResolvedValueOnce([{ routeId: '2A', eventType: 'DETOUR_DETECTED' }]),
+      getBaselineStatusWithDivergence: jest.fn().mockResolvedValue({
+        readyForDetours: true,
+        divergence: { hasChanges: false, added: [], removed: [] },
+      }),
+      now: () => now,
+      env: {
+        DETOUR_WORKER_ENABLED: 'true',
+      },
+    });
+
+    const result = await ops.getRolloutHealth();
+
+    expect(result.staleAutoClears.count).toBe(1);
+    expect(result.suspiciousShortLivedDetours.count).toBe(1);
+    expect(result.launchReadiness.status).toBe('pilot_ready_with_cautions');
+    expect(result.launchReadiness.failedWarnings).toContain('no_recent_stale_auto_clears');
+  });
 });

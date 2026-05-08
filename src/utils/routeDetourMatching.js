@@ -26,12 +26,14 @@ export const routeMatchesDetourRoute = (routeId, detourRouteId) => {
 };
 
 export const routeIsDetouring = (routeId, activeDetourRouteIds) => {
-  const detourIds = activeDetourRouteIds instanceof Set
-    ? Array.from(activeDetourRouteIds)
-    : Array.isArray(activeDetourRouteIds)
-      ? activeDetourRouteIds
-      : [];
-  return detourIds.some((detourRouteId) => routeMatchesDetourRoute(routeId, detourRouteId));
+  if (activeDetourRouteIds instanceof Set || Array.isArray(activeDetourRouteIds)) {
+    for (const detourRouteId of activeDetourRouteIds) {
+      if (routeMatchesDetourRoute(routeId, detourRouteId)) {
+        return true;
+      }
+    }
+  }
+  return false;
 };
 
 export const getMatchingDetourRouteIds = (routeId, activeDetours = {}) => (

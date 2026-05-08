@@ -7,6 +7,7 @@ const DEFAULT_PROGRESS_DELTA_METERS = 12;
 const MATCH_QUALITY_SCORES = {
   trip_id: 0.25,
   route_single: 0.18,
+  route_progress: 0.14,
   route_nearest: 0.1,
   none: 0,
 };

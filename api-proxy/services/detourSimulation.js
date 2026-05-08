@@ -7,13 +7,21 @@ const DEFAULT_OFFSET_METERS = 275;
 const DEFAULT_ROAD_MATCH_OFFSET_CANDIDATES_METERS = [275, 600, 1000, 1500, 1800];
 const DEFAULT_ROUTE_ID = null;
 const FARMERS_MARKET_PRESET = 'farmers-market';
-const FARMERS_MARKET_ROUTE_IDS = ['10', '11'];
+const FARMERS_MARKET_ROUTE_IDS = ['11'];
+const SAUNDERS_WELHAM_PRESET = 'saunders-welham';
+const SAUNDERS_WELHAM_ROUTE_IDS = ['12A', '12B'];
+const SAUNDERS_WELHAM_ALIASES = new Set([
+  SAUNDERS_WELHAM_PRESET,
+  'saunders-welham-detour',
+  'route-12-saunders-welham',
+]);
 
 const FARMERS_MARKET_POINTS = {
-  collierMulcaster: { latitude: 44.38932, longitude: -79.6878 },
-  collierOwen: { latitude: 44.3895, longitude: -79.6905 },
-  worsleyOwen: { latitude: 44.39045, longitude: -79.68986 },
-  worsleyMulcaster: { latitude: 44.39048, longitude: -79.6877 },
+  collierOwen: { latitude: 44.39043, longitude: -79.69007 },
+  collierMulcaster: { latitude: 44.39047, longitude: -79.6855 },
+  owenMcDonald: { latitude: 44.39262, longitude: -79.68792 },
+  mcdonaldMulcaster: { latitude: 44.39267, longitude: -79.68558 },
+  worsleyMulcaster: { latitude: 44.39157, longitude: -79.68552 },
 };
 
 function isFiniteCoordinate(point) {
@@ -136,12 +144,24 @@ function isFarmersMarketPreset(options = {}) {
   return normalizePreset(options.preset) === FARMERS_MARKET_PRESET;
 }
 
+function isSaundersWelhamPreset(options = {}) {
+  return SAUNDERS_WELHAM_ALIASES.has(normalizePreset(options.preset));
+}
+
 function getFarmersMarketRouteIds(options = {}) {
   if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
     return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
   }
   if (options.routeId) return [String(options.routeId).trim()];
   return FARMERS_MARKET_ROUTE_IDS;
+}
+
+function getSaundersWelhamRouteIds(options = {}) {
+  if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
+    return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
+  }
+  if (options.routeId) return [String(options.routeId).trim()];
+  return SAUNDERS_WELHAM_ROUTE_IDS;
 }
 
 function selectExactRouteAndShape(staticData, routeId) {
@@ -154,21 +174,18 @@ function selectExactRouteAndShape(staticData, routeId) {
 
 function buildFarmersMarketGeometry(routeId, shapeId) {
   const {
-    collierMulcaster,
     collierOwen,
-    worsleyOwen,
+    collierMulcaster,
+    owenMcDonald,
+    mcdonaldMulcaster,
     worsleyMulcaster,
   } = FARMERS_MARKET_POINTS;
-  const isRoute10 = String(routeId) === '10';
-  const skippedSegmentPolyline = isRoute10
-    ? [worsleyMulcaster, collierMulcaster]
-    : [collierMulcaster, worsleyMulcaster];
-  const inferredDetourPolyline = isRoute10
-    ? [worsleyMulcaster, worsleyOwen, collierOwen, collierMulcaster]
-    : [collierMulcaster, collierOwen, worsleyOwen, worsleyMulcaster];
+  const skippedSegmentPolyline = [collierMulcaster, mcdonaldMulcaster];
+  const inferredDetourPolyline = [collierOwen, owenMcDonald, mcdonaldMulcaster];
   const likelyDetourPolyline = inferredDetourPolyline;
-  const entryPoint = skippedSegmentPolyline[0];
-  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const likelyDetourRoadNames = ['Owen Street', 'McDonald Street', 'Mulcaster Street'];
+  const entryPoint = collierOwen;
+  const exitPoint = mcdonaldMulcaster;
   const lastEvidenceAt = new Date();
 
   return {
@@ -178,10 +195,10 @@ function buildFarmersMarketGeometry(routeId, shapeId) {
     skippedSegmentPolyline,
     inferredDetourPolyline,
     likelyDetourPolyline,
-    likelyDetourRoadNames: ['Owen Street', 'Worsley Street'],
+    likelyDetourRoadNames,
     roadMatchConfidence: 'medium',
     roadMatchSource: 'farmers-market-preset',
-    detourPathLabel: "Farmer's Market test detour",
+    detourPathLabel: 'Farmers Market test detour',
     confidence: 'medium',
     evidencePointCount: inferredDetourPolyline.length,
     lastEvidenceAt,
@@ -194,11 +211,80 @@ function buildFarmersMarketGeometry(routeId, shapeId) {
         skippedSegmentPolyline,
         inferredDetourPolyline,
         likelyDetourPolyline,
-        likelyDetourRoadNames: ['Owen Street', 'Worsley Street'],
+        likelyDetourRoadNames,
         roadMatchConfidence: 'medium',
         roadMatchSource: 'farmers-market-preset',
-        detourPathLabel: "Farmer's Market test detour",
+        detourPathLabel: 'Farmers Market test detour',
+        suppressStopDerivation: true,
         confidence: 'medium',
+        evidencePointCount: inferredDetourPolyline.length,
+        lastEvidenceAt,
+      },
+    ],
+  };
+}
+
+function buildSaundersWelhamGeometry(routeId, shapeId) {
+  const isRoute12A = String(routeId).toUpperCase() === '12A';
+  const saundersWelhamWestbound = { latitude: 44.33425, longitude: -79.66897 };
+  const saundersBayviewWestbound = { latitude: 44.33229, longitude: -79.6773 };
+  const saundersBayviewEastbound = { latitude: 44.33289, longitude: -79.67783 };
+  const saundersWelhamEastbound = { latitude: 44.3341, longitude: -79.66898 };
+  const welhamMapleviewWestbound = { latitude: 44.33922, longitude: -79.67001 };
+  const welhamMapleviewEastbound = { latitude: 44.33937, longitude: -79.66986 };
+  const bayviewMapleview = { latitude: 44.33651, longitude: -79.6785 };
+  const skippedSegmentPolyline = isRoute12A
+    ? [saundersWelhamWestbound, saundersBayviewWestbound]
+    : [saundersBayviewEastbound, saundersWelhamEastbound];
+  const inferredDetourPolyline = isRoute12A
+    ? [
+      saundersWelhamWestbound,
+      welhamMapleviewWestbound,
+      bayviewMapleview,
+      saundersBayviewWestbound,
+    ]
+    : [
+      saundersBayviewEastbound,
+      bayviewMapleview,
+      welhamMapleviewEastbound,
+      saundersWelhamEastbound,
+    ];
+  const likelyDetourPolyline = inferredDetourPolyline;
+  const likelyDetourRoadNames = isRoute12A
+    ? ['Welham Road', 'Mapleview Drive East', 'Bayview Drive']
+    : ['Bayview Drive', 'Mapleview Drive East', 'Welham Road'];
+  const entryPoint = skippedSegmentPolyline[0];
+  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const lastEvidenceAt = new Date();
+
+  return {
+    shapeId,
+    entryPoint,
+    exitPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    likelyDetourPolyline,
+    likelyDetourRoadNames,
+    roadMatchConfidence: 'high',
+    roadMatchSource: 'saunders-welham-preset',
+    detourPathLabel: 'Saunders/Welham test detour',
+    confidence: 'high',
+    evidencePointCount: inferredDetourPolyline.length,
+    lastEvidenceAt,
+    segments: [
+      {
+        segmentId: `saunders-welham-${String(routeId).toLowerCase()}-simulated-1`,
+        shapeId,
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline,
+        likelyDetourPolyline,
+        likelyDetourRoadNames,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'saunders-welham-preset',
+        detourPathLabel: 'Saunders/Welham test detour',
+        confidence: 'high',
         evidencePointCount: inferredDetourPolyline.length,
         lastEvidenceAt,
       },
@@ -423,8 +509,8 @@ function createDetourSimulationOps({
             ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
             : geometry.segments,
           testPreset: FARMERS_MARKET_PRESET,
-          title: "Farmer's Market Detour - Route 10 and 11",
-          description: 'Test detour for the Saturday Farmers Market closure on Mulcaster Street.',
+          title: "Farmer's Market Detour - Route 11",
+          description: 'Test detour for Route 11 around the Saturday Farmers Market closure on Mulcaster Street between Collier Street and Worsley Street.',
           affectedStops: ['191', '192', '556', '557'],
         };
 
@@ -444,7 +530,54 @@ function createDetourSimulationOps({
           segmentCount: writes.length,
           expiresAt: writes[0]?.expiresAt || null,
           availableRouteIds,
-          message: "Simulated Farmer's Market detours published for routes 10 and 11.",
+          message: "Simulated Farmer's Market detour published for route 11.",
+        },
+      };
+    }
+
+    if (isSaundersWelhamPreset(options)) {
+      const requestedRouteIds = getSaundersWelhamRouteIds(options);
+      const availableRouteIds = Array.from(staticData.routeShapeMapping.keys()).sort();
+      const writes = [];
+
+      for (const requestedRouteId of requestedRouteIds) {
+        const { routeId, shapeId } = selectExactRouteAndShape(staticData, requestedRouteId);
+        const geometry = buildSaundersWelhamGeometry(routeId, shapeId);
+        const doc = {
+          ...createSimulatedDetourDocument({
+            routeId,
+            shapeId,
+            geometry,
+            durationMinutes: options.durationMinutes,
+          }),
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: Array.isArray(geometry.segments)
+            ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
+            : geometry.segments,
+          testPreset: SAUNDERS_WELHAM_PRESET,
+          title: 'Saunders/Welham Detour - Route 12',
+          description: 'Test detour around the Saunders Road and Welham Road intersection closure.',
+          affectedStops: ['618', '933', '738', '757', '680', '681'],
+        };
+
+        await db.collection('activeDetours').doc(routeId).set(doc, { merge: true });
+        writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          enabled: true,
+          simulated: true,
+          preset: SAUNDERS_WELHAM_PRESET,
+          routeIds: writes.map((write) => write.routeId),
+          shapeIds: writes.map((write) => write.shapeId),
+          segmentCount: writes.length,
+          expiresAt: writes[0]?.expiresAt || null,
+          availableRouteIds,
+          message: 'Simulated Saunders/Welham detours published for routes 12A and 12B.',
         },
       };
     }
@@ -531,7 +664,9 @@ function createDetourSimulationOps({
 }
 
 module.exports = {
+  buildFarmersMarketGeometry,
   buildMatchedSimulationGeometry,
+  buildSaundersWelhamGeometry,
   buildSyntheticGeometry,
   createDetourSimulationOps,
   getSimulationOffsetCandidates,

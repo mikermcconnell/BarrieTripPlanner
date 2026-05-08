@@ -47,6 +47,38 @@ const buildMergedGeometryFromSegments = (segments = []) => {
   };
 };
 
+const isSamePhysicalTrip = (previous, next) => (
+  Boolean(previous?.tripId && next?.tripId && previous.tripId === next.tripId)
+);
+
+const getBlockId = (leg) => String(leg?.blockId || '').trim();
+
+const getDirectionId = (leg) => {
+  const rawDirectionId = leg?.directionId;
+  if (rawDirectionId === null || rawDirectionId === undefined || rawDirectionId === '') return null;
+  const numericDirectionId = Number(rawDirectionId);
+  return Number.isFinite(numericDirectionId) ? numericDirectionId : String(rawDirectionId);
+};
+
+const endpointsMatch = (previous, next) => (
+  Boolean(previous?.to?.stopId && next?.from?.stopId && previous.to.stopId === next.from.stopId)
+);
+
+const canMergeTransitLegs = (previous, next) => {
+  if (isSamePhysicalTrip(previous, next)) return true;
+  if (previous?.route?.shortName !== next?.route?.shortName) return false;
+  if (!getBlockId(previous) || getBlockId(previous) !== getBlockId(next)) return false;
+  if (!endpointsMatch(previous, next)) return false;
+
+  const previousDirectionId = getDirectionId(previous);
+  const nextDirectionId = getDirectionId(next);
+  return (
+    previousDirectionId === null ||
+    nextDirectionId === null ||
+    previousDirectionId === nextDirectionId
+  );
+};
+
 export const mergeTransitLegs = (legs, routingData) => {
   if (legs.length <= 1) return legs;
 
@@ -64,7 +96,7 @@ export const mergeTransitLegs = (legs, routingData) => {
         if (
           previous?.mode === 'BUS' &&
           next?.mode === 'BUS' &&
-          previous.route?.shortName === next.route?.shortName
+          canMergeTransitLegs(previous, next)
         ) {
           index += 1;
           continue;
@@ -89,7 +121,7 @@ export const mergeTransitLegs = (legs, routingData) => {
 
       if (next.mode === 'WALK' && nextIndex + 1 < legs.length && legs[nextIndex + 1].mode === 'BUS') {
         const nextBus = legs[nextIndex + 1];
-        if (nextBus.route?.shortName === mergedLeg.route?.shortName) {
+        if (canMergeTransitLegs(mergedLeg, nextBus)) {
           nextIndex += 1;
           next = legs[nextIndex];
         } else {
@@ -97,7 +129,7 @@ export const mergeTransitLegs = (legs, routingData) => {
         }
       }
 
-      if (next.mode === 'BUS' && next.route?.shortName === mergedLeg.route?.shortName) {
+      if (next.mode === 'BUS' && canMergeTransitLegs(mergedLeg, next)) {
         mergedSegments.push(next);
         if (next.tripId && !mergedLeg.tripIds.includes(next.tripId)) {
           mergedLeg.tripIds.push(next.tripId);

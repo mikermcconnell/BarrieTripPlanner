@@ -1,6 +1,7 @@
 const {
   collectItineraryEndpointCoordinates,
   collectItineraryViewportCoordinates,
+  collectTripPreviewViewportCoordinates,
   computeCoordinateBounds,
   computeCoordinateBoundsWithMinSpan,
   computeLegBounds,
@@ -34,6 +35,33 @@ describe('itineraryViewport', () => {
       ])
     );
     expect(coordinates).toHaveLength(6);
+  });
+
+  test('includes bus approach line coordinates when fitting a trip preview', () => {
+    const itinerary = {
+      legs: [
+        {
+          from: { lat: 44.2, lon: -79.8 },
+          to: { lat: 44.3, lon: -79.7 },
+        },
+      ],
+    };
+
+    const coordinates = collectTripPreviewViewportCoordinates(itinerary, [
+      {
+        id: 'bus-approach-8B',
+        coordinates: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+        ],
+      },
+    ]);
+
+    expect(coordinates).toEqual(expect.arrayContaining([
+      { latitude: 44.1, longitude: -79.9 },
+      { latitude: 44.2, longitude: -79.8 },
+      { latitude: 44.3, longitude: -79.7 },
+    ]));
   });
 
   test('computes consistent bounds for endpoint-only trip and leg fitting', () => {

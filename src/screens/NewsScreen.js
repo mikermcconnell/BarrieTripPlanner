@@ -225,42 +225,8 @@ const NewsScreen = ({ navigation }) => {
       >
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Service impacts</Text>
-          <Text style={styles.summaryText}>Active closures affect the map. Upcoming notices stay here until they begin.</Text>
+          <Text style={styles.summaryText}>Detours appear first. Upcoming notices stay here until they begin.</Text>
         </View>
-
-        <Section title="Active stop closures" subtitle="Map marker when matched to a stop" emptyText="No active stop closures found.">
-          {buckets.activeStopClosures.map((impact) => (
-            <ImpactCard
-              key={impact.id}
-              tone="error"
-              item={{
-                title: `Stop ${impact.stopCode}${impact.stopName ? ` · ${impact.stopName}` : ''}`,
-                subtitle: impact.sourceTitle,
-                badge: 'Active',
-                body: impact.message,
-                routes: impact.affectedRoutes,
-              }}
-              onPress={() => impact.sourceUrl && Linking.openURL(impact.sourceUrl)}
-            />
-          ))}
-        </Section>
-
-        <Section title="Upcoming stop closures" subtitle="Not shown on the map yet" emptyText="No upcoming stop closures found.">
-          {buckets.upcomingStopClosures.map((impact) => (
-            <ImpactCard
-              key={impact.id}
-              tone="warning"
-              item={{
-                title: `Stop ${impact.stopCode}${impact.stopName ? ` · ${impact.stopName}` : ''}`,
-                subtitle: impact.sourceTitle,
-                badge: formatStartsAt(impact.startsAt),
-                body: impact.message,
-                routes: impact.affectedRoutes,
-              }}
-              onPress={() => impact.sourceUrl && Linking.openURL(impact.sourceUrl)}
-            />
-          ))}
-        </Section>
 
         <Section title="Active detours" subtitle="Route-level changes" emptyText="No active detected detours.">
           {buckets.activeDetourNotices.map((item) => (
@@ -305,6 +271,40 @@ const NewsScreen = ({ navigation }) => {
                 routes: item.affectedRoutes,
               }}
               onPress={() => item.url && Linking.openURL(item.url)}
+            />
+          ))}
+        </Section>
+
+        <Section title="Active stop closures" subtitle="Map marker when matched to a stop" emptyText="No active stop closures found.">
+          {buckets.activeStopClosures.map((impact) => (
+            <ImpactCard
+              key={impact.id}
+              tone="error"
+              item={{
+                title: `Stop ${impact.stopCode}${impact.stopName ? ` · ${impact.stopName}` : ''}`,
+                subtitle: impact.sourceTitle,
+                badge: 'Active',
+                body: impact.message,
+                routes: impact.affectedRoutes,
+              }}
+              onPress={() => impact.sourceUrl && Linking.openURL(impact.sourceUrl)}
+            />
+          ))}
+        </Section>
+
+        <Section title="Upcoming stop closures" subtitle="Not shown on the map yet" emptyText="No upcoming stop closures found.">
+          {buckets.upcomingStopClosures.map((impact) => (
+            <ImpactCard
+              key={impact.id}
+              tone="warning"
+              item={{
+                title: `Stop ${impact.stopCode}${impact.stopName ? ` · ${impact.stopName}` : ''}`,
+                subtitle: impact.sourceTitle,
+                badge: formatStartsAt(impact.startsAt),
+                body: impact.message,
+                routes: impact.affectedRoutes,
+              }}
+              onPress={() => impact.sourceUrl && Linking.openURL(impact.sourceUrl)}
             />
           ))}
         </Section>

@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
   eyebrow: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, textTransform: 'uppercase', fontWeight: FONT_WEIGHTS.semibold },
   title: { fontSize: FONT_SIZES.xl, color: COLORS.textPrimary, fontWeight: FONT_WEIGHTS.bold },
-  closeButton: { width: 44, height: 44, borderRadius: BORDER_RADIUS.lg, backgroundColor: COLORS.grey100, alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+  closeButton: { width: 44, height: 44, borderRadius: BORDER_RADIUS.lg, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
   closeText: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.textPrimary },
   viewer: { flex: 1, backgroundColor: COLORS.grey50 },
   viewerContent: { minHeight: '100%', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },

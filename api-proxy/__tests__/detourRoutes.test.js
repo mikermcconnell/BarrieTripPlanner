@@ -26,6 +26,10 @@ describe('detourRoutes', () => {
 
   test('detour-run-once triggers a single tick when worker is enabled', async () => {
     const app = express();
+    app.use((req, _res, next) => {
+      req.clientId = 'scheduler:detour-run-once';
+      next();
+    });
     const runTick = jest.fn().mockResolvedValue({
       ok: true,
       skipped: false,
@@ -53,6 +57,40 @@ describe('detourRoutes', () => {
       tickCount: 3,
       detourCount: 1,
     }));
+  });
+
+  test('detour-run-once rejects non-admin client callers in production', async () => {
+    const app = express();
+    const runOnce = jest.fn().mockResolvedValue({
+      status: 200,
+      body: { ok: true },
+    });
+
+    app.use((req, _res, next) => {
+      req.auth = { uid: 'ordinary-rider' };
+      next();
+    });
+
+    registerDetourRoutes(app, {
+      detourWorker: {
+        getStatus: () => ({ running: false }),
+      },
+      detourOps: {
+        getStatus: jest.fn(),
+        runOnce,
+        getDebug: jest.fn(),
+        getLogs: jest.fn(),
+        getRolloutHealth: jest.fn(),
+      },
+      parseOptionalTimestamp: () => null,
+      isProd: true,
+    });
+
+    const response = await request(app).post('/api/detour-run-once');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toMatch(/detour admin/i);
+    expect(runOnce).not.toHaveBeenCalled();
   });
 
   test('detour-simulate publishes a simulated detour when enabled', async () => {

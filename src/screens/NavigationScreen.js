@@ -143,6 +143,55 @@ const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
   }
 };
 
+const NavigationBusMapMarker = ({ marker }) => {
+  if (!marker) return null;
+
+  const vehicle = {
+    ...marker.vehicle,
+    id: marker.id,
+  };
+
+  if (Platform.OS === 'android') {
+    return (
+      <MapLibreGL.MarkerView
+        key={marker.id}
+        id={`nav-bus-${marker.id}`}
+        coordinate={marker.coordinate}
+        anchor={{ x: 0.5, y: 0.5 }}
+      >
+        <View style={styles.busMarkerContainer}>
+          <View
+            style={[
+              styles.busMarker,
+              { backgroundColor: marker.color },
+            ]}
+          >
+            <Text style={styles.busMarkerText} numberOfLines={1}>
+              {marker.routeShortName || vehicle.routeId || '?'}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.busMarkerArrow,
+              { borderBottomColor: marker.color },
+            ]}
+          />
+        </View>
+      </MapLibreGL.MarkerView>
+    );
+  }
+
+  return (
+    <BusMarker
+      key={marker.id}
+      vehicle={vehicle}
+      color={marker.color}
+      routeLabel={marker.routeShortName}
+      snapPath={marker.snapPath}
+    />
+  );
+};
+
 const NavigationScreen = ({ route }) => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -844,6 +893,7 @@ const NavigationScreen = ({ route }) => {
           mapStyle={OSM_MAP_STYLE}
           scrollEnabled
           rotateEnabled
+          compassEnabled={false}
           pitchEnabled={false}
           onRegionWillChange={handleMapRegionWillChange}
           attributionPosition={{ bottom: 8, left: 8 }}
@@ -1023,30 +1073,12 @@ const NavigationScreen = ({ route }) => {
 
           {/* Tracked Bus Marker */}
           {trackedBusMarker && (
-            <BusMarker
-              key={trackedBusMarker.id}
-              vehicle={{
-                ...trackedBusMarker.vehicle,
-                id: trackedBusMarker.id,
-              }}
-              color={trackedBusMarker.color}
-              routeLabel={trackedBusMarker.routeShortName}
-              snapPath={trackedBusMarker.snapPath}
-            />
+            <NavigationBusMapMarker marker={trackedBusMarker} />
           )}
 
           {/* Next Bus Marker (shown during walking legs) */}
           {walkingBusMarker && (
-            <BusMarker
-              key={walkingBusMarker.id}
-              vehicle={{
-                ...walkingBusMarker.vehicle,
-                id: walkingBusMarker.id,
-              }}
-              color={walkingBusMarker.color}
-              routeLabel={walkingBusMarker.routeShortName}
-              snapPath={walkingBusMarker.snapPath}
-            />
+            <NavigationBusMapMarker marker={walkingBusMarker} />
           )}
         </MapLibreGL.MapView>
       </View>

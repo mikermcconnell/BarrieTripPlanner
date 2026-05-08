@@ -6,7 +6,7 @@
  * Also tracks user's position during the ride to alert when to get off.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useTransitRealtime } from '../context/TransitContext';
+import { useTransitRealtime, useTransitStatic } from '../context/TransitContext';
 import {
   haversineDistance,
   projectPointToPolyline,
@@ -20,6 +20,7 @@ import {
   evaluateBoardingBusDepartureStatus,
   shouldTreatBusAsArrivedAtBoarding,
 } from '../utils/navigationAutoProgress';
+import { selectMatchingVehicleForTransitLeg } from '../utils/transitVehicleMatching';
 
 // Threshold for considering arrival at a stop (meters)
 const STOP_ARRIVAL_THRESHOLD = 50;
@@ -137,6 +138,7 @@ const updateEvidenceWindow = (ref, isActive, now, minHits, minMs) => {
 
 export const useBusProximity = (transitLeg, isActive = true, userLocation = null, isUserOnBoard = false) => {
   const { vehicles } = useTransitRealtime();
+  const { shapes, tripMapping } = useTransitStatic();
   const [proximity, setProximity] = useState(createEmptyProximity);
   const intervalRef = useRef(null);
   // Monotonic counter: only allow stops count to decrease (prevents GPS jitter bouncing)
@@ -147,58 +149,13 @@ export const useBusProximity = (transitLeg, isActive = true, userLocation = null
 
   // Find the vehicle matching this transit leg's trip
   const findMatchingVehicle = useCallback(() => {
-    if (!transitLeg || !vehicles.length) return { vehicle: null, matchQuality: 'none' };
-
-    // Try to match by tripId first (most accurate)
-    const tripId = transitLeg.tripId;
-    if (tripId) {
-      const matchedVehicle = vehicles.find((v) => v.tripId === tripId);
-      if (matchedVehicle) {
-        return { vehicle: matchedVehicle, matchQuality: 'trip_id' };
-      }
-    }
-
-    // Fallback: match by routeId and find the best candidate
-    const routeId = transitLeg.route?.id || transitLeg.routeId;
-    if (routeId) {
-      const routeVehicles = vehicles.filter((v) => v.routeId === routeId);
-
-      if (routeVehicles.length === 1) {
-        return { vehicle: routeVehicles[0], matchQuality: 'route_single' };
-      }
-
-      // If multiple vehicles, find the one closest to (but before) the boarding stop
-      if (routeVehicles.length > 1 && transitLeg.from) {
-        const boardingLat = transitLeg.from.lat;
-        const boardingLon = transitLeg.from.lon;
-
-        let bestVehicle = null;
-        let bestDistance = Infinity;
-
-        routeVehicles.forEach(v => {
-          if (v.coordinate?.latitude && v.coordinate?.longitude) {
-            const dist = calculateDistance(
-              v.coordinate.latitude,
-              v.coordinate.longitude,
-              boardingLat,
-              boardingLon
-            );
-            if (dist < bestDistance) {
-              bestDistance = dist;
-              bestVehicle = v;
-            }
-          }
-        });
-
-        return {
-          vehicle: bestVehicle,
-          matchQuality: bestVehicle ? 'route_nearest' : 'none',
-        };
-      }
-    }
-
-    return { vehicle: null, matchQuality: 'none' };
-  }, [transitLeg, vehicles]);
+    return selectMatchingVehicleForTransitLeg({
+      transitLeg,
+      vehicles,
+      shapes,
+      tripMapping,
+    });
+  }, [transitLeg, vehicles, shapes, tripMapping]);
 
   // Calculate how many stops away the vehicle is from boarding stop
   const calculateStopsAwayFromBoarding = useCallback((vehicle, stopSequence) => {

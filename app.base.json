@@ -34,7 +34,7 @@
     "android": {
       "versionCode": 16,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/app-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#0c8ce5"
       },
       "package": "com.barrietransit.planner",
@@ -66,6 +66,12 @@
       "expo-asset",
       "expo-updates",
       "expo-secure-store",
+      [
+        "./plugins/withLauncherDisplayName",
+        {
+          "name": "MyBarrie"
+        }
+      ],
       [
         "@sentry/react-native",
         {

@@ -1,6 +1,8 @@
 const MAX_SAME_BUS_GAP_SECONDS = 2 * 60;
+const MAX_ROUTE_8_TURNAROUND_GAP_SECONDS = 20 * 60;
 const MAX_STAY_ON_BUS_WALK_SECONDS = 60;
 const MAX_STAY_ON_BUS_WALK_METERS = 35;
+const ROUTE_8_SOUTH_TO_NORTH_TURNAROUND_STOP_IDS = new Set(['725']);
 
 const DIRECTION_WORDS = ['NORTH', 'SOUTH', 'EAST', 'WEST', 'NB', 'SB', 'EB', 'WB', 'N', 'S', 'E', 'W'];
 const DIRECTION_WORD_PATTERN = '(NORTH|SOUTH|EAST|WEST|NB|SB|EB|WB|N|S|E|W)';
@@ -64,6 +66,51 @@ const hasMeaningfulWalkBetween = (legs, previousIndex, nextIndex) => legs
     return duration > MAX_STAY_ON_BUS_WALK_SECONDS || distance > MAX_STAY_ON_BUS_WALK_METERS;
   });
 
+const getStopId = (stop) => String(stop?.stopId || stop?.id || stop?.code || '').trim();
+
+const getStopName = (stop) => normalizeRouteText(stop?.name || stop?.stopName || '');
+
+const getLegEndpointStopId = (leg, endpoint) => getStopId(endpoint === 'start' ? leg?.from : leg?.to);
+
+const isBarrieSouthGoStop = (stop) => (
+  ROUTE_8_SOUTH_TO_NORTH_TURNAROUND_STOP_IDS.has(getStopId(stop)) ||
+  getStopName(stop).includes('BARRIE SOUTH GO')
+);
+
+const getBlockId = (leg) => String(
+  leg?.blockId ||
+  leg?.block_id ||
+  leg?.trip?.blockId ||
+  leg?.trip?.block_id ||
+  ''
+).trim();
+
+const getDirectionId = (leg) => {
+  const rawDirectionId = leg?.directionId ?? leg?.direction_id ?? leg?.trip?.directionId ?? leg?.trip?.direction_id;
+  if (rawDirectionId === null || rawDirectionId === undefined || rawDirectionId === '') return null;
+  const numericDirectionId = Number(rawDirectionId);
+  return Number.isFinite(numericDirectionId) ? numericDirectionId : String(rawDirectionId);
+};
+
+const endpointsMatch = (previousLeg, nextLeg) => {
+  const previousStopId = getLegEndpointStopId(previousLeg, 'end');
+  const nextStopId = getLegEndpointStopId(nextLeg, 'start');
+  return Boolean(previousStopId && nextStopId && previousStopId === nextStopId);
+};
+
+const hasMatchingBlock = (previousLeg, nextLeg) => {
+  const previousBlockId = getBlockId(previousLeg);
+  const nextBlockId = getBlockId(nextLeg);
+  return Boolean(previousBlockId && nextBlockId && previousBlockId === nextBlockId);
+};
+
+const isSouthboundToNorthboundRoute8Turnaround = (previousLeg, nextLeg, previousDirectionId, nextDirectionId) => (
+  previousDirectionId === 1 &&
+  nextDirectionId === 0 &&
+  isBarrieSouthGoStop(previousLeg?.to) &&
+  isBarrieSouthGoStop(nextLeg?.from)
+);
+
 export const isSameBusContinuation = (previousEntry, nextEntry, legs = []) => {
   const previousLeg = previousEntry?.leg || previousEntry;
   const nextLeg = nextEntry?.leg || nextEntry;
@@ -80,20 +127,64 @@ export const isSameBusContinuation = (previousEntry, nextEntry, legs = []) => {
     return false;
   }
 
-  if (isNumber(previousLeg?.endTime) && isNumber(nextLeg?.startTime)) {
-    const gapSeconds = Math.max(0, Math.round((Number(nextLeg.startTime) - Number(previousLeg.endTime)) / 1000));
-    if (gapSeconds > MAX_SAME_BUS_GAP_SECONDS) return false;
-  }
+  const gapSeconds = isNumber(previousLeg?.endTime) && isNumber(nextLeg?.startTime)
+    ? Math.max(0, Math.round((Number(nextLeg.startTime) - Number(previousLeg.endTime)) / 1000))
+    : null;
 
   const previousRoute = getRouteIdentity(previousLeg);
   const nextRoute = getRouteIdentity(nextLeg);
   if (!previousRoute.family || previousRoute.family !== nextRoute.family) return false;
   if (!previousRoute.hasBranchOrDirection && !nextRoute.hasBranchOrDirection) return false;
 
-  return (
-    previousRoute.compactRoute !== nextRoute.compactRoute ||
-    Boolean(previousRoute.direction && nextRoute.direction && previousRoute.direction !== nextRoute.direction)
+  if (!hasMatchingBlock(previousLeg, nextLeg)) return false;
+  if (!endpointsMatch(previousLeg, nextLeg)) return false;
+
+  const previousDirectionId = getDirectionId(previousLeg);
+  const nextDirectionId = getDirectionId(nextLeg);
+  const hasDirectionIdChange = (
+    previousDirectionId !== null &&
+    nextDirectionId !== null &&
+    previousDirectionId !== nextDirectionId
   );
+
+  const isRouteChangeOrDirectionChange = (
+    previousRoute.compactRoute !== nextRoute.compactRoute ||
+    Boolean(previousRoute.direction && nextRoute.direction && previousRoute.direction !== nextRoute.direction) ||
+    hasDirectionIdChange
+  );
+
+  if (!isRouteChangeOrDirectionChange) return false;
+
+  const isRoute8SouthToNorthTurnaround = (
+    previousRoute.family === '8' &&
+    hasDirectionIdChange &&
+    previousDirectionId === 1 &&
+    nextDirectionId === 0 &&
+    isSouthboundToNorthboundRoute8Turnaround(
+      previousLeg,
+      nextLeg,
+      previousDirectionId,
+      nextDirectionId
+    )
+  );
+
+  if (gapSeconds !== null) {
+    const maxGapSeconds = isRoute8SouthToNorthTurnaround
+      ? MAX_ROUTE_8_TURNAROUND_GAP_SECONDS
+      : MAX_SAME_BUS_GAP_SECONDS;
+    if (gapSeconds > maxGapSeconds) return false;
+  }
+
+  if (
+    previousRoute.family === '8' &&
+    hasDirectionIdChange &&
+    previousDirectionId === 1 &&
+    nextDirectionId === 0
+  ) {
+    return isRoute8SouthToNorthTurnaround;
+  }
+
+  return true;
 };
 
 export const getSameBusContinuationPairs = (legs = []) => {

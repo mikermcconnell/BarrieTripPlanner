@@ -74,6 +74,7 @@ const TransitMapComponent = forwardRef(({
             style={styles.map}
             mapStyle={OSM_MAP_STYLE}
             rotateEnabled
+            compassEnabled={false}
             pitchEnabled={false}
             attributionPosition={{ bottom: 8, left: 8 }}
             logoEnabled={false}

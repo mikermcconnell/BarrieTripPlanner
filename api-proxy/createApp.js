@@ -97,8 +97,8 @@ function createApiProxyApp({
     allowDetailedRouteDebug: env.DETOUR_DEBUG_ROUTE_DETAILS_ENABLED === 'true',
   });
 
-  registerBaselineRoutes(app);
-  registerNewsRoutes(app, { newsWorker });
+  registerBaselineRoutes(app, { isProd: config.isProd });
+  registerNewsRoutes(app, { newsWorker, isProd: config.isProd });
 
   return {
     app,

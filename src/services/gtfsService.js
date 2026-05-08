@@ -1,4 +1,7 @@
 import JSZip from 'jszip';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import pako from 'pako';
 import { GTFS_URLS } from '../config/constants';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
 import {
@@ -6,6 +9,150 @@ import {
   DEFAULT_ROUTE_STOP_SEQUENCE_KEY,
 } from '../utils/gtfsStopSequences';
 import logger from '../utils/logger';
+
+const GTFS_STATIC_ZIP_CACHE_FILE = 'bttp-gtfs-static.zip';
+const LOCAL_DEV_GTFS_PROXY_BASE = 'http://127.0.0.1:3001/proxy?url=';
+const LOCAL_DEV_PROXY_FALLBACK_ENABLED =
+  (typeof __DEV__ !== 'undefined' && __DEV__) ||
+  process.env.NODE_ENV === 'test' ||
+  Boolean(process.env.JEST_WORKER_ID);
+
+const base64ToArrayBuffer = (base64) => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const clean = String(base64 || '').replace(/[\r\n\s=]/g, '');
+  const bytes = [];
+  let buffer = 0;
+  let bits = 0;
+
+  for (let i = 0; i < clean.length; i += 1) {
+    const value = alphabet.indexOf(clean[i]);
+    if (value < 0) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+    }
+  }
+
+  return new Uint8Array(bytes).buffer;
+};
+
+const toZipBytes = (data) => {
+  if (data instanceof Uint8Array) {
+    return new Uint8Array(data);
+  }
+
+  return new Uint8Array(data || new ArrayBuffer(0));
+};
+
+const describeZipBytes = (bytes) => {
+  const firstBytes = Array.from(bytes.slice(0, 8))
+    .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+    .join(' ');
+  return `length=${bytes.length}, firstBytes=${firstBytes}`;
+};
+
+const readUInt16LE = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
+
+const readUInt32LE = (bytes, offset) =>
+  (bytes[offset] |
+    (bytes[offset + 1] << 8) |
+    (bytes[offset + 2] << 16) |
+    (bytes[offset + 3] << 24)) >>> 0;
+
+const bytesToString = (bytes) => {
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return decodeURIComponent(escape(binary));
+};
+
+const findEndOfCentralDirectoryOffsets = (bytes) => {
+  const offsets = [];
+  for (let i = bytes.length - 22; i >= 0; i -= 1) {
+    if (readUInt32LE(bytes, i) === 0x06054b50) {
+      offsets.push(i);
+    }
+  }
+  return offsets;
+};
+
+const extractZipTextFilesFromCentralDirectory = (bytes) => {
+  const eocdOffsets = findEndOfCentralDirectoryOffsets(bytes);
+
+  for (const eocdOffset of eocdOffsets) {
+    const entryCount = readUInt16LE(bytes, eocdOffset + 10);
+    let centralDirectoryOffset = readUInt32LE(bytes, eocdOffset + 16);
+    const files = {};
+    let valid = true;
+
+    for (let i = 0; i < entryCount; i += 1) {
+      if (readUInt32LE(bytes, centralDirectoryOffset) !== 0x02014b50) {
+        valid = false;
+        break;
+      }
+
+      const compressionMethod = readUInt16LE(bytes, centralDirectoryOffset + 10);
+      const compressedSize = readUInt32LE(bytes, centralDirectoryOffset + 20);
+      const localHeaderOffset = readUInt32LE(bytes, centralDirectoryOffset + 42);
+      const nameLength = readUInt16LE(bytes, centralDirectoryOffset + 28);
+      const extraLength = readUInt16LE(bytes, centralDirectoryOffset + 30);
+      const commentLength = readUInt16LE(bytes, centralDirectoryOffset + 32);
+      const fileName = bytesToString(
+        bytes.slice(centralDirectoryOffset + 46, centralDirectoryOffset + 46 + nameLength)
+      );
+
+      centralDirectoryOffset += 46 + nameLength + extraLength + commentLength;
+
+      if (
+        compressedSize === 0xffffffff ||
+        localHeaderOffset === 0xffffffff ||
+        readUInt32LE(bytes, localHeaderOffset) !== 0x04034b50
+      ) {
+        valid = false;
+        break;
+      }
+
+      if (!fileName.endsWith('.txt')) {
+        continue;
+      }
+
+      const localNameLength = readUInt16LE(bytes, localHeaderOffset + 26);
+      const localExtraLength = readUInt16LE(bytes, localHeaderOffset + 28);
+      const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+      const compressedData = bytes.slice(dataStart, dataStart + compressedSize);
+
+      if (compressionMethod === 0) {
+        files[fileName] = bytesToString(compressedData);
+      } else if (compressionMethod === 8) {
+        files[fileName] = pako.inflateRaw(compressedData, { to: 'string' });
+      } else {
+        valid = false;
+        break;
+      }
+    }
+
+    if (valid && Object.keys(files).length > 0) {
+      return files;
+    }
+  }
+
+  throw new Error('Unable to extract GTFS ZIP files');
+};
+
+const addCacheBust = (url) => {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}bttpCacheBust=${Date.now()}`;
+};
+
+const buildLocalDevProxyUrl = (url) => `${LOCAL_DEV_GTFS_PROXY_BASE}${encodeURIComponent(url)}`;
 
 /**
  * Parse CSV text into an array of objects
@@ -75,41 +222,128 @@ const parseCSVLine = (line) => {
  */
 const downloadGTFSZip = async () => {
   try {
-    // Retry up to 3 times with exponential backoff for this critical download
-    let response;
-    let lastError;
+    const downloadUrl = GTFS_URLS.STATIC_ZIP;
+    const fetchZip = async (url, options) => {
+      // Retry up to 3 times with exponential backoff for this critical download
+      let response;
+      let lastError;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        response = await fetchWithCORS(GTFS_URLS.STATIC_ZIP);
-        if (response.ok) break;
-        lastError = new Error(`HTTP error! status: ${response.status}`);
-        if (response.status >= 400 && response.status < 500) break; // Don't retry client errors
-      } catch (fetchError) {
-        lastError = fetchError;
-        if (attempt < 2) {
-          const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
-          logger.warn(`GTFS download attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await fetchWithCORS(url, options);
+          if (response.ok) break;
+          lastError = new Error(`HTTP error! status: ${response.status}`);
+          if (response.status >= 400 && response.status < 500) break; // Don't retry client errors
+        } catch (fetchError) {
+          lastError = fetchError;
+          if (attempt < 2) {
+            const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
+            logger.warn(`GTFS download attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
       }
-    }
 
-    if (!response || !response.ok) {
-      throw lastError || new Error('GTFS download failed after retries');
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-
-    const files = {};
-    const fileNames = Object.keys(zip.files);
-
-    for (const fileName of fileNames) {
-      if (fileName.endsWith('.txt')) {
-        const content = await zip.files[fileName].async('string');
-        files[fileName] = content;
+      if (!response || !response.ok) {
+        throw lastError || new Error('GTFS download failed after retries');
       }
+
+      return response.arrayBuffer();
+    };
+
+    const fetchZipViaFileSystem = async () => {
+      if (Platform.OS === 'web' || !FileSystem.cacheDirectory) {
+        throw new Error('Native GTFS file download is unavailable on this platform');
+      }
+
+      const fileUri = `${FileSystem.cacheDirectory}${GTFS_STATIC_ZIP_CACHE_FILE}`;
+      const downloadResult = await FileSystem.downloadAsync(addCacheBust(downloadUrl), fileUri, {
+        cache: false,
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
+
+      if (downloadResult?.status && (downloadResult.status < 200 || downloadResult.status >= 300)) {
+        throw new Error(`Native GTFS download failed with status ${downloadResult.status}`);
+      }
+
+      const base64Zip = await FileSystem.readAsStringAsync(downloadResult.uri || fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      try {
+        await FileSystem.deleteAsync(downloadResult.uri || fileUri, { idempotent: true });
+      } catch (cleanupError) {
+        logger.warn('Could not clean up temporary GTFS ZIP:', cleanupError);
+      }
+
+      return base64ToArrayBuffer(base64Zip);
+    };
+
+    let files = null;
+    const zipAttempts = [
+      () => fetchZip(downloadUrl),
+      () => fetchZip(addCacheBust(downloadUrl), { cache: 'no-store' }),
+      fetchZipViaFileSystem,
+    ];
+
+    if (Platform.OS !== 'web' && LOCAL_DEV_PROXY_FALLBACK_ENABLED) {
+      zipAttempts.push(() =>
+        fetchZip(buildLocalDevProxyUrl(addCacheBust(downloadUrl)), { cache: 'no-store' })
+      );
+    }
+
+    for (let parseAttempt = 0; parseAttempt < zipAttempts.length; parseAttempt += 1) {
+      const arrayBuffer = await zipAttempts[parseAttempt]();
+      const zipBytes = toZipBytes(arrayBuffer);
+
+      try {
+        const zip = await JSZip.loadAsync(zipBytes);
+        files = {};
+        const fileNames = Object.keys(zip.files);
+
+        for (const fileName of fileNames) {
+          if (fileName.endsWith('.txt')) {
+            const content = await zip.files[fileName].async('string');
+            files[fileName] = content;
+          }
+        }
+        break;
+      } catch (zipError) {
+        try {
+          files = extractZipTextFilesFromCentralDirectory(zipBytes);
+          logger.warn(
+            'GTFS ZIP required central-directory fallback extraction',
+            describeZipBytes(zipBytes)
+          );
+          break;
+        } catch (fallbackError) {
+          logger.warn('GTFS central-directory fallback extraction failed:', fallbackError);
+        }
+
+        const canRetryCorruptZip =
+          zipError?.message?.includes('unexpected signature') &&
+          parseAttempt < zipAttempts.length - 1;
+
+        if (canRetryCorruptZip) {
+          logger.warn(
+            parseAttempt === 0
+              ? 'GTFS ZIP payload looked corrupt; retrying with cache bypass'
+              : parseAttempt === 1
+              ? 'GTFS ZIP payload still looked corrupt; retrying with native file download'
+              : 'GTFS ZIP payload still looked corrupt; retrying with local dev proxy',
+            describeZipBytes(zipBytes)
+          );
+          continue;
+        }
+        throw zipError;
+      }
+    }
+
+    if (!files) {
+      throw new Error('GTFS ZIP extraction failed');
     }
 
     // Integrity check: verify expected files exist
@@ -229,6 +463,7 @@ const parseTrips = (content) => {
     headsign: trip.trip_headsign || '',
     directionId: parseInt(trip.direction_id || '0', 10),
     shapeId: trip.shape_id || null,
+    blockId: trip.block_id || null,
     wheelchairAccessible: parseInt(trip.wheelchair_accessible || '0', 10),
     bikesAllowed: parseInt(trip.bikes_allowed || '0', 10),
   }));
@@ -247,6 +482,7 @@ export const createTripMapping = (trips) => {
       shapeId: trip.shapeId,
       headsign: trip.headsign,
       directionId: trip.directionId,
+      blockId: trip.blockId,
     };
   });
   return mapping;

@@ -42,6 +42,8 @@ const buildTransitLeg = ({
   route,
   headsign,
   tripId,
+  directionId,
+  blockId,
   intermediateStops,
   shapes,
   tripIndex,
@@ -60,6 +62,8 @@ const buildTransitLeg = ({
   route,
   headsign,
   tripId,
+  directionId,
+  blockId,
   intermediateStops,
   legGeometry: buildTransitLegGeometry({ tripId, tripIndex, shapes, from, to, intermediateStops }),
   steps: null,
@@ -186,6 +190,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
       );
 
       const route = routingData.routes ? getRouteInfo(routingData, segment.routeId) : null;
+      const trip = tripIndex?.[segment.tripId];
 
       legs.push(buildTransitLeg({
         startTime: boardingTime,
@@ -213,6 +218,8 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         },
         headsign: segment.headsign,
         tripId: segment.tripId,
+        directionId: segment.directionId ?? trip?.directionId,
+        blockId: trip?.blockId || segment.blockId || null,
         intermediateStops,
         shapes: routingData.shapes,
         tripIndex,

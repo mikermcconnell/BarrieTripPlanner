@@ -4,8 +4,10 @@ const {
   setRouteBaselinesFromLiveGtfs,
   clearCurrentBaseline,
 } = require('../services/baselineOps');
+const { requireDetourAdmin } = require('../middleware/detourAdmin');
 
 function registerBaselineRoutes(app, {
+  isProd = process.env.NODE_ENV === 'production',
   baselineOps = {
     getBaselineStatusWithDivergence,
     setBaselineFromLiveGtfs,
@@ -24,6 +26,7 @@ function registerBaselineRoutes(app, {
   });
 
   app.post('/api/baseline/set', async (_req, res) => {
+    if (!requireDetourAdmin(_req, res, { isProd })) return;
     try {
       const result = await baselineOps.setBaselineFromLiveGtfs();
       return res.json(result);
@@ -34,6 +37,7 @@ function registerBaselineRoutes(app, {
   });
 
   app.post('/api/baseline/routes', async (req, res) => {
+    if (!requireDetourAdmin(req, res, { isProd })) return;
     try {
       const routeIds = Array.isArray(req.body?.routeIds)
         ? req.body.routeIds
@@ -51,6 +55,7 @@ function registerBaselineRoutes(app, {
   });
 
   app.post('/api/baseline/clear', async (_req, res) => {
+    if (!requireDetourAdmin(_req, res, { isProd })) return;
     try {
       const result = await baselineOps.clearCurrentBaseline();
       return res.json(result);

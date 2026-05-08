@@ -1,11 +1,13 @@
 function createLocationIqProxy({ hasLocationIQKey, apiKey, baseUrl }) {
-  return async function proxyRequest(apiPath, params, res) {
+  return async function proxyRequest(apiPath, params, res, options = {}) {
     if (!hasLocationIQKey) {
       return res.status(503).json({ error: 'LocationIQ proxy is not configured' });
     }
 
     params.set('key', apiKey);
-    params.set('format', 'json');
+    if (options.includeFormat !== false) {
+      params.set('format', 'json');
+    }
 
     try {
       const controller = new AbortController();

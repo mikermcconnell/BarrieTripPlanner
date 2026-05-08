@@ -21,6 +21,7 @@ jest.mock('../components/RoutePolyline', () => 'RoutePolyline');
 
 jest.mock('../components/WebMapView', () => ({
   WebHtmlMarker: 'WebHtmlMarker',
+  WebLineLabelLayer: 'WebLineLabelLayer',
   WebRoutePolyline: 'WebRoutePolyline',
 }));
 
@@ -108,5 +109,197 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findAllByType('WebRoutePolyline')).toHaveLength(0);
     expect(markers).toHaveLength(3);
     expect(markers.map((marker) => marker.props.zIndexOffset)).toEqual([660, 660, 700]);
+  });
+
+  test('web callouts shift overlapping detour labels away from the same map point', () => {
+    const sharedPoint = LINE[1];
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 16,
+        segmentStopDetails: [{
+          skippedSegmentPolyline: LINE,
+          inferredDetourPolyline: LINE,
+          likelyDetourPolyline: LINE,
+          skippedStops: [],
+          entryPoint: sharedPoint,
+          exitPoint: sharedPoint,
+        }],
+        labelDensity: 'full',
+        renderMode: 'callouts',
+      }));
+    });
+
+    const markers = inst.root.findAllByType('WebHtmlMarker');
+    const routeResumes = markers.find((marker) => marker.props.html.includes('ROUTE') && marker.props.html.includes('RESUMES'));
+
+    expect(routeResumes).toBeTruthy();
+    expect(routeResumes.props.offset).not.toEqual([0, -22]);
+  });
+
+  test('native detour line labels use a single collision-aware line symbol layer', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 12,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+      }));
+    });
+
+    const sources = inst.root.findAllByType('ShapeSource');
+    const symbolLayers = inst.root.findAllByType('SymbolLayer');
+    const labelSource = sources.find((source) => source.props.id === 'detour-line-labels-10');
+    const labelLayer = symbolLayers.find((layer) => layer.props.id === 'detour-line-labels-10-symbols');
+
+    expect(labelSource).toBeTruthy();
+    expect(labelSource.props.shape.features.map((feature) => feature.properties.label)).toEqual([
+      'Route 11 detour',
+      'Route closed',
+    ]);
+    expect(labelSource.props.shape.features.map((feature) => feature.properties.priority)).toEqual([100, 80]);
+    expect(labelSource.props.shape.features.map((feature) => feature.properties.sortKey)).toEqual([0, 20]);
+    expect(labelLayer.props.style).toEqual(expect.objectContaining({
+      symbolPlacement: 'line',
+      textOffset: [0, 0],
+      textAllowOverlap: false,
+      textIgnorePlacement: false,
+      textColor: ['match', ['get', 'kind'], 'closed', '#991B1B', 'detour', '#92400E', '#374151'],
+      textHaloColor: '#FFFBEB',
+      textHaloWidth: 2.4,
+      textSize: 12,
+      symbolSpacing: 420,
+      textPadding: 6,
+    }));
+    expect(inst.root.findAllByType('MarkerView').some((marker) => (
+      String(marker.props.id || '').includes('detour-line-label') ||
+      String(marker.props.id || '').includes('detour-closed-point')
+    ))).toBe(false);
+  });
+
+  test('web detour line labels use one collision-aware line label layer, not HTML marker badges', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 12,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+      }));
+    });
+
+    const labelLayers = inst.root.findAllByType('WebLineLabelLayer');
+    const htmlMarkers = inst.root.findAllByType('WebHtmlMarker');
+
+    expect(labelLayers).toHaveLength(1);
+    expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual(['Route 11 detour', 'Route closed']);
+    expect(labelLayers[0].props.labels.map((label) => label.priority)).toEqual([100, 80]);
+    expect(labelLayers[0].props.labels.map((label) => label.sortKey)).toEqual([0, 20]);
+    expect(labelLayers[0].props.labelStyle).toEqual(expect.objectContaining({
+      textOffset: [0, 0],
+      textAllowOverlap: false,
+      textIgnorePlacement: false,
+      color: ['match', ['get', 'kind'], 'closed', '#991B1B', 'detour', '#92400E', '#374151'],
+      haloColor: '#FFFBEB',
+      haloWidth: 2.4,
+      size: 12,
+      spacing: 420,
+      textPadding: 6,
+    }));
+    expect(htmlMarkers.some((marker) => (
+      marker.props.html.includes('Route 11 detour') ||
+      marker.props.html.includes('Route closed')
+    ))).toBe(false);
+  });
+
+  test('web medium-density callouts keep map labels concise', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 16,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+      }));
+    });
+
+    const labelText = inst.root
+      .findAllByType('WebLineLabelLayer')
+      .flatMap((layer) => layer.props.labels.map((label) => label.label))
+      .join('\n');
+    const html = inst.root.findAllByType('WebHtmlMarker').map((marker) => marker.props.html).join('\n');
+
+    expect(labelText).toContain('Route 11 detour');
+    expect(labelText).toContain('Route closed');
+    expect(html).not.toContain('ROUTE</span>');
+    expect(html).not.toContain('RESUMES');
+    expect(html).not.toContain('PATH');
+  });
+
+  test('web route-closed label uses the full closed line as its label anchor geometry', () => {
+    const closedLine = [
+      { latitude: 44.39047, longitude: -79.6855 },
+      { latitude: 44.39267, longitude: -79.68558 },
+    ];
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: false,
+        currentZoom: 16,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+        segmentStopDetails: [{
+          skippedSegmentPolyline: closedLine,
+          inferredDetourPolyline: [],
+          skippedStops: [],
+        }],
+      }));
+    });
+
+    const routeClosed = inst.root
+      .findAllByType('WebLineLabelLayer')
+      .flatMap((layer) => layer.props.labels)
+      .find((label) => label.label === 'Route closed');
+
+    expect(routeClosed.coordinates).toEqual(closedLine);
+    expect(inst.root.findByType('WebLineLabelLayer').props.labelStyle.textOffset).toEqual([0, 0]);
+  });
+
+  test('web full-density callouts describe the detour route instead of path', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 16,
+        labelDensity: 'full',
+        renderMode: 'callouts',
+      }));
+    });
+
+    const html = inst.root.findAllByType('WebHtmlMarker').map((marker) => marker.props.html).join('\n');
+
+    expect(html).toContain('DETOUR');
+    expect(html).toContain('ROUTE');
+    expect(html).not.toContain('PATH');
   });
 });

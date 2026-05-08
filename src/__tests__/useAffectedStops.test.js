@@ -272,4 +272,33 @@ describe('deriveAffectedStopDetailsForDetour', () => {
     expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
     expect(result.segmentStopDetails[1].affectedStops.map((stop) => stop.id)).toEqual(['s3', 's4', 's5']);
   });
+
+  it('can suppress stop derivation for manually drawn short test closures', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          entryPoint: { latitude: 44.396, longitude: -79.690 },
+          exitPoint: { latitude: 44.379, longitude: -79.690 },
+          skippedSegmentPolyline: [
+            { latitude: 44.390, longitude: -79.690 },
+            { latitude: 44.391, longitude: -79.690 },
+          ],
+          suppressStopDerivation: true,
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.routeStops).toEqual([]);
+    expect(result.segmentStopDetails).toHaveLength(1);
+    expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
+    expect(result.segmentStopDetails[0].skippedSegmentPolyline).toEqual([
+      { latitude: 44.390, longitude: -79.690 },
+      { latitude: 44.391, longitude: -79.690 },
+    ]);
+  });
 });

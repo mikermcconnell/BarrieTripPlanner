@@ -129,10 +129,10 @@ export const buildNavigationRoutePolylines = ({
         result.push({
           id: `leg-${index}-completed`,
           coordinates: coordinates.slice(0, splitIdx + 1),
-          color: style.isCurrentWalkLeg ? '#9BBBF9' : '#9E9E9E',
+          color: style.isCurrentWalkLeg ? style.color : '#9E9E9E',
           width: style.width,
           dashPattern: style.dashPattern,
-          opacity: 0.5,
+          opacity: style.isCurrentWalkLeg ? style.opacity : 0.5,
           outlineWidth: style.outlineWidth,
           outlineColor: style.outlineColor,
         });

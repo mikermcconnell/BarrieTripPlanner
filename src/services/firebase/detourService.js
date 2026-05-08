@@ -1,5 +1,6 @@
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { getEnabledDevDetourFixtures } from '../devDetourFixtures';
 
 /**
  * Subscribe to active detours collection in Firestore.
@@ -89,6 +90,12 @@ export function mapActiveDetourDoc(docId, data) {
 }
 
 export function subscribeToActiveDetours(onUpdate, onError) {
+  const devFixtures = getEnabledDevDetourFixtures();
+  if (Object.keys(devFixtures).length > 0) {
+    onUpdate(devFixtures);
+    return () => {};
+  }
+
   const detoursRef = collection(db, 'activeDetours');
 
   return onSnapshot(

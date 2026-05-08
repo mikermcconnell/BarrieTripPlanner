@@ -14,13 +14,12 @@ import {
   saveNotificationSettings,
   registerForPushNotifications,
 } from '../services/notificationService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { useAuth } from '../context/AuthContext';
 import { useTransitRealtime, useTransitStatic } from '../context/TransitContext';
 import { userFirestoreService } from '../services/firebase/userFirestoreService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
-import { APP_CONFIG, ONBOARDING_KEY } from '../config/constants';
+import { APP_CONFIG } from '../config/constants';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 
 const SettingsScreen = ({ navigation }) => {
@@ -291,16 +290,6 @@ const SettingsScreen = ({ navigation }) => {
               'High Contrast',
               'Improved visibility for map elements',
               () => Alert.alert('Coming Soon', 'This feature is in development'),
-              false
-            )}
-            {renderActionRow(
-              '🎓',
-              'Replay Tutorial',
-              'See the app walkthrough again',
-              async () => {
-                await AsyncStorage.removeItem(ONBOARDING_KEY);
-                Alert.alert('Tutorial Reset', 'The tutorial will show next time you open the app.');
-              },
               false
             )}
           </>

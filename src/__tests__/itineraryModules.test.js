@@ -241,6 +241,7 @@ describe('itinerary modules', () => {
         to: { name: 'Downtown Hub', lat: hub.latitude, lon: hub.longitude, stopId: '2', stopCode: '2' },
         route: { shortName: '10' },
         tripId: 'trip-before-switch',
+        blockId: 'route-10-block',
         intermediateStops: [],
         legGeometry: {
           points: encodePolyline([grove, hub]),
@@ -262,6 +263,7 @@ describe('itinerary modules', () => {
         to: { name: 'Eden Drive', lat: eden.latitude, lon: eden.longitude, stopId: '324', stopCode: '324' },
         route: { shortName: '10' },
         tripId: 'trip-after-switch',
+        blockId: 'route-10-block',
         intermediateStops: [{ name: 'Maple at Ross', lat: maple.latitude, lon: maple.longitude, stopId: '485', stopCode: '485' }],
         legGeometry: {
           points: encodePolyline([hub, maple, eden]),
@@ -286,6 +288,53 @@ describe('itinerary modules', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].tripIds).toEqual(['trip-before-switch', 'trip-after-switch']);
     expect(decoded).toEqual([grove, hub, maple, eden]);
+  });
+
+  test('mergeTransitLegs keeps Route 8 direction flips at Allandale as a transfer', () => {
+    const legs = [
+      {
+        mode: 'BUS',
+        startTime: 1000000,
+        endTime: 1600000,
+        scheduledEndTime: 1600000,
+        duration: 600,
+        from: { name: 'Georgian College', lat: 44.0, lon: -79.0, stopId: 'georgian', stopCode: '1' },
+        to: { name: 'Barrie Allandale Transit Terminal Platform 3', lat: 44.001, lon: -79.001, stopId: '9003', stopCode: '9003' },
+        route: { shortName: '8A' },
+        directionId: 1,
+        blockId: 'block-8',
+        tripId: 'trip-south',
+        intermediateStops: [],
+      },
+      {
+        mode: 'WALK',
+        startTime: 1600000,
+        endTime: 1630000,
+        duration: 30,
+        distance: 20,
+      },
+      {
+        mode: 'BUS',
+        startTime: 1660000,
+        endTime: 2200000,
+        scheduledEndTime: 2200000,
+        duration: 540,
+        from: { name: 'Barrie Allandale Transit Terminal Platform 5', lat: 44.001, lon: -79.001, stopId: '9005', stopCode: '9005' },
+        to: { name: 'Georgian College', lat: 44.003, lon: -79.003, stopId: 'georgian', stopCode: '3' },
+        route: { shortName: '8A' },
+        directionId: 0,
+        blockId: 'block-8',
+        tripId: 'trip-north',
+        intermediateStops: [],
+      },
+    ];
+
+    const merged = mergeTransitLegs(legs);
+
+    expect(merged).toHaveLength(3);
+    expect(merged[0].tripId).toBe('trip-south');
+    expect(merged[1].mode).toBe('WALK');
+    expect(merged[2].tripId).toBe('trip-north');
   });
 
   test('mergeTransitLegs does not merge bus legs on different routes', () => {

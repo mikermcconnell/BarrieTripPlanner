@@ -1,4 +1,5 @@
 const { buildNavigationRoutePolylines } = require('../features/navigation/model/buildNavigationRoutePolylines');
+const { buildCurrentStepBusPreviewLine } = require('../utils/navigationBusPreview');
 const { encodePolyline } = require('../utils/polylineUtils');
 const {
   WALKING_ROUTE_DOT_OUTLINE_COLOR,
@@ -8,6 +9,74 @@ const {
 } = require('../config/mapLineStyles');
 
 describe('buildNavigationRoutePolylines', () => {
+  test('shows walking directions and next bus approach during the first walking leg', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          legGeometry: {
+            points: encodePolyline([
+              { latitude: 44.381, longitude: -79.701 },
+              { latitude: 44.3815, longitude: -79.7005 },
+              { latitude: 44.382, longitude: -79.7 },
+            ]),
+          },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'TRIP-2A',
+          route: { id: '2A', color: '#0057B8' },
+          from: { lat: 44.382, lon: -79.7 },
+          to: { lat: 44.386, lon: -79.696 },
+        },
+      ],
+    };
+
+    const walkingLines = buildNavigationRoutePolylines({
+      itinerary,
+      currentLegIndex: 0,
+      userLocation: {
+        latitude: 44.381,
+        longitude: -79.701,
+      },
+    });
+
+    expect(walkingLines[0]).toEqual(expect.objectContaining({
+      id: 'leg-0',
+      color: '#4285F4',
+      width: 6,
+      dashPattern: null,
+      outlineWidth: 4,
+    }));
+    expect(walkingLines[0].coordinates).toHaveLength(3);
+
+    const busApproachLine = buildCurrentStepBusPreviewLine({
+      isWalkingLeg: true,
+      nextTransitLeg: itinerary.legs[1],
+      walkingVehicle: null,
+      shapes: {
+        shape2A: [
+          { latitude: 44.38, longitude: -79.702 },
+          { latitude: 44.381, longitude: -79.701 },
+          { latitude: 44.382, longitude: -79.7 },
+          { latitude: 44.386, longitude: -79.696 },
+        ],
+      },
+      tripMapping: {
+        'TRIP-2A': { shapeId: 'shape2A' },
+      },
+      routePathsByRouteId: new Map(),
+    });
+
+    expect(busApproachLine).toEqual(expect.objectContaining({
+      id: 'nav-bus-approach-TRIP-2A-board-shape',
+      color: '#0057B8',
+      isStaticApproach: true,
+    }));
+    expect(busApproachLine.coordinates[busApproachLine.coordinates.length - 1])
+      .toEqual({ latitude: 44.382, longitude: -79.7 });
+  });
+
   test('splits the current walking leg at the user location', () => {
     const itinerary = {
       legs: [
@@ -37,9 +106,10 @@ describe('buildNavigationRoutePolylines', () => {
     expect(lines[0]).toEqual(
       expect.objectContaining({
         id: 'leg-0-completed',
-        color: '#9BBBF9',
+        color: '#4285F4',
         width: 6,
         dashPattern: null,
+        opacity: 1,
         outlineWidth: 4,
       })
     );

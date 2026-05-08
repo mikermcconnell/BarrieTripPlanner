@@ -1,0 +1,14 @@
+
+> barrie-transit-planner@1.0.6 android:dev:clear
+> powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1 -ClearMetroCache
+
+[android:dev] Running recovery first
+[android:recover] Project root: C:\Users\Mike McConnell\Documents\mike_apps\BTTP
+[android:recover] Cleared adb reverse mappings
+[android:recover] Force-stopped com.barrietransit.planner
+[android:recover] Recovery complete
+[detour:dev] Skipped because DETOUR_DEV_WORKER_ENABLED=false
+[android:dev] Starting Metro on port 8081 for Expo dev client
+[android:dev] Metro is listening on port 8081
+[android:dev] Metro logs: C:\Users\Mike McConnell\Documents\mike_apps\BTTP\.logs-expo-dev-metro-8081.out.txt
+[android:dev] Priming Android bundle at http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=android&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable

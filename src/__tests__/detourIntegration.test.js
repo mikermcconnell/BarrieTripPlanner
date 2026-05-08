@@ -19,6 +19,7 @@ const React = require('react');
 const MockRoutePolyline = (props) => React.createElement('div', { 'data-mock': 'RoutePolyline' });
 const MockWebRoutePolyline = (props) => React.createElement('div', { 'data-mock': 'WebRoutePolyline' });
 const MockWebHtmlMarker = (props) => React.createElement('div', { 'data-mock': 'WebHtmlMarker' });
+const MockWebLineLabelLayer = (props) => React.createElement('div', { 'data-mock': 'WebLineLabelLayer' });
 
 // ─── Mocks needed before any require ────────────────────────────────────────
 
@@ -32,6 +33,8 @@ jest.mock('react-native', () => ({
 jest.mock('@maplibre/maplibre-react-native', () => ({
   MarkerView: 'MarkerView',
   PointAnnotation: 'PointAnnotation',
+  ShapeSource: 'ShapeSource',
+  SymbolLayer: 'SymbolLayer',
 }));
 
 jest.mock('../components/RoutePolyline', () => MockRoutePolyline);
@@ -41,6 +44,7 @@ jest.mock('../components/WebMapView', () => ({
   default: 'WebMapView',
   WebRoutePolyline: MockWebRoutePolyline,
   WebHtmlMarker: MockWebHtmlMarker,
+  WebLineLabelLayer: MockWebLineLabelLayer,
 }));
 
 // ─── Shared test data ────────────────────────────────────────────────────────
@@ -438,7 +442,6 @@ describe('DetourOverlay component rendering', () => {
       expect(markerViews.length).toBeGreaterThanOrEqual(8);
       expect(markerViews.find((a) => a.props.id === 'detour-route-stop-8A-s1-0')).toBeDefined();
       expect(markerViews.find((a) => a.props.id === 'detour-route-stop-8A-s2-1')).toBeDefined();
-      expect(markerViews.find((a) => a.props.id === 'detour-closed-point-8A')).toBeDefined();
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
       expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
       expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
@@ -447,7 +450,7 @@ describe('DetourOverlay component rendering', () => {
     test('callout labels anchor above the route line', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const annotations = inst.root.findAllByType('MarkerView');
-      ['detour-closed-point-8A', 'detour-entry-point-8A', 'detour-exit-point-8A'].forEach((id) => {
+      ['detour-entry-point-8A', 'detour-exit-point-8A'].forEach((id) => {
         expect(annotations.find((a) => a.props.id === id).props.anchor).toEqual({ x: 0.5, y: 1.35 });
       });
     });
@@ -470,8 +473,7 @@ describe('DetourOverlay component rendering', () => {
       const annotations = inst.root.findAllByType('PointAnnotation');
       const markerViews = inst.root.findAllByType('MarkerView');
       expect(annotations).toHaveLength(0);
-      expect(markerViews).toHaveLength(9);
-      expect(markerViews.find((a) => a.props.id === 'detour-closed-point-8A')).toBeDefined();
+      expect(markerViews).toHaveLength(8);
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
       expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
       expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
@@ -566,18 +568,23 @@ describe('DetourOverlay component rendering', () => {
     test('renders HTML markers for route, entry/exit, and skipped stops', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
-      expect(markers).toHaveLength(12);
+      const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
+      expect(markers).toHaveLength(11);
+      expect(labelLayers).toHaveLength(1);
+      expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
+        'Route closed',
+      ]);
       const coords = markers.map((m) => m.props.coordinate);
       expect(coords).toContainEqual({ latitude: 44.38, longitude: -79.69 });
       expect(coords).toContainEqual({ latitude: 44.39, longitude: -79.68 });
       expect(coords).toContainEqual({ latitude: 44.381, longitude: -79.691 });
       expect(coords).toContainEqual({ latitude: 44.391, longitude: -79.679 });
-      expect(markers.some((m) => m.props.html.includes('ROUTE CLOSED'))).toBe(true);
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
-      const entry = markers.find((m) => m.props.html.includes('PATH') && m.props.html.includes('DETOUR'));
+      const entry = markers.find((m) => m.props.html.includes('ROUTE') && m.props.html.includes('DETOUR') && !m.props.html.includes('RESUMES'));
       const exit = markers.find((m) => m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'));
       expect(entry.props.html).toContain('DETOUR');
-      expect(entry.props.html).toContain('PATH');
+      expect(entry.props.html).toContain('ROUTE');
+      expect(entry.props.html).not.toContain('PATH');
       expect(exit.props.html).toContain('ROUTE');
       expect(exit.props.html).toContain('RESUMES');
     });
@@ -593,13 +600,12 @@ describe('DetourOverlay component rendering', () => {
         .map((m) => m.props.zIndexOffset);
       const labelIndexes = markers
         .filter((m) =>
-          m.props.html.includes('ROUTE CLOSED') ||
-          (m.props.html.includes('DETOUR') && m.props.html.includes('PATH')) ||
-          (m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES')) ||
-          m.props.html.includes('8A DETOUR')
+          (m.props.html.includes('DETOUR') && m.props.html.includes('ROUTE')) ||
+          (m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'))
         )
         .map((m) => m.props.zIndexOffset);
 
+      expect(inst.root.findAllByType(MockWebLineLabelLayer)).toHaveLength(1);
       expect(Math.min(...labelIndexes)).toBeGreaterThan(Math.max(...stopIndexes));
     });
 
@@ -620,10 +626,14 @@ describe('DetourOverlay component rendering', () => {
         showStopMarkers: false,
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
-      expect(markers).toHaveLength(9);
-      expect(markers.some((m) => m.props.html.includes('ROUTE CLOSED'))).toBe(true);
+      const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
+      expect(markers).toHaveLength(8);
+      expect(labelLayers).toHaveLength(1);
+      expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
+        'Route closed',
+      ]);
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
-      expect(markers.some((m) => m.props.html.includes('DETOUR') && m.props.html.includes('PATH'))).toBe(true);
+      expect(markers.some((m) => m.props.html.includes('DETOUR') && m.props.html.includes('ROUTE') && !m.props.html.includes('PATH'))).toBe(true);
       expect(markers.some((m) => m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'))).toBe(true);
     });
   });

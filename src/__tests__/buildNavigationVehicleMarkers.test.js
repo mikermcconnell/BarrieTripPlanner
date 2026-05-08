@@ -159,6 +159,77 @@ describe('buildNavigationVehicleMarkers', () => {
     expect(walkingBusMarker.vehicle.bearing).toBeCloseTo(180, 0);
   });
 
+  test('buildWalkingBusMarker uses the proximity-selected next bus while walking', () => {
+    const walkingBusMarker = buildWalkingBusMarker({
+      itinerary: {
+        legs: [
+          { mode: 'WALK' },
+          {
+            mode: 'BUS',
+            tripId: 'scheduled-trip',
+            route: {
+              id: '11',
+              shortName: '11',
+              color: '#AA0000',
+            },
+            from: {
+              lat: 44.4,
+              lon: -79.7,
+            },
+          },
+        ],
+      },
+      currentLegIndex: 0,
+      isWalkingLeg: true,
+      nextTransitLeg: {
+        mode: 'BUS',
+        tripId: 'scheduled-trip',
+        route: {
+          id: '11',
+          shortName: '11',
+          color: '#AA0000',
+        },
+        from: {
+          lat: 44.4,
+          lon: -79.7,
+        },
+      },
+      vehicles: [
+        {
+          id: 'far-scheduled-bus',
+          tripId: 'scheduled-trip',
+          routeId: '11',
+          coordinate: {
+            latitude: 44.46,
+            longitude: -79.7,
+          },
+        },
+        {
+          id: 'near-approaching-bus',
+          tripId: 'near-trip',
+          routeId: '11',
+          coordinate: {
+            latitude: 44.405,
+            longitude: -79.7,
+          },
+        },
+      ],
+      nextTransitProximityVehicle: {
+        id: 'near-approaching-bus',
+        tripId: 'near-trip',
+        routeId: '11',
+        coordinate: {
+          latitude: 44.405,
+          longitude: -79.7,
+        },
+      },
+      routePathsByRouteId: new Map(),
+    });
+
+    expect(walkingBusMarker.vehicle.id).toBe('near-approaching-bus');
+    expect(walkingBusMarker.latitude).toBe(44.405);
+  });
+
   test('buildTrackedBusMarker falls back to route match when trip match is unavailable', () => {
     const trackedBusMarker = buildTrackedBusMarker({
       currentTransitLeg: {

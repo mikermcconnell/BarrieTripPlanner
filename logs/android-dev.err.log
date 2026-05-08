@@ -1,0 +1,13 @@
+adb.exe: error: no devices/emulators found
+adb.exe: no devices/emulators found
+Expo Android bundle warmup failed at http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=android&dev=true&
+hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable. Unable 
+to connect to the remote server
+At C:\Users\Mike McConnell\Documents\mike_apps\BTTP\scripts\android-dev.ps1:141 char:9
++         throw "Expo Android bundle warmup failed at $bundleUrl. $($_. ...
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Expo Android bu...e remote server:String) [], RuntimeException
+    + FullyQualifiedErrorId : Expo Android bundle warmup failed at http://127.0.0.1:8081/node_modules/expo/AppEntry.bu 
+   ndle?platform=android&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_trans  
+  formProfile=hermes-stable. Unable to connect to the remote server
+ 

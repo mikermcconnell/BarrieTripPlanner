@@ -1,0 +1,92 @@
+<svg width="1500" height="720" viewBox="0 0 1500 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.24"/>
+    </filter>
+    <linearGradient id="mapBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef7f4"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#d7e2e0" stroke-width="1" opacity="0.55"/>
+    </pattern>
+    <style>
+      .title { font: 900 30px Inter, Segoe UI, Arial, sans-serif; fill: #102a43; }
+      .subtitle { font: 600 16px Inter, Segoe UI, Arial, sans-serif; fill: #486581; }
+      .route { font: 900 36px Inter, Segoe UI, Arial, sans-serif; fill: #fff; letter-spacing: -1px; }
+      .arrow { font: 900 34px Inter, Segoe UI, Arial, sans-serif; fill: #fff; }
+      .mini { font: 800 14px Inter, Segoe UI, Arial, sans-serif; fill: #0b5cad; letter-spacing: .08em; }
+      .note { font: 600 15px Inter, Segoe UI, Arial, sans-serif; fill: #52616b; }
+      .blue { fill: #0b5cad; }
+      .pale { fill: #dbeafe; }
+      .line { stroke: #0b5cad; stroke-width: 14; stroke-linecap: round; opacity: .28; }
+    </style>
+  </defs>
+  <rect width="1500" height="720" fill="#f8fbff"/>
+  <text x="54" y="72" class="title">Option 3 iterations: same route styling + opposing direction arrows</text>
+  <text x="54" y="104" class="subtitle">All three keep 7A and 7B side-by-side with matching blue tabs; direction is the differentiator.</text>
+
+  <g transform="translate(42 145) scale(.48)">
+    <rect width="900" height="520" rx="26" fill="url(#mapBg)"/>
+    <rect width="900" height="520" rx="26" fill="url(#grid)" opacity=".9"/>
+    <text x="58" y="76" class="title">1. Arrow rail</text>
+      <g transform="translate(200 205)" filter="url(#shadow)">
+    <line x1="32" y1="46" x2="468" y2="46" class="line"/>
+    <rect x="0" y="0" width="220" height="92" rx="22" class="blue"/>
+    <rect x="228" y="0" width="220" height="92" rx="22" class="blue"/>
+    <text x="42" y="58" class="arrow">←</text>
+    <text x="98" y="60" class="route">7A</text>
+    <text x="282" y="60" class="route">7B</text>
+    <text x="380" y="58" class="arrow">→</text>
+    <path d="M104 104 l12 14 l12 -14" class="blue"/>
+    <path d="M332 104 l12 14 l12 -14" class="blue"/>
+  </g>
+  <g transform="translate(248 342)">
+    <text x="0" y="0" class="mini">← 7A</text>
+    <text x="248" y="0" class="mini">7B →</text>
+  </g>
+  </g>
+  <g transform="translate(532 145) scale(.48)">
+    <rect width="900" height="520" rx="26" fill="url(#mapBg)"/>
+    <rect width="900" height="520" rx="26" fill="url(#grid)" opacity=".9"/>
+    <text x="58" y="76" class="title">2. Directional caps</text>
+      <g transform="translate(192 206)" filter="url(#shadow)">
+    <line x1="24" y1="46" x2="492" y2="46" class="line"/>
+    <path d="M0 46 L44 0 H224 Q248 0 248 24 V68 Q248 92 224 92 H44 Z" class="blue"/>
+    <path d="M500 46 L456 0 H276 Q252 0 252 24 V68 Q252 92 276 92 H456 Z" class="blue"/>
+    <text x="30" y="59" class="arrow">←</text>
+    <text x="102" y="60" class="route">7A</text>
+    <text x="332" y="60" class="route">7B</text>
+    <text x="430" y="59" class="arrow">→</text>
+    <path d="M112 104 l12 14 l12 -14" class="blue"/>
+    <path d="M364 104 l12 14 l12 -14" class="blue"/>
+  </g>
+  <g transform="translate(254 342)">
+    <text x="0" y="0" class="mini">A branch points left</text>
+    <text x="262" y="0" class="mini">B branch points right</text>
+  </g>
+  </g>
+  <g transform="translate(1022 145) scale(.48)">
+    <rect width="900" height="520" rx="26" fill="url(#mapBg)"/>
+    <rect width="900" height="520" rx="26" fill="url(#grid)" opacity=".9"/>
+    <text x="58" y="76" class="title">3. Explicit labels</text>
+      <g transform="translate(202 196)" filter="url(#shadow)">
+    <line x1="24" y1="62" x2="456" y2="62" class="line"/>
+    <rect x="0" y="26" width="212" height="84" rx="21" class="blue"/>
+    <rect x="236" y="26" width="212" height="84" rx="21" class="blue"/>
+    <rect x="18" y="0" width="176" height="32" rx="16" fill="#ffffff" stroke="#0b5cad" stroke-width="3"/>
+    <rect x="254" y="0" width="176" height="32" rx="16" fill="#ffffff" stroke="#0b5cad" stroke-width="3"/>
+    <text x="65" y="23" class="mini">← THIS WAY</text>
+    <text x="291" y="23" class="mini">THIS WAY →</text>
+    <text x="68" y="82" class="route">7A</text>
+    <text x="304" y="82" class="route">7B</text>
+    <path d="M94 122 l12 14 l12 -14" class="blue"/>
+    <path d="M330 122 l12 14 l12 -14" class="blue"/>
+  </g>
+  <g transform="translate(258 360)">
+    <text x="0" y="0" class="mini">Label-first direction cue</text>
+    <text x="260" y="0" class="mini">Most explicit option</text>
+  </g>
+  </g>
+  <text x="54" y="655" class="note">Recommendation: Iteration 1. It is compact, symmetric, and clearly shows 7A going one way while 7B goes the other.</text>
+</svg>

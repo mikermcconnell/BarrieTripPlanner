@@ -7,10 +7,6 @@ import Icon from './Icon';
 
 const STATUS_BAR_OFFSET = Platform.OS === 'android' ? Constants.statusBarHeight : 0;
 
-export const shouldShowRoutesTooltip = ({ selectedCount, showRoutesHint, enableRoutesHint }) => (
-    enableRoutesHint && showRoutesHint && selectedCount === 0
-);
-
 export const getRouteSummaryChipStyles = ({ selectedCount }) => [
     styles.filterChip,
     styles.routeSummaryChip,
@@ -63,10 +59,7 @@ const HomeScreenControls = ({
     onToggleZones,
     zoneCount = 0,
     onOpenFilterSheet,
-    showRoutesTooltipOnOpen = true,
 }) => {
-    const [showRoutesHint, setShowRoutesHint] = React.useState(showRoutesTooltipOnOpen);
-
     const routeAlertsMap = useMemo(() => {
         const map = new Map();
         serviceAlerts.forEach((alert) => {
@@ -93,27 +86,8 @@ const HomeScreenControls = ({
     const routeSummaryChipStyles = getRouteSummaryChipStyles({
         selectedCount,
     });
-    const showRoutesTooltip = shouldShowRoutesTooltip({
-        selectedCount,
-        showRoutesHint,
-        enableRoutesHint: showRoutesTooltipOnOpen,
-    });
-
-    React.useEffect(() => {
-        if (!showRoutesTooltipOnOpen || selectedCount > 0) {
-            setShowRoutesHint(false);
-            return undefined;
-        }
-
-        const hideTimer = setTimeout(() => {
-            setShowRoutesHint(false);
-        }, 3000);
-
-        return () => clearTimeout(hideTimer);
-    }, [showRoutesTooltipOnOpen, selectedCount]);
 
     const handleOpenFilterSheet = useCallback(() => {
-        setShowRoutesHint(false);
         onOpenFilterSheet?.();
     }, [onOpenFilterSheet]);
 
@@ -248,11 +222,6 @@ const HomeScreenControls = ({
                 <Icon name="Settings" size={16} color={COLORS.primaryDark} />
             </TouchableOpacity>
 
-            {showRoutesTooltip && (
-                <View pointerEvents="none" style={styles.routesTooltip}>
-                    <Text style={styles.routesTooltipText}>Routes & map options</Text>
-                </View>
-            )}
         </View>
     );
 };
@@ -427,22 +396,6 @@ const styles = StyleSheet.create({
         flexShrink: 0,
         borderWidth: 1,
         borderColor: 'rgba(223, 225, 230, 0.8)',
-    },
-    routesTooltip: {
-        position: 'absolute',
-        top: 48,
-        left: SPACING.md,
-        paddingVertical: 5,
-        paddingHorizontal: SPACING.sm + 4,
-        borderRadius: BORDER_RADIUS.round,
-        backgroundColor: COLORS.textPrimary,
-        ...SHADOWS.small,
-    },
-    routesTooltipText: {
-        color: COLORS.white,
-        fontSize: FONT_SIZES.xs,
-        fontFamily: FONT_FAMILIES.semibold,
-        letterSpacing: 0.2,
     },
 });
 

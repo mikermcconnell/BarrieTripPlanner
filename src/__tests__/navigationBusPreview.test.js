@@ -182,6 +182,43 @@ describe('navigationBusPreview', () => {
         { latitude: 44.302, longitude: -79.698 },
       ],
       color: '#3366FF',
+      isStaticApproach: true,
+    });
+  });
+
+  test('uses the forward wrap segment for closed loop route approaches', () => {
+    const line = buildBusApproachLine({
+      transitLeg: {
+        tripId: 'loop-trip',
+        from: { lat: 44.0, lon: -79.0 },
+        to: { lat: 44.0, lon: -78.99 },
+        route: { color: '#B2D235' },
+      },
+      vehicle: {
+        coordinate: { latitude: 44.0, longitude: -78.97 },
+      },
+      shapes: {
+        loopShape: [
+          { latitude: 44.0, longitude: -79.0 },
+          { latitude: 44.0, longitude: -78.99 },
+          { latitude: 44.0, longitude: -78.98 },
+          { latitude: 44.0, longitude: -78.97 },
+          { latitude: 44.0, longitude: -79.0 },
+        ],
+      },
+      tripMapping: {
+        'loop-trip': { shapeId: 'loopShape' },
+      },
+      routePathsByRouteId: new Map(),
+    });
+
+    expect(line).toEqual({
+      id: 'nav-bus-approach-loop-trip',
+      coordinates: [
+        { latitude: 44.0, longitude: -78.97 },
+        { latitude: 44.0, longitude: -79.0 },
+      ],
+      color: '#B2D235',
     });
   });
 

@@ -287,7 +287,16 @@ const raptorForward = (
   activeServices,
   excludeTrips = null
 ) => {
-  const { stopDepartures, transfers, stopIndex, tripIndex, routeStopSequences, stopTimes, stopTimesIndex } = routingData;
+  const {
+    stopDepartures,
+    transfers,
+    stopIndex,
+    tripIndex,
+    routeStopSequences,
+    routePatternTripIds,
+    stopTimes,
+    stopTimesIndex,
+  } = routingData;
   const maxRounds = ROUTING_CONFIG.MAX_TRANSFERS + 1;
   const maxDepartureTime = departureTime + (ROUTING_CONFIG.TIME_WINDOW || 7200);
 
@@ -337,8 +346,10 @@ const raptorForward = (
       // Get both directions
       const directions = routeStopSequences[routeId] || {};
 
-      Object.keys(directions).forEach((directionId) => {
-        const stopSequence = directions[directionId];
+      Object.keys(directions).forEach((sequenceKey) => {
+        const directionId = parseInt(sequenceKey, 10);
+        const stopSequence = directions[sequenceKey];
+        const eligibleTripIds = routePatternTripIds?.[routeId]?.[sequenceKey] || null;
         if (!stopSequence || stopSequence.length === 0) return;
 
         let boarding = null; // { stopId, time, tripId, routeId, directionId }
@@ -358,10 +369,11 @@ const raptorForward = (
               stopDepartures,
               stopId,
               routeId,
-              parseInt(directionId, 10),
+              directionId,
               currentTime,
               activeServices,
-              excludeTrips
+              excludeTrips,
+              eligibleTripIds
             );
 
             if (departure && departure.departureTime <= maxDepartureTime) {
@@ -373,7 +385,7 @@ const raptorForward = (
                   tripId: departure.tripId,
                   tripDepartureTime: departure.departureTime,
                   routeId,
-                  directionId: parseInt(directionId, 10),
+                  directionId,
                   headsign: departure.headsign,
                 };
               } else {
@@ -393,7 +405,7 @@ const raptorForward = (
                     tripId: departure.tripId,
                     tripDepartureTime: departure.departureTime,
                     routeId,
-                    directionId: parseInt(directionId, 10),
+                    directionId,
                     headsign: departure.headsign,
                   };
                 }
@@ -515,7 +527,8 @@ const getNextDepartureForRouteDirection = (
   directionId,
   afterTime,
   activeServices,
-  excludeTrips = null
+  excludeTrips = null,
+  eligibleTripIds = null
 ) => {
   const departures = stopDepartures[stopId] || [];
 
@@ -526,7 +539,8 @@ const getNextDepartureForRouteDirection = (
       dep.directionId === directionId &&
       activeServices.has(dep.serviceId) &&
       dep.pickupType !== 1 && // pickupType 1 = no pickup
-      !(excludeTrips && excludeTrips.has(dep.tripId)) // skip already-found trips
+      !(excludeTrips && excludeTrips.has(dep.tripId)) && // skip already-found trips
+      (!eligibleTripIds || eligibleTripIds.has(dep.tripId))
     ) {
       return dep;
     }

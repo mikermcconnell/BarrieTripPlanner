@@ -54,6 +54,9 @@ describe('tripItineraryRanking', () => {
           endTime: BASE_TIME + 10 * 60 * 1000,
           route: { shortName: '7A' },
           headsign: 'North',
+          blockId: 'block-7',
+          from: { stopId: 'start' },
+          to: { stopId: 'terminal' },
         },
         {
           mode: 'BUS',
@@ -61,6 +64,9 @@ describe('tripItineraryRanking', () => {
           endTime: BASE_TIME + 20 * 60 * 1000,
           route: { shortName: '7B' },
           headsign: 'South',
+          blockId: 'block-7',
+          from: { stopId: 'terminal' },
+          to: { stopId: 'end' },
         },
       ],
     });

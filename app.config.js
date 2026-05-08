@@ -40,8 +40,8 @@ function readGoogleWebClientId(googleServicesFile) {
 module.exports = ({ config }) => {
   const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || packageJson.version;
   const mergedConfig = {
-    ...(appJson?.expo || {}),
     ...(config || {}),
+    ...(appJson?.expo || {}),
   };
   const resolvedConfig = JSON.parse(JSON.stringify(mergedConfig));
   const googleServicesFile = resolveGoogleServicesFile(resolvedConfig);

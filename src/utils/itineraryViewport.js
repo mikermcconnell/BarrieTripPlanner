@@ -142,6 +142,22 @@ export const collectItineraryViewportCoordinates = (
   return coordinates;
 };
 
+export const collectTripPreviewViewportCoordinates = (itinerary, busApproachLines = []) => {
+  const coordinates = collectItineraryViewportCoordinates(itinerary);
+
+  busApproachLines.forEach((line) => {
+    if (!Array.isArray(line?.coordinates)) return;
+    line.coordinates.forEach((coordinate) => {
+      const normalized = normalizeCoordinate(coordinate);
+      if (normalized) {
+        coordinates.push(normalized);
+      }
+    });
+  });
+
+  return coordinates;
+};
+
 export const collectItineraryEndpointCoordinates = (itinerary) =>
   collectItineraryViewportCoordinates(itinerary, {
     includeLegGeometry: false,

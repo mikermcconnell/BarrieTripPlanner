@@ -88,6 +88,22 @@ describe('api-proxy route hardening', () => {
     expect(options.headers).toEqual({ 'User-Agent': 'BarrieTransitProxy/1.0' });
   });
 
+  test('proxies walking directions using LocationIQ path coordinates', async () => {
+    const app = require('../index');
+    const response = await request(app)
+      .get('/api/walking-directions?from=44.3801,-79.7011&to=44.3822,-79.6992')
+      .set('x-api-token', 'test-proxy-token');
+
+    expect(response.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url] = global.fetch.mock.calls[0];
+    expect(url).toContain('/directions/walking/-79.7011,44.3801;-79.6992,44.3822?');
+    expect(url).not.toContain('coordinates=');
+    expect(url).not.toContain('format=json');
+    expect(url).toContain('steps=true');
+    expect(url).toContain('geometries=polyline');
+  });
+
   test('returns detour logs for authorized requests', async () => {
     mockGetDetourHistory.mockResolvedValue([
       { routeId: '8A', eventType: 'DETOUR_DETECTED', timestamp: 1712505600000 },
@@ -288,6 +304,52 @@ describe('api-proxy route hardening', () => {
     expect(response.body.enabled).toBe(false);
   });
 
+  test('news-run-once accepts the trusted scheduler token and runs one tick', async () => {
+    const newsTick = jest.fn().mockResolvedValue();
+    jest.doMock('../newsWorker', () => ({
+      tick: newsTick,
+      start: jest.fn(),
+      stop: jest.fn(),
+      getStatus: jest.fn(() => ({ running: false, tickCount: 0 })),
+    }));
+
+    process.env = {
+      ...ORIGINAL_ENV,
+      NODE_ENV: 'test',
+      LOCATIONIQ_API_KEY: 'test-locationiq-key',
+      REQUIRE_API_AUTH: 'true',
+      REQUIRE_FIREBASE_AUTH: 'false',
+      ALLOW_SHARED_TOKEN_AUTH: 'true',
+      API_PROXY_TOKEN: 'test-proxy-token',
+      DETOUR_WORKER_ENABLED: 'false',
+      NEWS_WORKER_ENABLED: 'true',
+      NEWS_WORKER_MODE: 'scheduled',
+      SCHEDULER_API_TOKEN: 'test-scheduler-token',
+    };
+
+    const app = require('../index');
+    const response = await request(app)
+      .post('/api/news-run-once')
+      .set('x-scheduler-token', 'test-scheduler-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ ok: true }));
+    expect(newsTick).toHaveBeenCalledTimes(1);
+  });
+
+  test('news-run-once returns disabled when the news worker is off', async () => {
+    const app = require('../index');
+    const response = await request(app)
+      .post('/api/news-run-once')
+      .set('x-api-token', 'test-proxy-token');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual(expect.objectContaining({
+      ok: false,
+      error: 'News worker is disabled',
+    }));
+  });
+
   test('health endpoint reports auth and feature posture without authentication', async () => {
     process.env = {
       ...ORIGINAL_ENV,
@@ -319,6 +381,8 @@ describe('api-proxy route hardening', () => {
       features: expect.objectContaining({
         locationIqProxyConfigured: true,
         detourWorkerEnabled: true,
+        newsWorkerEnabled: false,
+        newsWorkerMode: 'interval',
         detourHistoryEnabled: true,
         surveyAdminUsesApiAuth: true,
         detourDebugKeyEnabled: false,

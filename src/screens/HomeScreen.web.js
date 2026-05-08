@@ -9,8 +9,12 @@ import { useTransitStatic, useTransitRealtime } from '../context/TransitContext'
 import { useAuth } from '../context/AuthContext';
 import { MAP_CONFIG, PERFORMANCE_BUDGETS } from '../config/constants';
 import {
+  BUS_APPROACH_LINE_CAP,
   BUS_APPROACH_LINE_DASH_ARRAY,
+  BUS_APPROACH_LINE_OUTLINE_COLOR,
+  BUS_APPROACH_LINE_OUTLINE_WIDTH,
   BUS_APPROACH_LINE_OPACITY,
+  BUS_APPROACH_LINE_STROKE_WIDTH,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
 import { getPlatformMapForStop } from '../config/platformMaps';
@@ -37,15 +41,18 @@ import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../util
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
 import {
+  getDetourLabelDensity,
   getDetourGeometryOverlayProps,
   shouldShowDetailedDetourOverlay,
 } from '../utils/detourViewMode';
 import { escapeHtml } from '../utils/htmlUtils';
 import {
+  getRouteLineBadgeArrowRotation,
   getRouteLineBadgeDimensions,
   getRouteLineBadgeTextColor,
 } from '../components/RouteLineBadge';
-import { buildRouteLineLabelMarkers } from '../utils/routeLineLabelMarkers';
+import { cancelLocationCenterRequest } from '../utils/locationCenterRequest';
+import { shouldAutoFitTripPreview } from '../utils/tripPreviewAutoFit';
 
 // Web-only imports
 import WebMapView, { WebBusMarker, WebHtmlMarker, WebRoutePolyline, WebStopMarker } from '../components/WebMapView';
@@ -89,6 +96,12 @@ import {
 const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_ROUTE_LABEL_DEBUG === 'true';
 const PERF_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_PERF_DEBUG === 'true';
 const LOCATION_CENTER_ERROR_MESSAGE = 'We could not get your location. Check that location services are on and that Barrie Transit has location permission.';
+const MAP_ZOOM_RENDER_STEP = 0.25;
+const getRenderZoom = (zoom) => (
+  Number.isFinite(zoom)
+    ? Math.round(zoom / MAP_ZOOM_RENDER_STEP) * MAP_ZOOM_RENDER_STEP
+    : zoom
+);
 
 // SVG Icons as components - Refined for premium feel
 const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
@@ -244,8 +257,80 @@ const buildTripRouteBadgeHtml = (route) => {
 const buildRouteLineBadgeHtml = (marker) => {
   const label = escapeHtml(marker.label || '');
   const color = marker.color || '#1A73E8';
-  const textColor = getRouteLineBadgeTextColor(color);
+  const branches = Array.isArray(marker.branches) ? marker.branches.slice(0, 2) : [];
+  if (branches.length >= 2) {
+    const branchHtml = branches.map((branch) => {
+      const branchLabel = escapeHtml(branch.label || '');
+      const direction = branch.direction === 'left' ? 'left' : 'right';
+      const directionLabel = direction === 'left' ? '← THIS WAY' : 'THIS WAY →';
+      return `
+        <div style="
+          width:104px;
+          height:58px;
+          border-radius:14px;
+          background:${color};
+          color:#FFFFFF;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          padding:0 14px;
+          box-sizing:border-box;
+        ">
+          <div aria-label="This way ${direction}" style="
+            min-width:80px;
+            height:20px;
+            border-radius:10px;
+            background:#FFFFFF;
+            color:${color};
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding:0 8px;
+            margin-bottom:3px;
+            box-sizing:border-box;
+            font-size:9px;
+            font-weight:900;
+            line-height:10px;
+            letter-spacing:0.4px;
+          ">${directionLabel}</div>
+          <div style="
+            font-size:22px;
+            font-weight:900;
+            line-height:25px;
+            letter-spacing:-0.3px;
+          ">${branchLabel}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div aria-label="Route ${branches.map((branch) => escapeHtml(branch.label || '')).join(' and ')}" style="
+        border:3px solid ${color};
+        border-radius:18px;
+        background:#FFFFFF;
+        box-shadow:0 3px 10px rgba(15,23,42,0.18);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
+        padding:5px;
+        pointer-events:none;
+        user-select:none;
+        box-sizing:border-box;
+      ">
+        ${branchHtml}
+      </div>
+    `;
+  }
+
+  const textColor = getRouteLineBadgeTextColor(color) === '#111827' ? '#111827' : color;
+  const arrowTextColor = getRouteLineBadgeTextColor(color);
+  const arrowRotation = getRouteLineBadgeArrowRotation(marker.bearing);
   const dimensions = getRouteLineBadgeDimensions(label);
+  const arrowDegrees = Number.isFinite(Number(marker.bearing))
+    ? Math.round(((Number(marker.bearing) % 360) + 360) % 360)
+    : null;
 
   return `
     <div aria-label="Route ${label}" style="
@@ -253,20 +338,39 @@ const buildRouteLineBadgeHtml = (marker) => {
       height:${dimensions.height}px;
       border-radius:${dimensions.borderRadius}px;
       background:${color};
-      color:${textColor};
-      border:2.5px solid #FFFFFF;
-      box-shadow:0 2px 7px rgba(15,23,42,0.24);
+      color:${arrowTextColor};
+      border:2px solid ${color};
+      box-shadow:0 2px 8px rgba(15,23,42,0.18);
       display:flex;
       align-items:center;
       justify-content:center;
+      gap:6px;
+      padding:0 6px;
       font-size:12px;
-      font-weight:800;
+      font-weight:900;
       line-height:1;
       letter-spacing:0.1px;
       pointer-events:none;
       user-select:none;
       box-sizing:border-box;
-    ">${label}</div>
+    ">
+      <span>${label}</span>
+      <span aria-label="${arrowDegrees === null ? 'Route direction' : `Route direction ${arrowDegrees} degrees`}" style="
+        width:16px;
+        height:14px;
+        border-radius:7px;
+        background:#FFFFFF;
+        color:${textColor};
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:11px;
+        font-weight:900;
+        line-height:12px;
+        transform:rotate(${arrowRotation});
+        transform-origin:center;
+      ">→</span>
+    </div>
   `;
 };
 
@@ -333,6 +437,7 @@ const HomeScreen = ({ route }) => {
     () => clusterSavedPlaceMapMarkers(getSavedPlaceMapMarkers(rankedSavedPlaces)),
     [rankedSavedPlaces]
   );
+  const tripPreviewFitKeyRef = useRef(null);
   const {
     routes,
     stops,
@@ -417,6 +522,7 @@ const HomeScreen = ({ route }) => {
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const pendingLocationCenterRef = useRef(0);
+  const tripPreviewUserMovedMapRef = useRef(false);
   const perfRef = useRef({ lastWarnTs: 0 });
   const [expandedAlertRoute, setExpandedAlertRoute] = useState(null); // For showing alert details
   const [showZones, setShowZones] = useState(true);
@@ -667,6 +773,9 @@ const HomeScreen = ({ route }) => {
     tripFrom: tripFromLocation,
     tripTo: tripToLocation,
   });
+  const busApproachViewportCoordinates = useMemo(() => (
+    busApproachLines.flatMap((line) => (Array.isArray(line?.coordinates) ? line.coordinates : []))
+  ), [busApproachLines]);
 
   const itinerariesWithStopClosureNotices = useMemo(
     () => annotateItinerariesWithStopClosures(itineraries, transitNewsImpacts),
@@ -675,6 +784,7 @@ const HomeScreen = ({ route }) => {
   const selectedItinerary = isTripPlanningMode
     ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
+  const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
   const shouldCompactTripSearchHeader =
     hasTripSearched && !isTripLoading && itinerariesWithStopClosureNotices.length > 0;
 
@@ -841,7 +951,7 @@ const HomeScreen = ({ route }) => {
 
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
-    Math.round(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
+    getRenderZoom(Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2)
   );
 
   // Zoom-dependent polyline weight
@@ -934,13 +1044,19 @@ const HomeScreen = ({ route }) => {
   }, [displayedVehicles.length, displayedStopsForMap.length]);
 
   const cancelPendingLocationCenter = useCallback(() => {
-    pendingLocationCenterRef.current += 1;
+    cancelLocationCenterRequest({
+      pendingRef: pendingLocationCenterRef,
+      setIsCenteringOnUserLocation,
+    });
   }, []);
 
   const handleMapUserInteraction = useCallback(() => {
     setUserHasInteracted(true);
+    if (isTripPreviewMode) {
+      tripPreviewUserMovedMapRef.current = true;
+    }
     cancelPendingLocationCenter();
-  }, [cancelPendingLocationCenter]);
+  }, [cancelPendingLocationCenter, isTripPreviewMode]);
 
   // Handle map region change
   const handleRegionChange = (region) => {
@@ -950,8 +1066,9 @@ const HomeScreen = ({ route }) => {
         : Date.now();
     setMapRegion(region);
     // Derive zoom from latitudeDelta
-    const zoom = Math.round(Math.log(360 / region.latitudeDelta) / Math.LN2);
-    setCurrentZoom(zoom);
+    const zoom = Math.log(360 / region.latitudeDelta) / Math.LN2;
+    const renderZoom = getRenderZoom(zoom);
+    setCurrentZoom((prevZoom) => (prevZoom === renderZoom ? prevZoom : renderZoom));
 
     if (!PERF_DEBUG) return;
     const duration =
@@ -1102,33 +1219,38 @@ const HomeScreen = ({ route }) => {
       return;
     }
 
-    fitMapToItinerary(selectedItinerary);
-  }, [fitMapToItinerary, selectedItinerary]);
+    fitMapToItinerary(selectedItinerary, busApproachViewportCoordinates);
+  }, [busApproachViewportCoordinates, fitMapToItinerary, selectedItinerary]);
 
+  useEffect(() => {
+    const decision = shouldAutoFitTripPreview({
+      isTripPreviewMode,
+      selectedItinerary,
+      selectedItineraryIndex,
+      lastFitKey: tripPreviewFitKeyRef.current,
+      userHasMovedMap: tripPreviewUserMovedMapRef.current,
+    });
 
-  // Trip preview mode - hide regular map elements when viewing trip results
-  const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
+    if (!isTripPreviewMode || !selectedItinerary || !decision.fitKey) {
+      tripPreviewFitKeyRef.current = null;
+      tripPreviewUserMovedMapRef.current = false;
+      return;
+    }
 
-  const routeLineLabelMarkers = useMemo(() => buildRouteLineLabelMarkers({
-    shapes: displayedShapes,
-    currentZoom,
-    routeShortNameMap,
-    selectedRouteIds: selectedRoutes,
-    hoveredRouteId,
+    if (!decision.shouldFit) return;
+
+    fitMapToItinerary(selectedItinerary, busApproachViewportCoordinates);
+    tripPreviewFitKeyRef.current = decision.fitKey;
+    tripPreviewUserMovedMapRef.current = false;
+  }, [
+    busApproachViewportCoordinates,
+    fitMapToItinerary,
     isTripPreviewMode,
-    hasDetourFocus,
-    isDetourView,
-    maxLabels: hasDetourFocus || isDetourView ? 8 : 28,
-  }), [
-    displayedShapes,
-    currentZoom,
-    routeShortNameMap,
-    selectedRoutes,
-    hoveredRouteId,
-    isTripPreviewMode,
-    hasDetourFocus,
-    isDetourView,
+    selectedItinerary,
+    selectedItineraryIndex,
   ]);
+
+  const routeLineLabelMarkers = useMemo(() => [], []);
 
   const viewTripDetails = (itinerary) => {
     navigation.navigate('TripDetails', { itinerary });
@@ -1297,6 +1419,8 @@ const HomeScreen = ({ route }) => {
             key={`detour-${overlay.routeId}`}
             {...getDetourGeometryOverlayProps({ overlay, isDetourView, hasDetourFocus })}
             renderMode="geometry"
+            currentZoom={currentZoom}
+            labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
             onPress={() => handleDetourOverlayPress(overlay.routeId)}
           />
         ))}
@@ -1325,6 +1449,8 @@ const HomeScreen = ({ route }) => {
             key={`detour-stops-${overlay.routeId}`}
             {...overlay}
             renderMode="markers"
+            currentZoom={currentZoom}
+            labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
             onPress={() => handleDetourOverlayPress(overlay.routeId)}
           />
         ))}
@@ -1356,6 +1482,8 @@ const HomeScreen = ({ route }) => {
             key={`detour-callouts-${overlay.routeId}`}
             {...overlay}
             renderMode="callouts"
+            currentZoom={currentZoom}
+            labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
             onPress={() => handleDetourOverlayPress(overlay.routeId)}
           />
         ))}
@@ -1369,7 +1497,7 @@ const HomeScreen = ({ route }) => {
               dashArray={route.isOnDemand ? '12, 6' : null}
               lineCap="round"
               lineJoin="round"
-              opacity={route.isWalk ? 0.9 : 1}
+              opacity={1}
               outlineWidth={0}
               outlineColor={undefined}
               interactive={false}
@@ -1406,10 +1534,12 @@ const HomeScreen = ({ route }) => {
             key={line.id}
             coordinates={line.coordinates}
             color={line.color}
-            strokeWidth={3}
+            strokeWidth={BUS_APPROACH_LINE_STROKE_WIDTH}
             dashArray={BUS_APPROACH_LINE_DASH_ARRAY}
+            lineCap={BUS_APPROACH_LINE_CAP}
             opacity={BUS_APPROACH_LINE_OPACITY}
-            outlineWidth={0}
+            outlineWidth={BUS_APPROACH_LINE_OUTLINE_WIDTH}
+            outlineColor={BUS_APPROACH_LINE_OUTLINE_COLOR}
             interactive={false}
           />
         ))}
@@ -2402,7 +2532,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.grey100,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },

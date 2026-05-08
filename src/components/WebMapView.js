@@ -455,6 +455,7 @@ const addLineLayers = ({
   dashArray,
   offset,
   routeLabel,
+  labelStyle,
   showArrows,
 }) => {
   map.addSource(sourceId, {
@@ -525,25 +526,30 @@ const addLineLayers = ({
   }
 
   if (routeLabel) {
+    const resolvedLabelStyle = {
+      ...ROUTE_LINE_LABEL_STYLE,
+      ...(labelStyle || {}),
+    };
+
     map.addLayer({
       id: labelId,
       type: 'symbol',
       source: sourceId,
       layout: {
         'symbol-placement': 'line',
-        'symbol-spacing': ROUTE_LINE_LABEL_STYLE.spacing,
+        'symbol-spacing': resolvedLabelStyle.spacing,
         'text-field': routeLabel,
-        'text-size': ROUTE_LINE_LABEL_STYLE.size,
-        'text-offset': ROUTE_LINE_LABEL_STYLE.offset,
+        'text-size': resolvedLabelStyle.size,
+        'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
         'text-rotation-alignment': 'map',
-        'text-allow-overlap': false,
-        'text-ignore-placement': false,
+        'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
+        'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
       },
       paint: {
-        'text-color': ROUTE_LINE_LABEL_STYLE.color,
-        'text-halo-color': ROUTE_LINE_LABEL_STYLE.haloColor,
-        'text-halo-width': ROUTE_LINE_LABEL_STYLE.haloWidth,
-        'text-opacity': ROUTE_LINE_LABEL_STYLE.opacity,
+        'text-color': resolvedLabelStyle.color,
+        'text-halo-color': resolvedLabelStyle.haloColor,
+        'text-halo-width': resolvedLabelStyle.haloWidth,
+        'text-opacity': resolvedLabelStyle.opacity,
       },
     });
   }
@@ -565,6 +571,7 @@ const WebRoutePolylineComponent = ({
   onPress,
   interactive = true,
   routeLabel = null,
+  labelStyle = null,
   showArrows = false,
 }) => {
   const context = useMapContext();
@@ -610,6 +617,7 @@ const WebRoutePolylineComponent = ({
       dashArray,
       offset,
       routeLabel,
+      labelStyle,
       showArrows,
     });
 
@@ -643,6 +651,7 @@ const WebRoutePolylineComponent = ({
     outlineColor,
     outlineWidth,
     routeLabel,
+    labelStyle,
     showArrows,
     strokeWidth,
   ]);
@@ -651,6 +660,100 @@ const WebRoutePolylineComponent = ({
 };
 
 export const WebRoutePolyline = memo(WebRoutePolylineComponent);
+
+const WebLineLabelLayerComponent = ({
+  labels = [],
+  labelStyle = {},
+}) => {
+  const context = useMapContext();
+  const baseId = useStableMapId('web-line-labels');
+
+  useEffect(() => {
+    if (!context?.map || !context.isReady || !Array.isArray(labels) || labels.length === 0) {
+      return undefined;
+    }
+
+    const features = labels
+      .map((label) => {
+        const coordinates = Array.isArray(label.coordinates)
+          ? label.coordinates
+              .filter((coord) => Number.isFinite(coord?.latitude) && Number.isFinite(coord?.longitude))
+              .map((coord) => [coord.longitude, coord.latitude])
+          : [];
+
+        if (coordinates.length < 2) return null;
+
+        return {
+          type: 'Feature',
+          properties: {
+            label: label.label,
+            kind: label.kind,
+            priority: label.priority,
+            sortKey: label.sortKey,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (features.length === 0) {
+      return undefined;
+    }
+
+    const sourceId = `${baseId}-source`;
+    const layerId = `${baseId}-symbols`;
+    const resolvedLabelStyle = {
+      ...ROUTE_LINE_LABEL_STYLE,
+      ...labelStyle,
+    };
+
+    context.map.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features,
+      },
+    });
+    context.map.addLayer({
+      id: layerId,
+      type: 'symbol',
+      source: sourceId,
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': resolvedLabelStyle.spacing,
+        'symbol-sort-key': ['get', 'sortKey'],
+        'text-field': ['get', 'label'],
+        'text-size': resolvedLabelStyle.size,
+        'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
+        'text-padding': resolvedLabelStyle.textPadding ?? resolvedLabelStyle.padding,
+        'text-letter-spacing': resolvedLabelStyle.textLetterSpacing ?? resolvedLabelStyle.letterSpacing,
+        'text-max-angle': resolvedLabelStyle.textMaxAngle ?? resolvedLabelStyle.maxAngle,
+        'text-keep-upright': true,
+        'text-rotation-alignment': 'map',
+        'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
+        'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
+      },
+      paint: {
+        'text-color': resolvedLabelStyle.color,
+        'text-halo-color': resolvedLabelStyle.haloColor,
+        'text-halo-width': resolvedLabelStyle.haloWidth,
+        'text-opacity': resolvedLabelStyle.opacity,
+      },
+    });
+
+    return () => {
+      removeLayerIfExists(context.map, layerId);
+      removeSourceIfExists(context.map, sourceId);
+    };
+  }, [baseId, context?.isReady, context?.map, labelStyle, labels]);
+
+  return null;
+};
+
+export const WebLineLabelLayer = memo(WebLineLabelLayerComponent);
 
 export const RouteLineLabels = memo(({ coordinates, color, routeLabel }) => (
   <WebRoutePolyline

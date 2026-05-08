@@ -80,15 +80,18 @@ const TripSearchHeader = ({
         <View style={styles.compactHeader}>
           <View style={styles.compactTitleGroup}>
             <Text style={styles.compactEyebrow}>Trip planned</Text>
-            <Text style={styles.compactTime}>{formatTripTimeSummary(timeMode, selectedTime)}</Text>
+            <View style={styles.compactTimePill}>
+              <Icon name="Clock" size={12} color={COLORS.primaryDark} />
+              <Text style={styles.compactTime}>{formatTripTimeSummary(timeMode, selectedTime)}</Text>
+            </View>
           </View>
           <TouchableOpacity
-            style={styles.closeButton}
+            style={styles.compactCloseButton}
             onPress={onClose}
             accessibilityLabel="Close trip planner"
             accessibilityRole="button"
           >
-            <Icon name="X" size={20} color={COLORS.textSecondary} />
+            <Icon name="X" size={18} color={COLORS.success} />
           </TouchableOpacity>
         </View>
         <View style={styles.compactRouteRow}>
@@ -98,12 +101,18 @@ const TripSearchHeader = ({
             <View style={styles.toDot} />
           </View>
           <View style={styles.compactRouteText}>
-            <Text style={styles.compactPlaceText} numberOfLines={1}>
-              {fromText || 'Your location'}
-            </Text>
-            <Text style={styles.compactPlaceText} numberOfLines={1}>
-              {toText || 'Destination'}
-            </Text>
+            <View style={styles.compactPlaceBlock}>
+              <Text style={styles.compactPlaceLabel}>Start</Text>
+              <Text style={styles.compactPlaceText} numberOfLines={1}>
+                {fromText || 'Your location'}
+              </Text>
+            </View>
+            <View style={styles.compactPlaceBlock}>
+              <Text style={styles.compactPlaceLabel}>Destination</Text>
+              <Text style={styles.compactPlaceText} numberOfLines={1}>
+                {toText || 'Destination'}
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.editButton}
@@ -111,6 +120,7 @@ const TripSearchHeader = ({
             accessibilityLabel="Edit trip search"
             accessibilityRole="button"
           >
+            <Icon name="Pencil" size={14} color={COLORS.primaryDark} />
             <Text style={styles.editButtonText}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -139,7 +149,7 @@ const TripSearchHeader = ({
           accessibilityLabel="Close trip planner"
           accessibilityRole="button"
         >
-          <Icon name="X" size={20} color={COLORS.textSecondary} />
+          <Icon name="X" size={20} color={COLORS.success} />
         </TouchableOpacity>
       </View>
 
@@ -355,7 +365,12 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   compactContainer: {
-    padding: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   header: {
     flexDirection: 'row',
@@ -382,45 +397,73 @@ const styles = StyleSheet.create({
   },
   compactHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: SPACING.xxs,
+    marginBottom: SPACING.sm,
   },
   compactTitleGroup: {
     flex: 1,
-    paddingRight: SPACING.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    paddingRight: SPACING.sm,
   },
   compactEyebrow: {
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primaryDark,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
+  },
+  compactTimePill: {
+    minHeight: 24,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   compactTime: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.textPrimary,
-    marginTop: 1,
+    color: COLORS.primaryDark,
   },
   compactRouteRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
+    alignItems: 'stretch',
+    gap: SPACING.sm,
   },
   compactDots: {
     width: 18,
     alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   compactConnectorLine: {
     width: 2,
-    height: 16,
-    backgroundColor: COLORS.grey300,
-    marginVertical: 2,
+    flex: 1,
+    minHeight: 24,
+    backgroundColor: COLORS.borderLight,
+    marginVertical: 4,
   },
   compactRouteText: {
     flex: 1,
-    gap: 2,
+    justifyContent: 'space-between',
+    gap: SPACING.xs,
+  },
+  compactPlaceBlock: {
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  compactPlaceLabel: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 1,
   },
   compactPlaceText: {
     fontSize: FONT_SIZES.sm,
@@ -428,7 +471,12 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   editButton: {
-    paddingVertical: 7,
+    minHeight: 44,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
     paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primarySubtle,
@@ -436,7 +484,16 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.primary,
+    color: COLORS.primaryDark,
+  },
+  compactCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   closeButton: {
     width: 28,

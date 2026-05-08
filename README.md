@@ -287,6 +287,8 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    - `GET /api/health`
    - `GET /api/detour-status`
    - `POST /api/detour-run-once` (recommended in manual/scheduled mode)
+   - `GET /api/news-status`
+   - `POST /api/news-run-once` (for scheduled/manual MyRide news sync)
    - `GET /api/detour-logs?limit=100`
      - Optional filters: `routeId`, `eventType` (comma-separated), `start`, `end`
      - Log event types: `DETOUR_DETECTED`, `DETOUR_UPDATED`, `DETOUR_CLEARED`

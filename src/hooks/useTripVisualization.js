@@ -15,6 +15,8 @@ import {
 } from '../utils/navigationBusPreview';
 
 const BOARDING_PROGRESS_TOLERANCE_METERS = 80;
+const CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS = 60;
+const PROGRESS_CANDIDATE_TIE_TOLERANCE_METERS = 80;
 
 /** Snap a lat/lon to the nearest point on a decoded polyline */
 const snapToPolyline = (lat, lon, polylineCoords) => {
@@ -337,6 +339,104 @@ const getShapeProgress = (shapeCoords, lat, lon) => {
   return { index, meters };
 };
 
+const getShapeCumulativeMeters = (shapeCoords) => {
+  const cumulative = [0];
+  let total = 0;
+
+  for (let i = 1; i < shapeCoords.length; i += 1) {
+    total += haversineDistance(
+      shapeCoords[i - 1].latitude,
+      shapeCoords[i - 1].longitude,
+      shapeCoords[i].latitude,
+      shapeCoords[i].longitude
+    );
+    cumulative.push(total);
+  }
+
+  return cumulative;
+};
+
+const isClosedLoopShape = (shapeCoords) => {
+  if (!Array.isArray(shapeCoords) || shapeCoords.length < 3) {
+    return false;
+  }
+
+  const first = shapeCoords[0];
+  const last = shapeCoords[shapeCoords.length - 1];
+  return haversineDistance(
+    first.latitude,
+    first.longitude,
+    last.latitude,
+    last.longitude
+  ) <= CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS;
+};
+
+const getShapeProgressCandidates = (shapeCoords, lat, lon) => {
+  if (!Array.isArray(shapeCoords) || shapeCoords.length < 2) {
+    return [];
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return [];
+  }
+
+  const cumulative = getShapeCumulativeMeters(shapeCoords);
+  const distances = shapeCoords.map((coord, index) => ({
+    index,
+    meters: cumulative[index],
+    distanceToPoint: haversineDistance(lat, lon, coord.latitude, coord.longitude),
+  }));
+
+  const bestDistance = Math.min(...distances.map((candidate) => candidate.distanceToPoint));
+  return distances
+    .filter((candidate) => (
+      candidate.distanceToPoint <= bestDistance + PROGRESS_CANDIDATE_TIE_TOLERANCE_METERS
+    ))
+    .sort((a, b) => (
+      a.distanceToPoint - b.distanceToPoint ||
+      a.index - b.index
+    ));
+};
+
+const getForwardShapeDistance = (cumulative, fromIndex, toIndex, closedLoop = false) => {
+  if (!Array.isArray(cumulative) || cumulative.length === 0) {
+    return Infinity;
+  }
+
+  if (!closedLoop || toIndex >= fromIndex) {
+    return Math.abs(cumulative[toIndex] - cumulative[fromIndex]);
+  }
+
+  const total = cumulative[cumulative.length - 1];
+  return (total - cumulative[fromIndex]) + cumulative[toIndex];
+};
+
+const getClosedLoopApproachScore = (shapeCoords, vehicleCoord, boardPoint) => {
+  const cumulative = getShapeCumulativeMeters(shapeCoords);
+  const vehicleCandidates = getShapeProgressCandidates(
+    shapeCoords,
+    vehicleCoord.latitude,
+    vehicleCoord.longitude
+  );
+  const boardCandidates = getShapeProgressCandidates(shapeCoords, boardPoint.lat, boardPoint.lon);
+
+  let bestScore = Infinity;
+  vehicleCandidates.forEach((vehicleCandidate) => {
+    boardCandidates.forEach((boardCandidate) => {
+      const score = getForwardShapeDistance(
+        cumulative,
+        vehicleCandidate.index,
+        boardCandidate.index,
+        true
+      );
+      if (score < bestScore) {
+        bestScore = score;
+      }
+    });
+  });
+
+  return bestScore;
+};
+
 const getVehicleDistanceToStop = (vehicle, stop) => {
   if (!hasMarkerCoordinate(vehicle?.coordinate) || !hasCoordinate(stop)) {
     return Infinity;
@@ -348,6 +448,62 @@ const getVehicleDistanceToStop = (vehicle, stop) => {
     stop.lat,
     stop.lon
   );
+};
+
+const getBoardingProgressMatch = ({
+  leg,
+  vehicle,
+  shapes,
+  tripMapping,
+}) => {
+  if (!hasMarkerCoordinate(vehicle?.coordinate)) {
+    return { keep: false, evaluated: false, score: Infinity };
+  }
+
+  const shapeCoords = getShapeForLeg(leg, shapes, tripMapping);
+
+  if (!shapeCoords || !hasCoordinate(leg?.from) || !hasCoordinate(leg?.to)) {
+    return {
+      keep: true,
+      evaluated: false,
+      score: getVehicleDistanceToStop(vehicle, leg?.from),
+    };
+  }
+
+  if (isClosedLoopShape(shapeCoords)) {
+    return {
+      keep: true,
+      evaluated: true,
+      score: getClosedLoopApproachScore(shapeCoords, vehicle.coordinate, leg.from),
+    };
+  }
+
+  const boardProgress = getShapeProgress(shapeCoords, leg.from.lat, leg.from.lon);
+  const alightProgress = getShapeProgress(shapeCoords, leg.to.lat, leg.to.lon);
+  const vehicleProgress = getShapeProgress(
+    shapeCoords,
+    vehicle.coordinate.latitude,
+    vehicle.coordinate.longitude
+  );
+
+  if (!boardProgress || !alightProgress || !vehicleProgress || boardProgress.index === alightProgress.index) {
+    return {
+      keep: true,
+      evaluated: false,
+      score: getVehicleDistanceToStop(vehicle, leg?.from),
+    };
+  }
+
+  const travelIncreasing = boardProgress.meters <= alightProgress.meters;
+  const hasPassedBoarding = travelIncreasing
+    ? vehicleProgress.meters > boardProgress.meters + BOARDING_PROGRESS_TOLERANCE_METERS
+    : vehicleProgress.meters < boardProgress.meters - BOARDING_PROGRESS_TOLERANCE_METERS;
+
+  return {
+    keep: !hasPassedBoarding,
+    evaluated: true,
+    score: Math.abs(boardProgress.meters - vehicleProgress.meters),
+  };
 };
 
 const getVehicleRouteFallbackMatch = ({
@@ -366,35 +522,12 @@ const getVehicleRouteFallbackMatch = ({
     return { keep: false, evaluated: false, score: Infinity };
   }
 
-  const shapeCoords = getShapeForLeg(leg, shapes, tripMapping);
-  const vehicleCoord = vehicle?.coordinate;
-
-  if (!shapeCoords || !hasCoordinate(leg?.from) || !hasCoordinate(leg?.to) || !hasMarkerCoordinate(vehicleCoord)) {
-    return { keep: true, evaluated: false, score: Infinity };
-  }
-
-  const boardProgress = getShapeProgress(shapeCoords, leg.from.lat, leg.from.lon);
-  const alightProgress = getShapeProgress(shapeCoords, leg.to.lat, leg.to.lon);
-  const vehicleProgress = getShapeProgress(
-    shapeCoords,
-    vehicleCoord.latitude,
-    vehicleCoord.longitude
-  );
-
-  if (!boardProgress || !alightProgress || !vehicleProgress || boardProgress.index === alightProgress.index) {
-    return { keep: true, evaluated: false, score: Infinity };
-  }
-
-  const travelIncreasing = boardProgress.meters <= alightProgress.meters;
-  const hasPassedBoarding = travelIncreasing
-    ? vehicleProgress.meters > boardProgress.meters + BOARDING_PROGRESS_TOLERANCE_METERS
-    : vehicleProgress.meters < boardProgress.meters - BOARDING_PROGRESS_TOLERANCE_METERS;
-
-  return {
-    keep: !hasPassedBoarding,
-    evaluated: true,
-    score: Math.abs(boardProgress.meters - vehicleProgress.meters),
-  };
+  return getBoardingProgressMatch({
+    leg,
+    vehicle,
+    shapes,
+    tripMapping,
+  });
 };
 
 const getVehiclePreviewKey = (vehicle, fallbackIndex = 0) => (
@@ -477,16 +610,18 @@ export const selectTripPreviewVehicles = ({
       const firstLegTripIds = new Set(getLegTripIds(firstTransitLeg).filter(Boolean));
       const hasFirstLegExactMatch = byTripId.some((vehicle) => firstLegTripIds.has(vehicle.tripId));
 
-      if (hasFirstLegExactMatch) {
-        return byTripId;
-      }
-
       const { vehicles: firstLegFallbackVehicles } = selectRouteFallbackVehiclesForLeg({
         leg: firstTransitLeg,
         vehicles,
         shapes,
         tripMapping,
       });
+
+      if (hasFirstLegExactMatch) {
+        return firstLegFallbackVehicles.length > 0
+          ? mergePreviewVehicles(byTripId, firstLegFallbackVehicles)
+          : byTripId;
+      }
 
       return firstLegFallbackVehicles.length > 0
         ? mergePreviewVehicles(firstLegFallbackVehicles, byTripId)
@@ -521,46 +656,12 @@ const getApproachProgressMatch = ({
   shapes,
   tripMapping,
 }) => {
-  if (!hasMarkerCoordinate(vehicle?.coordinate)) {
-    return { keep: false, evaluated: false, score: Infinity };
-  }
-
-  const shapeCoords = getShapeForLeg(leg, shapes, tripMapping);
-
-  if (!shapeCoords || !hasCoordinate(leg?.from) || !hasCoordinate(leg?.to)) {
-    return {
-      keep: true,
-      evaluated: false,
-      score: getVehicleDistanceToStop(vehicle, leg?.from),
-    };
-  }
-
-  const boardProgress = getShapeProgress(shapeCoords, leg.from.lat, leg.from.lon);
-  const alightProgress = getShapeProgress(shapeCoords, leg.to.lat, leg.to.lon);
-  const vehicleProgress = getShapeProgress(
-    shapeCoords,
-    vehicle.coordinate.latitude,
-    vehicle.coordinate.longitude
-  );
-
-  if (!boardProgress || !alightProgress || !vehicleProgress || boardProgress.index === alightProgress.index) {
-    return {
-      keep: true,
-      evaluated: false,
-      score: getVehicleDistanceToStop(vehicle, leg?.from),
-    };
-  }
-
-  const travelIncreasing = boardProgress.meters <= alightProgress.meters;
-  const hasPassedBoarding = travelIncreasing
-    ? vehicleProgress.meters > boardProgress.meters + BOARDING_PROGRESS_TOLERANCE_METERS
-    : vehicleProgress.meters < boardProgress.meters - BOARDING_PROGRESS_TOLERANCE_METERS;
-
-  return {
-    keep: !hasPassedBoarding,
-    evaluated: true,
-    score: Math.abs(boardProgress.meters - vehicleProgress.meters),
-  };
+  return getBoardingProgressMatch({
+    leg,
+    vehicle,
+    shapes,
+    tripMapping,
+  });
 };
 
 const getFirstLegApproachVehicle = ({
@@ -571,6 +672,10 @@ const getFirstLegApproachVehicle = ({
 }) => {
   const legTripIds = new Set(getLegTripIds(firstTransitLeg).filter(Boolean));
   const exactVehicles = tripVehicles.filter((vehicle) => legTripIds.has(vehicle?.tripId));
+  const routeVehicles = tripVehicles.filter((candidate) => (
+    normalizeRouteKey(candidate?.routeId) === normalizeRouteKey(getLegRouteId(firstTransitLeg)) &&
+    directionsMatch(firstTransitLeg, candidate, tripMapping)
+  ));
 
   if (exactVehicles.length > 0) {
     const exactMatches = exactVehicles
@@ -585,13 +690,20 @@ const getFirstLegApproachVehicle = ({
       return bestExactMatch.vehicle;
     }
 
+    const routeMatches = routeVehicles
+      .map((vehicle) => ({
+        vehicle,
+        ...getApproachProgressMatch({ leg: firstTransitLeg, vehicle, shapes, tripMapping }),
+      }))
+      .sort((a, b) => a.score - b.score);
+
+    const bestRouteMatch = routeMatches.find((match) => match.keep);
+    if (bestRouteMatch) {
+      return bestRouteMatch.vehicle;
+    }
+
     return exactMatches.some((match) => match.evaluated) ? null : exactVehicles[0];
   }
-
-  const routeVehicles = tripVehicles.filter((candidate) => (
-    normalizeRouteKey(candidate?.routeId) === normalizeRouteKey(getLegRouteId(firstTransitLeg)) &&
-    directionsMatch(firstTransitLeg, candidate, tripMapping)
-  ));
 
   if (routeVehicles.length === 0) {
     return null;
@@ -614,7 +726,7 @@ export const buildBusApproachLines = ({
   tripMapping = {},
   routePathsByRouteId,
 }) => {
-  if (!Array.isArray(legs) || tripVehicles.length === 0) {
+  if (!Array.isArray(legs)) {
     return [];
   }
 
@@ -629,10 +741,6 @@ export const buildBusApproachLines = ({
     shapes,
     tripMapping,
   });
-  if (!vehicle) {
-    return [];
-  }
-
   const line = buildBusApproachLine({
     transitLeg: firstTransitLeg,
     vehicle,

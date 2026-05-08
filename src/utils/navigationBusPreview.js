@@ -3,6 +3,8 @@ import { haversineDistance, pointToPolylineDistance } from './geometryUtils';
 import { extractShapeSegment, findClosestPointIndex } from './polylineUtils';
 
 const STATIC_PREVIEW_LOOKBACK_METERS = 900;
+const CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS = 60;
+const CLOSEST_POINT_TIE_TOLERANCE_METERS = 80;
 
 const hasValidPoint = (point) => (
   Number.isFinite(point?.latitude) &&
@@ -13,6 +15,117 @@ const hasValidStop = (stop) => (
   Number.isFinite(stop?.lat) &&
   Number.isFinite(stop?.lon)
 );
+
+const isClosedLoopShape = (shapeCoords) => {
+  if (!Array.isArray(shapeCoords) || shapeCoords.length < 3) {
+    return false;
+  }
+
+  const first = shapeCoords[0];
+  const last = shapeCoords[shapeCoords.length - 1];
+  return haversineDistance(
+    first.latitude,
+    first.longitude,
+    last.latitude,
+    last.longitude
+  ) <= CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS;
+};
+
+const getShapeCumulativeMeters = (shapeCoords) => {
+  const cumulative = [0];
+  let total = 0;
+
+  for (let i = 1; i < shapeCoords.length; i += 1) {
+    total += haversineDistance(
+      shapeCoords[i - 1].latitude,
+      shapeCoords[i - 1].longitude,
+      shapeCoords[i].latitude,
+      shapeCoords[i].longitude
+    );
+    cumulative.push(total);
+  }
+
+  return cumulative;
+};
+
+const getClosestPointCandidates = (shapeCoords, lat, lon) => {
+  const distances = shapeCoords.map((coord, index) => ({
+    index,
+    distanceToPoint: haversineDistance(lat, lon, coord.latitude, coord.longitude),
+  }));
+  const bestDistance = Math.min(...distances.map((candidate) => candidate.distanceToPoint));
+
+  return distances
+    .filter((candidate) => (
+      candidate.distanceToPoint <= bestDistance + CLOSEST_POINT_TIE_TOLERANCE_METERS
+    ))
+    .sort((a, b) => (
+      a.distanceToPoint - b.distanceToPoint ||
+      a.index - b.index
+    ));
+};
+
+const getForwardShapeDistance = (cumulative, fromIndex, toIndex) => {
+  if (toIndex >= fromIndex) {
+    return cumulative[toIndex] - cumulative[fromIndex];
+  }
+
+  const total = cumulative[cumulative.length - 1];
+  return (total - cumulative[fromIndex]) + cumulative[toIndex];
+};
+
+const extractForwardShapeSegment = (shapeCoords, startIdx, endIdx) => {
+  if (startIdx <= endIdx) {
+    return shapeCoords.slice(startIdx, endIdx + 1);
+  }
+
+  return [
+    ...shapeCoords.slice(startIdx),
+    ...shapeCoords.slice(0, endIdx + 1),
+  ];
+};
+
+const extractApproachShapeSegment = (shapeCoords, fromLat, fromLon, toLat, toLon) => {
+  if (!isClosedLoopShape(shapeCoords)) {
+    return extractShapeSegment(shapeCoords, fromLat, fromLon, toLat, toLon);
+  }
+
+  const cumulative = getShapeCumulativeMeters(shapeCoords);
+  const startCandidates = getClosestPointCandidates(shapeCoords, fromLat, fromLon);
+  const endCandidates = getClosestPointCandidates(shapeCoords, toLat, toLon);
+
+  let best = null;
+  startCandidates.forEach((startCandidate) => {
+    endCandidates.forEach((endCandidate) => {
+      const distance = getForwardShapeDistance(
+        cumulative,
+        startCandidate.index,
+        endCandidate.index
+      );
+      const wraps = endCandidate.index < startCandidate.index ? 1 : 0;
+      const score = distance + wraps;
+
+      if (
+        !best ||
+        score < best.score ||
+        (score === best.score && wraps < best.wraps)
+      ) {
+        best = {
+          startIdx: startCandidate.index,
+          endIdx: endCandidate.index,
+          score,
+          wraps,
+        };
+      }
+    });
+  });
+
+  if (!best) {
+    return [];
+  }
+
+  return extractForwardShapeSegment(shapeCoords, best.startIdx, best.endIdx);
+};
 
 export const buildRoutePathsByRouteId = ({ shapes = {}, routeShapeMapping = {} }) => {
   const map = new Map();
@@ -153,6 +266,7 @@ const buildStaticBusPreviewLine = ({
     id: `${lineId}-shape`,
     coordinates: segment,
     color: transitLeg.route?.color || COLORS.primary,
+    isStaticApproach: true,
   };
 };
 
@@ -212,7 +326,7 @@ export const buildBusApproachLine = ({
     };
   }
 
-  const segment = extractShapeSegment(
+  const segment = extractApproachShapeSegment(
     shapeCoords,
     vehicle.coordinate.latitude,
     vehicle.coordinate.longitude,

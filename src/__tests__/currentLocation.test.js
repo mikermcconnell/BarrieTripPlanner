@@ -57,6 +57,23 @@ describe('getForegroundDeviceLocation', () => {
     jest.useRealTimers();
   });
 
+  test('does not hang forever when current and last-known lookups both stall', async () => {
+    jest.useFakeTimers();
+    const LocationApi = {
+      Accuracy: { Balanced: 'balanced' },
+      requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+      getCurrentPositionAsync: jest.fn(() => new Promise(() => {})),
+      getLastKnownPositionAsync: jest.fn(() => new Promise(() => {})),
+    };
+
+    const locationPromise = getForegroundDeviceLocation(LocationApi, { timeoutMs: 1000 });
+    const expectation = expect(locationPromise).rejects.toThrow('Location lookup timed out');
+    await jest.advanceTimersByTimeAsync(2000);
+
+    await expectation;
+    jest.useRealTimers();
+  });
+
   test('throws when permission is denied', async () => {
     const LocationApi = {
       Accuracy: { Balanced: 'balanced' },

@@ -1,4 +1,5 @@
 const {
+  getDetourLabelDensity,
   getDetourGeometryOverlayProps,
   shouldShowDetailedDetourOverlay,
 } = require('../utils/detourViewMode');
@@ -39,5 +40,11 @@ describe('detourViewMode', () => {
 
   test('focused detour view also keeps full details', () => {
     expect(shouldShowDetailedDetourOverlay({ isDetourView: false, hasDetourFocus: true })).toBe(true);
+  });
+
+  test('detour label density escalates from regular to focused mode', () => {
+    expect(getDetourLabelDensity({ isDetourView: false, hasDetourFocus: false })).toBe('minimal');
+    expect(getDetourLabelDensity({ isDetourView: true, hasDetourFocus: false })).toBe('medium');
+    expect(getDetourLabelDensity({ isDetourView: false, hasDetourFocus: true })).toBe('full');
   });
 });

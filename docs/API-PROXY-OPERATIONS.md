@@ -52,6 +52,16 @@ Non-production fallback:
 These are not public rider endpoints:
 
 - survey admin routes use the same `/api` auth boundary as other protected routes
+- baseline mutation routes require a Firebase `admin=true` or `detourAdmin=true` claim:
+  - `POST /api/baseline/set`
+  - `POST /api/baseline/routes`
+  - `POST /api/baseline/clear`
+- `POST /api/detour-run-once` requires either:
+  - the trusted scheduler token on `x-scheduler-token`
+  - or a Firebase `admin=true` or `detourAdmin=true` claim
+- `POST /api/news-run-once` requires either:
+  - the trusted scheduler token on `x-scheduler-token`
+  - or a Firebase `admin=true`, `detourAdmin=true`, or `surveyAdmin=true` claim
 - in production, survey admin access requires Firebase Bearer auth plus either:
   - a Firebase custom claim of `admin=true` or `surveyAdmin=true`
   - or a UID listed in `SURVEY_ADMIN_UIDS`
@@ -112,15 +122,17 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 ### Transit news worker
 
 - `NEWS_WORKER_ENABLED=true`
+- `NEWS_WORKER_MODE=interval|manual|scheduled`
 - Firebase Admin credentials
-- Polls MyRide's public news JSON endpoint every 6 hours:
+- Polls MyRide's public news JSON endpoint every 6 hours in `interval` mode:
   - `https://www.myridebarrie.ca/News/GetAllNews`
-- Publishes normalized items to Firestore `transitNews` for the app profile news screen.
+- In `manual` or `scheduled` mode, run one sync with `POST /api/news-run-once`.
+- Publishes normalized items to Firestore `transitNews` and parsed rider-facing impacts to `transitNewsImpacts`.
 
 Recommended modes:
 
 - `interval` — legacy always-on loop inside the service process
-- `manual` — no background loop; trigger single ticks with `POST /api/detour-run-once`
+- `manual` — no background loop; trigger single ticks with `POST /api/detour-run-once` or `POST /api/news-run-once`
 - `scheduled` — same single-tick behavior, intended for Cloud Scheduler / scheduled functions
 
 For non-production validation and cost control, prefer `manual` or `scheduled`.
@@ -166,6 +178,8 @@ Operational detour endpoints:
 - `GET /api/detour-rollout-health`
 - `GET /api/detour-logs?limit=100`
 - `POST /api/detour-run-once`
+- `GET /api/news-status`
+- `POST /api/news-run-once`
 
 Baseline endpoints:
 
@@ -174,7 +188,10 @@ Baseline endpoints:
 - `POST /api/baseline/routes` with `{ "routeIds": ["12"] }` — replace only selected route baselines from current GTFS
 - `POST /api/baseline/clear`
 
+Only detour admins should run baseline mutation endpoints. Do not refresh the baseline during a known active detour unless you intentionally want that detour treated as normal service.
+
 `GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours. It also reports suspicious short-lived detours under 15 minutes, grouped by confidence, so operators can review likely false positives that lasted longer than the strict 5-minute threshold.
+Launch readiness also checks whether the stored baseline diverges from current live GTFS. Baseline divergence is a critical blocker because it can create false detours or wrong affected-stop output. Stale auto-clears are reported as warning evidence and should be reviewed before public rollout.
 
 `GET /api/detour-debug` without `routeId` is the safe summary endpoint. Route-specific debug (`?routeId=...`) can expose vehicle-level evidence and is blocked in production unless the caller has an admin Firebase claim or `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true` is set intentionally.
 
@@ -187,6 +204,7 @@ Operational tasks are expected to be driven externally when possible:
 - detour detection can run continuously only in `DETOUR_WORKER_MODE=interval`
 - preferred low-cost detour operation is `DETOUR_WORKER_MODE=scheduled` with an external scheduler calling `POST /api/detour-run-once`
 - `DETOUR_WORKER_MODE=manual` is preferred for ad hoc testing and debugging
+- preferred low-cost news operation is `NEWS_WORKER_MODE=scheduled` with an external scheduler calling `POST /api/news-run-once` every 6 hours
 - survey digest is triggered by `POST /api/survey/send-digest`
 - any recurring digest or refresh flow should be run by platform cron/scheduler, not hidden process-local timers
 
@@ -229,7 +247,7 @@ If Firebase Admin credentials are missing, run-once ticks still execute, but run
    - `GET /api/health`
    - `GET /api/detour-status`
    - `GET /api/detour-rollout-health`
-   - `POST /api/detour-run-once` (for manual/scheduled mode)
+   - `POST /api/detour-run-once` with scheduler auth or a detour-admin Firebase token (for manual/scheduled mode)
 7. for production detour rollout, confirm `detour-rollout-health.launchReadiness.status` is at least `pilot_ready_with_cautions` and review every failed warning before enabling the rider feature flag
 
 ### Recommended non-production testing posture
@@ -275,13 +293,15 @@ Recommended for testing / low-cost validation:
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=scheduled`
 - `DETOUR_HISTORY_ENABLED=true`
+- `NEWS_WORKER_ENABLED=true`
+- `NEWS_WORKER_MODE=scheduled`
 - `REQUIRE_API_AUTH=true`
 - `ALLOW_SHARED_TOKEN_AUTH=true`
 - `API_PROXY_TOKEN=<long-random-secret>`
 - `REQUIRE_FIREBASE_AUTH=false` for testing
 - valid Firebase Admin credentials
 
-For public production, shared-token auth must be disabled and Firebase Bearer auth must be enabled. Use `SCHEDULER_API_TOKEN` only for server-to-server scheduler calls such as `POST /api/detour-run-once`.
+For public production, shared-token auth must be disabled and Firebase Bearer auth must be enabled. Use `SCHEDULER_API_TOKEN` only for server-to-server scheduler calls such as `POST /api/detour-run-once` and `POST /api/news-run-once`.
 
 ### Example deploy flow
 

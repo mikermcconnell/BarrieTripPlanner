@@ -19,8 +19,9 @@ function buildLaunchReadinessChecks({
   currentTime,
   publishFailureRate,
   flapping,
-  falsePositiveCandidates,
   falsePositiveRate,
+  baselineDivergence,
+  staleAutoClears,
   staleTickMs,
   env,
 }) {
@@ -56,6 +57,13 @@ function buildLaunchReadinessChecks({
       detail: status.baseline || null,
     },
     {
+      id: 'baseline_matches_live_gtfs',
+      ok: baselineDivergence == null || baselineDivergence.hasChanges === false,
+      severity: 'critical',
+      message: 'Stored detour baseline matches current live GTFS shapes',
+      detail: baselineDivergence,
+    },
+    {
       id: 'consecutive_failures',
       ok: (status.consecutiveFailureCount || 0) <= MAX_CONSECUTIVE_FAILURES,
       severity: 'critical',
@@ -82,6 +90,13 @@ function buildLaunchReadinessChecks({
       severity: 'warning',
       message: `False positive rate is below ${Math.round(MAX_FALSE_POSITIVE_RATE * 100)}%`,
       detail: falsePositiveRate,
+    },
+    {
+      id: 'no_recent_stale_auto_clears',
+      ok: (staleAutoClears?.count || 0) === 0,
+      severity: 'warning',
+      message: 'No stale auto-clears occurred in the rollout window',
+      detail: staleAutoClears,
     },
   ];
 
@@ -137,6 +152,7 @@ function createDetourOps({
   detourWorker,
   loadDetector = () => require('../detourDetector'),
   queryDetourHistory = getDetourHistory,
+  getBaselineStatusWithDivergence = async () => null,
   now = () => Date.now(),
   env = process.env,
 } = {}) {
@@ -245,6 +261,7 @@ function createDetourOps({
     let flapping = { flappingRoutes: [], flappingCount: 0, windowMs: rolloutWindowMs };
     let durationStats = { min: null, avg: null, max: null, count: 0 };
     let falsePositiveCandidates = { count: 0, maxDurationMs: FALSE_POSITIVE_DURATION_MS, routes: [] };
+    let staleAutoClears = { count: 0, windowMs: rolloutWindowMs, routes: [] };
     let suspiciousShortLivedDetours = {
       count: 0,
       maxDurationMs: SUSPICIOUS_SHORT_LIVED_DURATION_MS,
@@ -258,10 +275,19 @@ function createDetourOps({
       windowMs: falsePositiveWindowMs,
       note: 'No detections in window',
     };
+    let baselineDivergence = null;
 
     try {
+      const baselineWithDivergence = await getBaselineStatusWithDivergence();
+      baselineDivergence = baselineWithDivergence?.divergence || null;
+    } catch (err) {
+      baselineDivergence = { error: err.message || 'Could not compare baseline with live GTFS' };
+    }
+
+    try {
+      const clearEventTypes = ['DETOUR_CLEARED', 'DETOUR_AUTO_CLEARED_STALE'];
       const clearedEvents = await queryDetourHistory({
-        eventTypes: ['DETOUR_CLEARED'],
+        eventTypes: clearEventTypes,
         startMs: currentTime - rolloutWindowMs,
         limit: 200,
       });
@@ -281,6 +307,19 @@ function createDetourOps({
         flappingRoutes,
         flappingCount: flappingRoutes.length,
         windowMs: rolloutWindowMs,
+      };
+      const staleClearEvents = clearedEvents
+        .filter((event) => event.eventType === 'DETOUR_AUTO_CLEARED_STALE')
+        .map((event) => ({
+          routeId: event.routeId || null,
+          durationMs: event.durationMs || null,
+          confidence: normalizeConfidence(event.confidence),
+          occurredAt: event.occurredAt || event.clearedAt || null,
+        }));
+      staleAutoClears = {
+        count: staleClearEvents.length,
+        windowMs: rolloutWindowMs,
+        routes: staleClearEvents.slice(0, 20),
       };
 
       const durations = clearedEvents
@@ -320,7 +359,7 @@ function createDetourOps({
 
       const [falsePositiveClearedEvents, detectedEvents] = await Promise.all([
         queryDetourHistory({
-          eventTypes: ['DETOUR_CLEARED'],
+          eventTypes: clearEventTypes,
           startMs: currentTime - falsePositiveWindowMs,
           limit: 200,
         }),
@@ -357,8 +396,9 @@ function createDetourOps({
       currentTime,
       publishFailureRate,
       flapping,
-      falsePositiveCandidates,
       falsePositiveRate,
+      baselineDivergence,
+      staleAutoClears,
       staleTickMs,
       env,
     });
@@ -372,10 +412,12 @@ function createDetourOps({
       consecutiveFailureCount: status.consecutiveFailureCount,
       activeDetourCount: Object.keys(status.activeDetours || {}).length,
       baseline: status.baseline || null,
+      baselineDivergence,
       publishFailureRate,
       flapping,
       durationStats,
       falsePositiveCandidates,
+      staleAutoClears,
       suspiciousShortLivedDetours,
       falsePositiveRate,
       launchReadiness,

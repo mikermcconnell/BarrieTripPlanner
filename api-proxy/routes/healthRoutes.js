@@ -33,6 +33,8 @@ function registerHealthRoutes(app, {
         locationIqProxyConfigured: hasLocationIQKey,
         detourWorkerEnabled: process.env.DETOUR_WORKER_ENABLED === 'true',
         detourWorkerMode: process.env.DETOUR_WORKER_MODE || 'interval',
+        newsWorkerEnabled: process.env.NEWS_WORKER_ENABLED === 'true',
+        newsWorkerMode: process.env.NEWS_WORKER_MODE || 'interval',
         detourHistoryEnabled: process.env.DETOUR_HISTORY_ENABLED !== 'false',
         baselineAutoInitEnabled: process.env.BASELINE_AUTO_INIT === 'true',
         detourRequireSafeBaseline: process.env.DETOUR_REQUIRE_SAFE_BASELINE !== 'false',

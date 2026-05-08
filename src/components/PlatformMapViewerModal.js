@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, paddingRight: SPACING.md },
   eyebrow: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, textTransform: 'uppercase', fontWeight: FONT_WEIGHTS.semibold },
   title: { fontSize: FONT_SIZES.xl, color: COLORS.textPrimary, fontWeight: FONT_WEIGHTS.bold },
-  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BORDER_RADIUS.lg, backgroundColor: COLORS.grey100 },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: BORDER_RADIUS.lg, backgroundColor: 'transparent' },
   closeText: { fontSize: FONT_SIZES.lg, color: COLORS.textPrimary, fontWeight: FONT_WEIGHTS.bold },
   viewerShell: { flex: 1, backgroundColor: COLORS.grey50 },
   panArea: { flex: 1 },

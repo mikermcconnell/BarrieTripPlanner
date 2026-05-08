@@ -12,6 +12,7 @@ import {
   addNetworkListener,
 } from '../utils/offlineCache';
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
+import { getEnabledDevDetourFixtures } from '../services/devDetourFixtures';
 import { subscribeToTransitNews, subscribeToTransitNewsImpacts } from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
@@ -397,13 +398,15 @@ export const TransitProvider = ({ children }) => {
   /**
    * Load vehicle positions
    */
-  const loadVehiclePositions = useCallback(async () => {
+  const loadVehiclePositions = useCallback(async ({ showLoading = true } = {}) => {
     if (vehicleRequestPromiseRef.current) {
       return vehicleRequestPromiseRef.current;
     }
 
     const requestPromise = (async () => {
-      setIsLoadingVehicles(true);
+      if (showLoading) {
+        setIsLoadingVehicles(true);
+      }
       setVehicleError((prev) => (prev == null ? prev : null));
 
       try {
@@ -420,7 +423,9 @@ export const TransitProvider = ({ children }) => {
         setLastVehicleFailureAt(Date.now());
         setVehicleError(error.message || 'Failed to load vehicle positions');
       } finally {
-        setIsLoadingVehicles(false);
+        if (showLoading) {
+          setIsLoadingVehicles(false);
+        }
         vehicleRequestPromiseRef.current = null;
       }
     })();
@@ -440,7 +445,7 @@ export const TransitProvider = ({ children }) => {
     void loadVehiclePositions();
 
     vehicleIntervalRef.current = setInterval(
-      loadVehiclePositions,
+      () => loadVehiclePositions({ showLoading: false }),
       REFRESH_INTERVALS.VEHICLE_POSITIONS
     );
   }, [loadVehiclePositions]);
@@ -580,9 +585,20 @@ export const TransitProvider = ({ children }) => {
     return result;
   }, []);
 
+  const devDetourFixtures = useMemo(() => getEnabledDevDetourFixtures(), []);
+  const hasDevDetourFixtures = Object.keys(devDetourFixtures).length > 0;
+  const effectiveDetoursEnabled = detoursEnabled || hasDevDetourFixtures;
+
   const activeDetours = useMemo(
-    () => (detoursEnabled ? filterRiderVisibleDetours(detourFeed) : {}),
-    [detoursEnabled, detourFeed]
+    () => {
+      if (!effectiveDetoursEnabled) return {};
+
+      return filterRiderVisibleDetours({
+        ...devDetourFixtures,
+        ...detourFeed,
+      });
+    },
+    [effectiveDetoursEnabled, detourFeed, devDetourFixtures]
   );
 
   const isRouteDetouring = useCallback(
@@ -914,7 +930,7 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
-    detoursEnabled,
+    detoursEnabled: effectiveDetoursEnabled,
     setDetoursEnabled,
     activeDetours,
     isRouteDetouring,
@@ -936,7 +952,7 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
-    detoursEnabled,
+    effectiveDetoursEnabled,
     setDetoursEnabled,
     activeDetours,
     isRouteDetouring,

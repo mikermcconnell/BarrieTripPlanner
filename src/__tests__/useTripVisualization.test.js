@@ -144,6 +144,82 @@ describe('buildTripEndpointMarkers', () => {
 });
 
 describe('buildTripRouteCoordinates', () => {
+  test('shows the first walking leg and first bus approach in trip preview', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { lat: 44.381, lon: -79.701 },
+          to: { lat: 44.382, lon: -79.7 },
+        },
+        {
+          mode: 'BUS',
+          tripId: 'TRIP-7B',
+          route: { id: '7B', shortName: '7B', color: '#F58220' },
+          from: { name: 'Boarding Stop', lat: 44.382, lon: -79.7 },
+          to: { name: 'Downtown', lat: 44.386, lon: -79.696 },
+        },
+      ],
+    };
+
+    const tripRoutes = buildTripRouteCoordinates({
+      itinerary,
+      decodedLegPolylines: [
+        [
+          { latitude: 44.381, longitude: -79.701 },
+          { latitude: 44.3815, longitude: -79.7005 },
+          { latitude: 44.382, longitude: -79.7 },
+        ],
+        [
+          { latitude: 44.382, longitude: -79.7 },
+          { latitude: 44.384, longitude: -79.698 },
+          { latitude: 44.386, longitude: -79.696 },
+        ],
+      ],
+    });
+
+    expect(tripRoutes[0]).toEqual(expect.objectContaining({
+      id: 'trip-leg-0',
+      mode: 'WALK',
+      isWalk: true,
+      lineStyle: 'solid',
+    }));
+    expect(tripRoutes[0].coordinates).toHaveLength(3);
+    expect(tripRoutes[1]).toEqual(expect.objectContaining({
+      id: 'trip-leg-1',
+      mode: 'BUS',
+      routeLabel: '7B',
+      lineStyle: 'solid',
+    }));
+
+    const approachLines = buildBusApproachLines({
+      legs: itinerary.legs,
+      tripVehicles: [],
+      shapes: {
+        shape7B: [
+          { latitude: 44.38, longitude: -79.702 },
+          { latitude: 44.381, longitude: -79.701 },
+          { latitude: 44.382, longitude: -79.7 },
+          { latitude: 44.384, longitude: -79.698 },
+          { latitude: 44.386, longitude: -79.696 },
+        ],
+      },
+      tripMapping: {
+        'TRIP-7B': { shapeId: 'shape7B' },
+      },
+    });
+
+    expect(approachLines).toEqual([
+      expect.objectContaining({
+        id: 'bus-approach-TRIP-7B',
+        color: '#F58220',
+        isStaticApproach: true,
+      }),
+    ]);
+    expect(approachLines[0].coordinates[approachLines[0].coordinates.length - 1])
+      .toEqual({ latitude: 44.382, longitude: -79.7 });
+  });
+
   test('keeps bus and walking legs solid in a double-transfer trip', () => {
     const itinerary = {
       legs: [
@@ -376,6 +452,54 @@ describe('selectTripPreviewVehicles', () => {
     })).toEqual([exactVehicle]);
   });
 
+  test('keeps an approaching first-leg route fallback when an exact trip bus is already downstream', () => {
+    const selectedItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'PLANNED-8B',
+          directionId: 1,
+          from: { name: 'Boarding Stop', lat: 44.2, lon: -79.8 },
+          to: { name: 'Destination Stop', lat: 44.5, lon: -79.5 },
+          route: { id: '8B', shortName: '8B' },
+        },
+      ],
+    };
+
+    const vehicles = [
+      {
+        id: 'exact-downstream',
+        routeId: '8B',
+        tripId: 'PLANNED-8B',
+        directionId: 1,
+        coordinate: { latitude: 44.35, longitude: -79.65 },
+      },
+      {
+        id: 'route-approaching',
+        routeId: '8B',
+        tripId: 'LIVE-OTHER-8B',
+        directionId: 1,
+        coordinate: { latitude: 44.1, longitude: -79.9 },
+      },
+    ];
+
+    expect(selectTripPreviewVehicles({
+      selectedItinerary,
+      vehicles,
+      shapes: {
+        shape8B: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+          { latitude: 44.35, longitude: -79.65 },
+          { latitude: 44.5, longitude: -79.5 },
+        ],
+      },
+      tripMapping: {
+        'PLANNED-8B': { routeId: '8B', directionId: 1, shapeId: 'shape8B' },
+      },
+    }).map((vehicle) => vehicle.id)).toEqual(['exact-downstream', 'route-approaching']);
+  });
+
   test('keeps exact vehicle matches for merged same-route trip switches', () => {
     const selectedItinerary = {
       legs: [
@@ -543,6 +667,46 @@ describe('selectTripPreviewVehicles', () => {
       },
     ]);
   });
+
+  test('keeps an approaching bus on a closed loop after the rider alighting segment', () => {
+    const selectedItinerary = {
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'LOOP-TRIP',
+          directionId: 0,
+          from: { name: 'Loop Terminal', lat: 44.0, lon: -79.0 },
+          to: { name: 'First Stop', lat: 44.0, lon: -78.99 },
+          route: { id: '11', shortName: '11', color: '#B2D235' },
+        },
+      ],
+    };
+
+    const approachingLoopBus = {
+      id: 'loop-bus-after-alighting-segment',
+      routeId: '11',
+      tripId: 'LIVE-ROUTE-11',
+      directionId: 0,
+      coordinate: { latitude: 44.0, longitude: -78.97 },
+    };
+
+    expect(selectTripPreviewVehicles({
+      selectedItinerary,
+      vehicles: [approachingLoopBus],
+      shapes: {
+        loopShape: [
+          { latitude: 44.0, longitude: -79.0 },
+          { latitude: 44.0, longitude: -78.99 },
+          { latitude: 44.0, longitude: -78.98 },
+          { latitude: 44.0, longitude: -78.97 },
+          { latitude: 44.0, longitude: -79.0 },
+        ],
+      },
+      tripMapping: {
+        'LOOP-TRIP': { routeId: '11', directionId: 0, shapeId: 'loopShape' },
+      },
+    })).toEqual([approachingLoopBus]);
+  });
 });
 
 describe('buildBusApproachLines', () => {
@@ -701,6 +865,102 @@ describe('buildBusApproachLines', () => {
     })).toEqual([]);
   });
 
+  test('falls back to a static dashed approach segment when the live first bus is downstream', () => {
+    expect(buildBusApproachLines({
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'TRIP-7B',
+          route: { id: '7B', color: '#F58220' },
+          directionId: 1,
+          from: { name: 'Pickup', lat: 44.2, lon: -79.8 },
+          to: { name: 'Dropoff', lat: 44.5, lon: -79.5 },
+        },
+      ],
+      tripVehicles: [
+        {
+          id: 'downstream-exact-bus',
+          routeId: '7B',
+          tripId: 'TRIP-7B',
+          directionId: 1,
+          coordinate: { latitude: 44.35, longitude: -79.65 },
+        },
+      ],
+      shapes: {
+        shape7B: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+          { latitude: 44.35, longitude: -79.65 },
+          { latitude: 44.5, longitude: -79.5 },
+        ],
+      },
+      tripMapping: {
+        'TRIP-7B': { routeId: '7B', directionId: 1, shapeId: 'shape7B' },
+      },
+    })).toEqual([
+      {
+        id: 'bus-approach-TRIP-7B',
+        coordinates: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+        ],
+        color: '#F58220',
+        isStaticApproach: true,
+      },
+    ]);
+  });
+
+  test('uses an approaching route fallback line when the exact first-leg bus is downstream', () => {
+    expect(buildBusApproachLines({
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'TRIP-8B',
+          route: { id: '8B', color: '#0057B8' },
+          directionId: 1,
+          from: { name: 'Stop A', lat: 44.2, lon: -79.8 },
+          to: { name: 'Stop B', lat: 44.5, lon: -79.5 },
+        },
+      ],
+      tripVehicles: [
+        {
+          id: 'exact-downstream',
+          routeId: '8B',
+          tripId: 'TRIP-8B',
+          directionId: 1,
+          coordinate: { latitude: 44.35, longitude: -79.65 },
+        },
+        {
+          id: 'route-approaching',
+          routeId: '8B',
+          tripId: 'LIVE-OTHER-8B',
+          directionId: 1,
+          coordinate: { latitude: 44.1, longitude: -79.9 },
+        },
+      ],
+      shapes: {
+        shape8B: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+          { latitude: 44.35, longitude: -79.65 },
+          { latitude: 44.5, longitude: -79.5 },
+        ],
+      },
+      tripMapping: {
+        'TRIP-8B': { routeId: '8B', directionId: 1, shapeId: 'shape8B' },
+      },
+    })).toEqual([
+      {
+        id: 'bus-approach-TRIP-8B',
+        coordinates: [
+          { latitude: 44.1, longitude: -79.9 },
+          { latitude: 44.2, longitude: -79.8 },
+        ],
+        color: '#0057B8',
+      },
+    ]);
+  });
+
   test('uses the first transit leg route bus and direct fallback when no trip shape is available', () => {
     const line = buildBusApproachLines({
       legs: [
@@ -758,7 +1018,7 @@ describe('buildBusApproachLines', () => {
     ]);
   });
 
-  test('does not draw a route fallback approach line from a bus already past the first boarding stop', () => {
+  test('uses a static route approach line when the visible bus is already past the first boarding stop', () => {
     expect(buildBusApproachLines({
       legs: [
         {
@@ -790,6 +1050,61 @@ describe('buildBusApproachLines', () => {
       tripMapping: {
         'SCHEDULED-7B': { shapeId: 'shape7B', directionId: 1 },
       },
-    })).toEqual([]);
+    })).toEqual([
+      {
+        id: 'bus-approach-SCHEDULED-7B',
+        coordinates: [
+          { latitude: 44.0, longitude: -80.0 },
+          { latitude: 44.2, longitude: -79.8 },
+        ],
+        color: '#F58220',
+        isStaticApproach: true,
+      },
+    ]);
+  });
+
+  test('draws the short forward approach segment on a closed loop route', () => {
+    expect(buildBusApproachLines({
+      legs: [
+        {
+          mode: 'BUS',
+          tripId: 'LOOP-TRIP',
+          directionId: 0,
+          from: { name: 'Loop Terminal', lat: 44.0, lon: -79.0 },
+          to: { name: 'First Stop', lat: 44.0, lon: -78.99 },
+          route: { id: '11', color: '#B2D235' },
+        },
+      ],
+      tripVehicles: [
+        {
+          id: 'loop-bus-after-alighting-segment',
+          routeId: '11',
+          tripId: 'LIVE-ROUTE-11',
+          directionId: 0,
+          coordinate: { latitude: 44.0, longitude: -78.97 },
+        },
+      ],
+      shapes: {
+        loopShape: [
+          { latitude: 44.0, longitude: -79.0 },
+          { latitude: 44.0, longitude: -78.99 },
+          { latitude: 44.0, longitude: -78.98 },
+          { latitude: 44.0, longitude: -78.97 },
+          { latitude: 44.0, longitude: -79.0 },
+        ],
+      },
+      tripMapping: {
+        'LOOP-TRIP': { routeId: '11', directionId: 0, shapeId: 'loopShape' },
+      },
+    })).toEqual([
+      {
+        id: 'bus-approach-LOOP-TRIP',
+        coordinates: [
+          { latitude: 44.0, longitude: -78.97 },
+          { latitude: 44.0, longitude: -79.0 },
+        ],
+        color: '#B2D235',
+      },
+    ]);
   });
 });

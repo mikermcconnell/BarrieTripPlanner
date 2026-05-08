@@ -1,6 +1,12 @@
 export const shouldShowDetailedDetourOverlay = ({ isDetourView = false, hasDetourFocus = false } = {}) =>
   Boolean(isDetourView || hasDetourFocus);
 
+export const getDetourLabelDensity = ({ isDetourView = false, hasDetourFocus = false } = {}) => {
+  if (hasDetourFocus) return 'full';
+  if (isDetourView) return 'medium';
+  return 'minimal';
+};
+
 export const getDetourGeometryOverlayProps = ({
   overlay,
   isDetourView = false,
@@ -22,6 +28,7 @@ export const getDetourGeometryOverlayProps = ({
 };
 
 export default {
+  getDetourLabelDensity,
   getDetourGeometryOverlayProps,
   shouldShowDetailedDetourOverlay,
 };

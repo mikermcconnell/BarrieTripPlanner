@@ -22,23 +22,28 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SLIDES = [
   {
     id: '1',
-    title: 'Live Bus Tracking',
-    description: 'See every Barrie Transit bus in real time on the map.',
+    title: "Don't wait where the bus isn't going.",
+    description: 'See planned and unplanned detours before you walk to a skipped stop.',
   },
   {
     id: '2',
-    title: 'Trip Planning',
-    description: 'Get step-by-step directions between any two points in Barrie.',
+    title: 'See detours clearly',
+    description: 'My Barrie Transit shows route changes, affected stops, and likely detour paths.',
   },
   {
     id: '3',
-    title: 'Favorites & Alerts',
-    description: 'Save your stops and routes. Get notified about service changes.',
+    title: 'Track live Barrie buses',
+    description: 'See buses moving on the map so you know what is actually happening.',
   },
   {
     id: '4',
-    title: 'Step-by-Step Navigation',
-    description: 'Follow along with live guidance from bus stop to destination.',
+    title: 'Save your regular rides',
+    description: 'Keep your everyday stops and routes close so you can check them faster.',
+  },
+  {
+    id: '5',
+    title: 'Start riding with My Barrie Transit',
+    description: 'Plan trips, search stops, follow alerts, and ride with more confidence.',
   },
 ];
 
@@ -80,7 +85,7 @@ const OnboardingScreen = ({ onComplete }) => {
 
   return (
     <View style={styles.container}>
-      <OnboardingScene />
+      <OnboardingScene slideIndex={currentIndex} />
 
       <View style={styles.contentArea}>
         <FlatList
@@ -152,7 +157,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   slideTitle: {
-    fontSize: FONT_SIZES.xxl,
+    fontSize: FONT_SIZES.xxxl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
     textAlign: 'center',
@@ -163,7 +168,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
-    maxWidth: 300,
+    maxWidth: 320,
   },
   dotsContainer: {
     flexDirection: 'row',
