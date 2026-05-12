@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,7 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
-import { Platform, View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { Animated, Platform, View, StyleSheet, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
   Outfit_400Regular,
@@ -14,11 +14,12 @@ import {
   Outfit_600SemiBold,
   Outfit_700Bold,
 } from '@expo-google-fonts/outfit';
-import { TransitProvider } from './src/context/TransitContext';
+import { TransitProvider, useTransitRealtime, useTransitStatic } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import StartupLoadingScreen from './src/components/StartupLoadingScreen';
 import { COLORS } from './src/config/theme';
 import {
   registerForPushNotifications,
@@ -29,8 +30,12 @@ import { userFirestoreService } from './src/services/firebase/userFirestoreServi
 import logger from './src/utils/logger';
 import { installStartupDiagnostics, recordStartupFatal } from './src/utils/startupDiagnostics';
 import runtimeConfig, { hasCriticalStartupIssues } from './src/config/runtimeConfig';
+import { getAppStartupState } from './src/utils/appStartupState';
 
 const STARTUP_ENV_ISSUES = runtimeConfig.startup.criticalIssues;
+const STARTUP_LOADING_MIN_MS = 3000;
+const STARTUP_OPTIONAL_LOADING_MAX_MS = 12000;
+const STARTUP_EXIT_FADE_MS = 260;
 
 if (hasCriticalStartupIssues) {
   logger.error(`[StartupConfig] ${STARTUP_ENV_ISSUES.join(' | ')}`);
@@ -179,6 +184,14 @@ const linking = {
   },
 };
 
+export function shouldShowStartupLoadingPreview() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window?.location?.search) {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('preview') === 'startup-loading';
+}
+
 function StartupConfigErrorScreen({ issues }) {
   return (
     <View style={appStyles.configErrorContainer}>
@@ -204,8 +217,190 @@ function StartupConfigErrorScreen({ issues }) {
   );
 }
 
+function AppStartupGate({ fontsLoaded, minimumStartupElapsed, navigationRef }) {
+  const routingPreloadRequestedRef = useRef(false);
+  const startupStartedAtRef = useRef(Date.now());
+  const startupPhaseRef = useRef(null);
+  const startupReadyLoggedRef = useRef(false);
+  const overlayOpacityRef = useRef(new Animated.Value(1));
+  const [optionalWaitElapsed, setOptionalWaitElapsed] = useState(false);
+  const [showStartupOverlay, setShowStartupOverlay] = useState(true);
+  const { isLoading: authLoading } = useAuth();
+  const {
+    routes,
+    stops,
+    isLoadingStatic,
+    staticError,
+    isOffline,
+    isRoutingReady,
+    ensureRoutingData,
+    diagnostics,
+  } = useTransitStatic();
+  const {
+    lastVehicleUpdate,
+    isLoadingVehicles,
+    vehicleError,
+    hasLoadedServiceAlerts,
+    hasLoadedDetourFeed,
+  } = useTransitRealtime();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setOptionalWaitElapsed(true);
+    }, STARTUP_OPTIONAL_LOADING_MAX_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const hasStaticData = routes.length > 0 && stops.length > 0;
+    const routingStatus = diagnostics?.routing?.status;
+
+    if (
+      !hasStaticData ||
+      isOffline ||
+      isRoutingReady ||
+      routingPreloadRequestedRef.current ||
+      routingStatus === 'loading'
+    ) {
+      return;
+    }
+
+    routingPreloadRequestedRef.current = true;
+    void ensureRoutingData();
+  }, [
+    diagnostics?.routing?.status,
+    ensureRoutingData,
+    isOffline,
+    isRoutingReady,
+    routes.length,
+    stops.length,
+  ]);
+
+  const startupState = getAppStartupState({
+    fontsLoaded,
+    minimumStartupElapsed,
+    authLoading,
+    isLoadingStatic,
+    staticError,
+    routesCount: routes.length,
+    stopsCount: stops.length,
+    isOffline,
+    isRoutingReady,
+    lastVehicleUpdate,
+    isLoadingVehicles,
+    vehicleError,
+    hasLoadedServiceAlerts,
+    hasLoadedDetourFeed,
+    diagnostics,
+    optionalWaitElapsed,
+  });
+  const startupPhase = startupState.ready ? 'ready' : (startupState.statusText || startupState.detail || 'loading');
+
+  useEffect(() => {
+    if (startupPhaseRef.current === startupPhase) return;
+    startupPhaseRef.current = startupPhase;
+
+    logger.info('[startup] phase', {
+      phase: startupPhase,
+      elapsedMs: Date.now() - startupStartedAtRef.current,
+      percent: startupState.percent,
+      ready: startupState.ready,
+    });
+  }, [startupPhase, startupState.percent, startupState.ready]);
+
+  useEffect(() => {
+    if (!optionalWaitElapsed || startupState.ready) return;
+
+    logger.warn('[startup] optional wait cap reached; opening with available startup data', {
+      elapsedMs: Date.now() - startupStartedAtRef.current,
+      routingStatus: diagnostics?.routing?.status || 'unknown',
+      realtimeStatus: diagnostics?.realtimeVehicles?.status || 'unknown',
+      proxyStatus: diagnostics?.proxyApi?.status || 'unknown',
+      hasLoadedServiceAlerts,
+      hasLoadedDetourFeed,
+    });
+  }, [
+    diagnostics?.proxyApi?.status,
+    diagnostics?.realtimeVehicles?.status,
+    diagnostics?.routing?.status,
+    hasLoadedDetourFeed,
+    hasLoadedServiceAlerts,
+    optionalWaitElapsed,
+    startupState.ready,
+  ]);
+
+  useEffect(() => {
+    const overlayOpacity = overlayOpacityRef.current;
+
+    if (!startupState.ready) {
+      startupReadyLoggedRef.current = false;
+      setShowStartupOverlay(true);
+      overlayOpacity.stopAnimation();
+      overlayOpacity.setValue(1);
+      return undefined;
+    }
+
+    if (!startupReadyLoggedRef.current) {
+      startupReadyLoggedRef.current = true;
+      logger.info('[startup] ready', {
+        elapsedMs: Date.now() - startupStartedAtRef.current,
+        optionalWaitElapsed,
+        routes: routes.length,
+        stops: stops.length,
+      });
+    }
+
+    overlayOpacity.stopAnimation();
+    Animated.timing(overlayOpacity, {
+      toValue: 0,
+      duration: STARTUP_EXIT_FADE_MS,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setShowStartupOverlay(false);
+      }
+    });
+
+    return () => {
+      overlayOpacity.stopAnimation();
+    };
+  }, [optionalWaitElapsed, routes.length, startupState.ready, stops.length]);
+
+  return (
+    <View style={appStyles.startupGateContainer}>
+      <NavigationContainer ref={navigationRef} linking={linking}>
+        <StatusBar style="dark" backgroundColor={COLORS.surface} />
+        <NotificationInitializer navigationRef={navigationRef} />
+        <TabNavigator />
+      </NavigationContainer>
+      {showStartupOverlay ? (
+        <Animated.View
+          pointerEvents={startupState.ready ? 'none' : 'auto'}
+          style={[
+            appStyles.startupOverlay,
+            { opacity: overlayOpacityRef.current },
+          ]}
+        >
+          <StatusBar style="dark" backgroundColor={COLORS.surface} />
+          <StartupLoadingScreen
+            percent={startupState.percent}
+            title={startupState.title}
+            detail={startupState.detail}
+            statusText={startupState.statusText}
+            useBrandFonts={fontsLoaded}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function App() {
   const navigationRef = useRef();
+  const [minimumStartupElapsed, setMinimumStartupElapsed] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Outfit_400Regular,
@@ -224,6 +419,16 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinimumStartupElapsed(true);
+    }, STARTUP_LOADING_MIN_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
   if (hasCriticalStartupIssues) {
     return (
       <SafeAreaProvider>
@@ -232,13 +437,12 @@ export default function App() {
     );
   }
 
-  if (!fontsLoaded) {
+  if (shouldShowStartupLoadingPreview()) {
     return (
-      <View style={appStyles.splash}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={appStyles.splashTitle}>Starting My Barrie Transit</Text>
-        <Text style={appStyles.splashDetail}>Loading live buses, stops, and trip options.</Text>
-      </View>
+      <SafeAreaProvider>
+        <StatusBar style="dark" backgroundColor={COLORS.surface} />
+        <StartupLoadingScreen useBrandFonts={fontsLoaded} />
+      </SafeAreaProvider>
     );
   }
 
@@ -249,11 +453,11 @@ export default function App() {
           <ErrorBoundary fallbackMessage="Something went wrong with Barrie Transit. Please restart the app.">
             <AuthProvider>
               <TransitProvider>
-                <NavigationContainer ref={navigationRef} linking={linking}>
-                  <StatusBar style="dark" backgroundColor={COLORS.surface} />
-                  <NotificationInitializer navigationRef={navigationRef} />
-                  <TabNavigator />
-                </NavigationContainer>
+                <AppStartupGate
+                  fontsLoaded={fontsLoaded}
+                  minimumStartupElapsed={minimumStartupElapsed}
+                  navigationRef={navigationRef}
+                />
               </TransitProvider>
             </AuthProvider>
           </ErrorBoundary>
@@ -264,22 +468,14 @@ export default function App() {
 }
 
 const appStyles = StyleSheet.create({
-  splash: {
+  startupGateContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
   },
-  splashTitle: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  splashDetail: {
-    marginTop: 6,
-    fontSize: 14,
-    color: COLORS.textSecondary,
+  startupOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 9999,
+    backgroundColor: COLORS.white,
   },
   configErrorContainer: {
     flex: 1,

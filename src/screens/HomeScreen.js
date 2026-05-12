@@ -80,6 +80,7 @@ import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import StatusBadge from '../components/StatusBadge';
 import SystemHealthBanner from '../components/SystemHealthBanner';
 import SystemHealthChip from '../components/SystemHealthChip';
+import StartupLoadingScreen from '../components/StartupLoadingScreen';
 import useRoutePanel from '../hooks/useRoutePanel';
 import { getTransitStartupProgress } from '../utils/systemHealthUI';
 import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
@@ -2210,23 +2211,17 @@ const HomeScreen = ({ route }) => {
 
       {/* First launch loading screen when no saved transit data is ready yet */}
       {startupProgress?.variant === 'full' && (
-        <View
-          style={styles.startupFullOverlay}
-          accessibilityRole="progressbar"
-          accessibilityLabel={startupProgress.title}
-          accessibilityValue={{ min: 0, max: 100, now: startupProgress.percent }}
-        >
-          <View style={styles.startupFullCard}>
-            <PulsingSpinner size={34} />
-            <Text style={styles.startupFullTitle}>{startupProgress.title}</Text>
-            {startupProgress.detail ? (
-              <Text style={styles.startupFullDetail}>{startupProgress.detail}</Text>
-            ) : null}
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${startupProgress.percent}%` }]} />
-            </View>
-            <Text style={styles.progressLabel}>{startupProgress.percent}% ready</Text>
-          </View>
+        <View style={styles.startupFullOverlay}>
+          <StartupLoadingScreen
+            percent={startupProgress.percent}
+            title={startupProgress.title}
+            detail={
+              startupProgress.title === 'Getting Barrie Transit ready'
+                ? undefined
+                : startupProgress.detail
+            }
+            statusText={startupProgress.detail || undefined}
+          />
         </View>
       )}
 
@@ -2621,10 +2616,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 2000,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    padding: SPACING.xl,
+    backgroundColor: COLORS.white,
   },
   startupFullCard: {
     width: '100%',
