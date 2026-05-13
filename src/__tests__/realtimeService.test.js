@@ -22,6 +22,24 @@ describe('formatVehiclesForMap', () => {
     expect(formatted.speed).toBeNull();
   });
 
+  test('preserves current stop sequence for trip-planning missed-bus checks', () => {
+    const [formatted] = formatVehiclesForMap([
+      {
+        id: 'entity-1',
+        vehicleId: 'device-42',
+        latitude: 44.38,
+        longitude: -79.69,
+        bearing: 90,
+        speed: 8,
+        tripId: 'tripA',
+        routeId: '10',
+        currentStopSequence: 4,
+      },
+    ]);
+
+    expect(formatted.currentStopSequence).toBe(4);
+  });
+
   test('dedupes duplicate vehicle ids and keeps the newer snapshot', () => {
     const tripMapping = {
       tripA: { routeId: '100', headsign: 'Downtown' },

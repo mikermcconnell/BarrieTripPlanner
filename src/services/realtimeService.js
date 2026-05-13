@@ -357,6 +357,7 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
       vehicleLabel: vehicle.vehicleLabel,
       timestamp: vehicle.timestamp,
       currentStatus: vehicle.currentStatus,
+      currentStopSequence: vehicle.currentStopSequence,
       stopId: vehicle.stopId,
     };
   });

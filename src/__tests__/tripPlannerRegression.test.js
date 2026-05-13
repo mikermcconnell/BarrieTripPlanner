@@ -1184,6 +1184,44 @@ describe('useTripPlanner regressions', () => {
     unmount();
   });
 
+  test('passes live vehicle context to trip delay enrichment', async () => {
+    const itinerary = {
+      id: 'itinerary-1',
+      duration: 600,
+      startTime: 1000,
+      endTime: 1600,
+      walkDistance: 0,
+      walkTime: 0,
+      transitTime: 600,
+      waitingTime: 0,
+      transfers: 0,
+      legs: [],
+    };
+    const delayOptions = {
+      vehicles: [{ tripId: 'TRIP-1', currentStopSequence: 4 }],
+    };
+    const applyDelaysMock = jest.fn(async (itineraries) => itineraries);
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock: jest.fn(async () => ({ itineraries: [itinerary] })),
+      hookOptions: {
+        applyDelays: applyDelaysMock,
+        delayOptions,
+      },
+    });
+
+    await act(async () => {
+      await getHook().searchTrips(
+        { lat: 44.38, lon: -79.69 },
+        { lat: 44.39, lon: -79.68 }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(applyDelaysMock).toHaveBeenCalledWith([itinerary], delayOptions);
+
+    unmount();
+  });
+
   test('validation failures use structured trip-planning errors', async () => {
     const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
     const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });

@@ -216,6 +216,7 @@ function tripReducer(state, action) {
  * @param {Function} [options.onItinerariesReady] - Callback after successful search (e.g. fit map bounds)
  * @param {Function} [options.onTripPlanned] - Callback after a successful trip search to persist history
  * @param {Function} [options.applyDelays] - Optional function to apply real-time delays to itineraries
+ * @param {Object} [options.delayOptions] - Optional live context passed into delay enrichment
  * @param {Object} [options.activeDetours] - Active detour feed keyed by route
  * @param {Object} [options.detourStopDetailsByRouteId] - Derived skipped/affected stop details keyed by route
  */
@@ -224,6 +225,7 @@ export const useTripPlanner = ({
   onItinerariesReady,
   onTripPlanned,
   applyDelays,
+  delayOptions,
   onDemandZones,
   stops,
   activeDetours = {},
@@ -298,7 +300,7 @@ export const useTripPlanner = ({
       // Apply real-time delays if the platform provides the function
       if (applyDelays && finalItineraries.length > 0) {
         try {
-          finalItineraries = await applyDelays(finalItineraries);
+          finalItineraries = await applyDelays(finalItineraries, delayOptions);
         } catch {
           // Continue without delay info
         }
@@ -382,7 +384,7 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, activeDetours, detourStopDetailsByRouteId, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
+  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {

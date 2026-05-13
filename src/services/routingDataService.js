@@ -350,13 +350,20 @@ export const getTripStopTimes = (stopTimes, tripId) => {
  * This is critical for RAPTOR performance
  *
  * @param {Array} stopTimes - Array of all stop times
- * @returns {Object} Map of "tripId_stopId" to stop time object
+ * @returns {Object} Map of "tripId_stopId" to ordered stop time objects
  */
 export const buildStopTimesIndex = (stopTimes) => {
   const index = {};
   stopTimes.forEach((st) => {
     const key = `${st.tripId}_${st.stopId}`;
-    index[key] = st;
+    if (!index[key]) {
+      index[key] = [];
+    }
+    index[key].push(st);
+  });
+
+  Object.keys(index).forEach((key) => {
+    index[key].sort((a, b) => (a.stopSequence || 0) - (b.stopSequence || 0));
   });
   return index;
 };

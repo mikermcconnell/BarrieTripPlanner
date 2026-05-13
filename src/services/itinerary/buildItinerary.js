@@ -186,7 +186,9 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         routingData,
         segment.tripId,
         segment.boardingStopId,
-        segment.alightingStopId
+        segment.alightingStopId,
+        segment.boardingStopSequence,
+        segment.alightingStopSequence
       );
 
       const route = routingData.routes ? getRouteInfo(routingData, segment.routeId) : null;

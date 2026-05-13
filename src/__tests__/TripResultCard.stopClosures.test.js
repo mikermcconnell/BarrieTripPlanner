@@ -326,6 +326,39 @@ describe('TripResultCard stop closure notices', () => {
     expect(texts.join(' ')).toContain('Depart in 8 min');
   });
 
+  test('explains why the recommended trip is surfaced', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        labels: ['Recommended'],
+        isRecommended: true,
+        hasRealtimeInfo: true,
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('Why this route: best live option right now.');
+  });
+
+  test('explains grouped similar options and live transfer risk', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        similarOptionsHidden: 2,
+        hasMissedTransfer: true,
+        transferRisk: {
+          status: 'missed',
+          bufferSeconds: -120,
+        },
+      },
+      onPress: jest.fn(),
+    }));
+
+    const text = texts.join(' ');
+    expect(text).toContain('Transfer risk: connection may be missed after live delays.');
+    expect(text).toContain('2 similar options hidden');
+  });
+
   test('uses the on-pace walking icon in the route preview', () => {
     const root = renderTree(React.createElement(TripResultCard, {
       itinerary: {

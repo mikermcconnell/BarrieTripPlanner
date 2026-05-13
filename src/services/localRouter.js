@@ -412,6 +412,7 @@ const raptorForward = (
                   boardTime: currentTime,
                   tripId: departure.tripId,
                   tripDepartureTime: departure.departureTime,
+                  boardingStopSequence: departure.stopSequence ?? null,
                   routeId,
                   directionId,
                   headsign: departure.headsign,
@@ -432,6 +433,7 @@ const raptorForward = (
                     boardTime: currentTime,
                     tripId: departure.tripId,
                     tripDepartureTime: departure.departureTime,
+                    boardingStopSequence: departure.stopSequence ?? null,
                     routeId,
                     directionId,
                     headsign: departure.headsign,
@@ -443,14 +445,17 @@ const raptorForward = (
 
           // If we're on a trip, can we improve arrival at this stop?
           if (boarding !== null && i > boarding.stopIndex) {
-            // Get arrival time at this stop for the trip we're on (O(1) lookup)
-            const arrivalTime = getTripArrivalAtStop(
+            // Get the first matching stop visit after the boarding sequence.
+            // Some loop routes visit the same stop more than once.
+            const alightingStopTime = getTripStopTimeAtStop(
               stopTimesIndex,
               boarding.tripId,
-              stopId
+              stopId,
+              boarding.boardingStopSequence
             );
 
-            if (arrivalTime !== null) {
+            if (alightingStopTime?.arrivalTime != null) {
+              const arrivalTime = alightingStopTime.arrivalTime;
               const previousBest = tau.get(stopId);
 
               if (previousBest === undefined || arrivalTime < previousBest) {
@@ -462,7 +467,9 @@ const raptorForward = (
                   directionId: boarding.directionId,
                   headsign: boarding.headsign,
                   boardingStopId: boarding.stopId,
+                  boardingStopSequence: boarding.boardingStopSequence,
                   boardingTime: boarding.tripDepartureTime,
+                  alightingStopSequence: alightingStopTime.stopSequence ?? null,
                   alightingTime: arrivalTime,
                 });
                 newMarked.add(stopId);
@@ -578,12 +585,25 @@ const getNextDepartureForRouteDirection = (
 };
 
 /**
- * Get arrival time at a specific stop for a trip (O(1) lookup)
+ * Get a specific stop visit for a trip (O(1) lookup by trip+stop, with
+ * sequence disambiguation for loop routes that visit a stop more than once).
  */
-const getTripArrivalAtStop = (stopTimesIndex, tripId, stopId) => {
+const getTripStopTimeAtStop = (stopTimesIndex, tripId, stopId, afterStopSequence = null) => {
   const key = `${tripId}_${stopId}`;
-  const st = stopTimesIndex[key];
-  return st?.arrivalTime ?? null;
+  const entries = stopTimesIndex[key];
+  const stopTimes = Array.isArray(entries)
+    ? entries
+    : (entries ? [entries] : []);
+  const hasMinSequence = afterStopSequence !== null &&
+    afterStopSequence !== undefined &&
+    afterStopSequence !== '';
+  const minSequence = hasMinSequence ? Number(afterStopSequence) : null;
+
+  return stopTimes.find((st) => {
+    if (st?.dropOffType === 1) return false;
+    if (!Number.isFinite(minSequence)) return true;
+    return Number(st?.stopSequence) > minSequence;
+  }) || null;
 };
 
 /**
@@ -613,6 +633,8 @@ const reconstructPath = (labels, endStopId, tau) => {
         headsign: label.headsign,
         boardingStopId: label.boardingStopId,
         alightingStopId: currentStopId,
+        boardingStopSequence: label.boardingStopSequence ?? null,
+        alightingStopSequence: label.alightingStopSequence ?? null,
         boardingTime: label.boardingTime,
         alightingTime: label.alightingTime,
       });

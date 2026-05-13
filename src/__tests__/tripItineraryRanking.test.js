@@ -1,4 +1,5 @@
 import {
+  groupSimilarItinerariesForDisplay,
   rankItinerariesForRider,
   scoreItineraryForRider,
   sortRecommendedItineraryFirst,
@@ -136,5 +137,47 @@ describe('tripItineraryRanking', () => {
       'next-best',
       'third-best',
     ]);
+  });
+
+  test('groups near-duplicate options while keeping the best visible route', () => {
+    const routeLeg = (route, startOffsetMinutes = 0, endOffsetMinutes = 20) => ({
+      mode: 'BUS',
+      route: { shortName: route },
+      startTime: BASE_TIME + startOffsetMinutes * 60 * 1000,
+      endTime: BASE_TIME + endOffsetMinutes * 60 * 1000,
+      from: { stopId: 'origin-stop' },
+      to: { stopId: 'destination-stop' },
+    });
+    const best = makeItinerary({
+      id: 'best-route-1',
+      durationMinutes: 20,
+      arrivalMinutes: 20,
+      walkDistance: 250,
+      legs: [routeLeg('1')],
+    });
+    const nearDuplicate = makeItinerary({
+      id: 'near-duplicate-route-1',
+      durationMinutes: 22,
+      arrivalMinutes: 22,
+      walkDistance: 310,
+      legs: [routeLeg('1', 1, 21)],
+    });
+    const distinctLaterChoice = makeItinerary({
+      id: 'later-route-1',
+      durationMinutes: 20,
+      arrivalMinutes: 35,
+      walkDistance: 250,
+      legs: [routeLeg('1', 15, 35)],
+    });
+
+    const grouped = groupSimilarItinerariesForDisplay([
+      best,
+      nearDuplicate,
+      distinctLaterChoice,
+    ]);
+
+    expect(grouped.map((itinerary) => itinerary.id)).toEqual(['best-route-1', 'later-route-1']);
+    expect(grouped[0].similarOptionsHidden).toBe(1);
+    expect(grouped[0].similarOptionIds).toEqual(['near-duplicate-route-1']);
   });
 });

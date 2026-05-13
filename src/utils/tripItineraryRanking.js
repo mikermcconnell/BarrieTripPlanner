@@ -9,10 +9,16 @@ const DEFAULT_TRANSFER_PENALTY_SECONDS = 7 * 60;
 const DEFAULT_RISKY_TRANSFER_THRESHOLD_SECONDS = 3 * 60;
 const DEFAULT_RISKY_TRANSFER_PENALTY_SECONDS = 5 * 60;
 const DEFAULT_LONG_TRANSFER_WALK_THRESHOLD_METERS = 250;
+const DEFAULT_SIMILAR_START_THRESHOLD_SECONDS = 5 * 60;
+const DEFAULT_SIMILAR_END_THRESHOLD_SECONDS = 8 * 60;
+const DEFAULT_SIMILAR_DURATION_THRESHOLD_SECONDS = 8 * 60;
+const DEFAULT_SIMILAR_WALK_THRESHOLD_METERS = 250;
 
 const isNumber = (value) => Number.isFinite(Number(value));
 
 const toSeconds = (milliseconds) => Math.round(Number(milliseconds) / 1000);
+
+const getTimeSeconds = (value) => (isNumber(value) ? toSeconds(Number(value)) : null);
 
 const getTransferCount = (itinerary) => {
   return getEffectiveTransferCount(itinerary);
@@ -149,6 +155,108 @@ export const rankItinerariesForRider = (itineraries = [], options = {}) => (
       (a.walkDistance || 0) - (b.walkDistance || 0)
     ))
 );
+
+const getRouteName = (leg) => (
+  leg?.route?.shortName ||
+  leg?.routeShortName ||
+  leg?.routeId ||
+  leg?.route ||
+  leg?.zoneName ||
+  leg?.mode ||
+  'ride'
+);
+
+const getSimilarityRouteSignature = (itinerary) => {
+  const rideLegs = getTransitRideLegsWithIndexes(itinerary?.legs || []);
+  if (rideLegs.length === 0) {
+    return itinerary?.isWalkingOnly ? 'WALKING_ONLY' : 'NO_TRANSIT';
+  }
+
+  return rideLegs.map(({ leg }) => String(getRouteName(leg)).trim().toUpperCase()).join('>');
+};
+
+const areSimilarItineraries = (candidate, kept, options) => {
+  if (getSimilarityRouteSignature(candidate) !== getSimilarityRouteSignature(kept)) return false;
+  if (getTransferCount(candidate) !== getTransferCount(kept)) return false;
+  if (Boolean(candidate?.isWalkingOnly) !== Boolean(kept?.isWalkingOnly)) return false;
+
+  const candidateStart = getTimeSeconds(candidate?.startTime);
+  const keptStart = getTimeSeconds(kept?.startTime);
+  const candidateEnd = getTimeSeconds(candidate?.endTime);
+  const keptEnd = getTimeSeconds(kept?.endTime);
+
+  if (
+    candidateStart != null &&
+    keptStart != null &&
+    Math.abs(candidateStart - keptStart) > options.similarStartThresholdSeconds
+  ) {
+    return false;
+  }
+
+  if (
+    candidateEnd != null &&
+    keptEnd != null &&
+    Math.abs(candidateEnd - keptEnd) > options.similarEndThresholdSeconds
+  ) {
+    return false;
+  }
+
+  if (
+    isNumber(candidate?.duration) &&
+    isNumber(kept?.duration) &&
+    Math.abs(Number(candidate.duration) - Number(kept.duration)) > options.similarDurationThresholdSeconds
+  ) {
+    return false;
+  }
+
+  if (
+    isNumber(candidate?.walkDistance) &&
+    isNumber(kept?.walkDistance) &&
+    Math.abs(Number(candidate.walkDistance) - Number(kept.walkDistance)) > options.similarWalkThresholdMeters
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+export const groupSimilarItinerariesForDisplay = (itineraries = [], options = {}) => {
+  const groupingOptions = {
+    similarStartThresholdSeconds:
+      options.similarStartThresholdSeconds ?? DEFAULT_SIMILAR_START_THRESHOLD_SECONDS,
+    similarEndThresholdSeconds:
+      options.similarEndThresholdSeconds ?? DEFAULT_SIMILAR_END_THRESHOLD_SECONDS,
+    similarDurationThresholdSeconds:
+      options.similarDurationThresholdSeconds ?? DEFAULT_SIMILAR_DURATION_THRESHOLD_SECONDS,
+    similarWalkThresholdMeters:
+      options.similarWalkThresholdMeters ?? DEFAULT_SIMILAR_WALK_THRESHOLD_METERS,
+  };
+  const visible = [];
+
+  itineraries.forEach((itinerary) => {
+    const existingIndex = visible.findIndex((kept) => (
+      areSimilarItineraries(itinerary, kept, groupingOptions)
+    ));
+
+    if (existingIndex === -1) {
+      visible.push(itinerary);
+      return;
+    }
+
+    const kept = visible[existingIndex];
+    visible[existingIndex] = {
+      ...kept,
+      similarOptionsHidden: (kept.similarOptionsHidden || 0) + 1 + (itinerary.similarOptionsHidden || 0),
+      similarOptionIds: [
+        ...(kept.similarOptionIds || []),
+        itinerary.id,
+        ...(itinerary.similarOptionIds || []),
+      ].filter(Boolean),
+    };
+  });
+
+  return visible;
+};
 
 const hasRecommendedLabel = (itinerary) => (
   itinerary?.isRecommended === true ||

@@ -5,7 +5,11 @@ import { analyzeZoneInvolvement, buildZoneAwareTrip, estimateOnDemandDuration } 
 import { haversineDistance } from '../utils/geometryUtils';
 import { validateTripInputs } from '../utils/tripValidation';
 import { retryFetch } from '../utils/retryFetch';
-import { rankItinerariesForRider, sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
+import {
+  groupSimilarItinerariesForDisplay,
+  rankItinerariesForRider,
+  sortRecommendedItineraryFirst,
+} from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
@@ -212,8 +216,10 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
   }
 
   // Sort by rider-friendly generalized cost so transfers need to save enough time.
-  finalItineraries = placeNonRecommendedWalkingAfterTransit(
-    rankItinerariesForRider(finalItineraries)
+  finalItineraries = groupSimilarItinerariesForDisplay(
+    placeNonRecommendedWalkingAfterTransit(
+      rankItinerariesForRider(finalItineraries)
+    )
   );
 
   // Add "Recommended" label to first non-tomorrow trip

@@ -314,6 +314,64 @@ const StopClosureNotice = ({ notice }) => {
   );
 };
 
+export const getChoiceExplanationMessages = (itinerary, context = {}) => {
+  const messages = [];
+  const transferRisk = itinerary?.transferRisk;
+  const similarOptionsHidden = Number(itinerary?.similarOptionsHidden) || 0;
+
+  if (itinerary?.hasMissedDeparture) {
+    messages.push('Why not this one: first bus likely already left.');
+  }
+
+  if (itinerary?.hasMissedTransfer || transferRisk?.status === 'missed') {
+    messages.push('Transfer risk: connection may be missed after live delays.');
+  } else if (transferRisk?.status === 'tight' || transferRisk?.status === 'warning') {
+    const bufferSeconds = Math.max(0, Number(transferRisk.bufferSeconds) || 0);
+    messages.push(`Transfer risk: only ${formatDuration(bufferSeconds)} buffer after live updates.`);
+  }
+
+  if (itinerary?.isRecommended) {
+    if (context.hasRealtimeInfo || itinerary?.hasRealtimeInfo) {
+      messages.push('Why this route: best live option right now.');
+    } else if (itinerary?.isWalkingOnly) {
+      messages.push('Why this route: walking is the simplest option for this trip.');
+    } else if ((context.effectiveTransfers ?? getEffectiveTransferCount(itinerary?.legs || [])) === 0) {
+      messages.push('Why this route: direct ride with a good arrival time.');
+    } else {
+      messages.push('Why this route: best balance of arrival time, walking, and transfers.');
+    }
+  }
+
+  if (similarOptionsHidden > 0) {
+    messages.push(`${similarOptionsHidden} similar option${similarOptionsHidden === 1 ? '' : 's'} hidden`);
+  }
+
+  return messages;
+};
+
+const ChoiceExplanation = ({ messages, warning = false }) => {
+  if (!messages?.length) return null;
+
+  return (
+    <View style={[
+      styles.choiceExplanation,
+      warning && styles.choiceExplanationWarning,
+    ]}>
+      {messages.map((message, index) => (
+        <Text
+          key={`${message}-${index}`}
+          style={[
+            styles.choiceExplanationText,
+            warning && styles.choiceExplanationTextWarning,
+          ]}
+        >
+          {message}
+        </Text>
+      ))}
+    </View>
+  );
+};
+
 const TripTimingSummary = ({ startTime, endTime }) => (
   <View style={styles.timingRow}>
     <View style={styles.timingBlock}>
@@ -364,6 +422,11 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const transferWaitDisplay = getTransferWaitDisplay(transferWaitSummaries);
   const stayOnBusDisplay = getStayOnBusDisplay(itinerary.legs);
   const routePreviewItems = getRoutePreviewItems(itinerary.legs);
+  const choiceExplanationMessages = getChoiceExplanationMessages(itinerary, {
+    effectiveTransfers,
+    hasRealtimeInfo,
+  });
+  const hasChoiceWarning = itinerary.hasMissedDeparture || itinerary.hasMissedTransfer;
 
   // Format "leaves in" text
   const getLeavesInText = () => {
@@ -401,12 +464,14 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                   label === 'Less Walking' && styles.labelLessWalking,
                   label === 'Direct' && styles.labelDirect,
                   label === 'Avoids Detour' && styles.labelAvoidsDetour,
+                  (label === 'Likely departed' || label === 'Missed transfer' || label === 'Tight transfer') && styles.labelRisk,
                 ]}
               >
                 <Text style={[
                   styles.labelText,
                   label === 'Recommended' && styles.labelTextRecommended,
                   label === 'Avoids Detour' && styles.labelTextAvoidsDetour,
+                  (label === 'Likely departed' || label === 'Missed transfer' || label === 'Tight transfer') && styles.labelTextRisk,
                 ]}>
                   {label === 'Recommended' ? '⭐ ' : ''}{label}
                 </Text>
@@ -448,6 +513,8 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             ))}
           </View>
         </View>
+
+        <ChoiceExplanation messages={choiceExplanationMessages} warning={hasChoiceWarning} />
 
         {/* On-demand booking note */}
         {onDemandLeg && (
@@ -533,12 +600,14 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                 label === 'Less Walking' && styles.labelLessWalking,
                 label === 'Direct' && styles.labelDirect,
                 label === 'Avoids Detour' && styles.labelAvoidsDetour,
+                (label === 'Likely departed' || label === 'Missed transfer' || label === 'Tight transfer') && styles.labelRisk,
               ]}
             >
               <Text style={[
                 styles.labelText,
                 label === 'Recommended' && styles.labelTextRecommended,
                 label === 'Avoids Detour' && styles.labelTextAvoidsDetour,
+                (label === 'Likely departed' || label === 'Missed transfer' || label === 'Tight transfer') && styles.labelTextRisk,
               ]}>
                 {label === 'Recommended' ? '⭐ ' : ''}{label}
               </Text>
@@ -580,6 +649,8 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           ))}
         </View>
       </View>
+
+      <ChoiceExplanation messages={choiceExplanationMessages} warning={hasChoiceWarning} />
 
       {/* On-demand booking note */}
       {onDemandLeg && (
@@ -675,6 +746,11 @@ const styles = StyleSheet.create({
   labelAvoidsDetour: {
     backgroundColor: COLORS.success + '20',
   },
+  labelRisk: {
+    backgroundColor: COLORS.error + '18',
+    borderWidth: 1,
+    borderColor: COLORS.error + '35',
+  },
   labelText: {
     fontSize: 10,
     fontWeight: FONT_WEIGHTS.bold,
@@ -687,6 +763,9 @@ const styles = StyleSheet.create({
   },
   labelTextAvoidsDetour: {
     color: COLORS.success,
+  },
+  labelTextRisk: {
+    color: COLORS.error,
   },
   tomorrowBadge: {
     paddingHorizontal: SPACING.sm,
@@ -702,6 +781,29 @@ const styles = StyleSheet.create({
   topRow: {
     gap: SPACING.xxs,
     marginBottom: SPACING.xxs,
+  },
+  choiceExplanation: {
+    backgroundColor: COLORS.grey50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginBottom: SPACING.xs,
+    gap: 2,
+  },
+  choiceExplanationWarning: {
+    backgroundColor: COLORS.warningSubtle,
+    borderColor: 'rgba(255, 153, 31, 0.35)',
+  },
+  choiceExplanationText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  choiceExplanationTextWarning: {
+    color: COLORS.textPrimary,
+    fontWeight: FONT_WEIGHTS.bold,
   },
   topRowHeader: {
     flexDirection: 'row',
