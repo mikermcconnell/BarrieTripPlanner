@@ -20,6 +20,11 @@ import {
   BUS_APPROACH_LINE_OUTLINE_WIDTH,
   BUS_APPROACH_LINE_OPACITY,
   BUS_APPROACH_LINE_STROKE_WIDTH,
+  ROUTE_LINE_CONTEXT_OPACITY,
+  ROUTE_LINE_MUTED_COLOR,
+  ROUTE_LINE_MUTED_OPACITY,
+  ROUTE_LINE_OUTLINE_COLOR,
+  ROUTE_LINE_WIDTH_SCALE,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES } from '../config/theme';
 import { getPlatformMapForStop } from '../config/platformMaps';
@@ -219,23 +224,39 @@ const getSelectedRouteLabelThreshold = (selectedRouteCount) => (
   selectedRouteCount === 1 ? 13.4 : 13.6
 );
 
+const getNativeRouteStrokeWidth = (currentZoom, state = 'base') => {
+  const zoom = Number.isFinite(currentZoom) ? currentZoom : 13;
+  const baseWidth = zoom >= 15
+    ? 3.6
+    : zoom >= 14.2
+      ? 3.2
+      : zoom >= 12.8
+        ? 2.6
+        : 2.2;
+
+  if (state === 'primary') return (baseWidth + 1.7) * ROUTE_LINE_WIDTH_SCALE;
+  if (state === 'selected') return (baseWidth + 1.4) * ROUTE_LINE_WIDTH_SCALE;
+  if (state === 'muted') return Math.max(1.8, baseWidth - 0.7) * ROUTE_LINE_WIDTH_SCALE;
+
+  return baseWidth * ROUTE_LINE_WIDTH_SCALE;
+};
+
 const getBaseRouteVisual = ({ shape, currentZoom }) => ({
   routeOpacity:
     shape.visualType === 'shared_trunk'
-      ? 0.34
+      ? 0.42
       : shape.visualType === 'family'
-        ? 0.42
+        ? 0.52
         : currentZoom >= 13.8
-          ? 0.52
-          : 0.38,
+          ? 0.72
+          : 0.58,
   routeStrokeWidth:
     shape.visualType === 'shared_trunk'
       ? 2.2
-      : currentZoom >= 14.2
-        ? 3
-        : 2.4,
+      : getNativeRouteStrokeWidth(currentZoom),
   routeColor: shape.color,
-  outlineWidth: shape.visualType === 'shared_trunk' ? 0 : currentZoom >= 14.2 ? 1 : 0.5,
+  outlineWidth: shape.visualType === 'shared_trunk' ? 0 : currentZoom >= 14.2 ? 1.25 : 0.75,
+  outlineColor: ROUTE_LINE_OUTLINE_COLOR,
   showRouteLabel: false,
   showArrows: getOneWayRouteArrowVisibility({
     routeId: shape.routeId,
@@ -258,10 +279,13 @@ const getRouteVisualState = ({
 }) => {
   if (hasDetourFocus) {
     return {
-      routeOpacity: isFocusedDetour ? 0.98 : isDetouring ? 0.2 : 0.1,
-      routeStrokeWidth: isFocusedDetour ? 5 : 2,
-      routeColor: isFocusedDetour ? shape.color : COLORS.grey400,
-      outlineWidth: isFocusedDetour ? (currentZoom >= 14.2 ? 2.5 : 1.5) : 0,
+      routeOpacity: isFocusedDetour ? 1 : isDetouring ? ROUTE_LINE_CONTEXT_OPACITY : 0.24,
+      routeStrokeWidth: isFocusedDetour
+        ? getNativeRouteStrokeWidth(currentZoom, 'primary')
+        : getNativeRouteStrokeWidth(currentZoom, 'muted'),
+      routeColor: isFocusedDetour ? shape.color : ROUTE_LINE_MUTED_COLOR,
+      outlineWidth: isFocusedDetour ? (currentZoom >= 14.2 ? 2.75 : 2) : 0,
+      outlineColor: ROUTE_LINE_OUTLINE_COLOR,
       showRouteLabel: false,
       showArrows: false,
     };
@@ -269,10 +293,13 @@ const getRouteVisualState = ({
 
   if (isDetourView && !hasSelection) {
     return {
-      routeOpacity: isDetouring ? 0.82 : 0.18,
-      routeStrokeWidth: isDetouring ? 4 : 2,
-      routeColor: isDetouring ? shape.color : COLORS.grey400,
-      outlineWidth: isDetouring ? (currentZoom >= 14.2 ? 1.5 : 1) : 0,
+      routeOpacity: isDetouring ? 0.9 : ROUTE_LINE_MUTED_OPACITY,
+      routeStrokeWidth: isDetouring
+        ? getNativeRouteStrokeWidth(currentZoom, 'selected')
+        : getNativeRouteStrokeWidth(currentZoom, 'muted'),
+      routeColor: isDetouring ? shape.color : ROUTE_LINE_MUTED_COLOR,
+      outlineWidth: isDetouring ? (currentZoom >= 14.2 ? 2.25 : 1.5) : 0,
+      outlineColor: ROUTE_LINE_OUTLINE_COLOR,
       showRouteLabel: false,
       showArrows: false,
     };
@@ -285,10 +312,13 @@ const getRouteVisualState = ({
       currentZoom >= getSelectedRouteLabelThreshold(selectedRouteCount);
 
     return {
-      routeOpacity: isSelected ? 1 : 0.3,
-      routeStrokeWidth: isSelected ? 4 : 2,
-      routeColor: shape.color,
-      outlineWidth: isSelected ? (currentZoom >= 14.2 ? 2 : 1.5) : 0,
+      routeOpacity: isSelected ? 1 : ROUTE_LINE_CONTEXT_OPACITY,
+      routeStrokeWidth: isSelected
+        ? getNativeRouteStrokeWidth(currentZoom, 'selected')
+        : getNativeRouteStrokeWidth(currentZoom, 'muted'),
+      routeColor: isSelected ? shape.color : ROUTE_LINE_MUTED_COLOR,
+      outlineWidth: isSelected ? (currentZoom >= 14.2 ? 2.5 : 1.75) : 0,
+      outlineColor: ROUTE_LINE_OUTLINE_COLOR,
       showRouteLabel,
       showArrows: getOneWayRouteArrowVisibility({
         routeId: shape.routeId,
@@ -411,6 +441,7 @@ const HomeMapRoutesLayer = React.memo(({
                   strokeWidth={routeVisual.routeStrokeWidth}
                   opacity={routeVisual.routeOpacity}
                   outlineWidth={routeVisual.outlineWidth}
+                  outlineColor={routeVisual.outlineColor}
                   showArrows={routeVisual.showArrows}
                   routeLabel={null}
                   layerIndex={MAP_LAYER_INDEX.ROUTES}
@@ -1386,10 +1417,13 @@ const HomeScreen = ({ route }) => {
     );
   }, [activeDetours, detoursEnabled, routeStopSequencesMapping, routeStopsMapping, stops]);
 
+  const tripDelayOptions = useMemo(() => ({ vehicles }), [vehicles]);
+
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
     ensureRoutingData,
     applyDelays: applyDelaysToItineraries,
+    delayOptions: tripDelayOptions,
     onTripPlanned: addTripToHistory,
     onDemandZones,
     stops,

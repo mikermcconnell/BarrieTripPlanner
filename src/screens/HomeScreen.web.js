@@ -15,6 +15,11 @@ import {
   BUS_APPROACH_LINE_OUTLINE_WIDTH,
   BUS_APPROACH_LINE_OPACITY,
   BUS_APPROACH_LINE_STROKE_WIDTH,
+  ROUTE_LINE_CONTEXT_OPACITY,
+  ROUTE_LINE_MUTED_COLOR,
+  ROUTE_LINE_MUTED_OPACITY,
+  ROUTE_LINE_OUTLINE_COLOR,
+  ROUTE_LINE_WIDTH_SCALE,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
 import { getPlatformMapForStop } from '../config/platformMaps';
@@ -757,12 +762,15 @@ const HomeScreen = ({ route }) => {
     return getRouteAlerts(routeId).length > 0;
   }, [getRouteAlerts]);
 
+  const tripDelayOptions = useMemo(() => ({ vehicles }), [vehicles]);
+
   // Trip planning — shared hook
   const trip = useTripPlanner({
     ensureRoutingData,
     onDemandZones,
     stops,
     applyDelays: applyDelaysToItineraries,
+    delayOptions: tripDelayOptions,
     onTripPlanned: addTripToHistory,
     activeDetours: detoursEnabled ? activeDetours : {},
     detourStopDetailsByRouteId,
@@ -1007,19 +1015,24 @@ const HomeScreen = ({ route }) => {
   // Zoom-dependent polyline weight
   const getPolylineWeight = useCallback((routeId) => {
     let base;
-    if (currentZoom <= 11) base = 3;
-    else if (currentZoom <= 13) base = 4.5;
-    else if (currentZoom <= 15) base = 6;
-    else base = 8;
+    if (currentZoom <= 11) base = 2.8;
+    else if (currentZoom <= 13) base = 4;
+    else if (currentZoom <= 15) base = 5.5;
+    else base = 7;
 
     const isDetouring = routeIsDetouring(routeId, mapDetourRouteIds);
     const isFocusedDetour = mapHasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, routeId);
 
-    if (isFocusedDetour) return base + 2;
-    if (isDetourView && !hasSelection) return isDetouring ? base : Math.max(3, base - 4);
-    if (selectedRoutes.has(routeId)) base += 2;
-    if (hoveredRouteId === routeId) base += 1.5;
-    return base;
+    let width = base;
+
+    if (isFocusedDetour) width = base + 2.2;
+    else if (isDetourView && !hasSelection) width = isDetouring ? base + 1.2 : Math.max(2, base - 2.2);
+    else {
+      if (selectedRoutes.has(routeId)) width += 1.8;
+      if (hoveredRouteId === routeId) width += 1.5;
+    }
+
+    return width * ROUTE_LINE_WIDTH_SCALE;
   }, [
     mapDetourRouteIds,
     currentZoom,
@@ -1410,24 +1423,26 @@ const HomeScreen = ({ route }) => {
           let routeLabel = null;
 
           if (mapHasDetourFocus) {
-            opacity = isFocusedDetour ? 0.98 : isDetouring ? 0.22 : 0.1;
-            outlineW = isFocusedDetour ? (currentZoom >= 14 ? 4 : 3) : 0;
-            routeColor = isFocusedDetour ? shape.color : COLORS.grey400;
+            opacity = isFocusedDetour ? 1 : isDetouring ? ROUTE_LINE_CONTEXT_OPACITY : 0.24;
+            outlineW = isFocusedDetour ? (currentZoom >= 14 ? 4.5 : 3.5) : 0;
+            routeColor = isFocusedDetour ? shape.color : ROUTE_LINE_MUTED_COLOR;
           } else if (isDetourView && !hasSelection) {
-            opacity = isDetouring ? 0.82 : 0.18;
-            outlineW = isDetouring ? (currentZoom >= 14 ? 3 : 2) : 0;
-            routeColor = isDetouring ? shape.color : COLORS.grey400;
+            opacity = isDetouring ? 0.92 : ROUTE_LINE_MUTED_OPACITY;
+            outlineW = isDetouring ? (currentZoom >= 14 ? 3.5 : 2.5) : 0;
+            routeColor = isDetouring ? shape.color : ROUTE_LINE_MUTED_COLOR;
           } else if (hasSelection) {
-            opacity = isSelected ? 1.0 : 0.15;
+            opacity = isSelected ? 1.0 : ROUTE_LINE_CONTEXT_OPACITY;
             outlineW = isSelected ? (currentZoom >= 14 ? 4 : 3) : 0;
+            routeColor = isSelected ? shape.color : ROUTE_LINE_MUTED_COLOR;
             // Square route labels are rendered as WebHtmlMarker badges below.
           } else if (isHovering) {
-            opacity = isThisHovered ? 0.9 : 0.24;
-            outlineW = isThisHovered ? (currentZoom >= 14 ? 2 : 1) : 0;
+            opacity = isThisHovered ? 0.95 : ROUTE_LINE_CONTEXT_OPACITY;
+            outlineW = isThisHovered ? (currentZoom >= 14 ? 2.5 : 1.5) : 0;
+            routeColor = isThisHovered ? shape.color : ROUTE_LINE_MUTED_COLOR;
             // Square route labels are rendered as WebHtmlMarker badges below.
           } else {
-            opacity = currentZoom >= 14 ? 0.58 : 0.42;
-            outlineW = currentZoom >= 15 ? 1 : 0;
+            opacity = currentZoom >= 14 ? 0.76 : 0.6;
+            outlineW = currentZoom >= 15 ? 1.25 : 0.75;
           }
 
           const isNewlySelected = newlySelectedRoutes.has(shape.routeId);
@@ -1463,6 +1478,7 @@ const HomeScreen = ({ route }) => {
                 strokeWidth={getPolylineWeight(shape.routeId)}
                 opacity={opacity}
                 outlineWidth={outlineW}
+                outlineColor={ROUTE_LINE_OUTLINE_COLOR}
                 smoothFactor={1.2}
                 onMouseOver={() => setHoveredRouteId(shape.routeId)}
                 onMouseOut={() => setHoveredRouteId(null)}
