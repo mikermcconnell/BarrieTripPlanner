@@ -36,6 +36,7 @@ import { autocompleteAddress, getDistanceFromBarrie } from '../services/location
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { findMatchingSavedPlaces } from '../utils/savedTransitUtils';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 import Icon from './Icon';
 
 const getSuggestionKey = (item, index) => [
@@ -143,7 +144,7 @@ const AddressAutocomplete = ({
         if (requestSeq !== requestSeqRef.current) return;
         console.error('Autocomplete search error:', error);
         setSuggestions([]);
-        setSearchError(error.message || 'Address search unavailable');
+        setSearchError(getUserFacingErrorMessage(error, 'Address search is unavailable. Please try again.'));
       } finally {
         if (requestSeq === requestSeqRef.current) {
           setIsLoading(false);

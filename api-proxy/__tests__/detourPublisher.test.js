@@ -5,6 +5,8 @@ const {
   buildDetectedEvent,
   buildClearedEvent,
   buildStaleClearedEvent,
+  enforceGeometryTrustGate,
+  shouldAttemptRoadMatchBackfill,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
 
@@ -141,6 +143,54 @@ describe('makeSnapshot', () => {
   });
 });
 
+describe('enforceGeometryTrustGate', () => {
+  test('hides legacy one-sided inferred paths while keeping alert geometry data', () => {
+    const inferredPath = [
+      { latitude: 44.395, longitude: -79.699 },
+      { latitude: 44.395, longitude: -79.687 },
+    ];
+    const skippedPath = [
+      { latitude: 44.39, longitude: -79.699 },
+      { latitude: 44.39, longitude: -79.687 },
+    ];
+
+    const result = enforceGeometryTrustGate({
+      shapeId: 'shape-12',
+      skippedSegmentPolyline: skippedPath,
+      inferredDetourPolyline: inferredPath,
+      likelyDetourPolyline: inferredPath,
+      likelyDetourRoadNames: ['Bayview Drive'],
+      roadMatchConfidence: 'medium',
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        shapeId: 'shape-12',
+        skippedSegmentPolyline: skippedPath,
+        inferredDetourPolyline: inferredPath,
+        entryPoint: { latitude: 44.39, longitude: -79.699 },
+        exitPoint: { latitude: 44.39, longitude: -79.687 },
+        debug: {
+          entryAnchorSource: 'projected-evidence-fallback',
+          exitAnchorSource: 'boundary-candidate',
+          hasEntryBoundaryCandidate: false,
+          hasExitBoundaryCandidate: true,
+          entryCandidateCount: 0,
+          exitCandidateCount: 1,
+        },
+      }],
+    });
+
+    expect(result.inferredDetourPolyline).toEqual(inferredPath);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.roadMatchConfidence).toBeNull();
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.segments[0].canShowDetourPath).toBe(false);
+    expect(result.segments[0].skippedSegmentPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+});
+
 describe('shouldWriteGeometry', () => {
   const NOW = Date.now();
 
@@ -213,6 +263,52 @@ describe('shouldWriteGeometry', () => {
   });
 });
 
+describe('shouldAttemptRoadMatchBackfill', () => {
+  const geometry = {
+    shapeId: '12A',
+    inferredDetourPolyline: [
+      { latitude: 44.3388, longitude: -79.6698 },
+      { latitude: 44.3362, longitude: -79.6712 },
+    ],
+    canShowDetourPath: true,
+    segments: [{
+      shapeId: '12A',
+      canShowDetourPath: true,
+      inferredDetourPolyline: [
+        { latitude: 44.3388, longitude: -79.6698 },
+        { latitude: 44.3362, longitude: -79.6712 },
+      ],
+    }],
+  };
+
+  test('returns true for an existing trusted path with no road-matched geometry yet', () => {
+    expect(shouldAttemptRoadMatchBackfill(
+      geometry,
+      {
+        routeId: '12A',
+        inferredDetourPolyline: geometry.inferredDetourPolyline,
+        likelyDetourPolyline: null,
+        segments: geometry.segments,
+      },
+      null
+    )).toBe(true);
+  });
+
+  test('returns false once a likely detour path already exists', () => {
+    expect(shouldAttemptRoadMatchBackfill(
+      geometry,
+      {
+        routeId: '12A',
+        likelyDetourPolyline: [
+          { latitude: 44.3388, longitude: -79.6698 },
+          { latitude: 44.3362, longitude: -79.6712 },
+        ],
+      },
+      null
+    )).toBe(false);
+  });
+});
+
 describe('buildUpdatedEvent', () => {
   const NOW = Date.now();
 
@@ -261,6 +357,26 @@ describe('buildUpdatedEvent', () => {
     expect(event).not.toBeNull();
     expect(event.changedFields).toContain('confidence');
     expect(event.changedFields).toContain('evidencePointCount');
+  });
+
+  test('detects clear reason changes', () => {
+    const prev = {
+      vehicleCount: 2,
+      triggerVehicleId: 'bus-1',
+      state: 'active',
+      clearReason: null,
+      detectedAtMs: NOW - 600000,
+    };
+    const current = {
+      triggerVehicleId: 'bus-1',
+      vehicleCount: 2,
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    };
+    const event = buildUpdatedEvent('8A', prev, current, NOW);
+    expect(event).not.toBeNull();
+    expect(event.clearReason).toBe('normal-route-observed');
+    expect(event.changedFields).toContain('clearReason');
   });
 
   test('returns null when nothing changed', () => {
@@ -370,6 +486,9 @@ describe('buildClearedEvent', () => {
       confidence: 'medium',
       evidencePointCount: 8,
       lastEvidenceAt: NOW - 30000,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 0,
+      clearReason: 'normal-route-observed',
       segmentCount: 1,
     };
     const event = buildClearedEvent('8A', previous, NOW);
@@ -381,5 +500,8 @@ describe('buildClearedEvent', () => {
     expect(event.confidence).toBe('medium');
     expect(event.evidencePointCount).toBe(8);
     expect(event.lastEvidenceAt).toBe(NOW - 30000);
+    expect(event.uniqueVehicleCount).toBe(2);
+    expect(event.currentVehicleCount).toBe(0);
+    expect(event.clearReason).toBe('normal-route-observed');
   });
 });

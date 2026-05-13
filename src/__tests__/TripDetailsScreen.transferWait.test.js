@@ -20,6 +20,19 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../components/TripStep', () => 'TripStep');
 jest.mock('../components/FareInfoPanel', () => 'FareInfoPanel');
 jest.mock('../components/Icon', () => 'Icon');
+jest.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: null,
+    updateNotificationSettings: jest.fn(),
+    updatePushToken: jest.fn(),
+  }),
+}));
+jest.mock('../services/notificationService', () => ({
+  getNotificationSettings: jest.fn(() => Promise.resolve({ tripReminders: true })),
+  registerForPushNotifications: jest.fn(() => Promise.resolve({ success: true, token: 'token' })),
+  saveNotificationSettings: jest.fn(() => Promise.resolve({ success: true })),
+  scheduleTripReminder: jest.fn(() => Promise.resolve({ success: true, identifier: 'notification-id' })),
+}));
 jest.mock('../utils/androidNavigationBar', () => ({
   addSafeBottomPadding: (base, inset) => base + inset,
   useSafeBottomInset: () => 0,

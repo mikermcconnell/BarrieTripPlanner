@@ -16,6 +16,7 @@ import { auth } from '../../config/firebase';
 import runtimeConfig, { GOOGLE_SIGN_IN_DISABLED_MESSAGE } from '../../config/runtimeConfig';
 import { userFirestoreService } from './userFirestoreService';
 import logger from '../../utils/logger';
+import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const GOOGLE_NATIVE_ERROR_MESSAGES = {
   DEVELOPER_ERROR:
@@ -112,7 +113,7 @@ export const authService = {
       logger.error('Sign out error:', error);
       return {
         success: false,
-        error: error.message,
+        error: getUserFacingErrorMessage(error, 'Could not sign out. Please try again.'),
       };
     }
   },

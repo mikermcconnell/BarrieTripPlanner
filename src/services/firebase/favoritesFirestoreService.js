@@ -11,6 +11,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const getUserFavoritesCollection = (uid, type) =>
   collection(db, 'users', uid, 'favorites', type, 'items');
@@ -34,7 +35,7 @@ export const favoritesFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error adding favorite stop:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not save this stop. Please try again.') };
     }
   },
 
@@ -47,7 +48,7 @@ export const favoritesFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error removing favorite stop:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not remove this stop. Please try again.') };
     }
   },
 
@@ -104,7 +105,7 @@ export const favoritesFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error adding favorite route:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not save this route. Please try again.') };
     }
   },
 
@@ -117,7 +118,7 @@ export const favoritesFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error removing favorite route:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not remove this route. Please try again.') };
     }
   },
 
@@ -189,7 +190,7 @@ export const favoritesFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error syncing favorites:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not sync your favourites. Please try again.') };
     }
   },
 

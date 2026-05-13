@@ -271,12 +271,19 @@ const getDetourNoticeCopy = (itinerary) => {
 
   const stopImpact = impacts.find((impact) => impact.severity === 'stop_affected');
   if (stopImpact) {
+    const titleByScope = {
+      boarding_stop: 'Boarding stop may be missed',
+      exit_stop: 'Exit stop may be missed',
+      boarding_and_exit_stops: 'Boarding and exit stops may be missed',
+      ride_stops: 'Stops during this ride may be missed',
+    };
+
     return {
       tone: 'warning',
-      title: 'Detour may affect this trip',
+      title: titleByScope[stopImpact.impactScope] || 'Detour may affect this trip',
       detail: stopImpact.affectedStopNames?.length
         ? `Affected: ${stopImpact.affectedStopNames.slice(0, 2).join(', ')}`
-        : stopImpact.message,
+        : stopImpact.guidance || stopImpact.message,
     };
   }
 
@@ -393,11 +400,13 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                   label === 'Fastest' && styles.labelFastest,
                   label === 'Less Walking' && styles.labelLessWalking,
                   label === 'Direct' && styles.labelDirect,
+                  label === 'Avoids Detour' && styles.labelAvoidsDetour,
                 ]}
               >
                 <Text style={[
                   styles.labelText,
                   label === 'Recommended' && styles.labelTextRecommended,
+                  label === 'Avoids Detour' && styles.labelTextAvoidsDetour,
                 ]}>
                   {label === 'Recommended' ? '⭐ ' : ''}{label}
                 </Text>
@@ -523,11 +532,13 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
                 label === 'Fastest' && styles.labelFastest,
                 label === 'Less Walking' && styles.labelLessWalking,
                 label === 'Direct' && styles.labelDirect,
+                label === 'Avoids Detour' && styles.labelAvoidsDetour,
               ]}
             >
               <Text style={[
                 styles.labelText,
                 label === 'Recommended' && styles.labelTextRecommended,
+                label === 'Avoids Detour' && styles.labelTextAvoidsDetour,
               ]}>
                 {label === 'Recommended' ? '⭐ ' : ''}{label}
               </Text>
@@ -661,6 +672,9 @@ const styles = StyleSheet.create({
   labelDirect: {
     backgroundColor: COLORS.secondary + '20',
   },
+  labelAvoidsDetour: {
+    backgroundColor: COLORS.success + '20',
+  },
   labelText: {
     fontSize: 10,
     fontWeight: FONT_WEIGHTS.bold,
@@ -670,6 +684,9 @@ const styles = StyleSheet.create({
   },
   labelTextRecommended: {
     color: COLORS.white,
+  },
+  labelTextAvoidsDetour: {
+    color: COLORS.success,
   },
   tomorrowBadge: {
     paddingHorizontal: SPACING.sm,

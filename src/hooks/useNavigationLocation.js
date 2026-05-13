@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
 import logger from '../utils/logger';
 import { haversineDistance } from '../utils/geometryUtils';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const LOCATION_CONFIG = {
   accuracy: Location.Accuracy.High,
@@ -91,7 +92,7 @@ export const useNavigationLocation = () => {
       return true;
     } catch (err) {
       logger.error('Error starting location tracking:', err);
-      setError(err.message || 'Failed to start location tracking');
+      setError(getUserFacingErrorMessage(err, 'Could not start navigation location tracking.'));
       return false;
     }
   }, [buildLocationPayload]);

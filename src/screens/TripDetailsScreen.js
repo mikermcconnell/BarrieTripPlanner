@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,13 @@ import { formatDuration, formatTimeFromTimestamp, formatDistance } from '../serv
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { useAuth } from '../context/AuthContext';
+import {
+  getNotificationSettings,
+  registerForPushNotifications,
+  saveNotificationSettings,
+  scheduleTripReminder,
+} from '../services/notificationService';
 import {
   getEffectiveTransferCount,
   isSameBusContinuation,
@@ -118,6 +125,8 @@ const TransferWaitStep = ({ transfer, sequence = null, total = null }) => {
 const TripDetailsScreen = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
+  const { user, updateNotificationSettings, updatePushToken } = useAuth();
+  const [reminderSet, setReminderSet] = useState(false);
   const { itinerary } = route.params;
 
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -148,6 +157,72 @@ const TripDetailsScreen = ({ route, navigation }) => {
 
     // Navigate to the in-app navigation screen
     navigation.navigate('Navigation', { itinerary });
+  };
+
+  const scheduleReminder = async ({ forceEnable = false } = {}) => {
+    const settings = await getNotificationSettings();
+    if (!settings.tripReminders && !forceEnable) {
+      Alert.alert(
+        'Trip reminders are off',
+        'Turn on Trip Reminders to schedule this reminder.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Turn on',
+            onPress: () => {
+              void scheduleReminder({ forceEnable: true });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    if (!Number.isFinite(itinerary.startTime)) {
+      Alert.alert('Reminder unavailable', 'This trip does not have a scheduled start time.');
+      return;
+    }
+
+    const reminderTime = itinerary.startTime - 5 * 60 * 1000;
+    if (reminderTime <= Date.now()) {
+      Alert.alert('Trip is too soon', 'This trip is too soon for a reminder.');
+      return;
+    }
+
+    if (forceEnable && !settings.tripReminders) {
+      const newSettings = { ...settings, tripReminders: true };
+      await saveNotificationSettings(newSettings);
+      if (user) {
+        await updateNotificationSettings(newSettings);
+      }
+    }
+
+    const registration = await registerForPushNotifications();
+    if (!registration.success) {
+      Alert.alert('Could not turn on notifications', registration.error || 'Please try again.');
+      return;
+    }
+    if (registration.token) {
+      await updatePushToken(registration.token);
+    }
+
+    const result = await scheduleTripReminder({
+      tripId: itinerary.id || `trip-${itinerary.startTime}`,
+      title: 'Trip reminder',
+      body: `Your trip leaves at ${startTime}.`,
+      triggerTime: reminderTime,
+      data: {
+        itineraryId: itinerary.id || null,
+        itineraryStartTime: itinerary.startTime,
+      },
+    });
+
+    if (result.success) {
+      setReminderSet(true);
+      Alert.alert('Reminder set', 'We’ll remind you 5 minutes before this trip leaves.');
+    } else {
+      Alert.alert('Could not set reminder', result.error || 'Please try again.');
+    }
   };
 
   return (
@@ -223,6 +298,15 @@ const TripDetailsScreen = ({ route, navigation }) => {
         styles.footer,
         { paddingBottom: addSafeBottomPadding(SPACING.md, bottomInset) },
       ]}>
+        <TouchableOpacity
+          style={[styles.reminderButton, reminderSet && styles.reminderButtonDisabled]}
+          onPress={() => scheduleReminder()}
+          disabled={reminderSet}
+        >
+          <Text style={[styles.reminderButtonText, reminderSet && styles.reminderButtonTextDisabled]}>
+            {reminderSet ? 'Reminder set' : 'Remind me'}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.startButton} onPress={startNavigation}>
           <Text style={styles.startButtonText}>Start Navigation</Text>
         </TouchableOpacity>
@@ -399,6 +483,27 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
+  },
+  reminderButton: {
+    backgroundColor: COLORS.primarySubtle,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+  },
+  reminderButtonDisabled: {
+    backgroundColor: COLORS.grey100,
+    borderColor: COLORS.borderLight,
+  },
+  reminderButtonText: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+  },
+  reminderButtonTextDisabled: {
+    color: COLORS.textSecondary,
   },
   startButton: {
     backgroundColor: COLORS.primary,

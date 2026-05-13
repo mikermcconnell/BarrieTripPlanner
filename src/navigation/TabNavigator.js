@@ -16,6 +16,7 @@ import NavigationScreen from '../screens/NavigationScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
+import AccountScreen from '../screens/AccountScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import TripHistoryScreen from '../screens/TripHistoryScreen';
 import AlertsScreen from '../screens/AlertsScreen';
@@ -72,6 +73,7 @@ const ProfileStack = () => (
     <Stack.Screen name="ProfileMain" component={ProfileScreen} />
     <Stack.Screen name="SignIn" component={SignInScreen} options={{ animation: 'slide_from_bottom' }} />
     <Stack.Screen name="SignUp" component={SignUpScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="Account" component={AccountScreen} />
     <Stack.Screen name="Favorites" component={FavoritesScreen} />
     <Stack.Screen name="TripHistory" component={TripHistoryScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />

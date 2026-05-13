@@ -53,6 +53,7 @@ import { useStepProgress } from '../hooks/useStepProgress';
 import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import * as Haptics from 'expo-haptics';
@@ -797,7 +798,10 @@ const NavigationScreen = ({ route }) => {
       trackNavigationEvent('navigation_reroute_failed', {
         code: error?.code || 'UNKNOWN_ERROR',
       });
-      Alert.alert('Could Not Recalculate', error.message || 'A new route could not be generated right now.');
+      Alert.alert(
+        'Could not recalculate route',
+        getUserFacingErrorMessage(error, 'A new route could not be generated right now.')
+      );
     } finally {
       setIsRecalculatingRoute(false);
     }

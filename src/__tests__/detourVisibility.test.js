@@ -8,12 +8,29 @@ describe('detourVisibility', () => {
     expect(isRiderVisibleDetour({ confidence: 'low', state: 'active' })).toBe(false);
   });
 
+  test('shows low-confidence active detours when validation visibility is enabled', () => {
+    expect(isRiderVisibleDetour(
+      { confidence: 'low', state: 'active' },
+      { showLowConfidence: true }
+    )).toBe(true);
+  });
+
   test('hides medium-confidence detours until at least two vehicles support them', () => {
     expect(isRiderVisibleDetour({ confidence: 'medium', vehicleCount: 1, state: 'active' })).toBe(false);
   });
 
   test('shows medium-confidence detours with two supporting vehicles', () => {
     expect(isRiderVisibleDetour({ confidence: 'medium', vehicleCount: 2, state: 'active' })).toBe(true);
+  });
+
+  test('uses explicit unique vehicle count when current count is zero', () => {
+    expect(isRiderVisibleDetour({
+      confidence: 'medium',
+      vehicleCount: 0,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 0,
+      state: 'active',
+    })).toBe(true);
   });
 
   test('shows high-confidence detours', () => {
@@ -29,6 +46,16 @@ describe('detourVisibility', () => {
     })).toEqual({
       twoVehicleMedium: { confidence: 'medium', vehicleCount: 2 },
       high: { confidence: 'high' },
+    });
+  });
+
+  test('filter includes low-confidence active detours when validation visibility is enabled', () => {
+    expect(filterRiderVisibleDetours({
+      lowActive: { confidence: 'low', state: 'active' },
+      lowCleared: { confidence: 'low', state: 'cleared' },
+      mediumOneVehicle: { confidence: 'medium', vehicleCount: 1, state: 'active' },
+    }, { showLowConfidence: true })).toEqual({
+      lowActive: { confidence: 'low', state: 'active' },
     });
   });
 });

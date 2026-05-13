@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import logger from './logger';
+import { getUserFacingErrorMessage } from './userFacingErrors';
 
 const CACHE_KEYS = {
   GTFS_DATA: '@barrie_transit_gtfs_cache',
@@ -63,11 +64,11 @@ export const cacheData = async (key, data) => {
         return { success: true };
       } catch (retryError) {
         logger.warn(`Cache retry failed for ${key}, skipping:`, retryError.message);
-        return { success: false, error: retryError.message };
+        return { success: false, error: getUserFacingErrorMessage(retryError, 'Could not save offline data.') };
       }
     }
     logger.warn('Error caching data:', error.message);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not save offline data.') };
   }
 };
 
@@ -132,7 +133,7 @@ export const cacheGTFSData = async (data) => {
     return { success: true };
   } catch (error) {
     logger.error('Error caching GTFS data:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not save transit data for offline use.') };
   }
 };
 
@@ -190,7 +191,7 @@ export const clearCache = async () => {
     return { success: true };
   } catch (error) {
     logger.error('Error clearing cache:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not clear cached data. Please try again.') };
   }
 };
 

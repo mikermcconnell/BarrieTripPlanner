@@ -40,6 +40,8 @@ import { projectPointToPolyline } from '../utils/geometryUtils';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
+import { getDisplayedVehiclesForDetourView, isRouteInSameDetourFamily } from '../utils/detourVehicleFiltering';
+import { getRouteShapeVisibleSegments } from '../utils/detourRouteMasking';
 import {
   getDetourLabelDensity,
   getDetourGeometryOverlayProps,
@@ -47,7 +49,7 @@ import {
 } from '../utils/detourViewMode';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
-import { useDetourOverlays } from '../hooks/useDetourOverlays';
+import { getDetourOverlayRouteIds, useDetourOverlays } from '../hooks/useDetourOverlays';
 import { useZoneOverlays } from '../hooks/useZoneOverlays';
 import ZoneOverlay from '../components/ZoneOverlay';
 import ZoneInfoSheet from '../components/ZoneInfoSheet';
@@ -326,7 +328,7 @@ const HomeMapRoutesLayer = React.memo(({
       {displayedShapes.map((shape) => {
         const isSelected = isRouteSelected(shape.routeId);
         const isDetouring = routeIsDetouring(shape.routeId, activeDetourRouteIds);
-        const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === shape.routeId;
+        const isFocusedDetour = hasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, shape.routeId);
         const shouldRenderShape = shouldRenderRouteShape({
           routeId: shape.routeId,
           activeDetourRouteIds,
@@ -371,19 +373,51 @@ const HomeMapRoutesLayer = React.memo(({
           selectedRouteCount,
         });
 
+        const visibleRouteSegments = getRouteShapeVisibleSegments({
+          shape,
+          detourOverlays,
+        });
+
+        if (visibleRouteSegments.length === 0) {
+          return (
+            <RoutePolyline
+              key={shape.id}
+              id={`route-${shape.id}`}
+              coordinates={shape.coordinates}
+              color={shape.color}
+              strokeWidth={1}
+              opacity={0}
+              outlineWidth={0}
+              showArrows={false}
+              routeLabel={null}
+              layerIndex={MAP_LAYER_INDEX.ROUTES}
+            />
+          );
+        }
+
         return (
-          <RoutePolyline
-            key={shape.id}
-            id={`route-${shape.id}`}
-            coordinates={shape.coordinates}
-            color={routeVisual.routeColor}
-            strokeWidth={routeVisual.routeStrokeWidth}
-            opacity={routeVisual.routeOpacity}
-            outlineWidth={routeVisual.outlineWidth}
-            showArrows={routeVisual.showArrows}
-            routeLabel={null}
-            layerIndex={MAP_LAYER_INDEX.ROUTES}
-          />
+          <React.Fragment key={shape.id}>
+            {visibleRouteSegments.map((coordinates, segmentIndex) => {
+              const segmentId = visibleRouteSegments.length === 1
+                ? shape.id
+                : `${shape.id}-visible-${segmentIndex}`;
+
+              return (
+                <RoutePolyline
+                  key={segmentId}
+                  id={`route-${segmentId}`}
+                  coordinates={coordinates}
+                  color={routeVisual.routeColor}
+                  strokeWidth={routeVisual.routeStrokeWidth}
+                  opacity={routeVisual.routeOpacity}
+                  outlineWidth={routeVisual.outlineWidth}
+                  showArrows={routeVisual.showArrows}
+                  routeLabel={null}
+                  layerIndex={MAP_LAYER_INDEX.ROUTES}
+                />
+              );
+            })}
+          </React.Fragment>
         );
       })}
       {detourOverlays.map((overlay) => (
@@ -617,7 +651,7 @@ const HomeMapVehiclesLayer = React.memo(({
   if (Platform.OS === 'android') {
     return displayedVehicles.map((vehicle) => {
       const isDetouring = routeIsDetouring(vehicle.routeId, activeDetourRouteIds);
-      const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
+      const isFocusedDetour = hasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, vehicle.routeId);
       const dimmed = hasDetourFocus
         ? !isFocusedDetour
         : isDetourView && !hasSelection
@@ -641,7 +675,7 @@ const HomeMapVehiclesLayer = React.memo(({
 
   return displayedVehicles.map((vehicle) => {
     const isDetouring = routeIsDetouring(vehicle.routeId, activeDetourRouteIds);
-    const isFocusedDetour = hasDetourFocus && focusedDetourRouteId === vehicle.routeId;
+    const isFocusedDetour = hasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, vehicle.routeId);
     const dimmed = hasDetourFocus
       ? !isFocusedDetour
       : isDetourView && !hasSelection
@@ -886,6 +920,7 @@ const HomeMapView = React.memo(({
   routeLineLabelMarkers,
   detourOverlays,
   handleDetourOverlayPress,
+  handleDetourStopPress,
   zoneOverlays,
   handleZonePress,
   displayedStopsLength,
@@ -1020,6 +1055,7 @@ const HomeMapView = React.memo(({
         currentZoom={currentZoom}
         labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
         onPress={() => handleDetourOverlayPress?.(overlay.routeId)}
+        onStopPress={handleDetourStopPress}
       />
     ))}
 
@@ -1093,6 +1129,7 @@ const HomeMapView = React.memo(({
   prev.routeLineLabelMarkers === next.routeLineLabelMarkers &&
   prev.detourOverlays === next.detourOverlays &&
   prev.handleDetourOverlayPress === next.handleDetourOverlayPress &&
+  prev.handleDetourStopPress === next.handleDetourStopPress &&
   prev.zoneOverlays === next.zoneOverlays &&
   prev.handleZonePress === next.handleZonePress &&
   prev.displayedStopsLength === next.displayedStopsLength &&
@@ -1263,6 +1300,7 @@ const HomeScreen = ({ route }) => {
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const [focusedDetourRouteId, setFocusedDetourRouteId] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('regular');
+  const [detourLegendAutoCollapseSignal, setDetourLegendAutoCollapseSignal] = useState(0);
   const [secondaryChromeReady, setSecondaryChromeReady] = useState(false);
   const [mapReadyToMount, setMapReadyToMount] = useState(false);
   const [savedPlacePicker, setSavedPlacePicker] = useState(null);
@@ -1483,10 +1521,17 @@ const HomeScreen = ({ route }) => {
 
     return routeIds;
   }, [activeDetours, detoursEnabled]);
-  const shouldShowDetourStatusRow = !isTripPlanningMode && activeDetourRouteIds.size > 0;
   const canUseDetourView = detoursEnabled && activeDetourRouteIds.size > 0;
   const isDetourView = canUseDetourView && mapViewMode === 'detour';
   const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
+
+  const handleMapViewModeChange = useCallback((nextMode) => {
+    setMapViewMode(nextMode);
+
+    if (nextMode === 'detour') {
+      setDetourLegendAutoCollapseSignal((signal) => signal + 1);
+    }
+  }, []);
 
   useEffect(() => {
     if (!canUseDetourView && mapViewMode !== 'regular') {
@@ -1655,6 +1700,24 @@ const HomeScreen = ({ route }) => {
     routeShapeDisplayMode: !hasSelection && !hasDetourFocus ? 'native_home' : 'default',
   });
 
+  const mapDisplayedVehicles = useMemo(() => getDisplayedVehiclesForDetourView({
+    displayedVehicles,
+    vehicles,
+    selectedRouteIds: selectedRoutes,
+    activeDetours: detoursEnabled ? activeDetours : {},
+    focusedDetourRouteId: hasDetourFocus ? focusedDetourRouteId : null,
+    isDetourView,
+  }), [
+    activeDetours,
+    detoursEnabled,
+    displayedVehicles,
+    focusedDetourRouteId,
+    hasDetourFocus,
+    isDetourView,
+    selectedRoutes,
+    vehicles,
+  ]);
+
   const routeColorByRouteId = useMemo(
     () => Object.fromEntries((routes || []).filter((route) => route?.id).map((route) => [route.id, getRouteColor(route.id)])),
     [routes, getRouteColor]
@@ -1682,13 +1745,44 @@ const HomeScreen = ({ route }) => {
     focusedRouteId: hasDetourFocus ? focusedDetourRouteId : null,
     detourStopDetailsByRouteId,
     routeColorByRouteId,
+    showAllClosedStopMarkers: isDetourView && !hasDetourFocus,
+    showLowConfidenceGeometry: isDetourView || hasDetourFocus,
   });
+  const mapDetourRouteIds = useMemo(
+    () => getDetourOverlayRouteIds(detourOverlays),
+    [detourOverlays]
+  );
+  const mapHasDetourFocus = isDetourView &&
+    Boolean(focusedDetourRouteId) &&
+    routeIsDetouring(focusedDetourRouteId, mapDetourRouteIds);
+  const statusDetours = useMemo(() => (
+    Object.fromEntries(
+      Object.entries(activeDetours || {}).filter(([routeId]) =>
+        routeIsDetouring(routeId, mapDetourRouteIds)
+      )
+    )
+  ), [activeDetours, mapDetourRouteIds]);
+  const statusDetourRouteIds = useMemo(
+    () => new Set(Object.keys(statusDetours)),
+    [statusDetours]
+  );
+  const shouldShowDetourStatusRow = !isTripPlanningMode && statusDetourRouteIds.size > 0;
 
   const handleDetourOverlayPress = useCallback((routeId) => {
     if (!routeId) return;
     setFocusedDetourRouteId(routeId);
     setDetourSheetRouteId(routeId);
     setMapViewMode('detour');
+  }, []);
+
+  const handleDetourStopPress = useCallback((stop) => {
+    if (!stop) return;
+    suppressNextMapTapRef.current = true;
+    setTimeout(() => {
+      suppressNextMapTapRef.current = false;
+    }, 0);
+    setSelectedStop(stop);
+    setShowStops(true);
   }, []);
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
@@ -2161,14 +2255,15 @@ const HomeScreen = ({ route }) => {
           hasSelection={hasSelection}
           selectedRouteCount={selectedRoutes.size}
           currentZoom={currentZoom}
-          activeDetourRouteIds={activeDetourRouteIds}
-          hasDetourFocus={hasDetourFocus}
+          activeDetourRouteIds={mapDetourRouteIds}
+          hasDetourFocus={mapHasDetourFocus}
           focusedDetourRouteId={focusedDetourRouteId}
           isDetourView={isDetourView}
           routeShortNameMap={routeShortNameMap}
           routeLineLabelMarkers={routeLineLabelMarkers}
           detourOverlays={detourOverlays}
           handleDetourOverlayPress={handleDetourOverlayPress}
+          handleDetourStopPress={handleDetourStopPress}
           zoneOverlays={zoneOverlays}
           handleZonePress={handleZonePress}
           displayedStopsLength={displayedStopsForMap.length}
@@ -2176,7 +2271,7 @@ const HomeScreen = ({ route }) => {
           selectedStopId={selectedStop?.id ?? null}
           stopsGeoJson={stopsGeoJson}
           handleStopLayerPress={handleStopLayerPress}
-          displayedVehicles={displayedVehicles}
+          displayedVehicles={mapDisplayedVehicles}
           getRouteColor={getRouteColor}
           getRouteLabel={getRouteLabel}
           getVehicleSnapPath={getVehicleSnapPath}
@@ -2298,33 +2393,34 @@ const HomeScreen = ({ route }) => {
       {shouldShowDetourStatusRow && (
         <View style={styles.detourStatusRow}>
           <DetourAlertStrip
-            activeDetours={activeDetours}
+            activeDetours={statusDetours}
             onPress={(routeId) => {
               if (!routeId) {
-                setMapViewMode('detour');
+                handleMapViewModeChange('detour');
                 return;
               }
 
               setFocusedDetourRouteId(routeId);
               setDetourSheetRouteId(routeId);
-              setMapViewMode('detour');
+              handleMapViewModeChange('detour');
             }}
             routes={routes}
             inline
           />
           <MapViewModeToggle
-            visible={canUseDetourView}
+            visible={statusDetourRouteIds.size > 0}
             mode={mapViewMode}
-            onChange={setMapViewMode}
-            detourCount={activeDetourRouteIds.size}
+            onChange={handleMapViewModeChange}
+            detourCount={statusDetourRouteIds.size}
             inline
           />
         </View>
       )}
 
       <DetourMapLegend
-        visible={!isTripPlanningMode && !detourSheetRouteId && isDetourView && detourOverlays.length > 0 && !detourOverlays.some((overlay) => overlay.showCallouts)}
+        visible={!isTripPlanningMode && !detourSheetRouteId && isDetourView && detourOverlays.length > 0}
         openColor={detourOverlays.length === 1 ? detourOverlays[0].detourColor : COLORS.textPrimary}
+        autoCollapseSignal={detourLegendAutoCollapseSignal}
         style={styles.detourLegend}
       />
 

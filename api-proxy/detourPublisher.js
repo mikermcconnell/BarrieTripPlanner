@@ -76,6 +76,7 @@ function hasGeometryPayload(source) {
     'exitPoint',
     'skippedSegmentPolyline',
     'inferredDetourPolyline',
+    'canShowDetourPath',
     'likelyDetourPolyline',
     'likelyDetourRoadNames',
     'roadMatchConfidence',
@@ -108,12 +109,157 @@ function geometrySignatureFromSegments(segments) {
         entry?.longitude ?? entry?.lon ?? '',
         exit?.latitude ?? exit?.lat ?? '',
         exit?.longitude ?? exit?.lon ?? '',
+        segment?.canShowDetourPath === true ? 'show-path' : segment?.canShowDetourPath === false ? 'hide-path' : '',
+        polylineSignature(segment?.skippedSegmentPolyline),
         polylineSignature(segment?.likelyDetourPolyline),
         polylineSignature(segment?.inferredDetourPolyline),
         (segment?.likelyDetourRoadNames || []).join(','),
       ].join(':');
     })
     .join('|');
+}
+
+function hasBoundaryDebug(segment) {
+  const debug = segment?.debug || {};
+  return [
+    'entryCandidateCount',
+    'exitCandidateCount',
+    'hasEntryBoundaryCandidate',
+    'hasExitBoundaryCandidate',
+    'entryAnchorSource',
+    'exitAnchorSource',
+  ].some((key) => hasOwn(debug, key));
+}
+
+function hasConfirmedBoundaryAnchorPair(segment) {
+  if (!segment?.entryPoint || !segment?.exitPoint) return false;
+  if (!hasBoundaryDebug(segment)) return true;
+
+  const debug = segment.debug || {};
+  if (debug.entryCandidateCount === 0 || debug.hasEntryBoundaryCandidate === false) {
+    return false;
+  }
+  if (debug.entryAnchorSource === 'projected-evidence-fallback') {
+    return false;
+  }
+  if (debug.exitCandidateCount === 0 || debug.hasExitBoundaryCandidate === false) {
+    return false;
+  }
+  if (debug.exitAnchorSource === 'projected-evidence-fallback') {
+    return false;
+  }
+
+  return true;
+}
+
+function clearRoadMatchedPath(target) {
+  target.likelyDetourPolyline = null;
+  target.likelyDetourRoadNames = [];
+  target.roadMatchConfidence = null;
+  target.roadMatchRawConfidence = null;
+  target.roadMatchSource = null;
+}
+
+function getRenderableSegment(segment) {
+  if (!segment) return false;
+  return (
+    Array.isArray(segment.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2
+  ) || (
+    Array.isArray(segment.inferredDetourPolyline) && segment.inferredDetourPolyline.length >= 2
+  ) || (
+    Array.isArray(segment.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2
+  );
+}
+
+function hasLikelyDetourPath(source) {
+  if (!source || typeof source !== 'object') return false;
+  if (Array.isArray(source.likelyDetourPolyline) && source.likelyDetourPolyline.length >= 2) {
+    return true;
+  }
+  return Array.isArray(source.segments) && source.segments.some((segment) => (
+    Array.isArray(segment?.likelyDetourPolyline) &&
+    segment.likelyDetourPolyline.length >= 2
+  ));
+}
+
+function hasTrustedInferredDetourPath(geometry) {
+  if (!geometry || typeof geometry !== 'object') return false;
+  if (
+    geometry.canShowDetourPath === true &&
+    Array.isArray(geometry.inferredDetourPolyline) &&
+    geometry.inferredDetourPolyline.length >= 2
+  ) {
+    return true;
+  }
+  return Array.isArray(geometry.segments) && geometry.segments.some((segment) => (
+    segment?.canShowDetourPath === true &&
+    Array.isArray(segment.inferredDetourPolyline) &&
+    segment.inferredDetourPolyline.length >= 2
+  ));
+}
+
+function geometryBackfillSignature(geometry) {
+  const segmentSignature = geometrySignatureFromSegments(geometry?.segments);
+  if (segmentSignature) return segmentSignature;
+  return polylineSignature(geometry?.inferredDetourPolyline);
+}
+
+function shouldAttemptRoadMatchBackfill(geometry, previousSnapshot, knownGeometry) {
+  if (!hasTrustedInferredDetourPath(geometry)) return false;
+  if (hasLikelyDetourPath(geometry) || hasLikelyDetourPath(previousSnapshot)) return false;
+
+  const signature = geometryBackfillSignature(geometry);
+  if (!signature) return false;
+  return knownGeometry?.roadMatchBackfillAttemptedSignature !== signature;
+}
+
+function enforceGeometryTrustGate(geometry) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+
+  const next = cloneJson(geometry);
+  const segments = Array.isArray(next.segments)
+    ? next.segments.map((segment) => {
+      const normalized = { ...segment };
+      const hasConfirmedBoundaries = hasConfirmedBoundaryAnchorPair(normalized);
+
+      if (!hasConfirmedBoundaries && hasBoundaryDebug(normalized)) {
+        normalized.skippedSegmentPolyline = null;
+      }
+
+      if (normalized.canShowDetourPath !== true) {
+        normalized.canShowDetourPath =
+          normalized.canShowDetourPath === false || !hasConfirmedBoundaries
+            ? false
+            : normalized.canShowDetourPath;
+      }
+
+      if (normalized.canShowDetourPath === false) {
+        clearRoadMatchedPath(normalized);
+      }
+
+      return normalized;
+    })
+    : [];
+
+  if (Array.isArray(next.segments)) {
+    next.segments = segments;
+  }
+
+  const primarySegment = segments.find(getRenderableSegment) || segments[0] || null;
+  if (primarySegment) {
+    next.skippedSegmentPolyline = primarySegment.skippedSegmentPolyline || null;
+    if (primarySegment.canShowDetourPath != null) {
+      next.canShowDetourPath = primarySegment.canShowDetourPath === true;
+    }
+
+    if (primarySegment.canShowDetourPath === false) {
+      clearRoadMatchedPath(next);
+    }
+  } else if (next.canShowDetourPath === false) {
+    clearRoadMatchedPath(next);
+  }
+
+  return next;
 }
 
 function pickGeometryValue(doc, previousSnapshot, key, fallback = null) {
@@ -146,6 +292,9 @@ function makeSnapshot(doc, previousSnapshot = null) {
     'likelyDetourPolyline',
     null
   );
+  const canShowDetourPath = hasOwn(doc, 'canShowDetourPath')
+    ? doc.canShowDetourPath
+    : (previousSnapshot?.canShowDetourPath ?? null);
   const likelyDetourRoadNames = pickGeometryValue(
     doc,
     previousSnapshot,
@@ -181,13 +330,17 @@ function makeSnapshot(doc, previousSnapshot = null) {
     updatedAtMs: toMillis(doc.updatedAt),
     triggerVehicleId: doc.triggerVehicleId || null,
     vehicleCount: normalizeVehicleCount(doc.vehicleCount),
+    uniqueVehicleCount: normalizeVehicleCount(doc.uniqueVehicleCount ?? doc.vehicleCount),
+    currentVehicleCount: normalizeVehicleCount(doc.currentVehicleCount ?? doc.vehicleCount),
     state: doc.state || 'active',
+    clearReason: doc.clearReason || null,
     isPersistent: Boolean(doc.isPersistent),
     shapeId,
     entryPoint,
     exitPoint,
     skippedSegmentPolyline,
     inferredDetourPolyline,
+    canShowDetourPath,
     likelyDetourPolyline,
     likelyDetourRoadNames,
     roadMatchConfidence,
@@ -224,6 +377,31 @@ function hasRenderableGeometry(geo) {
   ) || (
     Array.isArray(geo.likelyDetourPolyline) && geo.likelyDetourPolyline.length >= 2
   );
+}
+
+function applyGeometryMetadata(doc, geo) {
+  if (!geo || typeof geo !== 'object') return;
+
+  if (hasOwn(geo, 'canShowDetourPath')) {
+    doc.canShowDetourPath = geo.canShowDetourPath ?? null;
+  }
+  if (hasOwn(geo, 'confidence')) {
+    doc.confidence = geo.confidence || null;
+  }
+  if (hasOwn(geo, 'evidencePointCount')) {
+    doc.evidencePointCount = geo.evidencePointCount ?? null;
+  }
+  if (hasOwn(geo, 'lastEvidenceAt')) {
+    doc.lastEvidenceAt = geo.lastEvidenceAt ?? null;
+  }
+
+  if (geo.canShowDetourPath === false) {
+    doc.likelyDetourPolyline = null;
+    doc.likelyDetourRoadNames = [];
+    doc.roadMatchConfidence = null;
+    doc.roadMatchRawConfidence = null;
+    doc.roadMatchSource = null;
+  }
 }
 
 /**
@@ -285,6 +463,8 @@ function buildDetectedEvent(routeId, current, now) {
     lastSeenAt: current?.lastSeenAtMs ?? toMillis(current.lastSeenAt) ?? detectedAt,
     triggerVehicleId: current.triggerVehicleId || null,
     vehicleCount: current.vehicleCount,
+    uniqueVehicleCount: current.uniqueVehicleCount ?? current.vehicleCount,
+    currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
     confidence: current.confidence || null,
     evidencePointCount: current.evidencePointCount ?? null,
     lastEvidenceAt: current.lastEvidenceAt ?? null,
@@ -316,6 +496,12 @@ function buildUpdatedEvent(routeId, previous, current, now) {
 
   const changedFields = [];
   if (previous.vehicleCount !== current.vehicleCount) changedFields.push('vehicleCount');
+  if ((previous.uniqueVehicleCount ?? previous.vehicleCount) !== (current.uniqueVehicleCount ?? current.vehicleCount)) {
+    changedFields.push('uniqueVehicleCount');
+  }
+  if ((previous.currentVehicleCount ?? previous.vehicleCount) !== (current.currentVehicleCount ?? current.vehicleCount)) {
+    changedFields.push('currentVehicleCount');
+  }
   if ((previous.triggerVehicleId || null) !== (current.triggerVehicleId || null)) {
     changedFields.push('triggerVehicleId');
   }
@@ -326,6 +512,9 @@ function buildUpdatedEvent(routeId, previous, current, now) {
   }
   if ((previous.evidencePointCount ?? null) !== (current.evidencePointCount ?? null)) {
     changedFields.push('evidencePointCount');
+  }
+  if ((previous.clearReason || null) !== (current.clearReason || null)) {
+    changedFields.push('clearReason');
   }
 
   if (changedFields.length === 0) return null;
@@ -341,6 +530,9 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     previousTriggerVehicleId: previous.triggerVehicleId || null,
     vehicleCount: current.vehicleCount,
     previousVehicleCount: previous.vehicleCount,
+    uniqueVehicleCount: current.uniqueVehicleCount ?? current.vehicleCount,
+    currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
+    clearReason: current.clearReason || null,
     changedFields,
     source: 'detour-worker-v2',
   };
@@ -357,6 +549,9 @@ function buildClearedEvent(routeId, previous, now) {
     durationMs: detectedAt != null ? Math.max(0, now - detectedAt) : null,
     triggerVehicleId: previous?.triggerVehicleId || null,
     previousVehicleCount: previous?.vehicleCount ?? 0,
+    uniqueVehicleCount: previous?.uniqueVehicleCount ?? previous?.vehicleCount ?? 0,
+    currentVehicleCount: previous?.currentVehicleCount ?? previous?.vehicleCount ?? 0,
+    clearReason: previous?.clearReason || 'detector-cleared',
     confidence: previous?.confidence || null,
     evidencePointCount: previous?.evidencePointCount ?? null,
     lastEvidenceAt: previous?.lastEvidenceAt ?? null,
@@ -422,7 +617,10 @@ async function hydratePublisherState(db) {
           updatedAt: data.updatedAt || null,
           triggerVehicleId: data.triggerVehicleId || null,
           vehicleCount: normalizeVehicleCount(data.vehicleCount),
+          uniqueVehicleCount: normalizeVehicleCount(data.uniqueVehicleCount ?? data.vehicleCount),
+          currentVehicleCount: normalizeVehicleCount(data.currentVehicleCount ?? data.vehicleCount),
           state: data.state || 'active',
+          clearReason: data.clearReason || null,
           confidence: data.confidence || null,
           roadMatchConfidence: data.roadMatchConfidence || null,
           roadMatchRawConfidence: data.roadMatchRawConfidence ?? null,
@@ -560,45 +758,28 @@ async function publishDetours(activeDetours, options = {}) {
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
   const scheduleIndex = options.scheduleIndex || options.gtfsData?.scheduleIndex || null;
   const activeEntries = Object.entries(activeDetours || {});
-  const staleClearedIds = new Set();
-
-  for (const [routeId, detour] of activeEntries) {
-    const previous = lastPublishedState.get(routeId);
+  const staleSuppressedDetours = new Map();
+  const publishableDetours = Object.fromEntries(activeEntries.filter(([routeId, detour]) => {
     const staleDecision = shouldAutoClearStaleDetour({
       routeId,
       detour,
-      previousSnapshot: previous,
+      previousSnapshot: lastPublishedState.get(routeId),
       vehicles,
       scheduleIndex,
       now,
     });
-
-    if (!staleDecision.shouldClear) continue;
-    staleClearedIds.add(routeId);
-    await deletePublishedDetour(
-      db,
-      routeId,
-      (lastPublishedIds.has(routeId) || previous)
-        ? buildStaleClearedEvent(routeId, previous || makeSnapshot({ routeId, ...detour }), now, staleDecision)
-        : null,
-      'auto-clear stale'
-    );
-    console.log(
-      `[detourPublisher] Auto-cleared stale detour ${routeId}: ` +
-      `${Math.round((staleDecision.staleAgeMs || 0) / 60000)}min without evidence ` +
-      `(threshold ${Math.round((staleDecision.thresholdMs || 0) / 60000)}min)`
-    );
-  }
-
-  const publishableDetours = Object.fromEntries(
-    activeEntries.filter(([routeId]) => !staleClearedIds.has(routeId))
-  );
+    if (staleDecision.shouldClear) {
+      staleSuppressedDetours.set(routeId, staleDecision);
+      return false;
+    }
+    return true;
+  }));
   const currentIds = new Set(Object.keys(publishableDetours));
 
   const removedIds = [...lastPublishedIds].filter(id => !currentIds.has(id));
   for (const routeId of removedIds) {
     const previous = lastPublishedState.get(routeId);
-    const staleDecision = shouldAutoClearStaleDetour({
+    const staleDecision = staleSuppressedDetours.get(routeId) || shouldAutoClearStaleDetour({
       routeId,
       detour: null,
       previousSnapshot: previous,
@@ -606,7 +787,8 @@ async function publishDetours(activeDetours, options = {}) {
       scheduleIndex,
       now,
     });
-    const event = staleDecision.shouldClear
+    const wasNormalRouteClear = previous?.clearReason === 'normal-route-observed';
+    const event = staleDecision.shouldClear && !wasNormalRouteClear
       ? buildStaleClearedEvent(routeId, previous, now, staleDecision)
       : buildClearedEvent(routeId, previous, now);
     await deletePublishedDetour(db, routeId, event);
@@ -624,9 +806,14 @@ async function publishDetours(activeDetours, options = {}) {
       updatedAt: now,
       triggerVehicleId: detour.triggerVehicleId || null,
       vehicleCount: detour.vehiclesOffRoute && detour.vehiclesOffRoute.size > 0
-        ? detour.vehiclesOffRoute.size
+        ? normalizeVehicleCount(detour.vehicleCount ?? detour.vehiclesOffRoute.size)
         : normalizeVehicleCount(detour.vehicleCount),
+      uniqueVehicleCount: normalizeVehicleCount(detour.uniqueVehicleCount ?? detour.vehicleCount),
+      currentVehicleCount: detour.vehiclesOffRoute && detour.vehiclesOffRoute.size >= 0
+        ? detour.vehiclesOffRoute.size
+        : normalizeVehicleCount(detour.currentVehicleCount ?? 0),
       state: detour.state || 'active',
+      clearReason: detour.clearReason || null,
       isPersistent: Boolean(detour.isPersistent),
     };
 
@@ -638,12 +825,19 @@ async function publishDetours(activeDetours, options = {}) {
     // Optional road matching decorates the inferred GPS path as a rider-facing
     // "likely detour path" only when we are already going to write geometry,
     // so active detours do not generate map-matching traffic every tick.
-    let geo = detour.geometry;
-    let detourForGeometry = detour;
+    let geo = enforceGeometryTrustGate(detour.geometry);
+    let detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
+    applyGeometryMetadata(doc, geo);
     let writeGeo = hasRenderableGeometry(geo) &&
       (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now));
+    const knownGeometry = lastKnownGeometry.get(routeId);
+    const shouldBackfillRoadMatch = !writeGeo &&
+      shouldAttemptRoadMatchBackfill(geo, previousSnapshot, knownGeometry);
+    const roadMatchBackfillAttemptedSignature = shouldBackfillRoadMatch
+      ? geometryBackfillSignature(geo)
+      : null;
 
-    if (writeGeo && geo) {
+    if ((writeGeo || shouldBackfillRoadMatch) && geo) {
       try {
         geo = await matchDetourGeometry(geo);
         detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
@@ -658,6 +852,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.segments = geo.segments || [];
       doc.skippedSegmentPolyline = geo.skippedSegmentPolyline || null;
       doc.inferredDetourPolyline = geo.inferredDetourPolyline || null;
+      doc.canShowDetourPath = geo.canShowDetourPath ?? null;
       doc.likelyDetourPolyline = geo.likelyDetourPolyline || null;
       doc.likelyDetourRoadNames = Array.isArray(geo.likelyDetourRoadNames)
         ? geo.likelyDetourRoadNames
@@ -700,6 +895,13 @@ async function publishDetours(activeDetours, options = {}) {
           geometrySignature: Array.isArray(geo.segments)
             ? geometrySignatureFromSegments(geo.segments)
             : '',
+          roadMatchBackfillAttemptedSignature: geo.roadMatchSource
+            ? null
+            : (
+              roadMatchBackfillAttemptedSignature ||
+              knownGeometry?.roadMatchBackfillAttemptedSignature ||
+              null
+            ),
         });
       }
     } catch (err) {
@@ -772,6 +974,8 @@ module.exports = {
   GEOMETRY_WRITE_THROTTLE_MS,
   // Exported for testing
   shouldWriteGeometry,
+  shouldAttemptRoadMatchBackfill,
+  enforceGeometryTrustGate,
   makeSnapshot,
   buildUpdatedEvent,
   buildDetectedEvent,

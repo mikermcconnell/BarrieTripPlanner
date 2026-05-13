@@ -26,6 +26,7 @@ const MockWebLineLabelLayer = (props) => React.createElement('div', { 'data-mock
 jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
+  Pressable: 'Pressable',
   StyleSheet: { create: (s) => s },
   Platform: { OS: 'ios' },
 }));
@@ -177,7 +178,9 @@ describe('Firestore → detourService → context → overlay derivation chain',
 
     expect(overlays).toHaveLength(1);
     expect(overlays[0].routeId).toBe('8A');
-    expect(overlays[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
+    // If the closed-route and detour paths overlap, the rider UI should keep
+    // the detour path but avoid drawing a contradictory closed section.
+    expect(overlays[0].skippedSegmentPolyline).toBeNull();
     expect(overlays[0].likelyDetourPolyline).toBe(LONG_POLYLINE);
     expect(overlays[0].opacity).toBe(0.95);
     expect(overlays[0].skippedColor).toBe('#DE350B');
@@ -302,7 +305,7 @@ describe('DetourOverlay component rendering', () => {
       { id: 's1', latitude: 44.38, longitude: -79.69 },
       { id: 's2', latitude: 44.39, longitude: -79.68 },
     ],
-    skippedStops: [{ id: 's2', latitude: 44.39, longitude: -79.68 }],
+    skippedStops: [{ id: 's2', code: '2002', latitude: 44.39, longitude: -79.68 }],
     entryStop: { id: 's1', latitude: 44.38, longitude: -79.69 },
     exitStop: { id: 's2', latitude: 44.39, longitude: -79.68 },
     opacity: 0.95,
@@ -314,6 +317,7 @@ describe('DetourOverlay component rendering', () => {
     state: 'active',
     showCallouts: true,
     showStopMarkers: true,
+    currentZoom: 15,
   };
 
   const OVERLAY_CLEAR_PENDING = {
@@ -434,25 +438,40 @@ describe('DetourOverlay component rendering', () => {
       expect(polylines).toHaveLength(0);
     });
 
-    test('renders route, entry/exit, and skipped stop markers', () => {
+    test('renders route and skipped stop markers without entry/exit text labels', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const annotations = inst.root.findAllByType('PointAnnotation');
       const markerViews = inst.root.findAllByType('MarkerView');
+      const skippedMarker = markerViews.find((a) => a.props.id === 'detour-skipped-stop-8A-s2-0');
       expect(annotations).toHaveLength(0);
       expect(markerViews.length).toBeGreaterThanOrEqual(8);
       expect(markerViews.find((a) => a.props.id === 'detour-route-stop-8A-s1-0')).toBeDefined();
       expect(markerViews.find((a) => a.props.id === 'detour-route-stop-8A-s2-1')).toBeDefined();
+      expect(skippedMarker).toBeDefined();
+      expect(skippedMarker.props.anchor.y).toBeGreaterThan(0.7);
+      expect(inst.root.findAllByType('Text').map((node) => node.props.children)).toContain('2002');
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
-      expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
-      expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
+      expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeUndefined();
+      expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeUndefined();
     });
 
-    test('callout labels anchor above the route line', () => {
+    test('can show only closed stop markers when regular stop markers are hidden', () => {
+      const inst = renderComponent(DetourOverlayNative, {
+        ...OVERLAY_ACTIVE,
+        showStopMarkers: false,
+        showClosedStopMarkers: true,
+      });
+      const markerViews = inst.root.findAllByType('MarkerView');
+
+      expect(markerViews.find((a) => String(a.props.id).startsWith('detour-route-stop-8A'))).toBeUndefined();
+      expect(markerViews.find((a) => a.props.id === 'detour-skipped-stop-8A-s2-0')).toBeDefined();
+    });
+
+    test('entry/exit text callouts are not rendered', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
       const annotations = inst.root.findAllByType('MarkerView');
-      ['detour-entry-point-8A', 'detour-exit-point-8A'].forEach((id) => {
-        expect(annotations.find((a) => a.props.id === id).props.anchor).toEqual({ x: 0.5, y: 1.35 });
-      });
+      expect(annotations.find((a) => a.props.id === 'detour-entry-point-8A')).toBeUndefined();
+      expect(annotations.find((a) => a.props.id === 'detour-exit-point-8A')).toBeUndefined();
     });
 
     test('adds twice as many prominent direction arrows to the detour path', () => {
@@ -465,7 +484,7 @@ describe('DetourOverlay component rendering', () => {
       expect(arrows).toHaveLength(4);
     });
 
-    test('still shows entry/exit callouts when stop markers are hidden', () => {
+    test('keeps closure markers but hides entry/exit callouts when stop markers are hidden', () => {
       const inst = renderComponent(DetourOverlayNative, {
         ...OVERLAY_ACTIVE,
         showStopMarkers: false,
@@ -473,10 +492,10 @@ describe('DetourOverlay component rendering', () => {
       const annotations = inst.root.findAllByType('PointAnnotation');
       const markerViews = inst.root.findAllByType('MarkerView');
       expect(annotations).toHaveLength(0);
-      expect(markerViews).toHaveLength(8);
+      expect(markerViews).toHaveLength(6);
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
-      expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeDefined();
-      expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeDefined();
+      expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeUndefined();
+      expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeUndefined();
     });
   });
 
@@ -565,11 +584,11 @@ describe('DetourOverlay component rendering', () => {
       expect(polylines).toHaveLength(6);
     });
 
-    test('renders HTML markers for route, entry/exit, and skipped stops', () => {
+    test('renders HTML markers for route and skipped stops without entry/exit text labels', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(11);
+      expect(markers).toHaveLength(8);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',
@@ -577,16 +596,27 @@ describe('DetourOverlay component rendering', () => {
       const coords = markers.map((m) => m.props.coordinate);
       expect(coords).toContainEqual({ latitude: 44.38, longitude: -79.69 });
       expect(coords).toContainEqual({ latitude: 44.39, longitude: -79.68 });
-      expect(coords).toContainEqual({ latitude: 44.381, longitude: -79.691 });
-      expect(coords).toContainEqual({ latitude: 44.391, longitude: -79.679 });
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
-      const entry = markers.find((m) => m.props.html.includes('ROUTE') && m.props.html.includes('DETOUR') && !m.props.html.includes('RESUMES'));
-      const exit = markers.find((m) => m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'));
-      expect(entry.props.html).toContain('DETOUR');
-      expect(entry.props.html).toContain('ROUTE');
-      expect(entry.props.html).not.toContain('PATH');
-      expect(exit.props.html).toContain('ROUTE');
-      expect(exit.props.html).toContain('RESUMES');
+      const skippedMarker = markers.find((m) => m.props.accessibilityLabel?.includes('not serviced'));
+      expect(skippedMarker.props.html).toContain('2002');
+      expect(skippedMarker.props.html).toContain('border-radius:50%');
+      expect(skippedMarker.props.html).not.toContain('min-width:30px');
+      const html = markers.map((m) => m.props.html).join('\n');
+      expect(html).not.toContain('DETOUR');
+      expect(html).not.toContain('RESUMES');
+      expect(html).not.toContain('ROUTE</span>');
+    });
+
+    test('web can show only closed stop markers when regular stop markers are hidden', () => {
+      const inst = renderComponent(DetourOverlayWeb, {
+        ...OVERLAY_ACTIVE,
+        showStopMarkers: false,
+        showClosedStopMarkers: true,
+      });
+      const markers = inst.root.findAllByType(MockWebHtmlMarker);
+
+      expect(markers.find((m) => m.props.zIndexOffset === 660)).toBeUndefined();
+      expect(markers.find((m) => m.props.zIndexOffset === 700)).toBeDefined();
     });
 
     test('web labels sit above stop and closed-stop markers', () => {
@@ -598,15 +628,11 @@ describe('DetourOverlay component rendering', () => {
       const stopIndexes = markers
         .filter((m) => m.props.zIndexOffset === 660 || m.props.zIndexOffset === 700)
         .map((m) => m.props.zIndexOffset);
-      const labelIndexes = markers
-        .filter((m) =>
-          (m.props.html.includes('DETOUR') && m.props.html.includes('ROUTE')) ||
-          (m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'))
-        )
-        .map((m) => m.props.zIndexOffset);
 
       expect(inst.root.findAllByType(MockWebLineLabelLayer)).toHaveLength(1);
-      expect(Math.min(...labelIndexes)).toBeGreaterThan(Math.max(...stopIndexes));
+      expect(markers.every((m) => !m.props.html.includes('RESUMES'))).toBe(true);
+      expect(markers.every((m) => !m.props.html.includes('DETOUR'))).toBe(true);
+      expect(Math.max(...stopIndexes)).toBeGreaterThan(0);
     });
 
     test('adds twice as many prominent web direction arrows to the detour path', () => {
@@ -620,21 +646,22 @@ describe('DetourOverlay component rendering', () => {
       });
     });
 
-    test('still shows entry/exit callouts when stop markers are hidden', () => {
+    test('keeps closure markers but hides entry/exit callouts when stop markers are hidden', () => {
       const inst = renderComponent(DetourOverlayWeb, {
         ...OVERLAY_ACTIVE,
         showStopMarkers: false,
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(8);
+      expect(markers).toHaveLength(6);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',
       ]);
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
-      expect(markers.some((m) => m.props.html.includes('DETOUR') && m.props.html.includes('ROUTE') && !m.props.html.includes('PATH'))).toBe(true);
-      expect(markers.some((m) => m.props.html.includes('ROUTE') && m.props.html.includes('RESUMES'))).toBe(true);
+      expect(markers.some((m) => m.props.html.includes('DETOUR'))).toBe(false);
+      expect(markers.some((m) => m.props.html.includes('RESUMES'))).toBe(false);
+      expect(markers.some((m) => m.props.html.includes('ROUTE</span>'))).toBe(false);
     });
   });
 });

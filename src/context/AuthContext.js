@@ -5,8 +5,10 @@ import { userFirestoreService } from '../services/firebase/userFirestoreService'
 import { favoritesFirestoreService } from '../services/firebase/favoritesFirestoreService';
 import { tripHistoryFirestoreService } from '../services/firebase/tripHistoryFirestoreService';
 import { savedTransitFirestoreService } from '../services/firebase/savedTransitFirestoreService';
+import { getStoredPushToken } from '../services/notificationService';
 import { secureSet, secureGet, secureDelete } from '../utils/secureStorage';
 import logger from '../utils/logger';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const AuthContext = createContext(null);
 
@@ -59,6 +61,15 @@ export const AuthProvider = ({ children }) => {
             const profile = await userFirestoreService.getUser(firebaseUser.uid);
             setUserProfile(profile);
 
+            try {
+              const storedPushToken = await getStoredPushToken();
+              if (storedPushToken) {
+                await userFirestoreService.updatePushToken(firebaseUser.uid, storedPushToken);
+              }
+            } catch (tokenError) {
+              logger.error('Failed to sync stored push token:', tokenError);
+            }
+
             // Set up real-time listeners for user data
             setupRealtimeListeners(firebaseUser.uid);
 
@@ -85,7 +96,7 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
           logger.error('Auth bootstrap error:', error);
           if (isMounted) {
-            setAuthError(error?.message || 'Authentication initialization failed');
+            setAuthError(getUserFacingErrorMessage(error, 'Could not finish signing you in. Please try again.'));
           }
         } finally {
           if (isMounted) {
@@ -208,7 +219,7 @@ export const AuthProvider = ({ children }) => {
 
       return result;
     } catch (error) {
-      const errorMessage = error.message || 'Sign in failed';
+      const errorMessage = getUserFacingErrorMessage(error, 'Could not sign in. Please try again.');
       setAuthError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -226,7 +237,7 @@ export const AuthProvider = ({ children }) => {
 
       return result;
     } catch (error) {
-      const errorMessage = error.message || 'Sign up failed';
+      const errorMessage = getUserFacingErrorMessage(error, 'Could not create your account. Please try again.');
       setAuthError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -251,7 +262,7 @@ export const AuthProvider = ({ children }) => {
       return result;
     } catch (error) {
       logger.error('Sign out error:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not sign out. Please try again.') };
     }
   }, []);
 
@@ -267,7 +278,7 @@ export const AuthProvider = ({ children }) => {
 
       return result;
     } catch (error) {
-      const errorMessage = error.message || 'Google sign in failed';
+      const errorMessage = getUserFacingErrorMessage(error, 'Could not sign in with Google. Please try again.');
       setAuthError(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -527,7 +538,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       logger.error('Error migrating local data:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not sync your saved items. Please try again.') };
     }
   }, [user]);
 

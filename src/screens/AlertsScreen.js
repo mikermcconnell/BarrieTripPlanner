@@ -17,6 +17,7 @@ import { fetchServiceAlerts } from '../services/alertService';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { getSeverityIcon, getSeverityColor, formatAlertPeriod } from '../utils/alertHelpers';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -38,7 +39,7 @@ const AlertsScreen = ({ navigation }) => {
       setAlerts(data);
     } catch (err) {
       console.error('Error loading alerts:', err);
-      setError('Unable to load service alerts');
+      setError(getUserFacingErrorMessage(err, 'Could not load service alerts. Please try again.'));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -172,7 +173,17 @@ const AlertsScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      <FlatList
+      {error ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>⚠️</Text>
+          <Text style={styles.emptyText}>Could not load service alerts</Text>
+          <Text style={styles.emptySubtext}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+            <Text style={styles.retryButtonText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
         data={alerts}
         keyExtractor={(item) => item.id}
         renderItem={renderAlert}
@@ -204,7 +215,8 @@ const AlertsScreen = ({ navigation }) => {
             </View>
           ) : null
         }
-      />
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -384,6 +396,20 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  retryButton: {
+    marginTop: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
   },
 });
 

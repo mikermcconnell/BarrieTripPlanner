@@ -53,9 +53,30 @@ describe('tripDetourImpacts', () => {
     });
 
     expect(impact.severity).toBe('stop_affected');
+    expect(impact.impactScope).toBe('boarding_stop');
     expect(impact.affectedStopRoles).toContain('boarding');
     expect(impact.affectedStopNames).toContain('Origin Stop');
-    expect(impact.message).toContain('boarding or exit stop may be affected');
+    expect(impact.message).toContain('your boarding stop may be missed');
+    expect(impact.guidance).toContain('Board before the detour');
+  });
+
+  test('gives specific guidance when the exit stop is skipped by the detour', () => {
+    const impact = getLegDetourImpact({
+      leg: busLeg,
+      activeDetours,
+      detourStopDetailsByRouteId: {
+        10: {
+          segmentStopDetails: [{
+            skippedStops: [{ stopId: 'S3', stopCode: '1003', name: 'Destination Stop' }],
+          }],
+        },
+      },
+    });
+
+    expect(impact.severity).toBe('stop_affected');
+    expect(impact.impactScope).toBe('exit_stop');
+    expect(impact.message).toContain('your exit stop may be missed');
+    expect(impact.guidance).toContain('Get off after the route rejoins');
   });
 
   test('escalates when an intermediate stop is affected', () => {
@@ -72,8 +93,9 @@ describe('tripDetourImpacts', () => {
     });
 
     expect(impact.severity).toBe('stop_affected');
+    expect(impact.impactScope).toBe('ride_stops');
     expect(impact.affectedStopRoles).toContain('intermediate');
-    expect(impact.message).toContain('stops along this ride may be affected');
+    expect(impact.message).toContain('stops along this ride may be missed');
   });
 
   test('annotates itinerary legs without mutating originals', () => {
@@ -96,6 +118,35 @@ describe('tripDetourImpacts', () => {
     expect(annotated.hasStopDetourImpact).toBe(true);
     expect(annotated.detourImpacts).toHaveLength(1);
     expect(busLeg.detourImpact).toBeUndefined();
+  });
+
+  test('tags alternatives that avoid an active detour when other results are affected', () => {
+    const detouredTrip = { id: 'detoured', legs: [busLeg] };
+    const clearTrip = {
+      id: 'clear',
+      labels: ['Fastest'],
+      legs: [{
+        ...busLeg,
+        route: { id: '7', shortName: '7' },
+      }],
+    };
+
+    const [detoured, clear] = annotateItinerariesWithDetours(
+      [detouredTrip, clearTrip],
+      activeDetours,
+      {
+        10: {
+          segmentStopDetails: [{
+            skippedStops: [{ stopId: 'S1', stopCode: '1001', name: 'Origin Stop' }],
+          }],
+        },
+      }
+    );
+
+    expect(detoured.hasDetour).toBe(true);
+    expect(clear.hasDetour).toBe(false);
+    expect(clear.detourAlternativeStatus).toBe('avoids_active_detour');
+    expect(clear.labels).toEqual(['Fastest', 'Avoids Detour']);
   });
 
   test('base route plans match active branch detours', () => {

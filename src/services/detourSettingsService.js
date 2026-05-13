@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import runtimeConfig from '../config/runtimeConfig';
 import logger from '../utils/logger';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const DETOUR_SETTINGS_KEY = '@barrie_transit_detours_enabled';
 const DETOURS_DISABLED_MESSAGE = 'Auto-detours are disabled for this build.';
@@ -35,7 +36,7 @@ export const saveDetoursEnabled = async (enabled) => {
     return { success: true };
   } catch (error) {
     logger.error('Error saving detour preference:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not update detour settings. Please try again.') };
   }
 };
 

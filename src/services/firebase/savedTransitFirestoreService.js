@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const timestampToIso = (value) => value?.toDate?.()?.toISOString?.() ?? value ?? null;
 
@@ -54,7 +55,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error adding saved place:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not save this place. Please try again.') };
     }
   },
 
@@ -64,7 +65,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error removing saved place:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not remove this place. Please try again.') };
     }
   },
 
@@ -99,7 +100,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating saved place usage:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update this place. Please try again.') };
     }
   },
 
@@ -122,7 +123,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error adding saved trip:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not save this trip. Please try again.') };
     }
   },
 
@@ -132,7 +133,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error removing saved trip:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not remove this trip. Please try again.') };
     }
   },
 
@@ -168,7 +169,7 @@ export const savedTransitFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating saved trip usage:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update this trip. Please try again.') };
     }
   },
 };

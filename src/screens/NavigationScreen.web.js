@@ -33,6 +33,7 @@ import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
 import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
 import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 import { recalculateNavigationItinerary } from '../services/navigationRecalculationService';
 import { decodePolyline } from '../utils/polylineUtils';
@@ -706,7 +707,7 @@ const NavigationScreen = ({ route }) => {
       trackNavigationEvent('navigation_reroute_failed', {
         code: error?.code || 'UNKNOWN_ERROR',
       });
-      alert(error.message || 'A new route could not be generated right now.');
+      alert(getUserFacingErrorMessage(error, 'A new route could not be generated right now.'));
     } finally {
       setIsRecalculatingRoute(false);
     }

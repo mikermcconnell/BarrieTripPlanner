@@ -60,14 +60,11 @@ export const getTransitStartupProgress = ({
   isLoadingStatic = false,
   isRefreshingStatic = false,
   usingCachedData = false,
-  isLoadingVehicles = false,
   routesCount = 0,
   stopsCount = 0,
-  vehiclesCount = 0,
   diagnostics = null,
 } = {}) => {
   const hasSavedRoutes = routesCount > 0 && stopsCount > 0;
-  const realtimeVehicles = diagnostics?.realtimeVehicles || {};
 
   if (isLoadingStatic && !hasSavedRoutes) {
     const loadingState = getTransitLoadingState(diagnostics) || {
@@ -83,24 +80,8 @@ export const getTransitStartupProgress = ({
     };
   }
 
-  if (hasSavedRoutes && usingCachedData && isRefreshingStatic && !isLoadingVehicles) {
+  if (hasSavedRoutes && usingCachedData && isRefreshingStatic) {
     return null;
-  }
-
-  if (
-    hasSavedRoutes &&
-    isLoadingVehicles &&
-    vehiclesCount === 0 &&
-    realtimeVehicles?.status !== 'healthy'
-  ) {
-    return {
-      variant: 'card',
-      percent: 75,
-      title: 'Loading live buses',
-      detail: usingCachedData
-        ? 'Showing saved routes while live bus locations load.'
-        : 'Routes are ready. Loading live bus locations now.',
-    };
   }
 
   return null;

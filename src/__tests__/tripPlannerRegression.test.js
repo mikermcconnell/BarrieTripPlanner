@@ -165,7 +165,26 @@ function loadUseTripPlanner({
 
   jest.doMock('../services/tripService', () => ({
     planTripAuto: planTripAutoMock,
-    TripPlanningError: class TripPlanningError extends Error {},
+    TRIP_ERROR_CODES: {
+      OTP_UNAVAILABLE: 'OTP_UNAVAILABLE',
+      NETWORK_ERROR: 'NETWORK_ERROR',
+      NO_ROUTES_FOUND: 'NO_ROUTES_FOUND',
+      NO_NEARBY_STOPS: 'NO_NEARBY_STOPS',
+      OUTSIDE_SERVICE_AREA: 'OUTSIDE_SERVICE_AREA',
+      TIMEOUT: 'TIMEOUT',
+      NO_DATA: 'NO_DATA',
+      NO_SERVICE: 'NO_SERVICE',
+      VALIDATION_ERROR: 'VALIDATION_ERROR',
+      ZONE_NO_SERVICE: 'ZONE_NO_SERVICE',
+      ZONE_NO_HUB_STOPS: 'ZONE_NO_HUB_STOPS',
+    },
+    TripPlanningError: class TripPlanningError extends Error {
+      constructor(code, message) {
+        super(message);
+        this.code = code;
+        this.name = 'TripPlanningError';
+      }
+    },
   }));
   jest.doMock('../services/locationIQService', () => ({
     autocompleteAddress: autocompleteAddressMock,
@@ -1161,6 +1180,28 @@ describe('useTripPlanner regressions', () => {
     expect(planTripAutoMock).toHaveBeenCalledWith(expect.objectContaining({
       enrichWalking: true,
     }));
+
+    unmount();
+  });
+
+  test('validation failures use structured trip-planning errors', async () => {
+    const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
+
+    await act(async () => {
+      await getHook().searchTrips(
+        { lat: 45.1, lon: -79.69 },
+        { lat: 44.39, lon: -79.68 }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(planTripAutoMock).not.toHaveBeenCalled();
+    expect(getHook().state.error).toEqual(expect.objectContaining({
+      code: 'OUTSIDE_SERVICE_AREA',
+      message: expect.stringContaining('outside Barrie Transit service area'),
+    }));
+    expect(getHook().state.hasSearched).toBe(true);
 
     unmount();
   });

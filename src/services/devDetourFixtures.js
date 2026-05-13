@@ -61,30 +61,6 @@ const createDetour = ({
   };
 };
 
-const farmersMarketFixtures = () => {
-  const collierOwen = { latitude: 44.39043, longitude: -79.69007 };
-  const collierMulcaster = { latitude: 44.39047, longitude: -79.6855 };
-  const owenMcDonald = { latitude: 44.39262, longitude: -79.68792 };
-  const mcdonaldMulcaster = { latitude: 44.39267, longitude: -79.68558 };
-  const worsleyMulcaster = { latitude: 44.39157, longitude: -79.68552 };
-
-  return {
-    11: createDetour({
-      routeId: '11',
-      entryPoint: collierOwen,
-      exitPoint: mcdonaldMulcaster,
-      skippedSegmentPolyline: [collierMulcaster, mcdonaldMulcaster],
-      likelyDetourPolyline: [collierOwen, owenMcDonald, mcdonaldMulcaster],
-      likelyDetourRoadNames: ['Owen Street', 'McDonald Street', 'Mulcaster Street'],
-      detourPathLabel: 'Farmers Market test detour',
-      title: "Farmer's Market Detour - Route 11",
-      description: 'Route 11 detours around the Mulcaster Street closure between Collier Street and Worsley Street.',
-      affectedStops: ['191', '192', '556', '557'],
-      suppressStopDerivation: true,
-    }),
-  };
-};
-
 const saundersWelhamFixtures = () => {
   const saundersWelhamWestbound = { latitude: 44.33425, longitude: -79.66897 };
   const saundersBayviewWestbound = { latitude: 44.33229, longitude: -79.6773 };
@@ -123,7 +99,7 @@ const parsePresetNames = (value) => String(value || '')
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
 
-const DEFAULT_DEV_PRESET = 'farmers-market';
+const DEFAULT_DEV_PRESET = '';
 
 export const getDevDetourFixturePreset = () => {
   if (process.env.NODE_ENV === 'test') return '';
@@ -141,9 +117,6 @@ export const getDevDetourFixtures = (presetValue) => {
   if (names.length === 0) return {};
 
   return names.reduce((fixtures, name) => {
-    if (name === 'farmers-market') {
-      return { ...fixtures, ...farmersMarketFixtures() };
-    }
     if (name === 'saunders-welham') {
       return { ...fixtures, ...saundersWelhamFixtures() };
     }

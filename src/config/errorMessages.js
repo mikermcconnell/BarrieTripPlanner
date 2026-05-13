@@ -53,6 +53,46 @@ export const TRIP_ERROR_MESSAGES = {
     icon: 'clock',
     retryable: true,
   },
+  NO_DATA: {
+    title: 'Transit data is not ready',
+    message: 'We could not load the transit schedule needed to plan this trip.',
+    icon: 'database-off',
+    retryable: true,
+    suggestions: [
+      'Try again in a moment',
+      'Check your connection if this keeps happening',
+    ],
+  },
+  NO_SERVICE: {
+    title: 'No service at that time',
+    message: 'Barrie Transit does not have scheduled service for this trip at the selected time.',
+    icon: 'clock-alert',
+    retryable: false,
+    suggestions: [
+      'Try a different departure or arrival time',
+      'Check the route schedule before you go',
+    ],
+  },
+  ZONE_NO_SERVICE: {
+    title: 'On-demand service is unavailable',
+    message: 'This on-demand zone is not available for the selected time.',
+    icon: 'map-clock',
+    retryable: false,
+    suggestions: [
+      'Try a different time',
+      'Use a nearby fixed-route stop if one is available',
+    ],
+  },
+  ZONE_NO_HUB_STOPS: {
+    title: 'No on-demand transfer stop found',
+    message: 'We could not find a transfer stop for this on-demand zone.',
+    icon: 'map-marker-question',
+    retryable: false,
+    suggestions: [
+      'Try a nearby address or stop',
+      'Try planning the trip again later',
+    ],
+  },
   VALIDATION_ERROR: {
     title: 'Check your trip details',
     message: 'Please check your starting location and destination.',

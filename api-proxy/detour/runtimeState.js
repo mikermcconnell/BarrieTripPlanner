@@ -36,12 +36,14 @@ function createRuntimeStatePersistence({
         [...recurringShortDeviationCandidates.entries()].map(([key, candidate]) => [key, {
           routeId: candidate?.routeId || null,
           shapeId: candidate?.shapeId || null,
+          recurringFamilyId: candidate?.recurringFamilyId || null,
           progressMinMeters: Number.isFinite(candidate?.progressMinMeters) ? candidate.progressMinMeters : null,
           progressMaxMeters: Number.isFinite(candidate?.progressMaxMeters) ? candidate.progressMaxMeters : null,
           lastSeenAt: toTimestampMs(candidate?.lastSeenAt) || null,
           observations: (candidate?.observations || []).map((observation) => ({
             routeId: observation?.routeId || null,
             shapeId: observation?.shapeId || null,
+            recurringFamilyId: observation?.recurringFamilyId || null,
             progressMinMeters: Number.isFinite(observation?.progressMinMeters)
               ? observation.progressMinMeters
               : null,
@@ -72,6 +74,14 @@ function createRuntimeStatePersistence({
         offRouteStreakStart: normalizeObservation(state?.offRouteStreakStart),
         offRouteStreakPoints: (state?.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
         onRouteStreakStart: normalizeObservation(state?.onRouteStreakStart),
+        onRouteStreakShapeId: state?.onRouteStreakShapeId || null,
+        onRouteStreakMinProgressMeters: Number.isFinite(state?.onRouteStreakMinProgressMeters)
+          ? state.onRouteStreakMinProgressMeters
+          : null,
+        onRouteStreakMaxProgressMeters: Number.isFinite(state?.onRouteStreakMaxProgressMeters)
+          ? state.onRouteStreakMaxProgressMeters
+          : null,
+        onRouteStreakPointCount: Number(state?.onRouteStreakPointCount) || 0,
         tripShapeId: state?.tripShapeId || null,
         tripId: state?.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(state?.hasReturnedOnRouteSinceDetour),
@@ -85,8 +95,11 @@ function createRuntimeStatePersistence({
           lastSeenAt: toTimestampMs(segment?.lastSeenAt) || null,
           triggerVehicleId: segment?.triggerVehicleId || null,
           vehiclesOffRoute: [...(segment?.vehiclesOffRoute || [])].filter(Boolean),
+          matchedVehicleIds: [...(segment?.matchedVehicleIds || [])].filter(Boolean),
+          normalRouteVehicleIds: [...(segment?.normalRouteVehicleIds || [])].filter(Boolean),
           state: segment?.state || 'active',
           clearPendingAt: toTimestampMs(segment?.clearPendingAt) || null,
+          clearReason: segment?.clearReason || null,
           lastOffRouteEvidenceAt: toTimestampMs(segment?.lastOffRouteEvidenceAt) || null,
           isPublished: Boolean(segment?.isPublished),
           isPersistent: Boolean(segment?.isPersistent),
@@ -147,6 +160,14 @@ function createRuntimeStatePersistence({
         offRouteStreakStart: normalizeObservation(rawVehicle.offRouteStreakStart),
         offRouteStreakPoints: (rawVehicle.offRouteStreakPoints || []).map(normalizeEvidenceEntry).filter(Boolean),
         onRouteStreakStart: normalizeObservation(rawVehicle.onRouteStreakStart),
+        onRouteStreakShapeId: rawVehicle.onRouteStreakShapeId || null,
+        onRouteStreakMinProgressMeters: Number.isFinite(rawVehicle.onRouteStreakMinProgressMeters)
+          ? rawVehicle.onRouteStreakMinProgressMeters
+          : null,
+        onRouteStreakMaxProgressMeters: Number.isFinite(rawVehicle.onRouteStreakMaxProgressMeters)
+          ? rawVehicle.onRouteStreakMaxProgressMeters
+          : null,
+        onRouteStreakPointCount: Number(rawVehicle.onRouteStreakPointCount) || 0,
         tripShapeId: rawVehicle.tripShapeId || null,
         tripId: rawVehicle.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(rawVehicle.hasReturnedOnRouteSinceDetour),
@@ -160,6 +181,7 @@ function createRuntimeStatePersistence({
       recurringShortDeviationCandidates.set(key, {
         routeId,
         shapeId,
+        recurringFamilyId: rawCandidate.recurringFamilyId || null,
         progressMinMeters: Number.isFinite(rawCandidate.progressMinMeters)
           ? rawCandidate.progressMinMeters
           : null,
@@ -171,6 +193,7 @@ function createRuntimeStatePersistence({
           .map((observation) => ({
             routeId: observation?.routeId || routeId,
             shapeId: observation?.shapeId || shapeId,
+            recurringFamilyId: observation?.recurringFamilyId || rawCandidate.recurringFamilyId || null,
             progressMinMeters: Number.isFinite(observation?.progressMinMeters)
               ? observation.progressMinMeters
               : null,
@@ -216,8 +239,11 @@ function createRuntimeStatePersistence({
           lastSeenAt: toDateOrNow(rawSegment.lastSeenAt),
           triggerVehicleId: rawSegment.triggerVehicleId || null,
           vehiclesOffRoute: new Set((rawSegment.vehiclesOffRoute || []).filter(Boolean)),
+          matchedVehicleIds: new Set((rawSegment.matchedVehicleIds || rawSegment.vehiclesOffRoute || []).filter(Boolean)),
+          normalRouteVehicleIds: new Set((rawSegment.normalRouteVehicleIds || []).filter(Boolean)),
           state: rawSegment.state || 'active',
           clearPendingAt: toTimestampMs(rawSegment.clearPendingAt),
+          clearReason: rawSegment.clearReason || null,
           lastOffRouteEvidenceAt: toTimestampMs(rawSegment.lastOffRouteEvidenceAt) || Date.now(),
           routeConfig,
           isPublished: Boolean(rawSegment.isPublished),

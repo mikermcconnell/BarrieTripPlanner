@@ -143,6 +143,8 @@ describe('detourRoadMatcher', () => {
       env: {
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO: '0.2',
+        DETOUR_ROAD_MATCHING_BACKTRACK_PROXIMITY_METERS: '20',
       },
       fetchImpl,
     });
@@ -184,6 +186,8 @@ describe('detourRoadMatcher', () => {
       env: {
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO: '0.2',
+        DETOUR_ROAD_MATCHING_BACKTRACK_PROXIMITY_METERS: '20',
       },
       fetchImpl,
     });
@@ -259,6 +263,115 @@ describe('detourRoadMatcher', () => {
     ]);
   });
 
+  test('route fallback can publish a Hooper Road detour after removing a leading OSRM spur', async () => {
+    const inferredDetourPolyline = [
+      { latitude: 44.33886019274972, longitude: -79.66989393548232 },
+      { latitude: 44.336219787597656, longitude: -79.67129516601562 },
+      { latitude: 44.33441162109375, longitude: -79.67435455322266 },
+      { latitude: 44.33293067604765, longitude: -79.67451703744516 },
+    ];
+    const skippedSegmentPolyline = [
+      { latitude: 44.33886019280516, longitude: -79.66989393549959 },
+      { latitude: 44.338480305004, longitude: -79.6697756710763 },
+      { latitude: 44.33673653, longitude: -79.66942321 },
+      { latitude: 44.3344369145376, longitude: -79.6687486938254 },
+      { latitude: 44.3342517234573, longitude: -79.6689704420632 },
+      { latitude: 44.33312923, longitude: -79.67365255 },
+      { latitude: 44.33293067702775, longitude: -79.67451703317792 },
+    ];
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 'Ok', matchings: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          routes: [
+            {
+              geometry: {
+                coordinates: [
+                  [-79.669912, 44.338900],
+                  [-79.670052, 44.338868],
+                  [-79.671667, 44.338491],
+                  [-79.675445, 44.337602],
+                  [-79.675544, 44.337581],
+                  [-79.675489, 44.337473],
+                  [-79.674781, 44.337647],
+                  [-79.672571, 44.338169],
+                  [-79.672263, 44.338238],
+                  [-79.670927, 44.338539],
+                  [-79.670003, 44.338740],
+                  [-79.669818, 44.338780],
+                  [-79.669795, 44.338692],
+                  [-79.669406, 44.337199],
+                  [-79.669353, 44.336993],
+                  [-79.669248, 44.336659],
+                  [-79.669865, 44.336540],
+                  [-79.671289, 44.336208],
+                  [-79.672749, 44.335867],
+                  [-79.673196, 44.335763],
+                  [-79.673686, 44.335648],
+                  [-79.674015, 44.335517],
+                  [-79.674167, 44.335389],
+                  [-79.674266, 44.335278],
+                  [-79.674389, 44.335053],
+                  [-79.674383, 44.334783],
+                  [-79.674290, 44.334420],
+                  [-79.674268, 44.334333],
+                  [-79.673956, 44.333104],
+                  [-79.673896, 44.332986],
+                  [-79.674473, 44.332865],
+                  [-79.674488, 44.332862],
+                ],
+              },
+              legs: [
+                {
+                  steps: [
+                    { name: 'Mapleview Drive East' },
+                    { name: 'Welham Road' },
+                    { name: 'Hooper Road' },
+                    { name: 'Saunders Road' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+    const result = await matchDetourGeometry({
+      shapeId: '12A',
+      inferredDetourPolyline,
+      segments: [
+        {
+          segmentId: 'segment-1',
+          skippedSegmentPolyline,
+          inferredDetourPolyline,
+          canShowDetourPath: true,
+        },
+      ],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO: '0.2',
+        DETOUR_ROAD_MATCHING_BACKTRACK_PROXIMITY_METERS: '20',
+      },
+      fetchImpl,
+    });
+
+    expect(result.likelyDetourPolyline.length).toBeGreaterThan(2);
+    expect(result.likelyDetourRoadNames).toContain('Hooper Road');
+    expect(result.roadMatchSource).toBe('osrm-route');
+    expect(result.likelyDetourPolyline).not.toContainEqual({
+      latitude: 44.337602,
+      longitude: -79.675445,
+    });
+  });
+
   test('decorates each segment and mirrors the primary likely path top-level', async () => {
     const fetchImpl = jest.fn(async () => ({
       ok: true,
@@ -289,6 +402,37 @@ describe('detourRoadMatcher', () => {
     expect(result.likelyDetourRoadNames).toContain('Yonge Street');
     expect(result.segments[0].likelyDetourPolyline).toHaveLength(3);
     expect(result.segments[0].roadMatchSource).toBe('osrm-match');
+  });
+
+  test('does not road-match untrusted sparse detour paths', async () => {
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      json: async () => OSRM_RESPONSE,
+    }));
+
+    const geometry = {
+      shapeId: 'shape-12',
+      inferredDetourPolyline: INPUT_POLYLINE,
+      segments: [
+        {
+          segmentId: 'segment-1',
+          inferredDetourPolyline: INPUT_POLYLINE,
+          canShowDetourPath: false,
+        },
+      ],
+    };
+
+    const result = await matchDetourGeometry(geometry, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
   });
 
   test('rejects road-matched paths that mostly reuse the skipped closed segment', async () => {

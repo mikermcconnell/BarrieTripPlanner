@@ -141,6 +141,7 @@ function NotificationInitializer({ navigationRef }) {
               navigationRef.current.navigate('Map', { screen: 'MapMain' });
               break;
             case 'service_alert':
+            case 'detour_alert':
               // Navigate to Alerts screen within the Map stack
               navigationRef.current.navigate('Map', { screen: 'Alerts' });
               break;

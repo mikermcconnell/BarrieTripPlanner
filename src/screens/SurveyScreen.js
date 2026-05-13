@@ -37,6 +37,7 @@ const SurveyScreen = ({ navigation, route }) => {
     submitted,
     alreadySubmitted,
     error,
+    retry,
   } = useSurvey(trigger);
 
   // ─── Loading state ───────────────────────────────────────────
@@ -53,6 +54,27 @@ const SurveyScreen = ({ navigation, route }) => {
   }
 
   // ─── No active survey ────────────────────────────────────────
+
+  if (error && !survey) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>{'\u2190'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Feedback</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.emptyTitle}>Could not load survey</Text>
+          <Text style={styles.emptySubtitle}>{error}</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={retry}>
+            <Text style={styles.primaryButtonText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!survey) {
     return (

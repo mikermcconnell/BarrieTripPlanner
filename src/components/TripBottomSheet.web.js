@@ -14,6 +14,7 @@ import FareCard from './FareCard';
 import TripPreviewMapLegend from './TripPreviewMapLegend';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const getItineraryKey = (itinerary, index) => {
   const legSignature = Array.isArray(itinerary?.legs)
@@ -129,7 +130,11 @@ const TripBottomSheet = ({
         <View style={styles.centerContainer} accessibilityRole="alert">
           <ErrorIcon size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>No routes found</Text>
-          <Text style={styles.errorSubtext}>{typeof error === 'string' ? error : error.message}</Text>
+          <Text style={styles.errorSubtext}>
+            {typeof error === 'string'
+              ? error
+              : getUserFacingErrorMessage(error, 'Please check your trip details and try again.')}
+          </Text>
           {onRetry && (
             <TouchableOpacity
               style={styles.retryButton}

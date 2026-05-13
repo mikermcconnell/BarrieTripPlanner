@@ -29,6 +29,8 @@ Use this checklist during live auto-detour validation. The goal is to confirm th
   - [ ] `lastSeenAt`
   - [ ] `lastEvidenceAt`
   - [ ] `vehicleCount`
+  - [ ] `uniqueVehicleCount`
+  - [ ] `currentVehicleCount`
   - [ ] `evidencePointCount`
   - [ ] `roadMatchSource`
   - [ ] `likelyDetourPolyline` point count
@@ -186,4 +188,3 @@ Pass the test only if:
 - [ ] Stale detours clear safely using headway-aware timing.
 - [ ] No stale detours reappear after tab switching or worker ticks.
 - [ ] History gives enough detail to audit what happened.
-

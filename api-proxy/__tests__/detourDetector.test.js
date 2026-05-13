@@ -12,6 +12,7 @@ const {
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   EVIDENCE_WINDOW_MS,
   DETOUR_PERSIST_CONSECUTIVE_MATCHES,
   DETOUR_PERSIST_MIN_AGE_MS,
@@ -54,6 +55,8 @@ const OFF_ROUTE_MID = { latitude: 44.395, longitude: -79.690 };
 const OFF_ROUTE_EAST = { latitude: 44.395, longitude: -79.682 };
 // On-route inside core zone — projects to index 4 (core ~2-6)
 const ON_ROUTE_IN_ZONE = { latitude: 44.39, longitude: -79.690 };
+const ON_ROUTE_ZONE_WEST = { latitude: 44.39, longitude: -79.696 };
+const ON_ROUTE_ZONE_EAST = { latitude: 44.39, longitude: -79.684 };
 // On-route outside core zone — projects to index 0 (outside core)
 const ON_ROUTE_OUTSIDE_ZONE = { latitude: 44.39, longitude: -79.700 };
 // Small detour: ~50m north of the shape, below the global threshold but above Route 8 tuning.
@@ -92,6 +95,37 @@ function confirmDetourWithZone(vehicleId = 'bus-1') {
   processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_MID })], shapes, routeShapeMapping);
   // 1 tick at east end → 3rd evidence point (zone can now be computed)
   return processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_EAST })], shapes, routeShapeMapping);
+}
+
+function runOnRouteTraversal(
+  vehicleId = 'bus-1',
+  tickCount = DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
+  coordinates = [ON_ROUTE_ZONE_WEST, ON_ROUTE_IN_ZONE, ON_ROUTE_ZONE_EAST]
+) {
+  let result;
+  for (let i = 0; i < tickCount; i++) {
+    result = processVehicles([
+      makeVehicle({
+        id: vehicleId,
+        coordinate: coordinates[Math.min(i, coordinates.length - 1)],
+      }),
+    ], shapes, routeShapeMapping);
+  }
+  return result;
+}
+
+function runOnRouteTraversalForVehicles(vehicleIds, tickCount = DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE) {
+  const coordinates = [ON_ROUTE_ZONE_WEST, ON_ROUTE_IN_ZONE, ON_ROUTE_ZONE_EAST];
+  let result;
+  for (let i = 0; i < tickCount; i++) {
+    const coordinate = coordinates[Math.min(i, coordinates.length - 1)];
+    result = processVehicles(
+      vehicleIds.map((id) => makeVehicle({ id, coordinate })),
+      shapes,
+      routeShapeMapping
+    );
+  }
+  return result;
 }
 
 beforeEach(() => {
@@ -143,11 +177,8 @@ describe('hysteresis clearing', () => {
       // Advance past grace period
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
 
-      // Run on-route-in-zone ticks up to threshold: should enter clear-pending
-      let result;
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-        result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      }
+      // Run a same-bus traversal of the regular route through the affected segment.
+      let result = runOnRouteTraversal();
       // After threshold tick: should be clear-pending (visible for one tick)
       expect(Object.keys(result)).toHaveLength(1);
       expect(result['route-1'].state).toBe('clear-pending');
@@ -175,8 +206,8 @@ describe('hysteresis clearing', () => {
       // Still within grace period (only 1 min elapsed, need 10 min)
       Date.now = () => BASE_TIME + 60_000;
 
-      // Run enough on-route-in-zone ticks to exceed the consecutive threshold
-      const result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
+      // Run enough same-bus regular-route traversal ticks to exceed the consecutive threshold.
+      const result = runOnRouteTraversal('bus-1', DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
 
       // Detour should persist because grace period hasn't elapsed
       expect(Object.keys(result)).toHaveLength(1);
@@ -196,10 +227,10 @@ describe('hysteresis clearing', () => {
       Date.now = () => BASE_TIME;
       confirmDetourWithZone();
 
-      // Within grace: vehicle goes on-route in zone, meets consecutive threshold
+      // Within grace: vehicle traverses the regular route, meets consecutive threshold
       // Vehicle stays in vehiclesOffRoute during grace — detour remains active
       Date.now = () => BASE_TIME + 60_000;
-      runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
+      runOnRouteTraversal('bus-1', DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
 
       // Advance past grace period — first tick enters clear-pending
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
@@ -231,8 +262,8 @@ describe('hysteresis clearing', () => {
       // Advance past grace period
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
 
-      // Run on-route-in-zone ticks to enter clear-pending
-      let result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      // Run same-bus regular-route traversal to enter clear-pending
+      let result = runOnRouteTraversal();
       expect(result['route-1'].state).toBe('clear-pending');
 
       // Vehicle goes off-route again — needs full confirmation ticks to re-add to detour
@@ -257,21 +288,14 @@ describe('hysteresis clearing', () => {
 
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
 
-      // Run on-route-in-zone for threshold - 1 ticks
-      runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE - 1);
+      // Start a regular-route traversal but stop before the clear threshold.
+      runOnRouteTraversal('bus-1', DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE - 1);
 
       // One off-route tick resets the on-route counter
       processVehicles([offVehicle], shapes, routeShapeMapping);
 
-      // Now run on-route-in-zone again — needs full threshold count again
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE - 1; i++) {
-        const result = processVehicles([onVehicle], shapes, routeShapeMapping);
-        expect(Object.keys(result)).toHaveLength(1);
-        expect(result['route-1'].state).toBe('active');
-      }
-
-      // This tick hits the threshold — should enter clear-pending
-      let result = processVehicles([onVehicle], shapes, routeShapeMapping);
+      // Now run the traversal again — needs the full threshold count again.
+      let result = runOnRouteTraversal();
       expect(result['route-1'].state).toBe('clear-pending');
 
       // Next tick finalizes the clear
@@ -329,28 +353,61 @@ describe('stale vehicle pruning', () => {
     }
   });
 
-  test('stale vehicle triggers clear after no-vehicle timeout (30 min)', () => {
-    const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+  test('stale one-vehicle candidate survives the no-vehicle timeout so a later bus can confirm it', () => {
+    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST });
+    const bus2West = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST });
+    const bus2Mid = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_MID });
+    const bus2East = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_EAST });
 
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
 
     try {
       Date.now = () => BASE_TIME;
-      confirmDetour(offVehicle);
+      confirmDetourWithZone('bus-1');
 
-      // Advance past stale timeout + no-vehicle timeout
+      // Advance past stale timeout + no-vehicle timeout. The first bus is gone,
+      // but this should remain as retained evidence, not be cleared.
       Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 6 * 60 * 1000;
-
-      // First tick: stale prune + no-vehicle timeout → clear-pending
+      processVehicles([], shapes, routeShapeMapping);
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 6 * 60 * 1000 + 1000;
       let result = processVehicles([], shapes, routeShapeMapping);
       expect(Object.keys(result)).toHaveLength(1);
-      expect(result['route-1'].state).toBe('clear-pending');
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].uniqueVehicleCount).toBe(1);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
 
-      // Second tick: finalize clear
-      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 6 * 60 * 1000 + 1000;
-      result = processVehicles([], shapes, routeShapeMapping);
-      expect(Object.keys(result)).toHaveLength(0);
+      // A later bus following the same detour promotes the retained candidate.
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 10 * 60 * 1000;
+      result = runTicks([bus2West], CONSECUTIVE_READINGS_REQUIRED);
+      processVehicles([bus2Mid], shapes, routeShapeMapping);
+      result = processVehicles([bus2East], shapes, routeShapeMapping);
+
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].uniqueVehicleCount).toBe(2);
+      expect(result['route-1'].currentVehicleCount).toBe(1);
+      expect(result['route-1'].vehicleCount).toBe(2);
+      expect(result['route-1'].geometry.confidence).toBe('medium');
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('retained detour does not clear after candidate evidence TTL without normal-route GPS proof', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = Date.parse('2026-05-12T13:30:00Z');
+
+    try {
+      Date.now = () => BASE_TIME;
+      confirmDetourWithZone('bus-1');
+
+      Date.now = () => BASE_TIME + DETOUR_CANDIDATE_EVIDENCE_TTL_MS + 6 * 60 * 1000;
+      const result = processVehicles([], shapes, routeShapeMapping);
+
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].currentVehicleCount).toBe(0);
     } finally {
       Date.now = realDateNow;
     }
@@ -381,6 +438,41 @@ describe('stale vehicle pruning', () => {
       expect(Object.keys(result)).toHaveLength(1);
       expect(result['route-1'].state).toBe('active');
       expect(result['route-1'].vehiclesOffRoute.has('bus-2')).toBe(true);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('retained medium detour clears only after a normal route traversal through the zone', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+
+    try {
+      Date.now = () => BASE_TIME;
+      confirmDetourWithZone('bus-1');
+
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 6 * 60 * 1000;
+      processVehicles([], shapes, routeShapeMapping);
+
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 10 * 60 * 1000;
+      runTicks([makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST })], CONSECUTIVE_READINGS_REQUIRED);
+      processVehicles([makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_MID })], shapes, routeShapeMapping);
+      processVehicles([makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_EAST })], shapes, routeShapeMapping);
+
+      // Bus 2 leaves; no clear should happen just because the detour has no current vehicle.
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 16 * 60 * 1000;
+      let result = processVehicles([], shapes, routeShapeMapping);
+      expect(result['route-1'].uniqueVehicleCount).toBe(2);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+
+      // A different vehicle traverses the normal route inside the suspected zone.
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 17 * 60 * 1000;
+      result = runOnRouteTraversal('bus-3');
+      expect(result['route-1'].state).toBe('clear-pending');
+
+      Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 17 * 60 * 1000 + 1000;
+      result = processVehicles([makeVehicle({ id: 'bus-3', coordinate: ON_ROUTE_ZONE_EAST })], shapes, routeShapeMapping);
+      expect(Object.keys(result)).toHaveLength(0);
     } finally {
       Date.now = realDateNow;
     }
@@ -466,9 +558,6 @@ describe('multiple vehicles on same route', () => {
   });
 
   test('hybrid clearing: route clears when all vehicles meet on-route threshold', () => {
-    const bus1on = makeVehicle({ id: 'bus-1', coordinate: ON_ROUTE_IN_ZONE });
-    const bus2on = makeVehicle({ id: 'bus-2', coordinate: ON_ROUTE_IN_ZONE });
-
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
 
@@ -491,15 +580,18 @@ describe('multiple vehicles on same route', () => {
       // Advance past grace
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
 
-      // Both return on-route in zone — need consecutive ticks to clear
-      let result = runTicks([bus1on, bus2on], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      // Both traverse the regular route through the affected segment.
+      let result = runOnRouteTraversalForVehicles(['bus-1', 'bus-2']);
       // Should be in clear-pending
       expect(Object.keys(result)).toHaveLength(1);
       expect(result['route-1'].state).toBe('clear-pending');
 
       // Next tick finalizes
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 2000;
-      result = processVehicles([bus1on, bus2on], shapes, routeShapeMapping);
+      result = processVehicles([
+        makeVehicle({ id: 'bus-1', coordinate: ON_ROUTE_ZONE_EAST }),
+        makeVehicle({ id: 'bus-2', coordinate: ON_ROUTE_ZONE_EAST }),
+      ], shapes, routeShapeMapping);
       expect(Object.keys(result)).toHaveLength(0);
     } finally {
       Date.now = realDateNow;
@@ -573,16 +665,17 @@ describe('vehicle switching routes', () => {
       // route-2 not yet triggered (counter reset)
       expect(result['route-2']).toBeUndefined();
 
-      // Advance past no-vehicle timeout — route-1 enters clear-pending
+      // Advance past no-vehicle timeout — route-1 retains evidence instead of clearing.
       Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 1000;
       result = processVehicles([busRoute2], shapes, routeShapeMapping);
       expect(result['route-1']).toBeDefined();
-      expect(result['route-1'].state).toBe('clear-pending');
+      expect(result['route-1'].state).toBe('active');
 
-      // Next tick: route-1 finalizes clear
+      // Next tick: route-1 still waits for either confirming evidence or normal-route traversal.
       Date.now = () => BASE_TIME + DETOUR_NO_VEHICLE_TIMEOUT_MS + 2000;
       result = processVehicles([busRoute2], shapes, routeShapeMapping);
-      expect(result['route-1']).toBeUndefined();
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].state).toBe('active');
     } finally {
       Date.now = realDateNow;
       shapes.delete('shape-2');
@@ -709,8 +802,6 @@ describe('getState with detour states', () => {
   });
 
   test('getState reflects clear-pending state', () => {
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
-
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
 
@@ -719,7 +810,7 @@ describe('getState with detour states', () => {
       confirmDetourWithZone();
 
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-      runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      runOnRouteTraversal();
 
       const state = getState();
       expect(state.detourStates['route-1']).toBe('clear-pending');
@@ -805,13 +896,13 @@ describe('evidence capture', () => {
       confirmDetourWithZone();
       expect(getDetourEvidence()['route-1']).toBeDefined();
 
-      // Clear the detour via on-route in zone
+      // Clear the detour via same-bus regular-route traversal.
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-      runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      runOnRouteTraversal();
 
       // Finalize
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 2000;
-      processVehicles([onVehicle], shapes, routeShapeMapping);
+      processVehicles([makeVehicle({ coordinate: ON_ROUTE_ZONE_EAST })], shapes, routeShapeMapping);
 
       const evidence = getDetourEvidence();
       expect(evidence['route-1']).toBeUndefined();
@@ -845,6 +936,7 @@ describe('geometry in snapshot', () => {
     expect(geo).toHaveProperty('confidence');
     expect(geo).toHaveProperty('evidencePointCount');
     expect(geo).toHaveProperty('lastEvidenceAt');
+    expect(geo).toHaveProperty('canShowDetourPath');
   });
 
   test('first confirmed detour includes pre-confirmation off-route evidence for renderable geometry', () => {
@@ -882,7 +974,6 @@ describe('geometry in snapshot', () => {
   });
 
   test('geometry is present on clear-pending snapshots', () => {
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
 
@@ -891,7 +982,7 @@ describe('geometry in snapshot', () => {
       confirmDetourWithZone();
 
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-      const result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      const result = runOnRouteTraversal();
 
       expect(result['route-1'].state).toBe('clear-pending');
       expect(result['route-1'].geometry).toBeDefined();
@@ -1002,7 +1093,9 @@ describe('recurring short deviations', () => {
       const result = runShortDeviation(3);
       expect(result['route-1']).toBeDefined();
       expect(result['route-1'].state).toBe('active');
-      expect(result['route-1'].vehicleCount).toBe(0);
+      expect(result['route-1'].vehicleCount).toBe(3);
+      expect(result['route-1'].uniqueVehicleCount).toBe(3);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
       expect(result['route-1'].geometry.evidencePointCount).toBeGreaterThanOrEqual(6);
       expect(result['route-1'].geometry.segments.length).toBeGreaterThanOrEqual(1);
     } finally {
@@ -1012,6 +1105,26 @@ describe('recurring short deviations', () => {
 });
 
 describe('zone-aware clearing', () => {
+  test('does not clear when a bus only appears at one point in the detour zone', () => {
+    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
+
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+
+    try {
+      Date.now = () => BASE_TIME;
+      confirmDetourWithZone();
+
+      Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
+
+      const result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE * 2);
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].state).toBe('active');
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
   test('on-route outside zone core does NOT clear detour', () => {
     const onVehicleOutsideZone = makeVehicle({ coordinate: ON_ROUTE_OUTSIDE_ZONE });
 
@@ -1034,7 +1147,7 @@ describe('zone-aware clearing', () => {
     }
   });
 
-  test('no zone data falls back to standard on-route clearing', () => {
+  test('no zone data does not clear without a known affected segment', () => {
     const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
 
     const realDateNow = Date.now;
@@ -1048,38 +1161,28 @@ describe('zone-aware clearing', () => {
       // Advance past grace period
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
 
-      // With sparse evidence and no computed zone, route still clears via on-route fallback.
-      let result;
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-        result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      }
+      // With sparse evidence and no computed zone, route should not clear.
+      const result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE * 2);
       expect(Object.keys(result)).toHaveLength(1);
-      expect(result['route-1'].state).toBe('clear-pending');
-
-      Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 2000;
-      result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      expect(Object.keys(result)).toHaveLength(0);
+      expect(result['route-1'].state).toBe('active');
     } finally {
       Date.now = realDateNow;
     }
   });
 
-  test('both sparse and rich evidence can clear once buses are back on route', () => {
+  test('rich evidence clears only after a same-bus regular-route traversal', () => {
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
 
     try {
-      // Scenario 1: sparse evidence (1 point) still clears.
+      // Scenario 1: sparse evidence (1 point) does not clear because the affected segment is unknown.
       Date.now = () => BASE_TIME;
       confirmDetour(); // 1 evidence point
 
       Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
       const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
-      let result;
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-        result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      }
-      expect(result['route-1'].state).toBe('clear-pending');
+      let result = runTicks([onVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE * 2);
+      expect(result['route-1'].state).toBe('active');
 
       // Scenario 2: fresh start with rich evidence also clears.
       clearVehicleState();
@@ -1087,9 +1190,7 @@ describe('zone-aware clearing', () => {
       confirmDetourWithZone(); // 3 spread evidence points
 
       Date.now = () => BASE_TIME + 2 * DETOUR_CLEAR_GRACE_MS + 3000;
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-        result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      }
+      result = runOnRouteTraversal();
       expect(result['route-1'].state).toBe('clear-pending');
     } finally {
       Date.now = realDateNow;
@@ -1235,15 +1336,15 @@ const {
 } = require('../detourDetector');
 
 describe('route-specific detector tuning', () => {
-  test('returns tighter auto-detour thresholds for route 8 branches', () => {
+  test('uses default detector thresholds for route 8 branches', () => {
     const config8A = resolveRouteDetectorConfig('8A');
     const configDefault = resolveRouteDetectorConfig('route-1');
 
-    expect(ROUTE_DETECTOR_OVERRIDES['8A']).toBeDefined();
-    expect(config8A.offRouteThresholdMeters).toBeLessThan(configDefault.offRouteThresholdMeters);
-    expect(config8A.onRouteClearThresholdMeters).toBeLessThan(configDefault.onRouteClearThresholdMeters);
-    expect(config8A.consecutiveReadingsRequired).toBeLessThan(configDefault.consecutiveReadingsRequired);
-    expect(config8A.evidenceWindowMs).toBeGreaterThan(configDefault.evidenceWindowMs);
+    expect(ROUTE_DETECTOR_OVERRIDES['8A']).toBeUndefined();
+    expect(config8A.offRouteThresholdMeters).toBe(configDefault.offRouteThresholdMeters);
+    expect(config8A.onRouteClearThresholdMeters).toBe(configDefault.onRouteClearThresholdMeters);
+    expect(config8A.consecutiveReadingsRequired).toBe(configDefault.consecutiveReadingsRequired);
+    expect(config8A.evidenceWindowMs).toBe(configDefault.evidenceWindowMs);
   });
 
   test('does not detect the small route 8 detour on default-tuned routes', () => {
@@ -1257,7 +1358,7 @@ describe('route-specific detector tuning', () => {
     expect(Object.keys(result)).toHaveLength(0);
   });
 
-  test('detects the small route 8A detour using branch-specific tuning', () => {
+  test('does not detect the small route 8A deviation with default tuning', () => {
     const config8A = resolveRouteDetectorConfig('8A');
     const vehicle = makeVehicle({
       id: 'bus-8a-small-detour',
@@ -1266,8 +1367,7 @@ describe('route-specific detector tuning', () => {
     });
 
     const result = runTicks([vehicle], config8A.consecutiveReadingsRequired);
-    expect(result['8A']).toBeDefined();
-    expect(result['8A'].triggerVehicleId).toBe('bus-8a-small-detour');
+    expect(result['8A']).toBeUndefined();
   });
 });
 
@@ -1320,7 +1420,7 @@ describe('isWithinServiceHours', () => {
 describe('service hours guard', () => {
   beforeEach(() => clearVehicleState());
 
-  test('processVehicles clears detours at service end and ignores vehicles outside service hours', () => {
+  test('processVehicles retains detours at service end and ignores vehicles outside service hours', () => {
     const originalNow = Date.now;
 
     try {
@@ -1338,11 +1438,13 @@ describe('service hours guard', () => {
       const before = getState();
       expect(before.activeDetourCount).toBe(1);
 
-      // First off-service tick clears active state.
+      // First off-service tick freezes active state instead of clearing without GPS proof.
       Date.now = () => oneAmEst;
       let result = processVehicles([], shapes, routeShapeMapping);
-      expect(Object.keys(result)).toHaveLength(0);
-      expect(getState().activeDetourCount).toBe(0);
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+      expect(getState().activeDetourCount).toBe(1);
 
       // Later off-service ticks ignore new off-route vehicles.
       const threeAmEst = new Date('2026-03-05T08:00:00Z').getTime();
@@ -1352,8 +1454,9 @@ describe('service hours guard', () => {
         result = processVehicles([newVehicle], shapes, routeShapeMapping);
       }
 
-      expect(Object.keys(result)).toHaveLength(0);
-      expect(getState().activeDetourCount).toBe(0);
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+      expect(getState().activeDetourCount).toBe(1);
     } finally {
       Date.now = originalNow;
     }
@@ -1362,75 +1465,167 @@ describe('service hours guard', () => {
   test('processVehicles resumes normal processing during service hours', () => {
     const tenAmEst = new Date('2026-03-04T15:00:00Z').getTime();
     const originalNow = Date.now;
-    Date.now = () => tenAmEst;
 
-    const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    confirmDetour(offRouteVehicle);
-    const state = getState();
-    expect(state.activeDetourCount).toBe(1);
+    try {
+      Date.now = () => tenAmEst;
 
-    Date.now = originalNow;
+      const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+      confirmDetour(offRouteVehicle);
+      const state = getState();
+      expect(state.activeDetourCount).toBe(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  test('Route 12 publishes medium-confidence path alerts when one bus in each direction repeats the same short detour area', () => {
+    const route12Shapes = new Map(shapes);
+    route12Shapes.set('shape-12a', [
+      { latitude: 44.39, longitude: -79.700 },
+      { latitude: 44.39, longitude: -79.696 },
+      { latitude: 44.39, longitude: -79.692 },
+      { latitude: 44.39, longitude: -79.688 },
+      { latitude: 44.39, longitude: -79.684 },
+      { latitude: 44.39, longitude: -79.680 },
+    ]);
+    route12Shapes.set('shape-12b', [
+      { latitude: 44.39, longitude: -79.680 },
+      { latitude: 44.39, longitude: -79.684 },
+      { latitude: 44.39, longitude: -79.688 },
+      { latitude: 44.39, longitude: -79.692 },
+      { latitude: 44.39, longitude: -79.696 },
+      { latitude: 44.39, longitude: -79.700 },
+    ]);
+
+    const route12Mapping = new Map(routeShapeMapping);
+    route12Mapping.set('12A', ['shape-12a']);
+    route12Mapping.set('12B', ['shape-12b']);
+
+    const tripMapping = new Map([
+      ['trip-12a', { routeId: '12A', shapeId: 'shape-12a', headsign: 'A', directionId: 0 }],
+      ['trip-12b', { routeId: '12B', shapeId: 'shape-12b', headsign: 'B', directionId: 1 }],
+    ]);
+
+    const offRouteSameArea = { latitude: 44.391, longitude: -79.690 };
+    const onRouteSameArea = { latitude: 44.39, longitude: -79.690 };
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+
+    const runOneShortDeviation = ({ routeId, tripId, vehicleId, offsetMs }) => {
+      Date.now = () => BASE_TIME + offsetMs;
+      let result = processVehicles([
+        makeVehicle({ id: vehicleId, routeId, tripId, coordinate: offRouteSameArea }),
+      ], route12Shapes, route12Mapping, tripMapping);
+      expect(result[routeId]).toBeUndefined();
+
+      Date.now = () => BASE_TIME + offsetMs + 60_000;
+      return processVehicles([
+        makeVehicle({ id: vehicleId, routeId, tripId, coordinate: onRouteSameArea }),
+      ], route12Shapes, route12Mapping, tripMapping);
+    };
+
+    try {
+      expect(Object.keys(runOneShortDeviation({
+        routeId: '12A',
+        tripId: 'trip-12a',
+        vehicleId: 'bus-12a',
+        offsetMs: 0,
+      }))).toHaveLength(0);
+
+      const result = runOneShortDeviation({
+        routeId: '12B',
+        tripId: 'trip-12b',
+        vehicleId: 'bus-12b',
+        offsetMs: 2 * 60_000,
+      });
+
+      expect(result['12A']).toBeDefined();
+      expect(result['12B']).toBeDefined();
+      expect(result['12A'].state).toBe('active');
+      expect(result['12B'].state).toBe('active');
+      expect(result['12A'].currentVehicleCount).toBe(0);
+      expect(result['12B'].currentVehicleCount).toBe(0);
+      expect(result['12A'].geometry.confidence).toBe('medium');
+      expect(result['12B'].geometry.confidence).toBe('medium');
+      expect(result['12A'].geometry.canShowDetourPath).toBe(true);
+      expect(result['12B'].geometry.canShowDetourPath).toBe(true);
+    } finally {
+      Date.now = realDateNow;
+    }
   });
 });
 
-describe('end-of-service cleanup', () => {
+describe('end-of-service retention', () => {
   beforeEach(() => clearVehicleState());
 
-  test('clears low-confidence detours at service end', () => {
-    // Confirm a detour with minimal evidence (low confidence: <5 points, <2 min, 1 vehicle)
-    const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    confirmDetour(offRouteVehicle);
-    expect(getState().activeDetourCount).toBe(1);
-
-    // Transition to out-of-service
-    const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+  test('retains low-confidence detours at service end', () => {
     const originalNow = Date.now;
-    Date.now = () => oneAmEst;
 
-    processVehicles([], shapes, routeShapeMapping);
+    try {
+      // Confirm a detour with minimal evidence (low confidence: <5 points, <2 min, 1 vehicle)
+      const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+      confirmDetour(offRouteVehicle);
+      expect(getState().activeDetourCount).toBe(1);
 
-    expect(getState().activeDetourCount).toBe(0);
-    Date.now = originalNow;
-  });
+      // Transition to out-of-service
+      const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+      Date.now = () => oneAmEst;
 
-  test('clears high-confidence detours at service end', () => {
-    const originalNow = Date.now;
-    const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
-    const sevenMinBeforeServiceEnd = oneAmEst - 7 * 60 * 1000;
+      processVehicles([], shapes, routeShapeMapping);
 
-    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
-    const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
-    for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
-      Date.now = () => sevenMinBeforeServiceEnd + i * 30000;
-      processVehicles([bus1, bus2], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+    } finally {
+      Date.now = originalNow;
     }
-
-    const before = getState();
-    expect(before.activeDetourCount).toBe(1);
-
-    Date.now = () => oneAmEst;
-    const result = processVehicles([], shapes, routeShapeMapping);
-
-    expect(Object.keys(result)).toHaveLength(0);
-    expect(getState().activeDetourCount).toBe(0);
-    Date.now = originalNow;
   });
 
-  test('repeated off-service ticks keep detector state cleared', () => {
-    const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    confirmDetour(offRouteVehicle);
-
-    const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+  test('retains high-confidence detours at service end', () => {
     const originalNow = Date.now;
-    Date.now = () => oneAmEst;
-    processVehicles([], shapes, routeShapeMapping);
-    expect(getState().activeDetourCount).toBe(0);
 
-    Date.now = () => oneAmEst + 30000;
-    processVehicles([makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD })], shapes, routeShapeMapping);
-    expect(getState().activeDetourCount).toBe(0);
+    try {
+      const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+      const sevenMinBeforeServiceEnd = oneAmEst - 7 * 60 * 1000;
 
-    Date.now = originalNow;
+      const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
+      const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
+      for (let i = 0; i < CONSECUTIVE_READINGS_REQUIRED + 6; i++) {
+        Date.now = () => sevenMinBeforeServiceEnd + i * 30000;
+        processVehicles([bus1, bus2], shapes, routeShapeMapping);
+      }
+
+      const before = getState();
+      expect(before.activeDetourCount).toBe(1);
+
+      Date.now = () => oneAmEst;
+      const result = processVehicles([], shapes, routeShapeMapping);
+
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+      expect(getState().activeDetourCount).toBe(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  test('repeated off-service ticks keep detector state retained and ignore new detections', () => {
+    const originalNow = Date.now;
+
+    try {
+      const offRouteVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
+      confirmDetour(offRouteVehicle);
+
+      const oneAmEst = new Date('2026-03-05T06:00:00Z').getTime();
+      Date.now = () => oneAmEst;
+      processVehicles([], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+
+      Date.now = () => oneAmEst + 30000;
+      const result = processVehicles([makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD })], shapes, routeShapeMapping);
+      expect(getState().activeDetourCount).toBe(1);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 });
 
@@ -1454,16 +1649,18 @@ describe('learned persistent detours', () => {
       expect(persistentDetours['route-1']).toBeDefined();
       expect(persistentDetours['route-1'].fingerprint).toBeTruthy();
 
-      // End of service clears volatile state but keeps the learned record.
+      // End of service freezes active state and keeps the learned record.
       Date.now = () => new Date('2026-03-14T07:00:00.000Z').getTime(); // 03:00 America/Toronto
       let result = processVehicles([], shapes, routeShapeMapping);
-      expect(Object.keys(result)).toHaveLength(0);
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+      expect(getPersistentDetours()['route-1']).toBeDefined();
 
-      // Next service day the learned detour is re-seeded immediately.
+      // Next service day the retained detour is still available without waiting for a new bus.
       Date.now = () => new Date('2026-03-14T14:00:00.000Z').getTime(); // 10:00 America/Toronto
       result = processVehicles([], shapes, routeShapeMapping);
       expect(result['route-1']).toBeDefined();
-      expect(result['route-1'].isPersistent).toBe(true);
+      expect(getPersistentDetours()['route-1']).toBeDefined();
     } finally {
       Date.now = realDateNow;
     }
@@ -1512,14 +1709,16 @@ describe('learned persistent detours', () => {
       let result = processVehicles([], shapes, routeShapeMapping);
       expect(result['route-1']).toBeDefined();
 
-      const onVehicle = makeVehicle({ coordinate: { latitude: 44.39, longitude: -79.686 } });
-      for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-        result = processVehicles([onVehicle], shapes, routeShapeMapping);
-      }
+      const persistentClearPath = [
+        ON_ROUTE_IN_ZONE,
+        { latitude: 44.39, longitude: -79.686 },
+        ON_ROUTE_ZONE_EAST,
+      ];
+      result = runOnRouteTraversal('bus-1', DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE, persistentClearPath);
       expect(result['route-1'].state).toBe('clear-pending');
 
       Date.now = () => new Date('2026-03-14T14:01:00.000Z').getTime();
-      result = processVehicles([onVehicle], shapes, routeShapeMapping);
+      result = processVehicles([makeVehicle({ coordinate: ON_ROUTE_ZONE_EAST })], shapes, routeShapeMapping);
       expect(Object.keys(result)).toHaveLength(0);
       expect(getPersistentDetours()['route-1']).toBeUndefined();
     } finally {
@@ -1580,7 +1779,7 @@ describe('runtime state persistence', () => {
       confirmDetourWithZone();
 
       Date.now = () => baseTime + DETOUR_CLEAR_GRACE_MS + 1000;
-      runTicks([makeVehicle({ coordinate: ON_ROUTE_IN_ZONE })], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE);
+      runOnRouteTraversal();
 
       const snapshot = serializeDetectorRuntimeState();
 
@@ -1593,7 +1792,7 @@ describe('runtime state persistence', () => {
       expect(restoredState.detours['route-1'].state).toBe('clear-pending');
 
       Date.now = () => baseTime + DETOUR_CLEAR_GRACE_MS + 2000;
-      const result = processVehicles([makeVehicle({ coordinate: ON_ROUTE_IN_ZONE })], shapes, routeShapeMapping);
+      const result = processVehicles([makeVehicle({ coordinate: ON_ROUTE_ZONE_EAST })], shapes, routeShapeMapping);
       expect(Object.keys(result)).toHaveLength(0);
     } finally {
       Date.now = realDateNow;

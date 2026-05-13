@@ -16,13 +16,34 @@ const SurveyResultsScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
   const surveyId = route?.params?.surveyId;
-  const { aggregates, loading } = useSurveyAggregates(surveyId);
+  const { aggregates, loading, error, retry } = useSurveyAggregates(surveyId);
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>{'\u2190'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Community Results</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.emptyTitle}>Could not load results</Text>
+          <Text style={styles.emptyText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retry}>
+            <Text style={styles.retryButtonText}>Try again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -317,6 +338,25 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: BORDER_RADIUS.round,
+    marginTop: SPACING.lg,
+  },
+  retryButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
   },
 });
 

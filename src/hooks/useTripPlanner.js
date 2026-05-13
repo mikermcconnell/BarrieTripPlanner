@@ -9,7 +9,7 @@
  */
 
 import { useReducer, useCallback, useRef, useEffect } from 'react';
-import { planTripAuto, TripPlanningError } from '../services/tripService';
+import { planTripAuto, TripPlanningError, TRIP_ERROR_CODES } from '../services/tripService';
 import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
 import { validateTripInputs } from '../utils/tripValidation';
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
@@ -140,7 +140,8 @@ function tripReducer(state, action) {
       return { ...state, showFromSuggestions: action.payload };
     case SHOW_TO_SUGGESTIONS:
       return { ...state, showToSuggestions: action.payload };
-    case SET_ERROR:
+    case SET_ERROR: {
+      const isTripPlanningError = !!(action.payload && typeof action.payload === 'object' && action.payload.code);
       return {
         ...state,
         itineraries: [],
@@ -148,8 +149,9 @@ function tripReducer(state, action) {
         isLoading: false,
         isLocatingFrom: false,
         error: action.payload,
-        hasSearched: false,
+        hasSearched: isTripPlanningError,
       };
+    }
     case SET_TIME_MODE:
       return {
         ...state,
@@ -251,7 +253,11 @@ export const useTripPlanner = ({
     const validation = validateTripInputs({ from, to, onDemandZones });
     if (!validation.valid) {
       invalidateTripSearches();
-      dispatch({ type: SET_ERROR, payload: validation.errorMessage });
+      const errorCode = TRIP_ERROR_CODES[validation.errorCode] || TRIP_ERROR_CODES.VALIDATION_ERROR;
+      dispatch({
+        type: SET_ERROR,
+        payload: new TripPlanningError(errorCode, validation.errorMessage),
+      });
       return;
     }
 

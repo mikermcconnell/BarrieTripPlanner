@@ -21,7 +21,7 @@ The system detects detours automatically by watching real-time GPS positions —
 1. A server-side worker processes GTFS-RT vehicle positions on each detection tick
 2. Each vehicle's GPS is compared against its route's published shape
 3. When consecutive off-route readings are observed, or the same short deviation repeats across trips/vehicles, a detour is confirmed
-4. Detour geometry (skipped segment + inferred path) is published to Firestore
+4. Detour geometry is published to Firestore. Rider-facing detour paths are shown after either a same-bus GPS trace confirms the bus left the regular route, travelled off-route, and returned, or two distinct buses corroborate the same detour corridor.
 5. The app subscribes in real time and shows the detour on the main map
 
 ---
@@ -77,12 +77,16 @@ If a route has multiple independent detour sections at the same time, they are p
 | `lastSeenAt` | Timestamp | When off-route evidence was last observed (throttled, updates every 5min) |
 | `updatedAt` | Timestamp | When the Firestore document was last written |
 | `triggerVehicleId` | String \| null | Vehicle that triggered initial detection |
-| `vehicleCount` | Number | Count of vehicles currently off-route |
+| `vehicleCount` | Number | Unique vehicles that have contributed evidence to this detour. This is the backward-compatible field used by rider visibility rules. |
+| `uniqueVehicleCount` | Number | Same evidence count as `vehicleCount`, published explicitly for newer clients and operations review. |
+| `currentVehicleCount` | Number | Vehicles currently observed off-route on this detour right now. Can be `0` while the detour remains active waiting for another bus or a normal-route clear. |
 | `state` | String | `"active"` or `"clear-pending"` (documents are deleted when cleared, not updated to `"cleared"`) |
+| `clearReason` | String \| null | Why a detour is moving toward clear, for example `"normal-route-observed"`. |
 | `isPersistent` | Boolean | Whether the published route snapshot is currently backed by a learned persistent detour record |
 | `segments` | Array | Renderable detour sections for this route. Each segment can have its own entry/exit points and skipped/inferred geometry. |
 | `skippedSegmentPolyline` | String \| null | Encoded polyline of the route segment being skipped |
 | `inferredDetourPolyline` | String \| null | Encoded polyline of the inferred detour path |
+| `canShowDetourPath` | Boolean | Whether the inferred path is trusted enough for rider-facing rendering and road matching. Requires entry and exit boundary anchors plus either a same-vehicle trace or two distinct buses on the same detour corridor. |
 | `likelyDetourPolyline` | String \| null | Optional road-matched path shown to riders as the likely detour path |
 | `likelyDetourRoadNames` | String[] | Optional road names from map matching |
 | `roadMatchConfidence` | String \| null | `"low"`, `"medium"`, or `"high"` from the road matcher |
@@ -101,10 +105,11 @@ Documents are created on detection, updated each publish cycle, and deleted when
 
 One document per event. Auto-generated IDs: `{timestamp}-{routeId}-{eventType}-{random}`.
 
-Three event types:
-- **`DETOUR_DETECTED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `vehicleCount`, `confidence`, `evidencePointCount`, `lastEvidenceAt`, `shapeId`, `entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `segmentCount`, `source`
-- **`DETOUR_UPDATED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `previousTriggerVehicleId`, `vehicleCount`, `previousVehicleCount`, `changedFields[]`, `source` (note: no `confidence`/`evidencePointCount` — those are tracked via `changedFields`)
-- **`DETOUR_CLEARED`** — `routeId`, `occurredAt`, `detectedAt`, `clearedAt`, `durationMs`, `triggerVehicleId`, `previousVehicleCount`, `lastEvidenceAt`, `shapeId`, `entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `segmentCount`, `source`
+Main event types:
+- **`DETOUR_DETECTED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `vehicleCount`, `uniqueVehicleCount`, `currentVehicleCount`, `confidence`, `evidencePointCount`, `lastEvidenceAt`, `shapeId`, `entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `segmentCount`, `source`
+- **`DETOUR_UPDATED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `previousTriggerVehicleId`, `vehicleCount`, `previousVehicleCount`, `uniqueVehicleCount`, `currentVehicleCount`, `clearReason`, `changedFields[]`, `source`
+- **`DETOUR_CLEARED`** — `routeId`, `occurredAt`, `detectedAt`, `clearedAt`, `durationMs`, `triggerVehicleId`, `previousVehicleCount`, `uniqueVehicleCount`, `currentVehicleCount`, `clearReason`, `lastEvidenceAt`, `shapeId`, `entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `segmentCount`, `source`
+- **`DETOUR_AUTO_CLEARED_STALE`** — legacy/stale-safety event shape with stale metadata such as `staleAgeMs`, `staleThresholdMs`, `scheduledHeadwayMs`, `scheduleSource`, and `serviceDate`. Current active detours should clear from normal-route GPS evidence, not elapsed time.
 
 All history events include `source: "detour-worker-v2"`.
 
@@ -127,9 +132,11 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - Detection worker supports a legacy 30s interval loop and a newer manual/scheduled single-tick mode
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
 - **Recurring short-deviation detection** — repeated short off-route streaks on the same route segment can publish a detour even when no single bus stays off-route long enough to hit the normal consecutive-reading threshold. This is meant for short downtown jogs such as temporary market closures.
-- **Service-hours-aware clearing** — outside service hours (1 AM - 5 AM EST), detection freezes. At end-of-service, all active detours are cleared and the worker starts fresh when service resumes.
-- **Headway-aware stale clearing** — as a safety net, the publisher clears stale active detour documents only when route-family vehicles are still reporting and the latest detour evidence is older than a schedule-aware threshold. The threshold is roughly two scheduled headways plus a buffer, with a 45-minute minimum, so low-frequency Sunday routes are not cleared just because no bus has reached the affected segment yet.
-- **Zero-vehicle stale clearing** — when a published detour has no vehicles currently off-route but route-family buses are still reporting, the publisher uses a shorter stale-evidence window so false positives do not linger on the map after buses return to normal routing.
+- **Route-family short-detour grouping** — Route 12A/12B short-deviation observations are grouped by physical area, so one bus in each direction can publish alerts for both branches. Two distinct buses on the same corridor now produce medium confidence and can expose the detour path on any route.
+- **Service-hours-aware retention** — outside service hours (1 AM - 5 AM EST), detection freezes. End-of-service no longer clears active detours; current vehicles are dropped and detours stay visible until an in-service bus adds detour evidence or proves normal routing.
+- **GPS-evidence clearing** — active detours are retained until the same bus is observed traversing the regular baseline route through the affected detour segment. By default, that bus must cover at least 100m and 60% of the affected segment. No-bus/currently-zero-vehicle states are not enough to clear.
+- **Headway-aware stale monitoring** — schedule/headway context can flag old evidence for operator review, but it does not clear an active detour by itself. This prevents low-frequency routes from disappearing before another bus reaches the affected segment.
+- **Path-confidence gate** — detour alerts can remain active while the map hides the likely detour path until the backend sees trusted evidence: either same-bus before/off-route/after evidence or two distinct buses with entry/exit anchors on the same corridor.
 - **Segment-level detour lifecycle under one route document** — same-route detours separated by normal on-route travel are now tracked as separate internal segments with independent clear-pending and clearing behavior.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
@@ -146,6 +153,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Fixed 2026-03-15: same-route detours were merging into one giant lifecycle** — The detector used to keep one active lifecycle per route, so two separate detours on the same route could collapse into one record and then clear when the bus served normal stops between them. The detector now keeps segment-level state internally and publishes both sections in one route document.
 - **Fixed 2026-03-20: noisy multi-vehicle detour geometry could render overlapping reroute branches** — The geometry builder used to simplify one timestamp-ordered list of all evidence points, which could weave together multiple buses and draw a messy inferred path. The backend now scores per-vehicle trajectories and publishes one representative reroute line so riders see a cleaner detour overlay.
 - **Fixed 2026-05-04: very short recurring detours could be missed** — The detector used to require one vehicle to stay off route for the full consecutive-reading window. It now also aggregates repeated short deviations across vehicles/trips within the same route segment.
+- **Fixed 2026-05-12: sparse evidence could create a misleading likely path** — Geometry now requires both entry and exit boundary anchors for skipped-route geometry. The path can publish once one bus provides a full trace or two distinct buses corroborate the same corridor.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are now segment-aware, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B and both directions of travel.
 
 ### What's missing to go public
@@ -169,7 +177,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 
 ### Known Issues (Fixed)
 - **Flapping detours** (Fixed 2026-02-27) — Single-vehicle GPS noise caused rapid detect/clear cycles. Fixed by raising `CONSECUTIVE_READINGS_REQUIRED` from 3→4 (2 minutes at 30s ticks). Made configurable via `DETOUR_CONSECUTIVE_READINGS` env var.
-- **Zombie detours & premature clearing** (Fixed 2026-03-03, simplified 2026-03-13) — False-positive detours could linger overnight while real multi-vehicle detours cleared inconsistently when buses stopped reporting. The current model clears all detours at end-of-service and re-detects fresh detours the next service day.
+- **Zombie detours & premature clearing** (Fixed 2026-03-03, revised 2026-05-12) — False-positive detours could linger overnight while real multi-vehicle detours cleared inconsistently when buses stopped reporting. The current model avoids time-based clearing: active detours are retained through service gaps and clear only after same-bus normal-route GPS traversal through the affected segment.
 - **Independent same-route detours merged into one lifecycle** (Fixed 2026-03-15) — Two detours on the same route could collapse into one route-wide lifecycle, then clear incorrectly when buses traveled normally between them. The detector now tracks segment-level lifecycles inside one route snapshot, so one segment can clear without deleting the others.
 
 ---
@@ -220,7 +228,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_EVIDENCE_WINDOW_MS` | `900000` | Time window for geometry evidence points (15min) |
 | `DETOUR_SEGMENT_GAP_METERS` | `400` | Minimum projected gap before geometry evidence is split into separate published detour segments |
 | `DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS` | `100` | Minimum skipped-route span before route-aligned skipped-segment geometry is published |
-| `DETOUR_NO_VEHICLE_TIMEOUT_MS` | `1800000` | Time before detour with no vehicles enters clear-pending (30min) |
+| `DETOUR_MIN_SAME_VEHICLE_PATH_POINTS` | `2` | Minimum off-route points from the same bus, between matching entry/exit anchors, before the likely detour path can be road-matched and shown to riders |
+| `DETOUR_CANDIDATE_EVIDENCE_TTL_MS` | `10800000` | Legacy/advisory evidence-retention value. Active detector-owned detours are no longer cleared solely because this time has elapsed. |
 | `DETOUR_PERSIST_CONSECUTIVE_MATCHES` | `10` | Matching active-detour snapshots required before a long-running detour becomes persistent |
 | `DETOUR_PERSIST_MIN_AGE_MS` | `18000000` | Minimum detour age before persistence learning is allowed (5 hours) |
 
@@ -237,14 +246,15 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS` | `40` | Tighter threshold for "back on route" (hysteresis: 40m to clear vs 75m to detect) |
 | `DETOUR_CLEAR_GRACE_MS` | `600000` | Minimum detour age before vehicles can be cleared from the off-route set (10min). Prevents flicker on short-lived detours. |
 | `DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE` | `6` in interval/manual mode; `4` in scheduled mode | On-route ticks before clearing per vehicle. The scheduled-mode default keeps a 1-minute scheduler inside the 5-minute clear target. |
-| `DETOUR_STALE_AUTO_CLEAR_ENABLED` | `true` | Enables the publisher-side stale-detour safety clear. |
-| `DETOUR_STALE_AUTO_CLEAR_MIN_MS` | `2700000` | Minimum stale evidence window before safety clearing (45min). |
-| `DETOUR_STALE_AUTO_CLEAR_HEADWAY_MULTIPLIER` | `2` | Number of scheduled headways to wait before stale safety clearing. |
-| `DETOUR_STALE_AUTO_CLEAR_BUFFER_MS` | `600000` | Extra buffer added to the headway-based stale window (10min). |
-| `DETOUR_STALE_AUTO_CLEAR_MAX_MS` | `10800000` | Maximum stale safety window (3h). |
+| `DETOUR_CLEAR_MIN_TRAVERSAL_METERS` | `100` | Minimum same-bus regular-route travel distance required before a vehicle can clear an affected segment. |
+| `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO` | `0.6` | Minimum share of the affected segment that the same bus must cover on the regular route before clearing. |
+| `DETOUR_STALE_AUTO_CLEAR_ENABLED` | `true` | Legacy flag for stale-clear decisions. Current policy treats stale/headway data as monitoring context; active detours require normal-route GPS evidence to clear. |
+| `DETOUR_STALE_AUTO_CLEAR_MIN_MS` | `2700000` | Minimum stale evidence window used for stale monitoring/advisory context (45min). |
+| `DETOUR_STALE_AUTO_CLEAR_HEADWAY_MULTIPLIER` | `2` | Number of scheduled headways used when calculating stale monitoring thresholds. |
+| `DETOUR_STALE_AUTO_CLEAR_BUFFER_MS` | `600000` | Extra buffer added to the headway-based stale monitoring window (10min). |
+| `DETOUR_STALE_AUTO_CLEAR_MAX_MS` | `10800000` | Maximum stale monitoring window (3h). |
 | `DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS` | `3600000` | Conservative fallback headway when nearby GTFS trips are unavailable but service still appears active. |
-| `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MS` | `720000` | Short stale-evidence window for active detours with `vehicleCount: 0` while route-family vehicles are still reporting (12min). |
-| `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MIN_AGE_MS` | `600000` | Minimum detour age before zero-vehicle stale clearing can remove a published detour (10min). |
+| — | — | There is intentionally no time-based clear for active detector-owned detours. They are retained so later buses can add evidence or prove normal routing. |
 
 ### Publishing & History
 | Variable | Default | Description |
@@ -277,7 +287,8 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 |---|---|---|---|
 | `TICK_INTERVAL` | `30000` | detourWorker.js | Detection poll interval (30s) |
 | `STALE_VEHICLE_TIMEOUT_MS` | `300000` | detourDetector.js | Remove vehicle from state after 5min of no data |
-| `MIN_EVIDENCE_FOR_GEOMETRY` | `3` | detourGeometry.js | Min evidence points to build geometry |
+| `MIN_EVIDENCE_FOR_GEOMETRY` | `2` | detourGeometry.js | Min evidence points to build geometry when two buses corroborate a corridor. |
+| `MIN_SAME_VEHICLE_PATH_POINTS` | `2` | detourGeometry.js | Same-bus off-route points required before a likely path is trusted without multi-bus corroboration. |
 | `HIGH_CONFIDENCE_VEHICLES` | `2` | detourGeometry.js | Unique vehicles needed for "high" confidence |
 | `HIGH_CONFIDENCE_POINTS` | `10` | detourGeometry.js | Evidence points needed for "high" confidence |
 | `MEDIUM_CONFIDENCE_VEHICLES` | `2` | detourGeometry.js | Unique vehicles needed before a detour can become rider-visible as "likely" |
@@ -291,11 +302,11 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 |---|---|
 | **GTFS-RT feed unavailable** | Fetch retries once (2s delay), then fails tick. `consecutiveFailureCount` increments. Detours persist in-memory. Worker retries next tick (30s), no backoff. |
 | **Vehicle disappears from feed** | Removed from state after 5min (`STALE_VEHICLE_TIMEOUT_MS`). Does NOT clear the detour — absence of data is not evidence of return. |
-| **All vehicles for one active segment go offline** | That segment enters `clear-pending` after 30min without evidence (`DETOUR_NO_VEHICLE_TIMEOUT_MS`). The route stays published while any other segment on that route remains active. |
+| **All vehicles for one active segment go offline** | The segment stays active with `currentVehicleCount: 0` so the next bus can add evidence. It clears only after same-bus normal-route GPS traversal through the affected segment. |
 | **Firestore write fails** | Error logged, publish skipped for that tick. Detection state machine continues in-memory. Retries next tick. |
 | **Firestore unreachable at startup** | Publisher hydration may fail, but the detector still begins fresh. Existing detours are re-detected as vehicles appear. |
 | **Worker restarts** | In interval mode, detector rehydrates learned persistent detours and resumes in-memory monitoring. In manual/scheduled mode, runtime detector state is reloaded from Firestore before each tick. |
-| **Service ends with active detours** | Volatile active detours clear immediately. Learned persistent detours are re-seeded on the next service day and only fully clear after repeated on-route traversal through the learned detour zone. |
+| **Service ends with active detours** | Detection freezes, current vehicle associations are dropped, and active detours remain published with `currentVehicleCount: 0`. They clear only after in-service GPS shows the same bus traversing the regular route through the affected segment. |
 
 ---
 

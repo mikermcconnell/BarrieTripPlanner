@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import logger from '../utils/logger';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const STORAGE_KEYS = {
   PUSH_TOKEN: '@barrie_transit_push_token',
@@ -30,7 +31,7 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
   // Skip push notification registration on web (requires VAPID key configuration)
   if (Platform.OS === 'web') {
     logger.log('Push notifications not supported on web');
-    return { success: false, error: 'Not supported on web' };
+    return { success: false, error: 'Notifications are not supported on web.' };
   }
 
   try {
@@ -39,7 +40,7 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
 
     if (existingStatus !== 'granted') {
       if (!requestPermission) {
-        return { success: false, error: 'Permission not granted' };
+        return { success: false, error: 'Notifications are off. You can turn them on in device settings.' };
       }
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
@@ -47,14 +48,14 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
 
     if (finalStatus !== 'granted') {
       logger.log('Push notification permission denied');
-      return { success: false, error: 'Permission denied' };
+      return { success: false, error: 'Notifications are off. You can turn them on in device settings.' };
     }
 
     // Get Expo push token using the EAS project ID from app config
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
       logger.warn('EAS project ID not found in app config');
-      return { success: false, error: 'EAS project ID not configured' };
+      return { success: false, error: 'Notifications are not configured for this build.' };
     }
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId,
@@ -93,7 +94,16 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
     return { success: true, token };
   } catch (error) {
     logger.error('Error registering for push notifications:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not turn on notifications. Please try again.') };
+  }
+};
+
+export const getStoredPushToken = async () => {
+  try {
+    return await AsyncStorage.getItem(STORAGE_KEYS.PUSH_TOKEN);
+  } catch (error) {
+    logger.error('Error reading stored push token:', error);
+    return null;
   }
 };
 
@@ -123,13 +133,17 @@ export const scheduleTripReminder = async ({
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
       },
-      trigger,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trigger,
+        channelId: 'reminders',
+      },
     });
 
     return { success: true, identifier };
   } catch (error) {
     logger.error('Error scheduling trip reminder:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not schedule this reminder. Please try again.') };
   }
 };
 
@@ -142,7 +156,7 @@ export const cancelNotification = async (identifier) => {
     return { success: true };
   } catch (error) {
     logger.error('Error canceling notification:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not cancel this notification. Please try again.') };
   }
 };
 
@@ -155,7 +169,7 @@ export const cancelAllNotifications = async () => {
     return { success: true };
   } catch (error) {
     logger.error('Error canceling all notifications:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not cancel notifications. Please try again.') };
   }
 };
 
@@ -168,14 +182,18 @@ export const getScheduledNotifications = async () => {
     return { success: true, notifications };
   } catch (error) {
     logger.error('Error getting scheduled notifications:', error);
-    return { success: false, error: error.message, notifications: [] };
+    return {
+      success: false,
+      error: getUserFacingErrorMessage(error, 'Could not load scheduled notifications. Please try again.'),
+      notifications: [],
+    };
   }
 };
 
 /**
  * Show immediate local notification (for service alerts)
  */
-export const showLocalNotification = async ({ title, body, data = {} }) => {
+export const showLocalNotification = async ({ title, body, data = {}, channelId = 'default' }) => {
   try {
     const identifier = await Notifications.scheduleNotificationAsync({
       content: {
@@ -184,13 +202,13 @@ export const showLocalNotification = async ({ title, body, data = {} }) => {
         data,
         sound: true,
       },
-      trigger: null, // Show immediately
+      trigger: Platform.OS === 'android' && channelId ? { channelId } : null,
     });
 
     return { success: true, identifier };
   } catch (error) {
     logger.error('Error showing local notification:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not show this notification. Please try again.') };
   }
 };
 
@@ -233,6 +251,6 @@ export const saveNotificationSettings = async (settings) => {
     return { success: true };
   } catch (error) {
     logger.error('Error saving notification settings:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: getUserFacingErrorMessage(error, 'Could not save notification settings. Please try again.') };
   }
 };

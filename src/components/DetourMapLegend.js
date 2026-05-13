@@ -1,44 +1,44 @@
-import React, { useState } from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, SHADOWS, SPACING } from '../config/theme';
 
 const CLOSED_DASH_COUNT = 4;
-
-const MiniSwatches = ({ openColor, openOutlineColor, closedColor, normalColor }) => (
-  <View style={styles.compactRows}>
-    <View style={styles.compactLegendRow}>
-      <View style={[styles.miniOpenOutline, { backgroundColor: openOutlineColor }]}>
-        <View style={[styles.miniOpenLine, { backgroundColor: openColor }]} />
-      </View>
-      <Text style={styles.compactLabel}>Likely path buses are using.</Text>
-    </View>
-    <View style={styles.compactLegendRow}>
-      <View style={styles.miniDashedLine}>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <View
-            key={`mini-closed-dash-${index}`}
-            style={[styles.miniClosedDash, { backgroundColor: closedColor }]}
-          />
-        ))}
-      </View>
-      <Text style={styles.compactLabel}>Closed regular route section.</Text>
-    </View>
-    <View style={styles.compactLegendRow}>
-      <View style={[styles.miniNormalLine, { backgroundColor: normalColor }]} />
-      <Text style={styles.compactLabel}>Regular route still open.</Text>
-    </View>
-  </View>
-);
+const AUTO_COLLAPSE_MS = 8000;
 
 const DetourMapLegend = ({
   visible = false,
   openColor = COLORS.primary,
   openOutlineColor = COLORS.warning,
   closedColor = COLORS.error,
-  normalColor = COLORS.textPrimary,
+  autoCollapseSignal = null,
   style,
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const autoCollapseTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    setExpanded(true);
+
+    if (autoCollapseSignal === null) return undefined;
+
+    if (autoCollapseTimerRef.current) {
+      clearTimeout(autoCollapseTimerRef.current);
+    }
+
+    autoCollapseTimerRef.current = setTimeout(() => {
+      setExpanded(false);
+      autoCollapseTimerRef.current = null;
+    }, AUTO_COLLAPSE_MS);
+
+    return () => {
+      if (autoCollapseTimerRef.current) {
+        clearTimeout(autoCollapseTimerRef.current);
+        autoCollapseTimerRef.current = null;
+      }
+    };
+  }, [autoCollapseSignal, visible]);
 
   if (!visible) return null;
 
@@ -46,20 +46,14 @@ const DetourMapLegend = ({
     return (
       <View style={[styles.container, style]} pointerEvents="box-none">
         <TouchableOpacity
-          style={styles.compactCard}
+          style={styles.collapsedCard}
           onPress={() => setExpanded(true)}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Expand detour legend"
         >
-          <Text style={styles.compactTitle}>Detour legend</Text>
-          <MiniSwatches
-            openColor={openColor}
-            openOutlineColor={openOutlineColor}
-            closedColor={closedColor}
-            normalColor={normalColor}
-          />
-          <Text style={styles.compactHint}>Expand</Text>
+          <Text style={styles.collapsedTitle}>Detour legend</Text>
+          <Text style={styles.collapsedHint}>Expand</Text>
         </TouchableOpacity>
       </View>
     );
@@ -69,15 +63,15 @@ const DetourMapLegend = ({
     <View style={[styles.container, style]} pointerEvents="box-none">
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Detour in effect</Text>
+          <Text style={styles.title}>Detour legend</Text>
           <TouchableOpacity
             onPress={() => setExpanded(false)}
-            style={styles.minimizeButton}
+            style={styles.closeButton}
             activeOpacity={0.75}
             accessibilityRole="button"
-            accessibilityLabel="Minimize detour legend"
+            accessibilityLabel="Close detour legend"
           >
-            <Text style={styles.minimizeText}>Minimize</Text>
+            <Text style={styles.closeText}>Close</Text>
           </TouchableOpacity>
         </View>
 
@@ -88,8 +82,8 @@ const DetourMapLegend = ({
             </View>
           </View>
           <View style={styles.copyWrap}>
-            <Text style={styles.label}>Likely detour path</Text>
-            <Text style={styles.caption}>Buses appear to be using this path.</Text>
+            <Text style={styles.label}>Detour route</Text>
+            <Text style={styles.caption}>Buses are using this temporary path.</Text>
           </View>
         </View>
 
@@ -105,22 +99,25 @@ const DetourMapLegend = ({
             </View>
           </View>
           <View style={styles.copyWrap}>
-            <Text style={styles.label}>Closed regular route</Text>
-            <Text style={styles.caption}>Normal bus service is not using this segment.</Text>
+            <Text style={styles.label}>Road closed</Text>
+            <Text style={styles.caption}>Regular service is skipping this section.</Text>
           </View>
         </View>
 
         <View style={styles.legendRow}>
           <View style={styles.swatchWrap}>
-            <View style={[styles.normalLine, { backgroundColor: normalColor }]} />
+            <View style={styles.closedStopSwatch}>
+              <Text style={[styles.closedStopCode, { borderColor: closedColor, color: closedColor }]}>!</Text>
+              <View style={[styles.closedStopMarker, { borderColor: closedColor }]}>
+                <View style={[styles.closedStopInnerDot, { backgroundColor: closedColor }]} />
+              </View>
+            </View>
           </View>
           <View style={styles.copyWrap}>
-            <Text style={styles.label}>Regular route still open</Text>
-            <Text style={styles.caption}>The route continues normally on this section.</Text>
+            <Text style={styles.label}>Closed bus stops</Text>
+            <Text style={styles.caption}>These stops are not serviced during the detour.</Text>
           </View>
         </View>
-
-        <Text style={styles.footer}>Route colour with orange outline shows the likely detour path. Red dashed shows the closed part it skips.</Text>
       </View>
     </View>
   );
@@ -132,17 +129,17 @@ const styles = StyleSheet.create({
     zIndex: 998,
   },
   card: {
-    width: 232,
+    width: 226,
     backgroundColor: 'rgba(255,255,255,0.96)',
-    borderRadius: BORDER_RADIUS.xl,
-    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.sm,
     borderWidth: 1,
     borderColor: 'rgba(223, 225, 230, 0.92)',
     ...SHADOWS.medium,
   },
-  compactCard: {
-    width: 208,
+  collapsedCard: {
+    width: 154,
     backgroundColor: 'rgba(255,255,255,0.96)',
     borderRadius: BORDER_RADIUS.lg,
     paddingHorizontal: SPACING.sm,
@@ -151,63 +148,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(223, 225, 230, 0.92)',
     ...SHADOWS.medium,
   },
-  compactTitle: {
+  collapsedTitle: {
     fontSize: FONT_SIZES.xs,
     fontFamily: FONT_FAMILIES.bold,
     color: COLORS.textPrimary,
   },
-  compactHint: {
+  collapsedHint: {
     marginTop: 2,
     fontSize: FONT_SIZES.xxs,
     color: COLORS.textSecondary,
-  },
-  compactRows: {
-    marginTop: 6,
-    gap: 5,
-  },
-  compactLegendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  compactLabel: {
-    flex: 1,
-    fontSize: FONT_SIZES.xxs,
-    color: COLORS.textSecondary,
-    lineHeight: 13,
-  },
-  miniOpenOutline: {
-    width: 32,
-    height: 7,
-    borderRadius: BORDER_RADIUS.round,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniOpenLine: {
-    width: 28,
-    height: 4,
-    borderRadius: BORDER_RADIUS.round,
-  },
-  miniDashedLine: {
-    width: 30,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  miniClosedDash: {
-    width: 7,
-    height: 4,
-    borderRadius: BORDER_RADIUS.round,
-  },
-  miniNormalLine: {
-    width: 30,
-    height: 4,
-    borderRadius: BORDER_RADIUS.round,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   title: {
     fontSize: FONT_SIZES.xs,
@@ -216,13 +171,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  minimizeButton: {
+  closeButton: {
     paddingHorizontal: SPACING.xs,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.surfaceHover,
   },
-  minimizeText: {
+  closeText: {
     fontSize: FONT_SIZES.xxs,
     fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
@@ -230,61 +185,79 @@ const styles = StyleSheet.create({
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
   },
   swatchWrap: {
-    width: 56,
+    width: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   openLine: {
-    width: 49,
+    width: 38,
     height: 5,
     borderRadius: BORDER_RADIUS.round,
   },
   openLineOutline: {
-    width: 54,
+    width: 42,
     height: 8,
     borderRadius: BORDER_RADIUS.round,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dashedLine: {
-    width: 52,
+    width: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   closedDash: {
-    width: 9,
+    width: 7,
     height: 5,
     borderRadius: BORDER_RADIUS.round,
   },
-  normalLine: {
-    width: 52,
-    height: 5,
-    borderRadius: BORDER_RADIUS.round,
+  closedStopSwatch: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closedStopCode: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginBottom: 2,
+    borderRadius: 7,
+    borderWidth: 1,
+    backgroundColor: COLORS.white,
+    fontSize: 10,
+    fontFamily: FONT_FAMILIES.bold,
+    lineHeight: 12,
+    transform: [{ translateX: 8 }],
+  },
+  closedStopMarker: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 3,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closedStopInnerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   copyWrap: {
     flex: 1,
   },
   label: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
   },
   caption: {
-    marginTop: 2,
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    lineHeight: 16,
-  },
-  footer: {
-    marginTop: 2,
     fontSize: FONT_SIZES.xxs,
     color: COLORS.textSecondary,
-    lineHeight: 14,
+    lineHeight: 13,
   },
 });
 

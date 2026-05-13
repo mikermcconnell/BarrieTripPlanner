@@ -60,7 +60,7 @@ describe('stale detour auto-clear policy', () => {
     expect(decision.reason).toBe('fresh-enough');
   });
 
-  test('clears stale detours after the headway-aware threshold when vehicles are live', () => {
+  test('does not clear stale detours after the headway-aware threshold without normal-route GPS proof', () => {
     const decision = shouldAutoClearStaleDetour({
       routeId: '8A',
       detour: { geometry: { lastEvidenceAt: sundayAt4pmEt - 140 * 60 * 1000 } },
@@ -69,16 +69,20 @@ describe('stale detour auto-clear policy', () => {
       now: sundayAt4pmEt,
     });
 
-    expect(decision.shouldClear).toBe(true);
-    expect(decision.reason).toBe('stale-evidence-with-live-route-family-vehicles');
+    expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('gps-clear-required');
+    expect(decision.staleAgeMs).toBe(140 * 60 * 1000);
+    expect(decision.thresholdMs).toBe(130 * 60 * 1000);
   });
 
-  test('clears zero-vehicle detours sooner when route-family vehicles are live', () => {
+  test('does not clear detector-owned zero-current-vehicle detours before the headway-aware threshold', () => {
     const decision = shouldAutoClearStaleDetour({
       routeId: '8A',
       detour: {
         detectedAt: sundayAt4pmEt - 20 * 60 * 1000,
-        vehicleCount: 0,
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
         geometry: { lastEvidenceAt: sundayAt4pmEt - 13 * 60 * 1000 },
       },
       vehicles: [{ routeId: '8B' }],
@@ -86,18 +90,19 @@ describe('stale detour auto-clear policy', () => {
       now: sundayAt4pmEt,
     });
 
-    expect(decision.shouldClear).toBe(true);
-    expect(decision.reason).toBe('zero-vehicle-stale-with-live-route-family-vehicles');
-    expect(decision.thresholdMs).toBe(12 * 60 * 1000);
+    expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('fresh-enough');
   });
 
-  test('keeps zero-vehicle detours during the short stale grace window', () => {
+  test('does not clear retained zero-current-vehicle detours without normal-route GPS proof', () => {
     const decision = shouldAutoClearStaleDetour({
       routeId: '8A',
       detour: {
-        detectedAt: sundayAt4pmEt - 20 * 60 * 1000,
-        vehicleCount: 0,
-        geometry: { lastEvidenceAt: sundayAt4pmEt - 8 * 60 * 1000 },
+        detectedAt: sundayAt4pmEt - 3 * 60 * 60 * 1000,
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 140 * 60 * 1000 },
       },
       vehicles: [{ routeId: '8B' }],
       scheduleIndex: makeScheduleIndex(),
@@ -105,7 +110,43 @@ describe('stale detour auto-clear policy', () => {
     });
 
     expect(decision.shouldClear).toBe(false);
-    expect(decision.reason).toBe('zero-vehicle-fresh-enough');
+    expect(decision.reason).toBe('gps-clear-required');
+    expect(decision.staleAgeMs).toBe(140 * 60 * 1000);
+    expect(decision.thresholdMs).toBe(130 * 60 * 1000);
+  });
+
+  test('clears stale low-confidence validation-only detours without waiting for normal-route proof', () => {
+    const decision = shouldAutoClearStaleDetour({
+      routeId: '8A',
+      detour: {
+        detectedAt: sundayAt4pmEt - 3 * 60 * 60 * 1000,
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
+        confidence: 'low',
+        canShowDetourPath: false,
+        skippedSegmentPolyline: null,
+        likelyDetourPolyline: null,
+        geometry: {
+          confidence: 'low',
+          canShowDetourPath: false,
+          lastEvidenceAt: sundayAt4pmEt - 70 * 60 * 1000,
+          segments: [{
+            confidence: 'low',
+            canShowDetourPath: false,
+            skippedSegmentPolyline: null,
+            likelyDetourPolyline: null,
+          }],
+        },
+      },
+      vehicles: [],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.shouldClear).toBe(true);
+    expect(decision.reason).toBe('stale-low-confidence-validation');
+    expect(decision.staleAgeMs).toBe(70 * 60 * 1000);
   });
 
   test('does not clear when no route-family vehicles are currently reporting', () => {

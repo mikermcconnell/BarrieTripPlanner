@@ -220,11 +220,50 @@ function getAvoidableBacktrackWindow(points, index, options) {
   return { start, end };
 }
 
+function stripLeadingOutAndBack(points, options) {
+  let cleaned = normalizePolyline(points);
+  let guard = 0;
+
+  while (cleaned.length >= 4 && guard < 5) {
+    guard += 1;
+
+    const maxReturnIndex = Math.min(cleaned.length - 2, options.maxWindowPoints);
+    let returnIndex = -1;
+    let travelledMeters = 0;
+
+    for (let i = 1; i <= maxReturnIndex; i += 1) {
+      travelledMeters += haversineDistance(cleaned[i - 1], cleaned[i]);
+      if (
+        travelledMeters >= options.minSegmentMeters &&
+        haversineDistance(cleaned[0], cleaned[i]) <= options.proximityMeters
+      ) {
+        returnIndex = i;
+      }
+    }
+
+    if (returnIndex < 1) {
+      break;
+    }
+
+    cleaned.splice(1, returnIndex);
+    cleaned = normalizePolyline(cleaned);
+  }
+
+  return cleaned;
+}
+
+function stripEndpointOutAndBacks(points, options) {
+  const withoutLeading = stripLeadingOutAndBack(points, options);
+  const reversed = [...withoutLeading].reverse();
+  return normalizePolyline(stripLeadingOutAndBack(reversed, options).reverse());
+}
+
 function removeAvoidableBacktracksFromPolyline(polyline, env = process.env) {
   let cleaned = normalizePolyline(polyline);
   if (cleaned.length < 3) return cleaned;
 
   const options = getBacktrackOptions(env);
+  cleaned = stripEndpointOutAndBacks(cleaned, options);
   let index = 1;
   let guard = 0;
 
@@ -247,6 +286,7 @@ function removeAvoidableBacktracksFromPolyline(polyline, env = process.env) {
     index = Math.max(1, window.start - 2);
   }
 
+  cleaned = stripEndpointOutAndBacks(cleaned, options);
   return cleaned;
 }
 
@@ -491,6 +531,10 @@ async function matchPolylineToRoads(polyline, options = {}) {
 }
 
 function getMatchCandidate(segment) {
+  if (segment?.canShowDetourPath === false) {
+    return [];
+  }
+
   if (Array.isArray(segment?.inferredDetourPolyline) && segment.inferredDetourPolyline.length >= 2) {
     return segment.inferredDetourPolyline;
   }

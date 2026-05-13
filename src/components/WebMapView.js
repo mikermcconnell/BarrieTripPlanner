@@ -709,6 +709,25 @@ const WebLineLabelLayerComponent = ({
       ...ROUTE_LINE_LABEL_STYLE,
       ...labelStyle,
     };
+    const symbolPlacement = resolvedLabelStyle.symbolPlacement || 'line';
+    const labelLayout = {
+      'symbol-placement': symbolPlacement,
+      'symbol-sort-key': ['get', 'sortKey'],
+      'text-field': ['get', 'label'],
+      'text-size': resolvedLabelStyle.size,
+      'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
+      'text-padding': resolvedLabelStyle.textPadding ?? resolvedLabelStyle.padding,
+      'text-letter-spacing': resolvedLabelStyle.textLetterSpacing ?? resolvedLabelStyle.letterSpacing,
+      'text-max-angle': resolvedLabelStyle.textMaxAngle ?? resolvedLabelStyle.maxAngle,
+      'text-keep-upright': true,
+      'text-rotation-alignment': 'map',
+      'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
+      'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
+    };
+
+    if (symbolPlacement !== 'line-center') {
+      labelLayout['symbol-spacing'] = resolvedLabelStyle.spacing;
+    }
 
     context.map.addSource(sourceId, {
       type: 'geojson',
@@ -721,21 +740,7 @@ const WebLineLabelLayerComponent = ({
       id: layerId,
       type: 'symbol',
       source: sourceId,
-      layout: {
-        'symbol-placement': 'line',
-        'symbol-spacing': resolvedLabelStyle.spacing,
-        'symbol-sort-key': ['get', 'sortKey'],
-        'text-field': ['get', 'label'],
-        'text-size': resolvedLabelStyle.size,
-        'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
-        'text-padding': resolvedLabelStyle.textPadding ?? resolvedLabelStyle.padding,
-        'text-letter-spacing': resolvedLabelStyle.textLetterSpacing ?? resolvedLabelStyle.letterSpacing,
-        'text-max-angle': resolvedLabelStyle.textMaxAngle ?? resolvedLabelStyle.maxAngle,
-        'text-keep-upright': true,
-        'text-rotation-alignment': 'map',
-        'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
-        'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
-      },
+      layout: labelLayout,
       paint: {
         'text-color': resolvedLabelStyle.color,
         'text-halo-color': resolvedLabelStyle.haloColor,

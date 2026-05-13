@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const MAX_HISTORY_ITEMS = 20;
 
@@ -53,7 +54,7 @@ export const tripHistoryFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error adding trip to history:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not save this trip to history. Please try again.') };
     }
   },
 
@@ -107,7 +108,7 @@ export const tripHistoryFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error deleting trip from history:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not delete this trip from history. Please try again.') };
     }
   },
 
@@ -127,7 +128,7 @@ export const tripHistoryFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error clearing trip history:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not clear trip history. Please try again.') };
     }
   },
 
@@ -186,7 +187,7 @@ export const tripHistoryFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error syncing history:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not sync trip history. Please try again.') };
     }
   },
 };

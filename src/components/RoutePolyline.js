@@ -23,6 +23,7 @@ const RoutePolylineComponent = ({
   routeLabel = null,
   layerIndex = null,
   onPress,
+  offset = 0,
 }) => {
   const formattedCoordinates = Array.isArray(coordinates)
     ? coordinates
@@ -109,6 +110,7 @@ const RoutePolylineComponent = ({
             lineWidth: outlineStrokeWidth,
             lineCap: lineCap,
             lineJoin: lineJoin,
+            ...(offset ? { lineOffset: offset } : {}),
             ...(outlineDashArray ? { lineDasharray: outlineDashArray } : {}),
           }}
         />
@@ -120,6 +122,7 @@ const RoutePolylineComponent = ({
             lineWidth: strokeWidth,
             lineCap: lineCap,
             lineJoin: lineJoin,
+            ...(offset ? { lineOffset: offset } : {}),
             ...(fillDashArray ? { lineDasharray: fillDashArray } : {}),
           }}
           aboveLayerID={`${sourceId}-outline`}
@@ -161,6 +164,7 @@ const RoutePolylineComponent = ({
           lineWidth: strokeWidth,
           lineCap: lineCap,
           lineJoin: lineJoin,
+          ...(offset ? { lineOffset: offset } : {}),
           ...(fillDashArray ? { lineDasharray: fillDashArray } : {}),
         }}
       />
@@ -209,6 +213,7 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.showArrows === next.showArrows &&
   prev.routeLabel === next.routeLabel &&
   prev.layerIndex === next.layerIndex &&
+  prev.offset === next.offset &&
   prev.onPress === next.onPress &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)
 );

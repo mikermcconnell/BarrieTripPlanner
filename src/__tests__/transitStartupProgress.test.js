@@ -49,7 +49,7 @@ describe('getTransitStartupProgress', () => {
     expect(progress).toBeNull();
   });
 
-  test('keeps saved routes visible while live bus locations are loading', () => {
+  test('does not show an in-app loading card while live buses refresh', () => {
     const progress = getTransitStartupProgress({
       isLoadingStatic: false,
       isRefreshingStatic: true,
@@ -72,10 +72,7 @@ describe('getTransitStartupProgress', () => {
       },
     });
 
-    expect(progress.variant).toBe('card');
-    expect(progress.percent).toBe(75);
-    expect(progress.title).toBe('Loading live buses');
-    expect(progress.detail).toBe('Showing saved routes while live bus locations load.');
+    expect(progress).toBeNull();
   });
 
   test('returns no progress state after the live map is ready', () => {

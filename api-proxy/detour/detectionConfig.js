@@ -26,6 +26,22 @@ const DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE =
     ? configuredClearConsecutive
     : defaultClearConsecutiveOnRoute;
 
+const configuredClearMinTraversalMeters = Number.parseFloat(
+  process.env.DETOUR_CLEAR_MIN_TRAVERSAL_METERS || '100'
+);
+const DETOUR_CLEAR_MIN_TRAVERSAL_METERS =
+  Number.isFinite(configuredClearMinTraversalMeters) && configuredClearMinTraversalMeters >= 0
+    ? configuredClearMinTraversalMeters
+    : 100;
+
+const configuredClearMinTraversalRatio = Number.parseFloat(
+  process.env.DETOUR_CLEAR_MIN_TRAVERSAL_RATIO || '0.6'
+);
+const DETOUR_CLEAR_MIN_TRAVERSAL_RATIO =
+  Number.isFinite(configuredClearMinTraversalRatio) && configuredClearMinTraversalRatio > 0
+    ? Math.min(configuredClearMinTraversalRatio, 1)
+    : 0.6;
+
 const configuredNoVehicleTimeoutMs = Number.parseFloat(
   process.env.DETOUR_NO_VEHICLE_TIMEOUT_MS || String(30 * 60 * 1000)
 );
@@ -33,6 +49,14 @@ const DETOUR_NO_VEHICLE_TIMEOUT_MS =
   Number.isFinite(configuredNoVehicleTimeoutMs) && configuredNoVehicleTimeoutMs > 0
     ? configuredNoVehicleTimeoutMs
     : 30 * 60 * 1000;
+
+const configuredCandidateEvidenceTtlMs = Number.parseFloat(
+  process.env.DETOUR_CANDIDATE_EVIDENCE_TTL_MS || String(3 * 60 * 60 * 1000)
+);
+const DETOUR_CANDIDATE_EVIDENCE_TTL_MS =
+  Number.isFinite(configuredCandidateEvidenceTtlMs) && configuredCandidateEvidenceTtlMs > 0
+    ? configuredCandidateEvidenceTtlMs
+    : 3 * 60 * 60 * 1000;
 
 const configuredConsecutiveReadings = Number.parseInt(process.env.DETOUR_CONSECUTIVE_READINGS || '4', 10);
 const CONSECUTIVE_READINGS_REQUIRED =
@@ -133,8 +157,11 @@ const BASE_ROUTE_DETECTOR_CONFIG = Object.freeze({
   onRouteClearThresholdMeters: ON_ROUTE_CLEAR_THRESHOLD_METERS,
   consecutiveReadingsRequired: CONSECUTIVE_READINGS_REQUIRED,
   clearConsecutiveOnRoute: DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
+  clearMinTraversalMeters: DETOUR_CLEAR_MIN_TRAVERSAL_METERS,
+  clearMinTraversalRatio: DETOUR_CLEAR_MIN_TRAVERSAL_RATIO,
   clearGraceMs: DETOUR_CLEAR_GRACE_MS,
   noVehicleTimeoutMs: DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  candidateEvidenceTtlMs: DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   evidenceWindowMs: EVIDENCE_WINDOW_MS,
 });
 
@@ -155,7 +182,10 @@ module.exports = {
   ON_ROUTE_CLEAR_THRESHOLD_METERS,
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
+  DETOUR_CLEAR_MIN_TRAVERSAL_METERS,
+  DETOUR_CLEAR_MIN_TRAVERSAL_RATIO,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   CONSECUTIVE_READINGS_REQUIRED,
   STALE_VEHICLE_TIMEOUT_MS,
   DEFAULT_MIN_VEHICLES_FOR_DETOUR,

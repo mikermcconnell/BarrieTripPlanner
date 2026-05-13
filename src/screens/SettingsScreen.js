@@ -66,11 +66,28 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleRouteToggle = async (routeId) => {
     if (!user) return;
+    const isAddingRoute = !subscribedRoutes.includes(routeId);
     const updated = subscribedRoutes.includes(routeId)
       ? subscribedRoutes.filter((r) => r !== routeId)
       : [...subscribedRoutes, routeId];
     setSubscribedRoutes(updated);
     await userFirestoreService.updateSubscribedRoutes(user.uid, updated);
+
+    if (isAddingRoute && !notificationSettings.transitNews) {
+      Alert.alert(
+        'Turn on Transit News?',
+        'Select routes here, then turn on Transit News to receive push alerts.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Turn on',
+            onPress: () => {
+              void enableTransitNewsPushes();
+            },
+          },
+        ]
+      );
+    }
   };
 
   const handleNotificationToggle = async (key) => {
@@ -88,8 +105,31 @@ const SettingsScreen = ({ navigation }) => {
   const handleDetourToggle = async (enabled) => {
     const result = await setDetoursEnabled(enabled);
     if (!result.success) {
-      Alert.alert('Error', result.error || 'Could not update detour visibility');
+      Alert.alert('Could not update detour setting', result.error || 'Please try again.');
     }
+  };
+
+  const enableTransitNewsPushes = async () => {
+    const result = await registerForPushNotifications();
+    if (!result.success) {
+      Alert.alert('Could not turn on notifications', result.error || 'Please try again.');
+      return false;
+    }
+
+    if (isAuthenticated && user && result.token) {
+      await userFirestoreService.updatePushToken(user.uid, result.token);
+    }
+
+    const newSettings = {
+      ...notificationSettings,
+      transitNews: true,
+    };
+    setNotificationSettings(newSettings);
+    await saveNotificationSettings(newSettings);
+    if (isAuthenticated && user) {
+      await userFirestoreService.updateNotificationSettings(user.uid, newSettings);
+    }
+    return true;
   };
 
   const handleEnableNotifications = async () => {
@@ -98,9 +138,12 @@ const SettingsScreen = ({ navigation }) => {
     setIsLoading(false);
 
     if (result.success) {
+      if (isAuthenticated && user && result.token) {
+        await userFirestoreService.updatePushToken(user.uid, result.token);
+      }
       Alert.alert('Notifications', 'Notifications are on.');
     } else {
-      Alert.alert('Error', result.error || 'Could not enable notifications');
+      Alert.alert('Could not turn on notifications', result.error || 'Please try again.');
     }
   };
 
@@ -214,9 +257,11 @@ const SettingsScreen = ({ navigation }) => {
           'Route Subscriptions',
           <View style={styles.routeChipsContainer}>
             <Text style={styles.routeChipsHint}>
-              {subscribedRoutes.length === 0
-                ? 'No routes selected. Route-specific news will stay in the app.'
-                : `Receiving news for ${subscribedRoutes.length} route${subscribedRoutes.length !== 1 ? 's' : ''}`}
+              {!notificationSettings.transitNews
+                ? 'Select routes here, then turn on Transit News to receive push alerts.'
+                : subscribedRoutes.length === 0
+                  ? 'No routes selected. Major system-wide updates may still send push alerts.'
+                  : `You’ll get push alerts for ${subscribedRoutes.length} selected route${subscribedRoutes.length !== 1 ? 's' : ''} and major system-wide updates.`}
             </Text>
             <View style={styles.routeChipsRow}>
               {routes.map((route) => {

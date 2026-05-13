@@ -69,7 +69,10 @@ export function mapActiveDetourDoc(docId, data) {
     detectedAt: data.detectedAt?.toDate?.()?.toISOString() ?? null,
     lastSeenAt: data.lastSeenAt?.toDate?.()?.toISOString() ?? null,
     vehicleCount: data.vehicleCount ?? 0,
+    uniqueVehicleCount: data.uniqueVehicleCount ?? data.vehicleCount ?? 0,
+    currentVehicleCount: data.currentVehicleCount ?? data.vehicleCount ?? 0,
     state: data.state ?? 'active',
+    clearReason: data.clearReason ?? null,
     segments: Array.isArray(data.segments)
       ? data.segments.map((segment) => normalizeDetourSegment(segment)).filter(Boolean)
       : [],

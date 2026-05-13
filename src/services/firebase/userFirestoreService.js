@@ -7,6 +7,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const COLLECTION = 'users';
 
@@ -40,7 +41,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error creating user:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not create your profile. Please try again.') };
     }
   },
 
@@ -74,7 +75,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating user:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update your profile. Please try again.') };
     }
   },
 
@@ -90,7 +91,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating last login:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update your account. Please try again.') };
     }
   },
 
@@ -107,7 +108,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating notification settings:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings. Please try again.') };
     }
   },
 
@@ -125,7 +126,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating push token:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings. Please try again.') };
     }
   },
 
@@ -142,7 +143,7 @@ export const userFirestoreService = {
       return { success: true };
     } catch (error) {
       console.error('Error updating subscribed routes:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update route subscriptions. Please try again.') };
     }
   },
 

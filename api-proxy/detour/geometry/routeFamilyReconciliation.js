@@ -32,6 +32,12 @@ function hasConfirmedBoundaryAnchors(segment) {
   if (!segment?.entryPoint || !segment?.exitPoint) return false;
 
   const debug = segment.debug || {};
+  if (debug.entryCandidateCount === 0 || debug.hasEntryBoundaryCandidate === false) {
+    return false;
+  }
+  if (debug.entryAnchorSource === 'projected-evidence-fallback') {
+    return false;
+  }
   if (debug.exitCandidateCount === 0 || debug.hasExitBoundaryCandidate === false) {
     return false;
   }
@@ -40,6 +46,12 @@ function hasConfirmedBoundaryAnchors(segment) {
   }
 
   return Array.isArray(segment.skippedSegmentPolyline) && segment.skippedSegmentPolyline.length >= 2;
+}
+
+function getConfirmedRenderableSegments(geometry) {
+  return Array.isArray(geometry?.segments)
+    ? geometry.segments.filter((segment) => hasRenderableSegment(segment) && hasConfirmedBoundaryAnchors(segment))
+    : [];
 }
 
 function createRouteFamilyReconciler({
@@ -89,9 +101,7 @@ function createRouteFamilyReconciler({
 
   function scoreRouteFamilyLeader(detour) {
     const geometry = detour?.geometry || null;
-    const segments = Array.isArray(geometry?.segments)
-      ? geometry.segments.filter(hasRenderableSegment)
-      : [];
+    const segments = getConfirmedRenderableSegments(geometry);
     const bestEvidence = segments.reduce((max, segment) => Math.max(max, segment.evidencePointCount || 0), 0);
     return {
       confidence: confidenceRank(geometry?.confidence),
@@ -198,6 +208,7 @@ function createRouteFamilyReconciler({
         }
         : null,
       confidence: segment.confidence || 'low',
+      canShowDetourPath: segment.canShowDetourPath === false ? false : true,
       evidencePointCount: segment.evidencePointCount || 0,
       lastEvidenceAt: segment.lastEvidenceAt || null,
       spanMeters,
@@ -251,16 +262,14 @@ function createRouteFamilyReconciler({
 
       const entries = routeIds
         .map((routeId) => [routeId, detourMap[routeId]])
-        .filter(([, detour]) => hasRenderableGeometry(detour?.geometry));
+        .filter(([, detour]) => getConfirmedRenderableSegments(detour?.geometry).length > 0);
       if (entries.length === 0) continue;
 
       const leaderEntry = entries
         .slice()
         .sort(([, a], [, b]) => compareLeaderScores(scoreRouteFamilyLeader(a), scoreRouteFamilyLeader(b)))[0];
       const [leaderRouteId, leaderDetour] = leaderEntry;
-      const leaderSegments = (leaderDetour.geometry?.segments || []).filter((segment) =>
-        hasRenderableSegment(segment) && hasConfirmedBoundaryAnchors(segment)
-      );
+      const leaderSegments = getConfirmedRenderableSegments(leaderDetour.geometry);
       if (leaderSegments.length === 0) continue;
 
       for (const [routeId, detour] of entries) {
@@ -296,6 +305,7 @@ function createRouteFamilyReconciler({
           inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
           entryPoint: primarySegment?.entryPoint ?? null,
           exitPoint: primarySegment?.exitPoint ?? null,
+          canShowDetourPath: primarySegment?.canShowDetourPath === true,
           confidence:
             confidenceRank(leaderDetour.geometry?.confidence) > confidenceRank(detour.geometry?.confidence)
               ? leaderDetour.geometry.confidence
@@ -343,6 +353,7 @@ function createRouteFamilyReconciler({
             inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
             entryPoint: primarySegment?.entryPoint ?? null,
             exitPoint: primarySegment?.exitPoint ?? null,
+            canShowDetourPath: primarySegment?.canShowDetourPath === true,
             debug: {
               ...(leaderDetour.geometry?.debug || {}),
               routeFamilyHandoffEnabled: true,

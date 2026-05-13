@@ -109,15 +109,30 @@ describe('TripResultCard stop closure notices', () => {
         ...baseItinerary,
         detourImpacts: [{
           severity: 'stop_affected',
-          message: 'Route 12B is on detour and your boarding or exit stop may be affected.',
+          impactScope: 'boarding_stop',
+          message: 'Route 12B is on detour and your boarding stop may be missed.',
+          guidance: 'Board before the detour starts or use a stop after the route rejoins.',
           affectedStopNames: ['Mapleview at Lily'],
         }],
       },
       onPress: jest.fn(),
     }));
 
-    expect(texts.join(' ')).toContain('Detour may affect this trip');
+    expect(texts.join(' ')).toContain('Boarding stop may be missed');
     expect(texts.join(' ')).toContain('Affected: Mapleview at Lily');
+  });
+
+  test('labels trips that avoid the active detour', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        labels: ['Fastest', 'Avoids Detour'],
+        detourAlternativeStatus: 'avoids_active_detour',
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('Avoids Detour');
   });
 
   test('shows wait time between transfer legs', () => {

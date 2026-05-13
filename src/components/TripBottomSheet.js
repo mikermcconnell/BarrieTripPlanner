@@ -18,6 +18,7 @@ import Svg, { Path } from 'react-native-svg';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import Icon from './Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const getItineraryKey = (itinerary, index) => {
   const legSignature = Array.isArray(itinerary?.legs)
@@ -99,7 +100,11 @@ const TripBottomSheet = ({
         <View style={styles.centerContainer}>
           <ErrorIcon size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>No routes found</Text>
-          <Text style={styles.errorSubtext}>{typeof error === 'string' ? error : error.message}</Text>
+          <Text style={styles.errorSubtext}>
+            {typeof error === 'string'
+              ? error
+              : getUserFacingErrorMessage(error, 'Please check your trip details and try again.')}
+          </Text>
           {onRetry && (
             <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.7}>
               <Text style={styles.retryButtonText}>Try Again</Text>

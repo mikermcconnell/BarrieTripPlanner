@@ -6,6 +6,7 @@ const { create, act } = require('react-test-renderer');
 jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
+  Pressable: 'Pressable',
   StyleSheet: { create: (styles) => styles },
 }));
 
@@ -43,7 +44,7 @@ const BASE_PROPS = {
     { id: 'open-2', latitude: 44.382, longitude: -79.702 },
   ],
   skippedStops: [
-    { id: 'closed-1', latitude: 44.383, longitude: -79.703 },
+    { id: 'closed-1', code: '123', name: 'Closed Stop', latitude: 44.383, longitude: -79.703 },
   ],
   entryPoint: LINE[0],
   exitPoint: LINE[2],
@@ -51,7 +52,7 @@ const BASE_PROPS = {
     skippedSegmentPolyline: LINE,
     inferredDetourPolyline: LINE,
     skippedStops: [
-      { id: 'closed-1', latitude: 44.383, longitude: -79.703 },
+      { id: 'closed-1', code: '123', name: 'Closed Stop', latitude: 44.383, longitude: -79.703 },
     ],
     entryPoint: LINE[0],
     exitPoint: LINE[2],
@@ -82,6 +83,39 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
   });
 
+  test('untrusted inferred detour paths are hidden while closed-route context remains', () => {
+    const props = {
+      ...BASE_PROPS,
+      segmentStopDetails: [{
+        skippedSegmentPolyline: LINE,
+        inferredDetourPolyline: LINE,
+        canShowDetourPath: false,
+        skippedStops: [],
+        entryPoint: LINE[0],
+        exitPoint: LINE[2],
+      }],
+      renderMode: 'geometry',
+    };
+
+    let nativeInst;
+    act(() => {
+      nativeInst = create(React.createElement(NativeDetourOverlay, props));
+    });
+    const nativeLines = nativeInst.root.findAllByType('RoutePolyline');
+    expect(nativeLines.map((line) => line.props.id)).toEqual([
+      'detour-context-10-mask',
+      'detour-context-10',
+    ]);
+
+    let webInst;
+    act(() => {
+      webInst = create(React.createElement(WebDetourOverlay, props));
+    });
+    const webLines = webInst.root.findAllByType('WebRoutePolyline');
+    expect(webLines).toHaveLength(2);
+    expect(webLines.some((line) => line.props.color === props.detourColor)).toBe(false);
+  });
+
   test('native markers mode renders open and closed stops above route lines', () => {
     let inst;
     act(() => {
@@ -93,7 +127,11 @@ describe('DetourOverlay layer split', () => {
 
     expect(inst.root.findAllByType('RoutePolyline')).toHaveLength(0);
     expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
-    expect(inst.root.findAllByType('MarkerView')).toHaveLength(3);
+    expect(inst.root.findAllByType('MarkerView')).toHaveLength(5);
+    expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(true);
+    const skippedStopButtons = inst.root.findAllByType('Pressable');
+    expect(skippedStopButtons).toHaveLength(1);
+    expect(skippedStopButtons[0].props.accessibilityLabel).toContain('not serviced by this detour');
   });
 
   test('web markers mode puts detour stop markers above regular route markers', () => {
@@ -107,11 +145,16 @@ describe('DetourOverlay layer split', () => {
 
     const markers = inst.root.findAllByType('WebHtmlMarker');
     expect(inst.root.findAllByType('WebRoutePolyline')).toHaveLength(0);
-    expect(markers).toHaveLength(3);
-    expect(markers.map((marker) => marker.props.zIndexOffset)).toEqual([660, 660, 700]);
+    expect(markers).toHaveLength(5);
+    expect(markers.map((marker) => marker.props.zIndexOffset)).toEqual([660, 660, 690, 690, 700]);
+    expect(markers.some((marker) => String(marker.props.html).includes('123'))).toBe(true);
+    expect(markers.some((marker) => String(marker.props.html).includes('Not serviced by this detour'))).toBe(true);
+    const skippedStopMarker = markers.find((marker) => marker.props.zIndexOffset === 700);
+    expect(typeof skippedStopMarker.props.onPress).toBe('function');
+    expect(skippedStopMarker.props.popupHtml).toContain('Not serviced by this detour');
   });
 
-  test('web callouts shift overlapping detour labels away from the same map point', () => {
+  test('web callouts do not render detour route or route resumes text labels', () => {
     const sharedPoint = LINE[1];
     let inst;
     act(() => {
@@ -135,10 +178,11 @@ describe('DetourOverlay layer split', () => {
     });
 
     const markers = inst.root.findAllByType('WebHtmlMarker');
-    const routeResumes = markers.find((marker) => marker.props.html.includes('ROUTE') && marker.props.html.includes('RESUMES'));
+    const html = markers.map((marker) => marker.props.html).join('\n');
 
-    expect(routeResumes).toBeTruthy();
-    expect(routeResumes.props.offset).not.toEqual([0, -22]);
+    expect(html).not.toContain('DETOUR');
+    expect(html).not.toContain('RESUMES');
+    expect(html).not.toContain('ROUTE</span>');
   });
 
   test('native detour line labels use a single collision-aware line symbol layer', () => {
@@ -149,7 +193,7 @@ describe('DetourOverlay layer split', () => {
         routeLineLabel: '11',
         showCallouts: true,
         showLineLabels: true,
-        currentZoom: 12,
+        currentZoom: 15,
         labelDensity: 'medium',
         renderMode: 'callouts',
       }));
@@ -168,7 +212,7 @@ describe('DetourOverlay layer split', () => {
     expect(labelSource.props.shape.features.map((feature) => feature.properties.priority)).toEqual([100, 80]);
     expect(labelSource.props.shape.features.map((feature) => feature.properties.sortKey)).toEqual([0, 20]);
     expect(labelLayer.props.style).toEqual(expect.objectContaining({
-      symbolPlacement: 'line',
+      symbolPlacement: 'line-center',
       textOffset: [0, 0],
       textAllowOverlap: false,
       textIgnorePlacement: false,
@@ -176,9 +220,9 @@ describe('DetourOverlay layer split', () => {
       textHaloColor: '#FFFBEB',
       textHaloWidth: 2.4,
       textSize: 12,
-      symbolSpacing: 420,
       textPadding: 6,
     }));
+    expect(labelLayer.props.style.symbolSpacing).toBeUndefined();
     expect(inst.root.findAllByType('MarkerView').some((marker) => (
       String(marker.props.id || '').includes('detour-line-label') ||
       String(marker.props.id || '').includes('detour-closed-point')
@@ -193,7 +237,7 @@ describe('DetourOverlay layer split', () => {
         routeLineLabel: '11',
         showCallouts: true,
         showLineLabels: true,
-        currentZoom: 12,
+        currentZoom: 15,
         labelDensity: 'medium',
         renderMode: 'callouts',
       }));
@@ -214,7 +258,7 @@ describe('DetourOverlay layer split', () => {
       haloColor: '#FFFBEB',
       haloWidth: 2.4,
       size: 12,
-      spacing: 420,
+      symbolPlacement: 'line-center',
       textPadding: 6,
     }));
     expect(htmlMarkers.some((marker) => (
@@ -282,7 +326,88 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findByType('WebLineLabelLayer').props.labelStyle.textOffset).toEqual([0, 0]);
   });
 
-  test('web full-density callouts describe the detour route instead of path', () => {
+  test('web labels use the same simplified closed geometry that is rendered', () => {
+    const closedLineWithNearDuplicate = [
+      { latitude: 44.39047, longitude: -79.6855 },
+      { latitude: 44.39048, longitude: -79.68551 },
+      { latitude: 44.39267, longitude: -79.68558 },
+    ];
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        showCallouts: true,
+        showLineLabels: false,
+        currentZoom: 16,
+        labelDensity: 'medium',
+        renderMode: 'all',
+        segmentStopDetails: [{
+          skippedSegmentPolyline: closedLineWithNearDuplicate,
+          inferredDetourPolyline: [],
+          skippedStops: [],
+        }],
+      }));
+    });
+
+    const renderedClosedLine = inst.root
+      .findAllByType('WebRoutePolyline')
+      .find((line) => line.props.dashArray === '3, 4')
+      .props.coordinates;
+    const routeClosed = inst.root
+      .findAllByType('WebLineLabelLayer')
+      .flatMap((layer) => layer.props.labels)
+      .find((label) => label.label === 'Route closed');
+
+    expect(routeClosed.coordinates).toEqual(renderedClosedLine);
+    expect(routeClosed.coordinates).toEqual([
+      closedLineWithNearDuplicate[0],
+      closedLineWithNearDuplicate[2],
+    ]);
+  });
+
+  test('native detour labels are hidden below the safe zoom instead of being offset away', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        routeLineLabel: '11',
+        showCallouts: true,
+        showLineLabels: true,
+        currentZoom: 13.25,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+      }));
+    });
+
+    expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
+  });
+
+  test('web detour labels are hidden when the line is too short for the text', () => {
+    const shortClosedLine = [
+      { latitude: 44.39047, longitude: -79.6855 },
+      { latitude: 44.39055, longitude: -79.6855 },
+    ];
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        showCallouts: true,
+        showLineLabels: false,
+        currentZoom: 18,
+        labelDensity: 'medium',
+        renderMode: 'callouts',
+        segmentStopDetails: [{
+          skippedSegmentPolyline: shortClosedLine,
+          inferredDetourPolyline: [],
+          skippedStops: [],
+        }],
+      }));
+    });
+
+    expect(inst.root.findByType('WebLineLabelLayer').props.labels).toHaveLength(0);
+  });
+
+  test('web full-density callouts omit detour route and route resumes text labels', () => {
     let inst;
     act(() => {
       inst = create(React.createElement(WebDetourOverlay, {
@@ -298,8 +423,9 @@ describe('DetourOverlay layer split', () => {
 
     const html = inst.root.findAllByType('WebHtmlMarker').map((marker) => marker.props.html).join('\n');
 
-    expect(html).toContain('DETOUR');
-    expect(html).toContain('ROUTE');
+    expect(html).not.toContain('DETOUR');
+    expect(html).not.toContain('ROUTE</span>');
+    expect(html).not.toContain('RESUMES');
     expect(html).not.toContain('PATH');
   });
 });

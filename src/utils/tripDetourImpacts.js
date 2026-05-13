@@ -136,13 +136,61 @@ const getPlannedStops = (leg) => ([
 const buildDetourMessage = ({ routeLabel, severity, impactedStops }) => {
   if (severity === STOP_IMPACT_SEVERITY) {
     const roles = new Set(impactedStops.flatMap((stop) => stop.roles || []));
-    if (roles.has('boarding') || roles.has('alighting')) {
-      return `Route ${routeLabel} is on detour and your boarding or exit stop may be affected.`;
+    if (roles.has('boarding') && roles.has('alighting')) {
+      return `Route ${routeLabel} is on detour and your boarding and exit stops may be missed.`;
     }
-    return `Route ${routeLabel} is on detour and stops along this ride may be affected.`;
+    if (roles.has('boarding')) {
+      return `Route ${routeLabel} is on detour and your boarding stop may be missed.`;
+    }
+    if (roles.has('alighting')) {
+      return `Route ${routeLabel} is on detour and your exit stop may be missed.`;
+    }
+    return `Route ${routeLabel} is on detour and stops along this ride may be missed.`;
   }
 
   return `Route ${routeLabel} is currently on detour.`;
+};
+
+const getImpactScope = (severity, impactedStops = []) => {
+  if (severity !== STOP_IMPACT_SEVERITY) return 'route';
+
+  const roles = new Set(impactedStops.flatMap((stop) => stop.roles || []));
+  if (roles.has('boarding') && roles.has('alighting')) return 'boarding_and_exit_stops';
+  if (roles.has('boarding')) return 'boarding_stop';
+  if (roles.has('alighting')) return 'exit_stop';
+  return 'ride_stops';
+};
+
+const buildDetourGuidance = (impactScope) => {
+  switch (impactScope) {
+    case 'boarding_stop':
+      return 'Board before the detour starts or use a stop after the route rejoins.';
+    case 'exit_stop':
+      return 'Get off after the route rejoins, or choose another trip if that stop is important.';
+    case 'boarding_and_exit_stops':
+      return 'Use open stops before the detour starts or after the route rejoins.';
+    case 'ride_stops':
+      return 'If you need one of these stops, check the map for an open stop outside the detour area.';
+    default:
+      return 'Check the map before travelling.';
+  }
+};
+
+const hasTransitLeg = (itinerary) => (
+  (itinerary?.legs || []).some((leg) => TRANSIT_MODES.has(leg?.mode))
+);
+
+const addAvoidsDetourLabel = (itinerary) => {
+  const labels = Array.isArray(itinerary?.labels) ? itinerary.labels : [];
+  const nextLabels = labels.includes('Avoids Detour')
+    ? labels
+    : [...labels, 'Avoids Detour'];
+
+  return {
+    ...itinerary,
+    labels: nextLabels,
+    detourAlternativeStatus: 'avoids_active_detour',
+  };
 };
 
 export const getLegDetourImpact = ({
@@ -185,12 +233,15 @@ export const getLegDetourImpact = ({
   const impactedStops = [...impactedByKey.values()];
   const severity = impactedStops.length > 0 ? STOP_IMPACT_SEVERITY : ROUTE_IMPACT_SEVERITY;
   const routeLabel = getLegRouteLabel(leg, routeId);
+  const impactScope = getImpactScope(severity, impactedStops);
 
   return {
     routeId: routeId == null ? null : String(routeId),
     detourRouteId,
     severity,
+    impactScope,
     message: buildDetourMessage({ routeLabel, severity, impactedStops }),
+    guidance: buildDetourGuidance(impactScope),
     affectedStopRoles: [...new Set(impactedStops.flatMap((stop) => stop.roles || []))],
     affectedStops: impactedStops,
     affectedStopNames: impactedStops.map((stop) => stop.stopName).filter(Boolean),
@@ -204,8 +255,8 @@ export const annotateItinerariesWithDetours = (
   itineraries = [],
   activeDetours = {},
   detourStopDetailsByRouteId = {}
-) => (
-  (itineraries || []).map((itinerary) => {
+) => {
+  const annotated = (itineraries || []).map((itinerary) => {
     const detourImpacts = [];
     const legs = (itinerary?.legs || []).map((leg, legIndex) => {
       const detourImpact = getLegDetourImpact({
@@ -231,7 +282,16 @@ export const annotateItinerariesWithDetours = (
       hasDetour: detourImpacts.length > 0,
       hasStopDetourImpact: detourImpacts.some((impact) => impact.severity === STOP_IMPACT_SEVERITY),
     };
-  })
-);
+  });
+
+  const hasAffectedTransitTrip = annotated.some((itinerary) => itinerary.hasDetour);
+  if (!hasAffectedTransitTrip) return annotated;
+
+  return annotated.map((itinerary) => (
+    !itinerary.hasDetour && hasTransitLeg(itinerary)
+      ? addAvoidsDetourLabel(itinerary)
+      : itinerary
+  ));
+};
 
 export default annotateItinerariesWithDetours;

@@ -35,6 +35,8 @@ const OFF_ROUTE_WEST = { latitude: 44.395, longitude: -79.698 };
 const OFF_ROUTE_MID = { latitude: 44.395, longitude: -79.690 };
 const OFF_ROUTE_EAST = { latitude: 44.395, longitude: -79.682 };
 const ON_ROUTE_IN_ZONE = { latitude: 44.39, longitude: -79.690 };
+const ON_ROUTE_ZONE_WEST = { latitude: 44.39, longitude: -79.696 };
+const ON_ROUTE_ZONE_EAST = { latitude: 44.39, longitude: -79.684 };
 
 function makeVehicle(overrides = {}) {
   return {
@@ -140,6 +142,38 @@ describe('detector → publisher: full pipeline', () => {
     expect(setOps[0].data.triggerVehicleId).toBe('bus-1');
     expect(setOps[0].data.detectedAt).toBeInstanceOf(Date);
     expect(setOps[0].data.updatedAt).toBeDefined();
+  });
+
+  test('publisher suppresses stale low-confidence validation-only detector output', async () => {
+    const now = Date.parse('2026-05-10T16:00:00Z');
+
+    await publishDetours({
+      'route-1': {
+        detectedAt: new Date(now - 4 * 60 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        triggerVehicleId: 'bus-1',
+        vehiclesOffRoute: new Set(),
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
+        state: 'active',
+        geometry: {
+          canShowDetourPath: false,
+          confidence: 'low',
+          evidencePointCount: 4,
+          lastEvidenceAt: now - 3 * 60 * 60 * 1000,
+        },
+      },
+    }, {
+      now,
+      vehicles: [{ routeId: 'route-1' }],
+    });
+
+    const deleteOps = mockDb._writes.filter(w => w.op === 'delete' && w.collection === 'activeDetours');
+    const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
+
+    expect(deleteOps).toHaveLength(0);
+    expect(setOps).toHaveLength(0);
   });
 
   test('publisher writes DETOUR_DETECTED history event on first publish', async () => {
@@ -259,6 +293,20 @@ describe('state transitions: active → clear-pending → cleared', () => {
     return processVehicles([makeVehicle({ id: vehicleId, coordinate: OFF_ROUTE_EAST })], shapes, routeShapeMapping);
   }
 
+  function runOnRouteTraversal(vehicleId = 'bus-1') {
+    const coordinates = [ON_ROUTE_ZONE_WEST, ON_ROUTE_IN_ZONE, ON_ROUTE_ZONE_EAST];
+    let activeDetours;
+    for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
+      activeDetours = processVehicles([
+        makeVehicle({
+          id: vehicleId,
+          coordinate: coordinates[Math.min(i, coordinates.length - 1)],
+        }),
+      ], shapes, routeShapeMapping);
+    }
+    return activeDetours;
+  }
+
   beforeEach(() => {
     mockDb = makeFirestoreMock();
     jest.resetModules();
@@ -282,18 +330,15 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('active → clear-pending writes DETOUR_UPDATED with state changedField', async () => {
     const BASE_TIME = realDateNow();
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
 
     // Confirm detour with zone
     Date.now = () => BASE_TIME;
     let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Advance past grace, enter clear-pending via on-route in zone
+    // Advance past grace, enter clear-pending via same-bus regular-route traversal
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-    for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-      activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
-    }
+    activeDetours = runOnRouteTraversal();
     expect(activeDetours['route-1'].state).toBe('clear-pending');
 
     await publishDetours(activeDetours);
@@ -306,22 +351,19 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('finalized clear writes DETOUR_CLEARED and removes Firestore document', async () => {
     const BASE_TIME = realDateNow();
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
 
     Date.now = () => BASE_TIME;
     let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Enter clear-pending via on-route in zone
+    // Enter clear-pending via same-bus regular-route traversal
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-    for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-      activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
-    }
+    activeDetours = runOnRouteTraversal();
     await publishDetours(activeDetours);
 
     // Finalize clear
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 2000;
-    activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
+    activeDetours = processVehicles([makeVehicle({ coordinate: ON_ROUTE_ZONE_EAST })], shapes, routeShapeMapping);
     expect(Object.keys(activeDetours)).toHaveLength(0);
 
     await publishDetours(activeDetours);
@@ -342,18 +384,15 @@ describe('state transitions: active → clear-pending → cleared', () => {
 
   test('reactivation from clear-pending writes DETOUR_UPDATED with state restored', async () => {
     const BASE_TIME = realDateNow();
-    const onVehicle = makeVehicle({ coordinate: ON_ROUTE_IN_ZONE });
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_MID });
 
     Date.now = () => BASE_TIME;
     let activeDetours = confirmDetourWithZone();
     await publishDetours(activeDetours);
 
-    // Enter clear-pending via on-route in zone
+    // Enter clear-pending via same-bus regular-route traversal
     Date.now = () => BASE_TIME + DETOUR_CLEAR_GRACE_MS + 1000;
-    for (let i = 0; i < DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE; i++) {
-      activeDetours = processVehicles([onVehicle], shapes, routeShapeMapping);
-    }
+    activeDetours = runOnRouteTraversal();
     expect(activeDetours['route-1'].state).toBe('clear-pending');
     await publishDetours(activeDetours);
 

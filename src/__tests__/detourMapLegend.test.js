@@ -13,7 +13,11 @@ jest.mock('react-native', () => ({
 const DetourMapLegend = require('../components/DetourMapLegend').default;
 
 describe('DetourMapLegend', () => {
-  test('renders a compact legend when visible', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('renders a small detour legend with closed stop guidance when visible', () => {
     let inst;
     act(() => {
       inst = create(React.createElement(DetourMapLegend, { visible: true }));
@@ -22,39 +26,64 @@ describe('DetourMapLegend', () => {
     const texts = inst.root.findAllByType('Text').map((node) => node.props.children);
 
     expect(texts).toContain('Detour legend');
-    expect(texts).toContain('Expand');
-    expect(texts).toContain('Likely path buses are using.');
-    expect(texts).toContain('Closed regular route section.');
-    expect(texts).toContain('Regular route still open.');
-    expect(texts).not.toContain('Likely detour path');
+    expect(texts).toContain('Detour route');
+    expect(texts).toContain('Buses are using this temporary path.');
+    expect(texts).toContain('Road closed');
+    expect(texts).toContain('Regular service is skipping this section.');
+    expect(texts).toContain('Closed bus stops');
+    expect(texts).toContain('These stops are not serviced during the detour.');
+    expect(texts).not.toContain('Regular route still open.');
+    expect(texts).not.toContain('Expand');
   });
 
-  test('expands and minimizes the full legend guidance', () => {
+  test('auto-collapses after 8 seconds and can be expanded again', () => {
+    jest.useFakeTimers();
+
     let inst;
     act(() => {
-      inst = create(React.createElement(DetourMapLegend, { visible: true }));
+      inst = create(React.createElement(DetourMapLegend, {
+        visible: true,
+        autoCollapseSignal: 1,
+      }));
     });
+
+    expect(inst.root.findAllByType('Text').map((node) => node.props.children)).toContain('Closed bus stops');
+
+    act(() => {
+      jest.advanceTimersByTime(8000);
+    });
+
+    let texts = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(texts).toContain('Detour legend');
+    expect(texts).toContain('Expand');
+    expect(texts).not.toContain('Closed bus stops');
 
     act(() => {
       inst.root.findByProps({ accessibilityLabel: 'Expand detour legend' }).props.onPress();
     });
 
-    let texts = inst.root.findAllByType('Text').map((node) => node.props.children);
+    texts = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(texts).toContain('Closed bus stops');
+  });
 
-    expect(texts).toContain('Detour in effect');
-    expect(texts).toContain('Likely detour path');
-    expect(texts).toContain('Closed regular route');
-    expect(texts).toContain('Regular route still open');
-    expect(texts).toContain('Route colour with orange outline shows the likely detour path. Red dashed shows the closed part it skips.');
-    expect(texts).toContain('Minimize');
+  test('can be closed manually before the timer finishes', () => {
+    jest.useFakeTimers();
 
+    let inst;
     act(() => {
-      inst.root.findByProps({ accessibilityLabel: 'Minimize detour legend' }).props.onPress();
+      inst = create(React.createElement(DetourMapLegend, {
+        visible: true,
+        autoCollapseSignal: 1,
+      }));
     });
 
-    texts = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(texts).toContain('Detour legend');
-    expect(texts).not.toContain('Likely detour path');
+    act(() => {
+      inst.root.findByProps({ accessibilityLabel: 'Close detour legend' }).props.onPress();
+    });
+
+    const texts = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(texts).toContain('Expand');
+    expect(texts).not.toContain('Closed bus stops');
   });
 
   test('renders nothing when hidden', () => {

@@ -21,6 +21,8 @@ function createSegmentState({
     lastSeenAt: new Date(now || Date.now()),
     triggerVehicleId: vehicleId,
     vehiclesOffRoute: new Set(),
+    matchedVehicleIds: new Set(),
+    normalRouteVehicleIds: new Set(),
     state: 'active',
     clearPendingAt: null,
     lastOffRouteEvidenceAt: now || Date.now(),
@@ -49,7 +51,8 @@ function getRouteVehicleCount(routeState) {
   if (!routeState?.segments) return 0;
   const unique = new Set();
   for (const segment of routeState.segments.values()) {
-    for (const vehicleId of segment.vehiclesOffRoute || []) {
+    const vehicleIds = segment.matchedVehicleIds?.size ? segment.matchedVehicleIds : segment.vehiclesOffRoute;
+    for (const vehicleId of vehicleIds || []) {
       unique.add(vehicleId);
     }
   }

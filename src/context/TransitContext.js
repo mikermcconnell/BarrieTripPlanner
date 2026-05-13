@@ -30,6 +30,7 @@ import {
 import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
 import { useAuth } from './AuthContext';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -89,6 +90,7 @@ export const TransitProvider = ({ children }) => {
   const [staticError, setStaticError] = useState(null);
   const [vehicleError, setVehicleError] = useState(null);
   const [serviceAlerts, setServiceAlerts] = useState([]);
+  const [hasLoadedServiceAlerts, setHasLoadedServiceAlerts] = useState(false);
   const [lastStaticRefreshAt, setLastStaticRefreshAt] = useState(null);
   const [lastStaticFailureAt, setLastStaticFailureAt] = useState(null);
   const [isRefreshingStatic, setIsRefreshingStatic] = useState(false);
@@ -105,6 +107,7 @@ export const TransitProvider = ({ children }) => {
 
   // Detour detection (server-side, via Firestore)
   const [detourFeed, setDetourFeed] = useState({});
+  const [hasLoadedDetourFeed, setHasLoadedDetourFeed] = useState(false);
   const [detoursEnabled, setDetoursEnabledState] = useState(runtimeConfig.detours.enabledByDefault);
   const prevDetourIdsRef = useRef(new Set());
   const detoursEnabledRef = useRef(detoursEnabled);
@@ -132,6 +135,7 @@ export const TransitProvider = ({ children }) => {
 
   // Refs for deferred routing and cache-first strategy
   const gtfsDataRef = useRef(null);
+  const gtfsFetchPromiseRef = useRef(null);
   const routingDataRef = useRef(null);
   const routingBuildPromiseRef = useRef(null);
 
@@ -254,6 +258,7 @@ export const TransitProvider = ({ children }) => {
     // Phase 1: Try cache first for instant map display
     const cachedData = await getCachedGTFSData();
     if (cachedData) {
+      gtfsDataRef.current = cachedData;
       applyStaticData(cachedData);
       setUsingCachedData(true);
       processAndStoreShapes(cachedData.shapes || {});
@@ -263,7 +268,9 @@ export const TransitProvider = ({ children }) => {
       if (online) {
         setIsRefreshingStatic(true);
         try {
-          const data = await fetchAllStaticData();
+          const refreshPromise = fetchAllStaticData();
+          gtfsFetchPromiseRef.current = refreshPromise;
+          const data = await refreshPromise;
           gtfsDataRef.current = data;
           applyStaticData(data);
           setUsingCachedData(false);
@@ -281,6 +288,7 @@ export const TransitProvider = ({ children }) => {
           setLastStaticFailureAt(Date.now());
           logger.warn('Background GTFS refresh failed:', error);
         } finally {
+          gtfsFetchPromiseRef.current = null;
           setIsRefreshingStatic(false);
         }
       }
@@ -297,7 +305,9 @@ export const TransitProvider = ({ children }) => {
 
     // First launch: must download
     try {
-      const data = await fetchAllStaticData();
+      const fetchPromise = fetchAllStaticData();
+      gtfsFetchPromiseRef.current = fetchPromise;
+      const data = await fetchPromise;
       gtfsDataRef.current = data;
       applyStaticData(data);
       setLastStaticRefreshAt(Date.now());
@@ -306,8 +316,9 @@ export const TransitProvider = ({ children }) => {
     } catch (error) {
       logger.error('Failed to load static data:', error);
       setLastStaticFailureAt(Date.now());
-      setStaticError(error.message || 'Failed to load transit data');
+      setStaticError(getUserFacingErrorMessage(error, 'Could not load transit data. Please try again.'));
     } finally {
+      gtfsFetchPromiseRef.current = null;
       setIsLoadingStatic(false);
     }
   }, [applyStaticData, processAndStoreShapes]);
@@ -335,7 +346,16 @@ export const TransitProvider = ({ children }) => {
 
         // Cache doesn't include stopTimes — fetch fresh if needed
         if (!data?.stopTimes) {
-          data = await fetchAllStaticData();
+          const existingFetchPromise = gtfsFetchPromiseRef.current;
+          const fetchPromise = existingFetchPromise || fetchAllStaticData();
+          gtfsFetchPromiseRef.current = fetchPromise;
+          try {
+            data = await fetchPromise;
+          } finally {
+            if (!existingFetchPromise && gtfsFetchPromiseRef.current === fetchPromise) {
+              gtfsFetchPromiseRef.current = null;
+            }
+          }
           gtfsDataRef.current = data;
           applyStaticData(data);
           processAndStoreShapes(data.shapes);
@@ -421,7 +441,7 @@ export const TransitProvider = ({ children }) => {
       } catch (error) {
         logger.error('Failed to load vehicle positions:', error);
         setLastVehicleFailureAt(Date.now());
-        setVehicleError(error.message || 'Failed to load vehicle positions');
+        setVehicleError(getUserFacingErrorMessage(error, 'Could not load live bus locations.'));
       } finally {
         if (showLoading) {
           setIsLoadingVehicles(false);
@@ -466,6 +486,7 @@ export const TransitProvider = ({ children }) => {
   const loadServiceAlerts = useCallback(async () => {
     if (isOffline) {
       setServiceAlerts([]);
+      setHasLoadedServiceAlerts(true);
       return;
     }
 
@@ -474,6 +495,8 @@ export const TransitProvider = ({ children }) => {
       setServiceAlerts(alerts);
     } catch (error) {
       logger.error('Failed to load service alerts:', error);
+    } finally {
+      setHasLoadedServiceAlerts(true);
     }
   }, [isOffline]);
 
@@ -516,7 +539,7 @@ export const TransitProvider = ({ children }) => {
     } catch (error) {
       logger.warn('API proxy health check failed:', error);
       setProxyHealth(null);
-      setProxyHealthError(error.message || 'API proxy health check failed');
+      setProxyHealthError(getUserFacingErrorMessage(error, 'Trip planning connection check failed.'));
       setLastProxyHealthFailureAt(Date.now());
     } finally {
       setIsCheckingProxyHealth(false);
@@ -635,6 +658,7 @@ export const TransitProvider = ({ children }) => {
           title: 'Route ' + routeId + ' Detour',
           body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
           data: { type: 'detour_alert', routeId },
+          channelId: 'alerts',
         }).catch(() => {})
       )
     );
@@ -652,6 +676,7 @@ export const TransitProvider = ({ children }) => {
         });
 
         hasSeenInitialDetourSnapshotRef.current = true;
+        setHasLoadedDetourFeed(true);
         prevDetourIdsRef.current = new Set(nextIds);
         setDetourFeed(detourMap);
 
@@ -664,7 +689,10 @@ export const TransitProvider = ({ children }) => {
           void notifyNewDetours(highConfidenceNewRouteIds);
         }
       },
-      (error) => logger.error('Detour subscription error:', error)
+      (error) => {
+        setHasLoadedDetourFeed(true);
+        logger.error('Detour subscription error:', error);
+      }
     );
     return () => unsubscribe();
   }, [notifyNewDetours]);
@@ -889,8 +917,10 @@ export const TransitProvider = ({ children }) => {
     isRoutingReady,
     ensureRoutingData,
     isLoadingStatic,
+    isBuildingRouting,
     isRefreshingStatic,
     staticError,
+    routingError,
     isOffline,
     usingCachedData,
     diagnostics,
@@ -914,8 +944,10 @@ export const TransitProvider = ({ children }) => {
     isRoutingReady,
     ensureRoutingData,
     isLoadingStatic,
+    isBuildingRouting,
     isRefreshingStatic,
     staticError,
+    routingError,
     isOffline,
     usingCachedData,
     diagnostics,
@@ -930,9 +962,11 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
+    hasLoadedServiceAlerts,
     detoursEnabled: effectiveDetoursEnabled,
     setDetoursEnabled,
     activeDetours,
+    hasLoadedDetourFeed,
     isRouteDetouring,
     getRouteDetour,
     transitNews,
@@ -952,9 +986,11 @@ export const TransitProvider = ({ children }) => {
     vehicles,
     lastVehicleUpdate,
     serviceAlerts,
+    hasLoadedServiceAlerts,
     effectiveDetoursEnabled,
     setDetoursEnabled,
     activeDetours,
+    hasLoadedDetourFeed,
     isRouteDetouring,
     getRouteDetour,
     transitNews,

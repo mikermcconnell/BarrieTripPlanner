@@ -15,6 +15,10 @@ function normalizeRouteSnapshotForDebug(routeId, snapshot) {
         : snapshot.vehiclesOffRoute instanceof Set
           ? snapshot.vehiclesOffRoute.size
           : 0,
+    uniqueVehicleCount: snapshot.uniqueVehicleCount ?? snapshot.vehicleCount ?? null,
+    currentVehicleCount:
+      snapshot.currentVehicleCount ??
+      (snapshot.vehiclesOffRoute instanceof Set ? snapshot.vehiclesOffRoute.size : null),
     state: snapshot.state || 'active',
     isPersistent: Boolean(snapshot.isPersistent),
     detourZone: cloneJson(snapshot.detourZone) || null,
@@ -40,9 +44,10 @@ function createDetectorReadModel({
   reconcileRouteFamilyGeometries,
   toTimestampMs,
 }) {
-  function getActiveDetours(shapes, routeShapeMapping) {
+  function getActiveDetours(shapes, routeShapeMapping, options = {}) {
     const now = Date.now();
     const result = {};
+    const shouldTrackPersistentLearning = options.trackPersistentLearning !== false;
 
     for (const [routeId, routeState] of activeDetours) {
       const snapshot = buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now);
@@ -52,10 +57,12 @@ function createDetectorReadModel({
         snapshot.detourZone = cloneJson(snapshot.detourZone);
       }
 
-      if (getSegmentCount(routeState) === 1) {
-        trackPersistentLearning(routeId, snapshot, snapshot.geometry, now);
-      } else {
-        resetPersistentCandidate(routeId);
+      if (shouldTrackPersistentLearning) {
+        if (getSegmentCount(routeState) === 1) {
+          trackPersistentLearning(routeId, snapshot, snapshot.geometry, now);
+        } else {
+          resetPersistentCandidate(routeId);
+        }
       }
 
       result[routeId] = snapshot;
@@ -95,6 +102,7 @@ function createDetectorReadModel({
             : 'clear-pending';
           return [routeId, {
             vehicleCount: getRouteVehicleCount(routeState),
+            uniqueVehicleCount: getRouteVehicleCount(routeState),
             detectedAt: Number.isFinite(earliestDetectedAt) ? new Date(earliestDetectedAt) : new Date(),
             triggerVehicleId: publishedSegments[0]?.triggerVehicleId || null,
             state: routeStateLabel,
@@ -105,7 +113,9 @@ function createDetectorReadModel({
       activeDetourCount: publishedDetours.length,
       detours: Object.fromEntries(
         publishedDetours.map(([routeId, d]) => [routeId, {
-          vehicleCount: d.vehiclesOffRoute?.size || d.vehicleCount || 0,
+          vehicleCount: d.vehicleCount ?? d.vehiclesOffRoute?.size ?? 0,
+          uniqueVehicleCount: d.uniqueVehicleCount ?? d.vehicleCount ?? 0,
+          currentVehicleCount: d.currentVehicleCount ?? d.vehiclesOffRoute?.size ?? 0,
           detectedAt: (d.detectedAt instanceof Date ? d.detectedAt : new Date(d.detectedAt)).toISOString(),
           triggerVehicleId: d.triggerVehicleId,
           state: d.state || 'active',
@@ -176,6 +186,8 @@ function createDetectorReadModel({
           isPersistent: Boolean(segment.isPersistent),
           triggerVehicleId: segment.triggerVehicleId || null,
           vehicleIds: [...(segment.vehiclesOffRoute || [])],
+          matchedVehicleIds: [...(segment.matchedVehicleIds || [])],
+          normalRouteVehicleIds: [...(segment.normalRouteVehicleIds || [])],
           shapeIdHint: segment.shapeIdHint || null,
           progressMinMeters: Number.isFinite(segment.progressMinMeters) ? segment.progressMinMeters : null,
           progressMaxMeters: Number.isFinite(segment.progressMaxMeters) ? segment.progressMaxMeters : null,

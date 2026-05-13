@@ -98,20 +98,19 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 - `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=true|false`
 - `DETOUR_HISTORY_ENABLED=true`
 - `DETOUR_HISTORY_RETENTION_DAYS=30`
-- Optional stale-detour safety clearing:
-  - `DETOUR_STALE_AUTO_CLEAR_ENABLED=true` enables a publisher-side guard that removes active detours whose latest evidence is stale while buses in the same route family are still reporting
-  - `DETOUR_STALE_AUTO_CLEAR_MIN_MS=2700000` minimum stale window (45 minutes)
-  - `DETOUR_STALE_AUTO_CLEAR_HEADWAY_MULTIPLIER=2` waits roughly two scheduled headways
-  - `DETOUR_STALE_AUTO_CLEAR_BUFFER_MS=600000` adds a 10-minute buffer
-  - `DETOUR_STALE_AUTO_CLEAR_MAX_MS=10800000` caps the stale window at 3 hours
-  - `DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS=3600000` fallback when GTFS does not have enough nearby trips
-  - `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MS=720000` clears zero-vehicle stale detours sooner when route-family buses are still reporting
-  - `DETOUR_ZERO_VEHICLE_STALE_AUTO_CLEAR_MIN_AGE_MS=600000` preserves the minimum visibility window before zero-vehicle stale clearing
+- Optional stale-detour monitoring:
+  - Active detector-owned detours clear from same-bus normal-route GPS traversal through the affected segment, not from elapsed time or bus absence.
+  - Default clear proof requires the same bus to cover at least 100m and 60% of the affected segment on the baseline route (`DETOUR_CLEAR_MIN_TRAVERSAL_METERS`, `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO`).
+  - `DETOUR_STALE_AUTO_CLEAR_*` values are retained for stale/headway monitoring context. They should not clear an active detour by themselves.
+  - There is intentionally no short zero-vehicle stale clear. A detour with `currentVehicleCount: 0` stays active until another bus either adds detour evidence or proves normal routing.
+  - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
   - `DETOUR_ROAD_MATCHING_BASE_URL=...` for an OSRM-compatible match service
+  - road matching is gated by GPS confidence: the segment must have entry and exit boundary anchors plus either a same-vehicle trace or two distinct buses corroborating the same corridor before a rider-facing likely path is generated.
   - `DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED=true` to fall back from OSRM match to OSRM route when trace matching cannot produce usable road geometry
   - `DETOUR_ROAD_MATCHING_RADIUS_METERS=75` to control GPS snap tolerance for OSRM match
+  - `DETOUR_MIN_SAME_VEHICLE_PATH_POINTS=2` sets the default minimum off-route points from that same vehicle before the likely path can be shown
   - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment
   - `DETOUR_ROAD_MATCHING_BACKTRACK_*` strips route-fallback out-and-back spurs caused by forced waypoints
   - `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS=275,600,1000,1500,1800` lets local dummy detours try wider synthetic GPS paths until the matcher finds a route that does not reuse the closed segment

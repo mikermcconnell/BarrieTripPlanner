@@ -112,7 +112,10 @@ describe('mapActiveDetourDoc', () => {
     const mapped = mapActiveDetourDoc('8A', {
       shapeId: 'shape-8a',
       vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 0,
       state: 'active',
+      clearReason: 'normal-route-observed',
       entryPoint: { lat: 44.38, lon: -79.69 },
       exitPoint: { latitude: 44.39, longitude: -79.68 },
       skippedSegmentPolyline: [
@@ -152,6 +155,10 @@ describe('mapActiveDetourDoc', () => {
     });
 
     expect(mapped.entryPoint).toEqual({ latitude: 44.38, longitude: -79.69 });
+    expect(mapped.vehicleCount).toBe(2);
+    expect(mapped.uniqueVehicleCount).toBe(2);
+    expect(mapped.currentVehicleCount).toBe(0);
+    expect(mapped.clearReason).toBe('normal-route-observed');
     expect(mapped.exitPoint).toEqual({ latitude: 44.39, longitude: -79.68 });
     expect(mapped.skippedSegmentPolyline).toEqual([
       { latitude: 44.38, longitude: -79.69 },

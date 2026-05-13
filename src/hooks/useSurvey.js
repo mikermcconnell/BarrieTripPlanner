@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { surveyService } from '../services/firebase/surveyService';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 /**
  * Hook for survey interaction: load config, track answers, validate, submit.
@@ -14,6 +15,7 @@ export function useSurvey(trigger = 'profile') {
   const [submitted, setSubmitted] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [error, setError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export function useSurvey(trigger = 'profile') {
 
     async function load() {
       try {
+        setError(null);
         const activeSurvey = await surveyService.getActiveSurvey();
         if (cancelled) return;
 
@@ -42,7 +45,10 @@ export function useSurvey(trigger = 'profile') {
         if (cancelled) return;
         setAlreadySubmitted(hasSubmitted);
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          setSurvey(null);
+          setError(getUserFacingErrorMessage(err, 'Could not load the survey. Please try again.'));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -50,6 +56,11 @@ export function useSurvey(trigger = 'profile') {
 
     load();
     return () => { cancelled = true; };
+  }, [reloadToken]);
+
+  const retry = useCallback(() => {
+    setLoading(true);
+    setReloadToken((token) => token + 1);
   }, []);
 
   const questions = survey?.questions || [];
@@ -102,7 +113,7 @@ export function useSurvey(trigger = 'profile') {
       }
     } catch (err) {
       if (isMounted.current) {
-        setError(err.message);
+        setError(getUserFacingErrorMessage(err, 'Could not submit your feedback. Please try again.'));
       }
     } finally {
       if (isMounted.current) {
@@ -129,5 +140,6 @@ export function useSurvey(trigger = 'profile') {
     submitted,
     alreadySubmitted,
     error,
+    retry,
   };
 }

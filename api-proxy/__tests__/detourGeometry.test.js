@@ -10,6 +10,8 @@ const {
   reconcileRouteFamilyGeometries,
   MIN_EVIDENCE_FOR_GEOMETRY,
   MIN_LINEAR_SEGMENT_LENGTH_METERS,
+  UNTRUSTED_PATH_MAX_ENDPOINT_MISMATCH_METERS,
+  HIGH_CONFIDENCE_CORROBORATED_OBSERVATIONS,
 } = require('../detourGeometry');
 
 // Reuse the same test shape as detourDetector.test.js: straight line east along 44.39 lat
@@ -243,14 +245,24 @@ describe('scoreConfidence', () => {
     expect(scoreConfidence(points, NOW - 150000, NOW)).toBe('low');
   });
 
-  test('returns medium for moderate multi-vehicle evidence', () => {
+  test('returns high for three or more corroborated observations', () => {
+    const points = Array.from({ length: HIGH_CONFIDENCE_CORROBORATED_OBSERVATIONS }, (_, i) =>
+      makeEvidencePoint({
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+        timestampMs: NOW - 60000 + i * 1000,
+      })
+    );
+    expect(scoreConfidence(points, NOW - 60000, NOW)).toBe('high');
+  });
+
+  test('returns high for moderate multi-vehicle evidence', () => {
     const points = Array.from({ length: 6 }, (_, i) =>
       makeEvidencePoint({
         vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
         timestampMs: NOW - 150000 + i * 30000,
       })
     );
-    expect(scoreConfidence(points, NOW - 150000, NOW)).toBe('medium');
+    expect(scoreConfidence(points, NOW - 150000, NOW)).toBe('high');
   });
 
   test('returns high for sustained multi-vehicle evidence', () => {
@@ -277,7 +289,7 @@ describe('buildGeometry', () => {
 
   test('returns empty geometry when evidence is below minimum', () => {
     const evidence = {
-      points: [makeEvidencePoint(), makeEvidencePoint()], // only 2, need 3
+      points: [makeEvidencePoint()],
     };
     const result = buildGeometry('route-1', evidence, shapes, routeShapeMapping, NOW, DETECTED_AT);
     expect(result.skippedSegmentPolyline).toBeNull();
@@ -383,6 +395,63 @@ describe('buildGeometry', () => {
     expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
   });
 
+  test('clamps Route 12 stale upstream entry anchor toward first off-route evidence', () => {
+    const route12Shapes = new Map(shapes);
+    route12Shapes.set('shape-12a', [
+      { latitude: 44.39, longitude: -79.700 },
+      { latitude: 44.39, longitude: -79.690 },
+      { latitude: 44.39, longitude: -79.680 },
+      { latitude: 44.39, longitude: -79.670 },
+    ]);
+
+    const route12Mapping = new Map(routeShapeMapping);
+    route12Mapping.set('12A', ['shape-12a']);
+
+    const result = buildGeometry(
+      '12A',
+      {
+        points: [
+          makeEvidencePoint({
+            latitude: 44.395,
+            longitude: -79.690,
+            timestampMs: DETECTED_AT + 60_000,
+            vehicleId: 'bus-1',
+          }),
+          makeEvidencePoint({
+            latitude: 44.395,
+            longitude: -79.684,
+            timestampMs: DETECTED_AT + 90_000,
+            vehicleId: 'bus-1',
+          }),
+        ],
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT + 30_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.671,
+            timestampMs: DETECTED_AT + 120_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+      },
+      route12Shapes,
+      route12Mapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.segments[0].debug.entryAnchorAdjusted).toBe(true);
+    expect(result.entryPoint.longitude).toBeCloseTo(-79.690, 3);
+    expect(result.skippedSegmentPolyline[0].longitude).toBeCloseTo(-79.690, 3);
+  });
+
   test('records fallback anchor debug when boundary candidates are unavailable', () => {
     const points = [
       makeEvidencePoint({
@@ -461,6 +530,238 @@ describe('buildGeometry', () => {
     expect(result.segments[0].debug.entryAnchorSource).toBe('boundary-candidate');
     expect(result.segments[0].debug.exitAnchorSource).toBe('projected-evidence-fallback');
     expect(result.segments[0].debug.exitCandidateCount).toBe(0);
+  });
+
+  test('does not publish untrusted raw detour geometry when it runs far past the fallback exit anchor', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.35,
+        longitude: -79.6989,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(UNTRUSTED_PATH_MAX_ENDPOINT_MISMATCH_METERS).toBeGreaterThan(0);
+    expect(result.inferredDetourPolyline).toBeNull();
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.segments).toEqual([]);
+  });
+
+  test('does not publish skipped route geometry until an entry boundary is observed', () => {
+    const points = Array.from({ length: 5 }, (_, i) =>
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.699 + i * 0.004,
+        timestampMs: DETECTED_AT + i * 30_000,
+        vehicleId: 'bus-1',
+      })
+    );
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.681,
+            timestampMs: DETECTED_AT + 6 * 30_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.segments[0].skippedSegmentPolyline).toBeNull();
+    expect(result.segments[0].debug.entryAnchorSource).toBe('projected-evidence-fallback');
+    expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
+  });
+
+  test('trusts sparse mixed-vehicle paths once at least two buses corroborate the corridor', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.699,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.693,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.687,
+        timestampMs: DETECTED_AT + 90_000,
+        vehicleId: 'bus-3',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.681,
+            timestampMs: DETECTED_AT + 120_000,
+            vehicleId: 'bus-3',
+          },
+        ],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.segments[0].canShowDetourPath).toBe(true);
+    expect(result.segments[0].debug.pathConfidenceReason).toBe('multi-vehicle-corroborated');
+  });
+
+  test('allows two buses on any route to publish a medium-confidence trusted detour path', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.696,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.688,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-2',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT,
+            vehicleId: 'bus-1',
+          },
+        ],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.681,
+            timestampMs: DETECTED_AT + 90_000,
+            vehicleId: 'bus-2',
+          },
+        ],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.confidence).toBe('medium');
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.inferredDetourPolyline.length).toBeGreaterThanOrEqual(2);
+    expect(result.evidencePointCount).toBe(2);
+    expect(result.segments[0].debug.pathConfidenceReason).toBe('multi-vehicle-corroborated');
+  });
+
+  test('uses full two-bus evidence when one bus has the entry and exit anchors', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.688,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.696,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-2',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT + 90_000,
+            vehicleId: 'bus-2',
+          },
+        ],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.681,
+            timestampMs: DETECTED_AT + 150_000,
+            vehicleId: 'bus-2',
+          },
+        ],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.inferredDetourPolyline.length).toBeGreaterThanOrEqual(2);
+    expect(result.segments[0].debug.entryAnchorSource).toBe('boundary-candidate');
+    expect(result.segments[0].debug.pathConfidenceReason).toBe('multi-vehicle-corroborated');
   });
 
   test('returns empty geometry for unknown route', () => {
@@ -607,6 +908,69 @@ describe('buildGeometry', () => {
     expect(result.entryPoint).not.toBeNull();
     expect(result.exitPoint).not.toBeNull();
     expect(result.inferredDetourPolyline).not.toBeNull();
+  });
+
+  test('trims shared route approach before publishing closed-route geometry', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.39,
+        longitude: -79.699,
+        timestampMs: DETECTED_AT + 30_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.39,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.691,
+        timestampMs: DETECTED_AT + 90_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.687,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-1',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.699,
+          timestampMs: DETECTED_AT,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.681,
+          timestampMs: DETECTED_AT + 150_000,
+          vehicleId: 'bus-1',
+        }],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.inferredDetourPolyline).not.toBeNull();
+    expect(result.skippedSegmentPolyline).not.toBeNull();
+    expect(result.segments[0].skippedSegmentPolyline).not.toBeNull();
+    expect(result.skippedSegmentPolyline[0].longitude).toBeCloseTo(-79.695, 3);
+    expect(result.inferredDetourPolyline[0].longitude).toBeCloseTo(-79.695, 3);
+    expect(result.entryPoint.longitude).toBeCloseTo(-79.695, 3);
+    expect(result.segments[0].suppressStopDerivation).toBe(false);
+    expect(result.segments[0].debug.overlapTrimmed).toBe(true);
+    expect(result.segments[0].debug.overlapSuppressed).toBe(false);
+    expect(result.segments[0].debug.boundaryQuality).toBe('overlap-trimmed');
   });
 
   test('collapses weak split clusters back into one corridor when the merged span is stronger', () => {
