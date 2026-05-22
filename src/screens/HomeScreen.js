@@ -735,6 +735,7 @@ const HomeMapTripPreviewLayer = React.memo(({
   intermediateStopMarkers,
   tripMarkers,
   boardingAlightingMarkers,
+  transferMarkers,
   isTripPreviewMode,
   tripVehicles,
   getRouteColor,
@@ -898,6 +899,26 @@ const HomeMapTripPreviewLayer = React.memo(({
       </MapLibreGL.MarkerView>
     ))}
 
+    {transferMarkers.map((marker) => (
+      <MapLibreGL.MarkerView
+        key={marker.id}
+        id={`transfer-${marker.id}`}
+        coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+        anchor={{ x: 0.5, y: 1 }}
+      >
+        <View style={styles.transferMarkerContainer} collapsable={false}>
+          <View style={styles.transferLabelBubble}>
+            <Text style={styles.transferLabelType}>Transfer</Text>
+            <Text style={styles.transferLabelName} numberOfLines={1}>
+              {marker.fromStopName}
+            </Text>
+          </View>
+          <View style={styles.transferLabelPointer} />
+          <View style={styles.transferDiamond} />
+        </View>
+      </MapLibreGL.MarkerView>
+    ))}
+
     {isTripPreviewMode && tripVehicles.map((vehicle) => {
       const routeLabel = String(getRouteLabel(vehicle) || vehicle.routeId || '?');
       const snapPath = getVehicleSnapPath(vehicle);
@@ -969,6 +990,7 @@ const HomeMapView = React.memo(({
   intermediateStopMarkers,
   tripMarkers,
   boardingAlightingMarkers,
+  transferMarkers,
   tripVehicles,
   mapTapLocation,
   savedPlaceMapMarkers,
@@ -1110,6 +1132,7 @@ const HomeMapView = React.memo(({
       intermediateStopMarkers={intermediateStopMarkers}
       tripMarkers={tripMarkers}
       boardingAlightingMarkers={boardingAlightingMarkers}
+      transferMarkers={transferMarkers}
       isTripPreviewMode={isTripPreviewMode}
       tripVehicles={tripVehicles}
       getRouteColor={getRouteColor}
@@ -1178,6 +1201,7 @@ const HomeMapView = React.memo(({
   prev.intermediateStopMarkers === next.intermediateStopMarkers &&
   prev.tripMarkers === next.tripMarkers &&
   prev.boardingAlightingMarkers === next.boardingAlightingMarkers &&
+  prev.transferMarkers === next.transferMarkers &&
   prev.tripVehicles === next.tripVehicles &&
   prev.mapTapLocation === next.mapTapLocation &&
   prev.savedPlaceMapMarkers === next.savedPlaceMapMarkers &&
@@ -1475,7 +1499,7 @@ const HomeScreen = ({ route }) => {
 
   const {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, tripVehicles, busApproachLines,
+    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({
     isTripPlanningMode,
     itineraries,
@@ -2315,6 +2339,7 @@ const HomeScreen = ({ route }) => {
           intermediateStopMarkers={intermediateStopMarkers}
           tripMarkers={tripMarkers}
           boardingAlightingMarkers={boardingAlightingMarkers}
+          transferMarkers={transferMarkers}
           tripVehicles={tripVehicles}
           mapTapLocation={mapTapLocation}
           savedPlaceMapMarkers={savedPlaceMapMarkers}
@@ -3371,6 +3396,54 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.textPrimary,
+  },
+  // Transfer point markers
+  transferMarkerContainer: {
+    alignItems: 'center',
+  },
+  transferLabelBubble: {
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 2,
+    borderColor: COLORS.transfer,
+    marginBottom: 4,
+    minWidth: 96,
+    maxWidth: 160,
+    ...SHADOWS.small,
+  },
+  transferLabelType: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.transfer,
+    textTransform: 'uppercase',
+  },
+  transferLabelName: {
+    fontSize: 11,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+  },
+  transferLabelPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: COLORS.transfer,
+    marginBottom: 2,
+  },
+  transferDiamond: {
+    width: 16,
+    height: 16,
+    backgroundColor: COLORS.transfer,
+    borderWidth: 3,
+    borderColor: COLORS.white,
+    borderRadius: 3,
+    transform: [{ rotate: '45deg' }],
+    ...SHADOWS.small,
   },
   // Map tap marker (dropped pin style)
   mapTapMarker: {

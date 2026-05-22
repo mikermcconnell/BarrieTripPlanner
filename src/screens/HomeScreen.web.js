@@ -251,6 +251,21 @@ const buildBoardingMarkerHtml = (marker) => {
   `;
 };
 
+const buildTransferMarkerHtml = (marker) => {
+  const stopName = escapeHtml(marker.fromStopName || 'Transfer');
+
+  return `
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+      <div style="background:white;border-radius:8px;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.2);border:2px solid ${COLORS.transfer};margin-bottom:4px;white-space:nowrap;">
+        <div style="font-size:10px;font-weight:bold;color:${COLORS.transfer};text-transform:uppercase;">Transfer</div>
+        <div style="font-size:11px;font-weight:600;color:#333;max-width:150px;overflow:hidden;text-overflow:ellipsis;">${stopName}</div>
+      </div>
+      <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${COLORS.transfer};margin-bottom:2px;"></div>
+      <div style="width:16px;height:16px;background:${COLORS.transfer};border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);transform:rotate(45deg);border-radius:3px;"></div>
+    </div>
+  `;
+};
+
 const buildTripRouteBadgeHtml = (route) => {
   const label = escapeHtml(route.routeLabel || '');
   const color = route.color || COLORS.primary;
@@ -819,7 +834,7 @@ const HomeScreen = ({ route }) => {
 
   const {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, tripVehicles, busApproachLines,
+    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
   } = useTripVisualization({
     isTripPlanningMode,
     itineraries,
@@ -1661,6 +1676,17 @@ const HomeScreen = ({ route }) => {
             coordinate={marker.coordinate}
             html={buildBoardingMarkerHtml(marker)}
             className={`stop-marker-${marker.type}`}
+          />
+        ))}
+
+        {/* Transfer point markers */}
+        {transferMarkers.map((marker) => (
+          <WebHtmlMarker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            html={buildTransferMarkerHtml(marker)}
+            className="transfer-point-marker"
+            zIndexOffset={980}
           />
         ))}
 

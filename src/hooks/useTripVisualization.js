@@ -188,6 +188,38 @@ export const buildTripEndpointMarkers = ({
   return markers;
 };
 
+export const buildTransferMarkers = ({ legs = [] }) => {
+  if (!Array.isArray(legs) || legs.length === 0) {
+    return [];
+  }
+
+  const markers = [];
+  legs.forEach((leg, index) => {
+    if (!isWalkBetweenTransit(legs, index)) return;
+
+    const previousLeg = legs[index - 1];
+    const nextLeg = legs[index + 1];
+    const transferPoint = hasCoordinate(leg?.from)
+      ? leg.from
+      : hasCoordinate(previousLeg?.to)
+        ? previousLeg.to
+        : null;
+
+    if (!transferPoint) return;
+
+    markers.push({
+      id: `transfer-${index}`,
+      coordinate: toMarkerCoordinate(transferPoint),
+      fromStopName: transferPoint.name || previousLeg?.to?.name || 'Transfer',
+      toStopName: leg?.to?.name || nextLeg?.from?.name || '',
+      walkDuration: leg?.duration || 0,
+      walkDistance: leg?.distance || 0,
+    });
+  });
+
+  return markers;
+};
+
 const getTransitLegs = (itinerary) => (
   Array.isArray(itinerary?.legs)
     ? itinerary.legs.filter(isTransitMapLeg)
@@ -246,16 +278,17 @@ export const buildTripRouteCoordinates = ({
     if (coords.length > 0) {
       const isWalk = leg.mode === 'WALK';
       const isOnDemand = isOnDemandMapLeg(leg);
+      const isTransferWalk = isWalkBetweenTransit(itinerary.legs, index);
       routes.push({
         id: `trip-leg-${index}`,
         coordinates: coords,
-        color: isWalk ? WALKING_ROUTE_COLOR
+        color: isWalk ? (isTransferWalk ? COLORS.transfer : WALKING_ROUTE_COLOR)
           : isOnDemand ? (leg.zoneColor || COLORS.primary)
           : (leg.route?.color || COLORS.primary),
         mode: leg.mode,
         isWalk,
         isOnDemand,
-        isTransferWalk: isWalkBetweenTransit(itinerary.legs, index),
+        isTransferWalk,
         lineStyle: isWalk ? 'solid' : isOnDemand ? 'dashed' : 'solid',
         routeLabel: !isWalk && !isOnDemand ? (leg.route?.shortName || null) : null,
         labelCoordinate: !isWalk && !isOnDemand ? getMiddleCoordinate(coords) : null,
@@ -878,6 +911,10 @@ export const useTripVisualization = ({
     return markers;
   }, [selectedItinerary, decodedLegPolylines]);
 
+  const transferMarkers = useMemo(() => (
+    buildTransferMarkers({ legs: selectedItinerary?.legs })
+  ), [selectedItinerary]);
+
   // Vehicles matching the selected itinerary's trips, or approaching buses on the same route
   const tripVehicles = useMemo(() => {
     return selectTripPreviewVehicles({
@@ -909,6 +946,7 @@ export const useTripVisualization = ({
     tripEndpointMarkers,
     intermediateStopMarkers,
     boardingAlightingMarkers,
+    transferMarkers,
     tripVehicles,
     busApproachLines,
   };
