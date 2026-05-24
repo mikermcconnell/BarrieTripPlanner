@@ -39,6 +39,7 @@ const BASE_PROPS = {
   routeId: '10',
   skippedSegmentPolyline: LINE,
   inferredDetourPolyline: LINE,
+  likelyDetourPolyline: LINE,
   routeStops: [
     { id: 'open-1', latitude: 44.381, longitude: -79.701 },
     { id: 'open-2', latitude: 44.382, longitude: -79.702 },
@@ -51,6 +52,7 @@ const BASE_PROPS = {
   segmentStopDetails: [{
     skippedSegmentPolyline: LINE,
     inferredDetourPolyline: LINE,
+    likelyDetourPolyline: LINE,
     skippedStops: [
       { id: 'closed-1', code: '123', name: 'Closed Stop', latitude: 44.383, longitude: -79.703 },
     ],
@@ -83,12 +85,55 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
   });
 
+  test('native regular-view geometry renders closed and alternate paths with lighter line weight', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        lineStyleScale: 0.72,
+      }));
+    });
+
+    const lines = inst.root.findAllByType('RoutePolyline');
+    const closedMask = lines.find((line) => line.props.id === 'detour-context-10-mask');
+    const closedLine = lines.find((line) => line.props.id === 'detour-context-10');
+    const detourLine = lines.find((line) => line.props.id === 'detour-path-10');
+
+    expect(closedMask.props.strokeWidth).toBeLessThan(11);
+    expect(closedLine.props.strokeWidth).toBeLessThan(3);
+    expect(closedLine.props.outlineWidth).toBeLessThan(1.25);
+    expect(detourLine.props.strokeWidth).toBeLessThan(4.5);
+    expect(detourLine.props.outlineWidth).toBeLessThan(1.25);
+  });
+
+  test('native alternate detour path uses route color with a green outline', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        detourColor: '#F48FB1',
+        routeBaseColor: '#F48FB1',
+      }));
+    });
+
+    const detourLine = inst.root
+      .findAllByType('RoutePolyline')
+      .find((line) => line.props.id === 'detour-path-10');
+
+    expect(detourLine.props.color).toBe('#F48FB1');
+    expect(detourLine.props.outlineColor).toBe('#2E7D32');
+  });
+
   test('untrusted inferred detour paths are hidden while closed-route context remains', () => {
     const props = {
       ...BASE_PROPS,
+      likelyDetourPolyline: null,
       segmentStopDetails: [{
         skippedSegmentPolyline: LINE,
         inferredDetourPolyline: LINE,
+        likelyDetourPolyline: null,
         canShowDetourPath: false,
         skippedStops: [],
         entryPoint: LINE[0],
@@ -117,21 +162,104 @@ describe('DetourOverlay layer split', () => {
   });
 
   test('native markers mode renders open and closed stops above route lines', () => {
+    const onStopPress = jest.fn();
     let inst;
     act(() => {
       inst = create(React.createElement(NativeDetourOverlay, {
         ...BASE_PROPS,
         renderMode: 'markers',
+        onStopPress,
       }));
     });
 
     expect(inst.root.findAllByType('RoutePolyline')).toHaveLength(0);
     expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
     expect(inst.root.findAllByType('MarkerView')).toHaveLength(5);
+    const skippedStopMarkers = inst.root
+      .findAllByType('MarkerView')
+      .filter((marker) => String(marker.props.id).startsWith('detour-skipped-stop-'));
+    expect(skippedStopMarkers).toHaveLength(1);
     expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(true);
-    const skippedStopButtons = inst.root.findAllByType('Pressable');
-    expect(skippedStopButtons).toHaveLength(1);
-    expect(skippedStopButtons[0].props.accessibilityLabel).toContain('not serviced by this detour');
+    expect(skippedStopMarkers[0].props.allowOverlap).toBe(true);
+    expect(() => skippedStopMarkers[0].findByType('Pressable').props.onPress()).not.toThrow();
+    expect(onStopPress).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'closed-1' }),
+      expect.objectContaining({
+        routeId: '10',
+        segment: expect.objectContaining({ skippedStops: expect.any(Array) }),
+      }),
+    );
+  });
+
+  test('native closed stop markers show stop codes below line-label zoom', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'markers',
+        currentZoom: 15,
+      }));
+    });
+
+    expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(true);
+  });
+
+  test('native skipped stop press uses the stop route when family stops are merged', () => {
+    const onStopPress = jest.fn();
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        routeId: '12A',
+        renderMode: 'markers',
+        onStopPress,
+        segmentStopDetails: [{
+          ...BASE_PROPS.segmentStopDetails[0],
+          skippedStops: [
+            { id: 'closed-12b', routeId: '12B', code: '618', name: 'Closed 12B Stop', latitude: 44.383, longitude: -79.703 },
+          ],
+        }],
+      }));
+    });
+
+    const skippedStopMarker = inst.root
+      .findAllByType('MarkerView')
+      .find((marker) => String(marker.props.id).startsWith('detour-skipped-stop-'));
+
+    act(() => {
+      skippedStopMarker.findByType('Pressable').props.onPress();
+    });
+
+    expect(onStopPress).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'closed-12b', routeId: '12B' }),
+      expect.objectContaining({ routeId: '12B' }),
+    );
+  });
+
+  test('native separates overlapping skipped stops from opposite route directions', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        routeId: '12A',
+        renderMode: 'markers',
+        segmentStopDetails: [{
+          ...BASE_PROPS.segmentStopDetails[0],
+          skippedStops: [
+            { id: 'closed-12a', routeId: '12A', code: '933', name: 'Closed 12A Stop', latitude: 44.383, longitude: -79.703 },
+            { id: 'closed-12b', routeId: '12B', code: '618', name: 'Closed 12B Stop', latitude: 44.383, longitude: -79.703 },
+          ],
+        }],
+      }));
+    });
+
+    const skippedStopCoordinates = inst.root
+      .findAllByType('MarkerView')
+      .filter((marker) => String(marker.props.id).startsWith('detour-skipped-stop-'))
+      .map((marker) => marker.props.coordinate);
+
+    expect(skippedStopCoordinates).toHaveLength(2);
+    expect(new Set(skippedStopCoordinates.map((coordinate) => coordinate.join(','))).size).toBe(2);
   });
 
   test('web markers mode puts detour stop markers above regular route markers', () => {
@@ -152,6 +280,119 @@ describe('DetourOverlay layer split', () => {
     const skippedStopMarker = markers.find((marker) => marker.props.zIndexOffset === 700);
     expect(typeof skippedStopMarker.props.onPress).toBe('function');
     expect(skippedStopMarker.props.popupHtml).toContain('Not serviced by this detour');
+  });
+
+  test('web regular-view geometry renders closed and alternate paths with lighter line weight', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        lineStyleScale: 0.72,
+      }));
+    });
+
+    const lines = inst.root.findAllByType('WebRoutePolyline');
+    const closedMask = lines.find((line) => line.props.color === '#FFFFFF' && line.props.outlineWidth === 0);
+    const closedLine = lines.find((line) => line.props.color === BASE_PROPS.skippedColor);
+    const detourLine = lines.find((line) => line.props.color === BASE_PROPS.detourColor);
+
+    expect(closedMask.props.strokeWidth).toBeLessThan(11);
+    expect(closedLine.props.strokeWidth).toBeLessThan(3);
+    expect(closedLine.props.outlineWidth).toBeLessThan(1.25);
+    expect(detourLine.props.strokeWidth).toBeLessThan(4.5);
+    expect(detourLine.props.outlineWidth).toBeLessThan(1.25);
+  });
+
+  test('web alternate detour path uses route color with a green outline', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        detourColor: '#F48FB1',
+        routeBaseColor: '#F48FB1',
+      }));
+    });
+
+    const detourLine = inst.root
+      .findAllByType('WebRoutePolyline')
+      .find((line) => line.props.color === '#F48FB1');
+
+    expect(detourLine.props.color).toBe('#F48FB1');
+    expect(detourLine.props.outlineColor).toBe('#2E7D32');
+  });
+
+  test('web closed stop markers show stop codes below line-label zoom', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'markers',
+        currentZoom: 15,
+      }));
+    });
+
+    const html = inst.root.findAllByType('WebHtmlMarker').map((marker) => marker.props.html).join('\n');
+    expect(html).toContain('123');
+  });
+
+  test('web skipped stop press uses the stop route when family stops are merged', () => {
+    const onStopPress = jest.fn();
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeId: '12A',
+        renderMode: 'markers',
+        onStopPress,
+        segmentStopDetails: [{
+          ...BASE_PROPS.segmentStopDetails[0],
+          skippedStops: [
+            { id: 'closed-12b', routeId: '12B', code: '618', name: 'Closed 12B Stop', latitude: 44.383, longitude: -79.703 },
+          ],
+        }],
+      }));
+    });
+
+    const skippedStopMarker = inst.root
+      .findAllByType('WebHtmlMarker')
+      .find((marker) => marker.props.zIndexOffset === 700);
+
+    act(() => {
+      skippedStopMarker.props.onPress();
+    });
+
+    expect(onStopPress).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'closed-12b', routeId: '12B' }),
+      expect.objectContaining({ routeId: '12B' }),
+    );
+  });
+
+  test('web separates overlapping skipped stops from opposite route directions', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        routeId: '12A',
+        renderMode: 'markers',
+        segmentStopDetails: [{
+          ...BASE_PROPS.segmentStopDetails[0],
+          skippedStops: [
+            { id: 'closed-12a', routeId: '12A', code: '933', name: 'Closed 12A Stop', latitude: 44.383, longitude: -79.703 },
+            { id: 'closed-12b', routeId: '12B', code: '618', name: 'Closed 12B Stop', latitude: 44.383, longitude: -79.703 },
+          ],
+        }],
+      }));
+    });
+
+    const skippedStopCoordinates = inst.root
+      .findAllByType('WebHtmlMarker')
+      .filter((marker) => marker.props.zIndexOffset === 700)
+      .map((marker) => marker.props.coordinate);
+
+    expect(skippedStopCoordinates).toHaveLength(2);
+    expect(new Set(skippedStopCoordinates.map((coordinate) => `${coordinate.latitude},${coordinate.longitude}`)).size).toBe(2);
   });
 
   test('web callouts do not render detour route or route resumes text labels', () => {

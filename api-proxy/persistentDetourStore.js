@@ -22,6 +22,35 @@ function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
+function normalizeEvidenceEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const latitude = Number(entry.latitude ?? entry.lat);
+  const longitude = Number(entry.longitude ?? entry.lon);
+  const timestampMs = toMillis(entry.timestampMs ?? entry.timestamp);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(timestampMs)) {
+    return null;
+  }
+  return {
+    latitude,
+    longitude,
+    timestampMs,
+    vehicleId: entry.vehicleId || null,
+    tripShapeId: entry.tripShapeId || null,
+    tripId: entry.tripId || null,
+    recurringObservationId: entry.recurringObservationId || null,
+  };
+}
+
+function normalizeEvidence(data = {}) {
+  const evidence = data && typeof data === 'object' ? data : {};
+  return {
+    points: (evidence.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+    confidencePoints: (evidence.confidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+    entryCandidates: (evidence.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+    exitCandidates: (evidence.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+  };
+}
+
 function normalizeRecord(routeId, data) {
   return {
     routeId,
@@ -34,14 +63,19 @@ function normalizeRecord(routeId, data) {
     triggerVehicleId: data.triggerVehicleId || null,
     geometry: cloneJson(data.geometry) || null,
     detourZone: cloneJson(data.detourZone) || null,
+    evidence: normalizeEvidence(data.evidence),
   };
 }
 
-async function loadPersistentDetours() {
+async function loadPersistentDetours(options = {}) {
   const db = getDb();
   if (!db) {
     console.warn('[persistentDetourStore] Firestore not configured — persistence disabled');
     return {};
+  }
+
+  if (options.force) {
+    hydratePromise = null;
   }
 
   if (!hydratePromise) {
@@ -99,6 +133,7 @@ async function syncPersistentDetours(records = {}) {
         triggerVehicleId: record.triggerVehicleId,
         geometry: record.geometry,
         detourZone: record.detourZone,
+        evidence: record.evidence,
       });
       lastSyncedIds.add(routeId);
     }

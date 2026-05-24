@@ -27,6 +27,6 @@ export const formatBoardingArrivalDetail = (nextTransitProximity, nowMs = Date.n
 
   if (nextTransitProximity.hasArrived && arrivalTime <= nowMs) return 'Bus is here';
 
-  const diffMinutes = Math.max(0, Math.floor((arrivalTime - nowMs) / 60000));
+  const diffMinutes = Math.max(0, Math.ceil((arrivalTime - nowMs) / 60000));
   return diffMinutes <= 0 ? 'Bus now' : `Bus in ${diffMinutes} min`;
 };

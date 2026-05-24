@@ -1,21 +1,13 @@
 'use strict';
 
 const DEFAULT_ROUTE_DETECTOR_OVERRIDES = Object.freeze({
-  // Route 12's downtown detour can be short enough that one bus in each
-  // direction may only yield one short-deviation observation. Group 12A/12B
-  // by physical area so both branches can be flagged from the shared corridor.
+  // Route 12 downtown geometry can have close entry/exit anchors. Keep the
+  // anchor tolerance narrow; route-family projection is handled globally only
+  // after a confirmed physical closure segment has renderable boundaries.
   '12A': Object.freeze({
-    recurringShortDeviationFamilyId: '12',
-    recurringShortDeviationFamilyMinRoutes: 2,
-    recurringShortDeviationFamilyMinObservations: 2,
-    recurringShortDeviationFamilyMaxDistanceMeters: 500,
     staleEntryAnchorMaxGapMeters: 150,
   }),
   '12B': Object.freeze({
-    recurringShortDeviationFamilyId: '12',
-    recurringShortDeviationFamilyMinRoutes: 2,
-    recurringShortDeviationFamilyMinObservations: 2,
-    recurringShortDeviationFamilyMaxDistanceMeters: 500,
     staleEntryAnchorMaxGapMeters: 150,
   }),
 });

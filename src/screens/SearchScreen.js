@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTransitStatic } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
@@ -21,6 +22,7 @@ import { useSearchHistory } from '../hooks/useSearchHistory';
 import { trackEvent } from '../services/analyticsService';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { getHighlightedStops } from '../utils/searchHighlights';
 
 const SearchScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -32,7 +34,22 @@ const SearchScreen = ({ navigation }) => {
   const [addressLoading, setAddressLoading] = useState(false);
   const debounceRef = useRef(null);
   const addressRequestSeqRef = useRef(0);
+  const resultsListRef = useRef(null);
   const { addToHistory, getHistory, clearHistory } = useSearchHistory();
+
+  const scrollResultsToTop = useCallback(() => {
+    resultsListRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollResultsToTop();
+    }, [scrollResultsToTop])
+  );
+
+  useEffect(() => {
+    scrollResultsToTop();
+  }, [searchQuery, searchType, scrollResultsToTop]);
 
   // Debounced address search
   useEffect(() => {
@@ -81,7 +98,7 @@ const SearchScreen = ({ navigation }) => {
 
     if (!query) {
       if (searchType === 'stops') {
-        return stops.slice(0, 20); // Show first 20 stops
+        return getHighlightedStops(stops);
       }
       return routes;
     }
@@ -191,6 +208,9 @@ const SearchScreen = ({ navigation }) => {
       if (searchQuery.trim().length < 3) return 'Type at least 3 characters';
       return `${filteredResults.length} address${filteredResults.length !== 1 ? 'es' : ''} found`;
     }
+    if (searchType === 'stops' && !searchQuery.trim()) {
+      return `Showing ${filteredResults.length} highlighted stops`;
+    }
     return `${filteredResults.length} ${searchType === 'stops' ? 'stops' : 'routes'} found`;
   };
 
@@ -295,6 +315,7 @@ const SearchScreen = ({ navigation }) => {
 
       {/* Results List */}
       <FlatList
+        ref={resultsListRef}
         data={filteredResults}
         keyExtractor={(item) => item.id?.toString()}
         renderItem={getRenderItem()}

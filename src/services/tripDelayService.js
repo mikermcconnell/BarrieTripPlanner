@@ -598,7 +598,10 @@ export const applyDelaysToItineraries = async (itineraries, options = {}) => {
  * @returns {Object} Formatted delay info with text and status
  */
 export const formatDelay = (delaySeconds) => {
-  if (delaySeconds === 0) {
+  const parsedSeconds = Number(delaySeconds);
+  const seconds = Number.isFinite(parsedSeconds) ? parsedSeconds : 0;
+
+  if (seconds === 0) {
     return {
       text: 'On time',
       status: 'ontime',
@@ -606,19 +609,19 @@ export const formatDelay = (delaySeconds) => {
     };
   }
 
-  const minutes = Math.round(delaySeconds / 60);
+  const minutes = Math.max(1, Math.ceil(Math.abs(seconds) / 60));
 
-  if (minutes > 0) {
+  if (seconds > 0) {
     return {
-      text: `+${formatMinutes(minutes)}`,
+      text: `+${formatMinutes(minutes)} late`,
       status: minutes <= 2 ? 'slight' : minutes <= 5 ? 'moderate' : 'severe',
       minutes,
     };
-  } else {
-    return {
-      text: `${formatMinutes(Math.abs(minutes))} early`,
-      status: 'early',
-      minutes,
-    };
   }
+
+  return {
+    text: `${formatMinutes(minutes)} early`,
+    status: 'early',
+    minutes: -minutes,
+  };
 };

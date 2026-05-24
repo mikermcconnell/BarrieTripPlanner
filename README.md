@@ -101,6 +101,10 @@ Supporting features:
 
 When working in Android emulator, use one of these commands instead of manual Metro setup:
 
+### Android UI Safe-Area Gotcha
+
+Android's system navigation bar can cover bottom-aligned UI. For full-screen loading screens, modals, maps, or bottom action controls, use the helpers in `src/utils/androidNavigationBar.js` so content sits above the nav bar.
+
 - `npm run android:stable`
   - Most reliable path.
   - Builds/installs release, then launches.

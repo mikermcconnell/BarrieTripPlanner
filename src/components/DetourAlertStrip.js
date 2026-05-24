@@ -19,23 +19,32 @@ const DetourAlertStrip = ({
   onPress,
   alertBannerVisible,
   routes = [],
+  routeColorByRouteId = {},
   style,
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, routeIds, routeGroups, topOffset, getRouteName,
-    getDetourStatusLabel, visibleIds, overflowCount, countText, shouldRender,
+    expanded, toggleExpanded, detourEvents, routeGroups, topOffset, getRouteName,
+    getEventStatusLabel, visibleEvents, overflowCount, countText, shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
 
   const handleCollapsedPress = () => {
-    if (routeIds.length === 1) {
-      onPress?.(routeIds[0]);
+    if (detourEvents.length === 1) {
+      const event = detourEvents[0];
+      onPress?.(event.primaryRouteId, event);
       return;
     }
     toggleExpanded();
   };
+  const getRouteColor = (routeId, familyId = null) => (
+    routeColorByRouteId[routeId] ||
+    (familyId ? routeColorByRouteId[familyId] : null) ||
+    ROUTE_COLORS[routeId] ||
+    (familyId ? ROUTE_COLORS[familyId] : null) ||
+    ROUTE_COLORS.DEFAULT
+  );
 
   return (
     <View
@@ -54,11 +63,11 @@ const DetourAlertStrip = ({
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={
-          routeIds.length === 1
-            ? `Open Route ${getRouteName(routeIds[0])} detour details`
+          detourEvents.length === 1
+            ? `Open ${detourEvents[0].title} detour details`
             : expanded ? 'Collapse detour list' : 'Expand detour list'
         }
-        accessibilityHint={routeIds.length === 1 ? 'Shows skipped stops and detour details' : countText}
+        accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
         <Icon name="Warning" size={16} color={COLORS.warning} />
         <Text style={styles.countText} numberOfLines={1}>
@@ -67,7 +76,7 @@ const DetourAlertStrip = ({
         {!inline && (
           <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
             {routeGroups.slice(0, 3).map((group) => {
-              const color = ROUTE_COLORS[group.firstRouteId] || ROUTE_COLORS.DEFAULT;
+              const color = getRouteColor(group.firstRouteId, group.familyId);
               return (
                 <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
                   <Text style={styles.routePillText}>{group.displayName}</Text>
@@ -85,30 +94,34 @@ const DetourAlertStrip = ({
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
         <View style={[styles.expandedPanel, inline && styles.expandedPanelInline]}>
-          {visibleIds.map((routeId) => {
-            const routeColor = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
-            const detour = activeDetours[routeId];
-            const isClearPending = detour?.state === 'clear-pending';
+          {visibleEvents.map((event) => {
+            const routeColor = getRouteColor(event.primaryRouteId);
+            const isClearPending = event.state === 'clear-pending';
 
             return (
               <TouchableOpacity
-                key={routeId}
+                key={event.eventId}
                 style={[
                   styles.detailRow,
                   { borderLeftColor: routeColor },
                   isClearPending && styles.detailRowFaded,
                 ]}
-                onPress={() => onPress?.(routeId)}
+                onPress={() => onPress?.(event.primaryRouteId, event)}
                 activeOpacity={0.8}
                 accessibilityRole="button"
-                accessibilityLabel={`Route ${getRouteName(routeId)} detour details`}
+                accessibilityLabel={`${event.title} detour details`}
               >
-                <View style={[styles.routePill, { backgroundColor: routeColor }]}>
-                  <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+                <View style={styles.eventRoutes}>
+                  {event.routeIds.slice(0, 4).map((routeId) => (
+                    <View key={`${event.eventId}-${routeId}`} style={[styles.routePill, { backgroundColor: getRouteColor(routeId) }]}>
+                      <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+                    </View>
+                  ))}
                 </View>
-                <Text style={styles.detailLabel} numberOfLines={1}>
-                  Route {getRouteName(routeId)} — {getDetourStatusLabel(routeId)}
-                </Text>
+                <View style={styles.eventCopy}>
+                  <Text style={styles.detailLabel} numberOfLines={1}>{event.title}</Text>
+                  <Text style={styles.detailStatus} numberOfLines={1}>{getEventStatusLabel(event)}</Text>
+                </View>
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>
             );
@@ -233,9 +246,23 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   detailLabel: {
-    flex: 1,
     fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.textPrimary,
+  },
+  eventRoutes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+  },
+  eventCopy: {
+    flex: 1,
+  },
+  detailStatus: {
+    marginTop: 1,
+    fontSize: FONT_SIZES.xxs,
+    color: COLORS.textSecondary,
   },
   chevronRight: {
     fontSize: FONT_SIZES.lg,

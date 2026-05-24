@@ -67,6 +67,8 @@ export const TransitProvider = ({ children }) => {
   const [stops, setStops] = useState([]);
   const [shapes, setShapes] = useState({});
   const [trips, setTrips] = useState([]);
+  const [calendar, setCalendar] = useState([]);
+  const [calendarDates, setCalendarDates] = useState([]);
   const [tripMapping, setTripMapping] = useState({});
   const [routeShapeMapping, setRouteShapeMapping] = useState({});
   const [routeStopsMapping, setRouteStopsMapping] = useState({});
@@ -229,6 +231,8 @@ export const TransitProvider = ({ children }) => {
     setStops(data.stops || []);
     setShapes(data.shapes || {});
     setTrips(data.trips || []);
+    setCalendar(data.calendar || []);
+    setCalendarDates(data.calendarDates || []);
     setTripMapping(data.tripMapping || {});
     setRouteShapeMapping(data.routeShapeMapping || {});
     setRouteStopsMapping(data.routeStopsMapping || {});
@@ -909,6 +913,8 @@ export const TransitProvider = ({ children }) => {
     processedShapes,
     shapeOverlapOffsets,
     trips,
+    calendar,
+    calendarDates,
     tripMapping,
     routeShapeMapping,
     routeStopsMapping,
@@ -936,6 +942,8 @@ export const TransitProvider = ({ children }) => {
     processedShapes,
     shapeOverlapOffsets,
     trips,
+    calendar,
+    calendarDates,
     tripMapping,
     routeShapeMapping,
     routeStopsMapping,

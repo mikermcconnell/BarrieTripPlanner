@@ -8,6 +8,7 @@ const {
   scoreConfidence,
   buildGeometry,
   reconcileRouteFamilyGeometries,
+  enrichDetourMapStopImpacts,
   MIN_EVIDENCE_FOR_GEOMETRY,
   MIN_LINEAR_SEGMENT_LENGTH_METERS,
   UNTRUSTED_PATH_MAX_ENDPOINT_MISMATCH_METERS,
@@ -340,6 +341,69 @@ describe('buildGeometry', () => {
     expect(result.evidencePointCount).toBe(10);
     expect(result.lastEvidenceAt).toBeDefined();
     expect(['low', 'medium', 'high']).toContain(result.confidence);
+  });
+
+  test('publishes explicit skipped stop ids including boundary stops inside the closed segment', () => {
+    const points = [];
+    for (let i = 0; i < 8; i++) {
+      points.push(makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.695 + i * 0.002,
+        timestampMs: DETECTED_AT + i * 30000,
+        vehicleId: i % 2 === 0 ? 'bus-1' : 'bus-2',
+      }));
+    }
+    const stopImpactData = {
+      routeStopSequencesMapping: {
+        'route-1': {
+          'shape-1': ['before', 'entry-boundary', 'inside', 'exit-boundary', 'after'],
+        },
+      },
+      stopsById: new Map([
+        ['before', { id: 'before', code: '100', latitude: 44.39, longitude: -79.700 }],
+        ['entry-boundary', { id: 'entry-boundary', code: '101', latitude: 44.39, longitude: -79.695 }],
+        ['inside', { id: 'inside', code: '102', latitude: 44.39, longitude: -79.685 }],
+        ['exit-boundary', { id: 'exit-boundary', code: '103', latitude: 44.39, longitude: -79.677 }],
+        ['after', { id: 'after', code: '104', latitude: 44.39, longitude: -79.660 }],
+      ]),
+    };
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.695,
+          timestampMs: DETECTED_AT - 30_000,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.677,
+          timestampMs: DETECTED_AT + 10 * 30_000,
+          vehicleId: 'bus-1',
+        }],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT,
+      stopImpactData
+    );
+
+    expect(result.segments[0].skippedStopIds).toEqual([
+      'entry-boundary',
+      'inside',
+      'exit-boundary',
+    ]);
+    expect(result.segments[0].skippedStops.map((stop) => stop.id)).toEqual([
+      'entry-boundary',
+      'inside',
+      'exit-boundary',
+    ]);
+    expect(result.segments[0].entryStopId).toBe('entry-boundary');
+    expect(result.segments[0].exitStopId).toBe('exit-boundary');
   });
 
   test('uses entry and exit boundary candidates when available', () => {
@@ -1247,7 +1311,148 @@ describe('buildGeometry', () => {
 });
 
 describe('route family geometry handoff', () => {
-  test('creates a sibling branch detour when only one branch is active', () => {
+  test('projects a confirmed shared-location closure onto another route family using the same closed segment', () => {
+    const sharedShapes = new Map([
+      ['shape-12b', [
+        { latitude: 44.394, longitude: -79.694 },
+        { latitude: 44.392, longitude: -79.693 },
+        { latitude: 44.390, longitude: -79.692 },
+        { latitude: 44.388, longitude: -79.691 },
+      ]],
+      ['shape-7b', [
+        { latitude: 44.395, longitude: -79.695 },
+        { latitude: 44.394, longitude: -79.694 },
+        { latitude: 44.392, longitude: -79.693 },
+        { latitude: 44.390, longitude: -79.692 },
+        { latitude: 44.388, longitude: -79.691 },
+      ]],
+      ['shape-7a-nearby', [
+        { latitude: 44.395, longitude: -79.696 },
+        { latitude: 44.392, longitude: -79.6942 },
+        { latitude: 44.388, longitude: -79.6922 },
+      ]],
+    ]);
+    const sharedRouteMapping = new Map([
+      ['12B', ['shape-12b']],
+      ['7B', ['shape-7b']],
+      ['7A', ['shape-7a-nearby']],
+    ]);
+    const detours = {
+      '12B': {
+        routeId: '12B',
+        detectedAt: new Date('2026-05-22T15:00:00Z'),
+        lastSeenAt: new Date('2026-05-22T15:05:00Z'),
+        state: 'active',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 2,
+          lastEvidenceAt: 10_000,
+          segments: [
+            {
+              shapeId: 'shape-12b',
+              detourEventId: 'detour-event-location-75-486',
+              skippedSegmentPolyline: [
+                { latitude: 44.392, longitude: -79.693 },
+                { latitude: 44.390, longitude: -79.692 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.6935 },
+                { latitude: 44.390, longitude: -79.6925 },
+              ],
+              entryPoint: { latitude: 44.392, longitude: -79.693 },
+              exitPoint: { latitude: 44.390, longitude: -79.692 },
+              confidence: 'medium',
+              evidencePointCount: 2,
+              lastEvidenceAt: 10_000,
+              entryIndex: 1,
+              exitIndex: 2,
+              spanMeters: 250,
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.392, longitude: -79.693 },
+            { latitude: 44.390, longitude: -79.692 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.392, longitude: -79.6935 },
+            { latitude: 44.390, longitude: -79.6925 },
+          ],
+          entryPoint: { latitude: 44.392, longitude: -79.693 },
+          exitPoint: { latitude: 44.390, longitude: -79.692 },
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, sharedShapes, sharedRouteMapping);
+
+    expect(detours['7B']).toBeDefined();
+    expect(detours['7B'].handoffSourceRouteId).toBe('12B');
+    expect(detours['7B'].geometry.segments[0].detourEventId).toBe('detour-event-location-75-486');
+    expect(detours['7B'].geometry.debug.routeFamilyMergeMode).toBe('projected-shared-location');
+    expect(detours['7A']).toBeUndefined();
+  });
+
+  test('normalizes existing shared-location detour event ids across route families', () => {
+    const sharedShapes = new Map([
+      ['shape-12b', [
+        { latitude: 44.394, longitude: -79.694 },
+        { latitude: 44.392, longitude: -79.693 },
+        { latitude: 44.390, longitude: -79.692 },
+      ]],
+      ['shape-7b', [
+        { latitude: 44.394, longitude: -79.694 },
+        { latitude: 44.392, longitude: -79.693 },
+        { latitude: 44.390, longitude: -79.692 },
+      ]],
+    ]);
+    const sharedRouteMapping = new Map([
+      ['12B', ['shape-12b']],
+      ['7B', ['shape-7b']],
+    ]);
+    const makeDetour = (routeId, shapeId, detourEventId) => ({
+      routeId,
+      state: 'active',
+      vehicleCount: 2,
+      geometry: {
+        confidence: 'medium',
+        evidencePointCount: 2,
+        lastEvidenceAt: 10_000,
+        detourEventId,
+        segments: [{
+          shapeId,
+          detourEventId,
+          skippedSegmentPolyline: [
+            { latitude: 44.392, longitude: -79.693 },
+            { latitude: 44.390, longitude: -79.692 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.393, longitude: -79.6935 },
+            { latitude: 44.391, longitude: -79.6925 },
+            { latitude: 44.389, longitude: -79.6925 },
+          ],
+          entryPoint: { latitude: 44.392, longitude: -79.693 },
+          exitPoint: { latitude: 44.390, longitude: -79.692 },
+          confidence: 'medium',
+          evidencePointCount: 2,
+          lastEvidenceAt: 10_000,
+          spanMeters: 250,
+        }],
+      },
+    });
+    const detours = {
+      '12B': makeDetour('12B', 'shape-12b', 'detour-event-12-legacy'),
+      '7B': makeDetour('7B', 'shape-7b', 'detour-event-7-legacy'),
+    };
+
+    reconcileRouteFamilyGeometries(detours, sharedShapes, sharedRouteMapping);
+
+    expect(detours['7B'].geometry.segments[0].detourEventId).toBe(
+      detours['12B'].geometry.segments[0].detourEventId
+    );
+  });
+
+  test('projects a physical detour event onto a missing sibling route', () => {
     const familyShapes = new Map([
       ['shape-8b', [
         { latitude: 44.39, longitude: -79.70 },
@@ -1316,11 +1521,103 @@ describe('route family geometry handoff', () => {
 
     reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
 
+    expect(detours['8B']).toBeDefined();
     expect(detours['8A']).toBeDefined();
     expect(detours['8A'].handoffSourceRouteId).toBe('8B');
-    expect(detours['8A'].geometry.segments).toHaveLength(1);
-    expect(detours['8A'].geometry.entryPoint.longitude).toBeCloseTo(-79.694, 3);
-    expect(detours['8A'].geometry.exitPoint.longitude).toBeCloseTo(-79.698, 3);
+    expect(detours['8A'].currentVehicleCount).toBe(0);
+    expect(detours['8A'].geometry.shapeId).toBe('shape-8a');
+    expect(detours['8A'].geometry.segments[0].entryPoint.longitude).toBeCloseTo(-79.694, 3);
+    expect(detours['8A'].geometry.segments[0].exitPoint.longitude).toBeCloseTo(-79.698, 3);
+    expect(detours['8A'].geometry.debug.routeFamilyMergeMode).toBe('projected-route');
+  });
+
+  test('adds explicit stop impacts to detected and projected sibling detours', () => {
+    const familyShapes = new Map([
+      ['shape-8b', [
+        { latitude: 44.39, longitude: -79.70 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.68 },
+      ]],
+      ['shape-8a', [
+        { latitude: 44.39, longitude: -79.68 },
+        { latitude: 44.39, longitude: -79.69 },
+        { latitude: 44.39, longitude: -79.70 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['8A', ['shape-8a']],
+      ['8B', ['shape-8b']],
+    ]);
+    const stopImpactData = {
+      routeStopSequencesMapping: {
+        '8B': { 'shape-8b': ['8b-before', '8b-entry', '8b-inside', '8b-exit', '8b-after'] },
+        '8A': { 'shape-8a': ['8a-before', '8a-entry', '8a-inside', '8a-exit', '8a-after'] },
+      },
+      stopsById: new Map([
+        ['8b-before', { id: '8b-before', code: '800', latitude: 44.39, longitude: -79.700 }],
+        ['8b-entry', { id: '8b-entry', code: '801', latitude: 44.39, longitude: -79.698 }],
+        ['8b-inside', { id: '8b-inside', code: '802', latitude: 44.39, longitude: -79.696 }],
+        ['8b-exit', { id: '8b-exit', code: '803', latitude: 44.39, longitude: -79.694 }],
+        ['8b-after', { id: '8b-after', code: '804', latitude: 44.39, longitude: -79.690 }],
+        ['8a-before', { id: '8a-before', code: '805', latitude: 44.39, longitude: -79.690 }],
+        ['8a-entry', { id: '8a-entry', code: '806', latitude: 44.39, longitude: -79.694 }],
+        ['8a-inside', { id: '8a-inside', code: '807', latitude: 44.39, longitude: -79.696 }],
+        ['8a-exit', { id: '8a-exit', code: '808', latitude: 44.39, longitude: -79.698 }],
+        ['8a-after', { id: '8a-after', code: '809', latitude: 44.39, longitude: -79.700 }],
+      ]),
+    };
+    const detours = {
+      '8B': {
+        routeId: '8B',
+        state: 'active',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 6,
+          lastEvidenceAt: 10_000,
+          segments: [
+            {
+              shapeId: 'shape-8b',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.698 },
+                { latitude: 44.39, longitude: -79.694 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.698 },
+                { latitude: 44.392, longitude: -79.694 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.698 },
+              exitPoint: { latitude: 44.39, longitude: -79.694 },
+              confidence: 'medium',
+              evidencePointCount: 6,
+              lastEvidenceAt: 10_000,
+              entryIndex: 0,
+              exitIndex: 1,
+              spanMeters: 350,
+            },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.698 },
+            { latitude: 44.39, longitude: -79.694 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.392, longitude: -79.698 },
+            { latitude: 44.392, longitude: -79.694 },
+          ],
+          entryPoint: { latitude: 44.39, longitude: -79.698 },
+          exitPoint: { latitude: 44.39, longitude: -79.694 },
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+    enrichDetourMapStopImpacts(detours, familyShapes, stopImpactData);
+
+    expect(detours['8B'].geometry.segments[0].skippedStopIds).toEqual(['8b-entry', '8b-inside', '8b-exit']);
+    expect(detours['8B'].geometry.skippedStopIds).toEqual(['8b-entry', '8b-inside', '8b-exit']);
+    expect(detours['8A']).toBeDefined();
+    expect(detours['8A'].geometry.segments[0].skippedStopIds).toEqual(['8a-entry', '8a-inside', '8a-exit']);
+    expect(detours['8A'].geometry.skippedStopIds).toEqual(['8a-entry', '8a-inside', '8a-exit']);
   });
 
   test('projects sibling branch detour segments onto the opposite-direction shape', () => {
@@ -1456,6 +1753,167 @@ describe('route family geometry handoff', () => {
     expect(detours['8A'].geometry.debug.routeFamilyLeaderRouteId).toBe('8B');
     expect(detours['8A'].geometry.segments[0].debug.projectedFromSiblingShapeId).toBe('shape-8b');
     expect(detours['8A'].geometry.segments[0].debug.projectedToShapeId).toBe('shape-8a');
+  });
+
+  test('supplements an existing sibling closure with the trusted physical detour path', () => {
+    const familyShapes = new Map([
+      ['shape-12a', [
+        { latitude: 44.39, longitude: -79.700 },
+        { latitude: 44.39, longitude: -79.696 },
+        { latitude: 44.39, longitude: -79.692 },
+        { latitude: 44.39, longitude: -79.688 },
+      ]],
+      ['shape-12b', [
+        { latitude: 44.39, longitude: -79.688 },
+        { latitude: 44.39, longitude: -79.692 },
+        { latitude: 44.39, longitude: -79.696 },
+        { latitude: 44.39, longitude: -79.700 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['12A', ['shape-12a']],
+      ['12B', ['shape-12b']],
+    ]);
+    const detours = {
+      '12A': {
+        routeId: '12A',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 8,
+          lastEvidenceAt: 20_000,
+          segments: [{
+            shapeId: 'shape-12a',
+            skippedSegmentPolyline: [
+              { latitude: 44.39, longitude: -79.696 },
+              { latitude: 44.39, longitude: -79.688 },
+            ],
+            inferredDetourPolyline: [
+              { latitude: 44.39, longitude: -79.696 },
+              { latitude: 44.395, longitude: -79.692 },
+              { latitude: 44.39, longitude: -79.688 },
+            ],
+            likelyDetourPolyline: [
+              { latitude: 44.39, longitude: -79.696 },
+              { latitude: 44.396, longitude: -79.692 },
+              { latitude: 44.39, longitude: -79.688 },
+            ],
+            entryPoint: { latitude: 44.39, longitude: -79.696 },
+            exitPoint: { latitude: 44.39, longitude: -79.688 },
+            confidence: 'medium',
+            canShowDetourPath: true,
+            evidencePointCount: 8,
+            lastEvidenceAt: 20_000,
+            entryIndex: 1,
+            exitIndex: 3,
+            spanMeters: 600,
+          }],
+        },
+      },
+      '12B': {
+        routeId: '12B',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'medium',
+          evidencePointCount: 2,
+          lastEvidenceAt: 15_000,
+          segments: [{
+            shapeId: 'shape-12b',
+            skippedSegmentPolyline: [
+              { latitude: 44.39, longitude: -79.688 },
+              { latitude: 44.39, longitude: -79.696 },
+            ],
+            inferredDetourPolyline: null,
+            entryPoint: { latitude: 44.39, longitude: -79.688 },
+            exitPoint: { latitude: 44.39, longitude: -79.696 },
+            confidence: 'medium',
+            canShowDetourPath: false,
+            evidencePointCount: 2,
+            lastEvidenceAt: 15_000,
+            entryIndex: 0,
+            exitIndex: 2,
+            spanMeters: 600,
+          }],
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+
+    expect(detours['12B'].geometry.canShowDetourPath).toBe(true);
+    expect(detours['12B'].geometry.inferredDetourPolyline).toHaveLength(3);
+    expect(detours['12B'].geometry.segments[0].canShowDetourPath).toBe(true);
+    expect(detours['12B'].geometry.segments[0].inferredDetourPolyline[0].longitude).toBeCloseTo(
+      detours['12B'].geometry.segments[0].entryPoint.longitude,
+      3
+    );
+    expect(detours['12B'].geometry.segments[0].inferredDetourPolyline[2].longitude).toBeCloseTo(
+      detours['12B'].geometry.segments[0].exitPoint.longitude,
+      3
+    );
+    expect(detours['12B'].geometry.segments[0].likelyDetourPolyline[0].longitude).toBeCloseTo(
+      detours['12B'].geometry.segments[0].entryPoint.longitude,
+      3
+    );
+    expect(detours['12B'].geometry.segments[0].likelyDetourPolyline[2].longitude).toBeCloseTo(
+      detours['12B'].geometry.segments[0].exitPoint.longitude,
+      3
+    );
+    expect(detours['12B'].geometry.segments[0].debug.routeFamilyMergeMode).toBe('supplemented-path');
+  });
+
+  test('does not project a sibling detour when the detour path follows the target route regular shape', () => {
+    const familyShapes = new Map([
+      ['shape-12b', [
+        { latitude: 44.390, longitude: -79.700 },
+        { latitude: 44.390, longitude: -79.695 },
+        { latitude: 44.390, longitude: -79.690 },
+      ]],
+      ['shape-12a', [
+        { latitude: 44.392, longitude: -79.700 },
+        { latitude: 44.392, longitude: -79.695 },
+        { latitude: 44.392, longitude: -79.690 },
+      ]],
+    ]);
+    const familyRouteMapping = new Map([
+      ['12A', ['shape-12a']],
+      ['12B', ['shape-12b']],
+    ]);
+    const detours = {
+      '12B': {
+        routeId: '12B',
+        vehicleCount: 2,
+        geometry: {
+          confidence: 'high',
+          evidencePointCount: 8,
+          segments: [{
+            shapeId: 'shape-12b',
+            skippedSegmentPolyline: [
+              { latitude: 44.390, longitude: -79.700 },
+              { latitude: 44.390, longitude: -79.690 },
+            ],
+            inferredDetourPolyline: [
+              { latitude: 44.392, longitude: -79.700 },
+              { latitude: 44.392, longitude: -79.695 },
+              { latitude: 44.392, longitude: -79.690 },
+            ],
+            entryPoint: { latitude: 44.390, longitude: -79.700 },
+            exitPoint: { latitude: 44.390, longitude: -79.690 },
+            confidence: 'high',
+            canShowDetourPath: true,
+            evidencePointCount: 8,
+            entryIndex: 0,
+            exitIndex: 2,
+            spanMeters: 800,
+          }],
+        },
+      },
+    };
+
+    reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
+
+    expect(detours['12B']).toBeDefined();
+    expect(detours['12A']).toBeUndefined();
   });
 
   test('skips sibling route projection when route family handoff is disabled', () => {

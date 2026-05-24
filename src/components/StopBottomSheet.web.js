@@ -6,12 +6,13 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Animated, Linking } from 'react-native';
 import { useStopArrivals } from '../hooks/useStopArrivals';
 import ArrivalRow from './ArrivalRow';
 import PlatformMapCard from './PlatformMapCard';
 import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
+import { getNoticeEndText, getNoticeStartText } from '../utils/noticeTimingUtils';
 
 // SVG Icons
 const CloseIcon = ({ size = 24, color = COLORS.textSecondary }) => (
@@ -115,6 +116,20 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
   }, [stop]);
 
   if (!stop) return null;
+  const closureImpact = stop.closureImpact || null;
+  const upcomingClosureImpact = stop.upcomingClosureImpact || null;
+  const detourNotice = stop.detourNotice || null;
+  const noticeSourceUrl = closureImpact?.sourceUrl || detourNotice?.sourceUrl || null;
+  const upcomingNoticeSourceUrl = upcomingClosureImpact?.sourceUrl || null;
+  const closureEndText = closureImpact ? getNoticeEndText(closureImpact, 'Stop closure end date is not listed.') : null;
+  const closureStartText = upcomingClosureImpact ? getNoticeStartText(upcomingClosureImpact, 'Stop closure start date is not listed.') : null;
+  const detourEndText = detourNotice ? getNoticeEndText(detourNotice, 'Detour end date is not listed.') : null;
+  const handleOpenNotice = () => {
+    if (noticeSourceUrl) Linking.openURL(noticeSourceUrl).catch(() => {});
+  };
+  const handleOpenUpcomingNotice = () => {
+    if (upcomingNoticeSourceUrl) Linking.openURL(upcomingNoticeSourceUrl).catch(() => {});
+  };
 
   return (
     <>
@@ -159,6 +174,51 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
             <CloseIcon size={20} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        {closureImpact && (
+          <View style={styles.closureBanner}>
+            <Text style={styles.closureTitle}>Stop closure reported</Text>
+            <Text style={styles.closureText}>
+              {closureImpact.message || 'This stop is reported closed in Barrie Transit news.'}
+            </Text>
+            {closureEndText && <Text style={styles.noticeTimingText}>{closureEndText}</Text>}
+            {noticeSourceUrl && (
+              <TouchableOpacity style={styles.noticeLinkButton} onPress={handleOpenNotice} accessibilityRole="button" accessibilityLabel="Open MyRide notice">
+                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {upcomingClosureImpact && !closureImpact && (
+          <View style={styles.upcomingClosureBanner}>
+            <Text style={styles.upcomingClosureTitle}>📅 Closure scheduled</Text>
+            <Text style={styles.closureText}>
+              {upcomingClosureImpact.message || 'This stop is scheduled to close based on Barrie Transit news.'}
+            </Text>
+            {closureStartText && <Text style={styles.noticeTimingText}>{closureStartText}</Text>}
+            {upcomingNoticeSourceUrl && (
+              <TouchableOpacity style={styles.noticeLinkButton} onPress={handleOpenUpcomingNotice} accessibilityRole="button" accessibilityLabel="Open MyRide notice">
+                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {detourNotice && (
+          <View style={styles.detourNoticeBanner}>
+            <Text style={styles.detourNoticeTitle}>{detourNotice.title || 'Detour notice'}</Text>
+            <Text style={styles.closureText}>
+              {detourNotice.message || 'This stop may be affected by the active detour.'}
+            </Text>
+            {detourEndText && !closureImpact && <Text style={styles.noticeTimingText}>{detourEndText}</Text>}
+            {noticeSourceUrl && !closureImpact && (
+              <TouchableOpacity style={styles.noticeLinkButton} onPress={handleOpenNotice} accessibilityRole="button" accessibilityLabel="Open MyRide notice">
+                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Actions */}
         <View style={styles.directionsContainer}>
@@ -339,6 +399,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     cursor: 'pointer',
+  },
+  closureBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.errorSubtle,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  closureTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+    marginBottom: SPACING.xxs,
+  },
+  closureText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    lineHeight: 19,
+  },
+  detourNoticeBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.warningSubtle,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  upcomingClosureBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.infoSubtle,
+    borderWidth: 1,
+    borderColor: COLORS.primarySubtle,
+  },
+  upcomingClosureTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+    marginBottom: SPACING.xxs,
+  },
+  detourNoticeTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.warning,
+    marginBottom: SPACING.xxs,
+  },
+  noticeLinkButton: {
+    alignSelf: 'flex-start',
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.white,
+    cursor: 'pointer',
+  },
+  noticeLinkText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  noticeTimingText: {
+    marginTop: SPACING.xs,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
   },
 
   // Direction Buttons

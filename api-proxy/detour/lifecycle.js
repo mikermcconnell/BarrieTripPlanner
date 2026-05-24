@@ -22,6 +22,7 @@ function createSegmentState({
     triggerVehicleId: vehicleId,
     vehiclesOffRoute: new Set(),
     matchedVehicleIds: new Set(),
+    candidateConfirmationIds: new Set(),
     normalRouteVehicleIds: new Set(),
     state: 'active',
     clearPendingAt: null,

@@ -59,6 +59,7 @@ export function normalizeDetourSegment(segment) {
     roadMatchConfidence: segment.roadMatchConfidence ?? null,
     roadMatchSource: segment.roadMatchSource ?? null,
     detourPathLabel: segment.detourPathLabel ?? 'Likely detour path',
+    detourEventId: segment.detourEventId ?? null,
   };
 }
 
@@ -66,6 +67,9 @@ export function mapActiveDetourDoc(docId, data) {
   return {
     routeId: docId,
     shapeId: data.shapeId ?? null,
+    title: data.title ?? null,
+    description: data.description ?? null,
+    locationText: data.locationText ?? null,
     detectedAt: data.detectedAt?.toDate?.()?.toISOString() ?? null,
     lastSeenAt: data.lastSeenAt?.toDate?.()?.toISOString() ?? null,
     vehicleCount: data.vehicleCount ?? 0,
@@ -84,6 +88,15 @@ export function mapActiveDetourDoc(docId, data) {
     roadMatchRawConfidence: data.roadMatchRawConfidence ?? null,
     roadMatchSource: data.roadMatchSource ?? null,
     detourPathLabel: data.detourPathLabel ?? 'Likely detour path',
+    detourEventId: data.detourEventId ?? null,
+    skippedStopIds: Array.isArray(data.skippedStopIds) ? data.skippedStopIds : [],
+    skippedStopCodes: Array.isArray(data.skippedStopCodes) ? data.skippedStopCodes : [],
+    skippedStops: Array.isArray(data.skippedStops) ? data.skippedStops : [],
+    affectedStopIds: Array.isArray(data.affectedStopIds) ? data.affectedStopIds : [],
+    affectedStopCodes: Array.isArray(data.affectedStopCodes) ? data.affectedStopCodes : [],
+    affectedStops: Array.isArray(data.affectedStops) ? data.affectedStops : [],
+    entryStopId: data.entryStopId ?? null,
+    exitStopId: data.exitStopId ?? null,
     entryPoint: normalizeDetourCoordinate(data.entryPoint),
     exitPoint: normalizeDetourCoordinate(data.exitPoint),
     confidence: data.confidence ?? null,

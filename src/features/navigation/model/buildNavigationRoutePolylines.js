@@ -93,7 +93,7 @@ const buildLineStyle = ({ leg, index, currentLegIndex }) => {
       : (leg?.route?.color || COLORS.primary),
     width: isCurrentWalkLeg ? 6 : isWalk ? WALKING_ROUTE_DOT_STROKE_WIDTH : isCurrentLeg ? 7 : 4,
     dashPattern: isCurrentWalkLeg ? null : isWalk ? WALKING_ROUTE_DOT_PATTERN : leg?.isOnDemand ? [8, 6] : null,
-    opacity: isCompletedLeg ? 0.28 : isCurrentLeg ? 1 : 0.62,
+    opacity: 1,
     outlineWidth: isCurrentWalkLeg ? 4 : isWalk ? WALKING_ROUTE_DOT_OUTLINE_WIDTH : 0,
     outlineColor: isCurrentWalkLeg ? COLORS.white : isWalk ? WALKING_ROUTE_DOT_OUTLINE_COLOR : undefined,
   };
@@ -132,7 +132,7 @@ export const buildNavigationRoutePolylines = ({
           color: style.isCurrentWalkLeg ? style.color : '#9E9E9E',
           width: style.width,
           dashPattern: style.dashPattern,
-          opacity: style.isCurrentWalkLeg ? style.opacity : 0.5,
+          opacity: 1,
           outlineWidth: style.outlineWidth,
           outlineColor: style.outlineColor,
         });

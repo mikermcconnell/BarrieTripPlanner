@@ -3,6 +3,7 @@ function createRuntimeStatePersistence({
   activeDetours,
   detourEvidence,
   persistentDetourCandidates,
+  normalDetourCandidates,
   recurringShortDeviationCandidates,
   getMinVehiclesForDetour,
   setMinVehiclesForDetour,
@@ -19,6 +20,24 @@ function createRuntimeStatePersistence({
   normalizeObservation,
   normalizeEvidenceEntry,
 }) {
+  function collectVehicleIdsFromEvidence(items, ids) {
+    for (const item of Array.isArray(items) ? items : []) {
+      const normalized = normalizeEvidenceEntry(item);
+      if (normalized?.vehicleId) ids.add(normalized.vehicleId);
+    }
+  }
+
+  function getRawSegmentEvidenceBackedVehicleIds(rawSegment) {
+    const ids = new Set((rawSegment?.vehiclesOffRoute || []).filter(Boolean));
+    for (const vehicleId of rawSegment?.candidateConfirmationIds || []) {
+      if (vehicleId) ids.add(vehicleId);
+    }
+    const evidence = rawSegment?.evidence || {};
+    collectVehicleIdsFromEvidence(evidence.points, ids);
+    collectVehicleIdsFromEvidence(evidence.confidencePoints, ids);
+    return ids;
+  }
+
   function serializeDetectorRuntimeState() {
     return {
       version: 1,
@@ -30,6 +49,36 @@ function createRuntimeStatePersistence({
           fingerprint: candidate?.fingerprint || null,
           consecutiveMatches: Number(candidate?.consecutiveMatches) || 0,
           lastMatchedAt: toTimestampMs(candidate?.lastMatchedAt) || null,
+        }])
+      ),
+      normalDetourCandidates: Object.fromEntries(
+        [...(normalDetourCandidates?.entries?.() || [])].map(([key, candidate]) => [key, {
+          routeId: candidate?.routeId || null,
+          shapeId: candidate?.shapeId || null,
+          progressMinMeters: Number.isFinite(candidate?.progressMinMeters) ? candidate.progressMinMeters : null,
+          progressMaxMeters: Number.isFinite(candidate?.progressMaxMeters) ? candidate.progressMaxMeters : null,
+          firstSeenAt: toTimestampMs(candidate?.firstSeenAt) || null,
+          lastSeenAt: toTimestampMs(candidate?.lastSeenAt) || null,
+          observations: (candidate?.observations || []).map((observation) => ({
+            routeId: observation?.routeId || null,
+            shapeId: observation?.shapeId || null,
+            progressMinMeters: Number.isFinite(observation?.progressMinMeters)
+              ? observation.progressMinMeters
+              : null,
+            progressMaxMeters: Number.isFinite(observation?.progressMaxMeters)
+              ? observation.progressMaxMeters
+              : null,
+            timestampMs: toTimestampMs(observation?.timestampMs) || null,
+            vehicleId: observation?.vehicleId || null,
+            tripId: observation?.tripId || null,
+            tripShapeId: observation?.tripShapeId || null,
+            signature: observation?.signature || null,
+            entryObservation: normalizeObservation(observation?.entryObservation),
+            exitObservation: normalizeObservation(observation?.exitObservation),
+            evidencePoints: (observation?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+            lastCoordinate: observation?.lastCoordinate || null,
+          })),
+          evidencePoints: (candidate?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
         }])
       ),
       recurringShortDeviationCandidates: Object.fromEntries(
@@ -96,6 +145,7 @@ function createRuntimeStatePersistence({
           triggerVehicleId: segment?.triggerVehicleId || null,
           vehiclesOffRoute: [...(segment?.vehiclesOffRoute || [])].filter(Boolean),
           matchedVehicleIds: [...(segment?.matchedVehicleIds || [])].filter(Boolean),
+          candidateConfirmationIds: [...(segment?.candidateConfirmationIds || [])].filter(Boolean),
           normalRouteVehicleIds: [...(segment?.normalRouteVehicleIds || [])].filter(Boolean),
           state: segment?.state || 'active',
           clearPendingAt: toTimestampMs(segment?.clearPendingAt) || null,
@@ -108,8 +158,15 @@ function createRuntimeStatePersistence({
           detourZone: cloneJson(segment?.detourZone) || null,
           evidence: {
             points: (segment?.evidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            confidencePoints: (segment?.evidence?.confidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
             entryCandidates: (segment?.evidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
             exitCandidates: (segment?.evidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+          },
+          learnedEvidence: {
+            points: (segment?.learnedEvidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            confidencePoints: (segment?.learnedEvidence?.confidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+            entryCandidates: (segment?.learnedEvidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+            exitCandidates: (segment?.learnedEvidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
           },
           shapeIdHint: segment?.shapeIdHint || null,
           progressMinMeters: Number.isFinite(segment?.progressMinMeters) ? segment.progressMinMeters : null,
@@ -125,15 +182,23 @@ function createRuntimeStatePersistence({
     activeDetours.clear();
     detourEvidence.clear();
     persistentDetourCandidates.clear();
+    normalDetourCandidates?.clear?.();
     recurringShortDeviationCandidates.clear();
 
     // Deployment config should win over persisted runtime state.
     // Older snapshots may contain a weaker minimum vehicle threshold, and
     // hydrating that value can re-enable one-bus false-positive publishing
     // after the operator has hardened DETOUR_MIN_UNIQUE_VEHICLES.
+    const configuredMinimumVehicleCount =
+      Number(getMinVehiclesForDetour?.()) ||
+      Number(defaultMinVehiclesForDetour) ||
+      2;
+    const minimumVehicleCount = configuredMinimumVehicleCount > 0
+      ? configuredMinimumVehicleCount
+      : 2;
     setMinVehiclesForDetour(defaultMinVehiclesForDetour);
     setWasInService(typeof snapshot?.wasInService === 'boolean' ? snapshot.wasInService : true);
-    setLastReportedDetours(cloneJson(snapshot?.lastReportedDetours) || null);
+    const rawLastReportedDetours = cloneJson(snapshot?.lastReportedDetours) || null;
 
     for (const [routeId, candidate] of Object.entries(snapshot?.persistentDetourCandidates || {})) {
       if (!candidate?.fingerprint) continue;
@@ -141,6 +206,54 @@ function createRuntimeStatePersistence({
         fingerprint: candidate.fingerprint,
         consecutiveMatches: Number(candidate.consecutiveMatches) || 0,
         lastMatchedAt: toTimestampMs(candidate.lastMatchedAt) || Date.now(),
+      });
+    }
+
+    for (const [key, rawCandidate] of Object.entries(snapshot?.normalDetourCandidates || {})) {
+      const routeId = rawCandidate?.routeId || null;
+      const shapeId = rawCandidate?.shapeId || null;
+      if (!routeId || !shapeId) continue;
+      const observations = (rawCandidate.observations || [])
+        .map((observation) => ({
+          routeId: observation?.routeId || routeId,
+          shapeId: observation?.shapeId || shapeId,
+          progressMinMeters: Number.isFinite(observation?.progressMinMeters)
+            ? observation.progressMinMeters
+            : null,
+          progressMaxMeters: Number.isFinite(observation?.progressMaxMeters)
+            ? observation.progressMaxMeters
+            : null,
+          timestampMs: toTimestampMs(observation?.timestampMs) || null,
+          vehicleId: observation?.vehicleId || null,
+          tripId: observation?.tripId || null,
+          tripShapeId: observation?.tripShapeId || null,
+          signature: observation?.signature || null,
+          entryObservation: normalizeObservation(observation?.entryObservation),
+          exitObservation: normalizeObservation(observation?.exitObservation),
+          evidencePoints: (observation?.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+          lastCoordinate: observation?.lastCoordinate || null,
+        }))
+        .filter((observation) =>
+          Number.isFinite(observation.progressMinMeters) &&
+          Number.isFinite(observation.progressMaxMeters) &&
+          Number.isFinite(observation.timestampMs)
+        );
+      const evidencePoints = (rawCandidate.evidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean);
+      normalDetourCandidates?.set?.(key, {
+        routeId,
+        shapeId,
+        progressMinMeters: Number.isFinite(rawCandidate.progressMinMeters)
+          ? rawCandidate.progressMinMeters
+          : (observations.length > 0 ? Math.min(...observations.map((item) => item.progressMinMeters)) : null),
+        progressMaxMeters: Number.isFinite(rawCandidate.progressMaxMeters)
+          ? rawCandidate.progressMaxMeters
+          : (observations.length > 0 ? Math.max(...observations.map((item) => item.progressMaxMeters)) : null),
+        firstSeenAt: toTimestampMs(rawCandidate.firstSeenAt) ||
+          (observations.length > 0 ? Math.min(...observations.map((item) => item.timestampMs)) : null),
+        lastSeenAt: toTimestampMs(rawCandidate.lastSeenAt) ||
+          (observations.length > 0 ? Math.max(...observations.map((item) => item.timestampMs)) : null),
+        observations,
+        evidencePoints,
       });
     }
 
@@ -233,28 +346,52 @@ function createRuntimeStatePersistence({
       for (const rawSegment of rawRouteState.segments || []) {
         const segmentId = rawSegment?.segmentId;
         if (!segmentId) continue;
+        const vehiclesOffRoute = new Set((rawSegment.vehiclesOffRoute || []).filter(Boolean));
+        const isPersistent = Boolean(rawSegment.isPersistent);
+        const evidenceBackedVehicleIds = getRawSegmentEvidenceBackedVehicleIds(rawSegment);
+        const shouldUseEvidenceBackedVehicleIds =
+          !isPersistent &&
+          minimumVehicleCount > 1 &&
+          evidenceBackedVehicleIds.size > 0;
+        const matchedVehicleIds = shouldUseEvidenceBackedVehicleIds
+          ? evidenceBackedVehicleIds
+          : new Set((rawSegment.matchedVehicleIds || rawSegment.vehiclesOffRoute || []).filter(Boolean));
+        const confirmationVehicleCount = shouldUseEvidenceBackedVehicleIds
+          ? evidenceBackedVehicleIds.size
+          : matchedVehicleIds.size;
+        const isPublished =
+          Boolean(rawSegment.isPublished) &&
+          (isPersistent || confirmationVehicleCount >= minimumVehicleCount);
         routeState.segments.set(segmentId, {
           segmentId,
           detectedAt: toDateOrNow(rawSegment.detectedAt),
           lastSeenAt: toDateOrNow(rawSegment.lastSeenAt),
           triggerVehicleId: rawSegment.triggerVehicleId || null,
-          vehiclesOffRoute: new Set((rawSegment.vehiclesOffRoute || []).filter(Boolean)),
-          matchedVehicleIds: new Set((rawSegment.matchedVehicleIds || rawSegment.vehiclesOffRoute || []).filter(Boolean)),
+          vehiclesOffRoute,
+          matchedVehicleIds,
+          candidateConfirmationIds: new Set((rawSegment.candidateConfirmationIds || []).filter(Boolean)),
           normalRouteVehicleIds: new Set((rawSegment.normalRouteVehicleIds || []).filter(Boolean)),
           state: rawSegment.state || 'active',
           clearPendingAt: toTimestampMs(rawSegment.clearPendingAt),
           clearReason: rawSegment.clearReason || null,
           lastOffRouteEvidenceAt: toTimestampMs(rawSegment.lastOffRouteEvidenceAt) || Date.now(),
           routeConfig,
-          isPublished: Boolean(rawSegment.isPublished),
-          isPersistent: Boolean(rawSegment.isPersistent),
+          isPublished,
+          isPersistent,
           persistentFingerprint: rawSegment.persistentFingerprint || null,
           persistedGeometry: cloneJson(rawSegment.persistedGeometry) || null,
           detourZone: cloneJson(rawSegment.detourZone) || null,
           evidence: {
             points: (rawSegment?.evidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            confidencePoints: (rawSegment?.evidence?.confidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
             entryCandidates: (rawSegment?.evidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
             exitCandidates: (rawSegment?.evidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+          },
+          learnedEvidence: {
+            points: (rawSegment?.learnedEvidence?.points || []).map(normalizeEvidenceEntry).filter(Boolean),
+            confidencePoints: (rawSegment?.learnedEvidence?.confidencePoints || []).map(normalizeEvidenceEntry).filter(Boolean),
+            entryCandidates: (rawSegment?.learnedEvidence?.entryCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
+            exitCandidates: (rawSegment?.learnedEvidence?.exitCandidates || []).map(normalizeEvidenceEntry).filter(Boolean),
           },
           shapeIdHint: rawSegment.shapeIdHint || null,
           progressMinMeters: Number.isFinite(rawSegment.progressMinMeters) ? rawSegment.progressMinMeters : null,
@@ -263,6 +400,22 @@ function createRuntimeStatePersistence({
       }
 
       activeDetours.set(routeId, routeState);
+    }
+
+    if (rawLastReportedDetours) {
+      const publishedRouteIds = new Set();
+      for (const [routeId, routeState] of activeDetours) {
+        const hasPublishedSegment = [...(routeState?.segments?.values?.() || [])]
+          .some((segment) => segment.isPublished);
+        if (hasPublishedSegment) publishedRouteIds.add(routeId);
+      }
+
+      setLastReportedDetours(Object.fromEntries(
+        Object.entries(rawLastReportedDetours)
+          .filter(([routeId]) => publishedRouteIds.has(routeId))
+      ));
+    } else {
+      setLastReportedDetours(null);
     }
 
     return getState();

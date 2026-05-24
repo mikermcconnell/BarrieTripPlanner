@@ -13,13 +13,18 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { Image as RNImage } from 'react-native';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import { OSM_MAP_STYLE } from '../config/constants';
 import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
+import { COLORS } from '../config/theme';
 import { escapeHtml } from '../utils/htmlUtils';
 
 const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css';
 const MAPLIBRE_JS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js';
+const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
+const BUS_HUB_ICON_URI = RNImage.resolveAssetSource?.(BUS_HUB_ICON_SOURCE)?.uri || BUS_HUB_ICON_SOURCE;
+const BUS_HUB_ICON_SCALE = 0.5;
 const MapContext = createContext(null);
 const webMarkerDebugState = new Map();
 const ROUTE_LABEL_DEBUG =
@@ -277,16 +282,69 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
   `;
 };
 
-const createStopHtml = (isSelected, isClosed = false) => {
+const createStopHtml = (isSelected, isClosed = false, stopCode = '') => {
   const size = isSelected ? 16 : 12;
-  const hitArea = 24;
+  const hitArea = isClosed ? 78 : 24;
   const background = isSelected ? '#1a73e8' : 'white';
   const border = isSelected ? 'white' : isClosed ? '#FF991F' : '#1a73e8';
-  const closedDash = isClosed
-    ? '<div style="width:7px;height:2px;border-radius:999px;background:#FF991F;"></div>'
+
+  if (isClosed) {
+    const codeLabel = stopCode
+      ? `<div style="padding:1px 5px;margin:0 0 3px 28px;border-radius:7px;background:#ffffff;border:1px solid #FF991F;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,0.16);color:#FF991F;font:900 10px/1.2 Avenir, Arial, sans-serif;letter-spacing:0.2px;white-space:nowrap;">${escapeHtml(stopCode)}</div>`
+      : '';
+
+    return `<div style="width:${hitArea}px;min-height:${hitArea}px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:visible;">${codeLabel}<div style="background:#ffffff;width:22px;height:22px;border-radius:50%;border:3px solid #FF991F;box-shadow:0 1px 5px rgba(0,0,0,0.2);box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><div style="width:7px;height:7px;border-radius:50%;background:#FF991F;"></div></div></div>`;
+  }
+
+  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;overflow:visible;"><div style="background:${background};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;"></div></div>`;
+};
+
+const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
+  const isMajor = hubType === 'major';
+  const safeLabel = escapeHtml(label);
+  const iconSize = (isMajor ? 54 : 46) * BUS_HUB_ICON_SCALE;
+  const labelHtml = safeLabel
+    ? `<div style="
+        margin-top:1px;
+        max-width:${isMajor ? 184 : 142}px;
+        padding:3px 8px;
+        border-radius:999px;
+        border:1px solid ${isMajor ? 'rgba(0,78,128,0.28)' : 'rgba(52,69,99,0.22)'};
+        background:rgba(255,255,255,0.97);
+        box-shadow:0 1px 4px rgba(0,0,0,0.15);
+        color:${COLORS.textPrimary};
+        font:800 ${isMajor ? 11 : 10}px/1.2 Avenir, Arial, sans-serif;
+        letter-spacing:0.1px;
+        text-align:center;
+        text-shadow:0 1px 0 rgba(255,255,255,0.8);
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        box-sizing:border-box;
+      ">${safeLabel}</div>`
     : '';
 
-  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><div style="background:${background};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;">${closedDash}</div></div>`;
+  return `
+    <div data-bus-hub-icon="true" style="
+      width:${isMajor ? 190 : 150}px;
+      min-height:${isMajor ? 74 : 66}px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      pointer-events:none;
+      overflow:visible;
+    ">
+      <img
+        data-bus-hub-artwork="true"
+        src="${escapeHtml(String(BUS_HUB_ICON_URI))}"
+        alt=""
+        aria-hidden="true"
+        style="display:block;width:${iconSize}px;height:${iconSize}px;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.24));"
+      />
+      ${labelHtml}
+    </div>
+  `;
 };
 
 const buildPopup = (maplibre, popupHtml) => {
@@ -760,6 +818,38 @@ const WebLineLabelLayerComponent = ({
 
 export const WebLineLabelLayer = memo(WebLineLabelLayerComponent);
 
+const WebBusHubLayerComponent = ({ featureCollection }) => {
+  const features = Array.isArray(featureCollection?.features) ? featureCollection.features : [];
+
+  return (
+    <>
+      {features.map((feature) => {
+        const [longitude, latitude] = feature?.geometry?.coordinates || [];
+        const hubType = feature?.properties?.hubType || 'minor';
+        const label = feature?.properties?.label || '';
+
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return null;
+        }
+
+        return (
+          <WebHtmlMarker
+            key={feature.id || feature.properties?.id}
+            coordinate={{ latitude, longitude }}
+            html={createBusHubHtml({ label, hubType })}
+            className={`bus-hub-marker bus-hub-marker-${hubType}`}
+            anchor="center"
+            zIndexOffset={hubType === 'major' ? 655 : 652}
+            accessibilityLabel={label ? `${label} bus hub` : 'Bus hub'}
+          />
+        );
+      })}
+    </>
+  );
+};
+
+export const WebBusHubLayer = memo(WebBusHubLayerComponent);
+
 export const RouteLineLabels = memo(({ coordinates, color, routeLabel }) => (
   <WebRoutePolyline
     coordinates={coordinates}
@@ -876,6 +966,7 @@ export const WebPolygon = memo(({
 
 export const __TEST_ONLY__ = {
   applyLayerEvents,
+  createBusHubHtml,
   createBusHtml,
   resolveLayerCallbacks,
 };
@@ -918,7 +1009,7 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
 export const WebStopMarker = memo(({ stop, onPress, isSelected }) => (
   <WebHtmlMarker
     coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-    html={createStopHtml(isSelected, Boolean(stop.isClosed))}
+    html={createStopHtml(isSelected, Boolean(stop.isClosed), String(stop.code ?? stop.stopCode ?? stop.id ?? ''))}
     zIndexOffset={isSelected ? 1000 : 500}
     onPress={() => onPress?.(stop)}
     popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}${stop.isClosed ? '<br /><span style="color:#8a5a00;">Stop closure reported</span>' : ''}`}

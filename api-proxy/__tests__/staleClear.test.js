@@ -115,7 +115,7 @@ describe('stale detour auto-clear policy', () => {
     expect(decision.thresholdMs).toBe(130 * 60 * 1000);
   });
 
-  test('clears stale low-confidence validation-only detours without waiting for normal-route proof', () => {
+  test('does not clear stale low-confidence validation-only detours without normal-route GPS proof', () => {
     const decision = shouldAutoClearStaleDetour({
       routeId: '8A',
       detour: {
@@ -144,9 +144,57 @@ describe('stale detour auto-clear policy', () => {
       now: sundayAt4pmEt,
     });
 
-    expect(decision.shouldClear).toBe(true);
-    expect(decision.reason).toBe('stale-low-confidence-validation');
+    expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('gps-clear-required');
     expect(decision.staleAgeMs).toBe(70 * 60 * 1000);
+    expect(decision.thresholdMs).toBe(60 * 60 * 1000);
+  });
+
+  test('does not clear current validation-only detours because stale trusted geometry exists', () => {
+    const decision = shouldAutoClearStaleDetour({
+      routeId: '8A',
+      detour: {
+        detectedAt: sundayAt4pmEt - 3 * 60 * 60 * 1000,
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
+        geometry: {
+          confidence: 'low',
+          canShowDetourPath: false,
+          lastEvidenceAt: sundayAt4pmEt - 70 * 60 * 1000,
+          segments: [{
+            confidence: 'low',
+            canShowDetourPath: false,
+            inferredDetourPolyline: [
+              { latitude: 44.39, longitude: -79.69 },
+              { latitude: 44.40, longitude: -79.68 },
+            ],
+          }],
+        },
+      },
+      previousSnapshot: {
+        confidence: 'medium',
+        canShowDetourPath: true,
+        likelyDetourPolyline: [
+          { latitude: 44.391, longitude: -79.691 },
+          { latitude: 44.392, longitude: -79.692 },
+        ],
+        segments: [{
+          confidence: 'medium',
+          canShowDetourPath: true,
+          likelyDetourPolyline: [
+            { latitude: 44.391, longitude: -79.691 },
+            { latitude: 44.392, longitude: -79.692 },
+          ],
+        }],
+      },
+      vehicles: [],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('gps-clear-required');
   });
 
   test('does not clear when no route-family vehicles are currently reporting', () => {

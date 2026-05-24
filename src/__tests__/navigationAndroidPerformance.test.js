@@ -2,6 +2,19 @@ const fs = require('fs');
 const path = require('path');
 
 describe('Navigation Android map performance', () => {
+  test('passive navigation marker views allow map gestures through', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'NavigationScreen.js'),
+      'utf8'
+    );
+
+    const markerViewCount = (source.match(/<MapLibreGL\.MarkerView/g) || []).length;
+    const passThroughCount = (source.match(/pointerEvents="none"/g) || []).length;
+
+    expect(markerViewCount).toBeGreaterThan(0);
+    expect(passThroughCount).toBeGreaterThanOrEqual(markerViewCount);
+  });
+
   test('Android navigation bus markers avoid per-frame JS animation', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'NavigationScreen.js'),

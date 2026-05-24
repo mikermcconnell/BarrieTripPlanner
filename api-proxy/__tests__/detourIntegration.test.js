@@ -99,7 +99,7 @@ function makeFirestoreMock() {
 // ─── Pipeline smoke tests ────────────────────────────────────────────────────
 
 describe('detector → publisher: full pipeline', () => {
-  let processVehicles, clearVehicleState, CONSECUTIVE_READINGS_REQUIRED;
+  let processVehicles, clearVehicleState, setMinVehicles, CONSECUTIVE_READINGS_REQUIRED;
   let publishDetours;
   let mockDb;
 
@@ -111,10 +111,14 @@ describe('detector → publisher: full pipeline', () => {
     const detector = require('../detourDetector');
     processVehicles = detector.processVehicles;
     clearVehicleState = detector.clearVehicleState;
+    setMinVehicles = detector.setMinVehicles;
     CONSECUTIVE_READINGS_REQUIRED = detector.CONSECUTIVE_READINGS_REQUIRED;
     publishDetours = require('../detourPublisher').publishDetours;
 
     clearVehicleState();
+    // These integration tests focus on detector → publisher shape/history writes.
+    // Dedicated detector/config tests cover the production two-bus publish threshold.
+    setMinVehicles(1);
   });
 
   afterEach(() => {
@@ -174,6 +178,83 @@ describe('detector → publisher: full pipeline', () => {
 
     expect(deleteOps).toHaveLength(0);
     expect(setOps).toHaveLength(0);
+  });
+
+  test('publisher clears orphaned Firestore detours even after initial hydration', async () => {
+    const now = Date.parse('2026-05-20T14:00:00Z');
+
+    await publishDetours({}, { now });
+    mockDb._writes.length = 0;
+
+    mockDb._hydrationDocs.push({
+      id: 'route-stale',
+      data: () => ({
+        routeId: 'route-stale',
+        detectedAt: new Date(now - 60 * 60 * 1000),
+        lastSeenAt: new Date(now - 45 * 60 * 1000),
+        updatedAt: now - 45 * 60 * 1000,
+        triggerVehicleId: 'bus-stale',
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 0,
+        state: 'active',
+        confidence: 'medium',
+        evidencePointCount: 8,
+        lastEvidenceAt: now - 45 * 60 * 1000,
+      }),
+    });
+
+    await publishDetours({}, { now: now + 1000 });
+
+    const deleteOps = mockDb._writes.filter(w => w.op === 'delete' && w.collection === 'activeDetours');
+    const historyWrites = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'detourHistory');
+
+    expect(deleteOps).toEqual([
+      expect.objectContaining({ docId: 'route-stale' }),
+    ]);
+    expect(historyWrites).toHaveLength(1);
+    expect(historyWrites[0].data).toMatchObject({
+      eventType: 'DETOUR_CLEARED',
+      routeId: 'route-stale',
+      clearReason: 'detector-cleared',
+      previousVehicleCount: 1,
+      uniqueVehicleCount: 1,
+      currentVehicleCount: 0,
+    });
+  });
+
+  test('publisher can suppress first empty cleanup when runtime and snapshot hydration are empty', async () => {
+    const now = Date.parse('2026-05-20T14:00:00Z');
+    mockDb._hydrationDocs.push({
+      id: 'route-stale',
+      data: () => ({
+        routeId: 'route-stale',
+        detectedAt: new Date(now - 60 * 60 * 1000),
+        lastSeenAt: new Date(now - 45 * 60 * 1000),
+        updatedAt: now - 45 * 60 * 1000,
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        state: 'active',
+        confidence: 'medium',
+        evidencePointCount: 8,
+        lastEvidenceAt: now - 45 * 60 * 1000,
+      }),
+    });
+
+    await publishDetours({}, {
+      now,
+      suppressDeletesWhenEmpty: true,
+      suppressDeleteReason: 'runtime-and-active-snapshot-hydration-empty',
+    });
+
+    expect(mockDb._writes.filter(w => w.op === 'delete' && w.collection === 'activeDetours')).toHaveLength(0);
+
+    await publishDetours({}, { now: now + 1000 });
+
+    expect(mockDb._writes.filter(w => w.op === 'delete' && w.collection === 'activeDetours')).toEqual([
+      expect.objectContaining({ docId: 'route-stale' }),
+    ]);
   });
 
   test('publisher writes DETOUR_DETECTED history event on first publish', async () => {
@@ -279,7 +360,7 @@ describe('detector → publisher: full pipeline', () => {
 // ─── State transition history events ─────────────────────────────────────────
 
 describe('state transitions: active → clear-pending → cleared', () => {
-  let processVehicles, clearVehicleState, CONSECUTIVE_READINGS_REQUIRED, DETOUR_CLEAR_GRACE_MS, DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
+  let processVehicles, clearVehicleState, setMinVehicles, CONSECUTIVE_READINGS_REQUIRED, DETOUR_CLEAR_GRACE_MS, DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
   let publishDetours;
   let mockDb;
   const realDateNow = Date.now;
@@ -315,12 +396,16 @@ describe('state transitions: active → clear-pending → cleared', () => {
     const detector = require('../detourDetector');
     processVehicles = detector.processVehicles;
     clearVehicleState = detector.clearVehicleState;
+    setMinVehicles = detector.setMinVehicles;
     CONSECUTIVE_READINGS_REQUIRED = detector.CONSECUTIVE_READINGS_REQUIRED;
     DETOUR_CLEAR_GRACE_MS = detector.DETOUR_CLEAR_GRACE_MS;
     DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE = detector.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE;
     publishDetours = require('../detourPublisher').publishDetours;
 
     clearVehicleState();
+    // Keep these state-transition tests focused on clear lifecycle behavior.
+    // Dedicated detector/config tests cover the production two-bus publish threshold.
+    setMinVehicles(1);
   });
 
   afterEach(() => {
@@ -416,7 +501,7 @@ describe('state transitions: active → clear-pending → cleared', () => {
 // ─── Geometry write throttling ───────────────────────────────────────────────
 
 describe('geometry write throttling across pipeline', () => {
-  let processVehicles, clearVehicleState;
+  let processVehicles, clearVehicleState, setMinVehicles;
   let publishDetours, GEOMETRY_WRITE_THROTTLE_MS;
   let mockDb;
   const realDateNow = Date.now;
@@ -429,11 +514,15 @@ describe('geometry write throttling across pipeline', () => {
     const detector = require('../detourDetector');
     processVehicles = detector.processVehicles;
     clearVehicleState = detector.clearVehicleState;
+    setMinVehicles = detector.setMinVehicles;
     const publisher = require('../detourPublisher');
     publishDetours = publisher.publishDetours;
     GEOMETRY_WRITE_THROTTLE_MS = publisher.GEOMETRY_WRITE_THROTTLE_MS;
 
     clearVehicleState();
+    // Keep these publisher throttling tests focused on write behavior.
+    // Dedicated detector/config tests cover the production two-bus publish threshold.
+    setMinVehicles(1);
   });
 
   afterEach(() => {

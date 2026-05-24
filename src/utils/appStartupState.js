@@ -2,7 +2,6 @@ const SETTLED_STATUSES = new Set(['healthy', 'degraded', 'error', 'offline']);
 
 export const getAppStartupState = ({
   fontsLoaded = false,
-  minimumStartupElapsed = false,
   authLoading = false,
   isLoadingStatic = false,
   staticError = null,
@@ -41,7 +40,6 @@ export const getAppStartupState = ({
 
   const criticalReady =
     fontsLoaded &&
-    minimumStartupElapsed &&
     !authLoading &&
     staticSettled;
   const optionalReady =
@@ -58,16 +56,6 @@ export const getAppStartupState = ({
       title: 'Getting Barrie Transit ready',
       detail: 'Loading app fonts and assets.',
       statusText: 'Loading app fonts and assets...',
-    };
-  }
-
-  if (!minimumStartupElapsed) {
-    return {
-      ready: false,
-      percent: 25,
-      title: 'Getting Barrie Transit ready',
-      detail: 'Warming up the app.',
-      statusText: 'Warming up the app...',
     };
   }
 

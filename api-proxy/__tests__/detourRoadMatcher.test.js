@@ -127,6 +127,115 @@ describe('detourRoadMatcher', () => {
     ]);
   });
 
+  test('rejects low-confidence OSRM matches instead of publishing rider-facing geometry', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [
+          {
+            confidence: 0.07,
+            geometry: {
+              coordinates: [
+                [-79.6901, 44.3801],
+                [-79.685, 44.385],
+                [-79.6801, 44.3901],
+              ],
+            },
+            legs: [{ steps: [{ name: 'Wonky Road' }] }],
+          },
+        ],
+      }),
+    }));
+
+    const result = await matchPolylineToRoads(INPUT_POLYLINE, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS: '160',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  test('rejects road-matched paths whose endpoints drift too far from the observed detour path', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [
+          {
+            confidence: 0.82,
+            geometry: {
+              coordinates: [
+                [-79.6915, 44.3815],
+                [-79.686, 44.386],
+                [-79.6815, 44.3915],
+              ],
+            },
+            legs: [{ steps: [{ name: 'Drifted Road' }] }],
+          },
+        ],
+      }),
+    }));
+
+    const result = await matchPolylineToRoads(INPUT_POLYLINE, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS: '45',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+
+  test('retries map matching with a smaller radius before route fallback', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ code: 'TooBig', message: 'Radius search size is too large for map matching.' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => OSRM_RESPONSE,
+      });
+
+    const result = await matchPolylineToRoads(INPUT_POLYLINE, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_RADIUS_METERS: '75',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0][0]).toContain('radiuses=75%3B75%3B75');
+    expect(fetchImpl.mock.calls[1][0]).toContain('radiuses=25%3B25%3B25');
+    expect(fetchImpl.mock.calls[1][0]).toContain('/match/v1/driving/');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[detourRoadMatcher] OSRM match attempt failed'),
+      expect.objectContaining({ radiusMeters: 75, reason: expect.stringContaining('HTTP 400') })
+    );
+    expect(result.roadMatchSource).toBe('osrm-match');
+    expect(result.roadMatchConfidence).toBe('high');
+    warnSpy.mockRestore();
+  });
+
   test('falls back to OSRM route when trace matching has no usable geometry', async () => {
     const fetchImpl = jest
       .fn()
@@ -235,7 +344,7 @@ describe('detourRoadMatcher', () => {
                   [-79.688, 44.382],
                   [-79.689, 44.381],
                   [-79.690, 44.380],
-                  [-79.680, 44.380],
+                  [-79.6801, 44.3901],
                 ],
               },
               legs: [
@@ -251,6 +360,7 @@ describe('detourRoadMatcher', () => {
       env: {
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS: '160',
       },
       fetchImpl,
     });
@@ -259,7 +369,7 @@ describe('detourRoadMatcher', () => {
     expect(result.likelyDetourPolyline).toEqual([
       { latitude: 44.379, longitude: -79.691 },
       { latitude: 44.38, longitude: -79.69 },
-      { latitude: 44.38, longitude: -79.68 },
+      { latitude: 44.3901, longitude: -79.6801 },
     ]);
   });
 
@@ -404,6 +514,85 @@ describe('detourRoadMatcher', () => {
     expect(result.segments[0].roadMatchSource).toBe('osrm-match');
   });
 
+  test('matches trusted segments even when a multi-segment detour has a stale top-level path', async () => {
+    const staleTopLevelPath = [
+      { latitude: 44.388, longitude: -79.691 },
+      { latitude: 44.387, longitude: -79.690 },
+    ];
+    const trustedSegmentPath = [
+      { latitude: 44.33657, longitude: -79.66937 },
+      { latitude: 44.3364, longitude: -79.67046 },
+      { latitude: 44.33515, longitude: -79.67443 },
+      { latitude: 44.33304, longitude: -79.67401 },
+    ];
+    const matchedTrustedSegmentPath = [
+      { latitude: 44.3366, longitude: -79.6693 },
+      { latitude: 44.3355, longitude: -79.6720 },
+      { latitude: 44.3331, longitude: -79.6740 },
+    ];
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          matchings: [{
+            confidence: 0.8,
+            geometry: {
+              coordinates: [
+                [-79.691, 44.388],
+                [-79.690, 44.387],
+              ],
+            },
+            legs: [{ steps: [{ name: 'Maple Avenue' }] }],
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          matchings: [{
+            confidence: 0.86,
+            geometry: {
+              coordinates: matchedTrustedSegmentPath.map((point) => [point.longitude, point.latitude]),
+            },
+            legs: [{ steps: [{ name: 'Hooper Road' }, { name: 'Saunders Road' }] }],
+          }],
+        }),
+      });
+
+    const result = await matchDetourGeometry({
+      shapeId: '12A',
+      inferredDetourPolyline: staleTopLevelPath,
+      segments: [
+        {
+          segmentId: 'south-segment',
+          inferredDetourPolyline: trustedSegmentPath,
+          canShowDetourPath: true,
+        },
+        {
+          segmentId: 'low-segment',
+          inferredDetourPolyline: staleTopLevelPath,
+          canShowDetourPath: false,
+        },
+      ],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.likelyDetourRoadNames).toEqual(['Hooper Road', 'Saunders Road']);
+    expect(result.likelyDetourPolyline).toEqual(matchedTrustedSegmentPath);
+    expect(result.segments[0].likelyDetourPolyline).toEqual(matchedTrustedSegmentPath);
+    expect(result.segments[0].roadMatchSource).toBe('osrm-match');
+    expect(result.segments[1].likelyDetourPolyline).toBeUndefined();
+  });
+
   test('does not road-match untrusted sparse detour paths', async () => {
     const fetchImpl = jest.fn(async () => ({
       ok: true,
@@ -433,6 +622,65 @@ describe('detourRoadMatcher', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result.likelyDetourPolyline).toBeUndefined();
     expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+  });
+
+  test('clears stale low-confidence likely paths when a fresh match is rejected', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const staleLikelyPath = [
+      { latitude: 44.389976, longitude: -79.690763 },
+      { latitude: 44.389413, longitude: -79.690277 },
+    ];
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [
+          {
+            confidence: 0.07,
+            geometry: {
+              coordinates: staleLikelyPath.map((point) => [point.longitude, point.latitude]),
+            },
+            legs: [{ steps: [{ name: 'Old Low Confidence Road' }] }],
+          },
+        ],
+      }),
+    }));
+
+    const result = await matchDetourGeometry({
+      shapeId: 'shape-8',
+      inferredDetourPolyline: INPUT_POLYLINE,
+      likelyDetourPolyline: staleLikelyPath,
+      roadMatchSource: 'osrm-match',
+      roadMatchConfidence: 'low',
+      roadMatchRawConfidence: 0.07,
+      likelyDetourRoadNames: ['Old Low Confidence Road'],
+      segments: [
+        {
+          segmentId: 'segment-8',
+          inferredDetourPolyline: INPUT_POLYLINE,
+          likelyDetourPolyline: staleLikelyPath,
+          roadMatchSource: 'osrm-match',
+          roadMatchConfidence: 'low',
+          roadMatchRawConfidence: 0.07,
+          likelyDetourRoadNames: ['Old Low Confidence Road'],
+          canShowDetourPath: true,
+        },
+      ],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+      },
+      fetchImpl,
+    });
+
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.roadMatchSource).toBeUndefined();
+    expect(result.roadMatchConfidence).toBeUndefined();
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].roadMatchSource).toBeUndefined();
+    expect(result.segments[0].roadMatchConfidence).toBeUndefined();
+    warnSpy.mockRestore();
   });
 
   test('rejects road-matched paths that mostly reuse the skipped closed segment', async () => {

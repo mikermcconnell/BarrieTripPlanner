@@ -31,6 +31,14 @@ describe('shouldRenderRouteShape', () => {
     })).toBe(false);
   });
 
+  test('keeps sibling variant corridors visible in focused detour mode', () => {
+    expect(shouldRenderRouteShape({
+      routeId: '12A',
+      hasDetourFocus: true,
+      focusedDetourRouteId: '12B',
+    })).toBe(true);
+  });
+
   test('matches route ids across string and numeric forms', () => {
     expect(shouldRenderRouteShape({
       routeId: 100,

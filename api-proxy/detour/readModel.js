@@ -42,6 +42,7 @@ function createDetectorReadModel({
   resetPersistentCandidate,
   buildRouteSnapshot,
   reconcileRouteFamilyGeometries,
+  enrichDetourMapStopImpacts,
   toTimestampMs,
 }) {
   function getActiveDetours(shapes, routeShapeMapping, options = {}) {
@@ -50,7 +51,14 @@ function createDetectorReadModel({
     const shouldTrackPersistentLearning = options.trackPersistentLearning !== false;
 
     for (const [routeId, routeState] of activeDetours) {
-      const snapshot = buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now);
+      const snapshot = buildRouteSnapshot(
+        routeId,
+        routeState,
+        shapes,
+        routeShapeMapping,
+        now,
+        options.stopImpactData || null
+      );
       if (!snapshot) continue;
 
       if (snapshot.isPersistent && snapshot.detourZone) {
@@ -59,7 +67,7 @@ function createDetectorReadModel({
 
       if (shouldTrackPersistentLearning) {
         if (getSegmentCount(routeState) === 1) {
-          trackPersistentLearning(routeId, snapshot, snapshot.geometry, now);
+          trackPersistentLearning(routeId, snapshot, snapshot.geometry, now, routeState);
         } else {
           resetPersistentCandidate(routeId);
         }
@@ -76,6 +84,7 @@ function createDetectorReadModel({
 
     if (shapes && routeShapeMapping) {
       reconcileRouteFamilyGeometries(result, shapes, routeShapeMapping);
+      enrichDetourMapStopImpacts?.(result, shapes, options.stopImpactData || null);
     }
     setLastReportedDetours(result);
     return result;

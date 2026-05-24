@@ -22,12 +22,11 @@ describe('map line styles', () => {
     expect(BUS_APPROACH_LINE_OPACITY).toBeGreaterThanOrEqual(0.9);
   });
 
-  test('route line polish uses white halos and soft muted context lines', () => {
+  test('route line polish uses white halos and fully opaque context lines', () => {
     expect(ROUTE_LINE_OUTLINE_COLOR).toBe('#FFFFFF');
     expect(ROUTE_LINE_MUTED_COLOR).toBe('#B6C0CC');
-    expect(ROUTE_LINE_MUTED_OPACITY).toBeGreaterThanOrEqual(0.3);
-    expect(ROUTE_LINE_CONTEXT_OPACITY).toBeGreaterThan(ROUTE_LINE_MUTED_OPACITY);
-    expect(ROUTE_LINE_CONTEXT_OPACITY).toBeGreaterThanOrEqual(0.4);
+    expect(ROUTE_LINE_MUTED_OPACITY).toBe(1);
+    expect(ROUTE_LINE_CONTEXT_OPACITY).toBe(1);
     expect(ROUTE_LINE_WIDTH_SCALE).toBe(1.5);
   });
 });

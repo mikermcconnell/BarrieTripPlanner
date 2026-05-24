@@ -7,14 +7,17 @@ const {
   getPersistentDetours,
   serializeDetectorRuntimeState,
   hydrateRuntimeState,
+  hydrateActiveDetourSnapshots,
 } = require('./detourDetector');
 const { publishDetours } = require('./detourPublisher');
 const { loadPersistentDetours, syncPersistentDetours } = require('./persistentDetourStore');
+const { loadActiveDetourSnapshots } = require('./activeDetourSnapshotStore');
 const {
   loadDetourRuntimeState,
   saveDetourRuntimeState,
 } = require('./detourRuntimeStateStore');
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
+const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
@@ -34,6 +37,7 @@ let runtimeStateHydrated = false;
 let lastTickStartedAt = null;
 let lastTickFinishedAt = null;
 let lastTickSource = null;
+const vehicleSampleFreshness = createVehicleSampleFreshnessTracker();
 const recentEvents = [];
 
 function getWorkerMode() {
@@ -50,20 +54,38 @@ function detourKeys(detours) {
   return new Set(Object.keys(detours));
 }
 
-async function ensurePersistentDetoursHydrated() {
-  if (persistentDetoursHydrated) return;
-  const records = await loadPersistentDetours();
+async function ensurePersistentDetoursHydrated({ force = false } = {}) {
+  if (persistentDetoursHydrated && !force) return;
+  const records = await loadPersistentDetours({ force });
   hydratePersistentDetours(records);
   persistentDetoursHydrated = true;
 }
 
 async function ensureRuntimeStateHydrated({ force = false } = {}) {
-  if (runtimeStateHydrated && !force) return;
-  const snapshot = await loadDetourRuntimeState();
+  if (runtimeStateHydrated && !force) {
+    const activeRouteCount = Object.keys(getState().detours || {}).length;
+    return {
+      attempted: false,
+      snapshotLoaded: null,
+      snapshotRouteCount: null,
+      activeRouteCount,
+      needsActiveSnapshotFallback: activeRouteCount === 0,
+    };
+  }
+  const snapshot = await loadDetourRuntimeState({ force });
   if (snapshot) {
     hydrateRuntimeState(snapshot);
   }
   runtimeStateHydrated = true;
+  const snapshotRouteCount = Array.isArray(snapshot?.routes) ? snapshot.routes.length : 0;
+  const activeRouteCount = Object.keys(getState().detours || {}).length;
+  return {
+    attempted: true,
+    snapshotLoaded: Boolean(snapshot),
+    snapshotRouteCount,
+    activeRouteCount,
+    needsActiveSnapshotFallback: !snapshot || snapshotRouteCount === 0 || activeRouteCount === 0,
+  };
 }
 
 function recordStateTransitions(prevSnapshot, activeDetours) {
@@ -107,8 +129,21 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
   lastTickStartedAt = new Date().toISOString();
 
   try {
-    await ensurePersistentDetoursHydrated();
-    await ensureRuntimeStateHydrated({ force: forceReloadState });
+    await ensurePersistentDetoursHydrated({ force: forceReloadState });
+    const runtimeHydration = await ensureRuntimeStateHydrated({ force: forceReloadState });
+    let activeSnapshotHydration = {
+      attempted: false,
+      snapshotCount: 0,
+      hydratedCount: 0,
+    };
+    if (runtimeHydration?.needsActiveSnapshotFallback) {
+      const activeSnapshots = await loadActiveDetourSnapshots({ force: forceReloadState });
+      activeSnapshotHydration = {
+        attempted: true,
+        snapshotCount: Object.keys(activeSnapshots || {}).length,
+        hydratedCount: hydrateActiveDetourSnapshots(activeSnapshots),
+      };
+    }
 
     const data = await getStaticData();
     if (data.lastRefresh !== lastGtfsRefresh) {
@@ -125,16 +160,37 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       );
     }
     const tripObj = Object.fromEntries(data.tripMapping);
-    const vehicles = await fetchVehicles(tripObj);
+    const fetchedVehicles = await fetchVehicles(tripObj);
+    const vehicles = vehicleSampleFreshness.filterFreshSamples(fetchedVehicles);
+    const vehicleSampleStats = vehicleSampleFreshness.getStats();
 
     const prevSnapshot = getState();
-    const activeDetours = processVehicles(vehicles, baseline.shapes, baseline.routeShapeMapping, data.tripMapping);
+    const activeDetours = processVehicles(
+      vehicles,
+      baseline.shapes,
+      baseline.routeShapeMapping,
+      data.tripMapping,
+      {
+        stopsById: data.stopsById,
+        routeStopSequencesMapping: data.routeStopSequencesMapping,
+        scheduleIndex: data.scheduleIndex,
+      }
+    );
     recordStateTransitions(prevSnapshot, activeDetours);
 
     try {
+      const suppressDeletesWhenEmpty =
+        runtimeHydration?.needsActiveSnapshotFallback === true &&
+        activeSnapshotHydration.attempted === true &&
+        activeSnapshotHydration.hydratedCount === 0 &&
+        Object.keys(activeDetours).length === 0;
       await publishDetours(activeDetours, {
         vehicles,
         scheduleIndex: data.scheduleIndex,
+        suppressDeletesWhenEmpty,
+        suppressDeleteReason: suppressDeletesWhenEmpty
+          ? 'runtime-and-active-snapshot-hydration-empty'
+          : undefined,
       });
       await syncPersistentDetours(getPersistentDetours());
       await saveDetourRuntimeState(serializeDetectorRuntimeState());
@@ -151,14 +207,18 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     consecutiveFailureCount = 0;
     const detourCount = Object.keys(activeDetours).length;
     console.log(
-      `[detourWorker] tick #${tickCount} (${source}): ${vehicles.length} vehicles, ${detourCount} detours`
+      `[detourWorker] tick #${tickCount} (${source}): ` +
+      `${vehicles.length}/${fetchedVehicles.length} fresh vehicles, ${detourCount} detours`
     );
 
     return {
       ok: true,
       skipped: false,
       vehiclesProcessed: vehicles.length,
+      vehiclesFetched: fetchedVehicles.length,
+      duplicateVehicleSamplesSkipped: vehicleSampleStats.duplicateCount,
       detourCount,
+      activeSnapshotHydration,
       tickCount,
       status: getStatus(),
     };
@@ -220,6 +280,7 @@ function getStatus() {
     lastGtfsRefresh: lastGtfsRefresh ? new Date(lastGtfsRefresh).toISOString() : null,
     activeDetours: detourSummary,
     baseline: getBaselineStatus(),
+    vehicleSamples: vehicleSampleFreshness.getStats(),
     recentEvents: [...recentEvents],
     errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures },
   };

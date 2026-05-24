@@ -17,6 +17,7 @@ const {
   hasRenderableSegment,
   hasRenderableGeometry,
 } = require('./detour/geometry/routeFamilyReconciliation');
+const { deriveSegmentStopImpacts } = require('./detour/stopImpacts');
 const { getRouteDetectorConfig } = require('./detourRouteConfig');
 
 // Minimum evidence points needed for any geometry output.
@@ -54,6 +55,9 @@ const MULTI_VEHICLE_PATH_MIN_UNIQUE_VEHICLES = 2;
 const ROUTE_FAMILY_SEGMENT_MATCH_METERS = Number.parseFloat(
   process.env.DETOUR_ROUTE_FAMILY_SEGMENT_MATCH_METERS || '250'
 );
+const ROUTE_FAMILY_TARGET_ROUTE_OVERLAP_METERS = Number.parseFloat(
+  process.env.DETOUR_ROUTE_FAMILY_TARGET_ROUTE_OVERLAP_METERS || '75'
+);
 const ENABLE_ROUTE_FAMILY_HANDOFF = process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF
   ? process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF === 'true'
   : true;
@@ -71,11 +75,13 @@ const reconcileRouteFamilyGeometries = createRouteFamilyReconciler({
   segmentMatchMeters: ROUTE_FAMILY_SEGMENT_MATCH_METERS,
   minLinearSegmentLengthMeters: MIN_LINEAR_SEGMENT_LENGTH_METERS,
   haversineDistance,
+  pointToPolylineDistance,
   findClosestShapePoint,
   buildCumulativeDistances,
   extractSkippedSegmentByProgress,
   dedupeConsecutivePoints,
   pickPrimarySegment,
+  targetRouteOverlapMeters: ROUTE_FAMILY_TARGET_ROUTE_OVERLAP_METERS,
 });
 
 function resolveShapeSelectionCandidates(shapeIds, evidenceGroups = []) {
@@ -1162,6 +1168,66 @@ function publishableSegment(shapeId, segment) {
   };
 }
 
+function enrichSegmentsWithStopImpacts(routeId, segments, shapes, fallbackShapeId, stopImpactData) {
+  if (!stopImpactData || !Array.isArray(segments) || segments.length === 0 || !(shapes instanceof Map)) {
+    return Array.isArray(segments) ? segments : [];
+  }
+
+  return segments.map((segment) => {
+    const shapeId = segment?.shapeId || fallbackShapeId || null;
+    const polyline = shapeId ? shapes.get(shapeId) : null;
+    const stopImpacts = deriveSegmentStopImpacts({
+      routeId,
+      shapeId,
+      segment,
+      polyline,
+      stopImpactData,
+    });
+
+    return Object.keys(stopImpacts).length > 0
+      ? { ...segment, ...stopImpacts }
+      : segment;
+  });
+}
+
+function enrichGeometryStopImpacts(routeId, geometry, shapes, stopImpactData) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+  const segments = enrichSegmentsWithStopImpacts(
+    routeId,
+    geometry.segments,
+    shapes,
+    geometry.shapeId,
+    stopImpactData
+  );
+  if (!Array.isArray(segments) || segments.length === 0) return geometry;
+
+  const primarySegment = pickPrimarySegment(segments);
+  return {
+    ...geometry,
+    segments,
+    skippedStopIds: primarySegment?.skippedStopIds || [],
+    skippedStopCodes: primarySegment?.skippedStopCodes || [],
+    skippedStops: primarySegment?.skippedStops || [],
+    affectedStopIds: primarySegment?.affectedStopIds || [],
+    affectedStopCodes: primarySegment?.affectedStopCodes || [],
+    affectedStops: primarySegment?.affectedStops || [],
+    entryStopId: primarySegment?.entryStopId || null,
+    exitStopId: primarySegment?.exitStopId || null,
+  };
+}
+
+function enrichDetourMapStopImpacts(detourMap, shapes, stopImpactData) {
+  if (!detourMap || typeof detourMap !== 'object') return detourMap;
+  if (!(shapes instanceof Map) || !stopImpactData) return detourMap;
+
+  Object.entries(detourMap).forEach(([routeId, detour]) => {
+    if (!detour?.geometry) return;
+    detour.geometry = enrichGeometryStopImpacts(routeId, detour.geometry, shapes, stopImpactData);
+  });
+
+  return detourMap;
+}
+
 /**
  * Score geometry confidence based on evidence density, duration, and vehicle count.
  */
@@ -1219,7 +1285,7 @@ function scoreConfidence(evidencePoints, detectedAtMs, now, routeConfig = {}) {
 /**
  * Top-level geometry builder. Called per active detour when building the snapshot.
  */
-function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, detectedAtMs) {
+function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, detectedAtMs, stopImpactData = null) {
   const routeConfig = getRouteDetectorConfig(routeId, {});
   const minEvidenceForGeometry = Number.isFinite(routeConfig.minEvidenceForGeometry)
     ? routeConfig.minEvidenceForGeometry
@@ -1313,6 +1379,7 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
 
   if (segments.length === 0) return empty;
 
+  segments = enrichSegmentsWithStopImpacts(routeId, segments, shapes, bestShape.shapeId, stopImpactData);
   const primarySegment = pickPrimarySegment(segments);
   const confidence = scoreConfidence(confidencePoints, detectedAtMs, now, routeConfig);
 
@@ -1325,6 +1392,14 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
     exitPoint: primarySegment?.exitPoint ?? null,
     confidence,
     canShowDetourPath: primarySegment?.canShowDetourPath === true,
+    skippedStopIds: primarySegment?.skippedStopIds || [],
+    skippedStopCodes: primarySegment?.skippedStopCodes || [],
+    skippedStops: primarySegment?.skippedStops || [],
+    affectedStopIds: primarySegment?.affectedStopIds || [],
+    affectedStopCodes: primarySegment?.affectedStopCodes || [],
+    affectedStops: primarySegment?.affectedStops || [],
+    entryStopId: primarySegment?.entryStopId || null,
+    exitStopId: primarySegment?.exitStopId || null,
     evidencePointCount: points.length,
     lastEvidenceAt,
     debug: {
@@ -1360,6 +1435,8 @@ module.exports = {
   getRouteFamilyKey,
   hasRenderableSegment,
   hasRenderableGeometry,
+  enrichGeometryStopImpacts,
+  enrichDetourMapStopImpacts,
   reconcileRouteFamilyGeometries,
   extractSkippedSegment,
   extractSkippedSegmentByProgress,

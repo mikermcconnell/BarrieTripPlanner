@@ -8,10 +8,50 @@ const SUSPICIOUS_SHORT_LIVED_DURATION_MS = 15 * 60 * 1000;
 const MAX_FALSE_POSITIVE_RATE = 0.10;
 const MAX_PUBLISH_FAILURE_RATE = 0.05;
 const MAX_CONSECUTIVE_FAILURES = 2;
+const DEFAULT_BURST_DURATION_MS = 50 * 1000;
+const DEFAULT_BURST_SAMPLE_INTERVAL_MS = 15 * 1000;
+const DEFAULT_BURST_MAX_SAMPLES = 4;
+const MAX_BURST_SAMPLES = 10;
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value || ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clampPositiveInt(value, fallback, max) {
+  return Math.min(parsePositiveInt(value, fallback), max);
+}
+
+function parseBurstSamplingConfig(env, status) {
+  const mode = String(status?.mode || env.DETOUR_WORKER_MODE || '').trim().toLowerCase();
+  const enabled = env.DETOUR_BURST_SAMPLING_ENABLED === 'true' && mode === 'scheduled';
+
+  return {
+    enabled,
+    durationMs: parsePositiveInt(env.DETOUR_BURST_DURATION_MS, DEFAULT_BURST_DURATION_MS),
+    sampleIntervalMs: parsePositiveInt(
+      env.DETOUR_BURST_SAMPLE_INTERVAL_MS,
+      DEFAULT_BURST_SAMPLE_INTERVAL_MS
+    ),
+    maxSamples: clampPositiveInt(env.DETOUR_BURST_MAX_SAMPLES, DEFAULT_BURST_MAX_SAMPLES, MAX_BURST_SAMPLES),
+  };
+}
+
+function summarizeBurstSample(result, index) {
+  return {
+    index,
+    ok: result?.ok === true,
+    skipped: result?.skipped === true,
+    reason: result?.reason || null,
+    error: result?.error || null,
+    vehiclesProcessed: Number.isFinite(result?.vehiclesProcessed) ? result.vehiclesProcessed : null,
+    vehiclesFetched: Number.isFinite(result?.vehiclesFetched) ? result.vehiclesFetched : null,
+    duplicateVehicleSamplesSkipped: Number.isFinite(result?.duplicateVehicleSamplesSkipped)
+      ? result.duplicateVehicleSamplesSkipped
+      : null,
+    detourCount: Number.isFinite(result?.detourCount) ? result.detourCount : null,
+    tickCount: Number.isFinite(result?.tickCount) ? result.tickCount : null,
+  };
 }
 
 function buildLaunchReadinessChecks({
@@ -154,8 +194,11 @@ function createDetourOps({
   queryDetourHistory = getDetourHistory,
   getBaselineStatusWithDivergence = async () => null,
   now = () => Date.now(),
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   env = process.env,
 } = {}) {
+  let runOnceInProgress = false;
+
   function getStatus() {
     if (!detourWorker) {
       return { enabled: false };
@@ -170,6 +213,68 @@ function createDetourOps({
     return { enabled: true, ...status };
   }
 
+  async function runSingleTick() {
+    const result = await detourWorker.runTick({
+      source: 'api-run-once',
+      forceReloadState: true,
+    });
+
+    return {
+      status: !result.ok && !result.skipped ? 500 : 200,
+      body: result,
+    };
+  }
+
+  async function runBurstSamples(config) {
+    const startedAt = now();
+    const samples = [];
+
+    for (let i = 0; i < config.maxSamples; i++) {
+      const result = await detourWorker.runTick({
+        source: 'api-run-once-burst',
+        forceReloadState: i === 0,
+      });
+      samples.push(result);
+
+      const nextSampleIndex = i + 1;
+      if (nextSampleIndex >= config.maxSamples) break;
+
+      const nextDueAt = startedAt + nextSampleIndex * config.sampleIntervalMs;
+      const burstEndsAt = startedAt + config.durationMs;
+      if (nextDueAt > burstEndsAt) break;
+
+      const delayMs = Math.max(0, Math.min(nextDueAt - now(), burstEndsAt - now()));
+      if (delayMs <= 0 && now() >= burstEndsAt) break;
+      await sleep(delayMs);
+    }
+
+    const okSamples = samples.filter((sample) => sample?.ok === true).length;
+    const skippedSamples = samples.filter((sample) => sample?.skipped === true).length;
+    const failedSamples = samples.length - okSamples - skippedSamples;
+    const finalResult = [...samples].reverse().find((sample) => sample?.ok === true) ||
+      samples[samples.length - 1] ||
+      { ok: false, skipped: false, error: 'No burst samples ran' };
+
+    return {
+      status: okSamples > 0 || skippedSamples > 0 ? 200 : 500,
+      body: {
+        ...finalResult,
+        ok: okSamples > 0,
+        burstSampling: {
+          enabled: true,
+          sampleCount: samples.length,
+          okSamples,
+          failedSamples,
+          skippedSamples,
+          durationMs: config.durationMs,
+          sampleIntervalMs: config.sampleIntervalMs,
+          maxSamples: config.maxSamples,
+          samples: samples.map((sample, index) => summarizeBurstSample(sample, index + 1)),
+        },
+      },
+    };
+  }
+
   async function runOnce() {
     if (!detourWorker || typeof detourWorker.runTick !== 'function') {
       return {
@@ -182,15 +287,28 @@ function createDetourOps({
       };
     }
 
-    const result = await detourWorker.runTick({
-      source: 'api-run-once',
-      forceReloadState: true,
-    });
+    if (runOnceInProgress) {
+      return {
+        status: 200,
+        body: {
+          ok: false,
+          skipped: true,
+          reason: 'run-once-in-progress',
+          status: detourWorker.getStatus?.() || null,
+        },
+      };
+    }
 
-    return {
-      status: !result.ok && !result.skipped ? 500 : 200,
-      body: result,
-    };
+    runOnceInProgress = true;
+    try {
+      const status = detourWorker.getStatus?.() || {};
+      const burstConfig = parseBurstSamplingConfig(env, status);
+      return await (burstConfig.enabled
+        ? runBurstSamples(burstConfig)
+        : runSingleTick());
+    } finally {
+      runOnceInProgress = false;
+    }
   }
 
   function getDebug(routeId = null) {

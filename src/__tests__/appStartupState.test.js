@@ -3,7 +3,6 @@ import { getAppStartupState } from '../utils/appStartupState';
 describe('getAppStartupState', () => {
   const readyBase = {
     fontsLoaded: true,
-    minimumStartupElapsed: true,
     authLoading: false,
     isLoadingStatic: false,
     routesCount: 20,
@@ -88,6 +87,15 @@ describe('getAppStartupState', () => {
         realtimeVehicles: { status: 'loading' },
         proxyApi: { status: 'loading' },
       },
+    });
+
+    expect(state.ready).toBe(true);
+  });
+
+  test('does not hold startup for an artificial minimum loading time', () => {
+    const state = getAppStartupState({
+      ...readyBase,
+      minimumStartupElapsed: false,
     });
 
     expect(state.ready).toBe(true);

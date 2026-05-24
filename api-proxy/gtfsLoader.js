@@ -1,4 +1,5 @@
 const JSZip = require('jszip');
+const { buildRouteStopSequencesMapping } = require('./detour/stopImpacts');
 
 const GTFS_URL = 'https://www.myridebarrie.ca/gtfs/Google_transit.zip';
 const CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -12,6 +13,7 @@ let cache = {
   scheduleIndex: null,
   stopsById: null,
   stopsByCode: null,
+  routeStopSequencesMapping: null,
   lastRefresh: null,
 };
 let refreshPromise = null;
@@ -159,6 +161,7 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const shapesRaw = parseCSV(shapesCSV);
   const tripsRaw = parseCSV(tripsCSV);
   const stopsRaw = extra.stopsCSV ? parseCSV(extra.stopsCSV) : [];
+  const stopTimesRaw = extra.stopTimesCSV ? parseCSV(extra.stopTimesCSV) : [];
 
   const shapes = new Map();
   for (const row of shapesRaw) {
@@ -196,6 +199,7 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
     calendarCSV: extra.calendarCSV,
     calendarDatesCSV: extra.calendarDatesCSV,
   });
+  const routeStopSequencesMapping = buildRouteStopSequencesMapping(tripsRaw, stopTimesRaw);
 
   const stopsById = new Map();
   const stopsByCode = new Map();
@@ -213,7 +217,15 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
     if (stop.code) stopsByCode.set(stop.code, stop);
   }
 
-  return { shapes, tripMapping, routeShapeMapping, scheduleIndex, stopsById, stopsByCode };
+  return {
+    shapes,
+    tripMapping,
+    routeShapeMapping,
+    scheduleIndex,
+    stopsById,
+    stopsByCode,
+    routeStopSequencesMapping,
+  };
 }
 
 async function refreshData() {
@@ -270,6 +282,7 @@ async function getStaticData() {
     scheduleIndex: cache.scheduleIndex,
     stopsById: cache.stopsById,
     stopsByCode: cache.stopsByCode,
+    routeStopSequencesMapping: cache.routeStopSequencesMapping,
     lastRefresh: cache.lastRefresh,
   };
 }

@@ -14,7 +14,6 @@ import { getMatchingDetourRouteIds } from '../utils/routeDetourMatching';
 import { getRouteFamilyId, normalizeRouteId } from '../utils/routeDetourMatching';
 import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 import { haversineDistance, pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
-import runtimeConfig from '../config/runtimeConfig';
 
 const DETOUR_COLORS = {
   SKIPPED: COLORS.error,   // closed regular route segment riders should not expect service on
@@ -35,6 +34,13 @@ const getOverlayRouteColor = (routeId, routeColorByRouteId = {}) => {
 const getLikelyDetourPath = (segment) => (
   segment?.likelyDetourPolyline?.length >= 2
     ? segment.likelyDetourPolyline
+    : null
+);
+
+const getTrustedInferredDetourPath = (segment) => (
+  segment?.canShowDetourPath === true &&
+  segment?.inferredDetourPolyline?.length >= 2
+    ? segment.inferredDetourPolyline
     : null
 );
 
@@ -370,12 +376,11 @@ const trimOverlappingSegmentGeometry = (segment) => {
 };
 
 const getPrimaryRenderablePath = (detour, options = {}) => {
-  const topLevelPath = getRenderableDetourPath(detour, options);
-  if (topLevelPath) return topLevelPath;
-
   const segments = Array.isArray(detour?.segments) ? detour.segments : [];
   const segment = segments.find((candidate) => getRenderableDetourPath(candidate, options));
-  return segment ? getRenderableDetourPath(segment, options) : null;
+  if (segment) return getRenderableDetourPath(segment, options);
+
+  return getRenderableDetourPath(detour, options);
 };
 
 const toRoundedCoordinateKey = (point) => (
@@ -402,6 +407,11 @@ const getCenteredOffset = (index, count, spacing) => {
   if (!Number.isFinite(index) || !Number.isFinite(count) || count <= 1) return 0;
   return (index - ((count - 1) / 2)) * spacing;
 };
+
+const routeMatchesFocusedFamily = (routeId, focusedRouteId) => (
+  Boolean(focusedRouteId) &&
+  getRouteFamilyId(routeId) === getRouteFamilyId(focusedRouteId)
+);
 
 const getEndpointOrientationSign = (path, referencePath) => {
   const points = normalizePath(path);
@@ -463,6 +473,99 @@ const buildFamilyPathRenderInfo = (familyRouteIds, riderVisibleDetours, focusedR
   }, {});
 };
 
+const getStopKey = (stop) => (
+  String(stop?.id ?? stop?.stopId ?? stop?.stop_id ?? stop?.code ?? stop?.stopCode ?? stop?.name ?? '')
+    .trim()
+    .toLowerCase()
+);
+
+const tagStopsForRoute = (routeId, stops = []) => (
+  (Array.isArray(stops) ? stops : []).map((stop) => ({
+    ...stop,
+    routeId: stop?.routeId ?? routeId,
+  }))
+);
+
+const mergeUniqueStops = (...stopLists) => {
+  const seen = new Set();
+  const merged = [];
+
+  stopLists.flat().forEach((stop) => {
+    if (!stop) return;
+    const key = getStopKey(stop);
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    merged.push(stop);
+  });
+
+  return merged;
+};
+
+const getFamilyClosedStopDetails = (familyRouteIds, detourStopDetailsByRouteId = {}) => {
+  const skippedStops = [];
+  const affectedStops = [];
+
+  familyRouteIds.forEach((familyRouteId) => {
+    const routeDetails = detourStopDetailsByRouteId[familyRouteId] || {};
+    const segments = Array.isArray(routeDetails.segmentStopDetails)
+      ? routeDetails.segmentStopDetails
+      : [];
+
+    segments.forEach((segment) => {
+      skippedStops.push(...tagStopsForRoute(familyRouteId, segment?.skippedStops));
+      affectedStops.push(...tagStopsForRoute(familyRouteId, segment?.affectedStops));
+    });
+  });
+
+  return {
+    skippedStops: mergeUniqueStops(skippedStops),
+    affectedStops: mergeUniqueStops(affectedStops),
+  };
+};
+
+const mergeSharedFamilyClosedStops = ({
+  segmentStopDetails,
+  routeId,
+  familyRouteIds,
+  detourStopDetailsByRouteId,
+}) => {
+  const normalizedSegments = Array.isArray(segmentStopDetails) ? segmentStopDetails : [];
+  if (normalizedSegments.length === 0 || !Array.isArray(familyRouteIds) || familyRouteIds.length < 2) {
+    return {
+      segmentStopDetails: normalizedSegments,
+      merged: false,
+    };
+  }
+
+  const familyStops = getFamilyClosedStopDetails(familyRouteIds, detourStopDetailsByRouteId);
+  if (familyStops.skippedStops.length === 0 && familyStops.affectedStops.length === 0) {
+    return {
+      segmentStopDetails: normalizedSegments,
+      merged: false,
+    };
+  }
+
+  return {
+    segmentStopDetails: normalizedSegments.map((segment, index) => (
+      index === 0
+        ? {
+          ...segment,
+          routeIds: familyRouteIds,
+          skippedStops: mergeUniqueStops(
+            tagStopsForRoute(routeId ?? familyRouteIds[0], segment?.skippedStops),
+            familyStops.skippedStops
+          ),
+          affectedStops: mergeUniqueStops(
+            tagStopsForRoute(routeId ?? familyRouteIds[0], segment?.affectedStops),
+            familyStops.affectedStops
+          ),
+        }
+        : segment
+    )),
+    merged: true,
+  };
+};
+
 /**
  * Pure derivation function (exported for testing without React).
  */
@@ -474,15 +577,12 @@ export function deriveDetourOverlays({
   detourStopDetailsByRouteId = {},
   routeColorByRouteId = {},
   showAllClosedStopMarkers = false,
-  showLowConfidenceGeometry = runtimeConfig.detours?.showLowConfidenceForValidation === true,
 }) {
   if (!enabled) return [];
 
   const overlays = [];
-  const renderOptions = { includeValidationPreview: showLowConfidenceGeometry };
-  const riderVisibleDetours = filterRiderVisibleDetours(activeDetours, {
-    showLowConfidence: showLowConfidenceGeometry,
-  });
+  const renderOptions = { includeValidationPreview: false };
+  const riderVisibleDetours = filterRiderVisibleDetours(activeDetours);
 
   // When no routes selected, show ALL active detours
   const routeIds = (selectedRouteIds && selectedRouteIds.size > 0)
@@ -521,15 +621,23 @@ export function deriveDetourOverlays({
     const hasSegmentRenderableDetourPath = normalizedSegments.some(
       (segment) => getRenderableDetourPath(segment, renderOptions)
     );
+    const hasSegmentTrustedRawOnlyDetourPath = normalizedSegments.some(
+      (segment) => !getRenderableDetourPath(segment, renderOptions) && getTrustedInferredDetourPath(segment)
+    );
     const shouldRenderTopLevelRoadMatchOnly =
       topLevelRenderableDetourPath &&
       normalizedSegments.length > 1 &&
-      !hasSegmentRenderableDetourPath;
+      !hasSegmentRenderableDetourPath &&
+      !hasSegmentTrustedRawOnlyDetourPath;
     const topLevelRenderSegment = {
       shapeId: detour.shapeId ?? normalizedSegments[0]?.shapeId ?? null,
       skippedSegmentPolyline: detour.skippedSegmentPolyline ?? normalizedSegments[0]?.skippedSegmentPolyline ?? null,
       inferredDetourPolyline: topLevelRenderableDetourPath,
       likelyDetourPolyline: topLevelLikelyDetourPath,
+      likelyDetourRoadNames: Array.isArray(detour.likelyDetourRoadNames) ? detour.likelyDetourRoadNames : [],
+      detourPathLabel: detour.detourPathLabel ?? normalizedSegments[0]?.detourPathLabel ?? null,
+      canShowDetourPath: detour.canShowDetourPath ?? null,
+      confidence: detour.confidence ?? null,
       entryPoint: detour.entryPoint ?? normalizedSegments[0]?.entryPoint ?? null,
       exitPoint: detour.exitPoint ?? normalizedSegments[0]?.exitPoint ?? null,
       affectedStops: [],
@@ -554,6 +662,10 @@ export function deriveDetourOverlays({
         skippedSegmentPolyline: segment?.skippedSegmentPolyline ?? null,
         inferredDetourPolyline: getRenderableDetourPath(segment, renderOptions),
         likelyDetourPolyline: segment?.likelyDetourPolyline ?? null,
+        likelyDetourRoadNames: Array.isArray(segment?.likelyDetourRoadNames) ? segment.likelyDetourRoadNames : [],
+        detourPathLabel: segment?.detourPathLabel ?? detour.detourPathLabel ?? null,
+        canShowDetourPath: segment?.canShowDetourPath ?? null,
+        confidence: segment?.confidence ?? detour.confidence ?? null,
         entryPoint: segment?.entryPoint ?? null,
         exitPoint: segment?.exitPoint ?? null,
         affectedStops: [],
@@ -566,6 +678,10 @@ export function deriveDetourOverlays({
         skippedSegmentPolyline: detour.skippedSegmentPolyline ?? null,
         inferredDetourPolyline: topLevelRenderableDetourPath,
         likelyDetourPolyline: detour.likelyDetourPolyline ?? null,
+        likelyDetourRoadNames: Array.isArray(detour.likelyDetourRoadNames) ? detour.likelyDetourRoadNames : [],
+        detourPathLabel: detour.detourPathLabel ?? null,
+        canShowDetourPath: detour.canShowDetourPath ?? null,
+        confidence: detour.confidence ?? null,
         entryPoint: detour.entryPoint ?? null,
         exitPoint: detour.exitPoint ?? null,
         affectedStops: [],
@@ -581,7 +697,7 @@ export function deriveDetourOverlays({
     const hasResolvedSegmentRenderableDetourPath = baseResolvedSegmentStopDetails.some(
       (segment) => getRenderableDetourPath(segment, renderOptions)
     );
-    const resolvedSegmentStopDetails = baseResolvedSegmentStopDetails
+    let resolvedSegmentStopDetails = baseResolvedSegmentStopDetails
       .map((segment, index) => ({
         ...segment,
         // Rendering reads inferredDetourPolyline for each segment. Prefer the
@@ -589,30 +705,50 @@ export function deriveDetourOverlays({
         // geometry. Do not put untrusted raw GPS/inferred paths back on the map.
         inferredDetourPolyline:
           getRenderableDetourPath(segment, renderOptions) ??
-          (!hasResolvedSegmentRenderableDetourPath && index === 0 ? topLevelRenderableDetourPath : null),
+          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && index === 0
+            ? topLevelRenderableDetourPath
+            : null),
         likelyDetourPolyline:
           segment?.likelyDetourPolyline ??
-          (!hasResolvedSegmentRenderableDetourPath && index === 0 ? topLevelLikelyDetourPath : null),
+          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && index === 0
+            ? topLevelLikelyDetourPath
+            : null),
       }))
       .map(trimOverlappingSegmentGeometry);
+    const shouldMergeSharedFamilyClosedStops =
+      familyRouteIds.length > 1 &&
+      !familyHasDistinctDetourPaths;
+    let familyStopsMerged = false;
+    if (shouldMergeSharedFamilyClosedStops) {
+      const mergedFamilyStops = mergeSharedFamilyClosedStops({
+        segmentStopDetails: resolvedSegmentStopDetails,
+        routeId,
+        familyRouteIds,
+        detourStopDetailsByRouteId,
+      });
+      resolvedSegmentStopDetails = mergedFamilyStops.segmentStopDetails;
+      familyStopsMerged = mergedFamilyStops.merged;
+    }
     const routeColor = getOverlayRouteColor(routeId, routeColorByRouteId);
     const primaryResolvedSegment = resolvedSegmentStopDetails[0] || {};
     const primaryStopsSuppressed = primaryResolvedSegment.suppressStopDerivation === true;
     const primaryRenderableDetourPath = getRenderableDetourPath(primaryResolvedSegment, renderOptions);
     const primaryLikelyDetourPath = getLikelyDetourPath(primaryResolvedSegment);
+    const allowTopLevelDetourPathFallback = !hasSegmentTrustedRawOnlyDetourPath;
 
     overlays.push({
       routeId,
+      routeIds: familyRouteIds,
       state: detour.state ?? 'active',
       skippedSegmentPolyline: primaryResolvedSegment.skippedSegmentPolyline ?? null,
       inferredDetourPolyline:
         primaryRenderableDetourPath ??
-        getRenderableDetourPath(detour, renderOptions) ??
+        (allowTopLevelDetourPathFallback ? getRenderableDetourPath(detour, renderOptions) : null) ??
         getRenderableDetourPath(normalizedSegments[0], renderOptions) ??
         null,
       likelyDetourPolyline:
         primaryLikelyDetourPath ??
-        getLikelyDetourPath(detour) ??
+        (allowTopLevelDetourPathFallback ? getLikelyDetourPath(detour) : null) ??
         getLikelyDetourPath(normalizedSegments[0]) ??
         null,
       entryPoint: primaryResolvedSegment.entryPoint ?? detour.entryPoint ?? normalizedSegments[0]?.entryPoint ?? null,
@@ -636,8 +772,9 @@ export function deriveDetourOverlays({
         detourStopDetailsByRouteId[routeId]?.exitStop ??
         null,
       segmentStopDetails: resolvedSegmentStopDetails,
+      familyStopsMerged,
       opacity:
-        focusedRouteId && routeId !== focusedRouteId
+        focusedRouteId && !routeMatchesFocusedFamily(routeId, focusedRouteId)
           ? 0.24
           : detour.state === 'clear-pending'
             ? 0.45
@@ -703,7 +840,6 @@ export const useDetourOverlays = ({
   detourStopDetailsByRouteId = {},
   routeColorByRouteId = {},
   showAllClosedStopMarkers = false,
-  showLowConfidenceGeometry = runtimeConfig.detours?.showLowConfidenceForValidation === true,
 }) => {
   const detourOverlays = useMemo(
     () => deriveDetourOverlays({
@@ -714,9 +850,8 @@ export const useDetourOverlays = ({
       detourStopDetailsByRouteId,
       routeColorByRouteId,
       showAllClosedStopMarkers,
-      showLowConfidenceGeometry,
     }),
-    [enabled, selectedRouteIds, activeDetours, focusedRouteId, detourStopDetailsByRouteId, routeColorByRouteId, showAllClosedStopMarkers, showLowConfidenceGeometry]
+    [enabled, selectedRouteIds, activeDetours, focusedRouteId, detourStopDetailsByRouteId, routeColorByRouteId, showAllClosedStopMarkers]
   );
 
   return { detourOverlays };

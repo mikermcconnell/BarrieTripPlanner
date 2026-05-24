@@ -1,0 +1,4204 @@
+{
+  "8B": {
+    "name": "projects/barrie-transit-trip-plan-cc84e/databases/(default)/documents/activeDetours/8B",
+    "fields": {
+      "isPersistent": {
+        "booleanValue": false
+      },
+      "detourPathLabel": {
+        "stringValue": "Likely detour path"
+      },
+      "entryPoint": {
+        "mapValue": {
+          "fields": {
+            "longitude": {
+              "doubleValue": -79.69111659372004
+            },
+            "latitude": {
+              "doubleValue": 44.39047918861853
+            }
+          }
+        }
+      },
+      "segments": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "likelyDetourRoadNames": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "Bayfield Street"
+                        },
+                        {
+                          "stringValue": "Dunlop Street East"
+                        },
+                        {
+                          "stringValue": "Simcoe Street"
+                        },
+                        {
+                          "stringValue": "Maple Avenue"
+                        }
+                      ]
+                    }
+                  },
+                  "roadMatchSource": {
+                    "stringValue": "osrm-match"
+                  },
+                  "entryIndex": {
+                    "integerValue": "84"
+                  },
+                  "lastEvidenceAt": {
+                    "integerValue": "1779470700702"
+                  },
+                  "spanMeters": {
+                    "doubleValue": 187.8145392668066
+                  },
+                  "detourEventId": {
+                    "stringValue": "detour-event-8-meesj2"
+                  },
+                  "detourPathLabel": {
+                    "stringValue": "Likely detour path"
+                  },
+                  "confidence": {
+                    "stringValue": "high"
+                  },
+                  "exitIndex": {
+                    "integerValue": "88"
+                  },
+                  "entryPoint": {
+                    "mapValue": {
+                      "fields": {
+                        "longitude": {
+                          "doubleValue": -79.69111659372004
+                        },
+                        "latitude": {
+                          "doubleValue": 44.39047918861853
+                        }
+                      }
+                    }
+                  },
+                  "canShowDetourPath": {
+                    "booleanValue": true
+                  },
+                  "roadMatchConfidence": {
+                    "stringValue": "low"
+                  },
+                  "likelyDetourPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389976
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690763
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389413
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690277
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690219
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389339
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690112
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38927
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689907
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389256
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389272
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688582
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688446
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389278
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688299
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389282
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68779
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389288
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68699
+                              },
+                              "latitude": {
+                                "doubleValue": 44.3893
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686874
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389304
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389307
+                              },
+                              "longitude": {
+                                "doubleValue": -79.686755
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685551
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389331
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389333
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685425
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685426
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38924
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389031
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685426
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389001
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685459
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685481
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388966
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685487
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388926
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388886
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685488
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388874
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685488
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685495
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388818
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68552
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38877
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685569
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388728
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685621
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388712
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388701
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68571
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388699
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685816
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686027
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388703
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686096
+                              },
+                              "latitude": {
+                                "doubleValue": 44.3887
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388689
+                              },
+                              "longitude": {
+                                "doubleValue": -79.686336
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68649
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388675
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388647
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68669
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686839
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388625
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388572
+                              },
+                              "longitude": {
+                                "doubleValue": -79.687081
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388552
+                              },
+                              "longitude": {
+                                "doubleValue": -79.687153
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38852
+                              },
+                              "longitude": {
+                                "doubleValue": -79.687264
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.687428
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388468
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.687594
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388412
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388284
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68799
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388093
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688579
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688803
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388001
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387934
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688864
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387895
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688899
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688967
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387871
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689103
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387811
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387613
+                              },
+                              "longitude": {
+                                "doubleValue": -79.689552
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387448
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68989
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387364
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690062
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387468
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690149
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387767
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690399
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388103
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690677
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690757
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388202
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388313
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690833
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690985
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388476
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691178
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388708
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691214
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388751
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691251
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388797
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691328
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388876
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388883
+                              },
+                              "longitude": {
+                                "doubleValue": -79.691335
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691665
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389255
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389413
+                              },
+                              "longitude": {
+                                "doubleValue": -79.691797
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.691918
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389564
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.390164
+                              },
+                              "longitude": {
+                                "doubleValue": -79.692439
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "skippedSegmentPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39047918864696
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69111659375086
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3906750614366
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6913289293063
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3907362046668
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6915618549735
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.6927312368946
+                              },
+                              "latitude": {
+                                "doubleValue": 44.3907328078224
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3906512834966
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6928690908609
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.6926755953039
+                              },
+                              "latitude": {
+                                "doubleValue": 44.39038451833491
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "exitPoint": {
+                    "mapValue": {
+                      "fields": {
+                        "longitude": {
+                          "doubleValue": -79.69267559523526
+                        },
+                        "latitude": {
+                          "doubleValue": 44.39038451824027
+                        }
+                      }
+                    }
+                  },
+                  "evidencePointCount": {
+                    "integerValue": "4"
+                  },
+                  "shapeId": {
+                    "stringValue": "74468b16-53db-431c-8d29-a81b5594e229"
+                  },
+                  "roadMatchRawConfidence": {
+                    "doubleValue": 0.0703160801
+                  },
+                  "debug": {
+                    "mapValue": {
+                      "fields": {
+                        "projectedFromSiblingShapeId": {
+                          "stringValue": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0"
+                        },
+                        "usedRepresentativePath": {
+                          "booleanValue": true
+                        },
+                        "boundaryQuality": {
+                          "stringValue": "confirmed"
+                        },
+                        "hasExitBoundaryCandidate": {
+                          "booleanValue": true
+                        },
+                        "entryCandidateCount": {
+                          "integerValue": "1"
+                        },
+                        "sameVehicleTraceVehicleId": {
+                          "nullValue": null
+                        },
+                        "rawPathRejectedByEndpointMismatch": {
+                          "booleanValue": false
+                        },
+                        "exitCandidateCount": {
+                          "integerValue": "1"
+                        },
+                        "canShowDetourPath": {
+                          "booleanValue": true
+                        },
+                        "entryAnchorSource": {
+                          "stringValue": "boundary-candidate"
+                        },
+                        "pathConfidenceReason": {
+                          "stringValue": "multi-vehicle-corroborated"
+                        },
+                        "sameVehicleTracePointCount": {
+                          "integerValue": "4"
+                        },
+                        "projectedToShapeId": {
+                          "stringValue": "74468b16-53db-431c-8d29-a81b5594e229"
+                        },
+                        "routeFamilyHandoffEnabled": {
+                          "booleanValue": true
+                        },
+                        "multiVehicleTraceVehicleCount": {
+                          "integerValue": "2"
+                        },
+                        "entryAnchorGapMeters": {
+                          "nullValue": null
+                        },
+                        "untrustedPathEndpointMismatchMeters": {
+                          "integerValue": "479"
+                        },
+                        "overlapSuffixTrimmed": {
+                          "booleanValue": false
+                        },
+                        "hasEntryBoundaryCandidate": {
+                          "booleanValue": true
+                        },
+                        "exitAnchorSource": {
+                          "stringValue": "boundary-candidate"
+                        },
+                        "entryAnchorAdjusted": {
+                          "booleanValue": false
+                        },
+                        "semanticReversed": {
+                          "booleanValue": true
+                        },
+                        "overlapSuppressed": {
+                          "booleanValue": false
+                        },
+                        "clusterVehicleIds": {
+                          "arrayValue": {
+                            "values": [
+                              {
+                                "stringValue": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+                              },
+                              {
+                                "stringValue": "70ae2e3e-be6d-40d1-8129-13eebb53c22b"
+                              }
+                            ]
+                          }
+                        },
+                        "overlapPrefixTrimmed": {
+                          "booleanValue": false
+                        },
+                        "overlapTrimmed": {
+                          "booleanValue": false
+                        }
+                      }
+                    }
+                  },
+                  "inferredDetourPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.69120580920548
+                              },
+                              "latitude": {
+                                "doubleValue": 44.39042980302123
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.6854019165039
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38925552368164
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38823318481445
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68795776367188
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.69253473935758
+                              },
+                              "latitude": {
+                                "doubleValue": 44.3904366893784
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "roadMatchSource": {
+        "stringValue": "osrm-match"
+      },
+      "triggerVehicleId": {
+        "stringValue": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+      },
+      "likelyDetourRoadNames": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "Bayfield Street"
+            },
+            {
+              "stringValue": "Dunlop Street East"
+            },
+            {
+              "stringValue": "Simcoe Street"
+            },
+            {
+              "stringValue": "Maple Avenue"
+            }
+          ]
+        }
+      },
+      "updatedAt": {
+        "integerValue": "1779473553071"
+      },
+      "lastSeenAt": {
+        "timestampValue": "2026-05-22T17:26:01.651Z"
+      },
+      "roadMatchRawConfidence": {
+        "doubleValue": 0.0703160801
+      },
+      "likelyDetourPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389976
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690763
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690277
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389413
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690219
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389339
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38927
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690112
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389256
+                  },
+                  "longitude": {
+                    "doubleValue": -79.689907
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.688582
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389272
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.688446
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389278
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.688299
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389282
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68779
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389288
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.3893
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68699
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389304
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686874
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389307
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686755
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389331
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685551
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389333
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685425
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38924
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685426
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389031
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685426
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685459
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389001
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388966
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685481
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388926
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685487
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685488
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388886
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685488
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388874
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388818
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685495
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68552
+                  },
+                  "latitude": {
+                    "doubleValue": 44.38877
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685569
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388728
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388712
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685621
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388701
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68571
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685816
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388699
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.686027
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388703
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.686096
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3887
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388689
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686336
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68649
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388675
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68669
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388647
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388625
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686839
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.687081
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388572
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388552
+                  },
+                  "longitude": {
+                    "doubleValue": -79.687153
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38852
+                  },
+                  "longitude": {
+                    "doubleValue": -79.687264
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388468
+                  },
+                  "longitude": {
+                    "doubleValue": -79.687428
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.687594
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388412
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388284
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68799
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388093
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688579
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388001
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688803
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.688864
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387934
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387895
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688899
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387871
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688967
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689103
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387811
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387613
+                  },
+                  "longitude": {
+                    "doubleValue": -79.689552
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68989
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387448
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387364
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690062
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387468
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690149
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387767
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690399
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388103
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690677
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388202
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690757
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388313
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690833
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690985
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388476
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691178
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388708
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691214
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388751
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691251
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388797
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691328
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388876
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388883
+                  },
+                  "longitude": {
+                    "doubleValue": -79.691335
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691665
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389255
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691797
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389413
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389564
+                  },
+                  "longitude": {
+                    "doubleValue": -79.691918
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.692439
+                  },
+                  "latitude": {
+                    "doubleValue": 44.390164
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "skippedSegmentPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.39047918864696
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69111659375086
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.3906750614366
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6913289293063
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.3907362046668
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6915618549735
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.6927312368946
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3907328078224
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.6928690908609
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3906512834966
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.6926755953039
+                  },
+                  "latitude": {
+                    "doubleValue": 44.39038451833491
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "uniqueVehicleCount": {
+        "integerValue": "2"
+      },
+      "canShowDetourPath": {
+        "booleanValue": true
+      },
+      "confidence": {
+        "stringValue": "high"
+      },
+      "routeId": {
+        "stringValue": "8B"
+      },
+      "detourEventId": {
+        "stringValue": "detour-event-8-meesj2"
+      },
+      "lastEvidenceAt": {
+        "integerValue": "1779470761651"
+      },
+      "handoffSourceRouteId": {
+        "stringValue": "8A"
+      },
+      "state": {
+        "stringValue": "active"
+      },
+      "vehicleCount": {
+        "integerValue": "2"
+      },
+      "currentVehicleCount": {
+        "integerValue": "0"
+      },
+      "evidencePointCount": {
+        "integerValue": "4"
+      },
+      "shapeId": {
+        "stringValue": "74468b16-53db-431c-8d29-a81b5594e229"
+      },
+      "exitPoint": {
+        "mapValue": {
+          "fields": {
+            "longitude": {
+              "doubleValue": -79.69267559523526
+            },
+            "latitude": {
+              "doubleValue": 44.39038451824027
+            }
+          }
+        }
+      },
+      "inferredDetourPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.39042980302123
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69120580920548
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38925552368164
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6854019165039
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38823318481445
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68795776367188
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.3904366893784
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69253473935758
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "clearReason": {
+        "nullValue": null
+      },
+      "roadMatchConfidence": {
+        "stringValue": "low"
+      },
+      "detectedAt": {
+        "timestampValue": "2026-05-22T16:22:31.407Z"
+      }
+    },
+    "createTime": "2026-05-22T17:26:04.642252Z",
+    "updateTime": "2026-05-22T18:12:34.923319Z"
+  },
+  "8A": {
+    "name": "projects/barrie-transit-trip-plan-cc84e/databases/(default)/documents/activeDetours/8A",
+    "fields": {
+      "currentVehicleCount": {
+        "integerValue": "0"
+      },
+      "uniqueVehicleCount": {
+        "integerValue": "2"
+      },
+      "likelyDetourPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691837
+                  },
+                  "latitude": {
+                    "doubleValue": 44.39071
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691415
+                  },
+                  "latitude": {
+                    "doubleValue": 44.390704
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.691101
+                  },
+                  "latitude": {
+                    "doubleValue": 44.39037
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389976
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690763
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690277
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389413
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389339
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690219
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690112
+                  },
+                  "latitude": {
+                    "doubleValue": 44.38927
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389172
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690066
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389094
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690015
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689896
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388951
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689347
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388301
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689312
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388261
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689071
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387983
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.689064
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387975
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387871
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688967
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387895
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688899
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387905
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688838
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.688708
+                  },
+                  "latitude": {
+                    "doubleValue": 44.387926
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.387965
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688595
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.687939
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388206
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.687537
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388354
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68739
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388404
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388481
+                  },
+                  "longitude": {
+                    "doubleValue": -79.687139
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.686824
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388557
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388592
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686599
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388616
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686405
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.686263
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388629
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685999
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388638
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388639
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685954
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388643
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685747
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685643
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388648
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38866
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685557
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685493
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388684
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388717
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685444
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388749
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685424
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.68541
+                  },
+                  "latitude": {
+                    "doubleValue": 44.38878
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.388836
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6854
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685403
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388889
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685396
+                  },
+                  "latitude": {
+                    "doubleValue": 44.388968
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685426
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389031
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685426
+                  },
+                  "latitude": {
+                    "doubleValue": 44.38924
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.685426
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389256
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389333
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685425
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389331
+                  },
+                  "longitude": {
+                    "doubleValue": -79.685551
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.686755
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389307
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389304
+                  },
+                  "longitude": {
+                    "doubleValue": -79.686874
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.3893
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68699
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389288
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68779
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389282
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688299
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389278
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688446
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389272
+                  },
+                  "longitude": {
+                    "doubleValue": -79.688582
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389256
+                  },
+                  "longitude": {
+                    "doubleValue": -79.689907
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38927
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690112
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389325
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690059
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690024
+                  },
+                  "latitude": {
+                    "doubleValue": 44.38936
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690038
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389442
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389757
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69006
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389996
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690063
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389995
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690163
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.389991
+                  },
+                  "longitude": {
+                    "doubleValue": -79.690603
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.690763
+                  },
+                  "latitude": {
+                    "doubleValue": 44.389976
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "lastEvidenceAt": {
+        "integerValue": "1779470761651"
+      },
+      "inferredDetourPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.69253473935758
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3904366893784
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38823318481445
+                  },
+                  "longitude": {
+                    "doubleValue": -79.68795776367188
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.38925552368164
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6854019165039
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.39042980302123
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69120580920548
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "roadMatchConfidence": {
+        "stringValue": "low"
+      },
+      "exitPoint": {
+        "mapValue": {
+          "fields": {
+            "longitude": {
+              "doubleValue": -79.69120580920548
+            },
+            "latitude": {
+              "doubleValue": 44.39042980302123
+            }
+          }
+        }
+      },
+      "clearReason": {
+        "nullValue": null
+      },
+      "roadMatchSource": {
+        "stringValue": "osrm-match"
+      },
+      "entryPoint": {
+        "mapValue": {
+          "fields": {
+            "latitude": {
+              "doubleValue": 44.3904366893784
+            },
+            "longitude": {
+              "doubleValue": -79.69253473935758
+            }
+          }
+        }
+      },
+      "likelyDetourRoadNames": {
+        "arrayValue": {
+          "values": [
+            {
+              "stringValue": "Ross Street"
+            },
+            {
+              "stringValue": "Bayfield Street"
+            },
+            {
+              "stringValue": "Simcoe Street"
+            },
+            {
+              "stringValue": "Dunlop Street East"
+            },
+            {
+              "stringValue": "Clapperton Street"
+            }
+          ]
+        }
+      },
+      "routeId": {
+        "stringValue": "8A"
+      },
+      "segments": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "affectedStopCodes": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "485"
+                        }
+                      ]
+                    }
+                  },
+                  "entryIndex": {
+                    "integerValue": "272"
+                  },
+                  "roadMatchRawConfidence": {
+                    "doubleValue": 0.1203495418
+                  },
+                  "detourEventId": {
+                    "stringValue": "detour-event-8-meesj2"
+                  },
+                  "affectedStopIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "485"
+                        }
+                      ]
+                    }
+                  },
+                  "debug": {
+                    "mapValue": {
+                      "fields": {
+                        "clusterVehicleIds": {
+                          "arrayValue": {
+                            "values": [
+                              {
+                                "stringValue": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+                              },
+                              {
+                                "stringValue": "70ae2e3e-be6d-40d1-8129-13eebb53c22b"
+                              }
+                            ]
+                          }
+                        },
+                        "entryAnchorSource": {
+                          "stringValue": "boundary-candidate"
+                        },
+                        "hasEntryBoundaryCandidate": {
+                          "booleanValue": true
+                        },
+                        "semanticReversed": {
+                          "booleanValue": false
+                        },
+                        "pathConfidenceReason": {
+                          "stringValue": "multi-vehicle-corroborated"
+                        },
+                        "sameVehicleTracePointCount": {
+                          "integerValue": "4"
+                        },
+                        "exitCandidateCount": {
+                          "integerValue": "1"
+                        },
+                        "overlapSuppressed": {
+                          "booleanValue": false
+                        },
+                        "overlapSuffixTrimmed": {
+                          "booleanValue": false
+                        },
+                        "untrustedPathEndpointMismatchMeters": {
+                          "integerValue": "479"
+                        },
+                        "multiVehicleTraceVehicleCount": {
+                          "integerValue": "2"
+                        },
+                        "overlapTrimmed": {
+                          "booleanValue": false
+                        },
+                        "usedRepresentativePath": {
+                          "booleanValue": true
+                        },
+                        "sameVehicleTraceVehicleId": {
+                          "nullValue": null
+                        },
+                        "canShowDetourPath": {
+                          "booleanValue": true
+                        },
+                        "exitAnchorSource": {
+                          "stringValue": "boundary-candidate"
+                        },
+                        "overlapPrefixTrimmed": {
+                          "booleanValue": false
+                        },
+                        "boundaryQuality": {
+                          "stringValue": "confirmed"
+                        },
+                        "hasExitBoundaryCandidate": {
+                          "booleanValue": true
+                        },
+                        "entryAnchorGapMeters": {
+                          "nullValue": null
+                        },
+                        "entryCandidateCount": {
+                          "integerValue": "1"
+                        },
+                        "entryAnchorAdjusted": {
+                          "booleanValue": false
+                        },
+                        "rawPathRejectedByEndpointMismatch": {
+                          "booleanValue": false
+                        }
+                      }
+                    }
+                  },
+                  "skippedSegmentPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39043668938854
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69253473936514
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3905823104362
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6926433320474
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.390718412978
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6925204525228
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3906871363718
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6914237545088
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.69120580923456
+                              },
+                              "latitude": {
+                                "doubleValue": 44.39042980305555
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "evidencePointCount": {
+                    "integerValue": "4"
+                  },
+                  "entryStopId": {
+                    "stringValue": "485"
+                  },
+                  "skippedStopIds": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "485"
+                        }
+                      ]
+                    }
+                  },
+                  "exitStopId": {
+                    "stringValue": "485"
+                  },
+                  "exitIndex": {
+                    "integerValue": "275"
+                  },
+                  "canShowDetourPath": {
+                    "booleanValue": true
+                  },
+                  "shapeId": {
+                    "stringValue": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0"
+                  },
+                  "spanMeters": {
+                    "doubleValue": 157.015801896614
+                  },
+                  "roadMatchSource": {
+                    "stringValue": "osrm-match"
+                  },
+                  "entryPoint": {
+                    "mapValue": {
+                      "fields": {
+                        "longitude": {
+                          "doubleValue": -79.69253473935758
+                        },
+                        "latitude": {
+                          "doubleValue": 44.3904366893784
+                        }
+                      }
+                    }
+                  },
+                  "exitPoint": {
+                    "mapValue": {
+                      "fields": {
+                        "longitude": {
+                          "doubleValue": -79.69120580920548
+                        },
+                        "latitude": {
+                          "doubleValue": 44.39042980302123
+                        }
+                      }
+                    }
+                  },
+                  "roadMatchConfidence": {
+                    "stringValue": "low"
+                  },
+                  "inferredDetourPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3904366893784
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69253473935758
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38823318481445
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68795776367188
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.6854019165039
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38925552368164
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39042980302123
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69120580920548
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "suppressStopDerivation": {
+                    "booleanValue": false
+                  },
+                  "lastEvidenceAt": {
+                    "integerValue": "1779470700702"
+                  },
+                  "likelyDetourPolyline": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39071
+                              },
+                              "longitude": {
+                                "doubleValue": -79.691837
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.390704
+                              },
+                              "longitude": {
+                                "doubleValue": -79.691415
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39037
+                              },
+                              "longitude": {
+                                "doubleValue": -79.691101
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389976
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690763
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389413
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690277
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389339
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690219
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690112
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38927
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389172
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690066
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389094
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690015
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689896
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388951
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689347
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388301
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388261
+                              },
+                              "longitude": {
+                                "doubleValue": -79.689312
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387983
+                              },
+                              "longitude": {
+                                "doubleValue": -79.689071
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689064
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387975
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688967
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387871
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688899
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387895
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688838
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387905
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688708
+                              },
+                              "latitude": {
+                                "doubleValue": 44.387926
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.387965
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688595
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388206
+                              },
+                              "longitude": {
+                                "doubleValue": -79.687939
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.687537
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388354
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388404
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68739
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388481
+                              },
+                              "longitude": {
+                                "doubleValue": -79.687139
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686824
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388557
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686599
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388592
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388616
+                              },
+                              "longitude": {
+                                "doubleValue": -79.686405
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686263
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388629
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685999
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388638
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685954
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388639
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388643
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685747
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388648
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685643
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685557
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38866
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685493
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388684
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388717
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685444
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685424
+                              },
+                              "latitude": {
+                                "doubleValue": 44.388749
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68541
+                              },
+                              "latitude": {
+                                "doubleValue": 44.38878
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388836
+                              },
+                              "longitude": {
+                                "doubleValue": -79.6854
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388889
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685403
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.388968
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685396
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389031
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685426
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38924
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685426
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685426
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389256
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389333
+                              },
+                              "longitude": {
+                                "doubleValue": -79.685425
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.685551
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389331
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.686755
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389307
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389304
+                              },
+                              "longitude": {
+                                "doubleValue": -79.686874
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.3893
+                              },
+                              "longitude": {
+                                "doubleValue": -79.68699
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.68779
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389288
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688299
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389282
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389278
+                              },
+                              "longitude": {
+                                "doubleValue": -79.688446
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.688582
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389272
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.689907
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389256
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38927
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690112
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389325
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690059
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.38936
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690024
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690038
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389442
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389757
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69006
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389996
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690063
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690163
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389995
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "longitude": {
+                                "doubleValue": -79.690603
+                              },
+                              "latitude": {
+                                "doubleValue": 44.389991
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.389976
+                              },
+                              "longitude": {
+                                "doubleValue": -79.690763
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "confidence": {
+                    "stringValue": "high"
+                  },
+                  "skippedStopCodes": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "485"
+                        }
+                      ]
+                    }
+                  },
+                  "detourPathLabel": {
+                    "stringValue": "Likely detour path"
+                  },
+                  "skippedStops": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "latitude": {
+                                "doubleValue": 44.39039984
+                              },
+                              "id": {
+                                "stringValue": "485"
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69250726
+                              },
+                              "name": {
+                                "stringValue": "Maple at Ross"
+                              },
+                              "code": {
+                                "stringValue": "485"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "affectedStops": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "mapValue": {
+                            "fields": {
+                              "id": {
+                                "stringValue": "485"
+                              },
+                              "longitude": {
+                                "doubleValue": -79.69250726
+                              },
+                              "name": {
+                                "stringValue": "Maple at Ross"
+                              },
+                              "code": {
+                                "stringValue": "485"
+                              },
+                              "latitude": {
+                                "doubleValue": 44.39039984
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "likelyDetourRoadNames": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "Ross Street"
+                        },
+                        {
+                          "stringValue": "Bayfield Street"
+                        },
+                        {
+                          "stringValue": "Simcoe Street"
+                        },
+                        {
+                          "stringValue": "Dunlop Street East"
+                        },
+                        {
+                          "stringValue": "Clapperton Street"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "detourPathLabel": {
+        "stringValue": "Likely detour path"
+      },
+      "isPersistent": {
+        "booleanValue": false
+      },
+      "confidence": {
+        "stringValue": "high"
+      },
+      "updatedAt": {
+        "integerValue": "1779473553071"
+      },
+      "detectedAt": {
+        "timestampValue": "2026-05-22T16:22:31.407Z"
+      },
+      "roadMatchRawConfidence": {
+        "doubleValue": 0.1203495418
+      },
+      "state": {
+        "stringValue": "active"
+      },
+      "handoffSourceRouteId": {
+        "nullValue": null
+      },
+      "lastSeenAt": {
+        "timestampValue": "2026-05-22T17:26:01.651Z"
+      },
+      "vehicleCount": {
+        "integerValue": "2"
+      },
+      "shapeId": {
+        "stringValue": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0"
+      },
+      "canShowDetourPath": {
+        "booleanValue": true
+      },
+      "evidencePointCount": {
+        "integerValue": "4"
+      },
+      "triggerVehicleId": {
+        "stringValue": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+      },
+      "skippedSegmentPolyline": {
+        "arrayValue": {
+          "values": [
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.39043668938854
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69253473936514
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.6926433320474
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3905823104362
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.390718412978
+                  },
+                  "longitude": {
+                    "doubleValue": -79.6925204525228
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "longitude": {
+                    "doubleValue": -79.6914237545088
+                  },
+                  "latitude": {
+                    "doubleValue": 44.3906871363718
+                  }
+                }
+              }
+            },
+            {
+              "mapValue": {
+                "fields": {
+                  "latitude": {
+                    "doubleValue": 44.39042980305555
+                  },
+                  "longitude": {
+                    "doubleValue": -79.69120580923456
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "detourEventId": {
+        "stringValue": "detour-event-8-meesj2"
+      }
+    },
+    "createTime": "2026-05-22T17:26:03.874041Z",
+    "updateTime": "2026-05-22T18:12:34.573643Z"
+  }
+}

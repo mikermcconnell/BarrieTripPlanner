@@ -1,5 +1,6 @@
 import {
   filterRiderVisibleDetours,
+  getCurrentOngoingDetourCount,
   isRiderVisibleDetour,
 } from '../utils/detourVisibility';
 
@@ -8,15 +9,15 @@ describe('detourVisibility', () => {
     expect(isRiderVisibleDetour({ confidence: 'low', state: 'active' })).toBe(false);
   });
 
-  test('shows low-confidence active detours when validation visibility is enabled', () => {
+  test('keeps low-confidence detours hidden even when validation visibility is requested', () => {
     expect(isRiderVisibleDetour(
       { confidence: 'low', state: 'active' },
       { showLowConfidence: true }
-    )).toBe(true);
+    )).toBe(false);
   });
 
-  test('hides medium-confidence detours until at least two vehicles support them', () => {
-    expect(isRiderVisibleDetour({ confidence: 'medium', vehicleCount: 1, state: 'active' })).toBe(false);
+  test('shows medium-confidence detours to riders', () => {
+    expect(isRiderVisibleDetour({ confidence: 'medium', vehicleCount: 1, state: 'active' })).toBe(true);
   });
 
   test('shows medium-confidence detours with two supporting vehicles', () => {
@@ -44,18 +45,29 @@ describe('detourVisibility', () => {
       twoVehicleMedium: { confidence: 'medium', vehicleCount: 2 },
       high: { confidence: 'high' },
     })).toEqual({
+      oneVehicleMedium: { confidence: 'medium', vehicleCount: 1 },
       twoVehicleMedium: { confidence: 'medium', vehicleCount: 2 },
       high: { confidence: 'high' },
     });
   });
 
-  test('filter includes low-confidence active detours when validation visibility is enabled', () => {
+  test('filter excludes low-confidence active detours when validation visibility is requested', () => {
     expect(filterRiderVisibleDetours({
       lowActive: { confidence: 'low', state: 'active' },
       lowCleared: { confidence: 'low', state: 'cleared' },
       mediumOneVehicle: { confidence: 'medium', vehicleCount: 1, state: 'active' },
     }, { showLowConfidence: true })).toEqual({
-      lowActive: { confidence: 'low', state: 'active' },
+      mediumOneVehicle: { confidence: 'medium', vehicleCount: 1, state: 'active' },
     });
+  });
+
+  test('counts only current ongoing detours for the Detours tab badge', () => {
+    expect(getCurrentOngoingDetourCount({
+      '12A': { confidence: 'high', state: 'active' },
+      '12B': { confidence: 'medium', state: 'clear-pending' },
+      futureRoute: { confidence: 'high', state: 'upcoming' },
+      archivedRoute: { confidence: 'high', state: 'archived' },
+      clearedRoute: { confidence: 'high', state: 'cleared' },
+    })).toBe(2);
   });
 });

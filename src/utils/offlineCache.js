@@ -120,6 +120,7 @@ export const cacheGTFSData = async (data) => {
       routeStopsMapping: data.routeStopsMapping,
       routeStopSequencesMapping: data.routeStopSequencesMapping,
       calendar: data.calendar,
+      calendarDates: data.calendarDates,
     });
 
     // 3. Shapes — 38 polylines, moderate (~1-2 MB).

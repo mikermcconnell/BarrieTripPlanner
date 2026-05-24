@@ -116,4 +116,27 @@ describe('newsImpactParser', () => {
     expect(new Date(window.startsAt).getFullYear()).toBe(2025);
     expect(statusForDateWindow(window, new Date('2026-04-29T12:00:00-04:00'))).toBe('active');
   });
+
+  test('parseDateWindow handles beginning/until wording', () => {
+    const window = parseDateWindow({
+      title: 'Stop 509 Closure',
+      body: 'Stop 509 is out of service beginning May 10 until May 20, 2026.',
+      publishedAt: Date.parse('2026-05-01T12:00:00Z'),
+    }, new Date('2026-05-14T12:00:00-04:00'));
+
+    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 10, 2026');
+    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 20, 2026');
+  });
+
+  test('parseDateWindow handles one-day "on May 27" detour wording', () => {
+    const window = parseDateWindow({
+      title: 'Lakeshore Fun Run Detour - Route 8A-NB',
+      body: 'Route 8A-NB will be on detour for the full day on May 27 due to a northbound road closure.',
+      publishedAt: Date.parse('2026-05-15T15:04:43Z'),
+    }, new Date('2026-05-15T12:00:00-04:00'));
+
+    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
+    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
+    expect(statusForDateWindow(window, new Date('2026-05-15T12:00:00-04:00'))).toBe('upcoming');
+  });
 });

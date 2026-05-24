@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS, TOUCH_TARGET } from '../config/theme';
 
 const MODES = [
-  { key: 'now', label: 'Leave Now' },
+  { key: 'now', label: 'Current Time' },
   { key: 'depart', label: 'Depart At' },
   { key: 'arrive', label: 'Arrive By' },
 ];
@@ -80,7 +80,9 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
   };
 
   const handleQuickSelect = (minutes) => {
-    const newTime = new Date(Date.now() + minutes * 60 * 1000);
+    const baseTime = value instanceof Date ? value : new Date(value);
+    const baseTimestamp = Number.isFinite(baseTime.getTime()) ? baseTime.getTime() : Date.now();
+    const newTime = new Date(baseTimestamp + minutes * 60 * 1000);
     onChange(newTime, mode);
   };
 
@@ -171,9 +173,9 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
       {/* Expandable time options for Depart At / Arrive By */}
       {showTimeOptions && (
         <View style={styles.timeOptions}>
-          {/* Quick offset chips (depart only) + Custom */}
+          {/* Quick offset chips + Custom */}
           <View style={styles.chipRow}>
-            {mode === 'depart' && QUICK_OFFSETS.map(({ label, minutes }) => (
+            {QUICK_OFFSETS.map(({ label, minutes }) => (
               <TouchableOpacity
                 key={label}
                 style={styles.chip}

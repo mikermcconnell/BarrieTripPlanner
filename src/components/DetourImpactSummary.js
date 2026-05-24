@@ -40,7 +40,7 @@ const StopList = ({ stops = [], emptyMessage }) => {
   );
 };
 
-const DetourImpactSummary = ({ routeId, sections = [] }) => {
+const DetourImpactSummary = ({ routeId, routeLabel: routeLabelOverride = null, sections = [] }) => {
   const [expanded, setExpanded] = useState(false);
   const normalizedSections = getUniqueDetourSections(sections);
   const skippedStops = useMemo(
@@ -50,7 +50,8 @@ const DetourImpactSummary = ({ routeId, sections = [] }) => {
     [normalizedSections]
   );
   const skippedCount = skippedStops.length;
-  const routeLabel = routeId ? `Route ${routeId}` : 'This route';
+  const routeLabel = routeLabelOverride || (routeId ? `Route ${routeId}` : 'This route');
+  const hasSkippedStops = skippedCount > 0;
 
   if (normalizedSections.length === 0) {
     return (
@@ -66,28 +67,34 @@ const DetourImpactSummary = ({ routeId, sections = [] }) => {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>{routeLabel} detour impact</Text>
+        <Text style={styles.cardTitle}>{`${routeLabel} detour impact`}</Text>
         <Text style={styles.guidanceText}>
-          {skippedCount > 0
-            ? `${skippedCount} regular stop${skippedCount === 1 ? '' : 's'} may be missed.`
-            : 'Stop impact is still being confirmed.'}
+          {`${skippedCount} regular stop${skippedCount === 1 ? '' : 's'} impacted.`}
         </Text>
-        <Text style={styles.guidanceHint}>
-          Use an open stop before the detour starts or after the route rejoins.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.expandButton}
-          onPress={() => setExpanded((value) => !value)}
-          accessibilityRole="button"
-          accessibilityLabel={expanded ? 'Hide stops not served' : 'View stops not served'}
-        >
-          <Text style={styles.expandButtonText}>
-            {expanded ? 'Hide stops' : `View stops not served (${skippedCount})`}
+        {hasSkippedStops ? (
+          <Text style={styles.guidanceHint}>
+            Use an open stop before the detour starts or after the route rejoins.
           </Text>
-        </TouchableOpacity>
+        ) : (
+          <Text style={styles.guidanceHint}>
+            No stops are currently listed as not served for this detour.
+          </Text>
+        )}
 
-        {expanded ? (
+        {hasSkippedStops ? (
+          <TouchableOpacity
+            style={styles.expandButton}
+            onPress={() => setExpanded((value) => !value)}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Hide stops not served' : 'View stops not served'}
+          >
+            <Text style={styles.expandButtonText}>
+              {expanded ? 'Hide stops' : `View stops not served (${skippedCount})`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {hasSkippedStops && expanded ? (
           <StopList
             stops={skippedStops}
             emptyMessage="No skipped stops are confirmed yet. Check the map for the active detour area."

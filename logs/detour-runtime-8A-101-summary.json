@@ -1,0 +1,871 @@
+{
+  "savedAt": "2026-05-20T14:58:01.284Z",
+  "updatedAt": "2026-05-20T14:58:01.285Z",
+  "minVehiclesForDetour": 2,
+  "wasInService": true,
+  "routeSummary": [
+    {
+      "routeId": "8A",
+      "nextSegmentOrdinal": 10,
+      "segments": [
+        {
+          "segmentId": "segment-1",
+          "state": "active",
+          "isPublished": false,
+          "isPersistent": false,
+          "detectedAt": "2026-05-16T10:52:46.719Z",
+          "lastSeenAt": "2026-05-16T10:52:46.719Z",
+          "lastOffRouteEvidenceAt": "2026-05-16T10:52:46.719Z",
+          "triggerVehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "a38dea84-c086-4a0c-acf4-298bd24935b8"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 971.4525045333731,
+          "progressMaxMeters": 971.4525045333731,
+          "shapeIdHint": "72f82ae5-6c47-42ec-8674-fc443fa4ed12",
+          "persistedGeometry": {
+            "confidence": "low",
+            "canShowDetourPath": false,
+            "pathConfidenceReason": "missing-boundary-anchor",
+            "clusterVehicleIds": [
+              "a38dea84-c086-4a0c-acf4-298bd24935b8"
+            ],
+            "evidencePointCount": 4,
+            "lastEvidenceAt": "2026-05-16T10:52:46.719Z",
+            "entryPoint": {
+              "latitude": 44.387753,
+              "longitude": -79.690237
+            },
+            "exitPoint": {
+              "latitude": 44.390376720414956,
+              "longitude": -79.68535617107347
+            }
+          },
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-16T10:51:16.646Z",
+                "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+                "lat": 44.387733459472656,
+                "lon": -79.68913269042969
+              },
+              {
+                "ts": "2026-05-16T10:52:01.716Z",
+                "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+                "lat": 44.38823699951172,
+                "lon": -79.68790435791016
+              },
+              {
+                "ts": "2026-05-16T10:52:16.725Z",
+                "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+                "lat": 44.38922882080078,
+                "lon": -79.68539428710938
+              },
+              {
+                "ts": "2026-05-16T10:52:46.719Z",
+                "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+                "lat": 44.389434814453125,
+                "lon": -79.68541717529297
+              }
+            ],
+            "pointCount": 4,
+            "evidenceVehicleCounts": {
+              "a38dea84-c086-4a0c-acf4-298bd24935b8": 4
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-16T10:50:46.648Z",
+                "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+                "lat": 44.387508392333984,
+                "lon": -79.69035339355469
+              }
+            ],
+            "exitCandidates": []
+          }
+        },
+        {
+          "segmentId": "segment-2",
+          "state": "active",
+          "isPublished": false,
+          "isPersistent": false,
+          "detectedAt": "2026-05-16T15:20:46.158Z",
+          "lastSeenAt": "2026-05-16T15:22:01.273Z",
+          "lastOffRouteEvidenceAt": "2026-05-16T15:22:01.273Z",
+          "triggerVehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "88304d2c-28ac-414c-bf22-c85675057003"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 21408.498674211234,
+          "progressMaxMeters": 21408.498674211234,
+          "shapeIdHint": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0",
+          "persistedGeometry": {
+            "confidence": "low",
+            "canShowDetourPath": false,
+            "pathConfidenceReason": "missing-boundary-anchor",
+            "clusterVehicleIds": [
+              "88304d2c-28ac-414c-bf22-c85675057003"
+            ],
+            "evidencePointCount": 6,
+            "lastEvidenceAt": "2026-05-16T15:22:01.273Z",
+            "entryPoint": {
+              "latitude": 44.388132063819235,
+              "longitude": -79.69058968392189
+            },
+            "exitPoint": {
+              "latitude": 44.38817655186139,
+              "longitude": -79.69063107594188
+            }
+          },
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-16T15:19:16.332Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.38778305053711,
+                "lon": -79.69145202636719
+              },
+              {
+                "ts": "2026-05-16T15:20:01.172Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.387779235839844,
+                "lon": -79.69146728515625
+              },
+              {
+                "ts": "2026-05-16T15:20:16.179Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.387779235839844,
+                "lon": -79.69146728515625
+              },
+              {
+                "ts": "2026-05-16T15:20:46.158Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.387779235839844,
+                "lon": -79.69146728515625
+              },
+              {
+                "ts": "2026-05-16T15:21:16.178Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.387779235839844,
+                "lon": -79.69146728515625
+              },
+              {
+                "ts": "2026-05-16T15:22:01.273Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.387779235839844,
+                "lon": -79.69146728515625
+              }
+            ],
+            "pointCount": 6,
+            "evidenceVehicleCounts": {
+              "88304d2c-28ac-414c-bf22-c85675057003": 6
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-16T15:18:46.321Z",
+                "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+                "lat": 44.38794708251953,
+                "lon": -79.69097900390625
+              }
+            ],
+            "exitCandidates": []
+          }
+        },
+        {
+          "segmentId": "segment-4",
+          "state": "active",
+          "isPublished": true,
+          "isPersistent": false,
+          "detectedAt": "2026-05-19T09:24:17.103Z",
+          "lastSeenAt": "2026-05-20T09:55:09.374Z",
+          "lastOffRouteEvidenceAt": "2026-05-20T09:55:09.374Z",
+          "triggerVehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "7f26a1df-3747-4404-a699-973e8f79915d"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 15297.573210400644,
+          "progressMaxMeters": 15780.03522597325,
+          "shapeIdHint": "617c0fe5-ff28-476d-9a96-4e7c26c0e116",
+          "persistedGeometry": {
+            "confidence": "high",
+            "canShowDetourPath": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "clusterVehicleIds": [
+              "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+              "7f26a1df-3747-4404-a699-973e8f79915d"
+            ],
+            "evidencePointCount": 4,
+            "lastEvidenceAt": "2026-05-20T09:54:39.378Z",
+            "entryPoint": {
+              "latitude": 44.38683949823078,
+              "longitude": -79.69097654631223
+            },
+            "exitPoint": {
+              "latitude": 44.390443912878474,
+              "longitude": -79.68288945656624
+            }
+          },
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-20T09:21:01.769Z",
+                "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+                "lat": 44.38799285888672,
+                "lon": -79.69318389892578
+              },
+              {
+                "ts": "2026-05-20T09:53:03.855Z",
+                "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+                "lat": 44.38774108886719,
+                "lon": -79.68909454345703
+              },
+              {
+                "ts": "2026-05-20T09:54:09.592Z",
+                "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+                "lat": 44.38915252685547,
+                "lon": -79.68537139892578
+              },
+              {
+                "ts": "2026-05-20T09:54:39.378Z",
+                "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+                "lat": 44.38954162597656,
+                "lon": -79.68537902832031
+              }
+            ],
+            "pointCount": 4,
+            "evidenceVehicleCounts": {
+              "1a09ebe3-0086-4b86-adcd-eaf8485ce10b": 1,
+              "7f26a1df-3747-4404-a699-973e8f79915d": 3
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-20T09:52:33.849Z",
+                "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+                "lat": 44.38682556152344,
+                "lon": -79.69096374511719
+              }
+            ],
+            "exitCandidates": [
+              {
+                "ts": "2026-05-20T09:55:09.374Z",
+                "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+                "lat": 44.39047622680664,
+                "lon": -79.68289184570312
+              }
+            ]
+          }
+        },
+        {
+          "segmentId": "segment-5",
+          "state": "active",
+          "isPublished": false,
+          "isPersistent": false,
+          "detectedAt": "2026-05-19T22:48:31.336Z",
+          "lastSeenAt": "2026-05-19T22:51:01.014Z",
+          "lastOffRouteEvidenceAt": "2026-05-19T22:51:01.014Z",
+          "triggerVehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "c08b759d-28c9-4a3e-848e-cc2f03c4320c"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 268.4323145389324,
+          "progressMaxMeters": 270.0784886438106,
+          "shapeIdHint": "e4829dcb-be1b-4a2a-99a0-9c23592d62ae",
+          "persistedGeometry": null,
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-19T22:46:30.663Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.41442108154297,
+                "lon": -79.6533432006836
+              },
+              {
+                "ts": "2026-05-19T22:47:00.664Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.415428161621094,
+                "lon": -79.65337371826172
+              },
+              {
+                "ts": "2026-05-19T22:48:01.584Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.41646194458008,
+                "lon": -79.65731811523438
+              },
+              {
+                "ts": "2026-05-19T22:48:31.336Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.416290283203125,
+                "lon": -79.65910339355469
+              },
+              {
+                "ts": "2026-05-19T22:49:01.338Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.4154167175293,
+                "lon": -79.65921020507812
+              },
+              {
+                "ts": "2026-05-19T22:50:01.278Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.4154167175293,
+                "lon": -79.66280364990234
+              },
+              {
+                "ts": "2026-05-19T22:50:31.083Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.41446304321289,
+                "lon": -79.66365814208984
+              },
+              {
+                "ts": "2026-05-19T22:51:01.014Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.41516876220703,
+                "lon": -79.66590118408203
+              }
+            ],
+            "pointCount": 8,
+            "evidenceVehicleCounts": {
+              "c08b759d-28c9-4a3e-848e-cc2f03c4320c": 8
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-19T22:46:00.899Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.41194152832031,
+                "lon": -79.65377807617188
+              }
+            ],
+            "exitCandidates": []
+          }
+        },
+        {
+          "segmentId": "segment-7",
+          "state": "active",
+          "isPublished": true,
+          "isPersistent": false,
+          "detectedAt": "2026-05-20T04:01:32.225Z",
+          "lastSeenAt": "2026-05-20T04:01:32.225Z",
+          "lastOffRouteEvidenceAt": "2026-05-20T04:01:32.225Z",
+          "triggerVehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "70ae2e3e-be6d-40d1-8129-13eebb53c22b",
+            "1da0d057-9fa3-4a81-9597-7d5cc59b39b0"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 2064.600569990835,
+          "progressMaxMeters": 2064.600569990835,
+          "shapeIdHint": "9bb49226-48b8-46ce-9a39-fc85a3bdc8dc",
+          "persistedGeometry": {
+            "confidence": "high",
+            "canShowDetourPath": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "clusterVehicleIds": [
+              "70ae2e3e-be6d-40d1-8129-13eebb53c22b",
+              "1da0d057-9fa3-4a81-9597-7d5cc59b39b0"
+            ],
+            "evidencePointCount": 4,
+            "lastEvidenceAt": "2026-05-20T04:01:02.235Z",
+            "entryPoint": {
+              "latitude": 44.38877234730023,
+              "longitude": -79.69114323600276
+            },
+            "exitPoint": {
+              "latitude": 44.39037748078494,
+              "longitude": -79.68540101535312
+            }
+          },
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-20T01:51:30.164Z",
+                "vehicleId": "70ae2e3e-be6d-40d1-8129-13eebb53c22b",
+                "lat": 44.387943267822266,
+                "lon": -79.6932601928711
+              },
+              {
+                "ts": "2026-05-20T01:52:02.248Z",
+                "vehicleId": "70ae2e3e-be6d-40d1-8129-13eebb53c22b",
+                "lat": 44.38782501220703,
+                "lon": -79.69338989257812
+              },
+              {
+                "ts": "2026-05-20T03:59:02.730Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.38779830932617,
+                "lon": -79.69336700439453
+              },
+              {
+                "ts": "2026-05-20T04:01:02.235Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.38860321044922,
+                "lon": -79.68641662597656
+              }
+            ],
+            "pointCount": 4,
+            "evidenceVehicleCounts": {
+              "70ae2e3e-be6d-40d1-8129-13eebb53c22b": 2,
+              "1da0d057-9fa3-4a81-9597-7d5cc59b39b0": 2
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-20T03:58:03.005Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.38876724243164,
+                "lon": -79.69115447998047
+              }
+            ],
+            "exitCandidates": [
+              {
+                "ts": "2026-05-20T04:01:32.225Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.390350341796875,
+                "lon": -79.6854019165039
+              }
+            ]
+          }
+        },
+        {
+          "segmentId": "segment-8",
+          "state": "active",
+          "isPublished": false,
+          "isPersistent": false,
+          "detectedAt": "2026-05-20T04:30:01.605Z",
+          "lastSeenAt": "2026-05-20T04:30:01.605Z",
+          "lastOffRouteEvidenceAt": "2026-05-20T04:30:01.605Z",
+          "triggerVehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+          "vehiclesOffRoute": [],
+          "matchedVehicleIds": [
+            "1da0d057-9fa3-4a81-9597-7d5cc59b39b0"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 3218.4762522314386,
+          "progressMaxMeters": 3218.4762522314386,
+          "shapeIdHint": "e4829dcb-be1b-4a2a-99a0-9c23592d62ae",
+          "persistedGeometry": null,
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-20T04:28:01.498Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.411231994628906,
+                "lon": -79.70095825195312
+              },
+              {
+                "ts": "2026-05-20T04:28:31.204Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.411170959472656,
+                "lon": -79.70152282714844
+              },
+              {
+                "ts": "2026-05-20T04:29:01.178Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.409244537353516,
+                "lon": -79.7034683227539
+              },
+              {
+                "ts": "2026-05-20T04:30:01.605Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.406982421875,
+                "lon": -79.69915771484375
+              }
+            ],
+            "pointCount": 4,
+            "evidenceVehicleCounts": {
+              "1da0d057-9fa3-4a81-9597-7d5cc59b39b0": 4
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-20T04:27:01.293Z",
+                "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+                "lat": 44.41004943847656,
+                "lon": -79.6985092163086
+              }
+            ],
+            "exitCandidates": []
+          }
+        },
+        {
+          "segmentId": "segment-9",
+          "state": "active",
+          "isPublished": false,
+          "isPersistent": false,
+          "detectedAt": "2026-05-20T10:55:00.971Z",
+          "lastSeenAt": "2026-05-20T10:55:00.971Z",
+          "lastOffRouteEvidenceAt": "2026-05-20T10:55:00.971Z",
+          "triggerVehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+          "vehiclesOffRoute": [
+            "10f14661-f9c2-46c0-8f70-9a1e6cc5356c"
+          ],
+          "matchedVehicleIds": [
+            "10f14661-f9c2-46c0-8f70-9a1e6cc5356c"
+          ],
+          "normalRouteVehicleIds": [],
+          "progressMinMeters": 22274.29109271722,
+          "progressMaxMeters": 22274.29109271722,
+          "shapeIdHint": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0",
+          "persistedGeometry": null,
+          "evidence": {
+            "points": [
+              {
+                "ts": "2026-05-20T10:53:01.270Z",
+                "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+                "lat": 44.38741683959961,
+                "lon": -79.69308471679688
+              },
+              {
+                "ts": "2026-05-20T10:54:01.179Z",
+                "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+                "lat": 44.387760162353516,
+                "lon": -79.68914031982422
+              },
+              {
+                "ts": "2026-05-20T10:54:30.968Z",
+                "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+                "lat": 44.38780212402344,
+                "lon": -79.68913269042969
+              },
+              {
+                "ts": "2026-05-20T10:55:00.971Z",
+                "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+                "lat": 44.38865661621094,
+                "lon": -79.6860122680664
+              }
+            ],
+            "pointCount": 4,
+            "evidenceVehicleCounts": {
+              "10f14661-f9c2-46c0-8f70-9a1e6cc5356c": 4
+            },
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [
+              {
+                "ts": "2026-05-20T10:52:01.516Z",
+                "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+                "lat": 44.38877487182617,
+                "lon": -79.69111633300781
+              }
+            ],
+            "exitCandidates": []
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "101",
+      "nextSegmentOrdinal": 3,
+      "segments": [
+        {
+          "segmentId": "segment-1",
+          "state": "active",
+          "isPublished": true,
+          "isPersistent": false,
+          "detectedAt": "2026-05-20T00:30:21.987Z",
+          "lastSeenAt": "2026-05-20T13:00:32.107Z",
+          "lastOffRouteEvidenceAt": "2026-05-20T13:00:32.107Z",
+          "triggerVehicleId": "6fe3cadb-d3a9-498d-a009-b786cb2f3f84",
+          "vehiclesOffRoute": [
+            "be5d6e66-7e92-4c28-a05a-08d03c170248"
+          ],
+          "matchedVehicleIds": [
+            "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+            "be5d6e66-7e92-4c28-a05a-08d03c170248"
+          ],
+          "normalRouteVehicleIds": [
+            "c08b759d-28c9-4a3e-848e-cc2f03c4320c"
+          ],
+          "progressMinMeters": 467.0769375839732,
+          "progressMaxMeters": 793.7706046679348,
+          "shapeIdHint": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1",
+          "persistedGeometry": {
+            "confidence": "low",
+            "canShowDetourPath": false,
+            "pathConfidenceReason": "missing-boundary-anchor",
+            "clusterVehicleIds": [
+              "be5d6e66-7e92-4c28-a05a-08d03c170248"
+            ],
+            "evidencePointCount": 4,
+            "lastEvidenceAt": "2026-05-20T13:00:32.107Z",
+            "entryPoint": {
+              "latitude": 44.38775336238379,
+              "longitude": -79.68920442355164
+            },
+            "exitPoint": {
+              "latitude": 44.390404730005905,
+              "longitude": -79.68537993392782
+            }
+          },
+          "evidence": {
+            "points": [],
+            "pointCount": 0,
+            "evidenceVehicleCounts": {},
+            "confidencePointCount": 0,
+            "confidenceVehicleCounts": {},
+            "entryCandidates": [],
+            "exitCandidates": [
+              {
+                "ts": "2026-05-20T13:28:00.877Z",
+                "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+                "lat": 44.390380859375,
+                "lon": -79.68660736083984
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "vehicleSummary": [
+    {
+      "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+      "routeId": "8A",
+      "detourSegmentId": "segment-4",
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.41302490234375,
+          "longitude": -79.70284271240234
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "3f9822c0-b3bd-49c7-9454-1754a68d2f22",
+      "tripId": "8e49515a-70f7-4319-b412-0d867048586d"
+    },
+    {
+      "vehicleId": "b6b99b29-3f11-43e8-a8f8-0572af647bd7",
+      "routeId": "8A",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.34698486328125,
+          "longitude": -79.70394134521484
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0",
+      "tripId": "6d63697c-bcfe-457c-82bd-22e5fd0985a5"
+    },
+    {
+      "vehicleId": "7f26a1df-3747-4404-a699-973e8f79915d",
+      "routeId": "8A",
+      "detourSegmentId": "segment-4",
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.395198822021484,
+          "longitude": -79.6622543334961
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0",
+      "tripId": "e4d95a33-d36d-42cf-85f1-d7747bb33572"
+    },
+    {
+      "vehicleId": "10f14661-f9c2-46c0-8f70-9a1e6cc5356c",
+      "routeId": "8A",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.3404426574707,
+          "longitude": -79.68030548095703
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "f1d3ca0d-ef57-4a29-a7e0-781c9d02dea0",
+      "tripId": "342d3c97-f39d-4f63-92d8-d5a7b07370fe"
+    },
+    {
+      "vehicleId": "5af54e49-d005-4cbf-90e4-bc42b52593ad",
+      "routeId": "8A",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.36587142944336,
+          "longitude": -79.66201782226562
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "3f9822c0-b3bd-49c7-9454-1754a68d2f22",
+      "tripId": "8c498e38-734b-487d-9028-301d01638edd"
+    },
+    {
+      "vehicleId": "88304d2c-28ac-414c-bf22-c85675057003",
+      "routeId": "2B",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": false,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.38130187988281,
+          "longitude": -79.72473907470703
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "47d0cba0-66b0-4fef-b689-9f6206c49fc6",
+      "tripId": "8a668c13-c431-4c60-b466-21bb54ab2e6c"
+    },
+    {
+      "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+      "routeId": "2A",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": false,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.38088607788086,
+          "longitude": -79.7262954711914
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "3f9f4a53-1c17-4d03-87bf-2e471c7b379b",
+      "tripId": "a061cae1-fb08-4fba-9958-843458704685"
+    },
+    {
+      "vehicleId": "1da0d057-9fa3-4a81-9597-7d5cc59b39b0",
+      "routeId": "11",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.41719055175781,
+          "longitude": -79.69840240478516
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "5b52e2d3-ac77-4ea4-8e7b-0c5ebb94357b",
+      "tripId": "a1da8c1b-5aa3-4239-8831-2f2b146fd1cd"
+    },
+    {
+      "vehicleId": "c08b759d-28c9-4a3e-848e-cc2f03c4320c",
+      "routeId": "101",
+      "detourSegmentId": "segment-1",
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 134,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.390403747558594,
+          "longitude": -79.68660736083984
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": {
+        "ts": "2026-05-20T13:28:00.877Z",
+        "coordinate": {
+          "latitude": 44.390380859375,
+          "longitude": -79.68660736083984
+        }
+      },
+      "tripShapeId": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1",
+      "tripId": "3d661622-4123-4827-8007-7ea4c0809be5"
+    },
+    {
+      "vehicleId": "be5d6e66-7e92-4c28-a05a-08d03c170248",
+      "routeId": "101",
+      "detourSegmentId": "segment-1",
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 40,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.41352462768555,
+          "longitude": -79.70301818847656
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": {
+        "ts": "2026-05-20T14:32:10.820Z",
+        "coordinate": {
+          "latitude": 44.39040756225586,
+          "longitude": -79.68682098388672
+        }
+      },
+      "tripShapeId": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1",
+      "tripId": "58546cf5-9591-4dc1-8d7b-31ce7febdeb2"
+    },
+    {
+      "vehicleId": "70ae2e3e-be6d-40d1-8129-13eebb53c22b",
+      "routeId": "100",
+      "detourSegmentId": null,
+      "consecutiveOffRoute": 0,
+      "consecutiveOnRoute": 0,
+      "lastCheckedAt": "2026-05-20T14:58:00.888Z",
+      "hasReturnedOnRouteSinceDetour": true,
+      "lastOnRouteObservation": {
+        "ts": "2026-05-20T14:58:00.888Z",
+        "coordinate": {
+          "latitude": 44.41417694091797,
+          "longitude": -79.7026596069336
+        }
+      },
+      "offRouteStreakStart": null,
+      "onRouteStreakStart": null,
+      "tripShapeId": "e356ff87-7516-4ab1-b4fc-fa627eaa79a2",
+      "tripId": "bdd92f8b-c07e-42fe-acd4-349635d1e645"
+    }
+  ]
+}

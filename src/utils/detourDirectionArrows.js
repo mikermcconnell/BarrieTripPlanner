@@ -1,5 +1,5 @@
 const EARTH_RADIUS_METERS = 6371000;
-const DETOUR_DIRECTION_ARROW_COUNT = 4;
+const DETOUR_DIRECTION_ARROW_COUNT = 2;
 const BIDIRECTIONAL_ARROW_OFFSET_METERS = 7;
 
 const toRadians = (degrees) => Number(degrees) * Math.PI / 180;

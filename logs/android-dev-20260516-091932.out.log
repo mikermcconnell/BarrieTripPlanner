@@ -1,0 +1,20 @@
+
+> barrie-transit-planner@1.0.6 android:dev
+> powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-dev.ps1
+
+[android:dev] Running recovery first
+[android:recover] Project root: C:\Users\Mike McConnell\Documents\mike_apps\BTTP
+[android:recover] Stopped PID 31812 (port 8081 listener)
+[android:recover] Cleared adb reverse mappings
+[android:recover] Force-stopped com.barrietransit.planner
+[android:recover] Recovery complete
+[detour:dev] Skipped because DETOUR_DEV_WORKER_ENABLED=false
+[android:dev] Starting Metro on port 8081 for Expo dev client
+[android:dev] Metro is listening on port 8081
+[android:dev] Metro logs: C:\Users\Mike McConnell\Documents\mike_apps\BTTP\.logs-expo-dev-metro-8081.out.txt
+[android:dev] Priming Android bundle at http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=android&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable
+[android:dev] Android bundle primed
+[android:dev] Expo dev server is responding at http://127.0.0.1:8081
+[android:dev] Launching com.barrietransit.planner on emulator/device
+[android:dev] Opening Expo dev client URL exp+barrie-transit-planner://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081
+[android:dev] Done

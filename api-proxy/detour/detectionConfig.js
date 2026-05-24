@@ -66,11 +66,11 @@ const CONSECUTIVE_READINGS_REQUIRED =
 
 const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-const configuredMinUniqueVehicles = Number.parseInt(process.env.DETOUR_MIN_UNIQUE_VEHICLES || '1', 10);
+const configuredMinUniqueVehicles = Number.parseInt(process.env.DETOUR_MIN_UNIQUE_VEHICLES || '2', 10);
 const DEFAULT_MIN_VEHICLES_FOR_DETOUR =
   Number.isFinite(configuredMinUniqueVehicles) && configuredMinUniqueVehicles > 0
-    ? configuredMinUniqueVehicles
-    : 1;
+    ? Math.max(configuredMinUniqueVehicles, 2)
+    : 2;
 
 const configuredEvidenceWindowMs = Number.parseFloat(
   process.env.DETOUR_EVIDENCE_WINDOW_MS || String(15 * 60 * 1000)
@@ -79,6 +79,46 @@ const EVIDENCE_WINDOW_MS =
   Number.isFinite(configuredEvidenceWindowMs) && configuredEvidenceWindowMs > 0
     ? configuredEvidenceWindowMs
     : 15 * 60 * 1000;
+
+const configuredVehicleTraceWindowMs = Number.parseFloat(
+  process.env.DETOUR_VEHICLE_TRACE_WINDOW_MS || String(20 * 60 * 1000)
+);
+const DETOUR_VEHICLE_TRACE_WINDOW_MS =
+  Number.isFinite(configuredVehicleTraceWindowMs) && configuredVehicleTraceWindowMs > 0
+    ? configuredVehicleTraceWindowMs
+    : 20 * 60 * 1000;
+
+const configuredCandidateConfirmationWindowMs = Number.parseFloat(
+  process.env.DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS || String(3 * 60 * 60 * 1000)
+);
+const DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS =
+  Number.isFinite(configuredCandidateConfirmationWindowMs) && configuredCandidateConfirmationWindowMs > 0
+    ? configuredCandidateConfirmationWindowMs
+    : 3 * 60 * 60 * 1000;
+
+const configuredCandidateHeadwayMultiplier = Number.parseFloat(
+  process.env.DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER || '2'
+);
+const DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER =
+  Number.isFinite(configuredCandidateHeadwayMultiplier) && configuredCandidateHeadwayMultiplier > 0
+    ? configuredCandidateHeadwayMultiplier
+    : 2;
+
+const configuredCandidateBufferMs = Number.parseFloat(
+  process.env.DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS || String(10 * 60 * 1000)
+);
+const DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS =
+  Number.isFinite(configuredCandidateBufferMs) && configuredCandidateBufferMs >= 0
+    ? configuredCandidateBufferMs
+    : 10 * 60 * 1000;
+
+const configuredCandidateMaxMs = Number.parseFloat(
+  process.env.DETOUR_CANDIDATE_CONFIRMATION_MAX_MS || String(3 * 60 * 60 * 1000)
+);
+const DETOUR_CANDIDATE_CONFIRMATION_MAX_MS =
+  Number.isFinite(configuredCandidateMaxMs) && configuredCandidateMaxMs > 0
+    ? configuredCandidateMaxMs
+    : 3 * 60 * 60 * 1000;
 
 const configuredPersistConsecutiveMatches = Number.parseInt(
   process.env.DETOUR_PERSIST_CONSECUTIVE_MATCHES || '10',
@@ -109,14 +149,14 @@ const RECURRING_SHORT_DEVIATION_WINDOW_MS =
     : 3 * 60 * 60 * 1000;
 
 const configuredRecurringShortDeviationMinObservations = Number.parseInt(
-  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS || '3',
+  process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS || '2',
   10
 );
 const RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS =
   Number.isFinite(configuredRecurringShortDeviationMinObservations) &&
   configuredRecurringShortDeviationMinObservations > 0
     ? configuredRecurringShortDeviationMinObservations
-    : 3;
+    : 2;
 
 const configuredRecurringShortDeviationMinUniqueSignatures = Number.parseInt(
   process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES || '2',
@@ -190,6 +230,11 @@ module.exports = {
   STALE_VEHICLE_TIMEOUT_MS,
   DEFAULT_MIN_VEHICLES_FOR_DETOUR,
   EVIDENCE_WINDOW_MS,
+  DETOUR_VEHICLE_TRACE_WINDOW_MS,
+  DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS,
+  DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER,
+  DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS,
+  DETOUR_CANDIDATE_CONFIRMATION_MAX_MS,
   DETOUR_PERSIST_CONSECUTIVE_MATCHES,
   DETOUR_PERSIST_MIN_AGE_MS,
   RECURRING_SHORT_DEVIATION_ENABLED,

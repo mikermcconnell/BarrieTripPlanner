@@ -256,7 +256,7 @@ describe('map and navigation button interactions', () => {
       onChange,
     }));
 
-    press(buttonByText(inst.root, 'Leave Now'));
+    press(buttonByText(inst.root, 'Current Time'));
     press(buttonByText(inst.root, 'Arrive By'));
     press(buttonByText(inst.root, '+15m'));
     press(buttonByText(inst.root, 'Tomorrow'));

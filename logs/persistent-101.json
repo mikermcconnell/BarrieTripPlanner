@@ -1,0 +1,481 @@
+{
+  "name": "projects/barrie-transit-trip-plan-cc84e/databases/(default)/documents/persistentDetoursAuto/101",
+  "fields": {
+    "detectedAt": {
+      "integerValue": "1779237021987"
+    },
+    "learnedAt": {
+      "integerValue": "1779279015694"
+    },
+    "lastSeenAt": {
+      "integerValue": "1779282032107"
+    },
+    "triggerVehicleId": {
+      "stringValue": "6fe3cadb-d3a9-498d-a009-b786cb2f3f84"
+    },
+    "geometry": {
+      "mapValue": {
+        "fields": {
+          "canShowDetourPath": {
+            "booleanValue": false
+          },
+          "evidencePointCount": {
+            "integerValue": "4"
+          },
+          "inferredDetourPolyline": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "latitude": {
+                        "doubleValue": 44.38775336238379
+                      },
+                      "longitude": {
+                        "doubleValue": -79.68920442355164
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "longitude": {
+                        "doubleValue": -79.68537139892578
+                      },
+                      "latitude": {
+                        "doubleValue": 44.38888931274414
+                      }
+                    }
+                  }
+                },
+                {
+                  "mapValue": {
+                    "fields": {
+                      "latitude": {
+                        "doubleValue": 44.389015197753906
+                      },
+                      "longitude": {
+                        "doubleValue": -79.6853256225586
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "confidence": {
+            "stringValue": "medium"
+          },
+          "shapeId": {
+            "stringValue": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1"
+          },
+          "skippedSegmentPolyline": {
+            "nullValue": null
+          },
+          "lastEvidenceAt": {
+            "integerValue": "1779282032107"
+          },
+          "entryPoint": {
+            "mapValue": {
+              "fields": {
+                "latitude": {
+                  "doubleValue": 44.38775336238379
+                },
+                "longitude": {
+                  "doubleValue": -79.68920442355164
+                }
+              }
+            }
+          },
+          "segments": {
+            "arrayValue": {
+              "values": [
+                {
+                  "mapValue": {
+                    "fields": {
+                      "skippedSegmentPolyline": {
+                        "nullValue": null
+                      },
+                      "affectedStopIds": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "89"
+                            },
+                            {
+                              "stringValue": "192"
+                            }
+                          ]
+                        }
+                      },
+                      "affectedStopCodes": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "89"
+                            },
+                            {
+                              "stringValue": "192"
+                            }
+                          ]
+                        }
+                      },
+                      "skippedStopCodes": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "89"
+                            },
+                            {
+                              "stringValue": "192"
+                            }
+                          ]
+                        }
+                      },
+                      "spanMeters": {
+                        "doubleValue": 683.3915126599381
+                      },
+                      "shapeId": {
+                        "stringValue": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1"
+                      },
+                      "skippedStopIds": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "stringValue": "89"
+                            },
+                            {
+                              "stringValue": "192"
+                            }
+                          ]
+                        }
+                      },
+                      "affectedStops": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "code": {
+                                    "stringValue": "89"
+                                  },
+                                  "name": {
+                                    "stringValue": "Bayfield at Chase McEachern"
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.3884489290011
+                                  },
+                                  "id": {
+                                    "stringValue": "89"
+                                  },
+                                  "longitude": {
+                                    "doubleValue": -79.6893494311657
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "id": {
+                                    "stringValue": "192"
+                                  },
+                                  "longitude": {
+                                    "doubleValue": -79.6875199489307
+                                  },
+                                  "name": {
+                                    "stringValue": "Owen Street"
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.3903620177723
+                                  },
+                                  "code": {
+                                    "stringValue": "192"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "exitIndex": {
+                        "integerValue": "11"
+                      },
+                      "entryIndex": {
+                        "integerValue": "2"
+                      },
+                      "entryPoint": {
+                        "mapValue": {
+                          "fields": {
+                            "longitude": {
+                              "doubleValue": -79.68920442355164
+                            },
+                            "latitude": {
+                              "doubleValue": 44.38775336238379
+                            }
+                          }
+                        }
+                      },
+                      "lastEvidenceAt": {
+                        "integerValue": "1779282032107"
+                      },
+                      "exitPoint": {
+                        "mapValue": {
+                          "fields": {
+                            "latitude": {
+                              "doubleValue": 44.390404730005905
+                            },
+                            "longitude": {
+                              "doubleValue": -79.68537993392782
+                            }
+                          }
+                        }
+                      },
+                      "debug": {
+                        "mapValue": {
+                          "fields": {
+                            "semanticReversed": {
+                              "booleanValue": false
+                            },
+                            "rawPathRejectedByEndpointMismatch": {
+                              "booleanValue": false
+                            },
+                            "hasEntryBoundaryCandidate": {
+                              "booleanValue": true
+                            },
+                            "overlapSuppressed": {
+                              "booleanValue": false
+                            },
+                            "entryAnchorAdjusted": {
+                              "booleanValue": false
+                            },
+                            "exitCandidateCount": {
+                              "integerValue": "0"
+                            },
+                            "overlapPrefixTrimmed": {
+                              "booleanValue": false
+                            },
+                            "sameVehicleTracePointCount": {
+                              "integerValue": "0"
+                            },
+                            "hasExitBoundaryCandidate": {
+                              "booleanValue": false
+                            },
+                            "sameVehicleTraceVehicleId": {
+                              "nullValue": null
+                            },
+                            "entryAnchorSource": {
+                              "stringValue": "boundary-candidate"
+                            },
+                            "boundaryQuality": {
+                              "stringValue": "inferred"
+                            },
+                            "usedRepresentativePath": {
+                              "booleanValue": true
+                            },
+                            "entryCandidateCount": {
+                              "integerValue": "1"
+                            },
+                            "untrustedPathEndpointMismatchMeters": {
+                              "integerValue": "330"
+                            },
+                            "multiVehicleTraceVehicleCount": {
+                              "integerValue": "0"
+                            },
+                            "clusterVehicleIds": {
+                              "arrayValue": {
+                                "values": [
+                                  {
+                                    "stringValue": "be5d6e66-7e92-4c28-a05a-08d03c170248"
+                                  }
+                                ]
+                              }
+                            },
+                            "overlapTrimmed": {
+                              "booleanValue": false
+                            },
+                            "overlapSuffixTrimmed": {
+                              "booleanValue": false
+                            },
+                            "canShowDetourPath": {
+                              "booleanValue": false
+                            },
+                            "pathConfidenceReason": {
+                              "stringValue": "missing-boundary-anchor"
+                            },
+                            "exitAnchorSource": {
+                              "stringValue": "projected-evidence-fallback"
+                            },
+                            "entryAnchorGapMeters": {
+                              "nullValue": null
+                            }
+                          }
+                        }
+                      },
+                      "suppressStopDerivation": {
+                        "booleanValue": false
+                      },
+                      "evidencePointCount": {
+                        "integerValue": "2"
+                      },
+                      "canShowDetourPath": {
+                        "booleanValue": false
+                      },
+                      "exitStopId": {
+                        "stringValue": "192"
+                      },
+                      "entryStopId": {
+                        "stringValue": "89"
+                      },
+                      "skippedStops": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "code": {
+                                    "stringValue": "89"
+                                  },
+                                  "name": {
+                                    "stringValue": "Bayfield at Chase McEachern"
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.3884489290011
+                                  },
+                                  "longitude": {
+                                    "doubleValue": -79.6893494311657
+                                  },
+                                  "id": {
+                                    "stringValue": "89"
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "code": {
+                                    "stringValue": "192"
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.3903620177723
+                                  },
+                                  "name": {
+                                    "stringValue": "Owen Street"
+                                  },
+                                  "longitude": {
+                                    "doubleValue": -79.6875199489307
+                                  },
+                                  "id": {
+                                    "stringValue": "192"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "confidence": {
+                        "stringValue": "low"
+                      },
+                      "inferredDetourPolyline": {
+                        "arrayValue": {
+                          "values": [
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "longitude": {
+                                    "doubleValue": -79.68920442355164
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.38775336238379
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "longitude": {
+                                    "doubleValue": -79.68537139892578
+                                  },
+                                  "latitude": {
+                                    "doubleValue": 44.38888931274414
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "mapValue": {
+                                "fields": {
+                                  "latitude": {
+                                    "doubleValue": 44.389015197753906
+                                  },
+                                  "longitude": {
+                                    "doubleValue": -79.6853256225586
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "exitPoint": {
+            "mapValue": {
+              "fields": {
+                "latitude": {
+                  "doubleValue": 44.390404730005905
+                },
+                "longitude": {
+                  "doubleValue": -79.68537993392782
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "fingerprint": {
+      "stringValue": "101:2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1:44.3878:-79.6892:44.3904:-79.6854"
+    },
+    "updatedAt": {
+      "integerValue": "1779289276447"
+    },
+    "routeId": {
+      "stringValue": "101"
+    },
+    "lastEvidenceAt": {
+      "integerValue": "1779289276262"
+    },
+    "detourZone": {
+      "mapValue": {
+        "fields": {
+          "shapeId": {
+            "stringValue": "2413bb32-5bb8-43af-bcf8-e3dd4fefc0d1"
+          },
+          "coreStart": {
+            "integerValue": "5"
+          },
+          "exitIndex": {
+            "integerValue": "11"
+          },
+          "entryIndex": {
+            "integerValue": "4"
+          },
+          "coreEnd": {
+            "integerValue": "10"
+          }
+        }
+      }
+    }
+  },
+  "createTime": "2026-05-20T12:10:16.355743Z",
+  "updateTime": "2026-05-20T15:01:16.474247Z"
+}

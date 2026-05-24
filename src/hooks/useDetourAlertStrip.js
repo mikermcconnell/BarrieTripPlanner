@@ -8,6 +8,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { LayoutAnimation, Platform } from 'react-native';
 import { filterRiderVisibleDetours } from '../utils/detourVisibility';
+import { buildActiveDetourEvents } from '../utils/detourEvents';
 import { getRouteFamilyId } from '../utils/routeDetourMatching';
 
 export const BASE_TOP = 140;
@@ -20,21 +21,18 @@ const normalizeConfidence = (confidence) => (
 
 const getDetourConfidence = (detour) => normalizeConfidence(detour?.confidence);
 
-const getStatusLabel = (detour) => {
-  if (detour?.state === 'clear-pending') return 'Clearing...';
-  return getDetourConfidence(detour) === 'high' ? 'Confirmed detour' : 'Likely detour';
+const getStatusLabel = (item) => {
+  if (item?.state === 'clear-pending') return 'Clearing...';
+  return getDetourConfidence(item) === 'high' ? 'Active detour' : 'Likely detour';
 };
 
-const getBannerPrefix = (groups) => {
-  const count = groups.length;
-  const hasHigh = groups.some((group) => group.confidence === 'high');
-  const hasMedium = groups.some((group) => group.confidence === 'medium');
-  const suffix = count === 1 ? 'detour' : 'detours';
+const getBannerPrefix = (events) => (events.length === 1 ? 'Active detour' : 'Active detours');
 
-  if (hasHigh && !hasMedium) return `Confirmed ${suffix}`;
-  if (hasMedium && !hasHigh) return `Likely ${suffix}`;
-  if (hasHigh) return `Confirmed ${suffix}`;
-  return count === 1 ? 'Detour' : 'Detours';
+const formatRouteSummary = (groups) => {
+  const routeNames = groups.map((group) => group.displayName).filter(Boolean);
+  if (routeNames.length === 0) return '';
+  const prefix = routeNames.length === 1 ? 'Route' : 'Routes';
+  return `${prefix} ${routeNames.join(', ')}`;
 };
 
 export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes = [] }) => {
@@ -76,6 +74,10 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
     () => filterRiderVisibleDetours(activeDetours),
     [activeDetours]
   );
+  const detourEvents = useMemo(
+    () => buildActiveDetourEvents(activeDetours),
+    [activeDetours]
+  );
 
   const topOffset = alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP;
 
@@ -111,35 +113,41 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
   }, [getRouteName, routeIds, visibleDetours]);
 
   const visibleIds = routeIds.slice(0, MAX_EXPANDED);
-  const overflowCount = routeIds.length - MAX_EXPANDED;
+  const visibleEvents = detourEvents.slice(0, MAX_EXPANDED);
+  const overflowCount = detourEvents.length - MAX_EXPANDED;
   const collapsedSummaryGroups = routeGroups.slice(0, 4);
   const collapsedOverflowCount = routeGroups.length - collapsedSummaryGroups.length;
-  const routeSummary = collapsedSummaryGroups.map((group) => group.displayName).join(', ');
-  const bannerPrefix = getBannerPrefix(routeGroups);
+  const routeSummary = formatRouteSummary(collapsedSummaryGroups);
+  const bannerPrefix = getBannerPrefix(detourEvents);
 
   const countText =
-    routeGroups.length === 1
-      ? `${bannerPrefix}: ${routeSummary}`
-      : collapsedOverflowCount > 0
-        ? `${bannerPrefix}: ${routeSummary} +${collapsedOverflowCount}`
-        : `${bannerPrefix}: ${routeSummary}`;
+    detourEvents.length === 1
+      ? `${bannerPrefix}: ${detourEvents[0].title}`
+      : `${bannerPrefix}: ${detourEvents.length} locations`;
 
   const getDetourStatusLabel = useCallback(
     (routeId) => getStatusLabel(visibleDetours[routeId]),
     [visibleDetours]
+  );
+  const getEventStatusLabel = useCallback(
+    (event) => getStatusLabel(event),
+    []
   );
 
   return {
     expanded,
     toggleExpanded,
     routeIds,
+    detourEvents,
     routeGroups,
     topOffset,
     getRouteName,
     getDetourStatusLabel,
+    getEventStatusLabel,
     visibleIds,
+    visibleEvents,
     overflowCount,
     countText,
-    shouldRender: routeIds.length > 0,
+    shouldRender: detourEvents.length > 0,
   };
 };

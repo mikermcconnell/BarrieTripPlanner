@@ -4,6 +4,13 @@ const DEFAULT_RADIUS_METERS = 75;
 const ROAD_MATCH_SOURCE = 'osrm-match';
 const ROAD_ROUTE_SOURCE = 'osrm-route';
 const DETOUR_PATH_LABEL = 'Likely detour path';
+const ROAD_MATCH_FIELDS = [
+  'likelyDetourPolyline',
+  'likelyDetourRoadNames',
+  'roadMatchConfidence',
+  'roadMatchRawConfidence',
+  'roadMatchSource',
+];
 const EARTH_RADIUS_METERS = 6371000;
 const DEFAULT_BLOCKED_PROXIMITY_METERS = 15;
 const DEFAULT_BLOCKED_OVERLAP_RATIO = 0.05;
@@ -13,6 +20,8 @@ const DEFAULT_BACKTRACK_PROXIMITY_METERS = 12;
 const DEFAULT_BACKTRACK_MIN_SEGMENT_METERS = 20;
 const DEFAULT_BACKTRACK_MIN_TURN_DEGREES = 150;
 const DEFAULT_BACKTRACK_MAX_WINDOW_POINTS = 30;
+const DEFAULT_MIN_MATCH_CONFIDENCE = 0.45;
+const DEFAULT_ENDPOINT_MAX_MISMATCH_METERS = 45;
 
 function isTruthy(value) {
   return ['true', '1', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -354,16 +363,64 @@ function confidenceLabel(rawConfidence) {
   return 'low';
 }
 
-function buildOsrmMatchUrl(baseUrl, points, env = process.env) {
-  const coordinateList = points
-    .map((point) => `${point.longitude},${point.latitude}`)
-    .join(';');
-  const radiusMeters = parsePositiveInt(
+function getRoadMatchRadiusMeters(env = process.env) {
+  return parsePositiveInt(
     env.DETOUR_ROAD_MATCHING_RADIUS_METERS,
     DEFAULT_RADIUS_METERS,
     5,
     500
   );
+}
+
+function getMinimumMatchConfidence(env = process.env) {
+  return parseNonNegativeFloat(
+    env.DETOUR_ROAD_MATCHING_MIN_CONFIDENCE,
+    DEFAULT_MIN_MATCH_CONFIDENCE,
+    0,
+    1
+  );
+}
+
+function getEndpointMaxMismatchMeters(env = process.env) {
+  return parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS,
+    DEFAULT_ENDPOINT_MAX_MISMATCH_METERS,
+    5,
+    500
+  );
+}
+
+function endpointMismatchMeters(path, referencePath) {
+  const matched = normalizePolyline(path);
+  const reference = normalizePolyline(referencePath);
+  if (matched.length < 2 || reference.length < 2) return null;
+
+  const matchedStart = matched[0];
+  const matchedEnd = matched[matched.length - 1];
+  const referenceStart = reference[0];
+  const referenceEnd = reference[reference.length - 1];
+  const direct = Math.max(
+    haversineDistance(matchedStart, referenceStart),
+    haversineDistance(matchedEnd, referenceEnd)
+  );
+  const reversed = Math.max(
+    haversineDistance(matchedStart, referenceEnd),
+    haversineDistance(matchedEnd, referenceStart)
+  );
+  return Math.min(direct, reversed);
+}
+
+function addRejectionReason(options, reason, details = {}) {
+  if (Array.isArray(options?.rejectionReasons)) {
+    options.rejectionReasons.push({ reason, ...details });
+  }
+}
+
+function buildOsrmMatchUrl(baseUrl, points, env = process.env) {
+  const coordinateList = points
+    .map((point) => `${point.longitude},${point.latitude}`)
+    .join(';');
+  const radiusMeters = getRoadMatchRadiusMeters(env);
   const query = new URLSearchParams({
     overview: 'full',
     geometries: 'geojson',
@@ -373,6 +430,13 @@ function buildOsrmMatchUrl(baseUrl, points, env = process.env) {
     radiuses: points.map(() => radiusMeters).join(';'),
   });
   return `${baseUrl}/match/v1/driving/${coordinateList}?${query.toString()}`;
+}
+
+function getAdaptiveMatchRadii(env = process.env) {
+  const configuredRadius = getRoadMatchRadiusMeters(env);
+  return [configuredRadius, 25, 15, 10]
+    .filter((radius, index, radii) => radius > 0 && radii.indexOf(radius) === index)
+    .filter((radius, index) => index === 0 || radius < configuredRadius);
 }
 
 function buildOsrmRouteUrl(baseUrl, points) {
@@ -450,12 +514,33 @@ async function fetchOsrmJsonWithTimeout(url, fetchImpl, timeoutMs) {
 }
 
 function buildRoadMatchedResult(matchable, source, options = {}) {
+  const rawConfidence = Number(matchable?.confidence);
+  if (
+    source === ROAD_MATCH_SOURCE &&
+    Number.isFinite(rawConfidence) &&
+    rawConfidence < getMinimumMatchConfidence(options.env)
+  ) {
+    addRejectionReason(options, 'low-confidence', { rawConfidence });
+    return null;
+  }
+
   const matchedPolyline = removeAvoidableBacktracksFromPolyline(
     parseMatchedPolyline(matchable),
     options.env
   );
   if (matchedPolyline.length < 2) return null;
+
+  const mismatchMeters = endpointMismatchMeters(matchedPolyline, options.candidatePolyline);
+  if (
+    mismatchMeters != null &&
+    mismatchMeters > getEndpointMaxMismatchMeters(options.env)
+  ) {
+    addRejectionReason(options, 'endpoint-mismatch', { mismatchMeters });
+    return null;
+  }
+
   if (doesPathUseBlockedSegment(matchedPolyline, options.blockedPolyline, options.env)) {
+    addRejectionReason(options, 'blocked-overlap');
     return null;
   }
 
@@ -503,17 +588,56 @@ async function matchPolylineToRoads(polyline, options = {}) {
     30000
   );
   let matchError = null;
-  try {
-    const payload = await fetchOsrmJsonWithTimeout(
-      buildOsrmMatchUrl(baseUrl, points, env),
-      fetchImpl,
-      timeoutMs
-    );
-    const matching = Array.isArray(payload?.matchings) ? payload.matchings[0] : null;
-    const matchResult = matching ? buildRoadMatchedResult(matching, ROAD_MATCH_SOURCE, options) : null;
-    if (matchResult) return matchResult;
-  } catch (err) {
-    matchError = err;
+  let rejectedForTrust = false;
+  for (const radiusMeters of getAdaptiveMatchRadii(env)) {
+    try {
+      const payload = await fetchOsrmJsonWithTimeout(
+        buildOsrmMatchUrl(baseUrl, points, {
+          ...env,
+          DETOUR_ROAD_MATCHING_RADIUS_METERS: String(radiusMeters),
+        }),
+        fetchImpl,
+        timeoutMs
+      );
+      const matching = Array.isArray(payload?.matchings) ? payload.matchings[0] : null;
+      const rejectionReasons = [];
+      const matchResult = matching
+        ? buildRoadMatchedResult(matching, ROAD_MATCH_SOURCE, {
+          ...options,
+          candidatePolyline: points,
+          rejectionReasons,
+        })
+        : null;
+      if (matchResult) return matchResult;
+      if (matching) {
+        if (rejectionReasons.some(({ reason }) => (
+          reason === 'low-confidence' || reason === 'endpoint-mismatch'
+        ))) {
+          rejectedForTrust = true;
+        }
+        console.warn('[detourRoadMatcher] OSRM match result rejected or unusable', {
+          radiusMeters,
+          reason: rejectionReasons[0]?.reason || 'no usable road-matched path after safety checks',
+          details: rejectionReasons[0] || undefined,
+        });
+        break;
+      }
+      matchError = null;
+      break;
+    } catch (err) {
+      matchError = err;
+      if (err?.name === 'AbortError') {
+        break;
+      }
+      console.warn('[detourRoadMatcher] OSRM match attempt failed', {
+        radiusMeters,
+        reason: err?.message || String(err),
+      });
+    }
+  }
+
+  if (rejectedForTrust) {
+    return null;
   }
 
   if (!isRouteFallbackEnabled(env)) {
@@ -527,7 +651,20 @@ async function matchPolylineToRoads(polyline, options = {}) {
     timeoutMs
   );
   const route = Array.isArray(routePayload?.routes) ? routePayload.routes[0] : null;
-  return route ? buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, options) : null;
+  return route
+    ? buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, {
+      ...options,
+      candidatePolyline: points,
+    })
+    : null;
+}
+
+function clearRoadMatchedFields(value) {
+  const next = { ...(value || {}) };
+  ROAD_MATCH_FIELDS.forEach((field) => {
+    delete next[field];
+  });
+  return next;
 }
 
 function getMatchCandidate(segment) {
@@ -552,7 +689,7 @@ async function matchSegment(segment, options) {
       ...options,
       blockedPolyline: segment?.skippedSegmentPolyline,
     });
-    if (!match) return { ...segment };
+    if (!match) return clearRoadMatchedFields(segment);
     return {
       ...segment,
       ...match,
@@ -586,26 +723,24 @@ async function matchDetourGeometry(geometry, options = {}) {
   }
 
   const segments = [];
-  if (primaryMatch?.likelyDetourPolyline?.length >= 2 && originalSegments.length > 1) {
-    segments.push(...originalSegments.map((segment) => ({ ...segment })));
-  } else {
-    for (const segment of originalSegments) {
-      // Keep requests sequential. Public OSRM and small hosted matchers often
-      // time out when several segment match + route-fallback calls are fired at
-      // once for route-family detours.
-      // eslint-disable-next-line no-await-in-loop
-      segments.push(await matchSegment(segment, options));
-    }
+  for (const segment of originalSegments) {
+    // Keep requests sequential. Public OSRM and small hosted matchers often
+    // time out when several segment match + route-fallback calls are fired at
+    // once for route-family detours.
+    // eslint-disable-next-line no-await-in-loop
+    segments.push(await matchSegment(segment, options));
   }
 
   next.segments = segments;
 
-  primaryMatch = primaryMatch?.likelyDetourPolyline?.length >= 2
-    ? primaryMatch
-    : segments.find((segment) => (
+  primaryMatch = segments.find((segment) => (
       Array.isArray(segment?.likelyDetourPolyline) &&
       segment.likelyDetourPolyline.length >= 2
-    ));
+    )) || (
+      primaryMatch?.likelyDetourPolyline?.length >= 2
+        ? primaryMatch
+        : null
+    );
 
   if (
     !primaryMatch &&
@@ -624,6 +759,10 @@ async function matchDetourGeometry(geometry, options = {}) {
     next.roadMatchRawConfidence = primaryMatch.roadMatchRawConfidence ?? null;
     next.roadMatchSource = primaryMatch.roadMatchSource || ROAD_MATCH_SOURCE;
     next.detourPathLabel = DETOUR_PATH_LABEL;
+  } else {
+    ROAD_MATCH_FIELDS.forEach((field) => {
+      delete next[field];
+    });
   }
 
   return next;

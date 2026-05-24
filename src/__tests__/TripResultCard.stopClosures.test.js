@@ -103,6 +103,19 @@ describe('TripResultCard stop closure notices', () => {
     expect(texts.join(' ')).not.toContain('not flagged');
   });
 
+  test('uses a calendar-style badge for trips in the future', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        isTomorrow: true,
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('📅 Tomorrow');
+    expect(texts.join(' ')).not.toContain('🌙 Tomorrow');
+  });
+
   test('shows a detour warning when a planned stop may be affected', () => {
     const texts = renderTexts(React.createElement(TripResultCard, {
       itinerary: {
@@ -120,6 +133,55 @@ describe('TripResultCard stop closure notices', () => {
 
     expect(texts.join(' ')).toContain('Boarding stop may be missed');
     expect(texts.join(' ')).toContain('Affected: Mapleview at Lily');
+  });
+
+  test('shows upcoming stop closures as scheduled notices with a start date', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        stopClosureNotices: {
+          hasTripImpact: false,
+          impactedStops: [],
+          routeNotices: [],
+          hasUpcomingImpact: true,
+          upcomingImpactedStops: [{
+            stopCode: '509',
+            stopName: 'Mapleview at Lily',
+            startsAt: Date.parse('2026-05-20T07:00:00-04:00'),
+            roles: ['boarding'],
+          }],
+          upcomingRouteNotices: [],
+        },
+      },
+      onPress: jest.fn(),
+    }));
+
+    const text = texts.join(' ');
+    expect(text).toContain('Stop 509 closure scheduled');
+    expect(text).toContain('Starts May 20, 2026');
+    expect(text).not.toContain('⚠️ Stop 509 may be closed');
+  });
+
+  test('upgrades scheduled stop closures when this planned trip is affected', () => {
+    const texts = renderTexts(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        stopClosureNotices: {
+          hasTripImpact: true,
+          impactedStops: [{
+            stopCode: '509',
+            stopName: 'Mapleview at Lily',
+            startsAt: Date.parse('2026-05-20T07:00:00-04:00'),
+            timingStatus: 'applies_to_trip',
+            roles: ['boarding'],
+          }],
+          routeNotices: [],
+        },
+      },
+      onPress: jest.fn(),
+    }));
+
+    expect(texts.join(' ')).toContain('This trip may be affected by Stop 509 closure');
   });
 
   test('labels trips that avoid the active detour', () => {
@@ -379,5 +441,65 @@ describe('TripResultCard stop closure notices', () => {
     const walkIcons = root.findAllByType('WalkingPaceIcon');
     expect(walkIcons).toHaveLength(2);
     expect(walkIcons.every((icon) => icon.props.level === 'on_pace')).toBe(true);
+  });
+
+  test('wires late realtime status into the trip preview badge', () => {
+    const root = renderTree(React.createElement(TripResultCard, {
+      itinerary: {
+        ...baseItinerary,
+        hasRealtimeInfo: true,
+        totalDelaySeconds: 4 * 60,
+        legs: [
+          { mode: 'WALK', duration: 180 },
+          {
+            mode: 'BUS',
+            duration: 420,
+            isRealtime: true,
+            delaySeconds: 4 * 60,
+            route: { shortName: '12B', color: '#0C8CE5' },
+          },
+        ],
+      },
+      onPress: jest.fn(),
+    }));
+
+    const badges = root.findAllByType('DelayBadge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].props).toMatchObject({
+      delaySeconds: 4 * 60,
+      isRealtime: true,
+      compact: true,
+    });
+  });
+
+  test('wires on-time and early realtime statuses into the trip preview badge', () => {
+    [0, -2 * 60].forEach((totalDelaySeconds) => {
+      const root = renderTree(React.createElement(TripResultCard, {
+        itinerary: {
+          ...baseItinerary,
+          hasRealtimeInfo: true,
+          totalDelaySeconds,
+          legs: [
+            { mode: 'WALK', duration: 180 },
+            {
+              mode: 'BUS',
+              duration: 420,
+              isRealtime: true,
+              delaySeconds: totalDelaySeconds,
+              route: { shortName: '12B', color: '#0C8CE5' },
+            },
+          ],
+        },
+        onPress: jest.fn(),
+      }));
+
+      const badges = root.findAllByType('DelayBadge');
+      expect(badges).toHaveLength(1);
+      expect(badges[0].props).toMatchObject({
+        delaySeconds: totalDelaySeconds,
+        isRealtime: true,
+        compact: true,
+      });
+    });
   });
 });

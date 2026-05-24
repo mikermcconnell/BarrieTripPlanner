@@ -33,4 +33,38 @@ describe('detour detection config', () => {
 
     expect(config.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE).toBe(7);
   });
+
+  test('requires two unique vehicles for detour publishing by default', () => {
+    delete process.env.DETOUR_MIN_UNIQUE_VEHICLES;
+
+    const config = require('../detour/detectionConfig');
+
+    expect(config.DEFAULT_MIN_VEHICLES_FOR_DETOUR).toBe(2);
+  });
+
+  test('does not allow env config to weaken publishing below two vehicles', () => {
+    process.env.DETOUR_MIN_UNIQUE_VEHICLES = '1';
+
+    const config = require('../detour/detectionConfig');
+
+    expect(config.DEFAULT_MIN_VEHICLES_FOR_DETOUR).toBe(2);
+  });
+
+  test('uses two observations as the short-recurring fallback', () => {
+    process.env.DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS = 'not-a-number';
+
+    const config = require('../detour/detectionConfig');
+
+    expect(config.RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS).toBe(2);
+  });
+
+  test('exposes normal detour candidate memory defaults', () => {
+    const config = require('../detour/detectionConfig');
+
+    expect(config.DETOUR_VEHICLE_TRACE_WINDOW_MS).toBe(20 * 60 * 1000);
+    expect(config.DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS).toBe(3 * 60 * 60 * 1000);
+    expect(config.DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER).toBe(2);
+    expect(config.DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS).toBe(10 * 60 * 1000);
+    expect(config.DETOUR_CANDIDATE_CONFIRMATION_MAX_MS).toBe(3 * 60 * 60 * 1000);
+  });
 });

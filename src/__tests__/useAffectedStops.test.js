@@ -221,6 +221,137 @@ describe('deriveAffectedStops', () => {
     expect(result.entryStopName).toBe('Barrie Allandale Transit Terminal Platform 5');
     expect(result.exitStopName).toBe('Poyntz Street');
   });
+
+  it('keeps entry and exit boundary stops open when they sit on the closed route section', () => {
+    const result = deriveAffectedStops({
+      routeId: 'R1',
+      entryPoint: { latitude: 44.395, longitude: -79.690 },
+      exitPoint: { latitude: 44.385, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.395, longitude: -79.690 },
+        { latitude: 44.390, longitude: -79.690 },
+        { latitude: 44.385, longitude: -79.690 },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.skippedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.entryStop.id).toBe('s2');
+    expect(result.exitStop.id).toBe('s4');
+  });
+
+  it('prefers explicit skipped stop ids from backend geometry over boundary heuristics', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          entryPoint: { latitude: 44.395, longitude: -79.690 },
+          exitPoint: { latitude: 44.385, longitude: -79.690 },
+          skippedSegmentPolyline: [
+            { latitude: 44.395, longitude: -79.690 },
+            { latitude: 44.390, longitude: -79.690 },
+            { latitude: 44.385, longitude: -79.690 },
+          ],
+          skippedStopIds: ['s2', 's3', 's4'],
+          entryStopId: 's2',
+          exitStopId: 's4',
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails[0].skippedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.segmentStopDetails[0].entryStop.id).toBe('s2');
+    expect(result.segmentStopDetails[0].exitStop.id).toBe('s4');
+  });
+
+  it('falls back to deriving stop impacts when backend publishes empty explicit arrays', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          entryPoint: { latitude: 44.396, longitude: -79.690 },
+          exitPoint: { latitude: 44.384, longitude: -79.690 },
+          skippedSegmentPolyline: [
+            { latitude: 44.395, longitude: -79.690 },
+            { latitude: 44.390, longitude: -79.690 },
+            { latitude: 44.385, longitude: -79.690 },
+          ],
+          skippedStopIds: [],
+          affectedStopIds: [],
+          skippedStops: [],
+          affectedStops: [],
+          entryStopId: 's2',
+          exitStopId: 's4',
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
+    expect(result.segmentStopDetails[0].skippedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.segmentStopDetails[0].entryStop.id).toBe('s2');
+    expect(result.segmentStopDetails[0].exitStop.id).toBe('s4');
+  });
+
+  it('keeps very short boundary-only sections open unless official data marks the stop closed', () => {
+    const result = deriveAffectedStops({
+      routeId: 'R1',
+      entryPoint: { latitude: 44.3901, longitude: -79.690 },
+      exitPoint: { latitude: 44.3899, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.3901, longitude: -79.690 },
+        { latitude: 44.3899, longitude: -79.690 },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.affectedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.skippedStops.map((stop) => stop.id)).toEqual([]);
+  });
+
+  it('does not mark the stop immediately before the detour entry as skipped', () => {
+    const localStops = [
+      makeStop('before', 'Before Detour', 44.4000, -79.690),
+      makeStop('inside', 'Inside Detour', 44.3980, -79.690),
+      makeStop('after', 'After Detour', 44.3960, -79.690),
+    ];
+
+    const result = deriveAffectedStops({
+      routeId: 'R3',
+      entryPoint: { latitude: 44.3999, longitude: -79.690 },
+      exitPoint: { latitude: 44.3961, longitude: -79.690 },
+      skippedSegmentPolyline: [
+        { latitude: 44.3999, longitude: -79.690 },
+        { latitude: 44.3980, longitude: -79.690 },
+        { latitude: 44.3961, longitude: -79.690 },
+      ],
+      stops: localStops,
+      routeStopsMapping: { R3: ['before', 'inside', 'after'] },
+      routeStopSequencesMapping: {
+        R3: {
+          __default__: ['before', 'inside', 'after'],
+          'shape-3': ['before', 'inside', 'after'],
+        },
+      },
+    });
+
+    expect(result.affectedStops.map((stop) => stop.id)).toEqual(['before', 'inside', 'after']);
+    expect(result.skippedStops.map((stop) => stop.id)).toEqual(['inside']);
+    expect(result.entryStop.id).toBe('before');
+  });
 });
 
 describe('deriveAffectedStopDetailsForDetour', () => {

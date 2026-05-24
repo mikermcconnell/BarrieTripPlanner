@@ -95,6 +95,40 @@ describe('navigationMapMarkers', () => {
     }));
   });
 
+  test('rounds boarding-stop ETA up so map and walking card countdowns match', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-20T12:00:00Z'));
+
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { name: 'Origin', lat: 44.3801, lon: -79.7021 },
+          to: { name: 'Boarding stop', lat: 44.381, lon: -79.703 },
+        },
+        {
+          mode: 'BUS',
+          from: { name: 'Beacon Road', stopCode: '295', lat: 44.3814, lon: -79.7042 },
+          to: { name: 'Downtown Terminal', stopCode: '1020', lat: 44.39, lon: -79.69 },
+        },
+      ],
+    };
+
+    const markers = buildWalkingLandmarkMarkers({
+      itinerary,
+      currentLeg: itinerary.legs[0],
+      currentLegIndex: 0,
+      nextTransitLeg: itinerary.legs[1],
+      nextTransitProximity: {
+        estimatedArrival: new Date('2026-03-20T12:09:30Z'),
+        hasArrived: false,
+      },
+    });
+
+    expect(markers[1]).toEqual(expect.objectContaining({
+      detail: 'Bus in 10 min',
+    }));
+  });
+
   test('shows that the bus is here when the next bus has arrived', () => {
     const itinerary = {
       legs: [

@@ -99,7 +99,7 @@ describe('deriveDetourOverlays', () => {
     expect(result).toEqual([]);
   });
 
-  test('renders low-confidence inferred geometry in validation mode', () => {
+  test('does not render low-confidence inferred geometry in validation mode', () => {
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: new Set(['100']),
@@ -128,10 +128,7 @@ describe('deriveDetourOverlays', () => {
       },
     });
 
-    expect(result).toHaveLength(1);
-    expect(result[0].routeId).toBe('100');
-    expect(result[0].inferredDetourPolyline).toBe(LONG_POLYLINE);
-    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBe(LONG_POLYLINE);
+    expect(result).toEqual([]);
   });
 
   test('does not render low-confidence preview geometry when endpoints do not match entry and exit anchors', () => {
@@ -253,11 +250,15 @@ describe('deriveDetourOverlays', () => {
     expect(result).toHaveLength(0);
   });
 
-  test('does not draw raw inferred detour geometry as the rider detour path', () => {
+  test('keeps the skipped route segment but hides raw inferred detour geometry until road matching succeeds', () => {
+    const rawInferredPolyline = [
+      { latitude: 44.381, longitude: -79.695 },
+      { latitude: 44.386, longitude: -79.692 },
+      { latitude: 44.391, longitude: -79.689 },
+    ];
     const result = deriveDetourOverlays({
       enabled: true,
       selectedRouteIds: new Set(['5']),
-      showLowConfidenceGeometry: true,
       activeDetours: {
         '5': {
           state: 'active',
@@ -265,8 +266,14 @@ describe('deriveDetourOverlays', () => {
           vehicleCount: 2,
           canShowDetourPath: true,
           skippedSegmentPolyline: SAMPLE_POLYLINE,
-          inferredDetourPolyline: LONG_POLYLINE,
+          inferredDetourPolyline: rawInferredPolyline,
           likelyDetourPolyline: null,
+          segments: [{
+            canShowDetourPath: true,
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            inferredDetourPolyline: rawInferredPolyline,
+            likelyDetourPolyline: null,
+          }],
         },
       },
     });
@@ -276,6 +283,7 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].inferredDetourPolyline).toBeNull();
     expect(result[0].likelyDetourPolyline).toBeNull();
     expect(result[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBeNull();
   });
 
   test('uses likely detour geometry ahead of raw inferred geometry', () => {
@@ -470,6 +478,124 @@ describe('deriveDetourOverlays', () => {
     ]);
   });
 
+  test('merged shared branch overlay includes closed stops from both route directions', () => {
+    const sharedDetourPath = [
+      { latitude: 44.38, longitude: -79.70 },
+      { latitude: 44.39, longitude: -79.70 },
+    ];
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['12']),
+      activeDetours: {
+        '12A': {
+          state: 'active',
+          confidence: 'medium',
+          vehicleCount: 2,
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          likelyDetourPolyline: sharedDetourPath,
+        },
+        '12B': {
+          state: 'active',
+          confidence: 'medium',
+          vehicleCount: 2,
+          skippedSegmentPolyline: LONG_POLYLINE,
+          likelyDetourPolyline: sharedDetourPath,
+        },
+      },
+      detourStopDetailsByRouteId: {
+        '12A': {
+          segmentStopDetails: [{
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            skippedStops: [
+              { id: 'stop-932', code: '932', latitude: 44.381, longitude: -79.691 },
+              { id: 'stop-933', code: '933', latitude: 44.382, longitude: -79.692 },
+            ],
+          }],
+        },
+        '12B': {
+          segmentStopDetails: [{
+            skippedSegmentPolyline: LONG_POLYLINE,
+            skippedStops: [
+              { id: 'stop-617', code: '617', latitude: 44.383, longitude: -79.693 },
+              { id: 'stop-618', code: '618', latitude: 44.384, longitude: -79.694 },
+            ],
+          }],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('12A');
+    expect(result[0].routeLineLabel).toBe('12A/12B');
+    expect(result[0].familyStopsMerged).toBe(true);
+    expect(result[0].routeIds).toEqual(['12A', '12B']);
+    expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.code)).toEqual([
+      '932',
+      '933',
+      '617',
+      '618',
+    ]);
+    expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.routeId)).toEqual([
+      '12A',
+      '12A',
+      '12B',
+      '12B',
+    ]);
+    expect(result[0].skippedStops.map((stop) => stop.code)).toEqual(['932', '933', '617', '618']);
+  });
+
+  test('focused shared branch overlay still includes closed stops from both route directions', () => {
+    const sharedDetourPath = [
+      { latitude: 44.38, longitude: -79.70 },
+      { latitude: 44.39, longitude: -79.70 },
+    ];
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['12']),
+      focusedRouteId: '12B',
+      activeDetours: {
+        '12A': {
+          state: 'active',
+          confidence: 'medium',
+          vehicleCount: 2,
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          likelyDetourPolyline: sharedDetourPath,
+        },
+        '12B': {
+          state: 'active',
+          confidence: 'medium',
+          vehicleCount: 2,
+          skippedSegmentPolyline: LONG_POLYLINE,
+          likelyDetourPolyline: sharedDetourPath,
+        },
+      },
+      detourStopDetailsByRouteId: {
+        '12A': {
+          segmentStopDetails: [{
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            skippedStops: [
+              { id: 'stop-932', code: '932', latitude: 44.381, longitude: -79.691 },
+            ],
+          }],
+        },
+        '12B': {
+          segmentStopDetails: [{
+            skippedSegmentPolyline: LONG_POLYLINE,
+            skippedStops: [
+              { id: 'stop-618', code: '618', latitude: 44.386, longitude: -79.686 },
+            ],
+          }],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('12B');
+    expect(result[0].familyStopsMerged).toBe(true);
+    expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.code)).toEqual(['618', '932']);
+    expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.routeId)).toEqual(['12B', '12A']);
+  });
+
   test('assigns separate detour lanes for distinct family paths', () => {
     const result = deriveDetourOverlays({
       enabled: true,
@@ -523,6 +649,28 @@ describe('deriveDetourOverlays', () => {
 
     expect(offsets['12A']).toBe(-9);
     expect(offsets['12B']).toBe(-9);
+  });
+
+  test('keeps sibling route-family detours opaque when one branch is focused', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(),
+      focusedRouteId: '12B',
+      activeDetours: {
+        '12A': { state: 'active', confidence: 'medium', vehicleCount: 2, likelyDetourPolyline: SAMPLE_POLYLINE },
+        '12B': { state: 'active', confidence: 'medium', vehicleCount: 2, likelyDetourPolyline: LONG_POLYLINE },
+        '8A': { state: 'active', confidence: 'medium', vehicleCount: 2, likelyDetourPolyline: SAMPLE_POLYLINE },
+      },
+    });
+
+    const opacities = Object.fromEntries(result.map((overlay) => [
+      overlay.routeId,
+      overlay.opacity,
+    ]));
+
+    expect(opacities['12A']).toBe(0.95);
+    expect(opacities['12B']).toBe(0.95);
+    expect(opacities['8A']).toBe(0.24);
   });
 
   test('uses forward arrows for a single-route detour', () => {
@@ -711,6 +859,56 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBe(firstDetourPolyline);
     expect(result[0].segmentStopDetails[0].likelyDetourPolyline).toBe(firstDetourPolyline);
     expect(result[0].segmentStopDetails[1].skippedSegmentPolyline).toBe(LONG_POLYLINE);
+    expect(result[0].segmentStopDetails[1].inferredDetourPolyline).toBeNull();
+  });
+
+  test('hides raw segment geometry instead of falling back to a stale top-level road match for multi-segment detours', () => {
+    const trustedSegmentPath = [
+      { latitude: 44.333, longitude: -79.674 },
+      { latitude: 44.335, longitude: -79.674 },
+      { latitude: 44.337, longitude: -79.669 },
+    ];
+    const unrelatedTopLevelPath = [
+      { latitude: 44.388, longitude: -79.691 },
+      { latitude: 44.387, longitude: -79.690 },
+    ];
+
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['12A']),
+      activeDetours: {
+        '12A': {
+          state: 'active',
+          confidence: 'high',
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          likelyDetourPolyline: unrelatedTopLevelPath,
+          segments: [
+            {
+              shapeId: 'shape-12a-south',
+              skippedSegmentPolyline: SAMPLE_POLYLINE,
+              inferredDetourPolyline: trustedSegmentPath,
+              likelyDetourPolyline: null,
+              canShowDetourPath: true,
+            },
+            {
+              shapeId: 'shape-12a-low',
+              skippedSegmentPolyline: LONG_POLYLINE,
+              inferredDetourPolyline: unrelatedTopLevelPath,
+              likelyDetourPolyline: null,
+              canShowDetourPath: false,
+            },
+          ],
+        },
+      },
+      detourStopDetailsByRouteId: {},
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].likelyDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails).toHaveLength(2);
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails[0].likelyDetourPolyline).toBeNull();
     expect(result[0].segmentStopDetails[1].inferredDetourPolyline).toBeNull();
   });
 

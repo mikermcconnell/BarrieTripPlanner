@@ -1,6 +1,119 @@
 const { createDetourOps } = require('../services/detourOps');
 
 describe('detourOps rollout health', () => {
+  test('runs multiple burst samples for scheduled detour run-once requests', async () => {
+    const runTick = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        skipped: false,
+        vehiclesProcessed: 10,
+        detourCount: 0,
+        tickCount: 1,
+        status: { mode: 'scheduled' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        skipped: false,
+        vehiclesProcessed: 11,
+        detourCount: 1,
+        tickCount: 2,
+        status: { mode: 'scheduled' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        skipped: false,
+        vehiclesProcessed: 11,
+        detourCount: 1,
+        tickCount: 3,
+        status: { mode: 'scheduled' },
+      });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+    const detourWorker = {
+      getStatus: () => ({ mode: 'scheduled', running: false }),
+      runTick,
+    };
+
+    const ops = createDetourOps({
+      detourWorker,
+      sleep,
+      env: {
+        DETOUR_BURST_SAMPLING_ENABLED: 'true',
+        DETOUR_BURST_MAX_SAMPLES: '3',
+        DETOUR_BURST_SAMPLE_INTERVAL_MS: '15000',
+        DETOUR_BURST_DURATION_MS: '45000',
+      },
+    });
+
+    const result = await ops.runOnce();
+
+    expect(result.status).toBe(200);
+    expect(runTick).toHaveBeenCalledTimes(3);
+    expect(runTick).toHaveBeenNthCalledWith(1, {
+      source: 'api-run-once-burst',
+      forceReloadState: true,
+    });
+    expect(runTick).toHaveBeenNthCalledWith(2, {
+      source: 'api-run-once-burst',
+      forceReloadState: false,
+    });
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(result.body).toMatchObject({
+      ok: true,
+      detourCount: 1,
+      tickCount: 3,
+      burstSampling: {
+        enabled: true,
+        sampleCount: 3,
+        okSamples: 3,
+        failedSamples: 0,
+        skippedSamples: 0,
+        sampleIntervalMs: 15000,
+      },
+    });
+  });
+
+  test('skips an overlapping detour run-once while a burst is already active', async () => {
+    let releaseFirstTick;
+    const runTick = jest.fn().mockImplementation(() =>
+      new Promise((resolve) => {
+        releaseFirstTick = () => resolve({
+          ok: true,
+          skipped: false,
+          vehiclesProcessed: 10,
+          detourCount: 0,
+          tickCount: 1,
+          status: { mode: 'scheduled' },
+        });
+      })
+    );
+    const detourWorker = {
+      getStatus: () => ({ mode: 'scheduled', running: false }),
+      runTick,
+    };
+    const ops = createDetourOps({
+      detourWorker,
+      sleep: jest.fn().mockResolvedValue(undefined),
+      env: {
+        DETOUR_BURST_SAMPLING_ENABLED: 'true',
+        DETOUR_BURST_MAX_SAMPLES: '1',
+      },
+    });
+
+    const firstRun = ops.runOnce();
+    const secondRun = await ops.runOnce();
+    releaseFirstTick();
+    await firstRun;
+
+    expect(secondRun.status).toBe(200);
+    expect(secondRun.body).toMatchObject({
+      ok: false,
+      skipped: true,
+      reason: 'run-once-in-progress',
+    });
+    expect(runTick).toHaveBeenCalledTimes(1);
+  });
+
   test('marks rollout pilot-ready when core health checks pass', async () => {
     const now = Date.parse('2026-04-24T12:00:00Z');
     const detourWorker = {

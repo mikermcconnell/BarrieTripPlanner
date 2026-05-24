@@ -1,17 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Linking } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../config/theme';
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import DetourImpactSummary from './DetourImpactSummary';
-import { formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
+import { formatDetourStartedAt, formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
+import { findRouteDetourNotice, getNoticeEndText } from '../utils/noticeTimingUtils';
 
 const getDetourTitle = (routeId, state) => {
   const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
   return `Route ${routeId} - ${statusLabel}`;
 };
 
-const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose, onViewOnMap }) => {
+const DetourDetailsSheet = ({
+  routeId,
+  detour,
+  detourEvent = null,
+  routeColor: routeColorOverride,
+  routeColorByRouteId = {},
+  segmentStopDetails = [],
+  transitNews = [],
+  onClose,
+  onViewOnMap,
+}) => {
   const [slideAnim] = useState(new Animated.Value(100));
   // Keep a ref to onClose so the Escape key handler never captures a stale value
   const onCloseRef = useRef(onClose);
@@ -46,9 +57,23 @@ const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose,
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleClose]);
 
-  const routeColor = ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+  const routeColor = routeColorOverride || ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
+  const getRouteColor = (id) => routeColorByRouteId[id] || ROUTE_COLORS[id] || routeColor;
+  const impactRouteLabel = detourEvent?.routeIds?.length > 1
+    ? `Routes ${detourEvent.routeIds.join('/')}`
+    : null;
   const timeLabel = formatDetourTime(detour?.detectedAt);
+  const startedAtLabel = formatDetourStartedAt(detour?.detectedAt);
   const confidenceChip = detour?.confidence ? getConfidenceChip(detour.confidence) : null;
+  const myRideNotice = findRouteDetourNotice(routeId, transitNews);
+  const timingTitle = myRideNotice ? 'MyRide timing' : 'Unplanned detour';
+  const myRideEndText = myRideNotice
+    ? getNoticeEndText({ endsAt: myRideNotice.window?.endsAt ?? myRideNotice.endsAt }, 'Detour end date is not listed.')
+    : 'End time unknown.';
+  const myRideUrl = myRideNotice?.url ?? myRideNotice?.sourceUrl ?? null;
+  const openMyRideNotice = () => {
+    if (myRideUrl) Linking.openURL(myRideUrl).catch(() => {});
+  };
 
   return (
     <>
@@ -80,7 +105,16 @@ const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose,
             <Text style={styles.routeBadgeText}>{routeId}</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.title}>{getDetourTitle(routeId, detour?.state)}</Text>
+            <Text style={styles.title}>{detourEvent?.title || getDetourTitle(routeId, detour?.state)}</Text>
+            {detourEvent?.routeIds?.length > 0 && (
+              <View style={styles.eventRoutesRow}>
+                {detourEvent.routeIds.map((eventRouteId) => (
+                  <View key={eventRouteId} style={[styles.eventRouteChip, { backgroundColor: getRouteColor(eventRouteId) }]}>
+                    <Text style={styles.eventRouteChipText}>{eventRouteId}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <View style={styles.headerMeta}>
               {timeLabel && <Text style={styles.timeLabel}>{timeLabel}</Text>}
               {confidenceChip && (
@@ -103,7 +137,24 @@ const DetourDetailsSheet = ({ routeId, detour, segmentStopDetails = [], onClose,
         <View style={styles.divider} />
 
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-          <DetourImpactSummary routeId={routeId} sections={segmentStopDetails} />
+          <View style={styles.timingCard}>
+            <Text style={styles.timingTitle}>{timingTitle}</Text>
+            {startedAtLabel && <Text style={styles.timingText}>Started: {startedAtLabel}</Text>}
+            <Text style={styles.timingText}>{myRideEndText}</Text>
+            {myRideNotice?.title && <Text style={styles.timingSource} numberOfLines={2}>{myRideNotice.title}</Text>}
+            {myRideUrl && (
+              <TouchableOpacity
+                style={styles.noticeLinkButton}
+                onPress={openMyRideNotice}
+                accessibilityRole="button"
+                accessibilityLabel="Open MyRide detour notice"
+              >
+                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <DetourImpactSummary routeId={routeId} routeLabel={impactRouteLabel} sections={segmentStopDetails} />
 
           <TouchableOpacity
             style={styles.viewButton}
@@ -177,6 +228,22 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
   },
+  eventRoutesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  eventRouteChip: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  eventRouteChipText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.white,
+  },
   headerMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -211,6 +278,44 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: SPACING.lg,
+  },
+  timingCard: {
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.warningSubtle,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  timingTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.warning,
+    marginBottom: SPACING.xxs,
+  },
+  timingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  timingSource: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  noticeLinkButton: {
+    alignSelf: 'flex-start',
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.white,
+    cursor: 'pointer',
+  },
+  noticeLinkText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
   },
   viewButton: {
     backgroundColor: COLORS.primary,

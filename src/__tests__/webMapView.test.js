@@ -2,6 +2,9 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'web' },
+  Image: {
+    resolveAssetSource: () => ({ uri: 'test-file-stub' }),
+  },
 }));
 
 const { __TEST_ONLY__ } = require('../components/WebMapView');
@@ -112,5 +115,27 @@ describe('WebMapView bus marker HTML', () => {
     const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', Number.NaN);
 
     expect(html).not.toContain('rotate(');
+  });
+});
+
+describe('WebMapView bus hub marker HTML', () => {
+  test('renders a cartoon bus icon with a readable hub label', () => {
+    const html = __TEST_ONLY__.createBusHubHtml({
+      label: 'Downtown Hub',
+      hubType: 'major',
+    });
+
+    expect(html).toContain('data-bus-hub-icon="true"');
+    expect(html).toContain('Downtown Hub');
+    expect(html).toContain('src="test-file-stub"');
+    expect(html).toContain('data-bus-hub-artwork="true"');
+    expect(html).toContain('<img');
+    expect(html).not.toContain('<svg');
+    expect(html).not.toContain('HUB</text>');
+    expect(html).toContain('text-shadow');
+    expect(html).toContain('width:27px;height:27px');
+    expect(html).toContain('margin-top:1px');
+    expect(html).toContain('font:800 11px/1.2 Avenir, Arial, sans-serif');
+    expect(html).not.toContain('transform:scale(0.5)');
   });
 });

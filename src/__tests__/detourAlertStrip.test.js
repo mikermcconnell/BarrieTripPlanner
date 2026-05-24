@@ -43,7 +43,10 @@ describe('DetourAlertStrip', () => {
       collapsedButton.props.onPress();
     });
 
-    expect(onPress).toHaveBeenCalledWith('8A');
+    expect(onPress).toHaveBeenCalledWith('8A', expect.objectContaining({
+      primaryRouteId: '8A',
+      title: 'Route 8 detour',
+    }));
   });
 
   test('does not render low-confidence detours', () => {
@@ -62,57 +65,78 @@ describe('DetourAlertStrip', () => {
     expect(inst.toJSON()).toBeNull();
   });
 
-  test('does not render medium-confidence detours with only one vehicle', () => {
+  test('renders medium-confidence detours under a location-focused summary', () => {
     let inst;
 
     act(() => {
       inst = create(React.createElement(DetourAlertStrip, {
         activeDetours: {
-          '8A': { state: 'active', confidence: 'medium', vehicleCount: 1 },
+          '8A': {
+            state: 'active',
+            confidence: 'medium',
+            vehicleCount: 1,
+            title: 'Sophia Street Detour - Route 8A',
+          },
         },
         routes: [{ id: '8A', shortName: '8A' }],
         onPress: jest.fn(),
       }));
     });
 
-    expect(inst.toJSON()).toBeNull();
+    const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textValues).toContain('Active detour: Sophia Street');
   });
 
-  test('collapses route variants into one likely route-family banner', () => {
+  test('collapses route variants into one location-focused event row', () => {
     const onPress = jest.fn();
     let inst;
 
     act(() => {
       inst = create(React.createElement(DetourAlertStrip, {
         activeDetours: {
-          '8A': { state: 'active', confidence: 'medium', vehicleCount: 2 },
-          '8B': { state: 'active', confidence: 'medium', vehicleCount: 2 },
+          '12A': {
+            state: 'active',
+            confidence: 'medium',
+            vehicleCount: 2,
+            title: 'Saunders/Welham Detour - Route 12',
+            description: 'Saunders Road and Welham Road intersection closure.',
+          },
+          '12B': {
+            state: 'active',
+            confidence: 'medium',
+            vehicleCount: 2,
+            title: 'Saunders/Welham Detour - Route 12',
+            description: 'Saunders Road and Welham Road intersection closure.',
+          },
         },
         routes: [
-          { id: '8A', shortName: '8A' },
-          { id: '8B', shortName: '8B' },
+          { id: '12A', shortName: '12A' },
+          { id: '12B', shortName: '12B' },
         ],
         onPress,
       }));
     });
 
     const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(textValues).toContain('Likely detour: 8');
+    expect(textValues).toContain('Active detour: Saunders & Welham');
 
     const collapsedButton = inst.root.findAllByType('TouchableOpacity')[0];
     act(() => {
       collapsedButton.props.onPress();
     });
 
-    expect(onPress).not.toHaveBeenCalled();
-    expect(inst.root.findAllByType('TouchableOpacity').length).toBeGreaterThan(1);
+    expect(onPress).toHaveBeenCalledWith('12A', expect.objectContaining({
+      title: 'Saunders & Welham',
+      routeIds: ['12A', '12B'],
+      primarySegmentIndex: null,
+    }));
 
     act(() => {
       inst.unmount();
     });
   });
 
-  test('uses confirmed wording for high-confidence detours', () => {
+  test('uses active-detour wording for high-confidence detours', () => {
     let inst;
 
     act(() => {
@@ -126,6 +150,30 @@ describe('DetourAlertStrip', () => {
     });
 
     const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(textValues).toContain('Confirmed detour: 1');
+    expect(textValues).toContain('Active detour: Route 1 detour');
+  });
+
+  test('shows stop codes in active detour location summaries', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourAlertStrip, {
+        activeDetours: {
+          '10': {
+            state: 'active',
+            confidence: 'high',
+            segments: [{
+              skippedStopCodes: ['946'],
+              likelyDetourRoadNames: ['Mulcaster Street', 'McDonald Street'],
+            }],
+          },
+        },
+        routes: [{ id: '10', shortName: '10' }],
+        onPress: jest.fn(),
+      }));
+    });
+
+    const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textValues).toContain('Active detour: Mulcaster & McDonald · Stop #946');
   });
 });

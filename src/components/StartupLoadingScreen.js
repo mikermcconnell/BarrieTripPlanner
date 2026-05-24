@@ -1,18 +1,31 @@
 import React from 'react';
 import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Asset } from 'expo-asset';
 import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, FONT_WEIGHTS, SPACING, SHADOWS } from '../config/theme';
+import { useSafeBottomInset } from '../utils/androidNavigationBar';
 
-const APP_ICON = require('../../assets/app-icon.png');
+const APP_ICON = require('../../assets/splash-icon.png');
 const HERO_IMAGE = require('../../assets/startup-home-scene.png');
 const DETOUR_CARD_IMAGE = require('../../assets/startup-detour-card.png');
+const STARTUP_IMAGE_ASSETS = [APP_ICON, HERO_IMAGE, DETOUR_CARD_IMAGE];
 
 const DEFAULT_STATUS = 'Checking service alerts and detours...';
 const DEFAULT_PERCENT = 65;
 
-function HeroScene({ width, height, compact = false }) {
-  const [imageReady, setImageReady] = React.useState(false);
-  const [imageFailed, setImageFailed] = React.useState(false);
+function getStartupImageSource(moduleId, preferPreloadedImages = false) {
+  if (!preferPreloadedImages || Platform.OS === 'web') {
+    return moduleId;
+  }
 
+  try {
+    const asset = Asset.fromModule(moduleId);
+    return asset?.localUri ? { uri: asset.localUri } : moduleId;
+  } catch {
+    return moduleId;
+  }
+}
+
+function HeroScene({ width, height, compact = false, preferPreloadedImages = false }) {
   return (
     <View
       style={[
@@ -23,62 +36,12 @@ function HeroScene({ width, height, compact = false }) {
       pointerEvents="none"
       accessible={false}
     >
-      <FallbackHeroScene compact={compact} />
-      {!imageFailed ? (
-        <Image
-          source={HERO_IMAGE}
-          style={[
-            styles.heroImage,
-            !imageReady && styles.artworkImageHidden,
-          ]}
-          resizeMode="contain"
-          fadeDuration={0}
-          onLoad={() => setImageReady(true)}
-          onError={() => setImageFailed(true)}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function FallbackHeroScene({ compact = false }) {
-  return (
-    <View style={styles.heroFallback}>
-      <View style={[styles.heroCloud, styles.heroCloudLeft]} />
-      <View style={[styles.heroCloud, styles.heroCloudRight]} />
-      <View style={styles.heroSkyline}>
-        {[0, 1, 2, 3, 4, 5].map((item) => (
-          <View
-            key={item}
-            style={[
-              styles.heroBuilding,
-              item % 2 === 0 && styles.heroBuildingTall,
-            ]}
-          />
-        ))}
-      </View>
-      <View style={[styles.heroRouteLine, styles.heroRouteGreen]} />
-      <View style={[styles.heroRouteLine, styles.heroRouteBlue]} />
-      <View style={[styles.heroRouteLine, styles.heroRouteDetour]} />
-      <View style={[styles.heroPin, styles.heroPinStart]}>
-        <View style={styles.heroPinInner}>
-          <View style={styles.heroPinBus} />
-        </View>
-      </View>
-      <View style={[styles.heroPin, styles.heroPinAlert]}>
-        <Text style={styles.heroAlertMark}>!</Text>
-      </View>
-      <View style={styles.heroBus}>
-        <View style={styles.heroBusWindshield} />
-        <View style={styles.heroBusWindows} />
-        <View style={[styles.heroBusWheel, styles.heroBusWheelLeft]} />
-        <View style={[styles.heroBusWheel, styles.heroBusWheelRight]} />
-      </View>
-      <View style={[styles.heroRouteDot, styles.heroRouteDotOne]} />
-      <View style={[styles.heroRouteDot, styles.heroRouteDotTwo]} />
-      <View style={[styles.heroRouteDot, styles.heroRouteDotThree]} />
-      <View style={[styles.heroRouteDot, styles.heroRouteDotFour]} />
-      {!compact ? <View style={styles.heroLake} /> : null}
+      <Image
+        source={getStartupImageSource(HERO_IMAGE, preferPreloadedImages)}
+        style={styles.heroImage}
+        resizeMode="contain"
+        fadeDuration={0}
+      />
     </View>
   );
 }
@@ -89,10 +52,8 @@ function FeatureCard({
   miniMapHeight,
   compact = false,
   useBrandFonts = true,
+  preferPreloadedImages = false,
 }) {
-  const [mapImageReady, setMapImageReady] = React.useState(false);
-  const [mapImageFailed, setMapImageFailed] = React.useState(false);
-
   return (
     <View
       style={[
@@ -122,20 +83,12 @@ function FeatureCard({
         compact && styles.featureCardCompact,
       ]}>
         <View style={[styles.miniMap, { height: miniMapHeight }]}>
-          <FallbackMiniMap />
-          {!mapImageFailed ? (
-            <Image
-              source={DETOUR_CARD_IMAGE}
-              style={[
-                styles.miniMapImage,
-                !mapImageReady && styles.artworkImageHidden,
-              ]}
-              resizeMode="contain"
-              fadeDuration={0}
-              onLoad={() => setMapImageReady(true)}
-              onError={() => setMapImageFailed(true)}
-            />
-          ) : null}
+          <Image
+            source={getStartupImageSource(DETOUR_CARD_IMAGE, preferPreloadedImages)}
+            style={styles.miniMapImage}
+            resizeMode="contain"
+            fadeDuration={0}
+          />
         </View>
         <Text style={[
           styles.featureTitle,
@@ -159,32 +112,6 @@ function FeatureCard({
   );
 }
 
-function FallbackMiniMap() {
-  return (
-    <View style={styles.miniMapFallback}>
-      <View style={[styles.miniMapGridLine, styles.miniMapGridLineOne]} />
-      <View style={[styles.miniMapGridLine, styles.miniMapGridLineTwo]} />
-      <View style={[styles.miniMapRouteLine, styles.miniMapRouteGreen]} />
-      <View style={[styles.miniMapRouteLine, styles.miniMapRouteBlue]} />
-      <View style={[styles.miniMapRouteLine, styles.miniMapRouteRed]} />
-      <View style={[styles.miniMapPin, styles.miniMapPinBlue]}>
-        <View style={styles.miniMapPinInner} />
-      </View>
-      <View style={[styles.miniMapPin, styles.miniMapPinAlert]}>
-        <Text style={styles.miniMapAlertMark}>!</Text>
-      </View>
-      <View style={styles.miniMapBus}>
-        <View style={styles.miniMapBusWindow} />
-        <View style={[styles.miniMapBusWheel, styles.miniMapBusWheelLeft]} />
-        <View style={[styles.miniMapBusWheel, styles.miniMapBusWheelRight]} />
-      </View>
-      <View style={[styles.miniMapDot, styles.miniMapDotOne]} />
-      <View style={[styles.miniMapDot, styles.miniMapDotTwo]} />
-      <View style={[styles.miniMapDot, styles.miniMapDotThree]} />
-    </View>
-  );
-}
-
 export default function StartupLoadingScreen({
   percent = DEFAULT_PERCENT,
   statusText = DEFAULT_STATUS,
@@ -192,8 +119,11 @@ export default function StartupLoadingScreen({
   detail = 'Loading routes, stops, live buses, and detour updates.',
   showProgress = true,
   useBrandFonts = true,
+  preferPreloadedImages = false,
+  onReadyToDisplay,
 }) {
   const { height, width } = useWindowDimensions();
+  const safeBottomInset = useSafeBottomInset(0);
   const compact = height <= 780 || width <= 360;
   const veryCompact = height < 700;
   const shellWidth = Math.min(width || 390, 430);
@@ -213,19 +143,30 @@ export default function StartupLoadingScreen({
     (featureCardWidth - (compact ? 24 : 28)) * (129 / 304)
   ));
   const safePercent = Math.max(0, Math.min(100, Number.isFinite(Number(percent)) ? Number(percent) : DEFAULT_PERCENT));
+  const baseBottomPadding = veryCompact ? 12 : 18;
+  const progressBottomPadding = Platform.OS === 'android'
+    ? safeBottomInset + SPACING.lg
+    : baseBottomPadding;
 
   return (
-    <View style={[styles.container, Platform.OS === 'web' && styles.webContainer]}>
+    <View
+      style={[styles.container, Platform.OS === 'web' && styles.webContainer]}
+      onLayout={onReadyToDisplay}
+    >
       <View
         style={[
           styles.content,
           { maxWidth: shellWidth, paddingHorizontal: horizontalPadding },
           compact && styles.contentCompact,
           veryCompact && styles.contentVeryCompact,
+          { paddingBottom: progressBottomPadding },
         ]}
       >
         <View style={[styles.brandRow, compact && styles.brandRowCompact]}>
-          <Image source={APP_ICON} style={[styles.appIcon, compact && styles.appIconCompact]} />
+          <Image
+            source={getStartupImageSource(APP_ICON, preferPreloadedImages)}
+            style={[styles.appIcon, compact && styles.appIconCompact]}
+          />
           <Text style={[
             styles.brandText,
             useBrandFonts && styles.brandTextFont,
@@ -233,7 +174,12 @@ export default function StartupLoadingScreen({
           ]}>MyBarrie Transit</Text>
         </View>
 
-        <HeroScene width={heroWidth} height={heroHeight} compact={compact} />
+        <HeroScene
+          width={heroWidth}
+          height={heroHeight}
+          compact={compact}
+          preferPreloadedImages={preferPreloadedImages}
+        />
 
         <View style={[styles.copyWrap, compact && styles.copyWrapCompact]}>
           <Text style={[
@@ -259,6 +205,7 @@ export default function StartupLoadingScreen({
           miniMapHeight={miniMapHeight}
           compact={compact}
           useBrandFonts={useBrandFonts}
+          preferPreloadedImages={preferPreloadedImages}
         />
 
         <View style={styles.progressArea}>
@@ -291,7 +238,12 @@ export default function StartupLoadingScreen({
   );
 }
 
-export { DEFAULT_PERCENT, DEFAULT_STATUS };
+export {
+  DEFAULT_PERCENT,
+  DEFAULT_STATUS,
+  STARTUP_IMAGE_ASSETS,
+  getStartupImageSource,
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -368,199 +320,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
-  },
-  artworkImageHidden: {
-    opacity: 0,
-  },
-  heroFallback: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-    borderRadius: 24,
-    backgroundColor: '#F7FCFF',
-  },
-  heroCloud: {
-    position: 'absolute',
-    width: 58,
-    height: 20,
-    borderRadius: 12,
-    backgroundColor: '#EAF4FF',
-    opacity: 0.9,
-  },
-  heroCloudLeft: {
-    left: '9%',
-    top: 8,
-  },
-  heroCloudRight: {
-    right: '13%',
-    top: 14,
-  },
-  heroSkyline: {
-    position: 'absolute',
-    top: '12%',
-    left: '26%',
-    right: '28%',
-    height: 76,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    opacity: 0.52,
-  },
-  heroBuilding: {
-    width: 20,
-    height: 46,
-    borderRadius: 4,
-    backgroundColor: '#D9ECFF',
-  },
-  heroBuildingTall: {
-    height: 68,
-    backgroundColor: '#CCE6FF',
-  },
-  heroRouteLine: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  heroRouteGreen: {
-    left: '-7%',
-    bottom: '22%',
-    width: '39%',
-    height: 9,
-    backgroundColor: '#4BB842',
-    transform: [{ rotate: '-12deg' }],
-  },
-  heroRouteBlue: {
-    left: '29%',
-    bottom: '24%',
-    width: '35%',
-    height: 9,
-    backgroundColor: '#0B8FE8',
-    transform: [{ rotate: '8deg' }],
-  },
-  heroRouteDetour: {
-    right: '5%',
-    bottom: '40%',
-    width: '29%',
-    height: 1,
-    borderTopWidth: 4,
-    borderStyle: 'dashed',
-    borderColor: '#FF6A2A',
-    transform: [{ rotate: '15deg' }],
-  },
-  heroPin: {
-    position: 'absolute',
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: COLORS.white,
-    ...SHADOWS.small,
-  },
-  heroPinStart: {
-    left: '11%',
-    top: '18%',
-    backgroundColor: '#43B647',
-  },
-  heroPinAlert: {
-    right: '13%',
-    top: '16%',
-    backgroundColor: '#FF4A23',
-  },
-  heroPinInner: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroPinBus: {
-    width: 18,
-    height: 22,
-    borderRadius: 4,
-    backgroundColor: '#0A315D',
-  },
-  heroAlertMark: {
-    color: COLORS.white,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: FONT_WEIGHTS.bold,
-  },
-  heroBus: {
-    position: 'absolute',
-    right: '32%',
-    bottom: '20%',
-    width: 96,
-    height: 58,
-    borderRadius: 13,
-    backgroundColor: COLORS.white,
-    borderWidth: 3,
-    borderColor: '#0A315D',
-    ...SHADOWS.small,
-  },
-  heroBusWindshield: {
-    position: 'absolute',
-    left: 10,
-    top: 10,
-    width: 28,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: '#123B63',
-  },
-  heroBusWindows: {
-    position: 'absolute',
-    left: 42,
-    top: 10,
-    right: 10,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: '#BDE4FF',
-  },
-  heroBusWheel: {
-    position: 'absolute',
-    bottom: -7,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#0A315D',
-  },
-  heroBusWheelLeft: {
-    left: 16,
-  },
-  heroBusWheelRight: {
-    right: 16,
-  },
-  heroRouteDot: {
-    position: 'absolute',
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: '#48B847',
-  },
-  heroRouteDotOne: {
-    right: '30%',
-    bottom: '35%',
-  },
-  heroRouteDotTwo: {
-    right: '27%',
-    bottom: '37%',
-  },
-  heroRouteDotThree: {
-    right: '24%',
-    bottom: '39%',
-  },
-  heroRouteDotFour: {
-    right: '21%',
-    bottom: '41%',
-  },
-  heroLake: {
-    position: 'absolute',
-    right: '-6%',
-    bottom: '-8%',
-    width: '34%',
-    height: '28%',
-    borderRadius: 999,
-    backgroundColor: '#DDF4FF',
   },
   copyWrap: {
     width: '100%',
@@ -735,145 +494,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
-  },
-  miniMapFallback: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-    backgroundColor: '#F7FBFF',
-  },
-  miniMapGridLine: {
-    position: 'absolute',
-    height: 2,
-    width: '70%',
-    borderRadius: 999,
-    backgroundColor: '#E7F1FA',
-  },
-  miniMapGridLineOne: {
-    left: '-8%',
-    top: '32%',
-    transform: [{ rotate: '-18deg' }],
-  },
-  miniMapGridLineTwo: {
-    right: '-10%',
-    top: '61%',
-    transform: [{ rotate: '-18deg' }],
-  },
-  miniMapRouteLine: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  miniMapRouteGreen: {
-    left: '-4%',
-    bottom: '32%',
-    width: '34%',
-    height: 6,
-    backgroundColor: '#46B947',
-    transform: [{ rotate: '-12deg' }],
-  },
-  miniMapRouteBlue: {
-    left: '31%',
-    bottom: '39%',
-    width: '24%',
-    height: 6,
-    backgroundColor: '#0C8CE5',
-    transform: [{ rotate: '11deg' }],
-  },
-  miniMapRouteRed: {
-    right: '6%',
-    bottom: '43%',
-    width: '28%',
-    height: 1,
-    borderTopWidth: 4,
-    borderStyle: 'dashed',
-    borderColor: '#FF4A23',
-    transform: [{ rotate: '8deg' }],
-  },
-  miniMapPin: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: COLORS.white,
-    ...SHADOWS.small,
-  },
-  miniMapPinBlue: {
-    left: '11%',
-    top: '14%',
-    backgroundColor: '#0C8CE5',
-  },
-  miniMapPinAlert: {
-    right: '17%',
-    top: '13%',
-    backgroundColor: '#FF4A23',
-  },
-  miniMapPinInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: COLORS.white,
-  },
-  miniMapAlertMark: {
-    color: COLORS.white,
-    fontSize: 20,
-    lineHeight: 22,
-    fontWeight: FONT_WEIGHTS.bold,
-  },
-  miniMapBus: {
-    position: 'absolute',
-    left: '34%',
-    top: '36%',
-    width: 50,
-    height: 29,
-    borderRadius: 7,
-    backgroundColor: COLORS.white,
-    borderWidth: 2,
-    borderColor: '#0A315D',
-    ...SHADOWS.small,
-  },
-  miniMapBusWindow: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    top: 7,
-    height: 10,
-    borderRadius: 3,
-    backgroundColor: '#BDE4FF',
-  },
-  miniMapBusWheel: {
-    position: 'absolute',
-    bottom: -4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#0A315D',
-  },
-  miniMapBusWheelLeft: {
-    left: 8,
-  },
-  miniMapBusWheelRight: {
-    right: 8,
-  },
-  miniMapDot: {
-    position: 'absolute',
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#46B947',
-  },
-  miniMapDotOne: {
-    left: '56%',
-    top: '50%',
-  },
-  miniMapDotTwo: {
-    left: '61%',
-    top: '48%',
-  },
-  miniMapDotThree: {
-    left: '66%',
-    top: '46%',
   },
   featureTitle: {
     marginTop: 14,

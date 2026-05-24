@@ -1,6 +1,6 @@
 /**
  * DelayBadge - Visual indicator for real-time delay information
- * Shows: "On time" (green), "+X min" (orange/red), or "X min early" (blue)
+ * Shows: "On time" (green), "+X min late" (orange/red), or "X min early" (blue)
  */
 
 import React from 'react';

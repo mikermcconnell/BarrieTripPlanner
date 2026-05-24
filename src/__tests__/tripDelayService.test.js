@@ -13,7 +13,7 @@ jest.mock('../services/tripService', () => ({
   formatMinutes: (minutes) => `${minutes} min`,
 }));
 
-const { applyDelaysToItinerary, applyDelaysToItineraries } = require('../services/tripDelayService');
+const { applyDelaysToItinerary, applyDelaysToItineraries, formatDelay } = require('../services/tripDelayService');
 const { fetchTripUpdates } = require('../services/arrivalService');
 
 const baseTime = Date.parse('2026-05-13T12:00:00-04:00');
@@ -127,7 +127,39 @@ describe('tripDelayService', () => {
     expect(updated.minutesUntilDeparture).toBe(15);
   });
 
+  test('recalculates itinerary times when a transit leg is early', async () => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(0));
+    const itinerary = {
+      id: 'early-bus',
+      startTime: minutes(10),
+      endTime: minutes(30),
+      duration: 20 * 60,
+      scheduledStartTime: minutes(10),
+      scheduledEndTime: minutes(30),
+      walkTime: 0,
+      walkDistance: 0,
+      transitTime: 20 * 60,
+      waitingTime: 0,
+      transfers: 0,
+      legs: [
+        makeBusLeg({ tripId: 'early-trip', startMin: 10, endMin: 30 }),
+      ],
+    };
+
+    const updated = await applyDelaysToItinerary(
+      itinerary,
+      [tripUpdate('early-trip', 'early-trip-from', -3 * 60)]
+    );
+
+    expect(updated.legs[0].startTime).toBe(minutes(7));
+    expect(updated.legs[0].endTime).toBe(minutes(27));
+    expect(updated.totalDelaySeconds).toBe(-3 * 60);
+    expect(updated.arrivalDelaySeconds).toBe(-3 * 60);
+    expect(updated.minutesUntilDeparture).toBe(7);
+  });
+
   test('re-ranks itineraries and refreshes the recommended label after delays', async () => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(-10));
     fetchTripUpdates.mockResolvedValue([
       tripUpdate('original-best', 'original-best-from', 30 * 60),
     ]);
@@ -275,5 +307,28 @@ describe('tripDelayService', () => {
     expect(updated[1].labels).toContain('Missed transfer');
     expect(updated[1].labels || []).not.toContain('Recommended');
     expect(updated[1].isRecommended).toBe(false);
+  });
+
+  test('formats realtime status as on time, late, or early', () => {
+    expect(formatDelay(0)).toEqual({
+      text: 'On time',
+      status: 'ontime',
+      minutes: 0,
+    });
+    expect(formatDelay(90)).toEqual({
+      text: '+2 min late',
+      status: 'slight',
+      minutes: 2,
+    });
+    expect(formatDelay(-90)).toEqual({
+      text: '2 min early',
+      status: 'early',
+      minutes: -2,
+    });
+  });
+
+  test('keeps sub-minute realtime changes in the correct direction', () => {
+    expect(formatDelay(10).text).toBe('+1 min late');
+    expect(formatDelay(-10).text).toBe('1 min early');
   });
 });

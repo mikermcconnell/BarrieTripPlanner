@@ -6,10 +6,11 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, Text, Animated, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import Icon from './Icon';
 import AddressAutocomplete from './AddressAutocomplete';
 import TimePicker from './TimePicker';
+import TripPlanningLoadingDots from './TripPlanningLoadingDots';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getSavedPlaceIconName } from '../utils/savedTransitUtils';
 
@@ -22,7 +23,7 @@ const FIELD_INDICATOR_GAP = SPACING.xs;
 const FIELD_ACTION_GUTTER = 40;
 
 const formatTripTimeSummary = (timeMode, selectedTime) => {
-  if (timeMode === 'now') return 'Leave now';
+  if (timeMode === 'now') return 'Current time';
 
   const prefix = timeMode === 'arriveBy' ? 'Arrive by' : 'Depart at';
   const date = selectedTime ? new Date(selectedTime) : new Date();
@@ -61,6 +62,7 @@ const TripSearchHeader = ({
   onSaveFromPlace,
   onSaveToPlace,
   compact = false,
+  holidayServiceInfo = null,
 }) => {
   void showFromSuggestions;
   void showToSuggestions;
@@ -84,6 +86,14 @@ const TripSearchHeader = ({
               <Icon name="Clock" size={12} color={COLORS.primaryDark} />
               <Text style={styles.compactTime}>{formatTripTimeSummary(timeMode, selectedTime)}</Text>
             </View>
+            {holidayServiceInfo && (
+              <View style={[
+                styles.compactHolidayPill,
+                holidayServiceInfo.status === 'no_service' && styles.compactHolidayPillNoService,
+              ]}>
+                <Text style={styles.compactHolidayText}>{holidayServiceInfo.badgeLabel}</Text>
+              </View>
+            )}
           </View>
           <TouchableOpacity
             style={styles.compactCloseButton}
@@ -306,7 +316,7 @@ const TripSearchHeader = ({
         </View>
       )}
 
-      {/* Time picker (Leave Now / Depart At / Arrive By) */}
+      {/* Time picker (Current Time / Depart At / Arrive By) */}
       <View style={styles.timePickerAligned}>
         <TimePicker
           value={selectedTime || new Date()}
@@ -323,6 +333,26 @@ const TripSearchHeader = ({
         />
       </View>
 
+      {holidayServiceInfo && (
+        <View
+          style={[
+            styles.holidayServiceBadge,
+            holidayServiceInfo.status === 'no_service' && styles.holidayServiceBadgeNoService,
+          ]}
+          accessibilityLabel={`${holidayServiceInfo.badgeLabel}. ${holidayServiceInfo.shortMessage}`}
+        >
+          <Icon
+            name={holidayServiceInfo.status === 'no_service' ? 'Warning' : 'Celebration'}
+            size={14}
+            color={holidayServiceInfo.status === 'no_service' ? COLORS.error : COLORS.warning}
+          />
+          <View style={styles.holidayServiceCopy}>
+            <Text style={styles.holidayServiceLabel}>{holidayServiceInfo.badgeLabel}</Text>
+            <Text style={styles.holidayServiceText}>{holidayServiceInfo.title}</Text>
+          </View>
+        </View>
+      )}
+
       {isLoading && (
         <View
           style={styles.planningStatus}
@@ -332,6 +362,7 @@ const TripSearchHeader = ({
         >
           <ActivityIndicator size="small" color={COLORS.primary} />
           <Text style={styles.planningStatusText}>Planning your trip…</Text>
+          <TripPlanningLoadingDots />
         </View>
       )}
 
@@ -429,6 +460,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.primaryDark,
+  },
+  compactHolidayPill: {
+    minHeight: 24,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.warningSubtle,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  compactHolidayPillNoService: {
+    backgroundColor: COLORS.errorSubtle,
+  },
+  compactHolidayText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textPrimary,
   },
   compactRouteRow: {
     flexDirection: 'row',
@@ -630,6 +677,39 @@ const styles = StyleSheet.create({
   timePickerAligned: {
     marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
     marginRight: FIELD_ACTION_GUTTER,
+  },
+  holidayServiceBadge: {
+    marginTop: SPACING.xs,
+    marginLeft: FIELD_INDICATOR_WIDTH + FIELD_INDICATOR_GAP,
+    marginRight: FIELD_ACTION_GUTTER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.warningSubtle,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.28)',
+  },
+  holidayServiceBadgeNoService: {
+    backgroundColor: COLORS.errorSubtle,
+    borderColor: 'rgba(222, 53, 11, 0.26)',
+  },
+  holidayServiceCopy: {
+    flex: 1,
+  },
+  holidayServiceLabel: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  holidayServiceText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
   },
   planningStatus: {
     flexDirection: 'row',

@@ -2,6 +2,85 @@ const fs = require('fs');
 const path = require('path');
 
 describe('HomeScreen map performance', () => {
+  test('passive home map marker views allow map gestures through', () => {
+    const homeSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+    const busHubSource = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'BusHubOverlay.js'),
+      'utf8'
+    );
+
+    const routeLabelsStart = homeSource.indexOf('const HomeMapRouteLineLabelsLayer = React.memo');
+    const routeLabelsEnd = homeSource.indexOf('const HomeMapStopsLayer = React.memo', routeLabelsStart);
+    const routeLabelsSource = homeSource.slice(routeLabelsStart, routeLabelsEnd);
+
+    const androidBusStart = homeSource.indexOf('const AndroidLiveBusMarker = React.memo');
+    const androidBusEnd = homeSource.indexOf('const HomeMapVehiclesLayer = React.memo', androidBusStart);
+    const androidBusSource = homeSource.slice(androidBusStart, androidBusEnd);
+
+    expect(routeLabelsSource).toContain('pointerEvents="none"');
+    expect(androidBusSource).toContain('pointerEvents="none"');
+    expect(busHubSource).toContain('pointerEvents="none"');
+  });
+
+  test('detour decorative marker views allow map gestures through', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'DetourOverlay.js'),
+      'utf8'
+    );
+
+    expect(source).toContain('key={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}');
+    expect(source).toContain('key={`detour-route-stop-${routeId}-${stop.id ??');
+    expect(source).toContain('key={`detour-closed-stop-${routeId}-${point.id ??');
+    expect(source).toContain('key={`detour-skipped-stop-${routeId}-${stopMarkerKey}-${stopIndex}`}');
+    expect(source).toContain('pointerEvents="none"');
+    expect(source).toContain('pointerEvents="box-none"');
+  });
+
+  test('regular home map mode renders lightweight detour geometry and masks closed route sections', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+
+    const layerStart = source.indexOf('const HomeMapRoutesLayer = React.memo');
+    const layerEnd = source.indexOf('const HomeMapRouteLineLabelsLayer = React.memo', layerStart);
+    const layerSource = source.slice(layerStart, layerEnd);
+
+    expect(layerSource).toContain(
+      'const shouldRenderDetourMapOverlays = shouldShowDetourGeometryOverlay({ isDetourView, hasDetourFocus });'
+    );
+    expect(layerSource).toContain(
+      'const routeMaskingDetourOverlays = shouldRenderDetourMapOverlays ? detourOverlays : [];'
+    );
+    expect(layerSource).toContain('detourOverlays: routeMaskingDetourOverlays');
+    expect(layerSource).toContain('{shouldRenderDetourMapOverlays && detourOverlays.map((overlay) => (');
+  });
+
+  test('detour map tab turns the regular stops toggle off by default', () => {
+    const nativeSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+    const webSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      'utf8'
+    );
+
+    [nativeSource, webSource].forEach((source) => {
+      const handlerStart = source.indexOf('const handleMapViewModeChange = useCallback');
+      const handlerEnd = source.indexOf('useEffect(() => {', handlerStart);
+      const handlerSource = source.slice(handlerStart, handlerEnd);
+
+      expect(handlerStart).toBeGreaterThanOrEqual(0);
+      expect(handlerEnd).toBeGreaterThan(handlerStart);
+      expect(handlerSource).toContain("if (nextMode === 'detour')");
+      expect(handlerSource).toContain('setShowStops(false);');
+    });
+  });
+
   test('Android home-fleet bus markers do not run per-frame JS animation', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),

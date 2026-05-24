@@ -13,8 +13,9 @@ Use this checklist during live auto-detour validation. The goal is to confirm th
 - [ ] Confirm baseline is safe:
   - [ ] `DETOUR_REQUIRE_SAFE_BASELINE=true`
   - [ ] `/api/baseline-status` reports a trusted baseline.
-- [ ] Confirm stale-clear safety is enabled:
+- [ ] Confirm stale/headway monitoring is configured:
   - [ ] `DETOUR_STALE_AUTO_CLEAR_ENABLED=true`
+  - [ ] Active detours still require normal-route GPS proof to clear.
 - [ ] Confirm road matching is configured if testing rider-facing detour paths:
   - [ ] `DETOUR_ROAD_MATCHING_ENABLED=true`
   - [ ] OSRM base URL is reachable.
@@ -36,7 +37,7 @@ Use this checklist during live auto-detour validation. The goal is to confirm th
   - [ ] `likelyDetourPolyline` point count
   - [ ] `skippedSegmentPolyline` point count
 - [ ] Check recent `detourHistory` events for those routes.
-- [ ] Confirm no already-stale detours are still active.
+- [ ] Flag stale active detours for review; they may remain active until normal-route GPS proves service has resumed.
 
 ## 3. Worker Tick / Publishing Check
 
@@ -44,7 +45,7 @@ Use this checklist during live auto-detour validation. The goal is to confirm th
 - [ ] Confirm the tick processed current vehicles.
 - [ ] Confirm the tick completed without errors.
 - [ ] Confirm Firestore writes happened when expected.
-- [ ] Confirm stale old docs were not recreated after being cleared.
+- [ ] Confirm cleared docs are not recreated unless fresh off-route evidence returns.
 - [ ] Confirm current active detours remain stable across multiple ticks.
 
 ## 4. Detection Check
@@ -134,22 +135,21 @@ When buses return to route:
 - [ ] The app removes the rider-facing detour promptly.
 - [ ] The detour does not immediately flap back on.
 
-## 11. Clearing Check — Stale Safety Clear
+## 11. Stale Monitoring Check
 
 For stale detour protection:
 
 - [ ] Latest `lastEvidenceAt` is older than the schedule-aware threshold.
 - [ ] There are recent live vehicles in the same route family.
-- [ ] The system clears the stale detour.
-- [ ] `DETOUR_AUTO_CLEARED_STALE` is written to `detourHistory`.
-- [ ] History includes:
-  - [ ] `clearReason`
+- [ ] The system keeps the active detour visible unless normal-route GPS traversal proof exists.
+- [ ] No `DETOUR_AUTO_CLEARED_STALE` event is expected for current active detours; treat that event type as legacy/ops-review history.
+- [ ] Monitoring output includes enough context to review:
   - [ ] `staleAgeMs`
   - [ ] `staleThresholdMs`
   - [ ] `scheduledHeadwayMs`
   - [ ] `scheduleSource`
-- [ ] The app no longer shows the stale detour.
-- [ ] The detour is not recreated on the next tick unless fresh off-route evidence returns.
+- [ ] The app continues to show the stale detour until a `DETOUR_CLEARED` flow deletes the active doc.
+- [ ] The detour is not recreated after GPS clear unless fresh off-route evidence returns.
 
 ## 12. Low-Frequency / Sunday Service Check
 
@@ -159,23 +159,36 @@ Use this to avoid false clears on hourly service:
 - [ ] Confirm stale threshold is approximately:
   - [ ] `max(45 min, 2 × headway + 10 min)`
   - [ ] capped at 3 hours
-- [ ] For 60-minute service, confirm stale clear waits about 130 minutes.
+- [ ] For 60-minute service, confirm stale monitoring warns at about 130 minutes.
 - [ ] Confirm the system does not clear just because no bus reached the detour area yet.
 - [ ] Confirm no-scheduled-service periods do not clear from staleness alone.
+- [ ] Confirm first bus off-route creates backend candidate evidence but no rider UI.
+- [ ] Confirm second bus 30-60 minutes later can confirm the same candidate.
+- [ ] Confirm candidate expires after the configured candidate confirmation window.
+- [ ] Confirm repeated evidence from the same trip/vehicle does not count as two buses.
 
-## 13. History / Rollout Health Check
+## 13. Cold Start / Scheduler Baseline Check
+
+- [ ] Confirm Cloud Scheduler runs every 60 seconds during service hours.
+- [ ] Confirm burst sampling is disabled in the target environment.
+- [ ] Confirm duplicate GTFS-RT snapshots are skipped and do not count as fresh evidence.
+- [ ] Restart the backend while `activeDetours` contains a published detour.
+- [ ] Confirm the first post-restart tick does not delete the Firestore detour just because runtime state is empty.
+- [ ] Confirm the detour still clears only after normal-route GPS traversal.
+
+## 14. History / Rollout Health Check
 
 - [ ] Review recent `detourHistory`.
 - [ ] Confirm event order is sensible:
   - [ ] `DETOUR_DETECTED`
   - [ ] `DETOUR_UPDATED`
-  - [ ] `DETOUR_CLEARED` or `DETOUR_AUTO_CLEARED_STALE`
+  - [ ] `DETOUR_CLEARED` after normal-route GPS proof
 - [ ] Check for repeated detect/clear flapping.
 - [ ] Check `/api/detour-rollout-health`.
 - [ ] Confirm launch readiness is acceptable for the test stage.
-- [ ] Record any false positives or stale clears for follow-up.
+- [ ] Record any false positives, stale warnings, or unexpected clears for follow-up.
 
-## 14. Final Acceptance Criteria
+## 15. Final Acceptance Criteria
 
 Pass the test only if:
 
@@ -185,6 +198,6 @@ Pass the test only if:
 - [ ] Stops and buses stay visible above route lines.
 - [ ] Route families like `8A/8B` behave correctly.
 - [ ] Detours clear normally when buses return to route.
-- [ ] Stale detours clear safely using headway-aware timing.
+- [ ] Stale/headway checks do not clear active detours without GPS proof.
 - [ ] No stale detours reappear after tab switching or worker ticks.
 - [ ] History gives enough detail to audit what happened.

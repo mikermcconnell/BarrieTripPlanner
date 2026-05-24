@@ -6,9 +6,181 @@ const {
   buildClearedEvent,
   buildStaleClearedEvent,
   enforceGeometryTrustGate,
+  preserveTrustedDetourPath,
   shouldAttemptRoadMatchBackfill,
+  buildDetourEventId,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
+
+describe('buildDetourEventId', () => {
+  test('uses the skipped/closed segment so opposite route directions share an event id', () => {
+    const westbound = {
+      skippedSegmentPolyline: [
+        { latitude: 44.33424, longitude: -79.66897 },
+        { latitude: 44.33229, longitude: -79.67731 },
+      ],
+      likelyDetourRoadNames: ['Hooper Road', 'Saunders Road'],
+    };
+    const eastbound = {
+      skippedSegmentPolyline: [
+        { latitude: 44.33231, longitude: -79.67729 },
+        { latitude: 44.33422, longitude: -79.66899 },
+      ],
+      likelyDetourRoadNames: ['Saunders Road', 'Hooper Road'],
+    };
+
+    expect(buildDetourEventId('12A', westbound)).toBe(buildDetourEventId('12B', eastbound));
+  });
+
+  test('uses physical closure location rather than route family for event ids', () => {
+    const sharedClosure = {
+      skippedSegmentPolyline: [
+        { latitude: 44.392064, longitude: -79.692667 },
+        { latitude: 44.390197, longitude: -79.692541 },
+      ],
+    };
+
+    expect(buildDetourEventId('7B', sharedClosure)).toBe(buildDetourEventId('12B', sharedClosure));
+  });
+
+  test('keeps separate closures separate for the same route family', () => {
+    const saunders = {
+      skippedSegmentPolyline: [
+        { latitude: 44.33424, longitude: -79.66897 },
+        { latitude: 44.33229, longitude: -79.67731 },
+      ],
+    };
+    const sophia = {
+      skippedSegmentPolyline: [
+        { latitude: 44.3941, longitude: -79.7022 },
+        { latitude: 44.3962, longitude: -79.7104 },
+      ],
+    };
+
+    expect(buildDetourEventId('12B', saunders)).not.toBe(buildDetourEventId('12B', sophia));
+  });
+});
+
+describe('publishDetours event ids', () => {
+  test('rewrites legacy route-based event ids to physical closure ids on geometry writes', async () => {
+    jest.resetModules();
+    const writes = {};
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+    const publisher = require('../detourPublisher');
+    const sharedClosure = {
+      shapeId: 'shape-12b',
+      confidence: 'medium',
+      segments: [{
+        shapeId: 'shape-12b',
+        detourEventId: 'detour-event-12-legacy',
+        skippedSegmentPolyline: [
+          { latitude: 44.392064, longitude: -79.692667 },
+          { latitude: 44.390197, longitude: -79.692541 },
+        ],
+        entryPoint: { latitude: 44.392064, longitude: -79.692667 },
+        exitPoint: { latitude: 44.390197, longitude: -79.692541 },
+      }],
+    };
+
+    await publisher.publishDetours({
+      '12B': {
+        routeId: '12B',
+        detectedAt: new Date('2026-05-22T17:00:00Z'),
+        lastSeenAt: new Date('2026-05-22T17:01:00Z'),
+        vehicleCount: 1,
+        state: 'active',
+        geometry: sharedClosure,
+      },
+    });
+
+    const written = writes['activeDetours/12B'];
+    expect(written.detourEventId).toBe(buildDetourEventId('7B', sharedClosure.segments[0]));
+    expect(written.segments[0].detourEventId).toBe(buildDetourEventId('7B', sharedClosure.segments[0]));
+  });
+
+  test('keeps source event id on projected shared-location route geometry', async () => {
+    jest.resetModules();
+    const writes = {};
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+    const publisher = require('../detourPublisher');
+
+    await publisher.publishDetours({
+      '7B': {
+        routeId: '7B',
+        handoffSourceRouteId: '12B',
+        detectedAt: new Date('2026-05-22T17:00:00Z'),
+        lastSeenAt: new Date('2026-05-22T17:01:00Z'),
+        vehicleCount: 1,
+        state: 'active',
+        geometry: {
+          shapeId: 'shape-7b',
+          confidence: 'medium',
+          segments: [{
+            shapeId: 'shape-7b',
+            detourEventId: 'detour-event-source-12b',
+            skippedSegmentPolyline: [
+              { latitude: 44.3921, longitude: -79.6927 },
+              { latitude: 44.3902, longitude: -79.6925 },
+            ],
+            entryPoint: { latitude: 44.3921, longitude: -79.6927 },
+            exitPoint: { latitude: 44.3902, longitude: -79.6925 },
+            debug: { sharedLocationHandoffEnabled: true },
+          }],
+        },
+      },
+    });
+
+    const written = writes['activeDetours/7B'];
+    expect(written.detourEventId).toBe('detour-event-source-12b');
+    expect(written.segments[0].detourEventId).toBe('detour-event-source-12b');
+  });
+});
 
 describe('makeSnapshot', () => {
   test('includes all geometry fields from doc', () => {
@@ -42,8 +214,10 @@ describe('makeSnapshot', () => {
       roadMatchConfidence: 'high',
       roadMatchSource: 'osrm-match',
       detourPathLabel: 'Likely detour path',
+      detourEventId: 'detour-event-12-saunders',
       segments: [{
         shapeId: 'shape-8a',
+        detourEventId: 'detour-event-12-saunders',
         entryPoint: { latitude: 44.39, longitude: -79.698 },
         exitPoint: { latitude: 44.39, longitude: -79.690 },
         likelyDetourPolyline: [
@@ -67,7 +241,9 @@ describe('makeSnapshot', () => {
     expect(snap.likelyDetourRoadNames).toEqual(['Yonge Street', 'Big Bay Point Road']);
     expect(snap.roadMatchConfidence).toBe('high');
     expect(snap.detourPathLabel).toBe('Likely detour path');
+    expect(snap.detourEventId).toBe('detour-event-12-saunders');
     expect(snap.segmentCount).toBe(1);
+    expect(snap.segments[0].detourEventId).toBe('detour-event-12-saunders');
   });
 
   test('defaults geometry fields to null when absent', () => {
@@ -144,6 +320,56 @@ describe('makeSnapshot', () => {
 });
 
 describe('enforceGeometryTrustGate', () => {
+  test('orients trusted detour paths to the closed route direction before publish', () => {
+    const result = enforceGeometryTrustGate({
+      shapeId: 'shape-12b',
+      entryPoint: { latitude: 44.39, longitude: -79.688 },
+      exitPoint: { latitude: 44.39, longitude: -79.696 },
+      skippedSegmentPolyline: [
+        { latitude: 44.39, longitude: -79.688 },
+        { latitude: 44.39, longitude: -79.696 },
+      ],
+      inferredDetourPolyline: [
+        { latitude: 44.395, longitude: -79.696 },
+        { latitude: 44.395, longitude: -79.692 },
+        { latitude: 44.395, longitude: -79.688 },
+      ],
+      likelyDetourPolyline: [
+        { latitude: 44.396, longitude: -79.696 },
+        { latitude: 44.396, longitude: -79.692 },
+        { latitude: 44.396, longitude: -79.688 },
+      ],
+      canShowDetourPath: true,
+      segments: [{
+        shapeId: 'shape-12b',
+        entryPoint: { latitude: 44.39, longitude: -79.688 },
+        exitPoint: { latitude: 44.39, longitude: -79.696 },
+        skippedSegmentPolyline: [
+          { latitude: 44.39, longitude: -79.688 },
+          { latitude: 44.39, longitude: -79.696 },
+        ],
+        inferredDetourPolyline: [
+          { latitude: 44.395, longitude: -79.696 },
+          { latitude: 44.395, longitude: -79.692 },
+          { latitude: 44.395, longitude: -79.688 },
+        ],
+        likelyDetourPolyline: [
+          { latitude: 44.396, longitude: -79.696 },
+          { latitude: 44.396, longitude: -79.692 },
+          { latitude: 44.396, longitude: -79.688 },
+        ],
+        canShowDetourPath: true,
+      }],
+    });
+
+    expect(result.inferredDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
+    expect(result.inferredDetourPolyline[2].longitude).toBeCloseTo(-79.696, 3);
+    expect(result.likelyDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
+    expect(result.likelyDetourPolyline[2].longitude).toBeCloseTo(-79.696, 3);
+    expect(result.segments[0].inferredDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
+    expect(result.segments[0].likelyDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
+  });
+
   test('hides legacy one-sided inferred paths while keeping alert geometry data', () => {
     const inferredPath = [
       { latitude: 44.395, longitude: -79.699 },
@@ -188,6 +414,322 @@ describe('enforceGeometryTrustGate', () => {
     expect(result.segments[0].canShowDetourPath).toBe(false);
     expect(result.segments[0].skippedSegmentPolyline).toBeNull();
     expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+
+  test('clears low-confidence road-matched paths before publishing geometry', () => {
+    const path = [
+      { latitude: 44.390437, longitude: -79.692535 },
+      { latitude: 44.388233, longitude: -79.687958 },
+      { latitude: 44.390430, longitude: -79.691206 },
+    ];
+    const result = enforceGeometryTrustGate({
+      shapeId: 'shape-8',
+      canShowDetourPath: true,
+      inferredDetourPolyline: path,
+      likelyDetourPolyline: path,
+      likelyDetourRoadNames: ['Bayfield Street'],
+      roadMatchConfidence: 'low',
+      roadMatchRawConfidence: 0.07,
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: path,
+        likelyDetourPolyline: path,
+        likelyDetourRoadNames: ['Bayfield Street'],
+        roadMatchConfidence: 'low',
+        roadMatchRawConfidence: 0.07,
+        roadMatchSource: 'osrm-match',
+      }],
+    });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.inferredDetourPolyline).toEqual(path);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.roadMatchConfidence).toBeNull();
+    expect(result.roadMatchSource).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].roadMatchConfidence).toBeNull();
+  });
+
+  test('clears stale likely paths when debug endpoint mismatch says the path is untrusted', () => {
+    const path = [
+      { latitude: 44.390437, longitude: -79.692535 },
+      { latitude: 44.388233, longitude: -79.687958 },
+      { latitude: 44.390430, longitude: -79.691206 },
+    ];
+    const result = enforceGeometryTrustGate({
+      shapeId: 'shape-8',
+      canShowDetourPath: true,
+      inferredDetourPolyline: path,
+      likelyDetourPolyline: path,
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: path,
+        likelyDetourPolyline: path,
+        debug: {
+          untrustedPathEndpointMismatchMeters: 479,
+        },
+      }],
+    });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+});
+
+describe('preserveTrustedDetourPath', () => {
+  test('keeps the last trusted path when an active update loses renderable geometry', () => {
+    const trustedPath = [
+      { latitude: 44.333067, longitude: -79.673553 },
+      { latitude: 44.33654, longitude: -79.669865 },
+      { latitude: 44.337165, longitude: -79.669397 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: trustedPath,
+      likelyDetourRoadNames: ['Saunders Road', 'Hooper Road', 'Welham Road'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        shapeId: 'shape-12b',
+        canShowDetourPath: true,
+        likelyDetourPolyline: trustedPath,
+        likelyDetourRoadNames: ['Saunders Road', 'Hooper Road', 'Welham Road'],
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+      }],
+    };
+    const weakGeometry = {
+      shapeId: 'shape-12b',
+      canShowDetourPath: false,
+      skippedSegmentPolyline: [
+        { latitude: 44.332330195752895, longitude: -79.67758412288693 },
+        { latitude: 44.33320818445025, longitude: -79.67290120961049 },
+      ],
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [{
+        shapeId: 'shape-12b',
+        canShowDetourPath: false,
+        skippedSegmentPolyline: [
+          { latitude: 44.332330195752895, longitude: -79.67758412288693 },
+          { latitude: 44.33320818445025, longitude: -79.67290120961049 },
+        ],
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(weakGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toEqual(trustedPath);
+    expect(result.likelyDetourRoadNames).toEqual(['Saunders Road', 'Hooper Road', 'Welham Road']);
+    expect(result.roadMatchConfidence).toBe('high');
+    expect(result.segments[0].canShowDetourPath).toBe(true);
+    expect(result.segments[0].likelyDetourPolyline).toEqual(trustedPath);
+  });
+
+  test('does not preserve a trusted path when current weak geometry is in a different location', () => {
+    const duckworthPath = [
+      { latitude: 44.41042, longitude: -79.67381 },
+      { latitude: 44.40951, longitude: -79.67194 },
+    ];
+    const previous = {
+      shapeId: 'shape-7b',
+      canShowDetourPath: true,
+      likelyDetourPolyline: duckworthPath,
+      likelyDetourRoadNames: ['Duckworth Street', 'Grizzlies Way'],
+      entryPoint: { latitude: 44.41042, longitude: -79.67381 },
+      exitPoint: { latitude: 44.40951, longitude: -79.67194 },
+      segments: [{
+        shapeId: 'shape-7b',
+        canShowDetourPath: true,
+        likelyDetourPolyline: duckworthPath,
+        entryPoint: { latitude: 44.41042, longitude: -79.67381 },
+        exitPoint: { latitude: 44.40951, longitude: -79.67194 },
+      }],
+    };
+    const mapleviewGeometry = {
+      shapeId: 'shape-7b',
+      canShowDetourPath: false,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      entryPoint: { latitude: 44.33206, longitude: -79.69920 },
+      exitPoint: { latitude: 44.33371, longitude: -79.69180 },
+      skippedSegmentPolyline: [
+        { latitude: 44.33206, longitude: -79.69920 },
+        { latitude: 44.33371, longitude: -79.69180 },
+      ],
+      segments: [{
+        shapeId: 'shape-7b',
+        canShowDetourPath: false,
+        likelyDetourPolyline: null,
+        entryPoint: { latitude: 44.33206, longitude: -79.69920 },
+        exitPoint: { latitude: 44.33371, longitude: -79.69180 },
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(mapleviewGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.segments[0].canShowDetourPath).toBe(false);
+  });
+
+  test('does not preserve trusted geometry once the detour is clear-pending', () => {
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: [
+        { latitude: 44.333067, longitude: -79.673553 },
+        { latitude: 44.337165, longitude: -79.669397 },
+      ],
+    };
+    const weakGeometry = {
+      canShowDetourPath: false,
+      likelyDetourPolyline: null,
+      segments: [],
+    };
+
+    const result = preserveTrustedDetourPath(weakGeometry, previous, { state: 'clear-pending' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+  });
+
+  test('restores the trusted path after road matching downgrades current geometry', () => {
+    const trustedPath = [
+      { latitude: 44.333067, longitude: -79.673553 },
+      { latitude: 44.337165, longitude: -79.669397 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: trustedPath,
+      likelyDetourRoadNames: ['Saunders Road', 'Hooper Road', 'Welham Road'],
+      roadMatchConfidence: 'high',
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: trustedPath,
+      }],
+    };
+    const roadMatchedDowngrade = {
+      canShowDetourPath: false,
+      inferredDetourPolyline: [
+        { latitude: 44.333, longitude: -79.673 },
+        { latitude: 44.334, longitude: -79.674 },
+      ],
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      roadMatchConfidence: null,
+      segments: [{
+        canShowDetourPath: false,
+        inferredDetourPolyline: [
+          { latitude: 44.333, longitude: -79.673 },
+          { latitude: 44.334, longitude: -79.674 },
+        ],
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(roadMatchedDowngrade, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toEqual(trustedPath);
+    expect(result.segments[0].canShowDetourPath).toBe(true);
+    expect(result.segments[0].likelyDetourPolyline).toEqual(trustedPath);
+  });
+
+  test('does not restore a previous low-confidence road-matched path', () => {
+    const lowConfidencePath = [
+      { latitude: 44.390437, longitude: -79.692535 },
+      { latitude: 44.388233, longitude: -79.687958 },
+      { latitude: 44.390430, longitude: -79.691206 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: lowConfidencePath,
+      likelyDetourPolyline: lowConfidencePath,
+      likelyDetourRoadNames: ['Bayfield Street', 'Dunlop Street East'],
+      roadMatchConfidence: 'low',
+      roadMatchRawConfidence: 0.07,
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: lowConfidencePath,
+        likelyDetourPolyline: lowConfidencePath,
+        likelyDetourRoadNames: ['Bayfield Street', 'Dunlop Street East'],
+        roadMatchConfidence: 'low',
+        roadMatchRawConfidence: 0.07,
+        roadMatchSource: 'osrm-match',
+      }],
+    };
+    const currentTrustedButUnmatched = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: lowConfidencePath,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      roadMatchConfidence: null,
+      roadMatchRawConfidence: null,
+      roadMatchSource: null,
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: lowConfidencePath,
+        likelyDetourPolyline: null,
+        likelyDetourRoadNames: [],
+        roadMatchConfidence: null,
+        roadMatchRawConfidence: null,
+        roadMatchSource: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(currentTrustedButUnmatched, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.roadMatchConfidence).toBeNull();
+    expect(result.roadMatchSource).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].roadMatchConfidence).toBeNull();
+  });
+
+  test('adds the previous likely path when current geometry only has a trusted inferred path', () => {
+    const trustedPath = [
+      { latitude: 44.333067, longitude: -79.673553 },
+      { latitude: 44.337165, longitude: -79.669397 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: trustedPath,
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: trustedPath,
+      }],
+    };
+    const currentTrustedButUnmatched = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: [
+        { latitude: 44.333, longitude: -79.673 },
+        { latitude: 44.334, longitude: -79.674 },
+      ],
+      likelyDetourPolyline: null,
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: [
+          { latitude: 44.333, longitude: -79.673 },
+          { latitude: 44.334, longitude: -79.674 },
+        ],
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(currentTrustedButUnmatched, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toEqual(trustedPath);
+    expect(result.segments[0].likelyDetourPolyline).toEqual(trustedPath);
   });
 });
 

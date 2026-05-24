@@ -14,7 +14,6 @@ const ROUTE_LABEL_DEBUG = typeof __DEV__ !== 'undefined' && __DEV__ && process.e
 const BusMarkerComponent = ({
   vehicle,
   color = '#E53935',
-  onPress,
   routeLabel: routeLabelProp,
   routeDirectionLabel,
   snapPath = null,
@@ -53,9 +52,11 @@ const BusMarkerComponent = ({
       id={`bus-${vehicle.id}`}
       coordinate={[longitude, latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
+      pointerEvents="none"
     >
       <View
         collapsable={false}
+        pointerEvents="none"
         style={[
           styles.wrapper,
           {
@@ -63,7 +64,6 @@ const BusMarkerComponent = ({
             transform: [{ scale: scale * (dimmed ? 0.84 : 1) }],
           },
         ]}
-        onTouchEnd={() => onPress?.(vehicle)}
       >
         {hasDirectionBearing && (
           <BusDirectionArrow

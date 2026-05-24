@@ -11,6 +11,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTransitRealtime } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import {
+  looksLikeDetourNotice,
+  looksLikeStopClosureNotice,
+} from '../utils/noticeTimingUtils';
+import { normalizeDetourNotice } from '../utils/upcomingDetourNotices';
 
 const MONTHS = {
   january: 0, jan: 0,
@@ -150,13 +155,13 @@ const NewsScreen = ({ navigation }) => {
     const upcomingStopClosures = stopClosures.filter((impact) => impact.status === 'upcoming');
     const activeDetourItems = Object.values(activeDetours || {}).filter((detour) => detour?.state !== 'archived');
     const detourNotices = (transitNews || [])
-      .filter((item) => looksLikeDetour(item) && !looksLikeStopClosure(item))
-      .map((item) => ({ ...item, window: parseDateWindow(item) }));
-    const activeDetourNotices = detourNotices.filter((item) => statusForWindow(item.window) === 'active');
-    const upcomingDetours = detourNotices.filter((item) => statusForWindow(item.window) === 'upcoming');
+      .filter((item) => looksLikeDetourNotice(item) && !looksLikeStopClosureNotice(item))
+      .map((item) => normalizeDetourNotice(item));
+    const activeDetourNotices = detourNotices.filter((item) => item.status === 'active');
+    const upcomingDetours = detourNotices.filter((item) => item.status === 'upcoming');
     const otherNews = (transitNews || []).filter((item) => (
-      !looksLikeStopClosure(item) &&
-      !looksLikeDetour(item)
+      !looksLikeStopClosureNotice(item) &&
+      !looksLikeDetourNotice(item)
     ));
 
     return { activeStopClosures, upcomingStopClosures, activeDetourItems, activeDetourNotices, upcomingDetours, otherNews };

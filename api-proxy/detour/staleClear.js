@@ -72,12 +72,19 @@ function getDetourGeometry(detour) {
 }
 
 function pickDetourField(detour, previousSnapshot, key) {
-  const geometry = getDetourGeometry(detour);
+  const hasCurrentDetour = detour && typeof detour === 'object';
+  const geometry = detour?.geometry && typeof detour.geometry === 'object'
+    ? detour.geometry
+    : null;
+
   if (geometry && Object.prototype.hasOwnProperty.call(geometry, key)) {
     return geometry[key];
   }
-  if (detour && Object.prototype.hasOwnProperty.call(detour, key)) {
+  if (hasCurrentDetour && Object.prototype.hasOwnProperty.call(detour, key)) {
     return detour[key];
+  }
+  if (hasCurrentDetour) {
+    return undefined;
   }
   if (previousSnapshot && Object.prototype.hasOwnProperty.call(previousSnapshot, key)) {
     return previousSnapshot[key];
@@ -174,11 +181,12 @@ function shouldAutoClearStaleDetour({
       staleAgeMs >= LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS
     ) {
       return {
-        shouldClear: true,
-        reason: 'stale-low-confidence-validation',
+        shouldClear: false,
+        reason: 'gps-clear-required',
         staleAgeMs,
         lastEvidenceAt: evidenceMs,
         thresholdMs: LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS,
+        validationOnly: true,
       };
     }
   }

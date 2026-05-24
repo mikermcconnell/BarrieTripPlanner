@@ -18,6 +18,7 @@ import DelayBadge from './DelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 import Icon from './Icon';
 import WalkingPaceIcon from './navigation/WalkingPaceIcon';
+import { getNoticeStartText } from '../utils/noticeTimingUtils';
 import {
   getEffectiveTransferCount,
   getRouteDisplayName,
@@ -35,6 +36,7 @@ const getTripLegKey = (leg, index) => {
 };
 
 const getLabelKey = (label, index) => `${label || 'label'}-${index}`;
+const TOMORROW_BADGE_TEXT = '📅 Tomorrow';
 
 export const getTransferWaitSummaries = (legs = []) => {
   const rideLegs = getTransitRideLegsWithIndexes(legs);
@@ -244,21 +246,56 @@ const getStopClosureNoticeCopy = (notices) => {
     const firstStop = notices.impactedStops[0];
     const stopLabel = firstStop.stopCode ? `Stop ${firstStop.stopCode}` : (firstStop.stopName || 'A stop');
     const extraCount = notices.impactedStops.length - 1;
+    const appliesToTrip = firstStop.timingStatus === 'applies_to_trip';
     return {
       tone: 'warning',
-      title: `${stopLabel} may be closed for this trip`,
+      title: appliesToTrip
+        ? `This trip may be affected by ${stopLabel} closure`
+        : `${stopLabel} may be closed for this trip`,
       detail: extraCount > 0
         ? `${extraCount + 1} stops in this trip have reported closures.`
-        : firstStop.stopName || 'Check the notice before travelling.',
+        : [
+          appliesToTrip ? getNoticeStartText(firstStop, null) : null,
+          firstStop.stopName || 'Check the notice before travelling.',
+        ].filter(Boolean).join(' · '),
     };
   }
 
   const routeNoticeCount = notices?.routeNotices?.length || 0;
   if (routeNoticeCount > 0) {
+    const firstRouteNotice = notices.routeNotices[0];
+    const appliesToTrip = notices.routeNotices.some((notice) => notice.timingStatus === 'applies_to_trip');
     return {
-      tone: 'minor',
-      title: `Your route has ${routeNoticeCount === 1 ? 'one stop closure' : `${routeNoticeCount} stop closures`}`,
-      detail: 'Your trip is not impacted.',
+      tone: appliesToTrip ? 'warning' : 'minor',
+      title: appliesToTrip
+        ? 'This trip may be affected by a scheduled stop closure'
+        : `Your route has ${routeNoticeCount === 1 ? 'one stop closure' : `${routeNoticeCount} stop closures`}`,
+      detail: appliesToTrip
+        ? getNoticeStartText(firstRouteNotice, 'Check the notice before travelling.')
+        : 'Your trip is not impacted.',
+    };
+  }
+
+  if (notices?.hasUpcomingImpact && notices.upcomingImpactedStops?.length > 0) {
+    const firstStop = notices.upcomingImpactedStops[0];
+    const stopLabel = firstStop.stopCode ? `Stop ${firstStop.stopCode}` : (firstStop.stopName || 'A stop');
+    return {
+      tone: 'upcoming',
+      title: `${stopLabel} closure scheduled`,
+      detail: [
+        getNoticeStartText(firstStop, null),
+        firstStop.stopName || 'Check the notice before travelling.',
+      ].filter(Boolean).join(' · '),
+    };
+  }
+
+  const upcomingRouteNoticeCount = notices?.upcomingRouteNotices?.length || 0;
+  if (upcomingRouteNoticeCount > 0) {
+    const firstRouteNotice = notices.upcomingRouteNotices[0];
+    return {
+      tone: 'upcoming',
+      title: `Upcoming ${upcomingRouteNoticeCount === 1 ? 'stop closure' : 'stop closures'} on your route`,
+      detail: getNoticeStartText(firstRouteNotice, 'Check the notice before travelling.'),
     };
   }
 
@@ -297,18 +334,19 @@ const getDetourNoticeCopy = (itinerary) => {
 const StopClosureNotice = ({ notice }) => {
   if (!notice) return null;
   const isWarning = notice.tone === 'warning';
+  const isUpcoming = notice.tone === 'upcoming';
   const noticeText = notice.detail ? `${notice.title} · ${notice.detail}` : notice.title;
 
   return (
     <View style={[
       styles.stopClosureNotice,
-      isWarning ? styles.stopClosureNoticeWarning : styles.stopClosureNoticeMinor,
+      isWarning ? styles.stopClosureNoticeWarning : isUpcoming ? styles.stopClosureNoticeUpcoming : styles.stopClosureNoticeMinor,
     ]}>
       <Text style={[
         styles.stopClosureNoticeTitle,
-        isWarning ? styles.stopClosureNoticeTitleWarning : styles.stopClosureNoticeTitleMinor,
+        isWarning ? styles.stopClosureNoticeTitleWarning : isUpcoming ? styles.stopClosureNoticeTitleUpcoming : styles.stopClosureNoticeTitleMinor,
       ]} numberOfLines={1}>
-        {isWarning ? '⚠️ ' : ''}{noticeText}
+        {isWarning ? '⚠️ ' : isUpcoming ? '📅 ' : ''}{noticeText}
       </Text>
     </View>
   );
@@ -479,7 +517,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             ))}
             {isTomorrow && (
               <View style={styles.tomorrowBadge}>
-                <Text style={styles.tomorrowText}>🌙 Tomorrow</Text>
+                <Text style={styles.tomorrowText}>{TOMORROW_BADGE_TEXT}</Text>
               </View>
             )}
           </View>
@@ -615,7 +653,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           ))}
           {isTomorrow && (
             <View style={styles.tomorrowBadge}>
-              <Text style={styles.tomorrowText}>🌙 Tomorrow</Text>
+              <Text style={styles.tomorrowText}>{TOMORROW_BADGE_TEXT}</Text>
             </View>
           )}
         </View>
@@ -1067,6 +1105,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.grey50,
     borderColor: COLORS.borderLight,
   },
+  stopClosureNoticeUpcoming: {
+    backgroundColor: COLORS.infoSubtle,
+    borderColor: COLORS.primarySubtle,
+  },
   stopClosureNoticeTitle: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.bold,
@@ -1076,6 +1118,9 @@ const styles = StyleSheet.create({
   },
   stopClosureNoticeTitleMinor: {
     color: COLORS.textSecondary,
+  },
+  stopClosureNoticeTitleUpcoming: {
+    color: COLORS.primaryDark,
   },
   stopClosureNoticeDetail: {
     color: COLORS.textSecondary,

@@ -1,0 +1,166 @@
+global.IS_REACT_ACT_ENVIRONMENT = true;
+
+const React = require('react');
+const { create, act } = require('react-test-renderer');
+
+jest.mock('react-native', () => ({
+  View: 'View',
+  Text: 'Text',
+  TouchableOpacity: 'TouchableOpacity',
+  StyleSheet: { create: (styles) => styles },
+  Linking: { openURL: jest.fn() },
+  useWindowDimensions: () => ({ width: 390, height: 844 }),
+}));
+
+jest.mock('@gorhom/bottom-sheet', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ children }) => React.createElement('BottomSheet', null, children),
+    BottomSheetScrollView: ({ children }) => React.createElement('BottomSheetScrollView', null, children),
+  };
+});
+
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+jest.mock('../components/Icon', () => 'Icon');
+jest.mock('../components/DetourImpactSummary', () => 'DetourImpactSummary');
+
+const DetourDetailsSheet = require('../components/DetourDetailsSheet').default;
+
+const collectText = (node) => {
+  if (node == null || typeof node === 'boolean') return [];
+  if (typeof node === 'string' || typeof node === 'number') return [String(node)];
+  if (Array.isArray(node)) return node.flatMap(collectText);
+  return collectText(node.props?.children);
+};
+
+describe('DetourDetailsSheet MyRide timing', () => {
+  let dateNowSpy;
+
+  beforeEach(() => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-05-15T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    dateNowSpy?.mockRestore();
+  });
+
+  test('shows parsed MyRide end date for a clicked detour segment', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '12',
+        detour: { routeId: '12', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [{
+          id: 'route-12-detour',
+          title: 'Route 12 detour',
+          body: 'Route 12 will be on detour from May 10 to May 20, 2026.',
+          affectedRoutes: ['12'],
+          url: 'https://www.myridebarrie.ca/News/route-12-detour/',
+          publishedAt: Date.parse('2026-05-01T12:00:00Z'),
+        }],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('MyRide timing');
+    expect(texts).toContain('Started: ');
+    expect(texts).toContain('Expected end date: May 20, 2026');
+    expect(texts).toContain('Route 12 detour');
+  });
+
+  test('says detour end date is not listed when MyRide has no end date', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '8',
+        detour: { routeId: '8', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [{
+          id: 'route-8-detour',
+          title: 'Route 8 detour',
+          body: 'Route 8 is on detour beginning May 10 until construction is complete.',
+          affectedRoutes: ['8'],
+          publishedAt: Date.parse('2026-05-01T12:00:00Z'),
+        }],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('MyRide timing');
+    expect(texts).toContain('Detour end date is not listed.');
+  });
+
+  test('labels detector-only detours as unplanned with unknown end time', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '12B',
+        detour: { routeId: '12B', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Unplanned detour');
+    expect(texts).toContain('Started: ');
+    expect(texts).toContain('End time unknown.');
+    expect(texts).not.toContain('MyRide timing');
+  });
+
+  test('uses the supplied route color for branch route badges', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '12B',
+        routeColor: '#E91E63',
+        detour: { routeId: '12B', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const routeBadge = inst.root.findAllByType('View').find((node) => (
+      Array.isArray(node.props.style) &&
+      node.props.style.some((style) => style?.backgroundColor === '#E91E63')
+    ));
+    expect(routeBadge).toBeDefined();
+  });
+
+  test('uses event context for a location-first title and impacted route chips', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '12A',
+        routeColor: '#F39AC2',
+        detour: { routeId: '12A', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detourEvent: {
+          title: 'Saunders & Welham',
+          routeIds: ['12A', '12B'],
+        },
+        routeColorByRouteId: {
+          '12A': '#F39AC2',
+          '12B': '#F39AC2',
+        },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Saunders & Welham');
+    expect(texts).toContain('12A');
+    expect(texts).toContain('12B');
+    expect(texts).not.toContain('Route 12A - Detour Active');
+
+    const impactSummary = inst.root.findByType('DetourImpactSummary');
+    expect(impactSummary.props.routeLabel).toBe('Routes 12A/12B');
+  });
+});

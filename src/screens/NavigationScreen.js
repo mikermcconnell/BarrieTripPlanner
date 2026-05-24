@@ -51,6 +51,7 @@ import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel'
 import { useBusProximity } from '../hooks/useBusProximity';
 import { useStepProgress } from '../hooks/useStepProgress';
 import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
+import { useDevNavigationSimulator } from '../hooks/useDevNavigationSimulator';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
@@ -88,6 +89,65 @@ const trackNavigationEvent = (eventName, params) => {
 const MAX_NAVIGATION_LOCATION_DISTANCE_FROM_TRIP_METERS = 25000;
 const GOOGLE_WALK_BLUE = '#4285F4';
 const GOOGLE_WALK_BLUE_DARK = '#1967D2';
+
+const DevNavigationSimulatorPanel = ({
+  canSimulate,
+  isRunning,
+  location,
+  progress,
+  onClear,
+  onPause,
+  onResume,
+  onStart,
+}) => {
+  if (!canSimulate) return null;
+
+  const hasStarted = !!location;
+  const hasFinished = hasStarted && progress >= 100 && !isRunning;
+  const primaryLabel = isRunning
+    ? 'Pause'
+    : hasStarted && !hasFinished
+      ? 'Resume'
+      : hasFinished
+        ? 'Replay ride'
+        : 'Sim ride';
+  const primaryAction = isRunning
+    ? onPause
+    : hasStarted && !hasFinished
+      ? onResume
+      : onStart;
+
+  return (
+    <View style={styles.devSimulatorPanel} pointerEvents="box-none">
+      <View style={styles.devSimulatorCard}>
+        <View style={styles.devSimulatorTextColumn}>
+          <Text style={styles.devSimulatorEyebrow}>Dev simulator</Text>
+          <Text style={styles.devSimulatorTitle}>
+            {isRunning ? `Riding… ${progress}%` : hasStarted ? `Ride sim ${progress}%` : 'Test bus ride'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.devSimulatorPrimaryButton}
+          onPress={primaryAction}
+          accessibilityRole="button"
+          accessibilityLabel={`${primaryLabel} navigation ride simulator`}
+        >
+          <Text style={styles.devSimulatorPrimaryText}>{primaryLabel}</Text>
+        </TouchableOpacity>
+        {hasStarted && (
+          <TouchableOpacity
+            style={styles.devSimulatorSecondaryButton}
+            onPress={onClear}
+            accessibilityRole="button"
+            accessibilityLabel="Clear navigation ride simulator"
+          >
+            <Text style={styles.devSimulatorSecondaryText}>Clear</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
 
 const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
   switch (type) {
@@ -159,8 +219,9 @@ const NavigationBusMapMarker = ({ marker }) => {
         id={`nav-bus-${marker.id}`}
         coordinate={marker.coordinate}
         anchor={{ x: 0.5, y: 0.5 }}
+        pointerEvents="none"
       >
-        <View style={styles.busMarkerContainer}>
+        <View style={styles.busMarkerContainer} pointerEvents="none">
           <View
             style={[
               styles.busMarker,
@@ -337,8 +398,15 @@ const NavigationScreen = ({ route }) => {
     distanceToDestination,
   });
 
+  const devNavigationSimulator = useDevNavigationSimulator({
+    enabled: isTransitLeg && !isOnDemandLeg,
+    transitLeg: currentTransitLeg,
+    onStartRide: boardBus,
+  });
+  const navigationUserLocation = devNavigationSimulator.location || userLocation;
+
   // Bus proximity tracking with user location and on-board status
-  const busProximity = useBusProximity(currentTransitLeg, true, userLocation, isUserOnBoard);
+  const busProximity = useBusProximity(currentTransitLeg, true, navigationUserLocation, isUserOnBoard);
 
   const notifyAutoBoardReady = useCallback(() => {
     triggerHapticOnce('auto-board', Haptics.NotificationFeedbackType.Success);
@@ -947,9 +1015,11 @@ const NavigationScreen = ({ route }) => {
               id={`nav-marker-${marker.id}`}
               coordinate={marker.coordinate}
               anchor={{ x: 0.5, y: 0.5 }}
+              pointerEvents="none"
             >
               <View
                 collapsable={false}
+                pointerEvents="none"
                 style={[
                   styles.marker,
                   marker.type === 'origin' && styles.markerOrigin,
@@ -972,8 +1042,9 @@ const NavigationScreen = ({ route }) => {
               id={`nav-marker-${marker.id}`}
               coordinate={marker.coordinate}
               anchor={{ x: 0.5, y: 1 }}
+              pointerEvents="none"
             >
-              <View collapsable={false} style={styles.transitStopMarkerContainer}>
+              <View collapsable={false} pointerEvents="none" style={styles.transitStopMarkerContainer}>
                 <View
                   style={[
                     styles.mapStopLabelBubble,
@@ -1023,8 +1094,9 @@ const NavigationScreen = ({ route }) => {
               id={`nav-marker-${marker.id}`}
               coordinate={marker.coordinate}
               anchor={{ x: 0.5, y: 1 }}
+              pointerEvents="none"
             >
-              <View collapsable={false} style={styles.transitStopMarkerContainer}>
+              <View collapsable={false} pointerEvents="none" style={styles.transitStopMarkerContainer}>
                 {marker.showLabel !== false && (
                   <View
                     style={[
@@ -1066,10 +1138,29 @@ const NavigationScreen = ({ route }) => {
               id="nav-marker-current-location"
               coordinate={[userLocation.longitude, userLocation.latitude]}
               anchor={{ x: 0.5, y: 0.5 }}
+              pointerEvents="none"
             >
-              <View collapsable={false} style={styles.currentLocationMarkerHalo}>
+              <View collapsable={false} pointerEvents="none" style={styles.currentLocationMarkerHalo}>
                 <View style={styles.currentLocationMarker}>
                   <View style={styles.currentLocationMarkerCore} />
+                </View>
+              </View>
+            </MapLibreGL.MarkerView>
+          )}
+
+          {devNavigationSimulator.location && (
+            <MapLibreGL.MarkerView
+              id="nav-marker-dev-simulated-location"
+              coordinate={[
+                devNavigationSimulator.location.longitude,
+                devNavigationSimulator.location.latitude,
+              ]}
+              anchor={{ x: 0.5, y: 0.5 }}
+              pointerEvents="none"
+            >
+              <View collapsable={false} pointerEvents="none" style={styles.devSimMarkerHalo}>
+                <View style={styles.devSimMarker}>
+                  <Text style={styles.devSimMarkerText}>SIM</Text>
                 </View>
               </View>
             </MapLibreGL.MarkerView>
@@ -1149,6 +1240,17 @@ const NavigationScreen = ({ route }) => {
           onShowTrip={showTripOverview}
         />
       </View>
+
+      <DevNavigationSimulatorPanel
+        canSimulate={devNavigationSimulator.canSimulate}
+        isRunning={devNavigationSimulator.isRunning}
+        location={devNavigationSimulator.location}
+        progress={devNavigationSimulator.progress}
+        onClear={devNavigationSimulator.clear}
+        onPause={devNavigationSimulator.pause}
+        onResume={devNavigationSimulator.resume}
+        onStart={devNavigationSimulator.start}
+      />
 
       {/* Bottom Section */}
       <View style={[
@@ -1401,6 +1503,61 @@ const styles = StyleSheet.create({
   mapControlBtnActive: {
     backgroundColor: COLORS.primary,
   },
+  devSimulatorPanel: {
+    position: 'absolute',
+    left: SPACING.md,
+    right: SPACING.md,
+    top: 142,
+    zIndex: 900,
+    alignItems: 'flex-start',
+  },
+  devSimulatorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: 'rgba(23, 43, 77, 0.94)',
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    ...SHADOWS.medium,
+  },
+  devSimulatorTextColumn: {
+    marginRight: SPACING.xs,
+  },
+  devSimulatorEyebrow: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  devSimulatorTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+  },
+  devSimulatorPrimaryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  devSimulatorPrimaryText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+  },
+  devSimulatorSecondaryButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  devSimulatorSecondaryText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+  },
   marker: {
     width: 24,
     height: 24,
@@ -1499,6 +1656,30 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.white,
+  },
+  devSimMarkerHalo: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 171, 0, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  devSimMarker: {
+    minWidth: 34,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.warning,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  devSimMarkerText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: '900',
   },
   transitStopMarkerContainer: {
     alignItems: 'center',

@@ -68,6 +68,20 @@ export function formatDetourTime(detectedAt) {
   return `Active for ${hours}h ${diffMin % 60}m`;
 }
 
+export function formatDetourStartedAt(detectedAt) {
+  if (!detectedAt) return null;
+  const date = detectedAt instanceof Date ? detectedAt : new Date(detectedAt);
+  if (isNaN(date.getTime())) return null;
+
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function getConfidenceChip(confidence) {
   switch (confidence) {
     case 'high':

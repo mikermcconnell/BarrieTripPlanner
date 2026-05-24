@@ -96,15 +96,27 @@ function parseDateWindow(newsItem, now = new Date()) {
     };
   }
 
+  const untilOnly = new RegExp(`\\b(?:until|through|to)\\s+(${datePattern})\\b`, 'i').exec(text);
   const fromOpen = new RegExp(`\\bfrom\\s+(${datePattern})\\b`, 'i').exec(text);
   const beginningOpen = new RegExp(`\\bbeginning\\s+(${datePattern})\\b`, 'i').exec(text);
+  const onSingleDay = new RegExp(`\\bon\\s+(${datePattern})\\b`, 'i').exec(text);
+  if (onSingleDay) {
+    return {
+      startsAt: parseMonthDate([null, onSingleDay[2], onSingleDay[3], onSingleDay[4]], fallbackYear),
+      endsAt: parseMonthDate([null, onSingleDay[2], onSingleDay[3], onSingleDay[4]], fallbackYear, true),
+    };
+  }
+
   const startsAt = parseMonthDate(fromOpen
     ? [null, fromOpen[2], fromOpen[3], fromOpen[4]]
     : beginningOpen
       ? [null, beginningOpen[2], beginningOpen[3], beginningOpen[4]]
       : null, fallbackYear);
 
-  return { startsAt, endsAt: null };
+  return {
+    startsAt,
+    endsAt: untilOnly ? parseMonthDate([null, untilOnly[2], untilOnly[3], untilOnly[4]], fallbackYear, true) : null,
+  };
 }
 
 function statusForDateWindow(window, now = new Date()) {

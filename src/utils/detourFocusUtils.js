@@ -1,4 +1,4 @@
-import { routeIsDetouring } from './routeDetourMatching';
+import { getRouteFamilyId, routeIsDetouring } from './routeDetourMatching';
 
 /**
  * In focused detour mode, only the focused route's scheduled corridor should
@@ -18,7 +18,8 @@ export const shouldRenderRouteShape = ({
     return true;
   }
 
-  return routeKey === String(focusedDetourRouteId);
+  return routeKey === String(focusedDetourRouteId) ||
+    getRouteFamilyId(routeKey) === getRouteFamilyId(focusedDetourRouteId);
 };
 
 /**

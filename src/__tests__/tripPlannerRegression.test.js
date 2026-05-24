@@ -1782,9 +1782,37 @@ describe('web trip planner regressions', () => {
     const progressIndicators = root.findAll(
       (node) => node.props.accessibilityRole === 'progressbar'
     );
+    const loadingAnimations = root.findAll(
+      (node) => node.props.testID === 'trip-planning-loading-animation'
+    );
 
     expect(loadingText).toHaveLength(1);
     expect(progressIndicators).toHaveLength(1);
+    expect(loadingAnimations).toHaveLength(1);
+
+    unmount();
+  });
+
+  test('native search header shows animated planning feedback while trip search is loading', () => {
+    const { root, unmount } = loadTripSearchHeaderNative({
+      fromText: 'Current Location',
+      toText: 'Downtown Terminal',
+      isLoading: true,
+    });
+
+    const loadingText = root.findAll(
+      (node) => node.children?.includes('Planning your trip…')
+    );
+    const progressIndicators = root.findAll(
+      (node) => node.props.accessibilityRole === 'progressbar'
+    );
+    const loadingAnimations = root.findAll(
+      (node) => node.props.testID === 'trip-planning-loading-animation'
+    );
+
+    expect(loadingText).toHaveLength(1);
+    expect(progressIndicators).toHaveLength(1);
+    expect(loadingAnimations).toHaveLength(1);
 
     unmount();
   });

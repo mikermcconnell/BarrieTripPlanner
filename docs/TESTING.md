@@ -96,6 +96,7 @@ Automated tests do not replace real workflow checks for:
 - live arrivals rendering
 - favorites visibility and navigation handoff
 - alerts and detour presentation on real screens
+- Android bottom UI spacing: confirm bottom loading bars, sheets, map controls, and action buttons sit above the system navigation bar, not underneath it
 
 ## What to mock by default
 
@@ -143,6 +144,26 @@ For meaningful transit changes, manually verify:
    - confirm map interactions and search still work
 5. **Plausibility**
    - outputs look believable for Barrie Transit, not just technically valid
+
+## Dev-only on-bus navigation simulator
+
+Native dev builds include a small **Dev simulator** control on `NavigationScreen` during a bus leg.
+
+Use it to test the on-bus part of TripPlan without physically riding:
+
+1. Launch Android with `npm run android:dev`.
+2. Plan a trip and start navigation.
+3. Advance to a bus leg if needed.
+4. Tap **Sim ride**.
+   - The app marks you as on board.
+   - A simulated GPS marker moves along the selected bus leg.
+5. Confirm the on-board card updates:
+   - stops remaining decreases
+   - “prepare to exit” / “your stop is next” appears
+   - “get off now” appears at the alighting stop
+   - the leg advances after sustained alighting evidence
+
+The simulator is dev-only (`__DEV__`) and can be hidden with `EXPO_PUBLIC_NAVIGATION_SIMULATOR=false`.
 
 ## Current priorities for added coverage
 

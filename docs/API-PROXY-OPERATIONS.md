@@ -96,11 +96,22 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=interval|manual|scheduled`
 - `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=true|false`
+  - route-family handoff treats a confirmed closure segment as one physical detour event and can project it onto sibling route variants/directions when the source segment has confirmed boundaries
+  - point-only short deviations are not projected because there is no reliable closed segment to map to the sibling route
+- `DETOUR_MIN_UNIQUE_VEHICLES=2`
+  - values below 2 are ignored; rider-facing detours require two unique vehicles on the same route
 - `DETOUR_HISTORY_ENABLED=true`
 - `DETOUR_HISTORY_RETENTION_DAYS=30`
+- Recommended low-cost production shape:
+  - `DETOUR_WORKER_MODE=scheduled`
+  - Cloud Scheduler calls `POST /api/detour-run-once` every 60 seconds during service hours.
+  - `DETOUR_BURST_SAMPLING_ENABLED=false`
+  - Each scheduled call collects one GTFS-RT snapshot.
+  - Continuity comes from backend memory, not multiple pulses inside one request.
+  - Duplicate GTFS vehicle snapshots are skipped so repeated feed data does not count as fresh detector evidence.
 - Optional stale-detour monitoring:
   - Active detector-owned detours clear from same-bus normal-route GPS traversal through the affected segment, not from elapsed time or bus absence.
-  - Default clear proof requires the same bus to cover at least 100m and 60% of the affected segment on the baseline route (`DETOUR_CLEAR_MIN_TRAVERSAL_METERS`, `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO`).
+  - Default clear proof requires the same bus to cover at least 100m and 60% of the affected segment on the baseline route (`DETOUR_CLEAR_MIN_TRAVERSAL_METERS`, `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO`). Once this proof exists, short segments can clear without waiting for the fixed consecutive on-route tick threshold.
   - `DETOUR_STALE_AUTO_CLEAR_*` values are retained for stale/headway monitoring context. They should not clear an active detour by themselves.
   - There is intentionally no short zero-vehicle stale clear. A detour with `currentVehicleCount: 0` stays active until another bus either adds detour evidence or proves normal routing.
   - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
@@ -136,7 +147,9 @@ Recommended modes:
 
 For non-production validation and cost control, prefer `manual` or `scheduled`.
 
-`DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=false` is useful during detour debugging when you need to verify whether wrong route labels are coming from sibling-route projection rather than the underlying detector.
+`DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=false` is useful during detour debugging when you need to verify whether wrong geometry is coming from sibling-route projection rather than the underlying detector.
+
+Long-running detours also retain learned GPS evidence separately from the short live evidence window. This lets trusted alternate paths and boundary candidates survive worker restarts and scheduled/manual run-once hydration. `lastEvidenceAt` is only advanced when new GPS evidence exists; ordinary persistence refreshes do not make stale evidence look new.
 
 ### Optional admin flows
 
@@ -190,7 +203,7 @@ Baseline endpoints:
 Only detour admins should run baseline mutation endpoints. Do not refresh the baseline during a known active detour unless you intentionally want that detour treated as normal service.
 
 `GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours. It also reports suspicious short-lived detours under 15 minutes, grouped by confidence, so operators can review likely false positives that lasted longer than the strict 5-minute threshold.
-Launch readiness also checks whether the stored baseline diverges from current live GTFS. Baseline divergence is a critical blocker because it can create false detours or wrong affected-stop output. Stale auto-clears are reported as warning evidence and should be reviewed before public rollout.
+Launch readiness also checks whether the stored baseline diverges from current live GTFS. Baseline divergence is a critical blocker because it can create false detours or wrong affected-stop output. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
 
 `GET /api/detour-debug` without `routeId` is the safe summary endpoint. Route-specific debug (`?routeId=...`) can expose vehicle-level evidence and is blocked in production unless the caller has an admin Firebase claim or `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true` is set intentionally.
 
@@ -282,15 +295,23 @@ Why both:
 Recommended for testing / low-cost validation:
 
 - minimum instances: `0`
-- maximum instances: `1`
+- maximum instances: low bounded value, e.g. `3`
 - CPU allocation: request-based/default
 - authentication: **required**
 - timeout: enough for one detour tick plus GTFS fetch margin
+
+If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeoutSeconds: 120`, `minInstances: 0`, `maxInstances: 3`, and `cpu: "gcf_gen1"` for the low-cost tier. Firebase Gen 2 otherwise defaults low-memory functions to 1 full CPU, which is more than this mostly I/O-bound proxy and scheduled detour worker need during validation. Do not cap this shared proxy at one instance: fractional-CPU functions can reject concurrent requests while a scheduled detour tick or app/API traffic is running.
 
 ### Suggested environment for Cloud Run
 
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=scheduled`
+- `DETOUR_BURST_SAMPLING_ENABLED=false`
+- `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`
+- `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000`
+- `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=2`
+- `DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS=600000`
+- `DETOUR_CANDIDATE_CONFIRMATION_MAX_MS=10800000`
 - `DETOUR_HISTORY_ENABLED=true`
 - `NEWS_WORKER_ENABLED=true`
 - `NEWS_WORKER_MODE=scheduled`
@@ -344,14 +365,14 @@ Create the scheduler job in paused-safe testing form:
 ```bash
 gcloud scheduler jobs create http bttp-detour-run-once \
   --location=YOUR_REGION \
-  --schedule="*/1 * * * *" \
+  --schedule="* 0,5-23 * * *" \
   --time-zone="America/Toronto" \
   --uri="https://YOUR_CLOUD_RUN_URL/api/detour-run-once" \
   --http-method=POST \
   --headers="x-scheduler-token=YOUR_LONG_RANDOM_TOKEN" \
   --oidc-service-account-email="bttp-detour-scheduler@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --oidc-token-audience="https://YOUR_CLOUD_RUN_URL" \
-  --attempt-deadline=30s \
+  --attempt-deadline=60s \
   --max-retry-attempts=0
 ```
 

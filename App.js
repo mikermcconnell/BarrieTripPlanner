@@ -6,7 +6,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
-import { Animated, Platform, View, StyleSheet, Text } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { Asset } from 'expo-asset';
+import { Animated, Image, Platform, View, StyleSheet, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import {
   Outfit_400Regular,
@@ -19,7 +21,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
-import StartupLoadingScreen from './src/components/StartupLoadingScreen';
+import StartupLoadingScreen, { STARTUP_IMAGE_ASSETS } from './src/components/StartupLoadingScreen';
 import { COLORS } from './src/config/theme';
 import {
   registerForPushNotifications,
@@ -33,9 +35,16 @@ import runtimeConfig, { hasCriticalStartupIssues } from './src/config/runtimeCon
 import { getAppStartupState } from './src/utils/appStartupState';
 
 const STARTUP_ENV_ISSUES = runtimeConfig.startup.criticalIssues;
-const STARTUP_LOADING_MIN_MS = 3000;
 const STARTUP_OPTIONAL_LOADING_MAX_MS = 12000;
 const STARTUP_EXIT_FADE_MS = 260;
+
+if (Platform.OS !== 'web') {
+  SplashScreen.preventAutoHideAsync().catch((error) => {
+    logger.warn('[startup] native splash hold failed', {
+      message: error?.message || String(error),
+    });
+  });
+}
 
 if (hasCriticalStartupIssues) {
   logger.error(`[StartupConfig] ${STARTUP_ENV_ISSUES.join(' | ')}`);
@@ -218,7 +227,12 @@ function StartupConfigErrorScreen({ issues }) {
   );
 }
 
-function AppStartupGate({ fontsLoaded, minimumStartupElapsed, navigationRef }) {
+function AppStartupGate({
+  fontsLoaded,
+  navigationRef,
+  startupImagesReady = false,
+  onStartupLoadingLayout,
+}) {
   const routingPreloadRequestedRef = useRef(false);
   const startupStartedAtRef = useRef(Date.now());
   const startupPhaseRef = useRef(null);
@@ -282,7 +296,6 @@ function AppStartupGate({ fontsLoaded, minimumStartupElapsed, navigationRef }) {
 
   const startupState = getAppStartupState({
     fontsLoaded,
-    minimumStartupElapsed,
     authLoading,
     isLoadingStatic,
     staticError,
@@ -392,6 +405,8 @@ function AppStartupGate({ fontsLoaded, minimumStartupElapsed, navigationRef }) {
             detail={startupState.detail}
             statusText={startupState.statusText}
             useBrandFonts={fontsLoaded}
+            preferPreloadedImages={startupImagesReady}
+            onReadyToDisplay={onStartupLoadingLayout}
           />
         </Animated.View>
       ) : null}
@@ -401,7 +416,10 @@ function AppStartupGate({ fontsLoaded, minimumStartupElapsed, navigationRef }) {
 
 export default function App() {
   const navigationRef = useRef();
-  const [minimumStartupElapsed, setMinimumStartupElapsed] = useState(false);
+  const [startupImagesReady, setStartupImagesReady] = useState(Platform.OS === 'web');
+  const [startupLoadingLayoutReady, setStartupLoadingLayoutReady] = useState(
+    Platform.OS === 'web' || hasCriticalStartupIssues
+  );
 
   const [fontsLoaded] = useFonts({
     Outfit_400Regular,
@@ -421,14 +439,50 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMinimumStartupElapsed(true);
-    }, STARTUP_LOADING_MIN_MS);
+    if (Platform.OS === 'web') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    Asset.loadAsync(STARTUP_IMAGE_ASSETS)
+      .then((assets) => Promise.all(
+        assets
+          .map((asset) => asset.localUri || asset.uri)
+          .filter(Boolean)
+          .map((uri) => Image.prefetch(uri).catch(() => false))
+      ))
+      .catch((error) => {
+        logger.warn('[startup] startup image preload failed', {
+          message: error?.message || String(error),
+        });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setStartupImagesReady(true);
+        }
+      });
 
     return () => {
-      clearTimeout(timer);
+      cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+
+    if (!startupImagesReady || !startupLoadingLayoutReady) {
+      return;
+    }
+
+    SplashScreen.hideAsync().catch((error) => {
+      logger.warn('[startup] native splash hide failed', {
+        message: error?.message || String(error),
+      });
+    });
+  }, [startupImagesReady, startupLoadingLayoutReady]);
 
   if (hasCriticalStartupIssues) {
     return (
@@ -456,8 +510,9 @@ export default function App() {
               <TransitProvider>
                 <AppStartupGate
                   fontsLoaded={fontsLoaded}
-                  minimumStartupElapsed={minimumStartupElapsed}
                   navigationRef={navigationRef}
+                  startupImagesReady={startupImagesReady}
+                  onStartupLoadingLayout={() => setStartupLoadingLayoutReady(true)}
                 />
               </TransitProvider>
             </AuthProvider>

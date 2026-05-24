@@ -10,6 +10,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
 import { findMatchingSavedPlaces, getSavedPlaceIconName } from '../utils/savedTransitUtils';
+import TripPlanningLoadingDots from './TripPlanningLoadingDots';
 
 const getSuggestionKey = (item, index) => [
   item?.id || 'suggestion',
@@ -131,7 +132,7 @@ const SavedPlaceGlyph = ({ place }) => (
 );
 
 const formatTripTimeSummary = (timeMode, selectedTime) => {
-  if (timeMode === 'now') return 'Leave now';
+  if (timeMode === 'now') return 'Current time';
 
   const prefix = timeMode === 'arriveBy' ? 'Arrive by' : 'Depart at';
   return `${prefix} ${formatTimeDisplay(selectedTime || new Date())}`;
@@ -525,7 +526,7 @@ const TripSearchHeaderWeb = ({
           }}
           aria-label="Trip time mode"
         >
-          <option value="now">Leave Now</option>
+          <option value="now">Current Time</option>
           <option value="departAt">Depart At</option>
           <option value="arriveBy">Arrive By</option>
         </select>
@@ -590,6 +591,7 @@ const TripSearchHeaderWeb = ({
       >
         <ActivityIndicator size="small" color={COLORS.primary} />
         <Text style={styles.planningStatusText}>Planning your trip…</Text>
+        <TripPlanningLoadingDots />
       </View>
     )}
   </View>

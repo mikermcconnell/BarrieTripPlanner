@@ -5,11 +5,15 @@ const DOC_ID = 'detourRuntime';
 
 let hydratePromise = null;
 
-async function loadDetourRuntimeState() {
+async function loadDetourRuntimeState(options = {}) {
   const db = getDb();
   if (!db) {
     console.warn('[detourRuntimeStateStore] Firestore not configured — runtime state persistence disabled');
     return null;
+  }
+
+  if (options.force) {
+    hydratePromise = null;
   }
 
   if (!hydratePromise) {

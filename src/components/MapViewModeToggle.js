@@ -11,6 +11,7 @@ const MapViewModeToggle = ({
   alertBannerVisible = false,
   style,
   inline = false,
+  onLayout,
 }) => {
   if (!visible) return null;
 
@@ -24,6 +25,7 @@ const MapViewModeToggle = ({
         inline && styles.containerInline,
         style,
       ]}
+      onLayout={onLayout}
       pointerEvents="box-none"
     >
       <View style={[styles.card, inline && styles.cardInline]}>
