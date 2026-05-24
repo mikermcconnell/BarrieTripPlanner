@@ -106,7 +106,15 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - `DETOUR_WORKER_MODE=scheduled`
   - Cloud Scheduler calls `POST /api/detour-run-once` every 60 seconds during service hours.
   - `DETOUR_BURST_SAMPLING_ENABLED=false`
-  - Each scheduled call collects one GTFS-RT snapshot.
+  - Optional 30-second offset sampling uses Cloud Tasks rather than sleeping inside a Cloud Run request:
+    - `DETOUR_OFFSET_SAMPLING_ENABLED=true`
+    - `DETOUR_OFFSET_SAMPLE_DELAY_SECONDS=30`
+    - `DETOUR_DISTRIBUTED_LOCK_ENABLED=true`
+    - `DETOUR_OFFSET_TASK_QUEUE=bttp-detour-offset-samples`
+    - `DETOUR_OFFSET_TASK_LOCATION=us-central1`
+    - `DETOUR_OFFSET_TASK_TARGET_URL=https://YOUR_CLOUD_RUN_URL/api/detour-run-once`
+  - The primary scheduler tick enqueues a delayed Cloud Task that calls the same endpoint with `source=offset-30s`.
+  - Each run collects one GTFS-RT snapshot.
   - Continuity comes from backend memory, not multiple pulses inside one request.
   - Duplicate GTFS vehicle snapshots are skipped so repeated feed data does not count as fresh detector evidence.
 - Optional stale-detour monitoring:
@@ -309,6 +317,12 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=scheduled`
 - `DETOUR_BURST_SAMPLING_ENABLED=false`
+- `DETOUR_OFFSET_SAMPLING_ENABLED=true` for 30-second offset sampling through Cloud Tasks
+- `DETOUR_OFFSET_SAMPLE_DELAY_SECONDS=30`
+- `DETOUR_DISTRIBUTED_LOCK_ENABLED=true`
+- `DETOUR_OFFSET_TASK_QUEUE=bttp-detour-offset-samples`
+- `DETOUR_OFFSET_TASK_LOCATION=us-central1`
+- `DETOUR_OFFSET_TASK_TARGET_URL=https://YOUR_CLOUD_RUN_URL/api/detour-run-once`
 - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`
 - `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000`
 - `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=2`
@@ -333,6 +347,24 @@ From `api-proxy/`, build and deploy a container to Cloud Run using your normal a
 - region: e.g. `northamerica-northeast1` or the region you already use
 - auth required
 - `min instances = 0`
+
+
+### Optional 30-second offset sampling
+
+Cloud Scheduler is minute-granularity, so true half-minute sampling is handled by Cloud Tasks:
+
+1. Scheduler runs the primary `POST /api/detour-run-once` once per minute.
+2. The API run enqueues one Cloud Task scheduled 30 seconds later.
+3. The task calls `POST /api/detour-run-once?source=offset-30s` with the scheduler token header.
+4. A Firestore-backed distributed lock prevents overlapping Cloud Run instances from processing at the same time.
+
+Required setup:
+
+```bash
+gcloud tasks queues create bttp-detour-offset-samples --location=YOUR_REGION
+```
+
+The Cloud Run service account needs permission to enqueue tasks, for example `roles/cloudtasks.enqueuer` on the project or queue. Keep `DETOUR_BURST_SAMPLING_ENABLED=false`; burst sampling is only for short pilots because it holds a request open while waiting.
 
 ### Example Cloud Scheduler pattern
 

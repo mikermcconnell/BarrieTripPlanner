@@ -46,6 +46,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-013 | Baseline safety | Block detection when the baseline is unsafe or silently refreshed from live detoured GTFS. | Existing backend status and rollout-health checks | QA sections 1, 13, 14 | Needs explicit scenario review before launch | Treating a live detour as normal service |
 | DET-014 | Rollout health / flapping | Surface recent failures, flapping, short-lived detections, and false-positive indicators before public launch. | `api-proxy` rollout-health coverage where present | QA section 14 | Needs ongoing live review | Launching with noisy but test-passing behavior |
 | DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
+| DET-016 | Short detour sampling cadence | If the GTFS-RT feed updates about every 30 seconds, the detector should support true half-minute sampling without keeping a Cloud Run request open. | `api-proxy/__tests__/detourOps.test.js`, `api-proxy/__tests__/detourOffsetTasks.test.js`, `api-proxy/__tests__/detourRunLock.test.js`, `api-proxy/__tests__/detourRoutes.test.js` | QA section 13 | Covered | Extra scheduler/task overlap; duplicate feed snapshots; cost from sleeping requests |
 
 ## Recorded issues
 
@@ -183,3 +184,15 @@ It is launch-ready only when:
 - regression coverage exists where practical,
 - rider-facing risk is understood,
 - and the relevant docs were updated.
+
+### DET-016A — true 30-second sampling without request sleeping
+
+- Date/time reviewed: 2026-05-24 around 3:00 PM ET
+- Environment: live production feed measurement and backend implementation
+- What happened: live GTFS-RT polling every 15 seconds showed the feed usually changed every other poll, with full-feed timestamp jumps around 28-34 seconds.
+- What should happen: the detector should be able to sample at about 30-second cadence without using route-specific rules or holding a Cloud Run request open for the wait period.
+- Root cause / design finding: Cloud Scheduler is minute-based, so it cannot directly schedule `:00` and `:30` runs. Burst sampling works but bills the waiting time inside the request.
+- Fix: primary scheduler runs once per minute and enqueues a Cloud Task delayed by 30 seconds. The delayed task calls the same run-once endpoint with `source=offset-30s`. A Firestore distributed lock prevents overlap across Cloud Run instances.
+- Verification: added backend tests for delayed task enqueue, offset-source handling, and distributed lock skip behavior.
+- Remaining risk: if MyRide publishes duplicate snapshots at the half-minute mark, duplicate-vehicle freshness filtering should skip them; monitor duplicate rate after deployment.
+

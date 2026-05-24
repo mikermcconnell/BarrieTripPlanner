@@ -1,6 +1,95 @@
 const { createDetourOps } = require('../services/detourOps');
 
 describe('detourOps rollout health', () => {
+  test('enqueues one delayed offset sample after a primary scheduled run', async () => {
+    const runTick = jest.fn().mockResolvedValue({
+      ok: true,
+      skipped: false,
+      vehiclesProcessed: 17,
+      detourCount: 0,
+      tickCount: 12,
+      status: { mode: 'scheduled' },
+    });
+    const enqueueOffsetSample = jest.fn().mockResolvedValue({
+      ok: true,
+      scheduledFor: '2026-05-24T19:30:30.000Z',
+      delaySeconds: 30,
+    });
+    const detourWorker = {
+      getStatus: () => ({ mode: 'scheduled', running: false }),
+      runTick,
+    };
+
+    const ops = createDetourOps({
+      detourWorker,
+      offsetSampleScheduler: { enqueueOffsetSample },
+      env: {
+        DETOUR_OFFSET_SAMPLING_ENABLED: 'true',
+        DETOUR_OFFSET_SAMPLE_DELAY_SECONDS: '30',
+      },
+    });
+
+    const result = await ops.runOnce({ triggerSource: 'scheduler-primary' });
+
+    expect(result.status).toBe(200);
+    expect(runTick).toHaveBeenCalledWith({
+      source: 'api-run-once',
+      forceReloadState: true,
+    });
+    expect(enqueueOffsetSample).toHaveBeenCalledWith(expect.objectContaining({
+      delaySeconds: 30,
+      source: 'offset-30s',
+    }));
+    expect(result.body.offsetSampling).toMatchObject({
+      enabled: true,
+      enqueued: true,
+      delaySeconds: 30,
+    });
+  });
+
+  test('does not enqueue another offset sample from the offset run itself', async () => {
+    const runTick = jest.fn().mockResolvedValue({ ok: true, skipped: false, tickCount: 13 });
+    const enqueueOffsetSample = jest.fn();
+    const ops = createDetourOps({
+      detourWorker: {
+        getStatus: () => ({ mode: 'scheduled', running: false }),
+        runTick,
+      },
+      offsetSampleScheduler: { enqueueOffsetSample },
+      env: { DETOUR_OFFSET_SAMPLING_ENABLED: 'true' },
+    });
+
+    const result = await ops.runOnce({ triggerSource: 'offset-30s' });
+
+    expect(result.status).toBe(200);
+    expect(enqueueOffsetSample).not.toHaveBeenCalled();
+    expect(result.body.offsetSampling).toBeUndefined();
+  });
+
+  test('uses a distributed lock to skip overlapping detour runs across instances', async () => {
+    const runTick = jest.fn();
+    const acquire = jest.fn().mockResolvedValue(null);
+    const release = jest.fn();
+    const ops = createDetourOps({
+      detourWorker: {
+        getStatus: () => ({ mode: 'scheduled', running: false }),
+        runTick,
+      },
+      runLock: { acquire, release },
+      env: { DETOUR_DISTRIBUTED_LOCK_ENABLED: 'true' },
+    });
+
+    const result = await ops.runOnce({ triggerSource: 'scheduler-primary' });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      ok: false,
+      skipped: true,
+      reason: 'distributed-lock-busy',
+    });
+    expect(runTick).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+  });
   test('runs multiple burst samples for scheduled detour run-once requests', async () => {
     const runTick = jest
       .fn()
@@ -343,3 +432,4 @@ describe('detourOps rollout health', () => {
     expect(result.launchReadiness.failedWarnings).toContain('no_recent_stale_auto_clears');
   });
 });
+

@@ -187,6 +187,9 @@ Use this to avoid false clears on hourly service:
 
 - [ ] Confirm Cloud Scheduler runs every 60 seconds during service hours.
 - [ ] Confirm burst sampling is disabled in the target environment.
+- [ ] If 30-second offset sampling is enabled, confirm the primary run enqueues exactly one delayed Cloud Task.
+- [ ] Confirm the offset task calls `/api/detour-run-once?source=offset-30s` about 30 seconds after the primary run.
+- [ ] Confirm the Firestore distributed lock skips overlapping runs rather than double-processing.
 - [ ] Confirm duplicate GTFS-RT snapshots are skipped and do not count as fresh evidence.
 - [ ] Restart the backend while `activeDetours` contains a published detour.
 - [ ] Confirm the first post-restart tick does not delete the Firestore detour just because runtime state is empty.

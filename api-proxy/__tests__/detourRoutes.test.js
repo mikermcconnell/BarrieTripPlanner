@@ -3,6 +3,62 @@ const request = require('supertest');
 const { registerDetourRoutes } = require('../routes/detourRoutes');
 
 describe('detourRoutes', () => {
+  test('passes scheduler trigger source into detour run-once ops', async () => {
+    const app = express();
+    app.use((req, _res, next) => {
+      req.clientId = 'scheduler:detour-run-once';
+      next();
+    });
+    const runOnce = jest.fn().mockResolvedValue({
+      status: 200,
+      body: { ok: true },
+    });
+
+    registerDetourRoutes(app, {
+      detourWorker: {
+        getStatus: () => ({ running: false }),
+      },
+      detourOps: {
+        getStatus: jest.fn(),
+        runOnce,
+        getDebug: jest.fn(),
+        getLogs: jest.fn(),
+        getRolloutHealth: jest.fn(),
+      },
+      parseOptionalTimestamp: () => null,
+    });
+
+    const response = await request(app).post('/api/detour-run-once');
+
+    expect(response.status).toBe(200);
+    expect(runOnce).toHaveBeenCalledWith({ triggerSource: 'scheduler-primary' });
+  });
+
+  test('passes explicit offset trigger source into detour run-once ops', async () => {
+    const app = express();
+    app.use((req, _res, next) => {
+      req.clientId = 'scheduler:detour-run-once';
+      next();
+    });
+    const runOnce = jest.fn().mockResolvedValue({ status: 200, body: { ok: true } });
+
+    registerDetourRoutes(app, {
+      detourWorker: { getStatus: () => ({ running: false }) },
+      detourOps: {
+        getStatus: jest.fn(),
+        runOnce,
+        getDebug: jest.fn(),
+        getLogs: jest.fn(),
+        getRolloutHealth: jest.fn(),
+      },
+      parseOptionalTimestamp: () => null,
+    });
+
+    const response = await request(app).post('/api/detour-run-once?source=offset-30s');
+
+    expect(response.status).toBe(200);
+    expect(runOnce).toHaveBeenCalledWith({ triggerSource: 'offset-30s' });
+  });
   afterEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
@@ -291,3 +347,4 @@ describe('detourRoutes', () => {
     });
   });
 });
+

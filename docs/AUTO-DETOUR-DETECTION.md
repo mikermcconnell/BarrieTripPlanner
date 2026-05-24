@@ -28,7 +28,7 @@ This is the core rider-facing goal:
 The system detects detours automatically by watching real-time GPS positions — no manual input from transit staff required.
 
 **How it works under the hood:**
-1. A server-side worker processes GTFS-RT vehicle positions on each detection tick. The low-cost production baseline is one externally scheduled tick per minute, with burst sampling disabled.
+1. A server-side worker processes GTFS-RT vehicle positions on each detection tick. The low-cost production baseline is one externally scheduled tick per minute, with burst sampling disabled. Optional production offset sampling adds a Cloud Task-delayed second tick about 30 seconds later without holding the Cloud Run request open.
 2. Each vehicle's GPS is compared against its route's published shape
 3. When two buses on the same route produce confirmed off-route evidence, or the same short deviation repeats for two unique same-route trips/vehicles, a detour is confirmed. Short-deviation evidence is captured as soon as a vehicle produces one off-route point, so a brief diversion does not need to last for the full consecutive-reading window before it can become candidate evidence. On 30- to 60-minute headways, the detector can remember the first bus as candidate evidence and confirm when the next unique bus reaches the same location.
 4. When that confirmed detour has a real closed segment, the backend can project the same physical detour event onto sibling route variants/directions that share the closure
@@ -163,7 +163,7 @@ Note: Firestore is the source of truth for active detours. The client should ren
 The client already renders multi-segment detours from `segments[]`; the recent backend work makes same-route independent detours publish as separate sections instead of one merged lifecycle.
 
 ### What's built (backend — complete)
-- Detection worker supports a legacy 30s interval loop and a low-cost manual/scheduled single-tick mode
+- Detection worker supports a legacy 30s interval loop, a low-cost manual/scheduled single-tick mode, and optional Cloud Tasks 30-second offset sampling
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
 - **Recurring short-deviation detection** — repeated short off-route streaks on the same route segment can publish a detour even when no single bus stays off-route long enough to hit the normal consecutive-reading threshold. Candidate evidence is captured on the first off-route point, then requires two unique same-route trips/vehicles before it becomes rider-facing. This is meant for short jogs anywhere in the network, not route-specific patches.
 - **Route-family geometry reconciliation/projection** — sibling routes can share a confirmed physical closure segment once one branch has enough evidence and reliable entry/exit boundaries. One bus on each branch still does not create alerts for both branches, and point-only short deviations remain route-specific.
@@ -194,6 +194,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Updated 2026-05-20: long-running detours retain learned GPS evidence** — Persistent detours now store learned evidence points and boundary candidates separately from the short live window, so trusted paths can survive deploys/restarts. `lastEvidenceAt` only moves when new GPS evidence exists.
 - **Updated 2026-05-24: low-frequency confirmation uses backend memory instead of burst pulses** — Scheduled production runs should collect one GTFS-RT snapshot per minute. The detector keeps short vehicle traces, longer headway-aware candidate summaries, and active Firestore snapshots so 30- to 60-minute routes can confirm and retain detours without multiple pulses inside a request.
 - **Fixed 2026-05-24: same-stop turnaround geometry could publish as a false detour** — The geometry and publisher trust gates now drop segments where `entryStopId === exitStopId` and the only affected/skipped stop is that same stop. Previously, those segments could preserve a likely path that went out, turned around, and returned without identifying a closed road segment.
+- **Updated 2026-05-24: true 30-second sampling uses Cloud Tasks** — Live GTFS-RT polling showed fresh vehicle snapshots roughly every 30 seconds. The scheduled production path can now keep the one-minute Cloud Scheduler job, enqueue a delayed Cloud Task for the half-minute sample, and use a Firestore distributed lock so overlapping Cloud Run instances do not double-process the same tick.
 - **Updated 2026-05-24: short-detour candidates are captured on first off-route point** — The recurring short-deviation path no longer waits for the same bus to return on-route before recording candidate evidence. This improves detection for brief diversions that may only be visible for one GTFS-RT sample. Runtime state also stores the latest per-vehicle projection diagnostic so missed cases can be explained without guessing.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are segment-aware and sibling projection is now supported, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B, 12A/12B, and both directions of travel.
 
@@ -272,7 +273,7 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_ROUTE_FAMILY_TARGET_ROUTE_OVERLAP_METERS` | `75` | Suppresses sibling-route projection when the observed detour path already follows that sibling route's regular shape. This prevents cases like a 12B bus using regular 12A routing from being labeled as a 12A detour. |
 | `DETOUR_MIN_UNIQUE_VEHICLES` | `2` | Minimum unique same-route vehicles required before a detour is published. Values below 2 are ignored. |
 | `DETOUR_OFF_ROUTE_THRESHOLD_METERS` | `75` | Distance from shape to count as "off route" |
-| `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming (4 × 30s = 2min) |
+| `DETOUR_CONSECUTIVE_READINGS` | `4` | Off-route ticks before confirming. At 60-second scheduled sampling this is about 4min; with 30-second offset sampling this is about 2min. |
 | `DETOUR_RECURRING_SHORT_DEVIATION_ENABLED` | `true` | Enables aggregation of repeated short off-route streaks across trips/vehicles. Set to `false` to disable. |
 | `DETOUR_RECURRING_SHORT_DEVIATION_WINDOW_MS` | `10800000` | Time window for grouping repeated short deviations (3h). |
 | `DETOUR_RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS` | `2` | Short-deviation observations required before publishing. |
@@ -326,6 +327,12 @@ All env vars for the detour system, set in Railway (production) or `.env` (local
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_SEGMENT_METERS` | `20` | Minimum out-and-back segment size to strip as an avoidable detour spur |
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_TURN_DEGREES` | `150` | Minimum turn angle used to identify route-fallback U-turn spurs |
 | `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS` | `275,600,1000,1500,1800` | Local dummy detour offsets to try until simulated GPS can be road-matched without reusing the closed segment |
+| `DETOUR_OFFSET_SAMPLING_ENABLED` | `false` | Enables Cloud Tasks delayed half-minute sampling after the primary scheduled tick. |
+| `DETOUR_OFFSET_SAMPLE_DELAY_SECONDS` | `30` | Delay before the offset sample runs. |
+| `DETOUR_DISTRIBUTED_LOCK_ENABLED` | `false` | Uses a Firestore lock to prevent overlapping scheduled/task/manual runs across Cloud Run instances. |
+| `DETOUR_OFFSET_TASK_QUEUE` | `bttp-detour-offset-samples` | Cloud Tasks queue used for delayed offset samples. |
+| `DETOUR_OFFSET_TASK_LOCATION` | `us-central1` | Cloud Tasks queue location. |
+| `DETOUR_OFFSET_TASK_TARGET_URL` | — | Absolute `/api/detour-run-once` URL that Cloud Tasks should call. |
 | `DETOUR_HISTORY_ENABLED` | `true` | Enable detour event history in Firestore |
 | `DETOUR_HISTORY_RETENTION_DAYS` | `30` | Days to retain history (<=0 disables pruning) |
 | `DETOUR_FALSE_POSITIVE_WINDOW_MS` | `604800000` | Rollout-health window for false-positive rate checks (7 days) |

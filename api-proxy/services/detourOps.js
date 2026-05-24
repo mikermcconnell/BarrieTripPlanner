@@ -1,4 +1,7 @@
 const { getDetourHistory, HISTORY_MAX_LIMIT } = require('../detourPublisher');
+const { getDb } = require('../firebaseAdmin');
+const { createDetourRunLock } = require('./detourRunLock');
+const { createOffsetSampleScheduler } = require('./detourOffsetTasks');
 
 const DEFAULT_ROLLOUT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FALSE_POSITIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -12,6 +15,7 @@ const DEFAULT_BURST_DURATION_MS = 50 * 1000;
 const DEFAULT_BURST_SAMPLE_INTERVAL_MS = 15 * 1000;
 const DEFAULT_BURST_MAX_SAMPLES = 4;
 const MAX_BURST_SAMPLES = 10;
+const DEFAULT_OFFSET_SAMPLE_DELAY_SECONDS = 30;
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -35,6 +39,32 @@ function parseBurstSamplingConfig(env, status) {
     ),
     maxSamples: clampPositiveInt(env.DETOUR_BURST_MAX_SAMPLES, DEFAULT_BURST_MAX_SAMPLES, MAX_BURST_SAMPLES),
   };
+}
+
+function parseOffsetSamplingConfig(env) {
+  return {
+    enabled: env.DETOUR_OFFSET_SAMPLING_ENABLED === 'true',
+    delaySeconds: parsePositiveInt(
+      env.DETOUR_OFFSET_SAMPLE_DELAY_SECONDS,
+      DEFAULT_OFFSET_SAMPLE_DELAY_SECONDS
+    ),
+    source: 'offset-30s',
+  };
+}
+
+function shouldEnqueueOffsetSample(triggerSource) {
+  return triggerSource === 'scheduler-primary' || triggerSource === 'scheduler';
+}
+
+function createConfiguredRunLock(env) {
+  if (env.DETOUR_DISTRIBUTED_LOCK_ENABLED !== 'true') return null;
+  const db = getDb();
+  return createDetourRunLock({ db });
+}
+
+function createConfiguredOffsetSampleScheduler(env) {
+  if (env.DETOUR_OFFSET_SAMPLING_ENABLED !== 'true') return null;
+  return createOffsetSampleScheduler({ env });
 }
 
 function summarizeBurstSample(result, index) {
@@ -195,9 +225,14 @@ function createDetourOps({
   getBaselineStatusWithDivergence = async () => null,
   now = () => Date.now(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  offsetSampleScheduler = null,
+  runLock = null,
   env = process.env,
 } = {}) {
   let runOnceInProgress = false;
+  const activeRunLock = runLock || createConfiguredRunLock(env);
+  const activeOffsetSampleScheduler =
+    offsetSampleScheduler || createConfiguredOffsetSampleScheduler(env);
 
   function getStatus() {
     if (!detourWorker) {
@@ -223,6 +258,52 @@ function createDetourOps({
       status: !result.ok && !result.skipped ? 500 : 200,
       body: result,
     };
+  }
+
+  async function maybeEnqueueOffsetSample(resultBody, options) {
+    const config = parseOffsetSamplingConfig(env);
+    if (
+      !config.enabled ||
+      !activeOffsetSampleScheduler ||
+      typeof activeOffsetSampleScheduler.enqueueOffsetSample !== 'function' ||
+      !shouldEnqueueOffsetSample(options.triggerSource)
+    ) {
+      return resultBody;
+    }
+
+    try {
+      const enqueueResult = await activeOffsetSampleScheduler.enqueueOffsetSample({
+        delaySeconds: config.delaySeconds,
+        source: config.source,
+        requestedAt: new Date(now()).toISOString(),
+      });
+
+      return {
+        ...resultBody,
+        offsetSampling: {
+          enabled: true,
+          enqueued: enqueueResult?.ok === true,
+          delaySeconds: config.delaySeconds,
+          source: config.source,
+          scheduledFor: enqueueResult?.scheduledFor || null,
+          taskName: enqueueResult?.taskName || null,
+          skipped: enqueueResult?.skipped === true,
+          reason: enqueueResult?.reason || null,
+        },
+      };
+    } catch (err) {
+      console.error('[detour-run-once] Failed to enqueue offset sample:', err.message);
+      return {
+        ...resultBody,
+        offsetSampling: {
+          enabled: true,
+          enqueued: false,
+          delaySeconds: config.delaySeconds,
+          source: config.source,
+          error: 'Failed to enqueue delayed offset sample',
+        },
+      };
+    }
   }
 
   async function runBurstSamples(config) {
@@ -275,7 +356,7 @@ function createDetourOps({
     };
   }
 
-  async function runOnce() {
+  async function runOnce(options = {}) {
     if (!detourWorker || typeof detourWorker.runTick !== 'function') {
       return {
         status: 409,
@@ -300,13 +381,40 @@ function createDetourOps({
     }
 
     runOnceInProgress = true;
+    let lockLease = null;
     try {
+      if (env.DETOUR_DISTRIBUTED_LOCK_ENABLED === 'true' && activeRunLock) {
+        lockLease = await activeRunLock.acquire({
+          holder: options.triggerSource || 'api-run-once',
+          nowMs: now(),
+        });
+
+        if (!lockLease) {
+          return {
+            status: 200,
+            body: {
+              ok: false,
+              skipped: true,
+              reason: 'distributed-lock-busy',
+              status: detourWorker.getStatus?.() || null,
+            },
+          };
+        }
+      }
+
       const status = detourWorker.getStatus?.() || {};
       const burstConfig = parseBurstSamplingConfig(env, status);
-      return await (burstConfig.enabled
+      const result = await (burstConfig.enabled
         ? runBurstSamples(burstConfig)
         : runSingleTick());
+      result.body = await maybeEnqueueOffsetSample(result.body, options);
+      return result;
     } finally {
+      if (lockLease && activeRunLock && typeof activeRunLock.release === 'function') {
+        await activeRunLock.release(lockLease).catch((err) => {
+          console.error('[detour-run-once] Failed to release distributed lock:', err.message);
+        });
+      }
       runOnceInProgress = false;
     }
   }

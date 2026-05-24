@@ -12,6 +12,7 @@
     "node": "22"
   },
   "dependencies": {
+    "@google-cloud/tasks": "^6.2.2",
     "@napi-rs/canvas": "^0.1.100",
     "barrie-transit-planner": "file:..",
     "cheerio": "^1.0.0",

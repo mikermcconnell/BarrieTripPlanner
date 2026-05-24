@@ -61,7 +61,11 @@ function registerDetourRoutes(app, {
       })) {
         return;
       }
-      const result = await detourOps.runOnce();
+      const explicitSource = req.query.source ? String(req.query.source).trim() : '';
+      const triggerSource = explicitSource || (
+        req.clientId === 'scheduler:detour-run-once' ? 'scheduler-primary' : 'manual'
+      );
+      const result = await detourOps.runOnce({ triggerSource });
       return res.status(result.status).json(result.body);
     } catch (err) {
       console.error('[detour-run-once] Failed:', err.message);
