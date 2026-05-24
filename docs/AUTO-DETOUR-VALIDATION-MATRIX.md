@@ -33,7 +33,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 |---|---|---|---|---|---|---|
 | DET-001 | Normal confirmed detour | Publish an active detour only after confirmed off-route evidence from the required unique same-route vehicles. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourIntegration.test.js` | QA sections 3, 4, 9 | Covered | False positives from noisy GPS or bad baseline |
 | DET-002 | Likely path confidence gate | Keep the alert active, but hide the rider-facing likely path until trusted entry/exit and corridor evidence exist. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 6, 7 | Covered | Sparse evidence producing a convincing but wrong purple path |
-| DET-003 | Very short recurring detour | Confirm repeated short off-route deviations only when two unique same-route trips/vehicles corroborate the same segment. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12 | Covered | Counting repeated snapshots from the same trip as independent evidence |
+| DET-003 | Very short recurring detour | Capture a first off-route point as candidate evidence, but publish only when two unique same-route trips/vehicles corroborate the same segment. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12 | Covered | Counting repeated snapshots from the same trip as independent evidence |
 | DET-004 | Low-frequency / Sunday service | Keep candidate evidence long enough for the next low-frequency bus to corroborate; do not clear from bus absence. | `api-proxy/__tests__/detourDetector.test.js` | QA section 12 | Covered | Candidate memory too short or stale warnings mistaken for clear proof |
 | DET-005 | GPS-proven normal clearing | Clear only after same-bus normal-route traversal through the affected segment, then delete the active Firestore doc. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11 | Covered | Premature clearing when a bus is merely near the route |
 | DET-006 | Stale active detour | Keep active detours visible with `currentVehicleCount: 0` until new evidence confirms detour or normal routing. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 11, 12 | Covered | Old evidence staying visible too long without operator review context |
@@ -45,6 +45,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-012 | Rider map rendering | Show closed route sections, likely detour paths, stops, buses, banner, and details without stale overlays after tab switching. | `src/__tests__/detourOverlays.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 6, 7, 8, 9 | Partially covered | Visual regressions that only appear in native/web map rendering |
 | DET-013 | Baseline safety | Block detection when the baseline is unsafe or silently refreshed from live detoured GTFS. | Existing backend status and rollout-health checks | QA sections 1, 13, 14 | Needs explicit scenario review before launch | Treating a live detour as normal service |
 | DET-014 | Rollout health / flapping | Surface recent failures, flapping, short-lived detections, and false-positive indicators before public launch. | `api-proxy` rollout-health coverage where present | QA section 14 | Needs ongoing live review | Launching with noisy but test-passing behavior |
+| DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
 
 ## Recorded issues
 
@@ -75,6 +76,36 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-QA-CHECKLIST.md`
   - this matrix
 - Remaining risk: similar false positives could still occur if entry and exit stops differ but the inferred path is still a short terminal loop. Watch for future cases where the affected segment is very short, terminal-only, or hub-only but not technically the same stop ID.
+
+### DET-015A — Route 10 short downtown movement not detected
+
+- Date/time observed: 2026-05-24 around 2:00 PM ET
+- Environment: live production validation
+- Route(s): `10`
+- Vehicle/trip IDs, if known: vehicle `02155a60-ef99-420b-a797-6217f8c979cf`, trip `f493d53c-1ba7-4006-aa04-c9c7ca5f5df7`
+- What happened: the map showed Route 10 appearing to leave the expected path briefly near Downtown/Simcoe, but no Route 10 auto-detour was published.
+- What should have happened: if the off-route movement was visible in GTFS-RT for at least one sample, it should have been retained as backend candidate evidence. It should still require a second unique same-route trip/vehicle before rider-facing publication.
+- Evidence:
+  - activeDetours doc: no `activeDetours/10`
+  - detourHistory event: no current Route 10 event; latest Route 10 events were from May 15, 2026
+  - runtime state: Route 10 vehicle existed, but stored samples available at review time were classified on-route
+  - screenshot/video: app screenshot showed Route 10 marker near the downtown area
+- Initial classification:
+  - detection threshold
+  - scheduler/sample cadence
+  - baseline/operations
+- Root cause: not proven from stored evidence because the backend did not retain per-sample projection diagnostics at the time. The most likely failure mode is that the short off-route portion happened between scheduled one-minute samples, or that only on-route samples were retained after the fact. The detector also waited for the same bus to return on-route before recording short-deviation candidate evidence, which could lose one-sample deviations.
+- Fix:
+  - record global short-deviation candidate evidence as soon as a first off-route point is seen
+  - keep two-unique-trip/vehicle confirmation before rider-facing publication
+  - persist latest per-vehicle route projection diagnostics in runtime state and route debug output
+- Tests added/updated:
+  - `api-proxy/__tests__/detourDetector.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: if a bus is on-route at both sampled points and completes an unsampled off-route movement between them, the detector still cannot prove the detour from GTFS-RT alone. Higher-frequency sampling or a faster GTFS-RT feed is needed for those cases.
 
 ## Status definitions
 

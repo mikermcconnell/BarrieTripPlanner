@@ -115,6 +115,8 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - `DETOUR_STALE_AUTO_CLEAR_*` values are retained for stale/headway monitoring context. They should not clear an active detour by themselves.
   - There is intentionally no short zero-vehicle stale clear. A detour with `currentVehicleCount: 0` stays active until another bus either adds detour evidence or proves normal routing.
   - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
+  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until a second unique same-route trip/vehicle corroborates the same segment.
+  - Runtime state stores the latest per-vehicle projection diagnostic (`lastRouteProjection`) with distance from route, thresholds, shape ID, classification, and sample time. Use this to explain missed detections before changing thresholds.
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
   - `DETOUR_ROAD_MATCHING_BASE_URL=...` for an OSRM-compatible match service

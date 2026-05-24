@@ -186,6 +186,7 @@ function createDetectorReadModel({
         uniqueVehicles: new Set(pointEntries.map((p) => p.vehicleId)).size,
         segmentCount: segments.length,
         routeConfig: cloneJson(routeState.routeConfig) || null,
+        recentVehicles: getRouteVehicleDiagnostics(routeId),
         snapshot: normalizeRouteSnapshotForDebug(routeId, lastReportedDetours?.[routeId] || null),
         segments,
         stateSegments: [...routeState.segments.values()].map((segment) => ({
@@ -230,6 +231,25 @@ function createDetectorReadModel({
     return result;
   }
 
+  function getRouteVehicleDiagnostics(routeId) {
+    return [...vehicleState.values()]
+      .filter((state) => state?.routeId === routeId)
+      .map((state) => ({
+        vehicleId: state.vehicleId || state.id || null,
+        routeId: state.routeId || null,
+        tripId: state.tripId || null,
+        tripShapeId: state.tripShapeId || null,
+        detourSegmentId: state.detourSegmentId || null,
+        consecutiveOffRoute: Number(state.consecutiveOffRoute) || 0,
+        consecutiveOnRoute: Number(state.consecutiveOnRoute) || 0,
+        lastCheckedAt: toTimestampMs(state.lastCheckedAt),
+        offRouteStreakPointCount: Array.isArray(state.offRouteStreakPoints)
+          ? state.offRouteStreakPoints.length
+          : 0,
+        lastRouteProjection: cloneJson(state.lastRouteProjection) || null,
+      }));
+  }
+
   function getRouteDebug(routeId) {
     const rawEvidence = getRawDetourEvidence();
     if (rawEvidence[routeId]) {
@@ -237,7 +257,8 @@ function createDetectorReadModel({
     }
 
     const snapshot = normalizeRouteSnapshotForDebug(routeId, getLastReportedDetours()?.[routeId] || null);
-    if (!snapshot) return null;
+    const recentVehicles = getRouteVehicleDiagnostics(routeId);
+    if (!snapshot && recentVehicles.length === 0) return null;
 
     return {
       routeId,
@@ -245,9 +266,10 @@ function createDetectorReadModel({
       oldestMs: null,
       newestMs: null,
       uniqueVehicles: 0,
-      segmentCount: Array.isArray(snapshot.geometry?.segments) ? snapshot.geometry.segments.length : 0,
+      segmentCount: Array.isArray(snapshot?.geometry?.segments) ? snapshot.geometry.segments.length : 0,
       routeConfig: null,
       snapshot,
+      recentVehicles,
       segments: [],
       stateSegments: [],
       entryCandidates: [],

@@ -30,7 +30,7 @@ The system detects detours automatically by watching real-time GPS positions —
 **How it works under the hood:**
 1. A server-side worker processes GTFS-RT vehicle positions on each detection tick. The low-cost production baseline is one externally scheduled tick per minute, with burst sampling disabled.
 2. Each vehicle's GPS is compared against its route's published shape
-3. When two buses on the same route produce confirmed off-route evidence, or the same short deviation repeats for two unique same-route trips/vehicles, a detour is confirmed. On 30- to 60-minute headways, the detector can remember the first bus as candidate evidence and confirm when the next unique bus reaches the same location.
+3. When two buses on the same route produce confirmed off-route evidence, or the same short deviation repeats for two unique same-route trips/vehicles, a detour is confirmed. Short-deviation evidence is captured as soon as a vehicle produces one off-route point, so a brief diversion does not need to last for the full consecutive-reading window before it can become candidate evidence. On 30- to 60-minute headways, the detector can remember the first bus as candidate evidence and confirm when the next unique bus reaches the same location.
 4. When that confirmed detour has a real closed segment, the backend can project the same physical detour event onto sibling route variants/directions that share the closure
 5. Detour geometry is published to Firestore. Rider-facing detour paths are shown after either a same-bus GPS trace confirms the bus left the regular route, travelled off-route, and returned, or two distinct buses corroborate the same detour corridor.
 6. The app subscribes in real time and shows the detour on the main map
@@ -76,11 +76,12 @@ GTFS-RT Feed (vehicle positions)
 
 ### Detector memory model
 
-The detector uses three backend memory layers. The client app does not feed map-icon movement back into detection; app location updates are display-only. GTFS-RT vehicle positions remain the detector evidence source.
+The detector uses four backend memory/diagnostic layers. The client app does not feed map-icon movement back into detection; app location updates are display-only. GTFS-RT vehicle positions remain the detector evidence source.
 
 1. **Vehicle trace memory** — keeps the last 15-20 minutes of per-vehicle GPS evidence for path confidence and same-bus before/off-route/after proof.
-2. **Candidate detour memory** — keeps compact 2-3 hour, headway-aware summaries of unconfirmed off-route candidates. This lets one bus create candidate evidence and a second unique bus confirm it 30-60 minutes later.
+2. **Candidate detour memory** — keeps compact 2-3 hour, headway-aware summaries of unconfirmed off-route candidates. This lets one bus create candidate evidence and a second unique bus confirm it 30-60 minutes later. Short-detour candidates can start from a single off-route GPS point; they are not rider-facing until corroborated by a second unique same-route trip/vehicle.
 3. **Active detour memory** — keeps confirmed detours in runtime state and Firestore `activeDetours` until normal-route GPS proof clears them. On restart, runtime state is loaded first; if it is empty, active Firestore snapshots are hydrated so the first post-restart tick does not delete a still-active detour.
+4. **Vehicle projection diagnostics** — stores the latest per-vehicle route projection in runtime state, including distance from shape, thresholds, classification (`on-route-clear`, `deadband`, `off-route`, or `no-projection`), shape ID, trip ID, and timestamp. This is diagnostic evidence only; it explains why a vehicle was or was not treated as off route.
 
 ### Firestore Document Schema
 
@@ -164,7 +165,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 ### What's built (backend — complete)
 - Detection worker supports a legacy 30s interval loop and a low-cost manual/scheduled single-tick mode
 - Detection algorithm with consecutive readings, zone-aware clearing (separate on-route threshold within detour zone), hysteresis (buffer between detection and clearing thresholds to prevent flickering)
-- **Recurring short-deviation detection** — repeated short off-route streaks on the same route segment can publish a detour even when no single bus stays off-route long enough to hit the normal consecutive-reading threshold. This now requires two unique same-route trips/vehicles, which is meant for short downtown jogs such as temporary market closures.
+- **Recurring short-deviation detection** — repeated short off-route streaks on the same route segment can publish a detour even when no single bus stays off-route long enough to hit the normal consecutive-reading threshold. Candidate evidence is captured on the first off-route point, then requires two unique same-route trips/vehicles before it becomes rider-facing. This is meant for short jogs anywhere in the network, not route-specific patches.
 - **Route-family geometry reconciliation/projection** — sibling routes can share a confirmed physical closure segment once one branch has enough evidence and reliable entry/exit boundaries. One bus on each branch still does not create alerts for both branches, and point-only short deviations remain route-specific.
 - **Service-hours-aware retention** — outside service hours (1 AM - 5 AM EST), detection freezes. End-of-service no longer clears active detours; current vehicles are dropped and detours stay visible until an in-service bus adds detour evidence or proves normal routing.
 - **GPS-evidence clearing** — active detours are retained until the same bus is observed traversing the regular baseline route through the affected detour segment. By default, that bus must cover at least 100m and 60% of the affected segment. No-bus/currently-zero-vehicle states are not enough to clear. Once that traversal proof exists, short detour segments can move to clearing without waiting for the fixed on-route tick threshold.
@@ -193,6 +194,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Updated 2026-05-20: long-running detours retain learned GPS evidence** — Persistent detours now store learned evidence points and boundary candidates separately from the short live window, so trusted paths can survive deploys/restarts. `lastEvidenceAt` only moves when new GPS evidence exists.
 - **Updated 2026-05-24: low-frequency confirmation uses backend memory instead of burst pulses** — Scheduled production runs should collect one GTFS-RT snapshot per minute. The detector keeps short vehicle traces, longer headway-aware candidate summaries, and active Firestore snapshots so 30- to 60-minute routes can confirm and retain detours without multiple pulses inside a request.
 - **Fixed 2026-05-24: same-stop turnaround geometry could publish as a false detour** — The geometry and publisher trust gates now drop segments where `entryStopId === exitStopId` and the only affected/skipped stop is that same stop. Previously, those segments could preserve a likely path that went out, turned around, and returned without identifying a closed road segment.
+- **Updated 2026-05-24: short-detour candidates are captured on first off-route point** — The recurring short-deviation path no longer waits for the same bus to return on-route before recording candidate evidence. This improves detection for brief diversions that may only be visible for one GTFS-RT sample. Runtime state also stores the latest per-vehicle projection diagnostic so missed cases can be explained without guessing.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are segment-aware and sibling projection is now supported, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B, 12A/12B, and both directions of travel.
 
 ### What's missing to go public

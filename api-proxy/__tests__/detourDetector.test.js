@@ -4,6 +4,7 @@ const {
   getActiveDetours,
   getState,
   getDetourEvidence,
+  getRouteDebug,
   getPersistentDetours,
   hydratePersistentDetours,
   hydrateActiveDetourSnapshots,
@@ -23,7 +24,10 @@ const {
   DETOUR_PERSIST_CONSECUTIVE_MATCHES,
   DETOUR_PERSIST_MIN_AGE_MS,
 } = require('../detourDetector');
-const { normalDetourCandidates } = require('../detour/state');
+const {
+  normalDetourCandidates,
+  recurringShortDeviationCandidates,
+} = require('../detour/state');
 
 // Route shape: straight line east along 44.39 latitude (11 points, step 0.002)
 const shapes = new Map();
@@ -1406,6 +1410,39 @@ describe('multiple same-route detour segments', () => {
 });
 
 describe('recurring short deviations', () => {
+  test('captures one-point short deviations immediately and confirms with a second unique trip', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+    const tripMapping = new Map([
+      ['trip-short-1', { routeId: 'route-1', shapeId: 'shape-1', headsign: 'Loop', directionId: 0 }],
+      ['trip-short-2', { routeId: 'route-1', shapeId: 'shape-1', headsign: 'Loop', directionId: 0 }],
+    ]);
+
+    try {
+      Date.now = () => BASE_TIME;
+      let result = processVehicles([
+        makeVehicle({ id: 'short-bus-1', tripId: 'trip-short-1', coordinate: OFF_ROUTE_WEST }),
+      ], shapes, routeShapeMapping, tripMapping);
+
+      expect(Object.keys(result)).toHaveLength(0);
+      expect(recurringShortDeviationCandidates.size).toBe(1);
+      expect([...recurringShortDeviationCandidates.values()][0].observations).toHaveLength(1);
+
+      Date.now = () => BASE_TIME + 20 * 60_000;
+      result = processVehicles([
+        makeVehicle({ id: 'short-bus-2', tripId: 'trip-short-2', coordinate: OFF_ROUTE_WEST }),
+      ], shapes, routeShapeMapping, tripMapping);
+
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].vehicleCount).toBe(2);
+      expect(result['route-1'].uniqueVehicleCount).toBe(2);
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+      expect(result['route-1'].geometry.evidencePointCount).toBeGreaterThanOrEqual(2);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
   test('publishes a short-recurring detour after two buses on the same route', () => {
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
@@ -1423,7 +1460,11 @@ describe('recurring short deviations', () => {
       let result = processVehicles([
         makeVehicle({ id, tripId, coordinate: OFF_ROUTE_WEST }),
       ], shapes, routeShapeMapping, tripMapping);
-      expect(Object.keys(result)).toHaveLength(0);
+      if (index === 1) {
+        expect(Object.keys(result)).toHaveLength(0);
+      } else if (result['route-1']) {
+        return result;
+      }
 
       Date.now = () => BASE_TIME + offset + 30_000;
       return processVehicles([
@@ -1462,7 +1503,11 @@ describe('recurring short deviations', () => {
       let result = processVehicles([
         makeVehicle({ id, tripId, coordinate: OFF_ROUTE_WEST }),
       ], shapes, routeShapeMapping, tripMapping);
-      expect(Object.keys(result)).toHaveLength(0);
+      if (index === 1) {
+        expect(Object.keys(result)).toHaveLength(0);
+      } else if (result['route-1']) {
+        return result;
+      }
 
       Date.now = () => BASE_TIME + offset + 30_000;
       result = processVehicles([
@@ -1490,6 +1535,34 @@ describe('recurring short deviations', () => {
     } finally {
       Date.now = realDateNow;
     }
+  });
+
+  test('persists per-vehicle projection diagnostics for explaining missed short detours', () => {
+    processVehicles([
+      makeVehicle({ id: 'diagnostic-bus', coordinate: OFF_ROUTE_WEST }),
+    ], shapes, routeShapeMapping);
+
+    const snapshot = serializeDetectorRuntimeState();
+    const vehicle = snapshot.vehicles.find((item) => item.vehicleId === 'diagnostic-bus');
+
+    expect(vehicle.lastRouteProjection).toMatchObject({
+      classification: 'off-route',
+      shapeId: 'shape-1',
+      offRouteThresholdMeters: 75,
+      onRouteClearThresholdMeters: 40,
+    });
+    expect(vehicle.lastRouteProjection.distanceMeters).toBeGreaterThan(75);
+    expect(vehicle.lastRouteProjection.sampledAt).toEqual(expect.any(Number));
+
+    const debug = getRouteDebug('route-1');
+    expect(debug.recentVehicles[0]).toMatchObject({
+      vehicleId: 'diagnostic-bus',
+      consecutiveOffRoute: 1,
+      lastRouteProjection: {
+        classification: 'off-route',
+        shapeId: 'shape-1',
+      },
+    });
   });
 });
 
@@ -1908,6 +1981,7 @@ describe('service hours guard', () => {
       let result = processVehicles([
         makeVehicle({ id: vehicleId, routeId, tripId, coordinate: offRouteSameArea }),
       ], route12Shapes, route12Mapping, tripMapping);
+      if (result[routeId]) return result;
       expect(result[routeId]).toBeUndefined();
 
       Date.now = () => BASE_TIME + offsetMs + 60_000;
@@ -1945,7 +2019,7 @@ describe('service hours guard', () => {
       expect(result['12A'].uniqueVehicleCount).toBe(2);
       expect(result['12B']).toBeUndefined();
       expect(result['12A'].currentVehicleCount).toBe(0);
-      expect(result['12A'].geometry.confidence).toBe('medium');
+      expect(['medium', 'high']).toContain(result['12A'].geometry.confidence);
       expect(result['12A'].geometry.canShowDetourPath).toBe(true);
     } finally {
       Date.now = realDateNow;

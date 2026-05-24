@@ -66,6 +66,9 @@ When a suspected detour exists:
 - [ ] Confirm buses are repeatedly off their baseline route shape.
 - [ ] Confirm detection waits for consecutive off-route readings.
 - [ ] Confirm one-off GPS noise does not create a detour.
+- [ ] For short detours, confirm a first off-route point creates candidate evidence but does not create rider UI by itself.
+- [ ] Confirm a second unique same-route trip/vehicle can confirm the same short candidate even if neither bus stays off-route for the full consecutive-reading window.
+- [ ] For missed-detour reviews, check the latest per-vehicle projection diagnostic: distance from shape, classification, shape ID, and threshold used.
 - [ ] Confirm `DETOUR_DETECTED` is written to `detourHistory`.
 - [ ] Confirm `activeDetours/{routeId}` appears.
 - [ ] Confirm the route ID is correct.
@@ -176,6 +179,7 @@ Use this to avoid false clears on hourly service:
 - [ ] Confirm no-scheduled-service periods do not clear from staleness alone.
 - [ ] Confirm first bus off-route creates backend candidate evidence but no rider UI.
 - [ ] Confirm second bus 30-60 minutes later can confirm the same candidate.
+- [ ] Confirm a one-point short deviation candidate survives between low-frequency trips.
 - [ ] Confirm candidate expires after the configured candidate confirmation window.
 - [ ] Confirm repeated evidence from the same trip/vehicle does not count as two buses.
 

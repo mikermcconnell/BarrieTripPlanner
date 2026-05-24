@@ -281,6 +281,43 @@ function projectCoordinateToRoute(routeId, coordinate, shapes, routeShapeMapping
   return best;
 }
 
+function classifyRouteProjection(distanceMeters, routeConfig) {
+  if (!Number.isFinite(distanceMeters)) return 'no-projection';
+  if (distanceMeters > routeConfig.offRouteThresholdMeters) return 'off-route';
+  if (distanceMeters <= routeConfig.onRouteClearThresholdMeters) return 'on-route-clear';
+  return 'deadband';
+}
+
+function buildRouteProjectionDiagnostic({
+  routeId,
+  coordinate,
+  routeProjection,
+  distanceMeters,
+  routeConfig,
+  sampleTimeMs,
+  checkedAt,
+  tripId,
+  tripShapeId,
+}) {
+  const normalizedCoordinate = normalizePoint(coordinate);
+  return {
+    routeId: routeId || null,
+    tripId: tripId || null,
+    tripShapeId: tripShapeId || null,
+    shapeId: routeProjection?.shapeId || null,
+    classification: classifyRouteProjection(distanceMeters, routeConfig),
+    distanceMeters: Number.isFinite(distanceMeters) ? distanceMeters : null,
+    progressMeters: Number.isFinite(routeProjection?.progressMeters)
+      ? routeProjection.progressMeters
+      : null,
+    offRouteThresholdMeters: routeConfig.offRouteThresholdMeters,
+    onRouteClearThresholdMeters: routeConfig.onRouteClearThresholdMeters,
+    sampledAt: Number.isFinite(sampleTimeMs) ? sampleTimeMs : null,
+    checkedAt: Number.isFinite(checkedAt) ? checkedAt : null,
+    coordinate: normalizedCoordinate,
+  };
+}
+
 function getPersistedGeometryProgressWindow(segment, shapes) {
   const geometry = segment?.persistedGeometry;
   if (!geometry || !shapes) return null;
@@ -2051,13 +2088,13 @@ function promoteMatureRecurringFamilyCandidates(now, shapes, routeShapeMapping) 
 }
 
 function recordRecurringShortDeviationObservation(observation, shapes, routeShapeMapping) {
-  if (!observation) return;
+  if (!observation) return null;
   pruneRecurringShortDeviationCandidates(observation.timestampMs);
 
   const activeSegment = findMatchingActiveSegmentForRecurringObservation(observation, shapes);
   if (activeSegment?.recurringShortDeviation) {
     appendRecurringObservationToSegment(activeSegment, observation, observation.routeConfig);
-    return;
+    return activeSegment;
   }
 
   const match = findRecurringShortDeviationCandidate(observation);
@@ -2088,9 +2125,13 @@ function recordRecurringShortDeviationObservation(observation, shapes, routeShap
     candidate.observations.length >= RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS &&
     signatures.size >= RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES
   ) {
-    publishRecurringShortDeviationCandidate(candidate, observation, shapes, routeShapeMapping);
-    recurringShortDeviationCandidates.delete(key);
+    const segment = publishRecurringShortDeviationCandidate(candidate, observation, shapes, routeShapeMapping);
+    if (segment) {
+      recurringShortDeviationCandidates.delete(key);
+      return segment;
+    }
   }
+  return null;
 }
 
 function maybeRemoveVehicleFromDetour(
@@ -2418,6 +2459,17 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
     state.lastCheckedAt = now;
     state.tripShapeId = tripShapeId || null;
     state.tripId = vehicle.tripId || null;
+    state.lastRouteProjection = buildRouteProjectionDiagnostic({
+      routeId,
+      coordinate,
+      routeProjection,
+      distanceMeters: minDist,
+      routeConfig,
+      sampleTimeMs,
+      checkedAt: now,
+      tripId: vehicle.tripId || null,
+      tripShapeId,
+    });
 
     if (minDist > routeConfig.offRouteThresholdMeters) {
       if (state.consecutiveOffRoute === 0) {
@@ -2432,6 +2484,24 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
       recordOffRouteStreakPoint(state, coordinate, sampleTimeMs, tripShapeId, routeConfig);
       state.consecutiveOnRoute = 0;
       resetOnRouteClearTraversal(state);
+
+      if (state.consecutiveOffRoute === 1 && !state.detourSegmentId) {
+        const recurringSegment = recordRecurringShortDeviationObservation(
+          buildRecurringShortDeviationObservation(
+            state,
+            routeId,
+            routeConfig,
+            shapes,
+            routeShapeMapping,
+            sampleTimeMs
+          ),
+          shapes,
+          routeShapeMapping
+        );
+        if (recurringSegment?.segmentId) {
+          state.detourSegmentId = recurringSegment.segmentId;
+        }
+      }
 
       if (state.consecutiveOffRoute >= routeConfig.consecutiveReadingsRequired) {
         const normalCandidateSegmentId = MIN_VEHICLES_FOR_DETOUR > 1

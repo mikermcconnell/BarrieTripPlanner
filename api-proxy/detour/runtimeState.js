@@ -38,6 +38,38 @@ function createRuntimeStatePersistence({
     return ids;
   }
 
+  function normalizeDiagnosticPoint(point) {
+    if (!point || typeof point !== 'object') return null;
+    const latitude = Number(point.latitude ?? point.lat);
+    const longitude = Number(point.longitude ?? point.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude, longitude };
+  }
+
+  function normalizeRouteProjectionDiagnostic(diagnostic) {
+    if (!diagnostic || typeof diagnostic !== 'object') return null;
+    const sampledAt = toTimestampMs(diagnostic.sampledAt);
+    const checkedAt = toTimestampMs(diagnostic.checkedAt);
+    return {
+      routeId: diagnostic.routeId || null,
+      tripId: diagnostic.tripId || null,
+      tripShapeId: diagnostic.tripShapeId || null,
+      shapeId: diagnostic.shapeId || null,
+      classification: diagnostic.classification || null,
+      distanceMeters: Number.isFinite(diagnostic.distanceMeters) ? diagnostic.distanceMeters : null,
+      progressMeters: Number.isFinite(diagnostic.progressMeters) ? diagnostic.progressMeters : null,
+      offRouteThresholdMeters: Number.isFinite(diagnostic.offRouteThresholdMeters)
+        ? diagnostic.offRouteThresholdMeters
+        : null,
+      onRouteClearThresholdMeters: Number.isFinite(diagnostic.onRouteClearThresholdMeters)
+        ? diagnostic.onRouteClearThresholdMeters
+        : null,
+      sampledAt: Number.isFinite(sampledAt) ? sampledAt : null,
+      checkedAt: Number.isFinite(checkedAt) ? checkedAt : null,
+      coordinate: normalizeDiagnosticPoint(diagnostic.coordinate),
+    };
+  }
+
   function serializeDetectorRuntimeState() {
     return {
       version: 1,
@@ -134,6 +166,7 @@ function createRuntimeStatePersistence({
         tripShapeId: state?.tripShapeId || null,
         tripId: state?.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(state?.hasReturnedOnRouteSinceDetour),
+        lastRouteProjection: normalizeRouteProjectionDiagnostic(state?.lastRouteProjection),
       })),
       routes: [...activeDetours.entries()].map(([routeId, routeState]) => ({
         routeId,
@@ -284,6 +317,7 @@ function createRuntimeStatePersistence({
         tripShapeId: rawVehicle.tripShapeId || null,
         tripId: rawVehicle.tripId || null,
         hasReturnedOnRouteSinceDetour: Boolean(rawVehicle.hasReturnedOnRouteSinceDetour),
+        lastRouteProjection: normalizeRouteProjectionDiagnostic(rawVehicle.lastRouteProjection),
       });
     }
 
