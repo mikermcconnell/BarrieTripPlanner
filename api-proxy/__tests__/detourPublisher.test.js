@@ -669,6 +669,73 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.segments).toEqual([]);
   });
 
+  test('does not reintroduce same-stop segments while preserving a valid previous path', () => {
+    const validPath = [
+      { latitude: 44.333039, longitude: -79.673622 },
+      { latitude: 44.33713, longitude: -79.66934 },
+    ];
+    const selfLoopPath = [
+      { latitude: 44.386386, longitude: -79.69204 },
+      { latitude: 44.389031, longitude: -79.685426 },
+      { latitude: 44.386386, longitude: -79.69204 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: validPath,
+      likelyDetourPolyline: selfLoopPath,
+      likelyDetourRoadNames: ['Simcoe Street'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [
+        {
+          canShowDetourPath: true,
+          inferredDetourPolyline: validPath,
+          skippedSegmentPolyline: validPath,
+          entryPoint: validPath[0],
+          exitPoint: validPath[1],
+          entryStopId: '617',
+          exitStopId: '931',
+          skippedStopIds: ['617', '618', '931'],
+        },
+        {
+          canShowDetourPath: true,
+          likelyDetourPolyline: selfLoopPath,
+          inferredDetourPolyline: selfLoopPath,
+          likelyDetourRoadNames: ['Simcoe Street'],
+          roadMatchConfidence: 'high',
+          roadMatchSource: 'osrm-match',
+          entryStopId: '1',
+          exitStopId: '1',
+          skippedStopIds: ['1'],
+        },
+      ],
+    };
+    const weakGeometry = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: validPath,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: validPath,
+        skippedSegmentPolyline: validPath,
+        entryPoint: validPath[0],
+        exitPoint: validPath[1],
+        entryStopId: '617',
+        exitStopId: '931',
+        skippedStopIds: ['617', '618', '931'],
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(weakGeometry, previous, { state: 'active' });
+
+    expect(result.segments).toHaveLength(1);
+    expect(result.segments[0].entryStopId).toBe('617');
+    expect(result.segments[0].exitStopId).toBe('931');
+    expect(result.segments[0].skippedStopIds).toEqual(['617', '618', '931']);
+    expect(result.segments.some(segment => segment.entryStopId === segment.exitStopId)).toBe(false);
+  });
+
   test('does not preserve trusted geometry once the detour is clear-pending', () => {
     const previous = {
       canShowDetourPath: true,

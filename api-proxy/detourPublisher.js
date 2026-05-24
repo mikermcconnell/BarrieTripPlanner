@@ -459,9 +459,11 @@ function preserveTrustedDetourPath(geometry, previousSnapshot, detour = {}) {
   if (!trusted) return geometry;
   if (!geometryMatchesTrustedPathLocation(geometry, previousSnapshot, trusted)) return geometry;
 
-  const previousSegments = Array.isArray(previousSnapshot?.segments)
-    ? cloneJson(previousSnapshot.segments)
-    : [];
+  const previousSegments = filterNonClosureSelfLoopSegments(
+    Array.isArray(previousSnapshot?.segments)
+      ? cloneJson(previousSnapshot.segments)
+      : []
+  );
   const next = {
     ...cloneJson(geometry),
     shapeId: previousSnapshot?.shapeId || geometry.shapeId || null,

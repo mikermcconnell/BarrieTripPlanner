@@ -65,6 +65,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - reject same-stop, single-stop non-closure segments after stop-impact enrichment
   - apply the same filter before publishing top-level geometry
   - do not preserve a previously trusted likely path from a same-stop non-closure segment
+  - filter preserved previous segments too, so old Firestore geometry cannot reintroduce a rejected self-loop during trusted-path preservation
 - Tests added/updated:
   - `api-proxy/__tests__/detourGeometry.test.js`
   - `api-proxy/__tests__/detourPublisher.test.js`
