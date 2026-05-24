@@ -355,6 +355,11 @@ function hasTrustedInferredDetourPath(geometry) {
   ));
 }
 
+function hasNonClosureSelfLoopSegments(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) return false;
+  return filterNonClosureSelfLoopSegments(segments).length !== segments.length;
+}
+
 function clearUntrustedLikelyDetourPath(target) {
   if (
     target &&
@@ -842,6 +847,7 @@ function shouldWriteGeometry(routeId, detour, previousSnapshot, now) {
 
   // No geometry to write
   if (!geo) return false;
+  if (hasNonClosureSelfLoopSegments(previousSnapshot?.segments)) return true;
 
   // Always write on state change
   const prevState = previousSnapshot?.state || 'active';
@@ -1317,6 +1323,7 @@ async function publishDetours(activeDetours, options = {}) {
     if (
       geo?.preservedTrustedDetourPath === true &&
       previousSnapshot &&
+      !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
       now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
     ) {
       writeGeo = false;
@@ -1346,6 +1353,7 @@ async function publishDetours(activeDetours, options = {}) {
       if (
         geo?.preservedTrustedDetourPath === true &&
         previousSnapshot &&
+        !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
         now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
       ) {
         writeGeo = false;

@@ -926,6 +926,44 @@ describe('shouldWriteGeometry', () => {
     expect(shouldWriteGeometry('8A', detour, prev, NOW)).toBe(true);
   });
 
+  test('returns true when previous snapshot contains filtered same-stop geometry', () => {
+    const validSegment = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: [
+        { latitude: 44.333039, longitude: -79.673622 },
+        { latitude: 44.33713, longitude: -79.66934 },
+      ],
+      entryStopId: '617',
+      exitStopId: '931',
+      skippedStopIds: ['617', '618', '931'],
+    };
+    const detour = makeDetour({
+      geometry: {
+        confidence: 'medium',
+        evidencePointCount: 10,
+        segments: [validSegment],
+      },
+    });
+    const prev = makePrevSnapshot({
+      segments: [
+        validSegment,
+        {
+          canShowDetourPath: true,
+          inferredDetourPolyline: [
+            { latitude: 44.386386, longitude: -79.69204 },
+            { latitude: 44.389031, longitude: -79.685426 },
+            { latitude: 44.386386, longitude: -79.69204 },
+          ],
+          entryStopId: '1',
+          exitStopId: '1',
+          skippedStopIds: ['1'],
+        },
+      ],
+    });
+
+    expect(shouldWriteGeometry('12B', detour, prev, NOW)).toBe(true);
+  });
+
   test('returns true on confidence change', () => {
     const detour = makeDetour();
     detour.geometry.confidence = 'high';
