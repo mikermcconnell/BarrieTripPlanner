@@ -8,6 +8,33 @@
 
 **Tech Stack:** Node 22 `api-proxy`, GTFS/GTFS-RT, Firestore Admin SDK, Jest, Expo/React Native client consuming Firestore.
 
+## Implementation Status
+
+Status: **Implemented locally and committed** (`46ea505 feat(detours): add memory baseline`).
+
+Updated: 2026-05-24 after verification.
+
+Completed implementation scope:
+
+- Low-cost scheduled baseline configuration and docs now prefer one GTFS-RT snapshot per minute with burst sampling disabled for normal operations.
+- Backend normal-detour candidate memory is implemented and persisted across scheduled/manual ticks.
+- Vehicle evidence uses GTFS-RT sample timestamps when available.
+- Active Firestore detour snapshots hydrate on cold start when runtime state is missing, with a first-tick deletion guard.
+- Detours remain active through service gaps or zero-current-vehicle periods until normal-route GPS traversal proof clears them.
+
+Verified locally:
+
+- `npm --prefix api-proxy test -- --runTestsByPath __tests__/detectionConfig.test.js __tests__/detourCandidateMemory.test.js __tests__/detourRuntimeStateStore.test.js __tests__/detourDetector.test.js __tests__/activeDetourSnapshotStore.test.js __tests__/detourWorkerColdStart.test.js __tests__/detourIntegration.test.js __tests__/detourPublisher.test.js`
+  - Result: 36 suites / 419 tests passed.
+- `npm test -- --runTestsByPath src/__tests__/detourIntegration.test.js src/__tests__/detourOverlays.test.js src/__tests__/detourAlertStrip.test.js src/__tests__/detourVisibility.test.js src/__tests__/detourService.test.js src/__tests__/UpcomingDetourStrip.test.js src/__tests__/DetourDetailsSheet.timing.test.js src/__tests__/detourOverlayLayerOrder.test.js src/__tests__/useAffectedStops.test.js`
+  - Result: 9 suites / 162 tests passed.
+
+Still pending outside this implementation plan:
+
+- Confirm deployed Cloud Scheduler cadence and production environment variables.
+- Run a live validation window against production GTFS/Firestore.
+- Complete the manual QA checklist in `docs/AUTO-DETOUR-QA-CHECKLIST.md`.
+
 ---
 
 ## Baseline Decision
@@ -126,7 +153,7 @@ Main gap:
 - Modify: `api-proxy/detour/detectionConfig.js`
 - Test: `api-proxy/__tests__/detectionConfig.test.js`
 
-- [ ] **Step 1: Add failing config tests**
+- [x] **Step 1: Add failing config tests**
 
 Add tests that verify these defaults:
 
@@ -144,7 +171,7 @@ test('exposes normal detour candidate memory defaults', () => {
 
 Expected: test fails because exports do not exist.
 
-- [ ] **Step 2: Add config constants**
+- [x] **Step 2: Add config constants**
 
 Add to `api-proxy/detour/detectionConfig.js`:
 
@@ -194,7 +221,7 @@ Export all five constants.
 
 Also re-export the five constants from `api-proxy/detourDetector.js`, because detector tests and downstream debug tooling import detector thresholds from that module.
 
-- [ ] **Step 3: Run targeted test**
+- [x] **Step 3: Run targeted test**
 
 Run:
 
@@ -213,7 +240,7 @@ Expected: PASS.
 - Create: `api-proxy/detour/candidateMemory.js`
 - Create: `api-proxy/__tests__/detourCandidateMemory.test.js`
 
-- [ ] **Step 1: Write module tests**
+- [x] **Step 1: Write module tests**
 
 Add tests covering:
 
@@ -396,7 +423,7 @@ test('ignores invalid candidate observations', () => {
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 2: Implement module**
+- [x] **Step 2: Implement module**
 
 Create `api-proxy/detour/candidateMemory.js` with pure functions only:
 
@@ -578,7 +605,7 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 3: Run module tests**
+- [x] **Step 3: Run module tests**
 
 Run:
 
@@ -598,7 +625,7 @@ Expected: PASS.
 - Modify: `api-proxy/detour/runtimeState.js`
 - Test: `api-proxy/__tests__/detourDetector.test.js`
 
-- [ ] **Step 1: Add failing runtime persistence test**
+- [x] **Step 1: Add failing runtime persistence test**
 
 Add this test to `api-proxy/__tests__/detourDetector.test.js`. It directly seeds the new state map so this task can pass before the detector starts writing normal candidates.
 
@@ -662,7 +689,7 @@ test('serializes and hydrates normal detour candidate memory for low-frequency c
 
 Expected: FAIL until candidate state is persisted.
 
-- [ ] **Step 2: Add state map**
+- [x] **Step 2: Add state map**
 
 Modify `api-proxy/detour/state.js`:
 
@@ -672,7 +699,7 @@ const normalDetourCandidates = new Map();
 
 Clear it in `clearDetourState()` and export it.
 
-- [ ] **Step 3: Serialize normal candidates**
+- [x] **Step 3: Serialize normal candidates**
 
 In `api-proxy/detour/runtimeState.js`, add `normalDetourCandidates` to `serializeDetectorRuntimeState()`:
 
@@ -705,7 +732,7 @@ normalDetourCandidates: Object.fromEntries(
 )
 ```
 
-- [ ] **Step 4: Hydrate normal candidates**
+- [x] **Step 4: Hydrate normal candidates**
 
 In `hydrateRuntimeState()`, clear `normalDetourCandidates` and hydrate entries from `snapshot.normalDetourCandidates`.
 
@@ -718,7 +745,7 @@ Keep only candidates with:
 
 Also update the `createRuntimeStatePersistence(...)` argument list and the call site in `api-proxy/detourDetector.js` so `normalDetourCandidates` is passed alongside `persistentDetourCandidates` and `recurringShortDeviationCandidates`.
 
-- [ ] **Step 5: Run detector tests**
+- [x] **Step 5: Run detector tests**
 
 Run:
 
@@ -737,7 +764,7 @@ Expected: new test passes and existing detector tests still pass.
 - Modify: `api-proxy/detourDetector.js`
 - Test: `api-proxy/__tests__/detourDetector.test.js`
 
-- [ ] **Step 1: Add failing timestamp test**
+- [x] **Step 1: Add failing timestamp test**
 
 Add a test:
 
@@ -766,7 +793,7 @@ test('uses GTFS vehicle timestamp for evidence time when present', () => {
 
 Expected: FAIL because detector currently uses tick time.
 
-- [ ] **Step 2: Add helper in detector**
+- [x] **Step 2: Add helper in detector**
 
 Add near the timestamp helpers in `api-proxy/detourDetector.js`:
 
@@ -781,7 +808,7 @@ function getVehicleSampleTimeMs(vehicle, fallbackMs) {
 }
 ```
 
-- [ ] **Step 3: Use sample time for evidence**
+- [x] **Step 3: Use sample time for evidence**
 
 Inside `processVehicles()`:
 
@@ -801,7 +828,7 @@ Also update `recordOffRouteStreakPoint(...)` to prune per-vehicle `offRouteStrea
 
 Keep `state.lastCheckedAt = now` because stale processing is about worker observation time, not vehicle sample time.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run:
 
@@ -823,7 +850,7 @@ Expected: PASS.
 - Modify: `api-proxy/detourWorker.js`
 - Test: `api-proxy/__tests__/detourDetector.test.js`
 
-- [ ] **Step 1: Add low-frequency confirmation tests**
+- [x] **Step 1: Add low-frequency confirmation tests**
 
 Add `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS` to the destructured imports from `../detourDetector`, then add these tests:
 
@@ -917,7 +944,7 @@ expect(getState().detours['route-1']).toBeUndefined();
 
 This preserves the false-positive guard while allowing 30–60 minute low-frequency confirmation.
 
-- [ ] **Step 2: Build normal candidate observations**
+- [x] **Step 2: Build normal candidate observations**
 
 In `api-proxy/detourDetector.js`, create a function similar to `buildRecurringShortDeviationObservation()` but for normal confirmed off-route streaks:
 
@@ -962,7 +989,7 @@ function buildNormalDetourCandidateObservation(state, routeId, routeConfig, shap
 }
 ```
 
-- [ ] **Step 3: Record and promote normal candidates**
+- [x] **Step 3: Record and promote normal candidates**
 
 Import the candidate helpers and schedule helper:
 
@@ -1044,7 +1071,7 @@ Add candidate-confirmation IDs to segment confirmation logic so older low-freque
 - call the updated `syncMatchedVehicleIdsToCurrentEvidence()` so `matchedVehicleIds` includes both short-window evidence IDs and candidate-confirmation IDs
 - call `markDetourPublishedIfEligible()`
 
-- [ ] **Step 4: Call it from the off-route confirmation path**
+- [x] **Step 4: Call it from the off-route confirmation path**
 
 When `state.consecutiveOffRoute >= routeConfig.consecutiveReadingsRequired`, call:
 
@@ -1066,7 +1093,7 @@ recordNormalDetourCandidateObservation(
 
 If `recordNormalDetourCandidateObservation(...)` returns a `segmentId`, assign it to `state.detourSegmentId` and skip the duplicate `addVehicleToDetour(...)` call for that same sample. If it returns `null`, continue the existing `addVehicleToDetour(...)` behavior.
 
-- [ ] **Step 5: Pass schedule data into the detector**
+- [x] **Step 5: Pass schedule data into the detector**
 
 In `api-proxy/detourWorker.js`, include the schedule index in the fifth `processVehicles(...)` argument:
 
@@ -1084,7 +1111,7 @@ const activeDetours = processVehicles(
 );
 ```
 
-- [ ] **Step 6: Run detector tests**
+- [x] **Step 6: Run detector tests**
 
 Run:
 
@@ -1106,7 +1133,7 @@ Expected: PASS.
 - Modify: `api-proxy/detourDetector.js`
 - Test: `api-proxy/__tests__/detourIntegration.test.js`
 
-- [ ] **Step 1: Add store tests**
+- [x] **Step 1: Add store tests**
 
 Create tests:
 
@@ -1150,7 +1177,7 @@ test('loads active detour snapshots from Firestore', async () => {
 });
 ```
 
-- [ ] **Step 2: Implement store**
+- [x] **Step 2: Implement store**
 
 Create `api-proxy/activeDetourSnapshotStore.js`:
 
@@ -1237,7 +1264,7 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 3: Add detector hydration function**
+- [x] **Step 3: Add detector hydration function**
 
 In `api-proxy/detourDetector.js`, add `hydrateActiveDetourSnapshots(records)`.
 
@@ -1257,7 +1284,7 @@ For each record:
 
 Export the function.
 
-- [ ] **Step 4: Call hydration in worker**
+- [x] **Step 4: Call hydration in worker**
 
 Modify `api-proxy/detourWorker.js`:
 
@@ -1274,7 +1301,7 @@ hydrateActiveDetourSnapshots(activeSnapshots);
 
 Track whether this fallback was attempted and how many snapshots were loaded; pass that status into the first publish call so the publisher can avoid destructive cleanup if both runtime state and snapshot hydration produced no active routes.
 
-- [ ] **Step 5: Prevent first-tick deletion when hydration is incomplete**
+- [x] **Step 5: Prevent first-tick deletion when hydration is incomplete**
 
 In `api-proxy/detourPublisher.js`, add an explicit publish option:
 
@@ -1308,7 +1335,7 @@ In `api-proxy/detourWorker.js`, pass this option only on the first tick where:
 
 The next successful hydrated tick may clean up normally.
 
-- [ ] **Step 6: Run integration tests**
+- [x] **Step 6: Run integration tests**
 
 Add/verify tests that cover:
 
@@ -1334,7 +1361,7 @@ Expected: PASS.
 - Modify: `docs/API-PROXY-OPERATIONS.md`
 - Modify: `docs/AUTO-DETOUR-DETECTION.md`
 
-- [ ] **Step 1: Update `.env.example`**
+- [x] **Step 1: Update `.env.example`**
 
 Set the recommended low-cost baseline:
 
@@ -1365,7 +1392,7 @@ Remove or label as legacy the unused keys:
 - `DETOUR_MIN_ROUTE_EVIDENCE`
 - `DETOUR_MIN_ACTIVE_MS`
 
-- [ ] **Step 2: Update `docs/API-PROXY-OPERATIONS.md`**
+- [x] **Step 2: Update `docs/API-PROXY-OPERATIONS.md`**
 
 Replace the current burst recommendation with:
 
@@ -1395,7 +1422,7 @@ gcloud scheduler jobs create http bttp-detour-run-once \
   --max-retry-attempts=0
 ```
 
-- [ ] **Step 3: Update `docs/AUTO-DETOUR-DETECTION.md`**
+- [x] **Step 3: Update `docs/AUTO-DETOUR-DETECTION.md`**
 
 Document the three memory layers:
 
@@ -1407,7 +1434,7 @@ Document the three memory layers:
 
 State that the app must not use app icon movement as detector evidence.
 
-- [ ] **Step 4: Review docs diff**
+- [x] **Step 4: Review docs diff**
 
 Run:
 
@@ -1421,12 +1448,14 @@ Expected: docs clearly describe one scheduled tick per minute and backend memory
 
 ## Task 8: Add Low-Frequency and Overnight QA Checks
 
+Note: The QA checklist items below were added to `docs/AUTO-DETOUR-QA-CHECKLIST.md`; they remain unchecked here until a deployed/manual validation pass is completed.
+
 **Files:**
 
 - Modify: `docs/AUTO-DETOUR-QA-CHECKLIST.md`
 - Test: documentation review only
 
-- [ ] **Step 1: Add candidate-memory checks**
+- [x] **Step 1: Add candidate-memory checks**
 
 Add to the low-frequency section:
 
@@ -1437,7 +1466,7 @@ Add to the low-frequency section:
 - [ ] Confirm repeated evidence from the same trip/vehicle does not count as two buses.
 ```
 
-- [ ] **Step 2: Add cold-start checks**
+- [x] **Step 2: Add cold-start checks**
 
 Add:
 
@@ -1447,7 +1476,7 @@ Add:
 - [ ] Confirm the detour still clears only after normal-route GPS traversal.
 ```
 
-- [ ] **Step 3: Add scheduler checks**
+- [x] **Step 3: Add scheduler checks**
 
 Add:
 
@@ -1461,11 +1490,13 @@ Add:
 
 ## Task 9: Full Verification
 
+Note: Automated verification has passed locally. Manual backend smoke and live validation are intentionally left open until the deployed scheduler/environment is checked.
+
 **Files:**
 
 - No new files
 
-- [ ] **Step 1: Run backend tests**
+- [x] **Step 1: Run backend tests**
 
 Run:
 
@@ -1475,7 +1506,7 @@ npm --prefix api-proxy test
 
 Expected: all API proxy tests pass.
 
-- [ ] **Step 2: Run app tests affected by detour display**
+- [x] **Step 2: Run app tests affected by detour display**
 
 Run:
 

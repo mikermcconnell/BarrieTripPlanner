@@ -11,6 +11,16 @@ Prepare auto-detour detection for public launch while keeping the launch conserv
 - Live QA checklist: `docs/AUTO-DETOUR-QA-CHECKLIST.md`
 - This file is a dated rollout plan only.
 
+
+## Update — 2026-05-24 memory baseline
+
+The implementation now uses the low-cost scheduled memory baseline from `docs/superpowers/plans/2026-05-24-auto-detour-memory-baseline.md`:
+
+- Cloud Scheduler should call `POST /api/detour-run-once` once per minute during service hours.
+- `DETOUR_BURST_SAMPLING_ENABLED=false` is the normal production setting.
+- Backend candidate memory can confirm low-frequency detours across 30–60 minute headways without retaining all raw GPS points.
+- Runtime state and active Firestore snapshots protect published detours during cold starts.
+
 ## Launch policy decisions
 
 - Keep `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` as the app-side launch switch.
@@ -53,6 +63,8 @@ Prepare auto-detour detection for public launch while keeping the launch conserv
 - Backend: low-confidence validation-only stale detours do not auto-clear.
 - Backend: same-bus normal-route traversal still clears through `clear-pending`.
 - Backend: route-family projection does not create false sibling detours.
+- Backend: low-frequency two-bus confirmation works beyond the short geometry/evidence window.
+- Backend: cold-start runtime/snapshot hydration does not delete active Firestore detours prematurely.
 - Frontend: medium/high visibility, low hidden, `clear-pending` faded, deleted docs removed.
 
 ## Out of scope

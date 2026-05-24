@@ -270,9 +270,11 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    ```
 2. Set environment variables:
    - `DETOUR_WORKER_ENABLED=true`
-   - `DETOUR_WORKER_MODE=manual` (recommended for testing; use `interval` only if you explicitly want the legacy always-on loop)
+   - `DETOUR_WORKER_MODE=manual` for local/ad hoc testing, or `scheduled` for low-cost production with Cloud Scheduler calling `POST /api/detour-run-once` every 60 seconds; use `interval` only for the legacy always-on loop
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
+   - `DETOUR_BURST_SAMPLING_ENABLED=false` for normal scheduled production; burst sampling is diagnostic only
+   - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000` and `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000` keep compact backend memory for low-frequency route confirmation
    - `BASELINE_AUTO_INIT=false` (prevents seeding the baseline from live GTFS during an active detour)
    - `DETOUR_REQUIRE_SAFE_BASELINE=true` (blocks detection until a trusted baseline is loaded)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
