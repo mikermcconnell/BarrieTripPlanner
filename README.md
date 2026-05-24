@@ -10,7 +10,8 @@ Read docs in this order:
 2. this README for current setup, scripts, and product surface
 3. [docs/API-PROXY-OPERATIONS.md](./docs/API-PROXY-OPERATIONS.md) for backend deployment and auth
 4. [docs/AUTO-DETOUR-DETECTION.md](./docs/AUTO-DETOUR-DETECTION.md) for detour feature behavior
-5. [docs/TESTING.md](./docs/TESTING.md) for the current automated + manual testing approach
+5. [docs/AUTO-DETOUR-VALIDATION-MATRIX.md](./docs/AUTO-DETOUR-VALIDATION-MATRIX.md) when working on auto-detour quality, regressions, or launch readiness
+6. [docs/TESTING.md](./docs/TESTING.md) for the current automated + manual testing approach
 
 Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start with [`docs/plans/README.md`](./docs/plans/README.md) if you need them.
 

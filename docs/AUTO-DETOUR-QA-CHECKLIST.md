@@ -2,6 +2,17 @@
 
 Use this checklist during live auto-detour validation. The goal is to confirm the backend detects, updates, renders, and clears detours correctly without leaving stale rider-facing detours.
 
+Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-MATRIX.md`](./AUTO-DETOUR-VALIDATION-MATRIX.md) or update the matching scenario row. The QA checklist proves current behavior; the matrix preserves what was learned.
+
+## 0. Issue Capture / Change Control
+
+- [ ] Identify the matching scenario in `AUTO-DETOUR-VALIDATION-MATRIX.md`, or add a new one.
+- [ ] Record what happened, what should have happened, affected route(s), date/time, and evidence.
+- [ ] Classify the issue: detection, geometry, clearing, route family, publishing/history, frontend rendering, or baseline/operations.
+- [ ] Confirm whether the expected behavior is already documented in `AUTO-DETOUR-DETECTION.md`.
+- [ ] Confirm whether the fix needs automated regression coverage, manual validation, or both.
+- [ ] Before closing the issue, update the matrix with root cause, fix, tests, docs, and remaining risk.
+
 ## 1. Pre-Test Setup
 
 - [ ] Confirm you are testing the expected environment: local, staging, or production.
@@ -72,6 +83,7 @@ For each active detour:
 - [ ] The likely detour path follows roads.
 - [ ] The likely detour path does not snap back onto the closed route segment.
 - [ ] Weird spurs, loops, or unnecessary deviations are not shown.
+- [ ] Same-stop turnarounds are not shown as detours when no closed route segment is identified.
 - [ ] Entry and exit points make sense.
 - [ ] Multiple independent detour sections are separate, not merged into one giant section.
 - [ ] If road matching fails, raw off-road GPS lines are not shown to riders.

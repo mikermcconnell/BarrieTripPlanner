@@ -11,6 +11,7 @@
 - `docs/AUTO-DETOUR-DETECTION.md` is the source of truth for detour behavior, geometry, Firestore fields, clearing policy, and rider-facing UX.
 - `docs/API-PROXY-OPERATIONS.md` is the source of truth for backend deployment, auth, worker modes, admin endpoints, and rollout-health operations.
 - `docs/AUTO-DETOUR-QA-CHECKLIST.md` is the live validation checklist.
+- `docs/AUTO-DETOUR-VALIDATION-MATRIX.md` is the scenario matrix and change-control workflow for turning live issues into repeatable regression coverage.
 - `docs/plans/` contains dated working plans and does not override the current source-of-truth docs.
 
 ---
@@ -118,6 +119,8 @@ If a route has multiple independent detour sections at the same time, they are p
 
 `segments[]` is the source of truth for multi-section detours. The top-level geometry fields (`entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `likelyDetourPolyline`) are still published for backward compatibility and mirror the route's primary segment.
 
+Self-loop segments are not valid closures when they enter and exit at the same stop and only that stop is affected. The backend filters these before publishing and before preserving a previously trusted likely path.
+
 Documents are created on detection, updated each publish cycle, and deleted when the final active segment clears.
 
 #### `persistentDetoursAuto` collection
@@ -168,6 +171,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Headway-aware stale monitoring** — schedule/headway context can flag old evidence for operator review, but it does not clear an active detour by itself. This prevents low-frequency routes from disappearing before another bus reaches the affected segment.
 - **Headway-aware candidate confirmation** — unconfirmed off-route evidence can be retained long enough for the next unique bus on 30- to 60-minute service to corroborate the same detour candidate.
 - **Path-confidence gate** — detour alerts can remain active while the map hides the likely detour path until the backend sees trusted evidence: either same-bus before/off-route/after evidence or two distinct buses with entry/exit anchors on the same corridor.
+- **Same-stop self-loop rejection** — geometry segments are rejected when the inferred closure enters and exits at the same stop and only that stop is affected. This prevents route-fallback turnarounds or short spurs from being published as detours when no real closed route segment was found.
 - **Segment-level detour lifecycle under one route document** — same-route detours separated by normal on-route travel are now tracked as separate internal segments with independent clear-pending and clearing behavior.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
@@ -188,6 +192,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Updated 2026-05-20: physical detour events can project to sibling route variants** — A confirmed closure segment on one branch can now publish projected geometry for a sibling branch, so paired variants such as 12A/12B do not require separate hand patches when they share the same closure. Point-only short deviations still stay route-specific.
 - **Updated 2026-05-20: long-running detours retain learned GPS evidence** — Persistent detours now store learned evidence points and boundary candidates separately from the short live window, so trusted paths can survive deploys/restarts. `lastEvidenceAt` only moves when new GPS evidence exists.
 - **Updated 2026-05-24: low-frequency confirmation uses backend memory instead of burst pulses** — Scheduled production runs should collect one GTFS-RT snapshot per minute. The detector keeps short vehicle traces, longer headway-aware candidate summaries, and active Firestore snapshots so 30- to 60-minute routes can confirm and retain detours without multiple pulses inside a request.
+- **Fixed 2026-05-24: same-stop turnaround geometry could publish as a false detour** — The geometry and publisher trust gates now drop segments where `entryStopId === exitStopId` and the only affected/skipped stop is that same stop. Previously, those segments could preserve a likely path that went out, turned around, and returned without identifying a closed road segment.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are segment-aware and sibling projection is now supported, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B, 12A/12B, and both directions of travel.
 
 ### What's missing to go public

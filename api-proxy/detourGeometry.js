@@ -11,6 +11,7 @@ const {
   douglasPeucker,
 } = require('./detour/geometry/polyline');
 const { pickPrimarySegment } = require('./detour/geometry/segmentSelection');
+const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
 const {
   createRouteFamilyReconciler,
   getRouteFamilyKey,
@@ -1192,19 +1193,55 @@ function enrichSegmentsWithStopImpacts(routeId, segments, shapes, fallbackShapeI
 
 function enrichGeometryStopImpacts(routeId, geometry, shapes, stopImpactData) {
   if (!geometry || typeof geometry !== 'object') return geometry;
-  const segments = enrichSegmentsWithStopImpacts(
+  const enrichedSegments = enrichSegmentsWithStopImpacts(
     routeId,
     geometry.segments,
     shapes,
     geometry.shapeId,
     stopImpactData
   );
-  if (!Array.isArray(segments) || segments.length === 0) return geometry;
+  const segments = filterNonClosureSelfLoopSegments(enrichedSegments);
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return Array.isArray(enrichedSegments) && enrichedSegments.length > 0
+      ? {
+        ...geometry,
+        segments: [],
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: null,
+        likelyDetourPolyline: null,
+        likelyDetourRoadNames: [],
+        roadMatchConfidence: null,
+        roadMatchRawConfidence: null,
+        roadMatchSource: null,
+        canShowDetourPath: false,
+        entryPoint: null,
+        exitPoint: null,
+        skippedStopIds: [],
+        skippedStopCodes: [],
+        skippedStops: [],
+        affectedStopIds: [],
+        affectedStopCodes: [],
+        affectedStops: [],
+        entryStopId: null,
+        exitStopId: null,
+      }
+      : geometry;
+  }
 
   const primarySegment = pickPrimarySegment(segments);
   return {
     ...geometry,
     segments,
+    skippedSegmentPolyline: primarySegment?.skippedSegmentPolyline ?? null,
+    inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
+    likelyDetourPolyline: primarySegment?.likelyDetourPolyline ?? null,
+    likelyDetourRoadNames: primarySegment?.likelyDetourRoadNames || [],
+    roadMatchConfidence: primarySegment?.roadMatchConfidence || null,
+    roadMatchRawConfidence: primarySegment?.roadMatchRawConfidence ?? null,
+    roadMatchSource: primarySegment?.roadMatchSource || null,
+    canShowDetourPath: primarySegment?.canShowDetourPath === true,
+    entryPoint: primarySegment?.entryPoint ?? null,
+    exitPoint: primarySegment?.exitPoint ?? null,
     skippedStopIds: primarySegment?.skippedStopIds || [],
     skippedStopCodes: primarySegment?.skippedStopCodes || [],
     skippedStops: primarySegment?.skippedStops || [],
@@ -1380,6 +1417,9 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
   if (segments.length === 0) return empty;
 
   segments = enrichSegmentsWithStopImpacts(routeId, segments, shapes, bestShape.shapeId, stopImpactData);
+  segments = filterNonClosureSelfLoopSegments(segments);
+  if (segments.length === 0) return empty;
+
   const primarySegment = pickPrimarySegment(segments);
   const confidence = scoreConfidence(confidencePoints, detectedAtMs, now, routeConfig);
 

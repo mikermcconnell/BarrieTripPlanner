@@ -2,6 +2,7 @@ const { getDb } = require('./firebaseAdmin');
 const { DETOUR_PATH_LABEL, matchDetourGeometry } = require('./detourRoadMatcher');
 const { shouldAutoClearStaleDetour } = require('./detour/staleClear');
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
+const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
 
 const ACTIVE_COLLECTION = 'activeDetours';
 const HISTORY_COLLECTION = 'detourHistory';
@@ -288,7 +289,10 @@ function hasTrustedLikelyDetourPath(source) {
 function getTrustedDetourPathSnapshot(source) {
   if (!source || typeof source !== 'object') return null;
 
-  const segments = Array.isArray(source.segments) ? source.segments : [];
+  const rawSegments = Array.isArray(source.segments) ? source.segments : null;
+  const segments = filterNonClosureSelfLoopSegments(rawSegments || []);
+  if (rawSegments && rawSegments.length > 0 && segments.length === 0) return null;
+
   const trustedLikelySegment = segments.find(hasTrustedLikelyDetourPath);
   const trustedSegment = trustedLikelySegment || segments.find((segment) => (
     segment?.canShowDetourPath === true &&
@@ -296,8 +300,11 @@ function getTrustedDetourPathSnapshot(source) {
     segment.inferredDetourPolyline.length >= 2
   ));
 
+  const canUseTopLevelLikelyPath =
+    hasTrustedLikelyDetourPath(source) &&
+    (!rawSegments || rawSegments.length === 0 || Boolean(trustedLikelySegment));
   const likelyDetourPolyline =
-    hasTrustedLikelyDetourPath(source)
+    canUseTopLevelLikelyPath
       ? source.likelyDetourPolyline
       : trustedLikelySegment?.likelyDetourPolyline;
   const inferredDetourPolyline =
@@ -523,20 +530,72 @@ function geometryBackfillSignature(geometry) {
   return polylineSignature(geometry?.inferredDetourPolyline);
 }
 
-function shouldAttemptRoadMatchBackfill(geometry, previousSnapshot, knownGeometry) {
-  if (!hasTrustedInferredDetourPath(geometry)) return false;
-  if (hasLikelyDetourPath(geometry) || hasLikelyDetourPath(previousSnapshot)) return false;
+function getRoadMatchBackfillSignatures(geometry) {
+  if (!geometry || typeof geometry !== 'object') return [];
 
-  const signature = geometryBackfillSignature(geometry);
-  if (!signature) return false;
-  return knownGeometry?.roadMatchBackfillAttemptedSignature !== signature;
+  const segments = filterNonClosureSelfLoopSegments(
+    Array.isArray(geometry.segments) ? geometry.segments : []
+  );
+  const signatures = [];
+
+  if (segments.length > 0) {
+    for (const segment of segments) {
+      if (
+        segment?.canShowDetourPath === true &&
+        Array.isArray(segment.inferredDetourPolyline) &&
+        segment.inferredDetourPolyline.length >= 2 &&
+        !hasTrustedLikelyDetourPath(segment)
+      ) {
+        const signature = polylineSignature(segment.inferredDetourPolyline);
+        if (signature) signatures.push(signature);
+      }
+    }
+  } else if (
+    hasTrustedInferredDetourPath(geometry) &&
+    !hasTrustedLikelyDetourPath(geometry)
+  ) {
+    const signature = geometryBackfillSignature(geometry);
+    if (signature) signatures.push(signature);
+  }
+
+  return [...new Set(signatures)];
+}
+
+function shouldAttemptRoadMatchBackfill(geometry, previousSnapshot, knownGeometry) {
+  const signatures = getRoadMatchBackfillSignatures(geometry);
+  if (signatures.length === 0) return false;
+
+  const segmentCount = Array.isArray(geometry?.segments)
+    ? filterNonClosureSelfLoopSegments(geometry.segments).length
+    : 0;
+  if (segmentCount <= 1 && hasLikelyDetourPath(previousSnapshot)) {
+    const trustedPreviousPath = getTrustedDetourPathSnapshot(previousSnapshot);
+    if (
+      trustedPreviousPath &&
+      geometryMatchesTrustedPathLocation(geometry, previousSnapshot, trustedPreviousPath)
+    ) {
+      return false;
+    }
+  }
+
+  const attempted = new Set(
+    Array.isArray(knownGeometry?.roadMatchBackfillAttemptedSignatures)
+      ? knownGeometry.roadMatchBackfillAttemptedSignatures
+      : []
+  );
+  if (knownGeometry?.roadMatchBackfillAttemptedSignature) {
+    attempted.add(knownGeometry.roadMatchBackfillAttemptedSignature);
+  }
+
+  return signatures.some(signature => !attempted.has(signature));
 }
 
 function enforceGeometryTrustGate(geometry) {
   if (!geometry || typeof geometry !== 'object') return geometry;
 
   const next = cloneJson(geometry);
-  const segments = Array.isArray(next.segments)
+  const originalSegmentCount = Array.isArray(next.segments) ? next.segments.length : 0;
+  const segments = filterNonClosureSelfLoopSegments(Array.isArray(next.segments)
     ? next.segments.map((segment) => {
       const normalized = { ...segment };
       const hasConfirmedBoundaries = hasConfirmedBoundaryAnchorPair(normalized);
@@ -560,7 +619,7 @@ function enforceGeometryTrustGate(geometry) {
 
       return normalized;
     })
-    : [];
+    : []);
 
   if (Array.isArray(next.segments)) {
     next.segments = segments;
@@ -569,6 +628,22 @@ function enforceGeometryTrustGate(geometry) {
   const primarySegment = segments.find(getRenderableSegment) || segments[0] || null;
   if (primarySegment) {
     next.skippedSegmentPolyline = primarySegment.skippedSegmentPolyline || null;
+    next.inferredDetourPolyline = primarySegment.inferredDetourPolyline || null;
+    next.entryPoint = primarySegment.entryPoint || null;
+    next.exitPoint = primarySegment.exitPoint || null;
+
+    if (Array.isArray(primarySegment.likelyDetourPolyline) && primarySegment.likelyDetourPolyline.length >= 2) {
+      next.likelyDetourPolyline = primarySegment.likelyDetourPolyline;
+      next.likelyDetourRoadNames = Array.isArray(primarySegment.likelyDetourRoadNames)
+        ? primarySegment.likelyDetourRoadNames
+        : [];
+      next.roadMatchConfidence = primarySegment.roadMatchConfidence;
+      next.roadMatchRawConfidence = primarySegment.roadMatchRawConfidence;
+      next.roadMatchSource = primarySegment.roadMatchSource;
+    } else {
+      clearRoadMatchedPath(next);
+    }
+
     if (primarySegment.canShowDetourPath != null) {
       next.canShowDetourPath = primarySegment.canShowDetourPath === true;
     }
@@ -578,6 +653,13 @@ function enforceGeometryTrustGate(geometry) {
     } else {
       clearUntrustedLikelyDetourPath(next);
     }
+  } else if (originalSegmentCount > 0 && segments.length === 0) {
+    next.canShowDetourPath = false;
+    next.skippedSegmentPolyline = null;
+    next.inferredDetourPolyline = null;
+    next.entryPoint = null;
+    next.exitPoint = null;
+    clearRoadMatchedPath(next);
   } else if (next.canShowDetourPath === false) {
     clearRoadMatchedPath(next);
   } else {
@@ -1240,9 +1322,10 @@ async function publishDetours(activeDetours, options = {}) {
     const knownGeometry = lastKnownGeometry.get(routeId);
     const shouldBackfillRoadMatch = !writeGeo &&
       shouldAttemptRoadMatchBackfill(geo, previousSnapshot, knownGeometry);
-    const roadMatchBackfillAttemptedSignature = shouldBackfillRoadMatch
-      ? geometryBackfillSignature(geo)
-      : null;
+    const roadMatchBackfillAttemptedSignatures = shouldBackfillRoadMatch
+      ? getRoadMatchBackfillSignatures(geo)
+      : [];
+    const roadMatchBackfillAttemptedSignature = roadMatchBackfillAttemptedSignatures[0] || null;
 
     if ((writeGeo || shouldBackfillRoadMatch) && geo) {
       try {
@@ -1321,6 +1404,17 @@ async function publishDetours(activeDetours, options = {}) {
               roadMatchBackfillAttemptedSignature ||
               knownGeometry?.roadMatchBackfillAttemptedSignature ||
               null
+            ),
+          roadMatchBackfillAttemptedSignatures: geo.roadMatchSource
+            ? roadMatchBackfillAttemptedSignatures
+            : (
+              roadMatchBackfillAttemptedSignatures.length > 0
+                ? roadMatchBackfillAttemptedSignatures
+                : (
+                  Array.isArray(knownGeometry?.roadMatchBackfillAttemptedSignatures)
+                    ? knownGeometry.roadMatchBackfillAttemptedSignatures
+                    : []
+                )
             ),
         });
       }

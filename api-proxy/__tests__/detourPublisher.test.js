@@ -477,6 +477,57 @@ describe('enforceGeometryTrustGate', () => {
     expect(result.likelyDetourPolyline).toBeNull();
     expect(result.segments[0].likelyDetourPolyline).toBeNull();
   });
+
+  test('filters same-stop turnaround segments before publishing top-level geometry', () => {
+    const validPath = [
+      { latitude: 44.333039, longitude: -79.673622 },
+      { latitude: 44.334702, longitude: -79.668856 },
+    ];
+    const selfLoopPath = [
+      { latitude: 44.386386, longitude: -79.69204 },
+      { latitude: 44.38743, longitude: -79.689927 },
+      { latitude: 44.386386, longitude: -79.69204 },
+    ];
+
+    const result = enforceGeometryTrustGate({
+      canShowDetourPath: true,
+      inferredDetourPolyline: selfLoopPath,
+      likelyDetourPolyline: selfLoopPath,
+      likelyDetourRoadNames: ['Simcoe Street'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [
+        {
+          canShowDetourPath: true,
+          inferredDetourPolyline: validPath,
+          skippedSegmentPolyline: validPath,
+          entryPoint: validPath[0],
+          exitPoint: validPath[1],
+          entryStopId: '617',
+          exitStopId: '931',
+          skippedStopIds: ['617', '618', '931'],
+        },
+        {
+          canShowDetourPath: true,
+          inferredDetourPolyline: selfLoopPath,
+          likelyDetourPolyline: selfLoopPath,
+          likelyDetourRoadNames: ['Simcoe Street'],
+          roadMatchConfidence: 'high',
+          roadMatchSource: 'osrm-match',
+          entryStopId: '1',
+          exitStopId: '1',
+          skippedStopIds: ['1'],
+        },
+      ],
+    });
+
+    expect(result.segments).toHaveLength(1);
+    expect(result.segments[0].skippedStopIds).toEqual(['617', '618', '931']);
+    expect(result.inferredDetourPolyline).toEqual(validPath);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.canShowDetourPath).toBe(true);
+  });
 });
 
 describe('preserveTrustedDetourPath', () => {
@@ -577,6 +628,45 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.likelyDetourPolyline).toBeNull();
     expect(result.likelyDetourRoadNames).toEqual([]);
     expect(result.segments[0].canShowDetourPath).toBe(false);
+  });
+
+  test('does not preserve a trusted path from a same-stop turnaround segment', () => {
+    const selfLoopPath = [
+      { latitude: 44.386386, longitude: -79.69204 },
+      { latitude: 44.38743, longitude: -79.689927 },
+      { latitude: 44.386386, longitude: -79.69204 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: selfLoopPath,
+      likelyDetourRoadNames: ['Bayfield Street'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-route',
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: selfLoopPath,
+        inferredDetourPolyline: selfLoopPath,
+        likelyDetourRoadNames: ['Bayfield Street'],
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-route',
+        entryStopId: '2',
+        exitStopId: '2',
+        skippedStopIds: ['2'],
+      }],
+    };
+    const weakGeometry = {
+      canShowDetourPath: false,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [],
+    };
+
+    const result = preserveTrustedDetourPath(weakGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.segments).toEqual([]);
   });
 
   test('does not preserve trusted geometry once the detour is clear-pending', () => {
@@ -848,6 +938,88 @@ describe('shouldAttemptRoadMatchBackfill', () => {
       },
       null
     )).toBe(false);
+  });
+
+  test('returns true when one segment is still missing road-matched geometry even if another segment has it', () => {
+    const segmentNeedingBackfill = {
+      shapeId: '12B',
+      canShowDetourPath: true,
+      inferredDetourPolyline: [
+        { latitude: 44.3330, longitude: -79.6736 },
+        { latitude: 44.3371, longitude: -79.6693 },
+      ],
+    };
+    const alreadyMatchedSegment = {
+      shapeId: '12B',
+      canShowDetourPath: true,
+      inferredDetourPolyline: [
+        { latitude: 44.3864, longitude: -79.6920 },
+        { latitude: 44.3877, longitude: -79.6902 },
+      ],
+      likelyDetourPolyline: [
+        { latitude: 44.3864, longitude: -79.6920 },
+        { latitude: 44.3877, longitude: -79.6902 },
+      ],
+      roadMatchConfidence: 'high',
+      roadMatchRawConfidence: 0.98,
+      roadMatchSource: 'osrm-match',
+    };
+
+    expect(shouldAttemptRoadMatchBackfill(
+      {
+        shapeId: '12B',
+        canShowDetourPath: true,
+        inferredDetourPolyline: segmentNeedingBackfill.inferredDetourPolyline,
+        segments: [segmentNeedingBackfill, alreadyMatchedSegment],
+      },
+      {
+        routeId: '12B',
+        likelyDetourPolyline: alreadyMatchedSegment.likelyDetourPolyline,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+        segments: [segmentNeedingBackfill, alreadyMatchedSegment],
+      },
+      null
+    )).toBe(true);
+  });
+
+  test('returns true when the previous route-level likely path is for a different segment location', () => {
+    expect(shouldAttemptRoadMatchBackfill(
+      {
+        shapeId: '12B',
+        canShowDetourPath: true,
+        inferredDetourPolyline: [
+          { latitude: 44.3330, longitude: -79.6736 },
+          { latitude: 44.3371, longitude: -79.6693 },
+        ],
+        entryPoint: { latitude: 44.3330, longitude: -79.6736 },
+        exitPoint: { latitude: 44.3371, longitude: -79.6693 },
+        segments: [{
+          shapeId: '12B',
+          canShowDetourPath: true,
+          inferredDetourPolyline: [
+            { latitude: 44.3330, longitude: -79.6736 },
+            { latitude: 44.3371, longitude: -79.6693 },
+          ],
+          entryPoint: { latitude: 44.3330, longitude: -79.6736 },
+          exitPoint: { latitude: 44.3371, longitude: -79.6693 },
+        }],
+      },
+      {
+        routeId: '12B',
+        likelyDetourPolyline: [
+          { latitude: 44.3864, longitude: -79.6920 },
+          { latitude: 44.3877, longitude: -79.6902 },
+        ],
+        inferredDetourPolyline: [
+          { latitude: 44.3864, longitude: -79.6920 },
+          { latitude: 44.3877, longitude: -79.6902 },
+        ],
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+      },
+      null
+    )).toBe(true);
   });
 });
 

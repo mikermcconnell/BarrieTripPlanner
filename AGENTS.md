@@ -8,7 +8,8 @@ This file is the repo-local entrypoint for agents and maintainers.
 2. Read [README.md](README.md) for the current product surface, environment setup, and day-to-day commands.
 3. Read [docs/API-PROXY-OPERATIONS.md](docs/API-PROXY-OPERATIONS.md) for backend deployment, auth, and detour-worker operations.
 4. Read [docs/AUTO-DETOUR-DETECTION.md](docs/AUTO-DETOUR-DETECTION.md) only when working on detour behavior, geometry, or rider-facing detour UX.
-5. Read files under [docs/plans/](docs/plans/) only when you need dated working notes or cleanup history. They are not default source-of-truth context.
+5. Read [docs/AUTO-DETOUR-VALIDATION-MATRIX.md](docs/AUTO-DETOUR-VALIDATION-MATRIX.md) when working on auto-detour quality, regressions, issue triage, or launch readiness.
+6. Read files under [docs/plans/](docs/plans/) only when you need dated working notes or cleanup history. They are not default source-of-truth context.
 
 ## Source Of Truth
 
@@ -16,6 +17,7 @@ This file is the repo-local entrypoint for agents and maintainers.
 - Current app setup, scripts, and product surface: [README.md](README.md)
 - Backend runtime and deployment model for `api-proxy/`: [docs/API-PROXY-OPERATIONS.md](docs/API-PROXY-OPERATIONS.md)
 - Detour feature reference and domain behavior: [docs/AUTO-DETOUR-DETECTION.md](docs/AUTO-DETOUR-DETECTION.md)
+- Detour validation scenarios and change-control workflow: [docs/AUTO-DETOUR-VALIDATION-MATRIX.md](docs/AUTO-DETOUR-VALIDATION-MATRIX.md)
 
 ## Non-Default Context
 

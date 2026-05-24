@@ -21,6 +21,14 @@ The implementation now uses the low-cost scheduled memory baseline from `docs/su
 - Backend candidate memory can confirm low-frequency detours across 30–60 minute headways without retaining all raw GPS points.
 - Runtime state and active Firestore snapshots protect published detours during cold starts.
 
+## Update — 2026-05-24 same-stop self-loop guard
+
+The implementation now rejects same-stop turnaround geometry before publish/preservation:
+
+- A segment where `entryStopId === exitStopId` and only that same stop is affected is not treated as a real closure.
+- The publisher will not preserve a previously trusted likely path from one of those segments.
+- For 12A/12B validation, this should remove downtown hub spur/turnaround segments while preserving legitimate multi-stop closure segments.
+
 ## Launch policy decisions
 
 - Keep `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` as the app-side launch switch.
@@ -65,6 +73,7 @@ The implementation now uses the low-cost scheduled memory baseline from `docs/su
 - Backend: route-family projection does not create false sibling detours.
 - Backend: low-frequency two-bus confirmation works beyond the short geometry/evidence window.
 - Backend: cold-start runtime/snapshot hydration does not delete active Firestore detours prematurely.
+- Backend: same-stop self-loop/turnaround segments are filtered and do not preserve stale likely paths.
 - Frontend: medium/high visibility, low hidden, `clear-pending` faded, deleted docs removed.
 
 ## Out of scope

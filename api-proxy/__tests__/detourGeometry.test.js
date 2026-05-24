@@ -406,6 +406,81 @@ describe('buildGeometry', () => {
     expect(result.segments[0].exitStopId).toBe('exit-boundary');
   });
 
+  test('filters same-stop turnaround segments after stop-impact enrichment', () => {
+    const stopImpactData = {
+      routeStopSequencesMapping: {
+        'route-1': {
+          'shape-1': ['valid-entry', 'valid-inside', 'valid-exit', 'hub-stop'],
+        },
+      },
+      stopsById: new Map([
+        ['valid-entry', { id: 'valid-entry', code: '101', latitude: 44.39, longitude: -79.698 }],
+        ['valid-inside', { id: 'valid-inside', code: '102', latitude: 44.39, longitude: -79.696 }],
+        ['valid-exit', { id: 'valid-exit', code: '103', latitude: 44.39, longitude: -79.694 }],
+        ['hub-stop', { id: 'hub-stop', code: '1', latitude: 44.39, longitude: -79.689 }],
+      ]),
+    };
+    const detours = {
+      'route-1': {
+        routeId: 'route-1',
+        geometry: {
+          shapeId: 'shape-1',
+          confidence: 'high',
+          segments: [
+            {
+              shapeId: 'shape-1',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.698 },
+                { latitude: 44.39, longitude: -79.694 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.392, longitude: -79.698 },
+                { latitude: 44.392, longitude: -79.694 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.698 },
+              exitPoint: { latitude: 44.39, longitude: -79.694 },
+              confidence: 'high',
+              canShowDetourPath: true,
+              spanMeters: 320,
+            },
+            {
+              shapeId: 'shape-1',
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.690 },
+                { latitude: 44.39, longitude: -79.688 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.391, longitude: -79.690 },
+                { latitude: 44.392, longitude: -79.689 },
+                { latitude: 44.391, longitude: -79.688 },
+              ],
+              likelyDetourPolyline: [
+                { latitude: 44.391, longitude: -79.690 },
+                { latitude: 44.392, longitude: -79.689 },
+                { latitude: 44.391, longitude: -79.688 },
+              ],
+              entryPoint: { latitude: 44.39, longitude: -79.690 },
+              exitPoint: { latitude: 44.39, longitude: -79.688 },
+              confidence: 'high',
+              canShowDetourPath: true,
+              spanMeters: 160,
+            },
+          ],
+        },
+      },
+    };
+
+    enrichDetourMapStopImpacts(detours, shapes, stopImpactData);
+
+    expect(detours['route-1'].geometry.segments).toHaveLength(1);
+    expect(detours['route-1'].geometry.segments[0].skippedStopIds).toEqual([
+      'valid-entry',
+      'valid-inside',
+      'valid-exit',
+    ]);
+    expect(detours['route-1'].geometry.segments[0].skippedStopIds).not.toContain('hub-stop');
+  });
+
   test('uses entry and exit boundary candidates when available', () => {
     const points = [
       makeEvidencePoint({
