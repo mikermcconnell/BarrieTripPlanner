@@ -1,6 +1,6 @@
 # Auto-Detour Validation Matrix
 
-Status: Current as of 2026-05-24
+Status: Current as of 2026-05-25
 
 Use this file to turn detour bugs, live observations, and product decisions into repeatable validation scenarios.
 
@@ -47,6 +47,8 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-014 | Rollout health / flapping | Surface recent failures, flapping, short-lived detections, and false-positive indicators before public launch. | `api-proxy` rollout-health coverage where present | QA section 14 | Needs ongoing live review | Launching with noisy but test-passing behavior |
 | DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
 | DET-016 | Short detour sampling cadence | If the GTFS-RT feed updates about every 30 seconds, the detector should support true half-minute sampling without keeping a Cloud Run request open. | `api-proxy/__tests__/detourOps.test.js`, `api-proxy/__tests__/detourOffsetTasks.test.js`, `api-proxy/__tests__/detourRunLock.test.js`, `api-proxy/__tests__/detourRoutes.test.js` | QA section 13 | Covered | Extra scheduler/task overlap; duplicate feed snapshots; cost from sleeping requests |
+| DET-017 | Unanchored no-stop geometry | Reject rider-facing geometry segments that have no entry stop, no exit stop, no skipped route segment, and explicit empty skipped/affected stop fields. Keep any valid anchored segment in the same route document. | `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Over-filtering older geometry that omitted stop-impact fields instead of explicitly proving none exist |
+| DET-018 | Stale rider visibility | Keep stale backend detour records until normal-route GPS proof clears them, but hide rider UI when confirmed evidence is stale beyond the headway-aware threshold and no route-family vehicle is currently reporting. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered | Hiding a true long-running detour during a long gap if the headway estimate or live vehicle feed is wrong |
 
 ## Recorded issues
 
@@ -107,6 +109,68 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-QA-CHECKLIST.md`
   - this matrix
 - Remaining risk: if a bus is on-route at both sampled points and completes an unsampled off-route movement between them, the detector still cannot prove the detour from GTFS-RT alone. Higher-frequency sampling or a faster GTFS-RT feed is needed for those cases.
+
+
+### DET-017A — unanchored no-stop path shown as a detour segment
+
+- Date/time observed: 2026-05-25 around 9:50-10:08 AM ET
+- Environment: live Firestore capture during auto-detour validation
+- Route(s): `12B`, with similar active-detour risk patterns on routes with no affected/skipped stops
+- What happened: a route document could contain a road-matched detour segment with `entryStopId: null`, `exitStopId: null`, `skippedStopIds: []`, and `affectedStopIds: []`. In the Route 12B review, one valid Hooper segment existed, but a second unanchored Bayfield/Sophia segment had no closed route section or affected stops.
+- What should have happened: the backend should remove the unanchored no-stop segment before publishing rider-facing geometry. If another segment in the same document is valid and anchored, that valid segment should remain visible.
+- Evidence:
+  - activeDetours review: 10 active routes were captured in `logs/detour-review-20260525/active-analysis.json`
+  - activeDetours doc: Route `12B` included two segments; the suspect segment had no entry/exit stops and no stop impacts
+  - screenshot/video: app map showed a short road-matched path that did not identify any closed route segment
+- Initial classification:
+  - geometry
+  - publishing/history
+  - frontend rendering
+- Root cause: the publisher trust gate filtered same-stop non-closures but still accepted segments that explicitly had no anchors and no stop impacts. Road matching can make those unanchored segments look plausible even though they do not describe a detoured-from route section.
+- Fix:
+  - reject segments with no entry stop, no exit stop, and explicit empty skipped/affected stop fields
+  - apply the rejection through the same geometry/publisher filtering path used for same-stop non-closures
+  - keep anchored valid sibling segments when only one segment in a multi-segment route document is invalid
+- Tests added/updated:
+  - `api-proxy/__tests__/detourPublisher.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: active route documents with zero vehicles or stale evidence can still remain visible by design until normal-route GPS traversal proves clearing. That lifecycle question is separate from this geometry-publication fix and should be handled with stale/lifecycle regression coverage, not by hiding valid geometry.
+
+
+### DET-018A — stale zero-current detours stayed rider-visible too long
+
+- Date/time observed: 2026-05-25 around 9:50-10:08 AM ET
+- Environment: live Firestore capture during auto-detour validation
+- Route(s): `7A`, `7B`, `10`, `12A`, `12B`, `100`, and similar stale active records
+- What happened: active backend detour records with `currentVehicleCount: 0` and stale evidence could remain visible to riders as active detours.
+- What should have happened: the backend record should remain until normal-route GPS proof clears it, but the rider UI should hide or suppress stale uncertain records after a headway-aware limit.
+- Evidence:
+  - activeDetours review: captured in `logs/detour-review-20260525/active-analysis.json`
+  - examples included stale `lastEvidenceAt`, zero current detour vehicles, and in some cases zero confirmed vehicle counts
+- Initial classification:
+  - lifecycle / clearing
+  - publishing/history
+  - frontend rendering
+- Root cause: stale monitoring correctly avoided backend deletion without GPS clear proof, but there was no separate rider-visibility field to distinguish “active for backend review” from “safe to show riders.”
+- Fix:
+  - added headway-aware rider visibility evaluation using `max(45min, 2 × headway + 10min)`, capped at 3 hours
+  - suppresses rider visibility when no route-family vehicle is currently reporting and evidence is older than the threshold
+  - suppresses zero-confirmed-vehicle active records from rider UI
+  - publishes `riderVisible`, `riderVisibilityReason`, `staleForReview`, and stale/headway metadata
+  - client filters detours with `riderVisible: false`
+- Tests added/updated:
+  - `api-proxy/__tests__/staleClear.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `src/__tests__/detourVisibility.test.js`
+  - `src/__tests__/detourService.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: if schedule headway data is wrong, the app may hide a real long-running detour too early. Operations review should watch `staleForReview`, `staleAgeMs`, `staleThresholdMs`, and `scheduleSource` during launch validation.
 
 ## Status definitions
 

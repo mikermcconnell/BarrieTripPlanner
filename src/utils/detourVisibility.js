@@ -8,6 +8,7 @@ const ONGOING_DETOUR_STATES = new Set(['active', 'clear-pending']);
 
 export function isRiderVisibleDetour(detour) {
   if (!detour || detour.state === 'cleared') return false;
+  if (detour.riderVisible === false) return false;
   const confidence = normalizeConfidence(detour.confidence);
   return RIDER_VISIBLE_CONFIDENCES.has(confidence);
 }

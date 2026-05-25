@@ -1,0 +1,678 @@
+{
+  "checkedAt": "2026-05-25T14:08:11.843Z",
+  "active": [
+    {
+      "routeId": "7A",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-25T10:52:20Z",
+      "detAgeMin": 196,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T10:52:20Z",
+      "lastSeenAgeMin": 196,
+      "lastEvidenceAt": 1779706340000,
+      "lastEvidenceAgeMin": 196,
+      "currentVehicleCount": 0,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 3,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 0,
+      "topInferredPoints": 4,
+      "roadNames": [],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "lastSeen>3h",
+        "lastEvidence>3h",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "canShow-without-likely-path"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 0,
+          "roadNames": [],
+          "likelyBounds": null,
+          "inferredBounds": {
+            "minLat": 44.39143797378853,
+            "maxLat": 44.39320755004883,
+            "minLon": -79.69493103027344,
+            "maxLon": -79.69343665615864
+          },
+          "debugFlags": {
+            "untrustedPathEndpointMismatchMeters": 230,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "hasEntryBoundaryCandidate": true,
+            "hasExitBoundaryCandidate": true,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "exitAnchorSource": "boundary-candidate"
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "7B",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-25T10:10:16Z",
+      "detAgeMin": 238,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T10:10:16Z",
+      "lastSeenAgeMin": 238,
+      "lastEvidenceAt": 1779703816000,
+      "lastEvidenceAgeMin": 238,
+      "currentVehicleCount": 0,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 3,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 0,
+      "topInferredPoints": 4,
+      "roadNames": [],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "lastSeen>3h",
+        "lastEvidence>3h",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "canShow-without-likely-path"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 0,
+          "roadNames": [],
+          "likelyBounds": null,
+          "inferredBounds": {
+            "minLat": 44.3914680480957,
+            "maxLat": 44.39371074058925,
+            "minLon": -79.6944351196289,
+            "maxLon": -79.69356536865234
+          },
+          "debugFlags": {
+            "hasExitBoundaryCandidate": true,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "exitAnchorSource": "boundary-candidate",
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "untrustedPathEndpointMismatchMeters": 253
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "8A",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-25T10:51:00Z",
+      "detAgeMin": 197,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": null,
+      "lastSeenAgeMin": null,
+      "lastEvidenceAt": 1779709841000,
+      "lastEvidenceAgeMin": 138,
+      "currentVehicleCount": 1,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 10,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 69,
+      "topInferredPoints": 4,
+      "roadNames": [
+        "Simcoe Street"
+      ],
+      "segmentCount": 1,
+      "issues": [
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 69,
+          "roadNames": [
+            "Simcoe Street"
+          ],
+          "likelyBounds": {
+            "minLat": 44.386888,
+            "maxLat": 44.389031,
+            "minLon": -79.690945,
+            "maxLon": -79.685396
+          },
+          "inferredBounds": {
+            "minLat": 44.3868655602466,
+            "maxLat": 44.389217376708984,
+            "minLon": -79.69092123118925,
+            "maxLon": -79.68540954589844
+          },
+          "debugFlags": {
+            "exitAnchorSource": "boundary-candidate",
+            "hasExitBoundaryCandidate": true,
+            "entryAnchorSource": "boundary-candidate",
+            "rawPathRejectedByEndpointMismatch": false,
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "single-vehicle-trace",
+            "untrustedPathEndpointMismatchMeters": 481
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "8B",
+      "state": "active",
+      "confidence": "medium",
+      "detectedAt": "2026-05-25T01:02:07Z",
+      "detAgeMin": 786,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": null,
+      "lastSeenAgeMin": null,
+      "lastEvidenceAt": 1779708859000,
+      "lastEvidenceAgeMin": 154,
+      "currentVehicleCount": 1,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 4,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 0,
+      "topInferredPoints": 3,
+      "roadNames": [],
+      "segmentCount": 1,
+      "issues": [
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "canShow-without-likely-path"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": false,
+          "inferredPoints": 3,
+          "likelyPoints": 0,
+          "roadNames": [],
+          "likelyBounds": null,
+          "inferredBounds": {
+            "minLat": 44.38862609863281,
+            "maxLat": 44.390533919034674,
+            "minLon": -79.68656158447266,
+            "maxLon": -79.68538505989186
+          },
+          "debugFlags": {
+            "hasExitBoundaryCandidate": false,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "exitAnchorSource": "projected-evidence-fallback",
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "missing-boundary-anchor",
+            "untrustedPathEndpointMismatchMeters": 209
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "10",
+      "state": "active",
+      "confidence": "medium",
+      "detectedAt": "2026-05-24T20:00:06Z",
+      "detAgeMin": 1088,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T12:05:55Z",
+      "lastSeenAgeMin": 122,
+      "lastEvidenceAt": 1779710755000,
+      "lastEvidenceAgeMin": 122,
+      "currentVehicleCount": 0,
+      "vehicleCount": 0,
+      "uniqueVehicleCount": 0,
+      "evidencePointCount": 2,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 0,
+      "topInferredPoints": 4,
+      "roadNames": [],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "canShow-without-likely-path",
+        "zero-evidence-vehicle-count",
+        "very-low-evidence-points"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 0,
+          "roadNames": [],
+          "likelyBounds": null,
+          "inferredBounds": {
+            "minLat": 44.38939666748047,
+            "maxLat": 44.3905243734287,
+            "minLon": -79.6856520888293,
+            "maxLon": -79.68548583984375
+          },
+          "debugFlags": {
+            "untrustedPathEndpointMismatchMeters": 126,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "hasEntryBoundaryCandidate": true,
+            "exitAnchorSource": "boundary-candidate",
+            "hasExitBoundaryCandidate": true,
+            "entryAnchorSource": "boundary-candidate",
+            "rawPathRejectedByEndpointMismatch": false
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "11",
+      "state": "active",
+      "confidence": "medium",
+      "detectedAt": "2026-05-25T01:34:59Z",
+      "detAgeMin": 753,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T13:31:42Z",
+      "lastSeenAgeMin": 36,
+      "lastEvidenceAt": 1779715902000,
+      "lastEvidenceAgeMin": 36,
+      "currentVehicleCount": 0,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 2,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 7,
+      "topInferredPoints": 4,
+      "roadNames": [
+        "Bayfield Street",
+        "Chase McEachern Way"
+      ],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "very-low-evidence-points"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 7,
+          "roadNames": [
+            "Bayfield Street",
+            "Chase McEachern Way"
+          ],
+          "likelyBounds": {
+            "minLat": 44.387712,
+            "maxLat": 44.388219,
+            "minLon": -79.689991,
+            "maxLon": -79.689389
+          },
+          "inferredBounds": {
+            "minLat": 44.38742757323374,
+            "maxLat": 44.38821792602539,
+            "minLon": -79.69004095891214,
+            "maxLon": -79.68785858154297
+          },
+          "debugFlags": {
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "hasExitBoundaryCandidate": true,
+            "exitAnchorSource": "boundary-candidate",
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "untrustedPathEndpointMismatchMeters": 194
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "12A",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-23T21:52:30.694Z",
+      "detAgeMin": 2416,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-24T00:23:02.342Z",
+      "lastSeenAgeMin": 2265,
+      "lastEvidenceAt": 1779594511157,
+      "lastEvidenceAgeMin": 2060,
+      "currentVehicleCount": 0,
+      "vehicleCount": 0,
+      "uniqueVehicleCount": 0,
+      "evidencePointCount": 6,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 15,
+      "topInferredPoints": 4,
+      "roadNames": [
+        "Hooper Road"
+      ],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "lastSeen>3h",
+        "lastEvidence>3h",
+        "zero-evidence-vehicle-count"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": "932",
+          "exitStopId": "756",
+          "skippedStops": 3,
+          "skippedStopIds": [
+            "932",
+            "933",
+            "756"
+          ],
+          "affectedStops": 3,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 15,
+          "roadNames": [
+            "Hooper Road"
+          ],
+          "likelyBounds": {
+            "minLat": 44.333066,
+            "maxLat": 44.336631,
+            "minLon": -79.674389,
+            "maxLon": -79.669395
+          },
+          "inferredBounds": {
+            "minLat": 44.33304893690145,
+            "maxLat": 44.33658987158103,
+            "minLon": -79.67400213949347,
+            "maxLon": -79.66938019260107
+          },
+          "debugFlags": {
+            "untrustedPathEndpointMismatchMeters": 283,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "hasEntryBoundaryCandidate": true,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "hasExitBoundaryCandidate": true,
+            "exitAnchorSource": "boundary-candidate"
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "12B",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-14T14:02:45.791Z",
+      "detAgeMin": 15845,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-23T21:05:01.271Z",
+      "lastSeenAgeMin": 2463,
+      "lastEvidenceAt": 1779703998000,
+      "lastEvidenceAgeMin": 235,
+      "currentVehicleCount": 0,
+      "vehicleCount": 5,
+      "uniqueVehicleCount": 5,
+      "evidencePointCount": 9,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 16,
+      "topInferredPoints": 4,
+      "roadNames": [
+        "Hooper Road"
+      ],
+      "segmentCount": 2,
+      "issues": [
+        "no-current-vehicles",
+        "lastSeen>3h",
+        "lastEvidence>3h",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": "617",
+          "exitStopId": "931",
+          "skippedStops": 3,
+          "skippedStopIds": [
+            "617",
+            "618",
+            "931"
+          ],
+          "affectedStops": 3,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 16,
+          "roadNames": [
+            "Hooper Road"
+          ],
+          "likelyBounds": {
+            "minLat": 44.332986,
+            "maxLat": 44.336659,
+            "minLon": -79.674389,
+            "maxLon": -79.669248
+          },
+          "inferredBounds": {
+            "minLat": 44.333039008585,
+            "maxLat": 44.33713029692305,
+            "minLon": -79.67417907714844,
+            "maxLon": -79.66933964877899
+          },
+          "debugFlags": {
+            "entryAnchorSource": "boundary-candidate",
+            "rawPathRejectedByEndpointMismatch": false,
+            "hasExitBoundaryCandidate": true,
+            "exitAnchorSource": "boundary-candidate",
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "untrustedPathEndpointMismatchMeters": 390
+          }
+        },
+        {
+          "index": 1,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 7,
+          "roadNames": [
+            "Bayfield Street",
+            "Sophia Street West"
+          ],
+          "likelyBounds": {
+            "minLat": 44.391788,
+            "maxLat": 44.392791,
+            "minLon": -79.693163,
+            "maxLon": -79.692481
+          },
+          "inferredBounds": {
+            "minLat": 44.391571044921875,
+            "maxLat": 44.392978601382225,
+            "minLon": -79.69347381591797,
+            "maxLon": -79.69339997158372
+          },
+          "debugFlags": {
+            "hasEntryBoundaryCandidate": true,
+            "hasExitBoundaryCandidate": true,
+            "entryAnchorSource": "boundary-candidate",
+            "rawPathRejectedByEndpointMismatch": false,
+            "exitAnchorSource": "boundary-candidate",
+            "untrustedPathEndpointMismatchMeters": 157,
+            "pathConfidenceReason": "multi-vehicle-corroborated"
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "100",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-24T21:51:44Z",
+      "detAgeMin": 976,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T12:59:21Z",
+      "lastSeenAgeMin": 69,
+      "lastEvidenceAt": 1779713961000,
+      "lastEvidenceAgeMin": 69,
+      "currentVehicleCount": 0,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 4,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 0,
+      "topInferredPoints": 4,
+      "roadNames": [],
+      "segmentCount": 1,
+      "issues": [
+        "no-current-vehicles",
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops",
+        "canShow-without-likely-path"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 0,
+          "roadNames": [],
+          "likelyBounds": null,
+          "inferredBounds": {
+            "minLat": 44.390529280967456,
+            "maxLat": 44.391544342041016,
+            "minLon": -79.69024658203125,
+            "maxLon": -79.68413584041497
+          },
+          "debugFlags": {
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "untrustedPathEndpointMismatchMeters": 498,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "hasExitBoundaryCandidate": true,
+            "exitAnchorSource": "boundary-candidate",
+            "hasEntryBoundaryCandidate": true
+          }
+        }
+      ]
+    },
+    {
+      "routeId": "101",
+      "state": "active",
+      "confidence": "high",
+      "detectedAt": "2026-05-25T00:54:55Z",
+      "detAgeMin": 793,
+      "updatedAt": "2026-05-25T14:08:03.559Z",
+      "updateAgeMin": 0,
+      "lastSeenAt": "2026-05-25T12:16:40Z",
+      "lastSeenAgeMin": 112,
+      "lastEvidenceAt": 1779711400000,
+      "lastEvidenceAgeMin": 112,
+      "currentVehicleCount": 1,
+      "vehicleCount": 2,
+      "uniqueVehicleCount": 2,
+      "evidencePointCount": 5,
+      "canShowDetourPath": true,
+      "topLikelyPoints": 57,
+      "topInferredPoints": 4,
+      "roadNames": [
+        "Simcoe Street"
+      ],
+      "segmentCount": 1,
+      "issues": [
+        "segment-missing-entry-exit-stops",
+        "segment-missing-skipped-stops"
+      ],
+      "segments": [
+        {
+          "index": 0,
+          "entryStopId": null,
+          "exitStopId": null,
+          "skippedStops": 0,
+          "skippedStopIds": [],
+          "affectedStops": 0,
+          "canShowDetourPath": true,
+          "inferredPoints": 4,
+          "likelyPoints": 57,
+          "roadNames": [
+            "Simcoe Street"
+          ],
+          "likelyBounds": {
+            "minLat": 44.38777,
+            "maxLat": 44.389031,
+            "minLon": -79.689197,
+            "maxLon": -79.685396
+          },
+          "inferredBounds": {
+            "minLat": 44.38776090774835,
+            "maxLat": 44.389373779296875,
+            "minLon": -79.68918908382656,
+            "maxLon": -79.68544006347656
+          },
+          "debugFlags": {
+            "hasExitBoundaryCandidate": true,
+            "rawPathRejectedByEndpointMismatch": false,
+            "entryAnchorSource": "boundary-candidate",
+            "exitAnchorSource": "boundary-candidate",
+            "hasEntryBoundaryCandidate": true,
+            "pathConfidenceReason": "multi-vehicle-corroborated",
+            "untrustedPathEndpointMismatchMeters": 348
+          }
+        }
+      ]
+    }
+  ]
+}

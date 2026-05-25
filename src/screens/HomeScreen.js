@@ -112,6 +112,7 @@ import {
 import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
+import { focusMapToDetour } from '../utils/detourViewport';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 import { trackEvent } from '../services/analyticsService';
 import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
@@ -1941,6 +1942,27 @@ const HomeScreen = ({ route }) => {
   );
   const shouldShowDetourStatusRow = !isTripPlanningMode && statusDetourRouteIds.size > 0;
 
+  const focusMapOnDetour = useCallback((routeId, detourEvent = null) => {
+    if (!routeId) return;
+
+    focusMapToDetour({
+      activeDetours,
+      routeId,
+      routeIds: detourEvent?.routeIds,
+      segmentIndex: Number.isInteger(detourEvent?.primarySegmentIndex)
+        ? detourEvent.primarySegmentIndex
+        : null,
+      mapRef: compatMapRef,
+      edgePadding: {
+        top: 180,
+        right: 60,
+        bottom: 340 + floatingBottomOffset,
+        left: 60,
+      },
+      animated: true,
+    });
+  }, [activeDetours, compatMapRef, floatingBottomOffset]);
+
   const handleDetourOverlayPress = useCallback((routeId, _segment = null, segmentIndex = null, overlay = null) => {
     if (!routeId) return;
     const isMergedFamilyOverlay =
@@ -1952,6 +1974,9 @@ const HomeScreen = ({ route }) => {
       : null;
     const sharedRouteLabel = overlay?.routeLineLabel || sharedRouteIds?.join('/');
     const sharedStatusLabel = overlay?.state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
+    const overlayRouteIds = Array.isArray(overlay?.routeIds) && overlay.routeIds.length > 0
+      ? overlay.routeIds
+      : sharedRouteIds;
 
     setFocusedDetourRouteId(routeId);
     setDetourSheetRouteId(routeId);
@@ -1968,7 +1993,11 @@ const HomeScreen = ({ route }) => {
       }
       : null);
     handleMapViewModeChange('detour');
-  }, [handleMapViewModeChange]);
+    focusMapOnDetour(routeId, {
+      routeIds: overlayRouteIds,
+      primarySegmentIndex: Number.isInteger(segmentIndex) ? segmentIndex : null,
+    });
+  }, [focusMapOnDetour, handleMapViewModeChange]);
 
   const handleDetourStopPress = useCallback((stop, context = {}) => {
     if (!stop) return;
@@ -2647,6 +2676,7 @@ const HomeScreen = ({ route }) => {
                   setDetourSheetEvent(detourEvent);
                   setDetourSheetSegmentStopDetailsOverride(null);
                   handleMapViewModeChange('detour');
+                  focusMapOnDetour(routeId, detourEvent);
                 }}
                 routes={routes}
                 inline

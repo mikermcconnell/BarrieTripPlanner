@@ -43,6 +43,10 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
   - [ ] `vehicleCount`
   - [ ] `uniqueVehicleCount`
   - [ ] `currentVehicleCount`
+  - [ ] `riderVisible`
+  - [ ] `riderVisibilityReason`
+  - [ ] `staleForReview`
+  - [ ] `staleAgeMs` / `staleThresholdMs`
   - [ ] `evidencePointCount`
   - [ ] `roadMatchSource`
   - [ ] `likelyDetourPolyline` point count
@@ -87,6 +91,7 @@ For each active detour:
 - [ ] The likely detour path does not snap back onto the closed route segment.
 - [ ] Weird spurs, loops, or unnecessary deviations are not shown.
 - [ ] Same-stop turnarounds are not shown as detours when no closed route segment is identified.
+- [ ] Paths with no entry stop, no exit stop, no skipped route segment, and no skipped/affected stops are not shown as detours.
 - [ ] Entry and exit points make sense.
 - [ ] Multiple independent detour sections are separate, not merged into one giant section.
 - [ ] If road matching fails, raw off-road GPS lines are not shown to riders.
@@ -163,7 +168,8 @@ For stale detour protection:
   - [ ] `staleThresholdMs`
   - [ ] `scheduledHeadwayMs`
   - [ ] `scheduleSource`
-- [ ] The app continues to show the stale detour until a `DETOUR_CLEARED` flow deletes the active doc.
+- [ ] The backend keeps the stale active doc until a `DETOUR_CLEARED` flow deletes it.
+- [ ] If `riderVisible=false`, the app hides the detour from the main rider map, alert strip, and detours tab while retaining the backend record for review.
 - [ ] The detour is not recreated after GPS clear unless fresh off-route evidence returns.
 
 ## 12. Low-Frequency / Sunday Service Check
@@ -177,6 +183,7 @@ Use this to avoid false clears on hourly service:
 - [ ] For 60-minute service, confirm stale monitoring warns at about 130 minutes.
 - [ ] Confirm the system does not clear just because no bus reached the detour area yet.
 - [ ] Confirm no-scheduled-service periods do not clear from staleness alone.
+- [ ] Confirm no-scheduled-service periods do not hide otherwise valid detours solely because no bus is scheduled.
 - [ ] Confirm first bus off-route creates backend candidate evidence but no rider UI.
 - [ ] Confirm second bus 30-60 minutes later can confirm the same candidate.
 - [ ] Confirm a one-point short deviation candidate survives between low-frequency trips.

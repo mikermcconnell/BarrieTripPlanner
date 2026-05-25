@@ -110,6 +110,28 @@ describe('detourService normalization helpers', () => {
 });
 
 describe('mapActiveDetourDoc', () => {
+
+  test('maps rider visibility fields', () => {
+    const mapped = mapActiveDetourDoc('12A', {
+      state: 'active',
+      confidence: 'high',
+      riderVisible: false,
+      riderVisibilityReason: 'stale-evidence-gps-clear-required',
+      staleForReview: true,
+      staleAgeMs: 8400000,
+      staleThresholdMs: 7800000,
+      scheduledHeadwayMs: 3600000,
+      scheduleSource: 'exact-route',
+    });
+
+    expect(mapped.riderVisible).toBe(false);
+    expect(mapped.riderVisibilityReason).toBe('stale-evidence-gps-clear-required');
+    expect(mapped.staleForReview).toBe(true);
+    expect(mapped.staleAgeMs).toBe(8400000);
+    expect(mapped.staleThresholdMs).toBe(7800000);
+    expect(mapped.scheduledHeadwayMs).toBe(3600000);
+    expect(mapped.scheduleSource).toBe('exact-route');
+  });
   test('normalizes top-level and segment geometry from mixed field names', () => {
     const mapped = mapActiveDetourDoc('8A', {
       shapeId: 'shape-8a',

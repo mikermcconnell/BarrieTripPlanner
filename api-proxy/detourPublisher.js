@@ -1,6 +1,6 @@
 const { getDb } = require('./firebaseAdmin');
 const { DETOUR_PATH_LABEL, matchDetourGeometry } = require('./detourRoadMatcher');
-const { shouldAutoClearStaleDetour } = require('./detour/staleClear');
+const { shouldAutoClearStaleDetour, evaluateStaleRiderVisibility } = require('./detour/staleClear');
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
 
@@ -661,6 +661,7 @@ function enforceGeometryTrustGate(geometry) {
       clearUntrustedLikelyDetourPath(next);
     }
   } else if (originalSegmentCount > 0 && segments.length === 0) {
+    next.invalidGeometrySuppressed = true;
     next.canShowDetourPath = false;
     next.skippedSegmentPolyline = null;
     next.inferredDetourPolyline = null;
@@ -762,6 +763,20 @@ function makeSnapshot(doc, previousSnapshot = null) {
     handoffSourceRouteId: hasOwn(doc, 'handoffSourceRouteId')
       ? doc.handoffSourceRouteId || null
       : previousSnapshot?.handoffSourceRouteId || null,
+    riderVisible: hasOwn(doc, 'riderVisible')
+      ? doc.riderVisible !== false
+      : previousSnapshot?.riderVisible !== false,
+    riderVisibilityReason: hasOwn(doc, 'riderVisibilityReason')
+      ? doc.riderVisibilityReason || null
+      : previousSnapshot?.riderVisibilityReason || null,
+    staleForReview: hasOwn(doc, 'staleForReview')
+      ? Boolean(doc.staleForReview)
+      : Boolean(previousSnapshot?.staleForReview),
+    staleAgeMs: hasOwn(doc, 'staleAgeMs') ? doc.staleAgeMs ?? null : previousSnapshot?.staleAgeMs ?? null,
+    staleThresholdMs: hasOwn(doc, 'staleThresholdMs') ? doc.staleThresholdMs ?? null : previousSnapshot?.staleThresholdMs ?? null,
+    scheduledHeadwayMs: hasOwn(doc, 'scheduledHeadwayMs') ? doc.scheduledHeadwayMs ?? null : previousSnapshot?.scheduledHeadwayMs ?? null,
+    scheduleSource: hasOwn(doc, 'scheduleSource') ? doc.scheduleSource || null : previousSnapshot?.scheduleSource || null,
+    serviceDate: hasOwn(doc, 'serviceDate') ? doc.serviceDate || null : previousSnapshot?.serviceDate || null,
     shapeId,
     entryPoint,
     exitPoint,
@@ -809,9 +824,27 @@ function hasRenderableGeometry(geo) {
   );
 }
 
+function shouldClearSuppressedGeometry(geo, previousSnapshot = null) {
+  return (
+    geo &&
+    typeof geo === 'object' &&
+    geo.canShowDetourPath === false &&
+    !hasRenderableGeometry(geo) &&
+    (
+      geo.invalidGeometrySuppressed === true ||
+      hasRenderableGeometry(previousSnapshot) ||
+      previousSnapshot?.canShowDetourPath === true ||
+      hasNonClosureSelfLoopSegments(previousSnapshot?.segments)
+    )
+  );
+}
+
 function applyGeometryMetadata(doc, geo) {
   if (!geo || typeof geo !== 'object') return;
 
+  if (hasOwn(geo, 'shapeId')) {
+    doc.shapeId = geo.shapeId || null;
+  }
   if (hasOwn(geo, 'canShowDetourPath')) {
     doc.canShowDetourPath = geo.canShowDetourPath ?? null;
   }
@@ -947,6 +980,12 @@ function buildUpdatedEvent(routeId, previous, current, now) {
   if ((previous.clearReason || null) !== (current.clearReason || null)) {
     changedFields.push('clearReason');
   }
+  if ((previous.riderVisible !== false) !== (current.riderVisible !== false)) {
+    changedFields.push('riderVisible');
+  }
+  if ((previous.riderVisibilityReason || null) !== (current.riderVisibilityReason || null)) {
+    changedFields.push('riderVisibilityReason');
+  }
 
   if (changedFields.length === 0) return null;
   const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? previous.detectedAtMs ?? now;
@@ -965,6 +1004,14 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
     clearReason: current.clearReason || null,
     changedFields,
+    riderVisible: current.riderVisible !== false,
+    riderVisibilityReason: current.riderVisibilityReason || null,
+    staleForReview: Boolean(current.staleForReview),
+    staleAgeMs: current.staleAgeMs ?? null,
+    staleThresholdMs: current.staleThresholdMs ?? null,
+    scheduledHeadwayMs: current.scheduledHeadwayMs ?? null,
+    scheduleSource: current.scheduleSource || null,
+    serviceDate: current.serviceDate || null,
     source: 'detour-worker-v2',
   };
 }
@@ -1035,6 +1082,14 @@ function rememberPublishedDetour(routeId, data = {}) {
     state: data.state || 'active',
     clearReason: data.clearReason || null,
     handoffSourceRouteId: data.handoffSourceRouteId || null,
+    riderVisible: data.riderVisible !== false,
+    riderVisibilityReason: data.riderVisibilityReason || null,
+    staleForReview: Boolean(data.staleForReview),
+    staleAgeMs: data.staleAgeMs ?? null,
+    staleThresholdMs: data.staleThresholdMs ?? null,
+    scheduledHeadwayMs: data.scheduledHeadwayMs ?? null,
+    scheduleSource: data.scheduleSource || null,
+    serviceDate: data.serviceDate || null,
     confidence: data.confidence || null,
     roadMatchConfidence: data.roadMatchConfidence || null,
     roadMatchRawConfidence: data.roadMatchRawConfidence ?? null,
@@ -1300,6 +1355,23 @@ async function publishDetours(activeDetours, options = {}) {
       handoffSourceRouteId: detour.handoffSourceRouteId || null,
     };
 
+    const riderVisibility = evaluateStaleRiderVisibility({
+      routeId,
+      detour,
+      previousSnapshot,
+      vehicles,
+      scheduleIndex,
+      now,
+    });
+    doc.riderVisible = riderVisibility.riderVisible !== false;
+    doc.riderVisibilityReason = riderVisibility.reason || null;
+    doc.staleForReview = Boolean(riderVisibility.staleForReview);
+    doc.staleAgeMs = riderVisibility.staleAgeMs ?? null;
+    doc.staleThresholdMs = riderVisibility.thresholdMs ?? null;
+    doc.scheduledHeadwayMs = riderVisibility.headwayMs ?? null;
+    doc.scheduleSource = riderVisibility.scheduleSource || null;
+    doc.serviceDate = riderVisibility.serviceDate || null;
+
     if (shouldUpdateLastSeen) {
       doc.lastSeenAt = toDate(detour.lastSeenAt, now);
     }
@@ -1318,8 +1390,10 @@ async function publishDetours(activeDetours, options = {}) {
     }
     let detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
     applyGeometryMetadata(doc, geo);
-    let writeGeo = hasRenderableGeometry(geo) &&
-      (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now));
+    let writeGeo = shouldClearSuppressedGeometry(geo, previousSnapshot) || (
+      hasRenderableGeometry(geo) &&
+      (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
+    );
     if (
       geo?.preservedTrustedDetourPath === true &&
       previousSnapshot &&
@@ -1330,13 +1404,14 @@ async function publishDetours(activeDetours, options = {}) {
     }
     const knownGeometry = lastKnownGeometry.get(routeId);
     const shouldBackfillRoadMatch = !writeGeo &&
+      hasRenderableGeometry(geo) &&
       shouldAttemptRoadMatchBackfill(geo, previousSnapshot, knownGeometry);
     const roadMatchBackfillAttemptedSignatures = shouldBackfillRoadMatch
       ? getRoadMatchBackfillSignatures(geo)
       : [];
     const roadMatchBackfillAttemptedSignature = roadMatchBackfillAttemptedSignatures[0] || null;
 
-    if ((writeGeo || shouldBackfillRoadMatch) && geo) {
+    if (((writeGeo && hasRenderableGeometry(geo)) || shouldBackfillRoadMatch) && geo) {
       try {
         geo = await matchDetourGeometry(geo);
         detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
@@ -1348,8 +1423,10 @@ async function publishDetours(activeDetours, options = {}) {
         geo = withDetourEventIds(routeId, geo);
       }
       detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
-      writeGeo = hasRenderableGeometry(geo) &&
-        (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now));
+      writeGeo = shouldClearSuppressedGeometry(geo, previousSnapshot) || (
+        hasRenderableGeometry(geo) &&
+        (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
+      );
       if (
         geo?.preservedTrustedDetourPath === true &&
         previousSnapshot &&
@@ -1359,6 +1436,13 @@ async function publishDetours(activeDetours, options = {}) {
         writeGeo = false;
       }
     }
+
+    if (shouldClearSuppressedGeometry(geo, previousSnapshot)) {
+      doc.riderVisible = false;
+      doc.riderVisibilityReason = 'suppressed-invalid-geometry';
+      doc.staleForReview = true;
+    }
+
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;
       doc.segments = geo.segments || [];

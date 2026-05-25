@@ -61,6 +61,116 @@ function getCurrentVehicleCount(detour) {
   return null;
 }
 
+function getConfirmedVehicleCount(detour, previousSnapshot = null) {
+  const sources = [detour, previousSnapshot].filter(Boolean);
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    if (Object.prototype.hasOwnProperty.call(source, 'uniqueVehicleCount')) {
+      const parsed = Number.parseInt(String(source.uniqueVehicleCount), 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(source, 'vehicleCount')) {
+      const parsed = Number.parseInt(String(source.vehicleCount), 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    }
+  }
+  return null;
+}
+
+function evaluateStaleRiderVisibility({
+  routeId,
+  detour,
+  previousSnapshot = null,
+  vehicles = [],
+  scheduleIndex = null,
+  now = Date.now(),
+} = {}) {
+  const currentVehicleCount = getCurrentVehicleCount(detour) ?? getCurrentVehicleCount(previousSnapshot) ?? 0;
+  if (currentVehicleCount > 0) {
+    return {
+      riderVisible: true,
+      staleForReview: false,
+      reason: 'current-detour-vehicle',
+      currentVehicleCount,
+    };
+  }
+
+  const confirmedVehicleCount = getConfirmedVehicleCount(detour, previousSnapshot);
+  const hasRecentRouteFamilyVehicle = routeFamilyHasRecentVehicle(routeId, vehicles);
+  if (confirmedVehicleCount === 0 && !hasRecentRouteFamilyVehicle) {
+    return {
+      riderVisible: false,
+      staleForReview: true,
+      reason: 'zero-confirmed-vehicle-count',
+      currentVehicleCount,
+      confirmedVehicleCount,
+    };
+  }
+
+  const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
+  if (evidenceMs == null) {
+    return {
+      riderVisible: true,
+      staleForReview: false,
+      reason: 'missing-evidence-time',
+      currentVehicleCount,
+      confirmedVehicleCount,
+    };
+  }
+
+  const threshold = computeStaleThresholdMs(routeId, scheduleIndex, now);
+  if (threshold.thresholdMs == null) {
+    return {
+      riderVisible: true,
+      staleForReview: false,
+      reason: 'no-scheduled-service',
+      currentVehicleCount,
+      confirmedVehicleCount,
+      lastEvidenceAt: evidenceMs,
+      ...threshold,
+    };
+  }
+
+  const staleAgeMs = now - evidenceMs;
+  if (hasRecentRouteFamilyVehicle) {
+    const isStale = Number.isFinite(staleAgeMs) && staleAgeMs >= threshold.thresholdMs;
+    return {
+      riderVisible: true,
+      staleForReview: isStale,
+      reason: 'current-route-family-vehicle',
+      currentVehicleCount,
+      confirmedVehicleCount,
+      staleAgeMs,
+      lastEvidenceAt: evidenceMs,
+      ...threshold,
+    };
+  }
+
+  if (!Number.isFinite(staleAgeMs) || staleAgeMs < threshold.thresholdMs) {
+    return {
+      riderVisible: true,
+      staleForReview: false,
+      reason: 'fresh-enough',
+      currentVehicleCount,
+      confirmedVehicleCount,
+      staleAgeMs,
+      lastEvidenceAt: evidenceMs,
+      ...threshold,
+    };
+  }
+
+  return {
+    riderVisible: false,
+    staleForReview: true,
+    reason: 'stale-evidence-gps-clear-required',
+    currentVehicleCount,
+    confirmedVehicleCount,
+    staleAgeMs,
+    lastEvidenceAt: evidenceMs,
+    ...threshold,
+  };
+}
+
 function hasUsablePolyline(value) {
   return Array.isArray(value) && value.length >= 2;
 }
@@ -234,6 +344,8 @@ module.exports = {
   routeFamilyHasRecentVehicle,
   getLatestEvidenceMs,
   getCurrentVehicleCount,
+  getConfirmedVehicleCount,
+  evaluateStaleRiderVisibility,
   isLowConfidenceValidationOnlyDetour,
   constants: {
     MIN_STALE_MS,

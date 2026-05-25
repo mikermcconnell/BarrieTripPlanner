@@ -269,9 +269,8 @@ describe('detector → publisher: full pipeline', () => {
     expect(historyWrites[0].data.eventType).toBe('DETOUR_DETECTED');
     expect(historyWrites[0].data.routeId).toBe('route-1');
     expect(historyWrites[0].data.source).toBe('detour-worker-v2');
-    expect(historyWrites[0].data.entryPoint).toBeDefined();
-    expect(historyWrites[0].data.exitPoint).toBeDefined();
     expect(historyWrites[0].data.shapeId).toBeDefined();
+    expect(historyWrites[0].data.evidencePointCount).toBeGreaterThan(0);
   });
 
   test('geometry fields written to Firestore when evidence is sufficient', async () => {
@@ -287,12 +286,13 @@ describe('detector → publisher: full pipeline', () => {
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     expect(setOps).toHaveLength(1);
     const doc = setOps[0].data;
-    // Geometry fields present on first write (isNew=true always writes geometry)
+    // Geometry metadata is present, but non-closure paths are not written as rider-facing geometry.
     expect(doc).toHaveProperty('shapeId');
     expect(doc).toHaveProperty('confidence');
     expect(doc).toHaveProperty('evidencePointCount');
-    expect(doc).toHaveProperty('skippedSegmentPolyline');
-    expect(doc).toHaveProperty('inferredDetourPolyline');
+    expect(doc.canShowDetourPath).toBe(false);
+    expect(doc.skippedSegmentPolyline).toBeUndefined();
+    expect(doc.inferredDetourPolyline).toBeUndefined();
   });
 
   test('multi-vehicle detour reports correct vehicleCount in Firestore', async () => {
@@ -538,10 +538,11 @@ describe('geometry write throttling across pipeline', () => {
     for (let i = 0; i < 6; i++) processVehicles([offVehicle], shapes, routeShapeMapping);
     let activeDetours = processVehicles([offVehicle], shapes, routeShapeMapping);
 
-    // First publish: isNew=true, geometry always written
+    // First publish writes metadata but not suppressed non-closure geometry.
     await publishDetours(activeDetours);
     const firstSet = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
-    expect(firstSet[0].data).toHaveProperty('skippedSegmentPolyline');
+    expect(firstSet[0].data.evidencePointCount).toBeGreaterThan(0);
+    expect(firstSet[0].data.skippedSegmentPolyline).toBeUndefined();
 
     // Second tick within throttle window
     mockDb._writes.length = 0;
@@ -572,7 +573,8 @@ describe('geometry write throttling across pipeline', () => {
 
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     expect(setOps.length).toBeGreaterThan(0);
-    expect(setOps[0].data).toHaveProperty('skippedSegmentPolyline');
+    expect(setOps[0].data.evidencePointCount).toBeGreaterThan(0);
+    expect(setOps[0].data.skippedSegmentPolyline).toBeUndefined();
   });
 
   test('publisher hydration does not wipe previously stored geometry on restart', async () => {
@@ -644,7 +646,7 @@ describe('geometry write throttling across pipeline', () => {
 
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     expect(setOps).toHaveLength(1);
-    expect(setOps[0].data.shapeId).toBeUndefined();
+    expect(setOps[0].data.shapeId).toBe('shape-1');
     expect(setOps[0].data.segments).toBeUndefined();
     expect(setOps[0].data.skippedSegmentPolyline).toBeUndefined();
     expect(setOps[0].data.inferredDetourPolyline).toBeUndefined();

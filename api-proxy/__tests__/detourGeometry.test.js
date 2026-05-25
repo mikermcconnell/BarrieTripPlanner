@@ -534,6 +534,151 @@ describe('buildGeometry', () => {
     expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
   });
 
+  test('chooses the downstream rejoin over a later loop-start exit candidate for any route', () => {
+    const loopPolyline = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.692 },
+      { latitude: 44.390, longitude: -79.690 },
+      { latitude: 44.392, longitude: -79.690 },
+      { latitude: 44.392, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.700 },
+    ];
+    const loopShapes = new Map([['shape-loop', loopPolyline]]);
+    const loopRouteMapping = new Map([['route-loop', ['shape-loop']]]);
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.388,
+        longitude: -79.699,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.388,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 90_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.388,
+        longitude: -79.691,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3881,
+        longitude: -79.699,
+        timestampMs: DETECTED_AT + 65_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3881,
+        longitude: -79.695,
+        timestampMs: DETECTED_AT + 95_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3881,
+        longitude: -79.691,
+        timestampMs: DETECTED_AT + 125_000,
+        vehicleId: 'bus-2',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-loop',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.390,
+          longitude: -79.700,
+          timestampMs: DETECTED_AT + 30_000,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [
+          {
+            latitude: 44.390,
+            longitude: -79.690,
+            timestampMs: DETECTED_AT + 150_000,
+            vehicleId: 'bus-1',
+          },
+          {
+            latitude: 44.390,
+            longitude: -79.699,
+            timestampMs: DETECTED_AT + 210_000,
+            vehicleId: 'bus-1',
+          },
+        ],
+      },
+      loopShapes,
+      loopRouteMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.segments).toHaveLength(1);
+    expect(result.segments[0].debug.exitAnchorSource).toBe('boundary-candidate');
+    expect(result.segments[0].spanMeters).toBeGreaterThan(600);
+    expect(result.skippedSegmentPolyline).not.toBeNull();
+    expect(result.skippedSegmentPolyline.length).toBeGreaterThanOrEqual(2);
+    expect(result.exitPoint.longitude).toBeCloseTo(-79.690, 3);
+  });
+
+  test('suppresses a long detour path when the identified closed route span is too small', () => {
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6994,
+        timestampMs: DETECTED_AT + 60_000,
+        vehicleId: 'bus-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6992,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-2',
+      }),
+      makeEvidencePoint({
+        latitude: 44.395,
+        longitude: -79.6990,
+        timestampMs: DETECTED_AT + 180_000,
+        vehicleId: 'bus-3',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-1',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.6994,
+          timestampMs: DETECTED_AT + 30_000,
+          vehicleId: 'bus-1',
+        }],
+        exitCandidates: [{
+          latitude: 44.39,
+          longitude: -79.6988,
+          timestampMs: DETECTED_AT + 90_000,
+          vehicleId: 'bus-1',
+        }, {
+          latitude: 44.39,
+          longitude: -79.6989,
+          timestampMs: DETECTED_AT + 210_000,
+          vehicleId: 'bus-2',
+        }],
+      },
+      shapes,
+      routeShapeMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.segments).toEqual([]);
+    expect(result.skippedSegmentPolyline).toBeNull();
+    expect(result.inferredDetourPolyline).toBeNull();
+  });
+
   test('clamps Route 12 stale upstream entry anchor toward first off-route evidence', () => {
     const route12Shapes = new Map(shapes);
     route12Shapes.set('shape-12a', [
@@ -941,7 +1086,7 @@ describe('buildGeometry', () => {
     };
     const exitCandidate = {
       latitude: 44.39,
-      longitude: -79.6988,
+      longitude: -79.6970,
       timestampMs: DETECTED_AT + 90_000,
       vehicleId: 'bus-1',
     };
@@ -981,10 +1126,10 @@ describe('buildGeometry', () => {
 
     expect(result.entryPoint).not.toBeNull();
     expect(result.exitPoint).not.toBeNull();
-    expect(result.exitPoint.longitude).toBeCloseTo(-79.6988, 4);
+    expect(result.exitPoint.longitude).toBeCloseTo(-79.6970, 4);
     expect(result.inferredDetourPolyline).not.toBeNull();
     expect(result.inferredDetourPolyline[0].longitude).toBeCloseTo(-79.6994, 4);
-    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].longitude).toBeCloseTo(-79.6988, 4);
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].longitude).toBeCloseTo(-79.6970, 4);
   });
 
   test('captures same-segment detours when projected span exceeds the publish threshold', () => {

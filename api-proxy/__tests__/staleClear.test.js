@@ -2,6 +2,7 @@ const {
   shouldAutoClearStaleDetour,
   computeStaleThresholdMs,
   routeFamilyHasRecentVehicle,
+  evaluateStaleRiderVisibility,
 } = require('../detour/staleClear');
 
 function makeScheduleIndex() {
@@ -225,6 +226,157 @@ describe('stale detour auto-clear policy', () => {
     });
 
     expect(decision.shouldClear).toBe(false);
+    expect(decision.reason).toBe('no-scheduled-service');
+  });
+});
+
+
+describe('stale rider visibility policy', () => {
+  const sundayAt4pmEt = Date.parse('2026-04-26T20:00:00Z');
+
+  test('keeps zero-current detours rider-visible before the headway-aware threshold', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 90 * 60 * 1000 },
+      },
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(true);
+    expect(decision.staleForReview).toBe(false);
+    expect(decision.reason).toBe('fresh-enough');
+    expect(decision.thresholdMs).toBe(130 * 60 * 1000);
+  });
+
+
+
+  test('keeps stale detours rider-visible while route-family vehicles are currently reporting', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 140 * 60 * 1000 },
+      },
+      vehicles: [{ routeId: '8B' }],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(true);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('current-route-family-vehicle');
+    expect(decision.staleAgeMs).toBe(140 * 60 * 1000);
+    expect(decision.thresholdMs).toBe(130 * 60 * 1000);
+  });
+
+  test('suppresses zero-current detours for riders after the headway-aware threshold', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 140 * 60 * 1000 },
+      },
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(false);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('stale-evidence-gps-clear-required');
+    expect(decision.staleAgeMs).toBe(140 * 60 * 1000);
+    expect(decision.thresholdMs).toBe(130 * 60 * 1000);
+    expect(decision.headwayMs).toBe(60 * 60 * 1000);
+  });
+
+  test('keeps detours rider-visible when a vehicle is currently in the detour', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 140 * 60 * 1000 },
+      },
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(true);
+    expect(decision.reason).toBe('current-detour-vehicle');
+  });
+
+  test('suppresses zero-evidence active detours for riders', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 0,
+        uniqueVehicleCount: 0,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 10 * 60 * 1000 },
+      },
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(false);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('zero-confirmed-vehicle-count');
+  });
+
+  test('keeps zero-evidence branch detours visible while sibling route-family vehicles are reporting', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 0,
+        uniqueVehicleCount: 0,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 10 * 60 * 1000 },
+      },
+      vehicles: [{ routeId: '8B' }],
+      scheduleIndex: makeScheduleIndex(),
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(true);
+    expect(decision.staleForReview).toBe(false);
+    expect(decision.reason).toBe('current-route-family-vehicle');
+  });
+
+  test('pauses stale rider suppression when no service is scheduled', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: sundayAt4pmEt - 4 * 60 * 60 * 1000 },
+      },
+      scheduleIndex: {
+        timeZone: 'America/Toronto',
+        tripsByRouteId: new Map(),
+        calendarByServiceId: new Map(),
+        calendarDatesByServiceId: new Map(),
+      },
+      now: sundayAt4pmEt,
+    });
+
+    expect(decision.riderVisible).toBe(true);
     expect(decision.reason).toBe('no-scheduled-service');
   });
 });

@@ -1531,7 +1531,8 @@ describe('recurring short deviations', () => {
       expect(result['route-1'].uniqueVehicleCount).toBe(2);
       expect(result['route-1'].currentVehicleCount).toBe(0);
       expect(result['route-1'].geometry.evidencePointCount).toBeGreaterThanOrEqual(4);
-      expect(result['route-1'].geometry.segments.length).toBeGreaterThanOrEqual(1);
+      expect(result['route-1'].geometry.segments).toEqual([]);
+      expect(result['route-1'].geometry.canShowDetourPath).toBe(false);
     } finally {
       Date.now = realDateNow;
     }
@@ -2020,7 +2021,8 @@ describe('service hours guard', () => {
       expect(result['12B']).toBeUndefined();
       expect(result['12A'].currentVehicleCount).toBe(0);
       expect(['medium', 'high']).toContain(result['12A'].geometry.confidence);
-      expect(result['12A'].geometry.canShowDetourPath).toBe(true);
+      expect(result['12A'].geometry.canShowDetourPath).toBe(false);
+      expect(result['12A'].geometry.segments).toEqual([]);
     } finally {
       Date.now = realDateNow;
     }

@@ -5,6 +5,15 @@ import {
 } from '../utils/detourVisibility';
 
 describe('detourVisibility', () => {
+  test('hides detours explicitly suppressed by the backend', () => {
+    expect(isRiderVisibleDetour({
+      confidence: 'high',
+      state: 'active',
+      riderVisible: false,
+      riderVisibilityReason: 'stale-evidence-gps-clear-required',
+    })).toBe(false);
+  });
+
   test('hides low-confidence detours', () => {
     expect(isRiderVisibleDetour({ confidence: 'low', state: 'active' })).toBe(false);
   });

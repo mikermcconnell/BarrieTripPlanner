@@ -463,20 +463,94 @@ function selectEntryBoundaryCandidate(projectedCandidates, segmentDetectedAtMs) 
   return candidatesBeforeSegment[0] || null;
 }
 
-function selectExitBoundaryCandidate(projectedCandidates, lastEvidenceAt) {
-  if (!Array.isArray(projectedCandidates) || projectedCandidates.length === 0) return null;
+function sortCandidatesByTimestampAsc(candidates) {
+  return candidates
+    .slice()
+    .sort((a, b) => (a.timestampMs || 0) - (b.timestampMs || 0));
+}
 
-  const candidatesAfterSegment = projectedCandidates
-    .filter((candidate) => candidate.timestampMs >= lastEvidenceAt)
-    .sort((a, b) => a.timestampMs - b.timestampMs);
+function selectEarliestCandidate(candidates) {
+  return sortCandidatesByTimestampAsc(candidates)[0] || null;
+}
 
-  if (candidatesAfterSegment.length > 0) {
-    return candidatesAfterSegment[candidatesAfterSegment.length - 1];
+function selectLatestCandidate(candidates) {
+  return candidates
+    .slice()
+    .sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0))[0] || null;
+}
+
+function hasExitBoundarySelectionContext(context) {
+  return Boolean(
+    context &&
+    (
+      Number.isFinite(context.entryProgressMeters) ||
+      Number.isFinite(context.evidenceMaxProgressMeters)
+    )
+  );
+}
+
+function selectDownstreamExitBoundaryCandidate(candidates, context = {}) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  if (!hasExitBoundarySelectionContext(context)) return null;
+
+  const entryProgressMeters = Number.isFinite(context.entryProgressMeters)
+    ? context.entryProgressMeters
+    : null;
+  const evidenceMaxProgressMeters = Number.isFinite(context.evidenceMaxProgressMeters)
+    ? context.evidenceMaxProgressMeters
+    : null;
+  const minSpanMeters = Number.isFinite(context.minSpanMeters)
+    ? Math.max(0, context.minSpanMeters)
+    : MIN_LINEAR_SEGMENT_LENGTH_METERS;
+  const evidenceBacktrackAllowanceMeters = Number.isFinite(context.evidenceBacktrackAllowanceMeters)
+    ? Math.max(0, context.evidenceBacktrackAllowanceMeters)
+    : Math.max(250, minSpanMeters * 2);
+
+  const candidatesWithProgress = candidates.filter((candidate) =>
+    Number.isFinite(candidate?.progressMeters)
+  );
+  if (candidatesWithProgress.length === 0) return null;
+
+  let spanPlausibleCandidates = candidatesWithProgress;
+  if (entryProgressMeters != null) {
+    const minimumExitProgress = entryProgressMeters + minSpanMeters;
+    spanPlausibleCandidates = candidatesWithProgress.filter(
+      (candidate) => candidate.progressMeters >= minimumExitProgress
+    );
+  }
+  if (spanPlausibleCandidates.length === 0) return null;
+
+  if (evidenceMaxProgressMeters != null) {
+    const evidenceEnvelopeStart = evidenceMaxProgressMeters - evidenceBacktrackAllowanceMeters;
+    const evidenceEnvelopeCandidates = spanPlausibleCandidates.filter(
+      (candidate) => candidate.progressMeters >= evidenceEnvelopeStart
+    );
+    if (evidenceEnvelopeCandidates.length > 0) {
+      return selectEarliestCandidate(evidenceEnvelopeCandidates);
+    }
   }
 
-  return projectedCandidates
-    .slice()
-    .sort((a, b) => b.timestampMs - a.timestampMs)[0] || null;
+  return selectEarliestCandidate(spanPlausibleCandidates);
+}
+
+function selectExitBoundaryCandidate(projectedCandidates, lastEvidenceAt, context = {}) {
+  if (!Array.isArray(projectedCandidates) || projectedCandidates.length === 0) return null;
+
+  const candidatesAfterSegment = sortCandidatesByTimestampAsc(
+    projectedCandidates.filter((candidate) => candidate.timestampMs >= lastEvidenceAt)
+  );
+
+  if (candidatesAfterSegment.length > 0) {
+    return (
+      selectDownstreamExitBoundaryCandidate(candidatesAfterSegment, context) ||
+      candidatesAfterSegment[candidatesAfterSegment.length - 1]
+    );
+  }
+
+  return (
+    selectDownstreamExitBoundaryCandidate(projectedCandidates, context) ||
+    selectLatestCandidate(projectedCandidates)
+  );
 }
 
 function clampStaleEntryAnchorToEvidence(entryProjection, sortedByProgress, routeConfig = {}) {
@@ -878,16 +952,6 @@ function buildSegmentGeometry(
       .filter((candidate) => candidate.timestampMs <= lastEvidenceAt)
       .sort((a, b) => b.timestampMs - a.timestampMs)[0] || null;
   }
-  const selectedExitBoundaryCandidate = selectExitBoundaryCandidate(
-    boundaryCandidates.exitCandidates,
-    lastEvidenceAt
-  );
-  const pathConfidence = assessPathConfidence(
-    pathConfidenceCluster,
-    selectedEntryBoundaryCandidate,
-    selectedExitBoundaryCandidate,
-    routeConfig
-  );
   const unclampedEntryProjection = selectedEntryBoundaryCandidate || sortedByProgress[0];
   const entryAnchorClamp = clampStaleEntryAnchorToEvidence(
     unclampedEntryProjection,
@@ -895,6 +959,22 @@ function buildSegmentGeometry(
     routeConfig
   );
   const rawEntryProjection = entryAnchorClamp.projection;
+  const selectedExitBoundaryCandidate = selectExitBoundaryCandidate(
+    boundaryCandidates.exitCandidates,
+    lastEvidenceAt,
+    {
+      entryProgressMeters: rawEntryProjection?.progressMeters,
+      evidenceMinProgressMeters: sortedByProgress[0]?.progressMeters,
+      evidenceMaxProgressMeters: sortedByProgress[sortedByProgress.length - 1]?.progressMeters,
+      minSpanMeters: MIN_LINEAR_SEGMENT_LENGTH_METERS,
+    }
+  );
+  const pathConfidence = assessPathConfidence(
+    pathConfidenceCluster,
+    selectedEntryBoundaryCandidate,
+    selectedExitBoundaryCandidate,
+    routeConfig
+  );
   const rawExitProjection = selectedExitBoundaryCandidate || sortedByProgress[sortedByProgress.length - 1];
   const hasEntryBoundaryCandidate = Boolean(selectedEntryBoundaryCandidate);
   const hasExitBoundaryCandidate = Boolean(selectedExitBoundaryCandidate);
@@ -971,6 +1051,19 @@ function buildSegmentGeometry(
     hasEntryBoundaryCandidate &&
     hasExitBoundaryCandidate &&
     skippedSegmentPolyline.length >= 2 && spanMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS;
+  const anchoredInferredPathLengthMeters = buildPolylineLengthMeters(
+    anchoredInferredDetourPolyline || []
+  );
+  const hasMisleadingLongPathTinyClosedSpan =
+    !hasRenderableSkippedSegment &&
+    Array.isArray(boundaryCandidates.exitCandidates) &&
+    boundaryCandidates.exitCandidates.length > 1 &&
+    hasEntryBoundaryCandidate &&
+    hasExitBoundaryCandidate &&
+    spanMeters < MIN_LINEAR_SEGMENT_LENGTH_METERS &&
+    anchoredInferredPathLengthMeters >= MIN_LINEAR_SEGMENT_LENGTH_METERS * 2;
+  if (hasMisleadingLongPathTinyClosedSpan) return null;
+
   const overlapAdjustment = hasRenderableSkippedSegment && anchoredInferredDetourPolyline?.length >= 2
     ? trimOverlappingOpenClosedGeometry(anchoredInferredDetourPolyline, skippedSegmentPolyline)
     : {
@@ -1378,6 +1471,18 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
 
   const clusters = clusterProjectedEvidence(bestShape.projectedPoints);
   empty.debug.clusterCount = clusters.length;
+  const suppressedGeometry = (reason) => ({
+    ...empty,
+    shapeId: bestShape.shapeId,
+    confidence: scoreConfidence(confidencePoints, detectedAtMs, now, routeConfig),
+    evidencePointCount: points.length,
+    lastEvidenceAt,
+    debug: {
+      ...empty.debug,
+      suppressedGeometryReason: reason,
+      confidenceEvidencePointCount: confidencePoints.length,
+    },
+  });
   let segments = clusters
     .map((cluster) => buildSegmentGeometry(cluster, bestShape.polyline, now, detectedAtMs, {
       entryCandidates: projectedEntryCandidates,
@@ -1414,11 +1519,11 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
     }
   }
 
-  if (segments.length === 0) return empty;
+  if (segments.length === 0) return suppressedGeometry('no-candidate-segments');
 
   segments = enrichSegmentsWithStopImpacts(routeId, segments, shapes, bestShape.shapeId, stopImpactData);
   segments = filterNonClosureSelfLoopSegments(segments);
-  if (segments.length === 0) return empty;
+  if (segments.length === 0) return suppressedGeometry('no-valid-closure-segments');
 
   const primarySegment = pickPrimarySegment(segments);
   const confidence = scoreConfidence(confidencePoints, detectedAtMs, now, routeConfig);
