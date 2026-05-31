@@ -127,13 +127,17 @@ describe('api-proxy route hardening', () => {
       expect.objectContaining({ routeId: '8A', eventType: 'DETOUR_DETECTED' }),
     ]);
     expect(response.body.limit).toBe(5);
-    expect(mockGetDetourHistory).toHaveBeenCalledWith({
+    expect(mockGetDetourHistory).toHaveBeenCalledWith(expect.objectContaining({
       limit: 5,
       routeId: '',
       eventTypes: [],
       startMs: null,
       endMs: null,
-    });
+      storageConfig: expect.objectContaining({
+        detourVersion: 'v1',
+        historyCollection: 'detourHistory',
+      }),
+    }));
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -144,13 +148,17 @@ describe('api-proxy route hardening', () => {
       .set('x-api-token', 'test-proxy-token');
 
     expect(response.status).toBe(200);
-    expect(mockGetDetourHistory).toHaveBeenCalledWith({
+    expect(mockGetDetourHistory).toHaveBeenCalledWith(expect.objectContaining({
       limit: 7,
       routeId: '8A',
       eventTypes: ['DETOUR_DETECTED', 'DETOUR_CLEARED'],
       startMs: Date.parse('2026-03-01T12:00:00.000Z'),
       endMs: Date.parse('2026-03-02T12:00:00.000Z'),
-    });
+      storageConfig: expect.objectContaining({
+        detourVersion: 'v1',
+        historyCollection: 'detourHistory',
+      }),
+    }));
     expect(response.body.filters).toEqual({
       routeId: '8A',
       eventTypes: ['DETOUR_DETECTED', 'DETOUR_CLEARED'],
