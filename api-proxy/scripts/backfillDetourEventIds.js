@@ -3,8 +3,8 @@ const path = require('path');
 
 const { getDb } = require('../firebaseAdmin');
 const { buildDetourEventId } = require('../detourPublisher');
+const { buildDetourStorageConfig } = require('../detour/storageConfig');
 
-const ACTIVE_COLLECTION = 'activeDetours';
 const SAME_EVENT_ENDPOINT_THRESHOLD_METERS = 225;
 const SAME_EVENT_CENTROID_THRESHOLD_METERS = 450;
 
@@ -227,8 +227,9 @@ async function runBackfill({ dryRun = true } = {}) {
   if (!db) {
     throw new Error('Firestore Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS.');
   }
+  const storageConfig = buildDetourStorageConfig(process.env);
 
-  const snapshot = await db.collection(ACTIVE_COLLECTION).get();
+  const snapshot = await db.collection(storageConfig.activeCollection).get();
   const docs = snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
   const updates = buildBackfillUpdates(docs);
 
@@ -236,7 +237,7 @@ async function runBackfill({ dryRun = true } = {}) {
     const batch = db.batch();
     updates.forEach((item) => {
       if (item.update) {
-        batch.set(db.collection(ACTIVE_COLLECTION).doc(item.docId), item.update, { merge: true });
+        batch.set(db.collection(storageConfig.activeCollection).doc(item.docId), item.update, { merge: true });
       }
     });
     await batch.commit();
@@ -244,6 +245,7 @@ async function runBackfill({ dryRun = true } = {}) {
 
   return {
     dryRun,
+    activeCollection: storageConfig.activeCollection,
     documentCount: docs.length,
     updatedDocumentCount: updates.filter((item) => item.update).length,
     updates: updates.map(({ docId, eventId, segmentEventIds }) => ({
@@ -275,5 +277,6 @@ module.exports = {
   flattenActiveDetourDocs,
   getEndpointPair,
   groupSegments,
+  runBackfill,
   samePhysicalEvent,
 };

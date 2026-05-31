@@ -16,4 +16,9 @@ describe('Firestore security rules', () => {
     expect(savedPlacesRules).toContain('request.resource.data.lat is number');
     expect(savedPlacesRules).toContain('request.resource.data.lon is number');
   });
+
+  test('allow public reads for V2 active detours and history', () => {
+    expect(rules).toContain('match /activeDetoursV2/{routeId}');
+    expect(rules).toContain('match /detourHistoryV2/{eventId}');
+  });
 });

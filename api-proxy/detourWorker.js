@@ -28,10 +28,12 @@ const {
 } = require('./detourRuntimeStateStore');
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
 const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
+const { buildDetourStorageConfig } = require('./detour/storageConfig');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
 const REQUIRE_SAFE_BASELINE = process.env.DETOUR_REQUIRE_SAFE_BASELINE !== 'false';
+const detourStorageConfig = buildDetourStorageConfig(process.env);
 
 let interval = null;
 let running = false;
@@ -86,7 +88,7 @@ async function ensureRuntimeStateHydrated({ force = false } = {}) {
       needsActiveSnapshotFallback: activeRouteCount === 0,
     };
   }
-  const snapshot = await loadDetourRuntimeState({ force });
+  const snapshot = await loadDetourRuntimeState({ force, storageConfig: detourStorageConfig });
   if (snapshot) {
     hydrateRuntimeState(snapshot);
   }
@@ -151,7 +153,10 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       hydratedCount: 0,
     };
     if (runtimeHydration?.needsActiveSnapshotFallback || runtimeHydration?.attempted) {
-      const activeSnapshots = await loadActiveDetourSnapshots({ force: forceReloadState });
+      const activeSnapshots = await loadActiveDetourSnapshots({
+        force: forceReloadState,
+        storageConfig: detourStorageConfig,
+      });
       activeSnapshotHydration = {
         attempted: true,
         snapshotCount: Object.keys(activeSnapshots || {}).length,
@@ -212,13 +217,16 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         vehicles,
         scheduleIndex: data.scheduleIndex,
         shapes: baseline.shapes,
+        storageConfig: detourStorageConfig,
         suppressDeletesWhenEmpty,
         suppressDeleteReason: suppressDeletesWhenEmpty
           ? 'runtime-and-active-snapshot-hydration-empty'
           : undefined,
       });
       await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
-      await saveDetourRuntimeState(serializeDetectorRuntimeState());
+      await saveDetourRuntimeState(serializeDetectorRuntimeState(), {
+        storageConfig: detourStorageConfig,
+      });
       if (Object.keys(activeDetours).length > 0) {
         lastDetourPublishAt = new Date().toISOString();
       }
@@ -293,6 +301,13 @@ function getStatus() {
   return {
     running,
     mode: getWorkerMode(),
+    detourVersion: detourStorageConfig.detourVersion,
+    storage: {
+      activeCollection: detourStorageConfig.activeCollection,
+      historyCollection: detourStorageConfig.historyCollection,
+      runtimeStateCollection: detourStorageConfig.runtimeStateCollection,
+      runtimeStateDoc: detourStorageConfig.runtimeStateDoc,
+    },
     tickCount,
     lastSuccessfulTick,
     lastDetourPublishAt,

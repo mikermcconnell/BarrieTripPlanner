@@ -45,3 +45,19 @@ test('returns an empty snapshot set when Firestore is unavailable', async () => 
   const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
   await expect(loadActiveDetourSnapshots({ force: true })).resolves.toEqual({});
 });
+
+test('V2 active snapshot hydration reads only the configured V2 collection', async () => {
+  jest.resetModules();
+  const get = jest.fn().mockResolvedValue({ forEach() {} });
+  const collection = jest.fn(() => ({ get }));
+
+  jest.doMock('../firebaseAdmin', () => ({
+    getDb: () => ({ collection }),
+  }));
+
+  const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
+  await loadActiveDetourSnapshots({ force: true, storageConfig: { activeCollection: 'activeDetoursV2' } });
+
+  expect(collection).toHaveBeenCalledWith('activeDetoursV2');
+  expect(collection).not.toHaveBeenCalledWith('activeDetours');
+});

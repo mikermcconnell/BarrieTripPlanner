@@ -110,6 +110,27 @@ describe('detourSimulation', () => {
     }));
   });
 
+  test('create and clear use configured V2 active detours collection', async () => {
+    const db = makeDbMock();
+    const ops = createDetourSimulationOps({
+      env: {
+        NODE_ENV: 'development',
+        DETOUR_SIMULATION_ENABLED: 'true',
+        DETOUR_DETECTOR_VERSION: 'v2',
+      },
+      loadStaticData: async () => makeStaticData(),
+      getFirestore: () => db,
+    });
+
+    await ops.create({ routeId: '1', durationMinutes: 5 });
+    await ops.clear({ routeId: '1' });
+
+    expect(db._writes[0].collectionName).toBe('activeDetoursV2');
+    expect(db._deletes).toEqual([
+      { collectionName: 'activeDetoursV2', docId: '1' },
+    ]);
+  });
+
   test('farmers market preset writes simulated Route 11 detour', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({

@@ -2,6 +2,7 @@ const { getStaticData } = require('../gtfsLoader');
 const { getDb } = require('../firebaseAdmin');
 const { matchDetourGeometry } = require('../detourRoadMatcher');
 const { haversineDistance, pointToPolylineDistance } = require('../geometry');
+const { buildDetourStorageConfig } = require('../detour/storageConfig');
 
 const DEFAULT_OFFSET_METERS = 275;
 const DEFAULT_ROAD_MATCH_OFFSET_CANDIDATES_METERS = [275, 600, 1000, 1500, 1800];
@@ -457,6 +458,8 @@ function createDetourSimulationOps({
   getFirestore = getDb,
   matchGeometry = matchDetourGeometry,
 } = {}) {
+  const storageConfig = buildDetourStorageConfig(env);
+
   function isEnabled() {
     return env.NODE_ENV !== 'production' && env.DETOUR_SIMULATION_ENABLED === 'true';
   }
@@ -514,7 +517,7 @@ function createDetourSimulationOps({
           affectedStops: ['191', '192', '556', '557'],
         };
 
-        await db.collection('activeDetours').doc(routeId).set(doc, { merge: true });
+        await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
         writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
       }
 
@@ -561,7 +564,7 @@ function createDetourSimulationOps({
           affectedStops: ['618', '933', '738', '757', '680', '681'],
         };
 
-        await db.collection('activeDetours').doc(routeId).set(doc, { merge: true });
+        await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
         writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
       }
 
@@ -597,7 +600,7 @@ function createDetourSimulationOps({
       durationMinutes: options.durationMinutes,
     });
 
-    await db.collection('activeDetours').doc(routeId).set(doc, { merge: true });
+    await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
 
     return {
       status: 200,
@@ -643,7 +646,7 @@ function createDetourSimulationOps({
       };
     }
 
-    await db.collection('activeDetours').doc(routeId).delete();
+    await db.collection(storageConfig.activeCollection).doc(routeId).delete();
 
     return {
       status: 200,

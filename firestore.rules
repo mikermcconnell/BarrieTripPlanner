@@ -158,6 +158,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Lab V2 detour feed isolated from the production V1 feed.
+    match /activeDetoursV2/{routeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /detourHistoryV2/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ==================== TRANSIT NEWS ====================
 
     // Backend news worker writes via Admin SDK.

@@ -62,3 +62,11 @@ describe('runtimeConfig', () => {
     expect(runtimeConfig.detours.enabledByDefault).toBe(true);
   });
 });
+
+test('reads active detours collection from public env', () => {
+  process.env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION = 'activeDetoursV2';
+
+  const { default: runtimeConfig } = loadRuntimeConfig();
+
+  expect(runtimeConfig.detours.activeCollection).toBe('activeDetoursV2');
+});

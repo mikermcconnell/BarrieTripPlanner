@@ -4,6 +4,7 @@ const { shouldAutoClearStaleDetour, evaluateStaleRiderVisibility } = require('./
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
 const { pruneDetourPathServedStopsFromGeometry } = require('./detour/stopImpacts');
+const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 const {
   buildClearedEvent,
   buildDetectedEvent,
@@ -11,8 +12,6 @@ const {
   makeSnapshot,
 } = require('./detour/publisher/snapshotEvents');
 
-const ACTIVE_COLLECTION = 'activeDetours';
-const HISTORY_COLLECTION = 'detourHistory';
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 const HISTORY_MAX_LIMIT = 200;
 const HISTORY_DEFAULT_LIMIT = 50;
@@ -44,7 +43,27 @@ const lastSeenUpdateTime = new Map();
 const lastGeometryWriteTime = new Map();
 const lastKnownGeometry = new Map(); // Tracks geometry state for throttle decisions
 let hydratePromise = null;
+let publisherCacheKey = null;
 let lastHistoryPruneAt = 0;
+
+function resetPublisherCache() {
+  hydratePromise = null;
+  lastPublishedIds.clear();
+  lastPublishedState.clear();
+  lastSeenUpdateTime.clear();
+  lastGeometryWriteTime.clear();
+  lastKnownGeometry.clear();
+}
+
+function resolvePublisherStorageConfig(storageConfig) {
+  const resolved = resolveDetourStorageConfig(storageConfig);
+  const cacheKey = `${resolved.activeCollection}/${resolved.historyCollection}`;
+  if (publisherCacheKey !== cacheKey) {
+    resetPublisherCache();
+    publisherCacheKey = cacheKey;
+  }
+  return resolved;
+}
 
 function getRouteFamilyId(routeId) {
   const normalized = String(routeId || '').trim().toUpperCase();
@@ -1474,8 +1493,8 @@ function rememberPublishedDetour(routeId, data = {}) {
   }
 }
 
-async function refreshPublishedDetoursFromFirestore(db) {
-  const snapshot = await db.collection(ACTIVE_COLLECTION).get();
+async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
+  const snapshot = await db.collection(storageConfig.activeCollection).get();
   snapshot.forEach((doc) => {
     const data = doc.data() || {};
     const routeId = data.routeId || doc.id;
@@ -1484,14 +1503,14 @@ async function refreshPublishedDetoursFromFirestore(db) {
   return snapshot.size;
 }
 
-async function writeHistoryEvent(db, event) {
+async function writeHistoryEvent(db, event, storageConfig) {
   if (!HISTORY_ENABLED || !event) return;
   const suffix = Math.random().toString(36).slice(2, 8);
   const docId = `${event.occurredAt}-${event.routeId}-${event.eventType}-${suffix}`;
-  await db.collection(HISTORY_COLLECTION).doc(docId).set(event);
+  await db.collection(storageConfig.historyCollection).doc(docId).set(event);
 }
 
-async function hydratePublisherState(db) {
+async function hydratePublisherState(db, storageConfig) {
   if (hydratePromise) {
     await hydratePromise;
     return;
@@ -1499,7 +1518,7 @@ async function hydratePublisherState(db) {
 
   hydratePromise = (async () => {
     try {
-      const count = await refreshPublishedDetoursFromFirestore(db);
+      const count = await refreshPublishedDetoursFromFirestore(db, storageConfig);
       if (count > 0) {
         console.log(`[detourPublisher] Hydrated ${count} active detours`);
       }
@@ -1511,7 +1530,7 @@ async function hydratePublisherState(db) {
   await hydratePromise;
 }
 
-async function pruneHistoryIfNeeded(db, now) {
+async function pruneHistoryIfNeeded(db, now, storageConfig) {
   if (!HISTORY_ENABLED) return;
   if (!Number.isFinite(HISTORY_RETENTION_DAYS) || HISTORY_RETENTION_DAYS <= 0) return;
   if ((now - lastHistoryPruneAt) < HISTORY_PRUNE_INTERVAL_MS) return;
@@ -1523,7 +1542,7 @@ async function pruneHistoryIfNeeded(db, now) {
     let totalDeleted = 0;
     for (let i = 0; i < 10; i++) {
       const snapshot = await db
-        .collection(HISTORY_COLLECTION)
+        .collection(storageConfig.historyCollection)
         .where('occurredAt', '<', cutoff)
         .orderBy('occurredAt', 'asc')
         .limit(200)
@@ -1561,10 +1580,10 @@ function normalizeHistoryDoc(doc) {
   };
 }
 
-async function deletePublishedDetour(db, routeId, event, logPrefix = 'delete') {
+async function deletePublishedDetour(db, routeId, event, logPrefix = 'delete', storageConfig) {
   try {
-    await db.collection(ACTIVE_COLLECTION).doc(routeId).delete();
-    await writeHistoryEvent(db, event);
+    await db.collection(storageConfig.activeCollection).doc(routeId).delete();
+    await writeHistoryEvent(db, event, storageConfig);
     lastPublishedIds.delete(routeId);
     lastPublishedState.delete(routeId);
     lastSeenUpdateTime.delete(routeId);
@@ -1645,7 +1664,8 @@ async function publishDetours(activeDetours, options = {}) {
     console.warn('[detourPublisher] Firestore not configured — skipping publish');
     return { staleAutoClearedRouteIds: [] };
   }
-  await hydratePublisherState(db);
+  const storageConfig = resolvePublisherStorageConfig(options.storageConfig);
+  await hydratePublisherState(db, storageConfig);
 
   const now = options.now || Date.now();
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
@@ -1679,7 +1699,7 @@ async function publishDetours(activeDetours, options = {}) {
   // activeDetours docs are cleared even if they appeared after this process
   // finished its initial hydration.
   try {
-    await refreshPublishedDetoursFromFirestore(db);
+    await refreshPublishedDetoursFromFirestore(db, storageConfig);
   } catch (err) {
     console.error('[detourPublisher] Failed to refresh active detours before cleanup:', err.message);
   }
@@ -1701,9 +1721,9 @@ async function publishDetours(activeDetours, options = {}) {
     if (!hasNormalRouteClearProof(previous)) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now);
       try {
-        await db.collection(ACTIVE_COLLECTION).doc(routeId).set(retainedDoc, { merge: true });
+        await db.collection(storageConfig.activeCollection).doc(routeId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
-        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previous, currentSnapshot, now));
+        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previous, currentSnapshot, now), storageConfig);
         lastPublishedIds.add(routeId);
         lastPublishedState.set(routeId, currentSnapshot);
         lastSeenUpdateTime.set(routeId, now);
@@ -1713,7 +1733,7 @@ async function publishDetours(activeDetours, options = {}) {
       continue;
     }
     const event = buildClearedEvent(routeId, previous, now);
-    await deletePublishedDetour(db, routeId, event);
+    await deletePublishedDetour(db, routeId, event, 'delete', storageConfig);
   }
 
   const sharedEventAssignments = buildSharedDetourEventAssignmentsForPublish(publishableDetours);
@@ -1888,12 +1908,16 @@ async function publishDetours(activeDetours, options = {}) {
     }
 
     try {
-      await db.collection(ACTIVE_COLLECTION).doc(routeId).set(doc, { merge: true });
+      await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
       const currentSnapshot = makeSnapshot(doc, previousSnapshot);
       if (isNew) {
-        await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now));
+        await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now), storageConfig);
       } else {
-        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now));
+        await writeHistoryEvent(
+          db,
+          buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now),
+          storageConfig
+        );
       }
       lastPublishedIds.add(routeId);
       lastPublishedState.set(routeId, currentSnapshot);
@@ -1939,7 +1963,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
   }
 
-  await pruneHistoryIfNeeded(db, now);
+  await pruneHistoryIfNeeded(db, now, storageConfig);
   return {
     staleAutoClearedRouteIds: [],
   };
@@ -1951,6 +1975,7 @@ async function getDetourHistory(options = {}) {
     console.warn('[detourPublisher] Firestore not configured — detour history unavailable');
     return [];
   }
+  const storageConfig = resolveDetourStorageConfig(options.storageConfig);
 
   const parsedLimit = Number.parseInt(String(options.limit ?? HISTORY_DEFAULT_LIMIT), 10);
   const limit = Number.isFinite(parsedLimit)
@@ -1967,7 +1992,7 @@ async function getDetourHistory(options = {}) {
   const startMs = Number.isFinite(options.startMs) ? options.startMs : null;
   const endMs = Number.isFinite(options.endMs) ? options.endMs : null;
 
-  let query = db.collection(HISTORY_COLLECTION).orderBy('occurredAt', 'desc');
+  let query = db.collection(storageConfig.historyCollection).orderBy('occurredAt', 'desc');
   if (startMs != null) {
     query = query.where('occurredAt', '>=', startMs);
   }

@@ -95,6 +95,10 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=interval|manual|scheduled`
+- `DETOUR_DETECTOR_VERSION=v1|v2`
+  - default `v1` uses `activeDetours`, `detourHistory`, and `systemState/detourRuntime`
+  - `v2` uses isolated lab storage: `activeDetoursV2`, `detourHistoryV2`, and `systemState/detourRuntimeV2`
+  - optional explicit overrides: `DETOUR_ACTIVE_COLLECTION`, `DETOUR_HISTORY_COLLECTION`, `DETOUR_RUNTIME_STATE_COLLECTION`, `DETOUR_RUNTIME_STATE_DOC`
 - `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=true|false`
   - route-family handoff treats a confirmed closure segment as one physical detour event and can project it onto sibling route variants/directions when the source segment has confirmed boundaries
   - point-only short deviations are not projected because there is no reliable closed segment to map to the sibling route
@@ -464,9 +468,9 @@ Instead:
   - confirms recent scheduler calls are `2xx`, with no recent `401`
   - confirms active detour documents are still being refreshed
 - confirm Firestore writes:
-  - `activeDetours`
-  - `detourHistory`
-  - `systemState/detourRuntime`
+  - configured active detour collection, usually `activeDetours` or lab `activeDetoursV2`
+  - configured history collection, usually `detourHistory` or lab `detourHistoryV2`
+  - configured runtime doc, usually `systemState/detourRuntime` or lab `systemState/detourRuntimeV2`
 - resume scheduler briefly and confirm repeated ticks advance state
 
 ## Rollback Notes

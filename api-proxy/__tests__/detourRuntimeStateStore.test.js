@@ -34,3 +34,27 @@ describe('detourRuntimeStateStore', () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 });
+
+test('V2 runtime state uses the configured V2 runtime document', async () => {
+  jest.resetModules();
+  const get = jest.fn(async () => ({ exists: false }));
+  const doc = jest.fn(() => ({ get }));
+  const collection = jest.fn(() => ({ doc }));
+
+  jest.doMock('../firebaseAdmin', () => ({
+    getDb: () => ({ collection }),
+  }));
+
+  const { loadDetourRuntimeState } = require('../detourRuntimeStateStore');
+  await loadDetourRuntimeState({
+    force: true,
+    storageConfig: {
+      runtimeStateCollection: 'systemState',
+      runtimeStateDoc: 'detourRuntimeV2',
+    },
+  });
+
+  expect(collection).toHaveBeenCalledWith('systemState');
+  expect(doc).toHaveBeenCalledWith('detourRuntimeV2');
+  expect(doc).not.toHaveBeenCalledWith('detourRuntime');
+});
