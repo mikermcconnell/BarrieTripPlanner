@@ -13,6 +13,7 @@ function parseArgs(argv) {
     fixture: 'docs/detour-ground-truth/route-10-mulcaster-simcoe-2026-05-26.json',
     source: 'live',
     activeDetoursJson: null,
+    activeCollection: null,
   };
 
   for (let index = 2; index < argv.length; index += 1) {
@@ -26,6 +27,9 @@ function parseArgs(argv) {
     } else if (arg === '--active-detours-json') {
       args.activeDetoursJson = argv[index + 1];
       args.source = 'json';
+      index += 1;
+    } else if (arg === '--active-collection') {
+      args.activeCollection = argv[index + 1];
       index += 1;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
@@ -45,6 +49,7 @@ Usage:
 Options:
   --fixture <path>              Ground-truth JSON fixture.
   --source live|json            Source for active detour data. Defaults to live.
+  --active-collection <name>    Firestore collection to read. Defaults to EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION or activeDetours.
   --active-detours-json <path>  Validate against a saved activeDetours map instead of Firestore.
 `);
 }
@@ -84,6 +89,11 @@ async function main() {
     activeDetours = await fetchLiveActiveDetours({
       apiKey: env.EXPO_PUBLIC_FIREBASE_API_KEY || env.FIREBASE_API_KEY,
       projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || env.FIREBASE_PROJECT_ID,
+      collectionName:
+        args.activeCollection ||
+        env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION ||
+        env.DETOUR_ACTIVE_COLLECTION ||
+        'activeDetours',
     });
   } else {
     throw new Error(`Unknown source: ${args.source}`);

@@ -273,14 +273,26 @@ function unwrapFirestoreFields(fields = {}) {
   );
 }
 
-async function fetchLiveActiveDetours({ apiKey, projectId, fetchImpl = fetch }) {
+function normalizeActiveDetourCollectionName(value) {
+  const collectionName = String(value || '').trim();
+  return collectionName || 'activeDetours';
+}
+
+async function fetchLiveActiveDetours({
+  apiKey,
+  projectId,
+  collectionName = 'activeDetours',
+  fetchImpl = fetch,
+}) {
   if (!apiKey || !projectId) {
     throw new Error('Missing Firebase public config. Set EXPO_PUBLIC_FIREBASE_API_KEY and EXPO_PUBLIC_FIREBASE_PROJECT_ID.');
   }
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/activeDetours?key=${apiKey}`;
+  const activeCollection = normalizeActiveDetourCollectionName(collectionName);
+  const encodedCollection = encodeURIComponent(activeCollection);
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${encodedCollection}?key=${apiKey}`;
   const response = await fetchImpl(url);
   if (!response.ok) {
-    throw new Error(`Failed to fetch activeDetours (${response.status})`);
+    throw new Error(`Failed to fetch ${activeCollection} (${response.status})`);
   }
   const payload = await response.json();
   return Object.fromEntries((payload.documents || []).map((document) => {
@@ -298,6 +310,7 @@ module.exports = {
   loadEnvFile,
   loadJsonFile,
   nearestPointOnPolyline,
+  normalizeActiveDetourCollectionName,
   normalizePoint,
   normalizePolyline,
   validateDetourAgainstGroundTruth,

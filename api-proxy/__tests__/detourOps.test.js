@@ -1,6 +1,18 @@
 const { createDetourOps } = require('../services/detourOps');
 
 describe('detourOps rollout health', () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  beforeEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    jest.dontMock('../detourDetector');
+    jest.dontMock('../detourV2/workerAdapter');
+  });
+
   test('enqueues one delayed offset sample after a primary scheduled run', async () => {
     const runTick = jest.fn().mockResolvedValue({
       ok: true,

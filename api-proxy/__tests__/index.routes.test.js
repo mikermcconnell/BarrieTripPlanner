@@ -30,6 +30,11 @@ describe('api-proxy route hardening', () => {
       API_PROXY_TOKEN: 'test-proxy-token',
       REQUIRE_FIREBASE_AUTH: 'false',
       DETOUR_WORKER_ENABLED: 'false',
+      DETOUR_DETECTOR_VERSION: 'v1',
+      DETOUR_ACTIVE_COLLECTION: 'activeDetours',
+      DETOUR_HISTORY_COLLECTION: 'detourHistory',
+      DETOUR_RUNTIME_STATE_COLLECTION: 'systemState',
+      DETOUR_RUNTIME_STATE_DOC: 'detourRuntime',
       NEWS_WORKER_ENABLED: 'false',
     };
     mockGetDetourHistory.mockReset();

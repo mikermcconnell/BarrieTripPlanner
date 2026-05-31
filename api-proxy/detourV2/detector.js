@@ -1,6 +1,9 @@
 'use strict';
 
-const { buildCumulativeDistances } = require('../detourGeometry');
+const {
+  buildCumulativeDistances,
+  enrichDetourMapStopImpacts,
+} = require('../detourGeometry');
 const { projectCoordinateToRoute } = require('../detour/projection');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = 75;
@@ -317,7 +320,13 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
-  function processVehicles(vehicles = [], shapes = new Map(), routeShapeMapping = new Map()) {
+  function processVehicles(
+    vehicles = [],
+    shapes = new Map(),
+    routeShapeMapping = new Map(),
+    _tripMapping = null,
+    stopImpactData = null
+  ) {
     tickId += 1;
     lastVehicleCount = vehicles.length;
     const offRouteThisTick = new Set();
@@ -376,16 +385,12 @@ function createDetourV2Detector(config = {}) {
         });
 
         if (hasEnoughEvidence(candidate)) {
-          const detour = activeDetours.get(routeId) || buildDetour(candidate, shapes);
-          detour.lastSeenAt = new Date(candidate.lastSeenAt);
-          detour.latestGpsEvidenceAt = candidate.lastSeenAt;
-          detour.geometryLastEvidenceAt = candidate.lastSeenAt;
-          detour.lastEvidenceAt = candidate.lastSeenAt;
-          detour.vehiclesOffRoute = new Set(candidate.vehicleIds);
-          detour.matchedVehicleIds = [...candidate.vehicleIds];
-          detour.vehicleCount = candidate.signatures.size;
-          detour.uniqueVehicleCount = candidate.signatures.size;
-          detour.currentVehicleCount = candidate.vehicleIds.size;
+          const previousDetour = activeDetours.get(routeId);
+          const detour = buildDetour(candidate, shapes);
+          if (previousDetour) {
+            detour.detectedAt = previousDetour.detectedAt || detour.detectedAt;
+            detour.triggerVehicleId = previousDetour.triggerVehicleId || detour.triggerVehicleId;
+          }
           activeDetours.set(routeId, detour);
         }
       } else if (projection.distanceMeters <= onRouteClearThresholdMeters) {
@@ -412,6 +417,7 @@ function createDetourV2Detector(config = {}) {
     for (const [routeId, detour] of activeDetours.entries()) {
       lastReportedDetours[routeId] = snapshotDetour(detour);
     }
+    enrichDetourMapStopImpacts(lastReportedDetours, shapes, stopImpactData);
     return lastReportedDetours;
   }
 

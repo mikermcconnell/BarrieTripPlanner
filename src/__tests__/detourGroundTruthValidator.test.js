@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const route10GroundTruth = require('../../docs/detour-ground-truth/route-10-mulcaster-simcoe-2026-05-26.json');
 const {
+  fetchLiveActiveDetours,
   getRenderableDetourPath,
   validateDetourAgainstGroundTruth,
 } = require('../../scripts/detourGroundTruthValidator');
@@ -71,6 +72,38 @@ describe('detour ground-truth validator', () => {
 
     expect(result.pass).toBe(false);
     expect(result.failures.some((failure) => failure.name.includes('detour path'))).toBe(true);
+  });
+
+  test('fetches the configured active-detour collection from Firestore REST', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        documents: [
+          {
+            name: 'projects/proj/databases/(default)/documents/activeDetoursV2/12A',
+            fields: {
+              routeId: { stringValue: '12A' },
+              riderVisible: { booleanValue: true },
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await fetchLiveActiveDetours({
+      apiKey: 'public-key',
+      projectId: 'proj',
+      collectionName: 'activeDetoursV2',
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://firestore.googleapis.com/v1/projects/proj/databases/(default)/documents/activeDetoursV2?key=public-key'
+    );
+    expect(result['12A']).toEqual(expect.objectContaining({
+      routeId: '12A',
+      riderVisible: true,
+    }));
   });
 
   test('uses trusted inferred geometry when road-matched geometry is unavailable', () => {
