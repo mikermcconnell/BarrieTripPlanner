@@ -330,4 +330,103 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     );
   });
 
+  test('runs the V2 detector when DETOUR_DETECTOR_VERSION is v2', async () => {
+    process.env.DETOUR_DETECTOR_VERSION = 'v2';
+    const v1ProcessVehicles = jest.fn(() => ({}));
+    const v2ProcessVehicles = jest.fn(() => ({
+      '8A': {
+        routeId: '8A',
+        detourVersion: 'v2',
+        state: 'active',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 2,
+        detectedAt: new Date('2026-05-31T10:00:00Z'),
+      },
+    }));
+    const publishDetours = jest.fn().mockResolvedValue();
+    const saveDetourRuntimeState = jest.fn().mockResolvedValue();
+    const loadPersistentDetours = jest.fn().mockResolvedValue({});
+    const loadPersistentDetourGeometries = jest.fn().mockResolvedValue({});
+    const syncPersistentDetours = jest.fn().mockResolvedValue();
+
+    jest.doMock('../gtfsLoader', () => ({
+      getStaticData: jest.fn().mockResolvedValue({
+        lastRefresh: 1,
+        tripMapping: new Map(),
+        stopsById: {},
+        routeStopSequencesMapping: {},
+        scheduleIndex: {},
+      }),
+    }));
+
+    jest.doMock('../vehicleFetcher', () => ({
+      fetchVehicles: jest.fn().mockResolvedValue([
+        { id: 'bus-1', routeId: '8A', coordinate: { latitude: 44.39, longitude: -79.69 } },
+      ]),
+      getVehicleFeedStatus: jest.fn(() => ({ freshness: { stale: false } })),
+      errors: { fetchFailures: 0 },
+    }));
+
+    jest.doMock('../baselineManager', () => ({
+      getBaselineData: jest.fn().mockResolvedValue({ shapes: new Map(), routeShapeMapping: new Map() }),
+      getBaselineStatus: jest.fn(() => ({ readyForDetours: true })),
+      logShapeDivergence: jest.fn(),
+    }));
+
+    jest.doMock('../detourDetector', () => ({
+      processVehicles: v1ProcessVehicles,
+      getState: jest.fn(() => ({ detours: {}, detourStates: {} })),
+      hydratePersistentDetours: jest.fn(),
+      hydratePersistentDetourGeometries: jest.fn(),
+      getPersistentDetours: jest.fn(() => ({})),
+      getPersistentDetourGeometries: jest.fn(() => ({})),
+      serializeDetectorRuntimeState: jest.fn(() => ({ detourVersion: 'v1', routes: [] })),
+      hydrateRuntimeState: jest.fn(),
+      hydrateActiveDetourSnapshots: jest.fn(() => 0),
+    }));
+
+    jest.doMock('../detourV2/workerAdapter', () => ({
+      processVehicles: v2ProcessVehicles,
+      getState: jest.fn(() => ({ detourVersion: 'v2', detours: {}, detourStates: {} })),
+      hydratePersistentDetours: jest.fn(),
+      hydratePersistentDetourGeometries: jest.fn(),
+      getPersistentDetours: jest.fn(() => ({})),
+      getPersistentDetourGeometries: jest.fn(() => ({})),
+      serializeDetectorRuntimeState: jest.fn(() => ({ detourVersion: 'v2', activeDetours: {} })),
+      hydrateRuntimeState: jest.fn(),
+      hydrateActiveDetourSnapshots: jest.fn(() => 0),
+    }));
+
+    jest.doMock('../detourPublisher', () => ({ publishDetours }));
+    jest.doMock('../persistentDetourStore', () => ({
+      loadPersistentDetours,
+      loadPersistentDetourGeometries,
+      syncPersistentDetours,
+    }));
+    jest.doMock('../detourRuntimeStateStore', () => ({
+      loadDetourRuntimeState: jest.fn().mockResolvedValue(null),
+      saveDetourRuntimeState,
+    }));
+    jest.doMock('../activeDetourSnapshotStore', () => ({
+      loadActiveDetourSnapshots: jest.fn().mockResolvedValue({}),
+    }));
+
+    const worker = require('../detourWorker');
+    const result = await worker.runTick({ source: 'test' });
+
+    expect(result).toMatchObject({ ok: true, detourCount: 1 });
+    expect(v1ProcessVehicles).not.toHaveBeenCalled();
+    expect(v2ProcessVehicles).toHaveBeenCalledTimes(1);
+    expect(loadPersistentDetours).not.toHaveBeenCalled();
+    expect(loadPersistentDetourGeometries).not.toHaveBeenCalled();
+    expect(syncPersistentDetours).not.toHaveBeenCalled();
+    expect(publishDetours.mock.calls[0][0]).toEqual(expect.objectContaining({
+      '8A': expect.objectContaining({ detourVersion: 'v2' }),
+    }));
+    expect(saveDetourRuntimeState.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ detourVersion: 'v2' })
+    );
+  });
+
 });

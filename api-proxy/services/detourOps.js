@@ -2,6 +2,8 @@ const { getDetourHistory, HISTORY_MAX_LIMIT } = require('../detourPublisher');
 const { getDb } = require('../firebaseAdmin');
 const { createDetourRunLock } = require('./detourRunLock');
 const { createOffsetSampleScheduler } = require('./detourOffsetTasks');
+const { buildDetourStorageConfig } = require('../detour/storageConfig');
+const { getDetectorForStorageConfig } = require('../detour/detectorSelector');
 
 const DEFAULT_ROLLOUT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FALSE_POSITIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -220,7 +222,7 @@ function summarizeShortLivedDetours(events, maxDurationMs) {
 
 function createDetourOps({
   detourWorker,
-  loadDetector = () => require('../detourDetector'),
+  loadDetector = null,
   queryDetourHistory = getDetourHistory,
   getBaselineStatusWithDivergence = async () => null,
   now = () => Date.now(),
@@ -233,6 +235,9 @@ function createDetourOps({
   const activeRunLock = runLock || createConfiguredRunLock(env);
   const activeOffsetSampleScheduler =
     offsetSampleScheduler || createConfiguredOffsetSampleScheduler(env);
+  const storageConfig = buildDetourStorageConfig(env);
+  const resolveDetector = loadDetector ||
+    (() => getDetectorForStorageConfig(storageConfig));
 
   function getStatus() {
     if (!detourWorker) {
@@ -241,7 +246,7 @@ function createDetourOps({
 
     const status = detourWorker.getStatus();
     try {
-      status.evidenceSummary = loadDetector().getDetourEvidence();
+      status.evidenceSummary = resolveDetector().getDetourEvidence();
     } catch (_err) {
       status.evidenceSummary = {};
     }
@@ -424,12 +429,22 @@ function createDetourOps({
       return { enabled: false };
     }
 
-    const detector = loadDetector();
+    const detector = resolveDetector();
+    const status = detourWorker.getStatus();
+    const meta = {
+      detourVersion: status.detourVersion || storageConfig.detourVersion,
+      storage: status.storage || {
+        activeCollection: storageConfig.activeCollection,
+        historyCollection: storageConfig.historyCollection,
+        runtimeStateCollection: storageConfig.runtimeStateCollection,
+        runtimeStateDoc: storageConfig.runtimeStateDoc,
+      },
+    };
 
     if (routeId) {
       const routeData = detector.getRouteDebug(routeId);
       if (!routeData) {
-        return { routeId, evidence: null, message: 'No evidence for this route' };
+        return { ...meta, routeId, evidence: null, message: 'No evidence for this route' };
       }
 
       const MAX_DEBUG_POINTS = 200;
@@ -441,17 +456,21 @@ function createDetourOps({
         responseData.points = responseData.points.slice(-MAX_DEBUG_POINTS);
         responseData.truncated = true;
       }
-      return { routeId, evidence: responseData };
+      return { ...meta, routeId, evidence: responseData };
     }
 
     const summary = detector.getDetourEvidence();
-    return { routes: summary, count: Object.keys(summary).length };
+    return { ...meta, routes: summary, count: Object.keys(summary).length };
   }
 
   async function getLogs(filters) {
-    const logs = await queryDetourHistory(filters);
+    const logs = await queryDetourHistory({ ...filters, storageConfig });
 
     return {
+      detourVersion: storageConfig.detourVersion,
+      storage: {
+        historyCollection: storageConfig.historyCollection,
+      },
       logs,
       count: logs.length,
       limit: filters.limit,
@@ -513,6 +532,7 @@ function createDetourOps({
     try {
       const clearEventTypes = ['DETOUR_CLEARED', 'DETOUR_AUTO_CLEARED_STALE'];
       const clearedEvents = await queryDetourHistory({
+        storageConfig,
         eventTypes: clearEventTypes,
         startMs: currentTime - rolloutWindowMs,
         limit: 200,
@@ -585,11 +605,13 @@ function createDetourOps({
 
       const [falsePositiveClearedEvents, detectedEvents] = await Promise.all([
         queryDetourHistory({
+          storageConfig,
           eventTypes: clearEventTypes,
           startMs: currentTime - falsePositiveWindowMs,
           limit: 200,
         }),
         queryDetourHistory({
+          storageConfig,
           eventTypes: ['DETOUR_DETECTED'],
           startMs: currentTime - falsePositiveWindowMs,
           limit: 200,
@@ -633,6 +655,13 @@ function createDetourOps({
       enabled: true,
       running: status.running,
       mode: status.mode,
+      detourVersion: status.detourVersion || storageConfig.detourVersion,
+      storage: status.storage || {
+        activeCollection: storageConfig.activeCollection,
+        historyCollection: storageConfig.historyCollection,
+        runtimeStateCollection: storageConfig.runtimeStateCollection,
+        runtimeStateDoc: storageConfig.runtimeStateDoc,
+      },
       tickCount: status.tickCount,
       lastSuccessfulTick: status.lastSuccessfulTick,
       consecutiveFailureCount: status.consecutiveFailureCount,

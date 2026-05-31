@@ -4,17 +4,6 @@ const {
   getVehicleFeedStatus,
   errors: fetchErrors,
 } = require('./vehicleFetcher');
-const {
-  processVehicles,
-  getState,
-  hydratePersistentDetours,
-  hydratePersistentDetourGeometries,
-  getPersistentDetours,
-  getPersistentDetourGeometries,
-  serializeDetectorRuntimeState,
-  hydrateRuntimeState,
-  hydrateActiveDetourSnapshots,
-} = require('./detourDetector');
 const { publishDetours } = require('./detourPublisher');
 const {
   loadPersistentDetours,
@@ -29,11 +18,24 @@ const {
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
 const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
 const { buildDetourStorageConfig } = require('./detour/storageConfig');
+const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
 const REQUIRE_SAFE_BASELINE = process.env.DETOUR_REQUIRE_SAFE_BASELINE !== 'false';
 const detourStorageConfig = buildDetourStorageConfig(process.env);
+const detector = getDetectorForStorageConfig(detourStorageConfig);
+const {
+  processVehicles,
+  getState,
+  hydratePersistentDetours,
+  hydratePersistentDetourGeometries,
+  getPersistentDetours,
+  getPersistentDetourGeometries,
+  serializeDetectorRuntimeState,
+  hydrateRuntimeState,
+  hydrateActiveDetourSnapshots,
+} = detector;
 
 let interval = null;
 let running = false;
@@ -67,6 +69,10 @@ function detourKeys(detours) {
 }
 
 async function ensurePersistentDetoursHydrated({ force = false } = {}) {
+  if (detourStorageConfig.detourVersion === 'v2') {
+    persistentDetoursHydrated = true;
+    return;
+  }
   if (persistentDetoursHydrated && !force) return;
   const [records, geometryRecords] = await Promise.all([
     loadPersistentDetours({ force }),
@@ -223,7 +229,9 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
           ? 'runtime-and-active-snapshot-hydration-empty'
           : undefined,
       });
-      await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
+      if (detourStorageConfig.detourVersion !== 'v2') {
+        await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
+      }
       await saveDetourRuntimeState(serializeDetectorRuntimeState(), {
         storageConfig: detourStorageConfig,
       });

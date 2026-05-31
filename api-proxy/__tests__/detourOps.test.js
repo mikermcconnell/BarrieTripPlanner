@@ -431,5 +431,98 @@ describe('detourOps rollout health', () => {
     expect(result.launchReadiness.status).toBe('pilot_ready_with_cautions');
     expect(result.launchReadiness.failedWarnings).toContain('no_recent_stale_auto_clears');
   });
+
+  test('default status and debug loaders use the V2 detector when configured', () => {
+    jest.resetModules();
+    process.env.DETOUR_DETECTOR_VERSION = 'v2';
+
+    jest.doMock('../detourDetector', () => ({
+      getDetourEvidence: jest.fn(() => ({ v1: { pointCount: 1 } })),
+      getRouteDebug: jest.fn(() => ({ candidateEvidence: { pointCount: 1 } })),
+    }));
+    jest.doMock('../detourV2/workerAdapter', () => ({
+      getDetourEvidence: jest.fn(() => ({ '8A': { pointCount: 2, uniqueVehicles: 2 } })),
+      getRouteDebug: jest.fn(() => ({
+        candidateEvidence: { pointCount: 2, uniqueSignatureCount: 2 },
+        projectionDiagnostics: [{ vehicleId: 'bus-1', classification: 'off-route' }],
+      })),
+    }));
+
+    const { createDetourOps: createIsolatedDetourOps } = require('../services/detourOps');
+    const ops = createIsolatedDetourOps({
+      detourWorker: {
+        getStatus: () => ({
+          running: false,
+          detourVersion: 'v2',
+          storage: { activeCollection: 'activeDetoursV2' },
+        }),
+      },
+      env: { DETOUR_DETECTOR_VERSION: 'v2' },
+    });
+
+    expect(ops.getStatus()).toEqual(expect.objectContaining({
+      detourVersion: 'v2',
+      storage: { activeCollection: 'activeDetoursV2' },
+      evidenceSummary: { '8A': { pointCount: 2, uniqueVehicles: 2 } },
+    }));
+    expect(ops.getDebug('8A')).toEqual(expect.objectContaining({
+      detourVersion: 'v2',
+      storage: { activeCollection: 'activeDetoursV2' },
+      routeId: '8A',
+      evidence: expect.objectContaining({
+        candidateEvidence: { pointCount: 2, uniqueSignatureCount: 2 },
+        projectionDiagnostics: [{ vehicleId: 'bus-1', classification: 'off-route' }],
+      }),
+    }));
+  });
+
+  test('rollout health reports and queries V2 storage when configured', async () => {
+    const now = Date.parse('2026-05-31T12:00:00Z');
+    const queryDetourHistory = jest.fn().mockResolvedValue([]);
+    const ops = createDetourOps({
+      detourWorker: {
+        getStatus: () => ({
+          running: false,
+          mode: 'scheduled',
+          detourVersion: 'v2',
+          storage: {
+            activeCollection: 'activeDetoursV2',
+            historyCollection: 'detourHistoryV2',
+          },
+          tickCount: 3,
+          lastSuccessfulTick: new Date(now - 60 * 1000).toISOString(),
+          consecutiveFailureCount: 0,
+          activeDetours: {},
+          baseline: { readyForDetours: true },
+          errors: { publishFailures: 0 },
+        }),
+      },
+      queryDetourHistory,
+      getBaselineStatusWithDivergence: jest.fn().mockResolvedValue({
+        divergence: { hasChanges: false },
+      }),
+      now: () => now,
+      env: {
+        DETOUR_DETECTOR_VERSION: 'v2',
+        DETOUR_WORKER_ENABLED: 'true',
+      },
+    });
+
+    const result = await ops.getRolloutHealth();
+
+    expect(result).toEqual(expect.objectContaining({
+      detourVersion: 'v2',
+      storage: expect.objectContaining({
+        activeCollection: 'activeDetoursV2',
+        historyCollection: 'detourHistoryV2',
+      }),
+    }));
+    expect(queryDetourHistory).toHaveBeenCalledWith(expect.objectContaining({
+      storageConfig: expect.objectContaining({
+        detourVersion: 'v2',
+        historyCollection: 'detourHistoryV2',
+      }),
+    }));
+  });
 });
 
