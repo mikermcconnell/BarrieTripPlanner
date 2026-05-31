@@ -21,6 +21,7 @@ function parseArgs(argv) {
     maxDetourAgeMinutes: 15,
     json: false,
     skipActiveDetourFreshness: false,
+    activeCollection: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -43,6 +44,7 @@ function parseArgs(argv) {
     else if (arg === '--lookback-minutes') args.lookbackMinutes = Number(readValue());
     else if (arg === '--max-detour-age-minutes') args.maxDetourAgeMinutes = Number(readValue());
     else if (arg === '--json') args.json = true;
+    else if (arg === '--active-collection') args.activeCollection = readValue();
     else if (arg === '--skip-active-detour-freshness') args.skipActiveDetourFreshness = true;
     else if (arg === '--help' || arg === '-h') {
       args.help = true;
@@ -66,7 +68,8 @@ Options:
   --scheduler-job <name>            Cloud Scheduler job (default: bttp-detour-run-once)
   --scheduler-location <location>   Cloud Scheduler location (default: us-central1)
   --lookback-minutes <n>            Log window to inspect (default: 10)
-  --max-detour-age-minutes <n>      Max activeDetours updatedAt age (default: 15)
+  --max-detour-age-minutes <n>      Max active-detour updatedAt age (default: 15)
+  --active-collection <name>        Firestore collection to read. Defaults to EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION or activeDetours.
   --skip-active-detour-freshness    Skip Firestore freshness check
   --json                            Print JSON output
 `);
@@ -175,18 +178,18 @@ function formatTime(value) {
   return value ? new Date(value).toISOString() : 'n/a';
 }
 
-function printText(result, tokenSummary) {
+function printText(result, tokenSummary, activeCollection) {
   const checks = result.checks;
   const lines = [
     `Detour scheduler health: ${result.ok ? 'PASS' : 'FAIL'}`,
     `- Scheduler token match: ${checks.schedulerTokenMatches.ok ? 'PASS' : 'FAIL'} (${checks.schedulerTokenMatches.reason})`,
     `- Recent scheduler 2xx: ${checks.recentSchedulerSuccess.ok ? 'PASS' : 'FAIL'} (${checks.recentSchedulerSuccess.count}; latest ${formatTime(checks.recentSchedulerSuccess.latestAt)})`,
     `- Recent scheduler 401s: ${checks.noRecentScheduler401.ok ? 'PASS' : 'FAIL'} (${checks.noRecentScheduler401.count}; latest ${formatTime(checks.noRecentScheduler401.latestAt)})`,
-    `- activeDetours freshness: ${checks.activeDetoursFresh.ok ? 'PASS' : 'FAIL'} (${checks.activeDetoursFresh.reason}; routes ${checks.activeDetoursFresh.activeDetourCount})`,
+    `- ${activeCollection} freshness: ${checks.activeDetoursFresh.ok ? 'PASS' : 'FAIL'} (${checks.activeDetoursFresh.reason}; routes ${checks.activeDetoursFresh.activeDetourCount})`,
     `- Token fingerprints: Cloud Run ${tokenSummary.cloudRun.hashPrefix || 'missing'}, Scheduler ${tokenSummary.scheduler.hashPrefix || 'missing'} (prefixes only)`,
   ];
   if (checks.activeDetoursFresh.staleRoutes?.length) {
-    lines.push(`- Stale activeDetours routes: ${checks.activeDetoursFresh.staleRoutes.join(', ')}`);
+    lines.push(`- Stale ${activeCollection} routes: ${checks.activeDetoursFresh.staleRoutes.join(', ')}`);
   }
   console.log(lines.join('\n'));
 }
@@ -199,6 +202,11 @@ async function main() {
   }
 
   const env = loadEnvFile('.env');
+  const activeCollection =
+    args.activeCollection ||
+    env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION ||
+    env.DETOUR_ACTIVE_COLLECTION ||
+    'activeDetours';
   const cloudRunToken = getCloudRunSchedulerToken(args);
   const schedulerToken = getSchedulerHeaderToken(args);
   const tokenMatch = Boolean(cloudRunToken.token && cloudRunToken.token === schedulerToken.token);
@@ -208,6 +216,7 @@ async function main() {
     : await fetchLiveActiveDetours({
       apiKey: env.EXPO_PUBLIC_FIREBASE_API_KEY,
       projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+      collectionName: activeCollection,
     });
 
   const result = evaluateDetourSchedulerHealth({
@@ -233,9 +242,9 @@ async function main() {
   };
 
   if (args.json) {
-    console.log(JSON.stringify({ ...result, tokenSummary }, null, 2));
+    console.log(JSON.stringify({ ...result, activeCollection, tokenSummary }, null, 2));
   } else {
-    printText(result, tokenSummary);
+    printText(result, tokenSummary, activeCollection);
   }
 
   if (!result.ok) process.exit(1);

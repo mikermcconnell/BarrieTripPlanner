@@ -163,6 +163,72 @@ describe('Auto Detour V2 detector', () => {
     }));
   });
 
+  test('enriches confirmed V2 geometry with route-scoped stop impacts', () => {
+    const detector = createDetourV2Detector();
+    const stopImpactData = {
+      routeStopSequencesMapping: {
+        '8A': {
+          'shape-1': ['before', 'inside', 'after'],
+        },
+      },
+      stopsById: new Map([
+        ['before', { id: 'before', code: '100', latitude: 44.39, longitude: -79.698 }],
+        ['inside', { id: 'inside', code: '101', latitude: 44.39, longitude: -79.690 }],
+        ['after', { id: 'after', code: '102', latitude: 44.39, longitude: -79.682 }],
+      ]),
+    };
+
+    const result = detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 1000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.690 }, timestampMs: 2000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.682 }, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping, null, stopImpactData);
+
+    expect(result['8A'].geometry).toEqual(expect.objectContaining({
+      affectedStopIds: ['before', 'inside', 'after'],
+      skippedStopIds: ['inside'],
+      entryStopId: 'before',
+      exitStopId: 'after',
+    }));
+    expect(result['8A'].geometry.segments[0]).toEqual(expect.objectContaining({
+      affectedStopIds: ['before', 'inside', 'after'],
+      skippedStopIds: ['inside'],
+      entryStopId: 'before',
+      exitStopId: 'after',
+    }));
+  });
+
+  test('upgrades a confirmed hidden detour when later evidence produces safe geometry', () => {
+    const detector = createDetourV2Detector();
+
+    let result = detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', coordinate: { latitude: 44.395, longitude: -79.690 }, timestampMs: 1000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.690 }, timestampMs: 2000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.690 }, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: false,
+      canShowDetourPath: false,
+    }));
+
+    result = detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 4000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.682 }, timestampMs: 5000 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: true,
+      canShowDetourPath: true,
+      riderVisibilityReason: 'v2-confirmed',
+    }));
+    expect(result['8A'].geometry).toEqual(expect.objectContaining({
+      canShowDetourPath: true,
+      inferredDetourPolyline: expect.any(Array),
+      skippedSegmentPolyline: expect.any(Array),
+    }));
+  });
+
   test('requires affected-span traversal before clearing', () => {
     const detector = createDetourV2Detector();
 
