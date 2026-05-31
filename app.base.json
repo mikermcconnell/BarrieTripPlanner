@@ -1,18 +1,15 @@
 {
   "expo": {
-    "name": "My Barrie Transit",
-    "slug": "barrie-transit-planner",
+    "name": "My Barrie Transit Lab",
+    "slug": "barrie-transit-planner-detour-lab",
     "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "barrie-transit",
+    "scheme": "barrie-transit-lab",
     "updates": {
-      "enabled": true,
-      "url": "https://u.expo.dev/7550e65d-8606-4a0b-9fea-e86b646fb573",
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "enabled": false
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -22,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.barrietransit.planner",
+      "bundleIdentifier": "com.barrietransit.planner.detourlab",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -35,7 +32,7 @@
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#0c8ce5"
       },
-      "package": "com.barrietransit.planner",
+      "package": "com.barrietransit.planner.detourlab",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
@@ -67,7 +64,7 @@
       [
         "./plugins/withLauncherDisplayName",
         {
-          "name": "MyBarrie"
+          "name": "MyBarrie Lab"
         }
       ],
       [
