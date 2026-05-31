@@ -222,6 +222,36 @@ describe('selectRepresentativeDetourPath', () => {
     expect(Math.min(...result.map((point) => point.latitude))).toBeGreaterThan(44.3945);
     expect(Math.max(...result.map((point) => point.latitude))).toBeLessThan(44.3975);
   });
+
+  test('does not stitch separate trips from the same vehicle into one backtracking path', () => {
+    const firstTrip = [
+      { latitude: 44.38820, longitude: -79.68790, timestampMs: 1_000, vehicleId: 'bus-1', tripId: 'trip-1', progressMeters: 100 },
+      { latitude: 44.38870, longitude: -79.68550, timestampMs: 31_000, vehicleId: 'bus-1', tripId: 'trip-1', progressMeters: 220 },
+      { latitude: 44.38920, longitude: -79.68540, timestampMs: 61_000, vehicleId: 'bus-1', tripId: 'trip-1', progressMeters: 340 },
+    ];
+    const nextTripOneHourLater = [
+      { latitude: 44.38821, longitude: -79.68786, timestampMs: 3_601_000, vehicleId: 'bus-1', tripId: 'trip-2', progressMeters: 105 },
+      { latitude: 44.38871, longitude: -79.68548, timestampMs: 3_631_000, vehicleId: 'bus-1', tripId: 'trip-2', progressMeters: 225 },
+      { latitude: 44.38918, longitude: -79.68539, timestampMs: 3_661_000, vehicleId: 'bus-1', tripId: 'trip-2', progressMeters: 345 },
+    ];
+
+    const result = selectRepresentativeDetourPath([
+      ...firstTrip,
+      ...nextTripOneHourLater,
+    ]);
+
+    const pathLengthMeters = result.slice(1).reduce((total, point, index) => (
+      total + Math.hypot(
+        (point.latitude - result[index].latitude) * 111_000,
+        (point.longitude - result[index].longitude) * 80_000
+      )
+    ), 0);
+
+    expect(result).not.toBeNull();
+    expect(pathLengthMeters).toBeLessThan(350);
+    expect(result[0].latitude).toBeCloseTo(44.3882, 4);
+    expect(result[result.length - 1].latitude).toBeCloseTo(44.3892, 4);
+  });
 });
 
 describe('scoreConfidence', () => {
@@ -343,7 +373,7 @@ describe('buildGeometry', () => {
     expect(['low', 'medium', 'high']).toContain(result.confidence);
   });
 
-  test('publishes explicit skipped stop ids including boundary stops inside the closed segment', () => {
+  test('publishes skipped stop ids without marking served boundary stops as skipped', () => {
     const points = [];
     for (let i = 0; i < 8; i++) {
       points.push(makeEvidencePoint({
@@ -357,6 +387,9 @@ describe('buildGeometry', () => {
       routeStopSequencesMapping: {
         'route-1': {
           'shape-1': ['before', 'entry-boundary', 'inside', 'exit-boundary', 'after'],
+        },
+        'route-8': {
+          'shape-8': ['inside'],
         },
       },
       stopsById: new Map([
@@ -393,15 +426,21 @@ describe('buildGeometry', () => {
     );
 
     expect(result.segments[0].skippedStopIds).toEqual([
-      'entry-boundary',
       'inside',
-      'exit-boundary',
     ]);
     expect(result.segments[0].skippedStops.map((stop) => stop.id)).toEqual([
-      'entry-boundary',
       'inside',
-      'exit-boundary',
     ]);
+    expect(result.segments[0].skippedStops[0]).toMatchObject({
+      id: 'inside',
+      routeId: 'route-1',
+      affectedRouteIds: ['route-1'],
+      servedRouteIds: ['route-8'],
+      impactScope: 'partial',
+    });
+    expect(result.segments[0].firstSkippedStopId).toBe('inside');
+    expect(result.segments[0].lastServedBeforeDetourStopId).toBe('entry-boundary');
+    expect(result.segments[0].firstServedAfterDetourStopId).toBe('exit-boundary');
     expect(result.segments[0].entryStopId).toBe('entry-boundary');
     expect(result.segments[0].exitStopId).toBe('exit-boundary');
   });
@@ -474,10 +513,10 @@ describe('buildGeometry', () => {
 
     expect(detours['route-1'].geometry.segments).toHaveLength(1);
     expect(detours['route-1'].geometry.segments[0].skippedStopIds).toEqual([
-      'valid-entry',
       'valid-inside',
-      'valid-exit',
     ]);
+    expect(detours['route-1'].geometry.segments[0].lastServedBeforeDetourStopId).toBe('valid-entry');
+    expect(detours['route-1'].geometry.segments[0].firstServedAfterDetourStopId).toBe('valid-exit');
     expect(detours['route-1'].geometry.segments[0].skippedStopIds).not.toContain('hub-stop');
   });
 
@@ -622,6 +661,78 @@ describe('buildGeometry', () => {
     expect(result.skippedSegmentPolyline).not.toBeNull();
     expect(result.skippedSegmentPolyline.length).toBeGreaterThanOrEqual(2);
     expect(result.exitPoint.longitude).toBeCloseTo(-79.690, 3);
+  });
+
+  test('does not anchor a representative detour path to a far stale exit candidate', () => {
+    const shape = [
+      { latitude: 44.39, longitude: -79.690 },
+      { latitude: 44.39, longitude: -79.688 },
+      { latitude: 44.39, longitude: -79.686 },
+      { latitude: 44.39, longitude: -79.684 },
+    ];
+    const localShapes = new Map([['shape-exit', shape]]);
+    const localMapping = new Map([['route-exit', ['shape-exit']]]);
+    const points = [
+      makeEvidencePoint({
+        latitude: 44.3882,
+        longitude: -79.6880,
+        timestampMs: DETECTED_AT + 120_000,
+        vehicleId: 'bus-1',
+        tripId: 'trip-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3887,
+        longitude: -79.6868,
+        timestampMs: DETECTED_AT + 150_000,
+        vehicleId: 'bus-1',
+        tripId: 'trip-1',
+      }),
+      makeEvidencePoint({
+        latitude: 44.3891,
+        longitude: -79.6861,
+        timestampMs: DETECTED_AT + 180_000,
+        vehicleId: 'bus-1',
+        tripId: 'trip-1',
+      }),
+    ];
+
+    const result = buildGeometry(
+      'route-exit',
+      {
+        points,
+        entryCandidates: [{
+          latitude: 44.39,
+          longitude: -79.690,
+          timestampMs: DETECTED_AT,
+          vehicleId: 'bus-1',
+          tripId: 'trip-1',
+        }],
+        exitCandidates: [
+          {
+            latitude: 44.39,
+            longitude: -79.684,
+            timestampMs: DETECTED_AT + 30_000,
+            vehicleId: 'bus-1',
+            tripId: 'trip-old',
+          },
+          {
+            latitude: 44.39,
+            longitude: -79.686,
+            timestampMs: DETECTED_AT + 90_000,
+            vehicleId: 'bus-1',
+            tripId: 'trip-1',
+          },
+        ],
+      },
+      localShapes,
+      localMapping,
+      NOW,
+      DETECTED_AT
+    );
+
+    expect(result.exitPoint.longitude).toBeCloseTo(-79.686, 3);
+    expect(result.inferredDetourPolyline[result.inferredDetourPolyline.length - 1].longitude)
+      .toBeCloseTo(-79.686, 3);
   });
 
   test('suppresses a long detour path when the identified closed route span is too small', () => {
@@ -1833,11 +1944,15 @@ describe('route family geometry handoff', () => {
     reconcileRouteFamilyGeometries(detours, familyShapes, familyRouteMapping);
     enrichDetourMapStopImpacts(detours, familyShapes, stopImpactData);
 
-    expect(detours['8B'].geometry.segments[0].skippedStopIds).toEqual(['8b-entry', '8b-inside', '8b-exit']);
-    expect(detours['8B'].geometry.skippedStopIds).toEqual(['8b-entry', '8b-inside', '8b-exit']);
+    expect(detours['8B'].geometry.segments[0].skippedStopIds).toEqual(['8b-inside']);
+    expect(detours['8B'].geometry.skippedStopIds).toEqual(['8b-inside']);
+    expect(detours['8B'].geometry.segments[0].lastServedBeforeDetourStopId).toBe('8b-entry');
+    expect(detours['8B'].geometry.segments[0].firstServedAfterDetourStopId).toBe('8b-exit');
     expect(detours['8A']).toBeDefined();
-    expect(detours['8A'].geometry.segments[0].skippedStopIds).toEqual(['8a-entry', '8a-inside', '8a-exit']);
-    expect(detours['8A'].geometry.skippedStopIds).toEqual(['8a-entry', '8a-inside', '8a-exit']);
+    expect(detours['8A'].geometry.segments[0].skippedStopIds).toEqual(['8a-inside']);
+    expect(detours['8A'].geometry.skippedStopIds).toEqual(['8a-inside']);
+    expect(detours['8A'].geometry.segments[0].lastServedBeforeDetourStopId).toBe('8a-entry');
+    expect(detours['8A'].geometry.segments[0].firstServedAfterDetourStopId).toBe('8a-exit');
   });
 
   test('projects sibling branch detour segments onto the opposite-direction shape', () => {

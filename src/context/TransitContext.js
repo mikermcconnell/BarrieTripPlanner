@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { fetchAllStaticData } from '../services/gtfsService';
-import { fetchVehiclePositions, formatVehiclesForMap } from '../services/realtimeService';
+import {
+  fetchVehiclePositions,
+  formatVehiclesForMap,
+  getLastVehicleFeedStatus,
+} from '../services/realtimeService';
 import { buildRoutingData } from '../services/routingDataService';
 import { fetchServiceAlerts } from '../services/alertService';
 import { REFRESH_INTERVALS, SHAPE_PROCESSING } from '../config/constants';
@@ -85,6 +89,7 @@ export const TransitProvider = ({ children }) => {
   // Real-time data
   const [vehicles, setVehicles] = useState([]);
   const [lastVehicleUpdate, setLastVehicleUpdate] = useState(null);
+  const [vehicleFeedHealth, setVehicleFeedHealth] = useState(null);
 
   // Loading and error states
   const [isLoadingStatic, setIsLoadingStatic] = useState(true);
@@ -435,13 +440,19 @@ export const TransitProvider = ({ children }) => {
 
       try {
         const rawVehicles = await fetchVehiclePositions();
+        const nextVehicleFeedHealth = getLastVehicleFeedStatus();
+        setVehicleFeedHealth(nextVehicleFeedHealth);
         const formattedVehicles = formatVehiclesForMap(rawVehicles, tripMapping);
         const diffed = diffVehicles(formattedVehicles, prevVehiclesRef.current);
         if (diffed !== prevVehiclesRef.current) {
           prevVehiclesRef.current = diffed;
           setVehicles(diffed);
         }
-        setLastVehicleUpdate(new Date());
+        if (nextVehicleFeedHealth?.freshness?.status === 'stale') {
+          setLastVehicleFailureAt(Date.now());
+        } else {
+          setLastVehicleUpdate(new Date());
+        }
       } catch (error) {
         logger.error('Failed to load vehicle positions:', error);
         setLastVehicleFailureAt(Date.now());
@@ -800,6 +811,7 @@ export const TransitProvider = ({ children }) => {
       lastSuccessAt: lastVehicleUpdate,
       lastFailureAt: lastVehicleFailureAt,
       error: vehicleError,
+      feedHealth: vehicleFeedHealth,
     },
     routing: {
       isLoading: isBuildingRouting,
@@ -838,6 +850,7 @@ export const TransitProvider = ({ children }) => {
     lastVehicleUpdate,
     lastVehicleFailureAt,
     vehicleError,
+    vehicleFeedHealth,
     isBuildingRouting,
     isRoutingReady,
     routingData,
@@ -983,6 +996,7 @@ export const TransitProvider = ({ children }) => {
     isLoadingVehicles,
     vehicleError,
     diagnostics,
+    vehicleFeedHealth,
     loadVehiclePositions,
     loadServiceAlerts,
     startVehicleUpdates,
@@ -1007,6 +1021,7 @@ export const TransitProvider = ({ children }) => {
     isLoadingVehicles,
     vehicleError,
     diagnostics,
+    vehicleFeedHealth,
     loadVehiclePositions,
     loadServiceAlerts,
     startVehicleUpdates,

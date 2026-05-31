@@ -154,12 +154,61 @@ describe('detourRoadMatcher', () => {
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
         DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS: '160',
+        DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED: 'false',
       },
       fetchImpl,
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  test('falls back to OSRM route when trace matching is low-confidence', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          matchings: [
+            {
+              confidence: 0.07,
+              geometry: {
+                coordinates: [
+                  [-79.6901, 44.3801],
+                  [-79.685, 44.385],
+                  [-79.6801, 44.3901],
+                ],
+              },
+              legs: [{ steps: [{ name: 'Wonky Road' }] }],
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => OSRM_ROUTE_RESPONSE,
+      });
+
+    const result = await matchPolylineToRoads(INPUT_POLYLINE, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS: '160',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][0]).toContain('/route/v1/driving/');
+    expect(result.roadMatchSource).toBe('osrm-route');
+    expect(result.likelyDetourRoadNames).toEqual([
+      'Bayfield Street',
+      'Grove Street',
+      'Duckworth Street',
+    ]);
     warnSpy.mockRestore();
   });
 
@@ -801,5 +850,61 @@ describe('detourRoadMatcher', () => {
 
     expect(result.likelyDetourPolyline).toBeUndefined();
     expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+  });
+
+  test('trims normal-route approach before publishing likely detour geometry', async () => {
+    const routeShapePolyline = [
+      { latitude: 44.0, longitude: -79.700 },
+      { latitude: 44.0, longitude: -79.699 },
+      { latitude: 44.0, longitude: -79.698 },
+      { latitude: 44.0, longitude: -79.697 },
+      { latitude: 44.0, longitude: -79.696 },
+    ];
+    const skippedSegmentPolyline = [
+      { latitude: 44.0, longitude: -79.696 },
+      { latitude: 44.0, longitude: -79.694 },
+    ];
+    const matchedPath = [
+      [-79.700, 44.000],
+      [-79.699, 44.000],
+      [-79.698, 44.000],
+      [-79.697, 44.002],
+      [-79.695, 44.002],
+    ];
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [{
+          confidence: 0.91,
+          geometry: { coordinates: matchedPath },
+          legs: [{ steps: [{ name: 'Detour Road' }] }],
+        }],
+      }),
+    });
+
+    const result = await matchDetourGeometry({
+      shapeId: 'shape-11',
+      inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
+      segments: [{
+        shapeId: 'shape-11',
+        skippedSegmentPolyline,
+        inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
+        canShowDetourPath: true,
+      }],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+      },
+      fetchImpl,
+      shapes: new Map([['shape-11', routeShapePolyline]]),
+    });
+
+    expect(result.segments[0].likelyDetourPolyline).toEqual([
+      { latitude: 44.002, longitude: -79.697 },
+      { latitude: 44.002, longitude: -79.695 },
+    ]);
+    expect(result.likelyDetourPolyline).toEqual(result.segments[0].likelyDetourPolyline);
   });
 });

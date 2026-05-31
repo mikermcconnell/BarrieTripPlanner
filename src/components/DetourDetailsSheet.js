@@ -15,6 +15,8 @@ const getDetourTitle = (routeId, state) => {
   return `Route ${routeId} - ${statusLabel}`;
 };
 
+const MAP_INTERACTION_HINT = 'Tap or click a highlighted route line on the map to open that route’s detour details.';
+
 const DetourDetailsSheet = ({
   routeId,
   detour,
@@ -23,8 +25,13 @@ const DetourDetailsSheet = ({
   routeColorByRouteId = {},
   segmentStopDetails = [],
   transitNews = [],
+  detourExplorerLevel = 'route',
+  selectedEventRouteId = null,
   onClose,
   onViewOnMap,
+  onSelectEventRoute,
+  onShowEvent,
+  onShowAllDetours,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
@@ -40,6 +47,9 @@ const DetourDetailsSheet = ({
 
   const routeColor = routeColorOverride || ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
   const getRouteColor = (id) => routeColorByRouteId[id] || ROUTE_COLORS[id] || routeColor;
+  const eventRouteIds = Array.isArray(detourEvent?.routeIds) ? detourEvent.routeIds : [];
+  const canSelectEventRoute = typeof onSelectEventRoute === 'function';
+  const currentEventRouteId = selectedEventRouteId || routeId;
   const impactRouteLabel = detourEvent?.routeIds?.length > 1
     ? `Routes ${detourEvent.routeIds.join('/')}`
     : null;
@@ -54,6 +64,9 @@ const DetourDetailsSheet = ({
   const myRideUrl = myRideNotice?.url ?? myRideNotice?.sourceUrl ?? null;
   const openMyRideNotice = () => {
     if (myRideUrl) Linking.openURL(myRideUrl).catch(() => {});
+  };
+  const handleEventRoutePress = (eventRouteId) => {
+    if (canSelectEventRoute) onSelectEventRoute(eventRouteId);
   };
 
   return (
@@ -78,13 +91,34 @@ const DetourDetailsSheet = ({
           </View>
           <View style={styles.headerText}>
             <Text style={styles.title}>{detourEvent?.title || getDetourTitle(routeId, detour?.state)}</Text>
-            {detourEvent?.routeIds?.length > 0 && (
+            {eventRouteIds.length > 0 && (
               <View style={styles.eventRoutesRow}>
-                {detourEvent.routeIds.map((eventRouteId) => (
-                  <View key={eventRouteId} style={[styles.eventRouteChip, { backgroundColor: getRouteColor(eventRouteId) }]}>
-                    <Text style={styles.eventRouteChipText}>{eventRouteId}</Text>
-                  </View>
-                ))}
+                {eventRouteIds.map((eventRouteId) => {
+                  const isSelectedRoute = eventRouteId === currentEventRouteId;
+                  const Chip = canSelectEventRoute ? TouchableOpacity : View;
+
+                  return (
+                    <Chip
+                      key={eventRouteId}
+                      style={[
+                        styles.eventRouteChip,
+                        { backgroundColor: getRouteColor(eventRouteId) },
+                        isSelectedRoute && styles.eventRouteChipSelected,
+                      ]}
+                      {...(canSelectEventRoute
+                        ? {
+                          onPress: () => handleEventRoutePress(eventRouteId),
+                          activeOpacity: 0.8,
+                          accessibilityRole: 'button',
+                          accessibilityLabel: `Show Route ${eventRouteId} detour only`,
+                          accessibilityState: { selected: isSelectedRoute },
+                        }
+                        : {})}
+                    >
+                      <Text style={styles.eventRouteChipText}>{eventRouteId}</Text>
+                    </Chip>
+                  );
+                })}
               </View>
             )}
             <View style={styles.headerMeta}>
@@ -107,6 +141,48 @@ const DetourDetailsSheet = ({
         </View>
 
         <View style={styles.divider} />
+
+        {(onShowAllDetours || (detourEvent && onShowEvent)) && (
+          <View style={styles.explorerControls}>
+            <Text style={styles.explorerLabel}>
+              {detourExplorerLevel === 'event'
+                ? 'Showing all routes in this detour'
+                : `Selected: Route ${currentEventRouteId}`}
+            </Text>
+            <View style={styles.explorerButtonRow}>
+              {detourExplorerLevel === 'route' && onShowEvent && eventRouteIds.length > 1 && (
+                <TouchableOpacity
+                  style={styles.explorerButton}
+                  onPress={onShowEvent}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show all routes in this detour event"
+                >
+                  <Text style={styles.explorerButtonText}>Event view</Text>
+                </TouchableOpacity>
+              )}
+              {onShowAllDetours && (
+                <TouchableOpacity
+                  style={styles.explorerButton}
+                  onPress={onShowAllDetours}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show all active detours"
+                >
+                  <Text style={styles.explorerButtonText}>View all</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
+        <View style={styles.mapHintCard}>
+          <View style={styles.mapHintIcon}>
+            <Icon name="Route" size={16} color={COLORS.primaryDark} />
+          </View>
+          <View style={styles.mapHintCopy}>
+            <Text style={styles.mapHintTitle}>Map tip</Text>
+            <Text style={styles.mapHintText}>{MAP_INTERACTION_HINT}</Text>
+          </View>
+        </View>
 
         <View style={styles.timingCard}>
           <Text style={styles.timingTitle}>{timingTitle}</Text>
@@ -192,6 +268,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  eventRouteChipSelected: {
+    borderColor: COLORS.white,
+    shadowColor: COLORS.black,
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   eventRouteChipText: {
     fontSize: FONT_SIZES.xxs,
@@ -203,6 +288,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
     marginTop: 2,
+  },
+  explorerControls: {
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.grey50,
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+  },
+  explorerLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  explorerButtonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  explorerButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.grey300,
+  },
+  explorerButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+  },
+  mapHintCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.infoSubtle,
+    borderWidth: 1,
+    borderColor: COLORS.primarySubtle,
+  },
+  mapHintIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.primarySubtle,
+  },
+  mapHintCopy: {
+    flex: 1,
+  },
+  mapHintTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+    marginBottom: 2,
+  },
+  mapHintText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textPrimary,
+    lineHeight: 18,
   },
   timeLabel: {
     fontSize: FONT_SIZES.sm,

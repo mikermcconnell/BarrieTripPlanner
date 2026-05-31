@@ -104,6 +104,46 @@ describe('stopClosureMapUtils', () => {
     });
   });
 
+  test('does not mark route-scoped stop impacts as globally closed', () => {
+    const routeScopedImpact = {
+      ...activeImpact,
+      affectedRoutes: ['11'],
+    };
+
+    const result = annotateStopsWithClosures(
+      [{ id: 'different-id', code: '932', name: 'Stop 932' }],
+      [routeScopedImpact]
+    );
+
+    expect(result[0].isClosed).toBeUndefined();
+    expect(result[0].closureImpact).toBeUndefined();
+  });
+
+  test('keeps route-scoped closure markers from carrying global closure impact data', () => {
+    const routeScopedImpact = {
+      ...activeImpact,
+      affectedRoutes: ['11'],
+    };
+
+    const closures = deriveMappableStopClosureStops({
+      impacts: [routeScopedImpact],
+      stops,
+    });
+    const result = mergeStopClosuresForDetourMap({
+      displayedStops: [],
+      closureStops: closures,
+      includeClosures: true,
+    });
+
+    expect(result[0]).toMatchObject({
+      isRouteScopedClosure: true,
+      routeScopedClosureImpact: routeScopedImpact,
+      isNewsClosure: true,
+    });
+    expect(result[0].isClosed).toBeUndefined();
+    expect(result[0].closureImpact).toBeUndefined();
+  });
+
   test('adds upcoming closure context without marking the stop closed', () => {
     const upcomingImpact = {
       ...activeImpact,

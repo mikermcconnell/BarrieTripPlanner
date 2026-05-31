@@ -230,14 +230,20 @@ The Expo app should own:
 
 The assistant can use:
 
-- static GTFS data from existing GTFS loader/local app data patterns
-- GTFS real-time trip updates
-- GTFS real-time vehicle positions
+- static GTFS data from existing GTFS loader/local app data patterns, including stops, routes, shapes, stop sequences, schedules, route names, and route colours
+- GTFS real-time trip updates for predicted arrivals and trip status
+- GTFS real-time vehicle positions for rider-facing bus location context
 - GTFS real-time service alerts
-- active detours from Firestore/backend detour state
+- active detours from Firestore/backend detour state, including affected routes, skipped segments, likely detour paths, affected stops, confidence, detected time, and last-seen time
 - platform map hub metadata
 - approved app help content stored as local markdown/JSON knowledge documents
-- current rider context sent by app, such as selected stop, route, map area, or current location if permission is already granted
+- current rider context sent by app, such as selected stop, route, map area, saved/favourite stops or routes, or current location if permission is already granted
+
+Detour history may be used only through filtered summaries, not as raw log access. Safe examples:
+
+- "This detour was first detected about 20 minutes ago."
+- "Confidence is high because multiple buses confirmed it."
+- "This route has had repeated detections near this area."
 
 The assistant must not use:
 
@@ -245,6 +251,19 @@ The assistant must not use:
 - saved places/home/work coordinates in prompts for Phase 1
 - arbitrary web search
 - internal detour debug evidence for normal rider answers
+- raw `detourHistory` documents in rider prompts
+- route-specific `/api/detour-debug` evidence for non-admin users
+- backend process logs, Firebase runtime state, baseline mutation tools, API keys, auth tokens, or environment variables
+
+The model should not directly read Firestore, GTFS feeds, or backend logs. The backend should expose narrow, deterministic context tools such as:
+
+- `getRouteContext(routeId)`
+- `getStopContext(stopId)`
+- `getActiveDetours(routeId?)`
+- `getArrivals(stopId)`
+- `explainDetour(routeId)`
+- `compareTripOptions(from, to)`
+- `summarizeServiceStatus()`
 
 ## Grounding and Safety Rules
 

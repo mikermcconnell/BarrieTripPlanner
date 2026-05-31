@@ -148,7 +148,7 @@ describe('detector → publisher: full pipeline', () => {
     expect(setOps[0].data.updatedAt).toBeDefined();
   });
 
-  test('publisher suppresses stale low-confidence validation-only detector output', async () => {
+  test('publisher does not suppress low-confidence validation-only detector output based on age', async () => {
     const now = Date.parse('2026-05-10T16:00:00Z');
 
     await publishDetours({
@@ -177,10 +177,12 @@ describe('detector → publisher: full pipeline', () => {
     const setOps = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
 
     expect(deleteOps).toHaveLength(0);
-    expect(setOps).toHaveLength(0);
+    expect(setOps).toHaveLength(1);
+    expect(setOps[0].data.riderVisible).toBe(false);
+    expect(setOps[0].data.riderVisibilityReason).toBe('insufficient-geometry');
   });
 
-  test('publisher clears orphaned Firestore detours even after initial hydration', async () => {
+  test('publisher hides retained orphaned Firestore detours without normal-route GPS clear proof', async () => {
     const now = Date.parse('2026-05-20T14:00:00Z');
 
     await publishDetours({}, { now });
@@ -207,23 +209,28 @@ describe('detector → publisher: full pipeline', () => {
     await publishDetours({}, { now: now + 1000 });
 
     const deleteOps = mockDb._writes.filter(w => w.op === 'delete' && w.collection === 'activeDetours');
+    const activeWrites = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'activeDetours');
     const historyWrites = mockDb._writes.filter(w => w.op === 'set' && w.collection === 'detourHistory');
 
-    expect(deleteOps).toEqual([
-      expect.objectContaining({ docId: 'route-stale' }),
-    ]);
+    expect(deleteOps).toHaveLength(0);
+    expect(activeWrites).toHaveLength(1);
+    expect(activeWrites[0].data).toMatchObject({
+      routeId: 'route-stale',
+      currentVehicleCount: 0,
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
+      staleForReview: true,
+    });
     expect(historyWrites).toHaveLength(1);
     expect(historyWrites[0].data).toMatchObject({
-      eventType: 'DETOUR_CLEARED',
       routeId: 'route-stale',
-      clearReason: 'detector-cleared',
-      previousVehicleCount: 1,
-      uniqueVehicleCount: 1,
-      currentVehicleCount: 0,
+      eventType: 'DETOUR_UPDATED',
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
     });
   });
 
-  test('publisher can suppress first empty cleanup when runtime and snapshot hydration are empty', async () => {
+  test('publisher can suppress first empty cleanup before deleting GPS-cleared detours', async () => {
     const now = Date.parse('2026-05-20T14:00:00Z');
     mockDb._hydrationDocs.push({
       id: 'route-stale',
@@ -235,7 +242,8 @@ describe('detector → publisher: full pipeline', () => {
         vehicleCount: 2,
         uniqueVehicleCount: 2,
         currentVehicleCount: 0,
-        state: 'active',
+        state: 'clear-pending',
+        clearReason: 'normal-route-observed',
         confidence: 'medium',
         evidencePointCount: 8,
         lastEvidenceAt: now - 45 * 60 * 1000,

@@ -41,7 +41,11 @@ import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
-import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
+import {
+  getDetourRouteLayerOrder,
+  shouldKeepHiddenRouteShapeLayerMounted,
+  shouldRenderRouteShape,
+} from '../utils/detourFocusUtils';
 import { routeIsDetouring } from '../utils/routeDetourMatching';
 import { getDisplayedVehiclesForDetourView, isRouteInSameDetourFamily } from '../utils/detourVehicleFiltering';
 import { getRouteShapeVisibleSegments } from '../utils/detourRouteMasking';
@@ -98,6 +102,12 @@ import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
 import { focusMapToDetour } from '../utils/detourViewport';
+import {
+  DEFAULT_DETOUR_EXPLORER_SELECTION,
+  buildDetourExplorerSelection,
+  getDetourEventPrimaryRouteId,
+  getDetourEventSegmentIndexForRoute,
+} from '../utils/detourExplorerSelection';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 import { trackEvent } from '../services/analyticsService';
 import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
@@ -567,6 +577,7 @@ const HomeScreen = ({ route }) => {
   const [detourSheetRouteId, setDetourSheetRouteId] = useState(null);
   const [detourSheetSegmentIndex, setDetourSheetSegmentIndex] = useState(null);
   const [detourSheetEvent, setDetourSheetEvent] = useState(null);
+  const [detourExplorerSelection, setDetourExplorerSelection] = useState(DEFAULT_DETOUR_EXPLORER_SELECTION);
   const [detourSheetSegmentStopDetailsOverride, setDetourSheetSegmentStopDetailsOverride] = useState(null);
   const [focusedDetourRouteId, setFocusedDetourRouteId] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('regular');
@@ -635,20 +646,50 @@ const HomeScreen = ({ route }) => {
   const isDetourView = canUseDetourView && mapViewMode === 'detour';
   const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
 
+  const clearDetourMapSelection = useCallback(() => {
+    setFocusedDetourRouteId(null);
+    setDetourSheetRouteId(null);
+    setDetourSheetSegmentIndex(null);
+    setDetourSheetEvent(null);
+    setDetourSheetSegmentStopDetailsOverride(null);
+    setDetourExplorerSelection(DEFAULT_DETOUR_EXPLORER_SELECTION);
+  }, []);
+
   const handleMapViewModeChange = useCallback((nextMode) => {
     setMapViewMode(nextMode);
+
+    if (nextMode === 'regular') {
+      const hadDetourMapSelection = Boolean(
+        focusedDetourRouteId ||
+        detourSheetRouteId ||
+        detourExplorerSelection.level !== DEFAULT_DETOUR_EXPLORER_SELECTION.level
+      );
+
+      clearDetourMapSelection();
+
+      if (hadDetourMapSelection) {
+        selectRoute(null);
+      }
+      return;
+    }
 
     if (nextMode === 'detour') {
       setShowStops(false);
       setDetourLegendAutoCollapseSignal((signal) => signal + 1);
     }
-  }, []);
+  }, [
+    clearDetourMapSelection,
+    detourExplorerSelection.level,
+    detourSheetRouteId,
+    focusedDetourRouteId,
+    selectRoute,
+  ]);
 
   useEffect(() => {
     if (!canUseDetourView && mapViewMode !== 'regular') {
-      setMapViewMode('regular');
+      handleMapViewModeChange('regular');
     }
-  }, [canUseDetourView, mapViewMode]);
+  }, [canUseDetourView, handleMapViewModeChange, mapViewMode]);
 
   useEffect(() => {
     if (focusedDetourRouteId && !activeDetourRouteIds.has(focusedDetourRouteId)) {
@@ -721,7 +762,8 @@ const HomeScreen = ({ route }) => {
     focusedRouteId: hasDetourFocus ? focusedDetourRouteId : null,
     detourStopDetailsByRouteId,
     routeColorByRouteId,
-    showAllClosedStopMarkers: isDetourView && !hasDetourFocus,
+    showAllClosedStopMarkers: isDetourView && detourExplorerSelection.level !== 'route' && !hasDetourFocus,
+    detourExplorerSelection: isDetourView ? detourExplorerSelection : DEFAULT_DETOUR_EXPLORER_SELECTION,
   });
   const mapDetourRouteIds = useMemo(
     () => getDetourOverlayRouteIds(detourOverlays),
@@ -755,6 +797,57 @@ const HomeScreen = ({ route }) => {
     });
   }, [activeDetours, mapRef]);
 
+  const showDetourEventOnMap = useCallback((routeId, detourEvent = null) => {
+    const primaryRouteId = getDetourEventPrimaryRouteId(detourEvent, routeId);
+    if (!primaryRouteId) return;
+
+    setFocusedDetourRouteId(null);
+    setDetourSheetRouteId(primaryRouteId);
+    setDetourSheetSegmentIndex(null);
+    setDetourSheetEvent(detourEvent);
+    setDetourSheetSegmentStopDetailsOverride(null);
+    setDetourExplorerSelection(buildDetourExplorerSelection({
+      level: detourEvent ? 'event' : 'route',
+      event: detourEvent,
+      routeId: primaryRouteId,
+    }));
+    handleMapViewModeChange('detour');
+    focusMapOnDetour(primaryRouteId, detourEvent);
+  }, [focusMapOnDetour, handleMapViewModeChange]);
+
+  const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
+    if (!routeId) return;
+    const segmentIndex = getDetourEventSegmentIndexForRoute(detourEvent, routeId);
+
+    setFocusedDetourRouteId(routeId);
+    setDetourSheetRouteId(routeId);
+    setDetourSheetSegmentIndex(segmentIndex);
+    setDetourSheetEvent(detourEvent);
+    setDetourSheetSegmentStopDetailsOverride(null);
+    setDetourExplorerSelection(buildDetourExplorerSelection({
+      level: 'route',
+      event: detourEvent,
+      routeId,
+    }));
+    handleMapViewModeChange('detour');
+    focusMapOnDetour(routeId, {
+      ...detourEvent,
+      routeIds: [routeId],
+      primaryRouteId: routeId,
+      primarySegmentIndex: segmentIndex,
+    });
+  }, [detourSheetEvent, focusMapOnDetour, handleMapViewModeChange]);
+
+  const showAllDetoursOnMap = useCallback(() => {
+    setFocusedDetourRouteId(null);
+    setDetourSheetRouteId(null);
+    setDetourSheetSegmentIndex(null);
+    setDetourSheetEvent(null);
+    setDetourSheetSegmentStopDetailsOverride(null);
+    setDetourExplorerSelection(DEFAULT_DETOUR_EXPLORER_SELECTION);
+    handleMapViewModeChange('detour');
+  }, [handleMapViewModeChange]);
+
   const handleDetourOverlayPress = useCallback((routeId, _segment = null, segmentIndex = null, overlay = null) => {
     if (!routeId) return;
     const isMergedFamilyOverlay =
@@ -784,6 +877,16 @@ const HomeScreen = ({ route }) => {
         routeIds: sharedRouteIds,
       }
       : null);
+    setDetourExplorerSelection(buildDetourExplorerSelection({
+      level: 'route',
+      event: isMergedFamilyOverlay && sharedRouteIds
+        ? {
+          title: sharedRouteLabel ? `Routes ${sharedRouteLabel} - ${sharedStatusLabel}` : sharedStatusLabel,
+          routeIds: sharedRouteIds,
+        }
+        : null,
+      routeId,
+    }));
     handleMapViewModeChange('detour');
     focusMapOnDetour(routeId, {
       routeIds: overlayRouteIds,
@@ -1496,6 +1599,13 @@ const HomeScreen = ({ route }) => {
           const isSelected = isRouteSelected(shape.routeId);
           const isDetouring = routeIsDetouring(shape.routeId, mapDetourRouteIds);
           const isFocusedDetour = mapHasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, shape.routeId);
+          const routeLayerOrder = getDetourRouteLayerOrder({
+            routeId: shape.routeId,
+            activeDetourRouteIds: mapDetourRouteIds,
+            isDetourView,
+            hasDetourFocus: mapHasDetourFocus,
+            focusedDetourRouteId,
+          });
           const shouldRenderShape = shouldRenderRouteShape({
             routeId: shape.routeId,
             activeDetourRouteIds: mapDetourRouteIds,
@@ -1519,6 +1629,7 @@ const HomeScreen = ({ route }) => {
                   opacity={0}
                   outlineWidth={0}
                   interactive={false}
+                  layerOrder={routeLayerOrder}
                 />
               );
             }
@@ -1592,6 +1703,7 @@ const HomeScreen = ({ route }) => {
                 className={isNewlySelected ? 'polyline-draw-on' : ''}
                 routeLabel={routeLabel}
                 showArrows={showOneWayArrows}
+                layerOrder={routeLayerOrder}
               />
             );
           });
@@ -1947,20 +2059,16 @@ const HomeScreen = ({ route }) => {
             routeColorByRouteId={routeColorByRouteId}
             onPress={(routeId, detourEvent = null) => {
               if (!routeId) {
-                setDetourSheetSegmentIndex(null);
-                setDetourSheetEvent(null);
-                setDetourSheetSegmentStopDetailsOverride(null);
-                handleMapViewModeChange('detour');
+                showAllDetoursOnMap();
                 return;
               }
 
-              setFocusedDetourRouteId(routeId);
-              setDetourSheetRouteId(routeId);
-              setDetourSheetSegmentIndex(Number.isInteger(detourEvent?.primarySegmentIndex) ? detourEvent.primarySegmentIndex : null);
-              setDetourSheetEvent(detourEvent);
-              setDetourSheetSegmentStopDetailsOverride(null);
-              handleMapViewModeChange('detour');
-              focusMapOnDetour(routeId, detourEvent);
+              if (detourEvent) {
+                showDetourEventOnMap(routeId, detourEvent);
+                return;
+              }
+
+              showDetourRouteOnMap(routeId, null);
             }}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
             routes={routes}
@@ -2220,6 +2328,11 @@ const HomeScreen = ({ route }) => {
           routeColorByRouteId={routeColorByRouteId}
           segmentStopDetails={detourSheetSegmentStopDetails}
           transitNews={transitNews}
+          detourExplorerLevel={detourExplorerSelection.level}
+          selectedEventRouteId={detourExplorerSelection.routeId || detourSheetRouteId}
+          onSelectEventRoute={(eventRouteId) => showDetourRouteOnMap(eventRouteId, detourSheetEvent)}
+          onShowEvent={() => showDetourEventOnMap(detourSheetRouteId, detourSheetEvent)}
+          onShowAllDetours={showAllDetoursOnMap}
           onClose={() => {
             setDetourSheetRouteId(null);
             setDetourSheetSegmentIndex(null);
@@ -2227,7 +2340,7 @@ const HomeScreen = ({ route }) => {
             setDetourSheetSegmentStopDetailsOverride(null);
           }}
           onViewOnMap={() => {
-            setFocusedDetourRouteId(detourSheetRouteId);
+            setFocusedDetourRouteId(detourExplorerSelection.level === 'route' ? detourSheetRouteId : null);
             handleMapViewModeChange('detour');
             setDetourSheetRouteId(null);
             setDetourSheetSegmentIndex(null);

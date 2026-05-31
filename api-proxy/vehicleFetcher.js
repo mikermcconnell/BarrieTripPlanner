@@ -1,8 +1,12 @@
 const VEHICLE_POSITIONS_URL = 'https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb';
 const STALE_THRESHOLD_SECONDS = 5 * 60;
 const RETRY_DELAY_MS = 2000;
+const {
+  summarizeVehicleFeedFreshness,
+} = require('./detour/vehicleSampleFreshness');
 
 const errors = { fetchFailures: 0, decodeFailures: 0 };
+let lastVehicleFeedStatus = buildVehicleFeedStatus([]);
 
 const decodeVarint = (buffer, offset) => {
   let result = 0, shift = 0, bytesRead = 0;
@@ -166,6 +170,44 @@ const decodeGTFSRT = (buffer) => {
   return entities;
 };
 
+function hasUsablePosition(entity) {
+  return entity?.vehicle?.latitude != null && entity?.vehicle?.longitude != null;
+}
+
+function isFreshVehicle(entity, nowSeconds) {
+  const timestamp = entity?.vehicle?.timestamp;
+  return timestamp == null || (nowSeconds - timestamp) <= STALE_THRESHOLD_SECONDS;
+}
+
+function buildVehicleFeedStatus(entities, { nowSeconds = Math.floor(Date.now() / 1000) } = {}) {
+  const list = Array.isArray(entities) ? entities : [];
+  const positioned = list.filter(hasUsablePosition);
+  const freshPositioned = positioned.filter(entity => isFreshVehicle(entity, nowSeconds));
+  const freshness = summarizeVehicleFeedFreshness(
+    positioned.map(entity => entity.vehicle),
+    {
+      now: nowSeconds * 1000,
+      staleThresholdMs: STALE_THRESHOLD_SECONDS * 1000,
+    }
+  );
+
+  return {
+    checkedAt: new Date(nowSeconds * 1000).toISOString(),
+    rawEntityCount: list.length,
+    positionedVehicleCount: positioned.length,
+    usableVehicleCount: freshPositioned.length,
+    staleFilteredCount: Math.max(0, positioned.length - freshPositioned.length),
+    freshness,
+  };
+}
+
+function getVehicleFeedStatus() {
+  return {
+    ...lastVehicleFeedStatus,
+    freshness: { ...lastVehicleFeedStatus.freshness },
+  };
+}
+
 async function fetchWithRetry() {
   try {
     const res = await fetch(VEHICLE_POSITIONS_URL);
@@ -192,10 +234,11 @@ async function fetchVehicles(tripMapping = {}) {
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
+  lastVehicleFeedStatus = buildVehicleFeedStatus(entities, { nowSeconds });
 
   return entities
-    .filter(e => e.vehicle.latitude != null && e.vehicle.longitude != null)
-    .filter(e => e.vehicle.timestamp == null || (nowSeconds - e.vehicle.timestamp) <= STALE_THRESHOLD_SECONDS)
+    .filter(hasUsablePosition)
+    .filter(e => isFreshVehicle(e, nowSeconds))
     .map(e => {
       const v = e.vehicle;
       const routeId = (v.tripId && tripMapping[v.tripId]?.routeId) || v.routeId;
@@ -209,4 +252,10 @@ async function fetchVehicles(tripMapping = {}) {
     });
 }
 
-module.exports = { fetchVehicles, errors };
+module.exports = {
+  STALE_THRESHOLD_SECONDS,
+  buildVehicleFeedStatus,
+  fetchVehicles,
+  getVehicleFeedStatus,
+  errors,
+};

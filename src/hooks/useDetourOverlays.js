@@ -13,7 +13,21 @@ import { COLORS } from '../config/theme';
 import { getMatchingDetourRouteIds } from '../utils/routeDetourMatching';
 import { getRouteFamilyId, normalizeRouteId } from '../utils/routeDetourMatching';
 import { filterRiderVisibleDetours } from '../utils/detourVisibility';
-import { haversineDistance, pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
+import {
+  getLikelyDetourPath,
+  getPathSignature,
+  getPrimaryRenderablePath,
+  getRenderableDetourPath,
+  getTrustedInferredDetourPath,
+  isStopServedByRenderableDetourPath,
+  normalizePath,
+  trimOverlappingSegmentGeometry,
+} from '../utils/detourOverlayGeometry';
+import { haversineDistance } from '../utils/geometryUtils';
+
+
+const DETOUR_FAMILY_LANE_SPACING_METERS = 18;
+const DETOUR_FAMILY_ARROW_STAGGER_RATIO = 0.045;
 
 const DETOUR_COLORS = {
   SKIPPED: COLORS.error,   // closed regular route segment riders should not expect service on
@@ -29,370 +43,6 @@ const isValidColor = (value) =>
 const getOverlayRouteColor = (routeId, routeColorByRouteId = {}) => {
   const color = routeColorByRouteId?.[routeId] ?? routeColorByRouteId?.[String(routeId)];
   return isValidColor(color) ? color : DETOUR_COLORS.DETOUR_FALLBACK;
-};
-
-const getLikelyDetourPath = (segment) => (
-  segment?.likelyDetourPolyline?.length >= 2
-    ? segment.likelyDetourPolyline
-    : null
-);
-
-const getTrustedInferredDetourPath = (segment) => (
-  segment?.canShowDetourPath === true &&
-  segment?.inferredDetourPolyline?.length >= 2
-    ? segment.inferredDetourPolyline
-    : null
-);
-
-const getValidationPreviewDetourPath = (segment, { includeValidationPreview = false } = {}) => (
-  includeValidationPreview &&
-  segment?.confidence === 'low' &&
-  segment?.canShowDetourPath === false &&
-  hasAnchoredPreviewGeometry(segment)
-    ? segment.inferredDetourPolyline
-    : null
-);
-
-const getRenderableDetourPath = (segment, options = {}) =>
-  getLikelyDetourPath(segment) ??
-  getValidationPreviewDetourPath(segment, options);
-
-const OPEN_CLOSED_OVERLAP_PROXIMITY_METERS = 35;
-const OPEN_CLOSED_OVERLAP_MIN_RUN_METERS = 35;
-const OPEN_CLOSED_INTERIOR_OVERLAP_RATIO = 0.5;
-const OPEN_CLOSED_MIN_CLOSED_ROUTE_METERS = 100;
-const DETOUR_FAMILY_LANE_SPACING_METERS = 18;
-const DETOUR_FAMILY_ARROW_STAGGER_RATIO = 0.045;
-const VALIDATION_PREVIEW_MAX_ENDPOINT_MISMATCH_METERS = 250;
-
-const isFiniteCoordinate = (point) => (
-  Number.isFinite(Number(point?.latitude)) &&
-  Number.isFinite(Number(point?.longitude))
-);
-
-const normalizePath = (path) => (
-  Array.isArray(path)
-    ? path
-      .filter(isFiniteCoordinate)
-      .map((point) => ({
-        latitude: Number(point.latitude),
-        longitude: Number(point.longitude),
-      }))
-    : []
-);
-
-const getEndpointDistanceMeters = (from, to) => {
-  if (!isFiniteCoordinate(from) || !isFiniteCoordinate(to)) return Infinity;
-  const distance = haversineDistance(
-    Number(from.latitude),
-    Number(from.longitude),
-    Number(to.latitude),
-    Number(to.longitude)
-  );
-  return Number.isFinite(distance) ? distance : Infinity;
-};
-
-const hasAnchoredPreviewGeometry = (segment) => {
-  const path = normalizePath(segment?.inferredDetourPolyline);
-  if (path.length < 2 || !isFiniteCoordinate(segment?.entryPoint) || !isFiniteCoordinate(segment?.exitPoint)) {
-    return false;
-  }
-
-  const first = path[0];
-  const last = path[path.length - 1];
-  const forwardMismatch = Math.max(
-    getEndpointDistanceMeters(first, segment.entryPoint),
-    getEndpointDistanceMeters(last, segment.exitPoint)
-  );
-  const reverseMismatch = Math.max(
-    getEndpointDistanceMeters(first, segment.exitPoint),
-    getEndpointDistanceMeters(last, segment.entryPoint)
-  );
-
-  return Math.min(forwardMismatch, reverseMismatch) <= VALIDATION_PREVIEW_MAX_ENDPOINT_MISMATCH_METERS;
-};
-
-const getPathLengthMeters = (path) => {
-  const points = normalizePath(path);
-  if (points.length < 2) return 0;
-  return points.slice(1).reduce((sum, point, index) => {
-    const previous = points[index];
-    const distance = haversineDistance(
-      previous.latitude,
-      previous.longitude,
-      point.latitude,
-      point.longitude
-    );
-    return Number.isFinite(distance) ? sum + distance : sum;
-  }, 0);
-};
-
-const dedupeConsecutivePoints = (points) => {
-  if (!Array.isArray(points) || points.length === 0) return [];
-
-  return points.reduce((deduped, point) => {
-    const previous = deduped[deduped.length - 1];
-    if (
-      previous &&
-      previous.latitude === point.latitude &&
-      previous.longitude === point.longitude
-    ) {
-      return deduped;
-    }
-
-    deduped.push({
-      latitude: point.latitude,
-      longitude: point.longitude,
-    });
-    return deduped;
-  }, []);
-};
-
-const getCumulativeDistances = (path) => {
-  const points = normalizePath(path);
-  if (points.length === 0) return [];
-
-  const cumulative = [0];
-  for (let index = 1; index < points.length; index += 1) {
-    cumulative[index] =
-      cumulative[index - 1] +
-      haversineDistance(
-        points[index - 1].latitude,
-        points[index - 1].longitude,
-        points[index].latitude,
-        points[index].longitude
-      );
-  }
-  return cumulative;
-};
-
-const interpolatePointAlongPath = (path, cumulativeDistances, targetMeters) => {
-  const points = normalizePath(path);
-  if (points.length === 0) return null;
-  if (points.length === 1) return points[0];
-
-  const maxDistance = cumulativeDistances[cumulativeDistances.length - 1] ?? 0;
-  const clampedTarget = Math.max(0, Math.min(targetMeters, maxDistance));
-
-  for (let index = 1; index < cumulativeDistances.length; index += 1) {
-    if (cumulativeDistances[index] < clampedTarget) continue;
-
-    const segmentStartDistance = cumulativeDistances[index - 1];
-    const segmentLength = cumulativeDistances[index] - segmentStartDistance;
-    if (segmentLength <= 0) return points[index];
-
-    const ratio = (clampedTarget - segmentStartDistance) / segmentLength;
-    return {
-      latitude: points[index - 1].latitude + (points[index].latitude - points[index - 1].latitude) * ratio,
-      longitude: points[index - 1].longitude + (points[index].longitude - points[index - 1].longitude) * ratio,
-    };
-  }
-
-  return points[points.length - 1];
-};
-
-const extractPathByProgress = (path, startProgressMeters, endProgressMeters) => {
-  const points = normalizePath(path);
-  if (points.length === 0) return [];
-
-  const cumulative = getCumulativeDistances(points);
-  const maxDistance = cumulative[cumulative.length - 1] ?? 0;
-  const startMeters = Math.max(0, Math.min(startProgressMeters, endProgressMeters, maxDistance));
-  const endMeters = Math.max(0, Math.min(Math.max(startProgressMeters, endProgressMeters), maxDistance));
-
-  const extracted = [];
-  const startPoint = interpolatePointAlongPath(points, cumulative, startMeters);
-  if (startPoint) extracted.push(startPoint);
-
-  for (let index = 1; index < cumulative.length - 1; index += 1) {
-    if (cumulative[index] <= startMeters || cumulative[index] >= endMeters) continue;
-    extracted.push(points[index]);
-  }
-
-  const endPoint = interpolatePointAlongPath(points, cumulative, endMeters);
-  if (endPoint) extracted.push(endPoint);
-
-  return dedupeConsecutivePoints(extracted);
-};
-
-const getEndpointOverlapRunLength = (openPath, closedPath, fromEnd = false) => {
-  const orderedPath = fromEnd ? [...openPath].reverse() : openPath;
-  const run = [];
-
-  for (const point of orderedPath) {
-    if (pointToPolylineDistance(point, closedPath) > OPEN_CLOSED_OVERLAP_PROXIMITY_METERS) {
-      break;
-    }
-    run.push(point);
-  }
-
-  if (run.length < 2) return 0;
-  return getPathLengthMeters(fromEnd ? run.reverse() : run);
-};
-
-const projectPointOntoPathWithProgress = (point, path) => {
-  const projection = projectPointToPolyline(point, path);
-  if (!projection?.point) return null;
-
-  const points = normalizePath(path);
-  const cumulative = getCumulativeDistances(points);
-  const segmentStart = points[projection.segmentIndex] || points[0];
-  const progressMeters =
-    (cumulative[projection.segmentIndex] || 0) +
-    haversineDistance(
-      segmentStart.latitude,
-      segmentStart.longitude,
-      projection.point.latitude,
-      projection.point.longitude
-    );
-
-  return {
-    point: {
-      latitude: projection.point.latitude,
-      longitude: projection.point.longitude,
-    },
-    progressMeters,
-  };
-};
-
-const getEndpointOverlapBoundary = (openPath, closedPath, fromEnd = false) => {
-  const indexedPath = openPath.map((point, index) => ({ point, index }));
-  const scanPath = fromEnd ? [...indexedPath].reverse() : indexedPath;
-  const run = [];
-
-  for (const entry of scanPath) {
-    if (pointToPolylineDistance(entry.point, closedPath) > OPEN_CLOSED_OVERLAP_PROXIMITY_METERS) {
-      break;
-    }
-    run.push(entry);
-  }
-
-  if (run.length < 2) return null;
-
-  const runPoints = (fromEnd ? [...run].reverse() : run).map((entry) => entry.point);
-  const overlapMeters = getPathLengthMeters(runPoints);
-  if (overlapMeters < OPEN_CLOSED_OVERLAP_MIN_RUN_METERS) return null;
-
-  const boundaryEntry = run[run.length - 1];
-  const projection = projectPointOntoPathWithProgress(boundaryEntry.point, closedPath);
-  if (!projection) return null;
-
-  return {
-    index: boundaryEntry.index,
-    point: projection.point,
-    progressMeters: projection.progressMeters,
-  };
-};
-
-const trimOpenPathToBoundaries = (openPath, prefixBoundary, suffixBoundary) => {
-  const startIndex = prefixBoundary?.index ?? 0;
-  const endIndex = suffixBoundary?.index ?? openPath.length - 1;
-  if (startIndex > endIndex) return null;
-
-  const points = openPath.slice(startIndex, endIndex + 1).map((point) => ({
-    latitude: point.latitude,
-    longitude: point.longitude,
-  }));
-  if (points.length === 0) return null;
-
-  if (prefixBoundary) points[0] = { ...prefixBoundary.point };
-  if (suffixBoundary) points[points.length - 1] = { ...suffixBoundary.point };
-
-  const deduped = dedupeConsecutivePoints(points);
-  return deduped.length >= 2 ? deduped : null;
-};
-
-const trimClosedPathToBoundaries = (closedPath, prefixBoundary, suffixBoundary) => {
-  const closedLengthMeters = getPathLengthMeters(closedPath);
-  if (closedLengthMeters <= 0) return null;
-
-  const startProgress = prefixBoundary
-    ? Math.max(0, Math.min(prefixBoundary.progressMeters, closedLengthMeters))
-    : 0;
-  const endProgress = suffixBoundary
-    ? Math.max(0, Math.min(suffixBoundary.progressMeters, closedLengthMeters))
-    : closedLengthMeters;
-
-  if (endProgress <= startProgress) return null;
-  if ((endProgress - startProgress) < OPEN_CLOSED_MIN_CLOSED_ROUTE_METERS) return null;
-
-  const trimmed = extractPathByProgress(closedPath, startProgress, endProgress);
-  if (trimmed.length < 2) return null;
-  return getPathLengthMeters(trimmed) >= OPEN_CLOSED_MIN_CLOSED_ROUTE_METERS
-    ? trimmed
-    : null;
-};
-
-const hasMaterialOpenClosedOverlap = (openPath, closedPath) => {
-  const open = normalizePath(openPath);
-  const closed = normalizePath(closedPath);
-  if (open.length < 2 || closed.length < 2) return false;
-
-  if (getEndpointOverlapRunLength(open, closed) >= OPEN_CLOSED_OVERLAP_MIN_RUN_METERS) {
-    return true;
-  }
-  if (getEndpointOverlapRunLength(open, closed, true) >= OPEN_CLOSED_OVERLAP_MIN_RUN_METERS) {
-    return true;
-  }
-
-  const interior = open.slice(1, -1);
-  if (interior.length < 3) return false;
-
-  const nearClosedCount = interior.filter((point) =>
-    pointToPolylineDistance(point, closed) <= OPEN_CLOSED_OVERLAP_PROXIMITY_METERS
-  ).length;
-
-  return (nearClosedCount / interior.length) >= OPEN_CLOSED_INTERIOR_OVERLAP_RATIO;
-};
-
-const trimOverlappingSegmentGeometry = (segment) => {
-  const detourPath = getRenderableDetourPath(segment);
-  const skippedPath = segment?.skippedSegmentPolyline;
-  const open = normalizePath(detourPath);
-  const closed = normalizePath(skippedPath);
-
-  if (!hasMaterialOpenClosedOverlap(open, closed)) {
-    return segment;
-  }
-
-  const prefixBoundary = getEndpointOverlapBoundary(open, closed, false);
-  const suffixBoundary = getEndpointOverlapBoundary(open, closed, true);
-  const trimmedOpenPath = trimOpenPathToBoundaries(open, prefixBoundary, suffixBoundary);
-  const trimmedClosedPath = trimClosedPathToBoundaries(closed, prefixBoundary, suffixBoundary);
-  const closedSegmentSuppressed = !trimmedClosedPath;
-  const nextEntryPoint = trimmedClosedPath?.[0] ?? segment?.entryPoint ?? null;
-  const nextExitPoint = trimmedClosedPath?.[trimmedClosedPath.length - 1] ?? segment?.exitPoint ?? null;
-
-  return {
-    ...segment,
-    skippedSegmentPolyline: trimmedClosedPath,
-    inferredDetourPolyline: trimmedOpenPath,
-    likelyDetourPolyline: segment?.likelyDetourPolyline?.length >= 2 ? trimmedOpenPath : segment?.likelyDetourPolyline,
-    entryPoint: nextEntryPoint,
-    exitPoint: nextExitPoint,
-    skippedStops: closedSegmentSuppressed ? [] : (segment?.skippedStops ?? []),
-    suppressStopDerivation: closedSegmentSuppressed,
-  };
-};
-
-const getPrimaryRenderablePath = (detour, options = {}) => {
-  const segments = Array.isArray(detour?.segments) ? detour.segments : [];
-  const segment = segments.find((candidate) => getRenderableDetourPath(candidate, options));
-  if (segment) return getRenderableDetourPath(segment, options);
-
-  return getRenderableDetourPath(detour, options);
-};
-
-const toRoundedCoordinateKey = (point) => (
-  `${Number(point?.latitude).toFixed(5)},${Number(point?.longitude).toFixed(5)}`
-);
-
-const getPathSignature = (path) => {
-  if (!Array.isArray(path) || path.length < 2) return null;
-
-  const forward = path.map(toRoundedCoordinateKey).join('|');
-  const reverse = [...path].reverse().map(toRoundedCoordinateKey).join('|');
-  return forward < reverse ? forward : reverse;
 };
 
 const getFamilyHasDistinctDetourPaths = (familyRouteIds, riderVisibleDetours, options = {}) => {
@@ -479,22 +129,77 @@ const getStopKey = (stop) => (
     .toLowerCase()
 );
 
+const normalizeRouteKey = (routeId) => (
+  routeId == null ? null : String(routeId).trim().toUpperCase()
+);
+
+const mergeRouteIds = (...routeLists) => {
+  const seen = new Set();
+  const merged = [];
+  routeLists.flat().forEach((routeId) => {
+    const key = normalizeRouteKey(routeId);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(key);
+  });
+  return merged;
+};
+
 const tagStopsForRoute = (routeId, stops = []) => (
-  (Array.isArray(stops) ? stops : []).map((stop) => ({
-    ...stop,
-    routeId: stop?.routeId ?? routeId,
-  }))
+  (Array.isArray(stops) ? stops : []).map((stop) => {
+    const affectedRouteIds = mergeRouteIds(
+      stop?.affectedRouteIds,
+      stop?.routeIds,
+      stop?.routeId,
+      routeId
+    );
+    const servedRouteIds = mergeRouteIds(stop?.servedRouteIds);
+
+    return {
+      ...stop,
+      routeId: stop?.routeId ?? routeId,
+      routeIds: affectedRouteIds,
+      affectedRouteIds,
+      servedRouteIds,
+      impactScope: stop?.impactScope || (servedRouteIds.length > 0 ? 'partial' : 'route'),
+    };
+  })
 );
 
 const mergeUniqueStops = (...stopLists) => {
   const seen = new Set();
   const merged = [];
+  const indexByKey = new Map();
 
   stopLists.flat().forEach((stop) => {
     if (!stop) return;
     const key = getStopKey(stop);
-    if (key && seen.has(key)) return;
-    if (key) seen.add(key);
+    if (key && seen.has(key)) {
+      const existingIndex = indexByKey.get(key);
+      const existing = merged[existingIndex];
+      const affectedRouteIds = mergeRouteIds(
+        existing?.affectedRouteIds,
+        existing?.routeIds,
+        existing?.routeId,
+        stop?.affectedRouteIds,
+        stop?.routeIds,
+        stop?.routeId
+      );
+      const servedRouteIds = mergeRouteIds(existing?.servedRouteIds, stop?.servedRouteIds);
+      merged[existingIndex] = {
+        ...existing,
+        affectedRouteIds,
+        routeIds: affectedRouteIds,
+        servedRouteIds,
+        allServingRouteIds: mergeRouteIds(existing?.allServingRouteIds, stop?.allServingRouteIds, affectedRouteIds, servedRouteIds),
+        impactScope: servedRouteIds.length > 0 ? 'partial' : existing?.impactScope || stop?.impactScope || 'route',
+      };
+      return;
+    }
+    if (key) {
+      seen.add(key);
+      indexByKey.set(key, merged.length);
+    }
     merged.push(stop);
   });
 
@@ -566,6 +271,70 @@ const mergeSharedFamilyClosedStops = ({
   };
 };
 
+const normalizeExplorerRouteIds = (routeIds = []) => (
+  Array.isArray(routeIds)
+    ? routeIds.map(normalizeRouteId).filter(Boolean)
+    : []
+);
+
+const getExplorerRouteScope = (detourExplorerSelection) => {
+  const level = detourExplorerSelection?.level;
+  const selectedRouteId = normalizeRouteId(detourExplorerSelection?.routeId);
+  const eventRouteIds = normalizeExplorerRouteIds(detourExplorerSelection?.event?.routeIds);
+
+  if (level === 'route' && selectedRouteId) {
+    return new Set([selectedRouteId]);
+  }
+
+  if (level === 'event' && eventRouteIds.length > 0) {
+    return new Set(eventRouteIds);
+  }
+
+  return null;
+};
+
+const getExplorerSegmentIndexes = (detourExplorerSelection, routeId) => {
+  const level = detourExplorerSelection?.level;
+  if (level !== 'event' && level !== 'route') return null;
+
+  const normalizedRouteId = normalizeRouteId(routeId);
+  if (level === 'route') {
+    const selectedRouteId = normalizeRouteId(detourExplorerSelection?.routeId);
+    if (selectedRouteId && selectedRouteId !== normalizedRouteId) return null;
+  }
+
+  const candidates = Array.isArray(detourExplorerSelection?.event?.candidates)
+    ? detourExplorerSelection.event.candidates
+    : [];
+  const indexes = candidates
+    .filter((candidate) => normalizeRouteId(candidate?.routeId) === normalizedRouteId)
+    .map((candidate) => candidate?.segmentIndex)
+    .filter((index) => Number.isInteger(index));
+
+  return indexes.length > 0 ? new Set(indexes) : null;
+};
+
+const filterBySegmentIndexes = (items, segmentIndexes) => {
+  if (!segmentIndexes || !Array.isArray(items)) return items;
+  return items.filter((_, index) => segmentIndexes.has(index));
+};
+
+const removeDetourPathServedSkippedStops = (segment) => {
+  if (!segment || !Array.isArray(segment.skippedStops) || segment.skippedStops.length === 0) {
+    return segment;
+  }
+
+  const skippedStops = segment.skippedStops.filter(
+    (stop) => !isStopServedByRenderableDetourPath(stop, segment)
+  );
+  if (skippedStops.length === segment.skippedStops.length) return segment;
+
+  return {
+    ...segment,
+    skippedStops,
+  };
+};
+
 /**
  * Pure derivation function (exported for testing without React).
  */
@@ -577,20 +346,22 @@ export function deriveDetourOverlays({
   detourStopDetailsByRouteId = {},
   routeColorByRouteId = {},
   showAllClosedStopMarkers = false,
+  detourExplorerSelection = null,
 }) {
   if (!enabled) return [];
 
   const overlays = [];
   const renderOptions = { includeValidationPreview: false };
   const riderVisibleDetours = filterRiderVisibleDetours(activeDetours);
+  const explorerRouteScope = getExplorerRouteScope(detourExplorerSelection);
 
   // When no routes selected, show ALL active detours
-  const routeIds = (selectedRouteIds && selectedRouteIds.size > 0)
+  const routeIds = explorerRouteScope ?? ((selectedRouteIds && selectedRouteIds.size > 0)
     ? new Set(Array.from(selectedRouteIds).flatMap((routeId) => {
       const matches = getMatchingDetourRouteIds(routeId, riderVisibleDetours);
       return matches.length > 0 ? matches : [routeId];
     }))
-    : new Set(Object.keys(riderVisibleDetours));
+    : new Set(Object.keys(riderVisibleDetours)));
   const renderedRouteIds = Array.from(routeIds)
     .filter((routeId) => riderVisibleDetours[routeId])
     .sort((a, b) => normalizeRouteId(a).localeCompare(normalizeRouteId(b)));
@@ -604,6 +375,7 @@ export function deriveDetourOverlays({
   routeIds.forEach((routeId) => {
     const detour = riderVisibleDetours[routeId];
     if (!detour) return;
+    const segmentIndexes = getExplorerSegmentIndexes(detourExplorerSelection, routeId);
     const familyRouteIds = renderedFamilyRouteIds[getRouteFamilyId(routeId)] || [routeId];
     const familyPathRenderInfo = buildFamilyPathRenderInfo(familyRouteIds, riderVisibleDetours, focusedRouteId, renderOptions);
     const routePathRenderInfo = familyPathRenderInfo[routeId] || {};
@@ -615,9 +387,11 @@ export function deriveDetourOverlays({
       ? (familyHasDistinctDetourPaths ? 'forward' : 'both')
       : 'forward';
 
-    const normalizedSegments = Array.isArray(detour.segments) ? detour.segments : [];
-    const topLevelLikelyDetourPath = getLikelyDetourPath(detour);
-    const topLevelRenderableDetourPath = getRenderableDetourPath(detour, renderOptions);
+    const allSegments = Array.isArray(detour.segments) ? detour.segments : [];
+    const normalizedSegments = filterBySegmentIndexes(allSegments, segmentIndexes) || [];
+    const isSegmentScoped = Boolean(segmentIndexes && allSegments.length > 0);
+    const topLevelLikelyDetourPath = isSegmentScoped ? null : getLikelyDetourPath(detour);
+    const topLevelRenderableDetourPath = isSegmentScoped ? null : getRenderableDetourPath(detour, renderOptions);
     const hasSegmentRenderableDetourPath = normalizedSegments.some(
       (segment) => getRenderableDetourPath(segment, renderOptions)
     );
@@ -650,8 +424,8 @@ export function deriveDetourOverlays({
         (segment?.skippedSegmentPolyline?.length >= 2) ||
         Boolean(getRenderableDetourPath(segment, renderOptions))
       ) ||
-      (detour.skippedSegmentPolyline?.length >= 2) ||
-      Boolean(topLevelRenderableDetourPath);
+      (!isSegmentScoped && detour.skippedSegmentPolyline?.length >= 2) ||
+      (!isSegmentScoped && Boolean(topLevelRenderableDetourPath));
     if (!hasGeometry) return;
 
     const fallbackSegmentStopDetails = shouldRenderTopLevelRoadMatchOnly
@@ -689,10 +463,15 @@ export function deriveDetourOverlays({
         entryStop: null,
         exitStop: null,
       }];
+    const explicitSegmentStopDetails = filterBySegmentIndexes(
+      detourStopDetailsByRouteId[routeId]?.segmentStopDetails,
+      segmentIndexes
+    );
+    const hasExplicitSegmentStopDetails = Boolean(explicitSegmentStopDetails?.length);
     const baseResolvedSegmentStopDetails = shouldRenderTopLevelRoadMatchOnly
       ? [topLevelRenderSegment]
-      : detourStopDetailsByRouteId[routeId]?.segmentStopDetails?.length
-        ? detourStopDetailsByRouteId[routeId].segmentStopDetails
+      : hasExplicitSegmentStopDetails
+        ? explicitSegmentStopDetails
         : fallbackSegmentStopDetails;
     const hasResolvedSegmentRenderableDetourPath = baseResolvedSegmentStopDetails.some(
       (segment) => getRenderableDetourPath(segment, renderOptions)
@@ -729,12 +508,23 @@ export function deriveDetourOverlays({
       resolvedSegmentStopDetails = mergedFamilyStops.segmentStopDetails;
       familyStopsMerged = mergedFamilyStops.merged;
     }
+    resolvedSegmentStopDetails = resolvedSegmentStopDetails.map(removeDetourPathServedSkippedStops);
     const routeColor = getOverlayRouteColor(routeId, routeColorByRouteId);
     const primaryResolvedSegment = resolvedSegmentStopDetails[0] || {};
     const primaryStopsSuppressed = primaryResolvedSegment.suppressStopDerivation === true;
+    const hasPrimarySkippedStops =
+      Array.isArray(primaryResolvedSegment.skippedStops) &&
+      (
+        hasExplicitSegmentStopDetails ||
+        familyStopsMerged ||
+        primaryResolvedSegment.skippedStops.length > 0
+      );
     const primaryRenderableDetourPath = getRenderableDetourPath(primaryResolvedSegment, renderOptions);
     const primaryLikelyDetourPath = getLikelyDetourPath(primaryResolvedSegment);
-    const allowTopLevelDetourPathFallback = !hasSegmentTrustedRawOnlyDetourPath;
+    const allowTopLevelDetourPathFallback =
+      !hasSegmentRenderableDetourPath &&
+      !hasSegmentTrustedRawOnlyDetourPath &&
+      !isSegmentScoped;
 
     overlays.push({
       routeId,
@@ -751,13 +541,13 @@ export function deriveDetourOverlays({
         (allowTopLevelDetourPathFallback ? getLikelyDetourPath(detour) : null) ??
         getLikelyDetourPath(normalizedSegments[0]) ??
         null,
-      entryPoint: primaryResolvedSegment.entryPoint ?? detour.entryPoint ?? normalizedSegments[0]?.entryPoint ?? null,
-      exitPoint: primaryResolvedSegment.exitPoint ?? detour.exitPoint ?? normalizedSegments[0]?.exitPoint ?? null,
+      entryPoint: primaryResolvedSegment.entryPoint ?? (!isSegmentScoped ? detour.entryPoint : null) ?? normalizedSegments[0]?.entryPoint ?? null,
+      exitPoint: primaryResolvedSegment.exitPoint ?? (!isSegmentScoped ? detour.exitPoint : null) ?? normalizedSegments[0]?.exitPoint ?? null,
       routeStops: detourStopDetailsByRouteId[routeId]?.routeStops ?? [],
       skippedStops: primaryStopsSuppressed
         ? []
         : (
-          primaryResolvedSegment.skippedStops?.length
+          hasPrimarySkippedStops
             ? primaryResolvedSegment.skippedStops
             : detourStopDetailsByRouteId[routeId]?.segmentStopDetails?.[0]?.skippedStops ??
               detourStopDetailsByRouteId[routeId]?.skippedStops ??
@@ -840,6 +630,7 @@ export const useDetourOverlays = ({
   detourStopDetailsByRouteId = {},
   routeColorByRouteId = {},
   showAllClosedStopMarkers = false,
+  detourExplorerSelection = null,
 }) => {
   const detourOverlays = useMemo(
     () => deriveDetourOverlays({
@@ -850,8 +641,9 @@ export const useDetourOverlays = ({
       detourStopDetailsByRouteId,
       routeColorByRouteId,
       showAllClosedStopMarkers,
+      detourExplorerSelection,
     }),
-    [enabled, selectedRouteIds, activeDetours, focusedRouteId, detourStopDetailsByRouteId, routeColorByRouteId, showAllClosedStopMarkers]
+    [enabled, selectedRouteIds, activeDetours, focusedRouteId, detourStopDetailsByRouteId, routeColorByRouteId, showAllClosedStopMarkers, detourExplorerSelection]
   );
 
   return { detourOverlays };

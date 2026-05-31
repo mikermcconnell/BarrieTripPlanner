@@ -24,6 +24,7 @@ function createSegmentState({
     matchedVehicleIds: new Set(),
     candidateConfirmationIds: new Set(),
     normalRouteVehicleIds: new Set(),
+    normalRouteClearProofs: new Map(),
     state: 'active',
     clearPendingAt: null,
     lastOffRouteEvidenceAt: now || Date.now(),

@@ -148,4 +148,72 @@ describe('buildTransitDiagnostics', () => {
     expect(diagnostics.overall.status).toBe(DIAGNOSTIC_STATUS.DEGRADED);
     expect(diagnostics.overall.reason).toBe('partial_backend_availability');
   });
+
+  test('marks realtime vehicles degraded when GPS feed is stale even if requests succeed', () => {
+    const now = Date.UTC(2026, 4, 28, 15, 40, 19);
+
+    const diagnostics = buildTransitDiagnostics({
+      isOffline: false,
+      now,
+      staticData: {
+        isAvailable: true,
+        lastSuccessAt: now - 10 * 60 * 1000,
+      },
+      realtimeVehicles: {
+        isAvailable: true,
+        lastSuccessAt: now - 30 * 1000,
+        feedHealth: {
+          positionedVehicleCount: 31,
+          usableVehicleCount: 0,
+          staleFilteredCount: 31,
+          freshness: {
+            status: 'stale',
+            stale: true,
+            newestAgeMs: 35 * 60 * 1000,
+          },
+        },
+      },
+      routing: {
+        isReady: true,
+        lastSuccessAt: now - 30 * 1000,
+      },
+    });
+
+    expect(diagnostics.realtimeVehicles.status).toBe(DIAGNOSTIC_STATUS.DEGRADED);
+    expect(diagnostics.realtimeVehicles.reason).toBe('gps_feed_stale');
+    expect(diagnostics.realtimeVehicles.isFeedStale).toBe(true);
+    expect(diagnostics.overall.status).toBe(DIAGNOSTIC_STATUS.DEGRADED);
+  });
+
+  test('does not mark realtime vehicles healthy when GPS timestamps are missing', () => {
+    const now = Date.UTC(2026, 4, 28, 15, 40, 19);
+
+    const diagnostics = buildTransitDiagnostics({
+      isOffline: false,
+      now,
+      staticData: {
+        isAvailable: true,
+        lastSuccessAt: now - 10 * 60 * 1000,
+      },
+      realtimeVehicles: {
+        isAvailable: true,
+        lastSuccessAt: now - 30 * 1000,
+        feedHealth: {
+          positionedVehicleCount: 1,
+          usableVehicleCount: 1,
+          freshness: {
+            status: 'unknown',
+            stale: false,
+          },
+        },
+      },
+      routing: {
+        isReady: true,
+        lastSuccessAt: now - 30 * 1000,
+      },
+    });
+
+    expect(diagnostics.realtimeVehicles.status).toBe(DIAGNOSTIC_STATUS.DEGRADED);
+    expect(diagnostics.realtimeVehicles.reason).toBe('gps_feed_unknown');
+  });
 });

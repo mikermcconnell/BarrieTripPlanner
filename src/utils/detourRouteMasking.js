@@ -7,6 +7,7 @@ import {
 import { getRouteFamilyId, normalizeRouteId } from './routeDetourMatching';
 
 const DEFAULT_CLOSED_ROUTE_MASK_BUFFER_METERS = 35;
+const LOOP_ROUTE_ENDPOINT_PROXIMITY_METERS = 30;
 
 const isFiniteCoordinate = (point) => (
   Number.isFinite(Number(point?.latitude)) &&
@@ -38,6 +39,35 @@ const getOverlayClosedPaths = (overlay) => {
   return paths;
 };
 
+const getRenderableOpenPath = (source) => {
+  const likelyPath = normalizePath(source?.likelyDetourPolyline);
+  if (likelyPath.length >= 2) return likelyPath;
+
+  const inferredPath = normalizePath(source?.inferredDetourPolyline);
+  if (source?.canShowDetourPath === true && inferredPath.length >= 2) {
+    return inferredPath;
+  }
+
+  return [];
+};
+
+const getOverlayOpenPaths = (overlay) => {
+  const paths = [];
+  const topLevelPath = getRenderableOpenPath(overlay);
+  if (topLevelPath.length >= 2) paths.push([topLevelPath[0], topLevelPath[topLevelPath.length - 1]]);
+
+  if (Array.isArray(overlay?.segmentStopDetails)) {
+    overlay.segmentStopDetails.forEach((segment) => {
+      const path = getRenderableOpenPath(segment);
+      if (path.length >= 2) {
+        paths.push([path[0], path[path.length - 1]]);
+      }
+    });
+  }
+
+  return paths;
+};
+
 const routeFamiliesMatch = (routeId, detourRouteId) => {
   const routeKey = normalizeRouteId(routeId);
   const detourKey = normalizeRouteId(detourRouteId);
@@ -51,6 +81,17 @@ export const getClosedDetourPathsForRoute = (routeId, detourOverlays = []) => (
     .filter((overlay) => routeFamiliesMatch(routeId, overlay?.routeId))
     .flatMap(getOverlayClosedPaths)
 );
+
+const getRenderableDetourPathsForRoute = (routeId, detourOverlays = []) => (
+  (Array.isArray(detourOverlays) ? detourOverlays : [])
+    .filter((overlay) => routeFamiliesMatch(routeId, overlay?.routeId))
+    .flatMap(getOverlayOpenPaths)
+);
+
+const getRouteMaskPathsForRoute = (routeId, detourOverlays = []) => ([
+  ...getClosedDetourPathsForRoute(routeId, detourOverlays),
+  ...getRenderableDetourPathsForRoute(routeId, detourOverlays),
+]);
 
 const midpoint = (start, end) => ({
   latitude: (Number(start.latitude) + Number(end.latitude)) / 2,
@@ -86,6 +127,19 @@ const buildCumulativeDistances = (coordinates) => {
       );
   }
   return cumulative;
+};
+
+const routeIsClosedLoop = (coordinates) => {
+  if (!Array.isArray(coordinates) || coordinates.length < 3) return false;
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  const distance = haversineDistance(
+    first.latitude,
+    first.longitude,
+    last.latitude,
+    last.longitude
+  );
+  return Number.isFinite(distance) && distance <= LOOP_ROUTE_ENDPOINT_PROXIMITY_METERS;
 };
 
 const interpolatePointAlongRoute = (coordinates, cumulativeDistances, targetMeters) => {
@@ -132,6 +186,91 @@ const projectPointToRouteProgress = (point, coordinates, cumulativeDistances) =>
   };
 };
 
+const normalizeProgress = (progressMeters, routeLength) => {
+  if (!Number.isFinite(progressMeters) || !Number.isFinite(routeLength) || routeLength <= 0) {
+    return null;
+  }
+
+  const normalized = progressMeters % routeLength;
+  return normalized < 0 ? normalized + routeLength : normalized;
+};
+
+const getShortestLoopProgressInterval = (progressValues, routeLength) => {
+  const values = progressValues
+    .map((progress) => normalizeProgress(progress, routeLength))
+    .filter((progress) => Number.isFinite(progress))
+    .sort((a, b) => a - b);
+
+  if (values.length < 2 || !Number.isFinite(routeLength) || routeLength <= 0) {
+    return null;
+  }
+
+  let largestGap = -Infinity;
+  let largestGapIndex = 0;
+
+  values.forEach((value, index) => {
+    const nextValue = index === values.length - 1
+      ? values[0] + routeLength
+      : values[index + 1];
+    const gap = nextValue - value;
+    if (gap > largestGap) {
+      largestGap = gap;
+      largestGapIndex = index;
+    }
+  });
+
+  const start = values[(largestGapIndex + 1) % values.length];
+  let end = values[largestGapIndex];
+  if (end < start) end += routeLength;
+
+  return end > start ? { start, end } : null;
+};
+
+const splitLoopInterval = (interval, routeLength) => {
+  if (!interval || !Number.isFinite(routeLength) || routeLength <= 0) return [];
+
+  const start = Math.max(0, Math.min(interval.start, routeLength));
+  if (interval.end <= routeLength) {
+    const end = Math.max(0, Math.min(interval.end, routeLength));
+    return end > start ? [{ start, end }] : [];
+  }
+
+  const endOfRouteInterval = start < routeLength
+    ? [{ start, end: routeLength }]
+    : [];
+  const wrappedEnd = Math.max(0, Math.min(interval.end - routeLength, routeLength));
+
+  return wrappedEnd > 0
+    ? [...endOfRouteInterval, { start: 0, end: wrappedEnd }]
+    : endOfRouteInterval;
+};
+
+const getProgressIntervalsForPath = ({
+  path,
+  coordinates,
+  cumulativeDistances,
+  routeLength,
+  isClosedLoop,
+}) => {
+  const progressValues = path
+    .map((point) => projectPointToRouteProgress(point, coordinates, cumulativeDistances)?.progressMeters)
+    .filter((progress) => Number.isFinite(progress));
+
+  if (progressValues.length < 2) return [];
+
+  if (isClosedLoop) {
+    return splitLoopInterval(
+      getShortestLoopProgressInterval(progressValues, routeLength),
+      routeLength
+    );
+  }
+
+  return [{
+    start: Math.min(...progressValues),
+    end: Math.max(...progressValues),
+  }].filter((interval) => interval.end > interval.start);
+};
+
 const dedupeSequentialCoordinates = (points) => {
   if (!Array.isArray(points) || points.length <= 1) return points || [];
 
@@ -169,18 +308,17 @@ const extractRouteSegmentByProgress = (coordinates, cumulativeDistances, startMe
 
 const getClosedProgressIntervals = (coordinates, closedPaths) => {
   const cumulativeDistances = buildCumulativeDistances(coordinates);
+  const routeLength = cumulativeDistances[cumulativeDistances.length - 1] ?? 0;
+  const isClosedLoop = routeIsClosedLoop(coordinates);
 
   const intervals = closedPaths
-    .map((path) => {
-      const start = projectPointToRouteProgress(path[0], coordinates, cumulativeDistances);
-      const end = projectPointToRouteProgress(path[path.length - 1], coordinates, cumulativeDistances);
-      if (!start || !end) return null;
-
-      return {
-        start: Math.min(start.progressMeters, end.progressMeters),
-        end: Math.max(start.progressMeters, end.progressMeters),
-      };
-    })
+    .flatMap((path) => getProgressIntervalsForPath({
+      path,
+      coordinates,
+      cumulativeDistances,
+      routeLength,
+      isClosedLoop,
+    }))
     .filter((interval) => interval && interval.end > interval.start)
     .sort((a, b) => a.start - b.start);
 
@@ -280,12 +418,12 @@ export const getRouteShapeVisibleSegments = ({
   const rawCoordinates = Array.isArray(shape?.coordinates) ? shape.coordinates : [];
   if (rawCoordinates.length < 2) return [];
 
-  const closedPaths = getClosedDetourPathsForRoute(shape?.routeId, detourOverlays);
-  if (closedPaths.length === 0) return [rawCoordinates];
+  const maskPaths = getRouteMaskPathsForRoute(shape?.routeId, detourOverlays);
+  if (maskPaths.length === 0) return [rawCoordinates];
 
   return splitRouteCoordinatesAroundClosedPaths({
     coordinates: rawCoordinates,
-    closedPaths,
+    closedPaths: maskPaths,
     bufferMeters,
   });
 };

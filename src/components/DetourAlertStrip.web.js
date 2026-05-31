@@ -4,6 +4,16 @@ import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS
 import { ROUTE_COLORS } from '../config/constants';
 import Icon from './Icon';
 import { useDetourAlertStrip } from '../hooks/useDetourAlertStrip';
+import { formatDetourRoutesMetaLabel } from '../utils/detourLabeling';
+
+const getStatusTone = (statusLabel) => {
+  const label = String(statusLabel || '').toLowerCase();
+  if (label.startsWith('active')) return 'active';
+  if (label.startsWith('clearing')) return 'clearing';
+  return 'likely';
+};
+
+const MAP_ROUTE_HINT = 'Tap or click a highlighted route line on the map for details.';
 
 /**
  * DetourAlertStrip (web) — collapsible amber banner showing active detours.
@@ -89,9 +99,24 @@ const DetourAlertStrip = ({
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
         <View style={[styles.expandedPanel, inline && styles.expandedPanelInline]}>
-          {visibleEvents.map((event) => {
+          {visibleEvents.map((event, eventIndex) => {
             const routeColor = getRouteColor(event.primaryRouteId);
             const isClearPending = event.state === 'clear-pending';
+            const routeMetaLabel = formatDetourRoutesMetaLabel(event.routeIds);
+            const statusLabel = getEventStatusLabel(event);
+            const statusTone = getStatusTone(statusLabel);
+            const visibleRouteIds = event.routeIds.slice(0, 4);
+            const hiddenRouteCount = Math.max(0, event.routeIds.length - visibleRouteIds.length);
+            const statusBadgeStyle = statusTone === 'active'
+              ? styles.statusBadgeActive
+              : statusTone === 'clearing'
+                ? styles.statusBadgeClearing
+                : styles.statusBadgeLikely;
+            const statusBadgeTextStyle = statusTone === 'active'
+              ? styles.statusBadgeTextActive
+              : statusTone === 'clearing'
+                ? styles.statusBadgeTextClearing
+                : styles.statusBadgeTextLikely;
 
             return (
               <TouchableOpacity
@@ -104,23 +129,40 @@ const DetourAlertStrip = ({
                 onPress={() => onPress?.(event.primaryRouteId, event)}
                 activeOpacity={0.8}
                 accessibilityRole="button"
-                accessibilityLabel={`${event.title} detour details`}
+                accessibilityLabel={`${event.title}. ${statusLabel}${routeMetaLabel ? `. ${routeMetaLabel}` : ''}. View detour details`}
               >
-                <View style={styles.eventRoutes}>
-                  {event.routeIds.slice(0, 4).map((routeId) => (
-                    <View key={`${event.eventId}-${routeId}`} style={[styles.routePill, { backgroundColor: getRouteColor(routeId) }]}>
-                      <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
-                    </View>
-                  ))}
+                <View style={[styles.eventNumberBadge, { borderColor: routeColor }]}>
+                  <Text style={[styles.eventNumberText, { color: routeColor }]}>{eventIndex + 1}</Text>
                 </View>
                 <View style={styles.eventCopy}>
-                  <Text style={styles.detailLabel} numberOfLines={1}>{event.title}</Text>
-                  <Text style={styles.detailStatus} numberOfLines={1}>{getEventStatusLabel(event)}</Text>
+                  <Text style={styles.detailLabel} numberOfLines={2}>{event.title}</Text>
+                  <View style={styles.eventMetaRow}>
+                    <View style={[styles.statusBadge, statusBadgeStyle]}>
+                      <Text style={[styles.statusBadgeText, statusBadgeTextStyle]}>{statusLabel}</Text>
+                    </View>
+                    <View style={styles.eventRoutes}>
+                      {visibleRouteIds.map((routeId) => (
+                        <View key={`${event.eventId}-${routeId}`} style={[styles.routePill, { backgroundColor: getRouteColor(routeId) }]}>
+                          <Text style={styles.routePillText}>{getRouteName(routeId)}</Text>
+                        </View>
+                      ))}
+                      {hiddenRouteCount > 0 && (
+                        <View style={styles.routeOverflowPill}>
+                          <Text style={styles.routeOverflowText}>+{hiddenRouteCount}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
                 <Text style={styles.chevronRight}>›</Text>
               </TouchableOpacity>
             );
           })}
+
+          <View style={styles.mapRouteHint}>
+            <Icon name="Route" size={15} color={COLORS.primaryDark} />
+            <Text style={styles.mapRouteHintText}>{MAP_ROUTE_HINT}</Text>
+          </View>
 
           {overflowCount > 0 && (
             <TouchableOpacity
@@ -232,8 +274,8 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
+    alignItems: 'flex-start',
+    minHeight: 58,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderLeftWidth: 3,
@@ -250,25 +292,109 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.textPrimary,
+    lineHeight: 17,
+  },
+  eventNumberBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  eventNumberText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+    lineHeight: FONT_SIZES.xs,
   },
   eventRoutes: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 3,
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
   },
   eventCopy: {
     flex: 1,
+    minWidth: 0,
   },
-  detailStatus: {
-    marginTop: 1,
+  eventMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  statusBadge: {
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+  statusBadgeActive: {
+    backgroundColor: COLORS.successSubtle,
+    borderColor: 'rgba(76, 175, 80, 0.32)',
+  },
+  statusBadgeLikely: {
+    backgroundColor: COLORS.warningSubtle,
+    borderColor: 'rgba(255, 153, 31, 0.32)',
+  },
+  statusBadgeClearing: {
+    backgroundColor: COLORS.grey100,
+    borderColor: COLORS.border,
+  },
+  statusBadgeText: {
     fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  statusBadgeTextActive: {
+    color: COLORS.ctaGreen,
+  },
+  statusBadgeTextLikely: {
+    color: COLORS.accentDark,
+  },
+  statusBadgeTextClearing: {
+    color: COLORS.textSecondary,
+  },
+  routeOverflowPill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey100,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  routeOverflowText: {
+    fontSize: FONT_SIZES.xxs,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textSecondary,
   },
   chevronRight: {
     fontSize: FONT_SIZES.lg,
     color: COLORS.textSecondary,
     lineHeight: FONT_SIZES.lg,
+    alignSelf: 'center',
+  },
+  mapRouteHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.infoSubtle,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.primarySubtle,
+  },
+  mapRouteHintText: {
+    flex: 1,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primaryDark,
   },
   moreLink: {
     paddingHorizontal: SPACING.md,

@@ -1,5 +1,20 @@
 import { getRouteFamilyId, routeIsDetouring } from './routeDetourMatching';
 
+export const DETOUR_ROUTE_LAYER_ORDER = {
+  CONTEXT_ROUTE: 90,
+  BASE_ROUTE: 100,
+  DETOURED_ROUTE: 180,
+};
+
+const routeIsInFocusedDetourFamily = (routeId, focusedDetourRouteId) => {
+  if (routeId == null || focusedDetourRouteId == null) return false;
+
+  const routeKey = String(routeId);
+  const focusedKey = String(focusedDetourRouteId);
+  return routeKey === focusedKey ||
+    getRouteFamilyId(routeKey) === getRouteFamilyId(focusedKey);
+};
+
 /**
  * In focused detour mode, only the focused route's scheduled corridor should
  * remain visible. In the main detour view, keep regular route corridors visible
@@ -33,3 +48,30 @@ export const shouldKeepHiddenRouteShapeLayerMounted = ({
   activeDetourRouteIds,
   isDetourView,
 }) => Boolean(isDetourView && routeIsDetouring(routeId, activeDetourRouteIds));
+
+/**
+ * In detour map mode, detouring route corridors need to sit above muted
+ * non-detour context routes. The actual detour geometry still renders above
+ * these route corridors using its own higher layer range.
+ */
+export const getDetourRouteLayerOrder = ({
+  routeId,
+  activeDetourRouteIds,
+  isDetourView,
+  hasDetourFocus,
+  focusedDetourRouteId,
+} = {}) => {
+  if (hasDetourFocus) {
+    return routeIsInFocusedDetourFamily(routeId, focusedDetourRouteId)
+      ? DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE
+      : DETOUR_ROUTE_LAYER_ORDER.CONTEXT_ROUTE;
+  }
+
+  if (isDetourView) {
+    return routeIsDetouring(routeId, activeDetourRouteIds)
+      ? DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE
+      : DETOUR_ROUTE_LAYER_ORDER.CONTEXT_ROUTE;
+  }
+
+  return DETOUR_ROUTE_LAYER_ORDER.BASE_ROUTE;
+};

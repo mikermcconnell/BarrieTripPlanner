@@ -64,6 +64,10 @@ const ENABLE_ROUTE_FAMILY_HANDOFF = process.env.DETOUR_ENABLE_ROUTE_FAMILY_HANDO
   : true;
 const REPRESENTATIVE_PATH_CORRIDOR_METERS = 60;
 const REPRESENTATIVE_PATH_OVERLAP_THRESHOLD = 0.7;
+const REPRESENTATIVE_TRACE_MAX_TIME_GAP_MS = 10 * 60 * 1000;
+const REPRESENTATIVE_TRACE_PROGRESS_REVERSAL_METERS = 150;
+const REPRESENTATIVE_EXIT_ENDPOINT_MAX_METERS = 250;
+const REPRESENTATIVE_EXIT_IMPROVEMENT_METERS = 25;
 const OPEN_CLOSED_OVERLAP_PROXIMITY_METERS = 35;
 const OPEN_CLOSED_OVERLAP_MIN_RUN_METERS = 35;
 const OPEN_CLOSED_INTERIOR_OVERLAP_RATIO = 0.5;
@@ -199,32 +203,65 @@ function buildRepresentativePathCandidates(cluster) {
     const sortedPoints = vehiclePoints
       .slice()
       .sort((a, b) => a.timestampMs - b.timestampMs);
-    const rawPath = dedupeConsecutivePoints(
-      sortedPoints.map((point) => ({
-        latitude: point.latitude,
-        longitude: point.longitude,
-      }))
-    );
-    if (rawPath.length < 2) continue;
 
-    const simplifiedPath = douglasPeucker(rawPath, DP_TOLERANCE_METERS);
-    if (!Array.isArray(simplifiedPath) || simplifiedPath.length < 2) continue;
+    const traceGroups = [];
+    let currentTrace = [];
+    sortedPoints.forEach((point) => {
+      const previous = currentTrace[currentTrace.length - 1];
+      const currentTripKey = point?.recurringObservationId || point?.tripId || null;
+      const previousTripKey = previous?.recurringObservationId || previous?.tripId || null;
+      const tripChanged =
+        Boolean(currentTripKey && previousTripKey) && currentTripKey !== previousTripKey;
+      const timeGap =
+        previous &&
+        Number.isFinite(point?.timestampMs) &&
+        Number.isFinite(previous?.timestampMs) &&
+        (point.timestampMs - previous.timestampMs) > REPRESENTATIVE_TRACE_MAX_TIME_GAP_MS;
+      const progressReversed =
+        previous &&
+        Number.isFinite(point?.progressMeters) &&
+        Number.isFinite(previous?.progressMeters) &&
+        point.progressMeters + REPRESENTATIVE_TRACE_PROGRESS_REVERSAL_METERS < previous.progressMeters;
 
-    const progressValues = sortedPoints
-      .map((point) => point.progressMeters)
-      .filter(Number.isFinite);
-    const progressSpanMeters = progressValues.length > 0
-      ? Math.max(...progressValues) - Math.min(...progressValues)
-      : 0;
+      if (previous && (tripChanged || timeGap || progressReversed)) {
+        traceGroups.push(currentTrace);
+        currentTrace = [];
+      }
 
-    candidates.push({
-      vehicleKey,
-      rawPath,
-      path: simplifiedPath,
-      evidencePointCount: sortedPoints.length,
-      progressSpanMeters,
-      lastEvidenceAt: sortedPoints[sortedPoints.length - 1]?.timestampMs || 0,
-      pathLengthMeters: buildPolylineLengthMeters(rawPath),
+      currentTrace.push(point);
+    });
+    if (currentTrace.length > 0) traceGroups.push(currentTrace);
+
+    traceGroups.forEach((tracePoints, traceIndex) => {
+      if (!Array.isArray(tracePoints) || tracePoints.length < 2) return;
+
+      const rawPath = dedupeConsecutivePoints(
+        tracePoints.map((point) => ({
+          latitude: point.latitude,
+          longitude: point.longitude,
+        }))
+      );
+      if (rawPath.length < 2) return;
+
+      const simplifiedPath = douglasPeucker(rawPath, DP_TOLERANCE_METERS);
+      if (!Array.isArray(simplifiedPath) || simplifiedPath.length < 2) return;
+
+      const progressValues = tracePoints
+        .map((point) => point.progressMeters)
+        .filter(Number.isFinite);
+      const progressSpanMeters = progressValues.length > 0
+        ? Math.max(...progressValues) - Math.min(...progressValues)
+        : 0;
+
+      candidates.push({
+        vehicleKey: `${vehicleKey}:trace:${traceIndex}`,
+        rawPath,
+        path: simplifiedPath,
+        evidencePointCount: tracePoints.length,
+        progressSpanMeters,
+        lastEvidenceAt: tracePoints[tracePoints.length - 1]?.timestampMs || 0,
+        pathLengthMeters: buildPolylineLengthMeters(rawPath),
+      });
     });
   }
 
@@ -551,6 +588,72 @@ function selectExitBoundaryCandidate(projectedCandidates, lastEvidenceAt, contex
     selectDownstreamExitBoundaryCandidate(projectedCandidates, context) ||
     selectLatestCandidate(projectedCandidates)
   );
+}
+
+function selectExitBoundaryNearRepresentativePath(
+  projectedCandidates,
+  currentCandidate,
+  representativePath,
+  context = {}
+) {
+  if (
+    !Array.isArray(projectedCandidates) ||
+    projectedCandidates.length === 0 ||
+    !currentCandidate ||
+    !Array.isArray(representativePath) ||
+    representativePath.length < 2
+  ) {
+    return currentCandidate;
+  }
+
+  const pathEnd = representativePath[representativePath.length - 1];
+  if (!pathEnd) return currentCandidate;
+
+  const minSpanMeters = Number.isFinite(context.minSpanMeters)
+    ? Math.max(0, context.minSpanMeters)
+    : MIN_LINEAR_SEGMENT_LENGTH_METERS;
+  const entryProgressMeters = Number.isFinite(context.entryProgressMeters)
+    ? context.entryProgressMeters
+    : null;
+  const currentDistance = haversineDistance(
+    pathEnd.latitude,
+    pathEnd.longitude,
+    currentCandidate.projectedPoint?.latitude ?? currentCandidate.latitude,
+    currentCandidate.projectedPoint?.longitude ?? currentCandidate.longitude
+  );
+
+  const best = projectedCandidates
+    .filter((candidate) => {
+      if (!Number.isFinite(candidate?.progressMeters)) return false;
+      if (entryProgressMeters != null && candidate.progressMeters < entryProgressMeters + minSpanMeters) {
+        return false;
+      }
+      return true;
+    })
+    .map((candidate) => ({
+      candidate,
+      distanceMeters: haversineDistance(
+        pathEnd.latitude,
+        pathEnd.longitude,
+        candidate.projectedPoint?.latitude ?? candidate.latitude,
+        candidate.projectedPoint?.longitude ?? candidate.longitude
+      ),
+    }))
+    .filter((item) => Number.isFinite(item.distanceMeters))
+    .sort((a, b) => (
+      a.distanceMeters - b.distanceMeters ||
+      (b.candidate.timestampMs || 0) - (a.candidate.timestampMs || 0)
+    ))[0];
+
+  if (
+    best &&
+    best.distanceMeters <= REPRESENTATIVE_EXIT_ENDPOINT_MAX_METERS &&
+    best.distanceMeters + REPRESENTATIVE_EXIT_IMPROVEMENT_METERS < currentDistance
+  ) {
+    return best.candidate;
+  }
+
+  return currentCandidate;
 }
 
 function clampStaleEntryAnchorToEvidence(entryProjection, sortedByProgress, routeConfig = {}) {
@@ -959,15 +1062,23 @@ function buildSegmentGeometry(
     routeConfig
   );
   const rawEntryProjection = entryAnchorClamp.projection;
-  const selectedExitBoundaryCandidate = selectExitBoundaryCandidate(
+  const representativeDetourPath = selectRepresentativeDetourPath(cluster);
+  const exitSelectionContext = {
+    entryProgressMeters: rawEntryProjection?.progressMeters,
+    evidenceMinProgressMeters: sortedByProgress[0]?.progressMeters,
+    evidenceMaxProgressMeters: sortedByProgress[sortedByProgress.length - 1]?.progressMeters,
+    minSpanMeters: MIN_LINEAR_SEGMENT_LENGTH_METERS,
+  };
+  let selectedExitBoundaryCandidate = selectExitBoundaryCandidate(
     boundaryCandidates.exitCandidates,
     lastEvidenceAt,
-    {
-      entryProgressMeters: rawEntryProjection?.progressMeters,
-      evidenceMinProgressMeters: sortedByProgress[0]?.progressMeters,
-      evidenceMaxProgressMeters: sortedByProgress[sortedByProgress.length - 1]?.progressMeters,
-      minSpanMeters: MIN_LINEAR_SEGMENT_LENGTH_METERS,
-    }
+    exitSelectionContext
+  );
+  selectedExitBoundaryCandidate = selectExitBoundaryNearRepresentativePath(
+    boundaryCandidates.exitCandidates,
+    selectedExitBoundaryCandidate,
+    representativeDetourPath,
+    exitSelectionContext
   );
   const pathConfidence = assessPathConfidence(
     pathConfidenceCluster,
@@ -1010,7 +1121,6 @@ function buildSegmentGeometry(
       longitude: exitProjection.projectedPoint.longitude,
     }
     : null;
-  const representativeDetourPath = selectRepresentativeDetourPath(cluster);
   const simplified = douglasPeucker(rawCoords, DP_TOLERANCE_METERS);
   const rawInferredDetourPolyline =
     representativeDetourPath ||
@@ -1262,7 +1372,14 @@ function publishableSegment(shapeId, segment) {
   };
 }
 
-function enrichSegmentsWithStopImpacts(routeId, segments, shapes, fallbackShapeId, stopImpactData) {
+function enrichSegmentsWithStopImpacts(
+  routeId,
+  segments,
+  shapes,
+  fallbackShapeId,
+  stopImpactData,
+  serviceEvidencePoints = []
+) {
   if (!stopImpactData || !Array.isArray(segments) || segments.length === 0 || !(shapes instanceof Map)) {
     return Array.isArray(segments) ? segments : [];
   }
@@ -1276,6 +1393,7 @@ function enrichSegmentsWithStopImpacts(routeId, segments, shapes, fallbackShapeI
       segment,
       polyline,
       stopImpactData,
+      serviceEvidencePoints,
     });
 
     return Object.keys(stopImpacts).length > 0
@@ -1521,7 +1639,18 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
 
   if (segments.length === 0) return suppressedGeometry('no-candidate-segments');
 
-  segments = enrichSegmentsWithStopImpacts(routeId, segments, shapes, bestShape.shapeId, stopImpactData);
+  const stopServiceEvidencePoints = [
+    ...projectedEntryCandidates,
+    ...projectedExitCandidates,
+  ];
+  segments = enrichSegmentsWithStopImpacts(
+    routeId,
+    segments,
+    shapes,
+    bestShape.shapeId,
+    stopImpactData,
+    stopServiceEvidencePoints
+  );
   segments = filterNonClosureSelfLoopSegments(segments);
   if (segments.length === 0) return suppressedGeometry('no-valid-closure-segments');
 

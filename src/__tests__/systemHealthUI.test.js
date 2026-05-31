@@ -78,4 +78,29 @@ describe('systemHealthUI', () => {
     expect(getSystemHealthChipState(diagnostics).label).toBe('LIVE');
     expect(getSystemHealthBannerState(diagnostics)).toBeNull();
   });
+
+  test('shows bus feed down state when live bus feed is stale', () => {
+    const diagnostics = {
+      overall: { status: 'degraded' },
+      proxyApi: { status: 'healthy' },
+      staticData: { usingCachedData: false, status: 'healthy', isAvailable: true },
+      realtimeVehicles: {
+        status: 'degraded',
+        reason: 'gps_feed_stale',
+        isFeedStale: true,
+      },
+    };
+
+    expect(getSystemHealthChipState(diagnostics)).toMatchObject({
+      label: 'FEED DOWN',
+      accessibilityLabel: 'Transit status bus feed down',
+    });
+    expect(getSystemHealthBannerState(diagnostics)).toEqual({
+      tone: 'warning',
+      title: 'Bus Feed is down.',
+      detail: 'Bus locations are hidden until the Bus Feed is back online. Schedules are still available.',
+      actionLabel: 'Refresh live buses',
+      actionKey: 'realtime',
+    });
+  });
 });

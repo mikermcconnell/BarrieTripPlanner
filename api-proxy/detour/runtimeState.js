@@ -165,6 +165,13 @@ function createRuntimeStatePersistence({
         onRouteStreakPointCount: Number(state?.onRouteStreakPointCount) || 0,
         tripShapeId: state?.tripShapeId || null,
         tripId: state?.tripId || null,
+        tripRolloverClearSuppression: state?.tripRolloverClearSuppression
+          ? {
+            routeId: state.tripRolloverClearSuppression.routeId || null,
+            tripId: state.tripRolloverClearSuppression.tripId || null,
+            segmentId: state.tripRolloverClearSuppression.segmentId || null,
+          }
+          : null,
         hasReturnedOnRouteSinceDetour: Boolean(state?.hasReturnedOnRouteSinceDetour),
         lastRouteProjection: normalizeRouteProjectionDiagnostic(state?.lastRouteProjection),
       })),
@@ -180,6 +187,17 @@ function createRuntimeStatePersistence({
           matchedVehicleIds: [...(segment?.matchedVehicleIds || [])].filter(Boolean),
           candidateConfirmationIds: [...(segment?.candidateConfirmationIds || [])].filter(Boolean),
           normalRouteVehicleIds: [...(segment?.normalRouteVehicleIds || [])].filter(Boolean),
+          normalRouteClearProofs: [...(segment?.normalRouteClearProofs?.values?.() || [])].map((proof) => ({
+            proofId: proof?.proofId || null,
+            vehicleId: proof?.vehicleId || null,
+            tripId: proof?.tripId || null,
+            shapeId: proof?.shapeId || null,
+            minProgressMeters: Number.isFinite(proof?.minProgressMeters) ? proof.minProgressMeters : null,
+            maxProgressMeters: Number.isFinite(proof?.maxProgressMeters) ? proof.maxProgressMeters : null,
+            firstSeenAt: toTimestampMs(proof?.firstSeenAt) || null,
+            lastSeenAt: toTimestampMs(proof?.lastSeenAt) || null,
+            pointCount: Number(proof?.pointCount) || 0,
+          })),
           state: segment?.state || 'active',
           clearPendingAt: toTimestampMs(segment?.clearPendingAt) || null,
           clearReason: segment?.clearReason || null,
@@ -316,6 +334,13 @@ function createRuntimeStatePersistence({
         onRouteStreakPointCount: Number(rawVehicle.onRouteStreakPointCount) || 0,
         tripShapeId: rawVehicle.tripShapeId || null,
         tripId: rawVehicle.tripId || null,
+        tripRolloverClearSuppression: rawVehicle.tripRolloverClearSuppression
+          ? {
+            routeId: rawVehicle.tripRolloverClearSuppression.routeId || null,
+            tripId: rawVehicle.tripRolloverClearSuppression.tripId || null,
+            segmentId: rawVehicle.tripRolloverClearSuppression.segmentId || null,
+          }
+          : null,
         hasReturnedOnRouteSinceDetour: Boolean(rawVehicle.hasReturnedOnRouteSinceDetour),
         lastRouteProjection: normalizeRouteProjectionDiagnostic(rawVehicle.lastRouteProjection),
       });
@@ -396,6 +421,26 @@ function createRuntimeStatePersistence({
         const isPublished =
           Boolean(rawSegment.isPublished) &&
           (isPersistent || confirmationVehicleCount >= minimumVehicleCount);
+        const normalRouteClearProofs = new Map(
+          (rawSegment.normalRouteClearProofs || [])
+            .map((proof) => {
+              const proofId = proof?.proofId || null;
+              if (!proofId) return null;
+              return [proofId, {
+                proofId,
+                vehicleId: proof?.vehicleId || null,
+                tripId: proof?.tripId || null,
+                shapeId: proof?.shapeId || null,
+                minProgressMeters: Number.isFinite(proof?.minProgressMeters) ? proof.minProgressMeters : null,
+                maxProgressMeters: Number.isFinite(proof?.maxProgressMeters) ? proof.maxProgressMeters : null,
+                firstSeenAt: toTimestampMs(proof?.firstSeenAt) || null,
+                lastSeenAt: toTimestampMs(proof?.lastSeenAt) || null,
+                pointCount: Number(proof?.pointCount) || 0,
+              }];
+            })
+            .filter(Boolean)
+        );
+
         routeState.segments.set(segmentId, {
           segmentId,
           detectedAt: toDateOrNow(rawSegment.detectedAt),
@@ -405,6 +450,7 @@ function createRuntimeStatePersistence({
           matchedVehicleIds,
           candidateConfirmationIds: new Set((rawSegment.candidateConfirmationIds || []).filter(Boolean)),
           normalRouteVehicleIds: new Set((rawSegment.normalRouteVehicleIds || []).filter(Boolean)),
+          normalRouteClearProofs,
           state: rawSegment.state || 'active',
           clearPendingAt: toTimestampMs(rawSegment.clearPendingAt),
           clearReason: rawSegment.clearReason || null,

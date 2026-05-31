@@ -64,7 +64,7 @@ describe('normal detour candidate memory', () => {
     expect(hasEnoughUniqueEvidence(promoted, { minUniqueSignatures: 2 })).toBe(true);
   });
 
-  test('does not count the same vehicle on a later trip as a second bus', () => {
+  test('counts the same vehicle on a later trip as a second unique trip signature', () => {
     const candidates = new Map();
     const first = {
       routeId: '8A',
@@ -85,7 +85,7 @@ describe('normal detour candidate memory', () => {
     const candidate = upsertCandidateObservation(candidates, first, { maxGapMeters: 350 });
     upsertCandidateObservation(candidates, sameBusLaterTrip, { maxGapMeters: 350 });
 
-    expect(hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: 2 })).toBe(false);
+    expect(hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: 2 })).toBe(true);
   });
 
   test('keeps repeated observations from the same signature compact', () => {

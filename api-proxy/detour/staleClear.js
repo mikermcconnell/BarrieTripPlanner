@@ -1,22 +1,4 @@
-const { estimateRouteHeadwayMs } = require('./routeSchedule');
 const { routeIdsShareFamily } = require('./routeFamily');
-
-const MIN_STALE_MS = Number.parseFloat(process.env.DETOUR_STALE_AUTO_CLEAR_MIN_MS || String(45 * 60 * 1000));
-const BUFFER_MS = Number.parseFloat(process.env.DETOUR_STALE_AUTO_CLEAR_BUFFER_MS || String(10 * 60 * 1000));
-const HEADWAY_MULTIPLIER = Number.parseFloat(process.env.DETOUR_STALE_AUTO_CLEAR_HEADWAY_MULTIPLIER || '2');
-const DEFAULT_HEADWAY_MS = Number.parseFloat(
-  process.env.DETOUR_STALE_AUTO_CLEAR_DEFAULT_HEADWAY_MS || String(60 * 60 * 1000)
-);
-const MAX_STALE_MS = Number.parseFloat(process.env.DETOUR_STALE_AUTO_CLEAR_MAX_MS || String(3 * 60 * 60 * 1000));
-const STALE_AUTO_CLEAR_ENABLED = process.env.DETOUR_STALE_AUTO_CLEAR_ENABLED
-  ? process.env.DETOUR_STALE_AUTO_CLEAR_ENABLED === 'true'
-  : true;
-const LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_ENABLED = process.env.DETOUR_LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_ENABLED
-  ? process.env.DETOUR_LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_ENABLED === 'true'
-  : true;
-const LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS = Number.parseFloat(
-  process.env.DETOUR_LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS || String(60 * 60 * 1000)
-);
 
 function toMillis(value) {
   if (value == null) return null;
@@ -78,12 +60,8 @@ function getConfirmedVehicleCount(detour, previousSnapshot = null) {
 }
 
 function evaluateStaleRiderVisibility({
-  routeId,
   detour,
   previousSnapshot = null,
-  vehicles = [],
-  scheduleIndex = null,
-  now = Date.now(),
 } = {}) {
   const currentVehicleCount = getCurrentVehicleCount(detour) ?? getCurrentVehicleCount(previousSnapshot) ?? 0;
   if (currentVehicleCount > 0) {
@@ -96,8 +74,7 @@ function evaluateStaleRiderVisibility({
   }
 
   const confirmedVehicleCount = getConfirmedVehicleCount(detour, previousSnapshot);
-  const hasRecentRouteFamilyVehicle = routeFamilyHasRecentVehicle(routeId, vehicles);
-  if (confirmedVehicleCount === 0 && !hasRecentRouteFamilyVehicle) {
+  if (confirmedVehicleCount === 0) {
     return {
       riderVisible: false,
       staleForReview: true,
@@ -108,71 +85,20 @@ function evaluateStaleRiderVisibility({
   }
 
   const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
-  if (evidenceMs == null) {
-    return {
-      riderVisible: true,
-      staleForReview: false,
-      reason: 'missing-evidence-time',
-      currentVehicleCount,
-      confirmedVehicleCount,
-    };
-  }
-
-  const threshold = computeStaleThresholdMs(routeId, scheduleIndex, now);
-  if (threshold.thresholdMs == null) {
-    return {
-      riderVisible: true,
-      staleForReview: false,
-      reason: 'no-scheduled-service',
-      currentVehicleCount,
-      confirmedVehicleCount,
-      lastEvidenceAt: evidenceMs,
-      ...threshold,
-    };
-  }
-
-  const staleAgeMs = now - evidenceMs;
-  if (hasRecentRouteFamilyVehicle) {
-    const isStale = Number.isFinite(staleAgeMs) && staleAgeMs >= threshold.thresholdMs;
-    return {
-      riderVisible: true,
-      staleForReview: isStale,
-      reason: 'current-route-family-vehicle',
-      currentVehicleCount,
-      confirmedVehicleCount,
-      staleAgeMs,
-      lastEvidenceAt: evidenceMs,
-      ...threshold,
-    };
-  }
-
-  if (!Number.isFinite(staleAgeMs) || staleAgeMs < threshold.thresholdMs) {
-    return {
-      riderVisible: true,
-      staleForReview: false,
-      reason: 'fresh-enough',
-      currentVehicleCount,
-      confirmedVehicleCount,
-      staleAgeMs,
-      lastEvidenceAt: evidenceMs,
-      ...threshold,
-    };
-  }
 
   return {
-    riderVisible: false,
-    staleForReview: true,
-    reason: 'stale-evidence-gps-clear-required',
+    riderVisible: true,
+    staleForReview: false,
+    reason: evidenceMs == null ? 'missing-evidence-time' : 'gps-clear-required',
     currentVehicleCount,
     confirmedVehicleCount,
-    staleAgeMs,
     lastEvidenceAt: evidenceMs,
-    ...threshold,
   };
 }
 
 function hasUsablePolyline(value) {
-  return Array.isArray(value) && value.length >= 2;
+  if (Array.isArray(value)) return value.length >= 2;
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function getDetourGeometry(detour) {
@@ -228,40 +154,48 @@ function isLowConfidenceValidationOnlyDetour(detour, previousSnapshot = null) {
   return true;
 }
 
-function computeStaleThresholdMs(routeId, scheduleIndex, nowMs) {
-  const estimate = estimateRouteHeadwayMs(routeId, scheduleIndex, nowMs);
-  const scheduledHeadwayMs = estimate?.headwayMs;
+function hasRenderableGeometry(detour, previousSnapshot = null) {
+  if (hasUsablePolyline(pickDetourField(detour, previousSnapshot, 'skippedSegmentPolyline'))) return true;
+  if (hasUsablePolyline(pickDetourField(detour, previousSnapshot, 'likelyDetourPolyline'))) return true;
 
-  if (Number.isFinite(scheduledHeadwayMs) && scheduledHeadwayMs > 0) {
-    return {
-      thresholdMs: Math.min(
-        MAX_STALE_MS,
-        Math.max(MIN_STALE_MS, scheduledHeadwayMs * HEADWAY_MULTIPLIER + BUFFER_MS)
-      ),
-      headwayMs: scheduledHeadwayMs,
-      scheduleSource: estimate.source,
-      serviceDate: estimate.serviceDate,
-    };
+  const canShowDetourPath = pickDetourField(detour, previousSnapshot, 'canShowDetourPath');
+  if (
+    canShowDetourPath === true &&
+    hasUsablePolyline(pickDetourField(detour, previousSnapshot, 'inferredDetourPolyline'))
+  ) {
+    return true;
   }
 
-  if (estimate?.source === 'no-scheduled-service') {
-    return {
-      thresholdMs: null,
-      headwayMs: null,
-      scheduleSource: estimate.source,
-      serviceDate: estimate.serviceDate,
-    };
+  const segments = pickDetourField(detour, previousSnapshot, 'segments');
+  if (!Array.isArray(segments)) return false;
+
+  return segments.some((segment) =>
+    segment?.canShowDetourPath === true ||
+    hasUsablePolyline(segment?.skippedSegmentPolyline) ||
+    hasUsablePolyline(segment?.likelyDetourPolyline) ||
+    (segment?.canShowDetourPath === true && hasUsablePolyline(segment?.inferredDetourPolyline))
+  );
+}
+
+function isUnclearableGeometrylessDetour(detour, previousSnapshot = null) {
+  const currentReason = detour?.riderVisibilityReason || detour?.visibilityReason || null;
+  const previousReason = previousSnapshot?.riderVisibilityReason || previousSnapshot?.visibilityReason || null;
+  const canShowDetourPath = pickDetourField(detour, previousSnapshot, 'canShowDetourPath');
+  const segments = pickDetourField(detour, previousSnapshot, 'segments');
+  const explicitlyEmptySegments = Array.isArray(segments) && segments.length === 0;
+  const wasSuppressedInvalidGeometry =
+    currentReason === 'suppressed-invalid-geometry' ||
+    previousReason === 'suppressed-invalid-geometry';
+
+  if (
+    canShowDetourPath !== false &&
+    !explicitlyEmptySegments &&
+    !wasSuppressedInvalidGeometry
+  ) {
+    return false;
   }
 
-  return {
-    thresholdMs: Math.min(
-      MAX_STALE_MS,
-      Math.max(MIN_STALE_MS, DEFAULT_HEADWAY_MS * HEADWAY_MULTIPLIER + BUFFER_MS)
-    ),
-    headwayMs: DEFAULT_HEADWAY_MS,
-    scheduleSource: estimate?.source || 'default-headway',
-    serviceDate: estimate?.serviceDate || null,
-  };
+  return !hasRenderableGeometry(detour, previousSnapshot);
 }
 
 function shouldAutoClearStaleDetour({
@@ -269,38 +203,7 @@ function shouldAutoClearStaleDetour({
   detour,
   previousSnapshot = null,
   vehicles = [],
-  scheduleIndex = null,
-  now = Date.now(),
 } = {}) {
-  if (!STALE_AUTO_CLEAR_ENABLED) {
-    return { shouldClear: false, reason: 'disabled' };
-  }
-
-  if (
-    LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_ENABLED &&
-    isLowConfidenceValidationOnlyDetour(detour, previousSnapshot)
-  ) {
-    const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
-    if (evidenceMs == null) {
-      return { shouldClear: false, reason: 'missing-evidence-time' };
-    }
-
-    const staleAgeMs = now - evidenceMs;
-    if (
-      Number.isFinite(staleAgeMs) &&
-      staleAgeMs >= LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS
-    ) {
-      return {
-        shouldClear: false,
-        reason: 'gps-clear-required',
-        staleAgeMs,
-        lastEvidenceAt: evidenceMs,
-        thresholdMs: LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS,
-        validationOnly: true,
-      };
-    }
-  }
-
   if (!routeFamilyHasRecentVehicle(routeId, vehicles)) {
     return { shouldClear: false, reason: 'no-recent-route-family-vehicle' };
   }
@@ -310,51 +213,20 @@ function shouldAutoClearStaleDetour({
     return { shouldClear: false, reason: 'missing-evidence-time' };
   }
 
-  const threshold = computeStaleThresholdMs(routeId, scheduleIndex, now);
-  if (threshold.thresholdMs == null) {
-    return {
-      shouldClear: false,
-      reason: 'no-scheduled-service',
-      ...threshold,
-    };
-  }
-
-  const staleAgeMs = now - evidenceMs;
-  if (staleAgeMs < threshold.thresholdMs) {
-    return {
-      shouldClear: false,
-      reason: 'fresh-enough',
-      staleAgeMs,
-      ...threshold,
-    };
-  }
-
   return {
     shouldClear: false,
     reason: 'gps-clear-required',
-    staleAgeMs,
     lastEvidenceAt: evidenceMs,
-    ...threshold,
   };
 }
 
 module.exports = {
   shouldAutoClearStaleDetour,
-  computeStaleThresholdMs,
   routeFamilyHasRecentVehicle,
   getLatestEvidenceMs,
   getCurrentVehicleCount,
   getConfirmedVehicleCount,
   evaluateStaleRiderVisibility,
   isLowConfidenceValidationOnlyDetour,
-  constants: {
-    MIN_STALE_MS,
-    BUFFER_MS,
-    HEADWAY_MULTIPLIER,
-    DEFAULT_HEADWAY_MS,
-    MAX_STALE_MS,
-    STALE_AUTO_CLEAR_ENABLED,
-    LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_ENABLED,
-    LOW_CONFIDENCE_VALIDATION_AUTO_CLEAR_MS,
-  },
+  isUnclearableGeometrylessDetour,
 };

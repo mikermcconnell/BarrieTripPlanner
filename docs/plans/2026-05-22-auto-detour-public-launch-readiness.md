@@ -44,7 +44,7 @@ The implementation now rejects same-stop turnaround geometry before publish/pres
 - Remove detector-owned stale zero-vehicle active-detour clearing.
 - Keep `clear-pending` as the visible transition state before deletion.
 - Keep deletion of active docs after the detector finalizes a GPS-proven clear.
-- Return stale/headway decisions as advisory GPS-required decisions, including low-confidence validation-only cases.
+- Return lifecycle decisions as GPS-required decisions, including low-confidence validation-only cases.
 
 ## Required validation routes
 

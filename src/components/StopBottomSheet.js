@@ -55,6 +55,44 @@ const DirectionsToIcon = ({ size = 18, color = COLORS.error }) => (
   </Svg>
 );
 
+const uniqueRouteLabels = (routes = []) => {
+  const seen = new Set();
+  return (Array.isArray(routes) ? routes : [])
+    .map((route) => String(route || '').trim().toUpperCase())
+    .filter((route) => {
+      if (!route || seen.has(route)) return false;
+      seen.add(route);
+      return true;
+    });
+};
+
+const DetourRouteContext = ({ notice }) => {
+  const affectedRoutes = uniqueRouteLabels(
+    notice?.affectedRouteIds?.length ? notice.affectedRouteIds : [notice?.routeId]
+  );
+  const servedRoutes = uniqueRouteLabels(notice?.servedRouteIds);
+  if (affectedRoutes.length === 0 && servedRoutes.length === 0) return null;
+
+  return (
+    <View style={styles.routeContextRow}>
+      {affectedRoutes.length > 0 && (
+        <View style={[styles.routeContextPill, styles.routeContextPillWarning]}>
+          <Text style={[styles.routeContextPillText, styles.routeContextPillTextWarning]}>
+            Not served: {affectedRoutes.join(', ')}
+          </Text>
+        </View>
+      )}
+      {servedRoutes.length > 0 && (
+        <View style={[styles.routeContextPill, styles.routeContextPillInfo]}>
+          <Text style={[styles.routeContextPillText, styles.routeContextPillTextInfo]}>
+            Still served: {servedRoutes.join(', ')}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, platformMap, onOpenPlatformMap }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
@@ -188,6 +226,7 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
       {detourNotice && (
         <View style={styles.detourNoticeBanner}>
           <Text style={styles.detourNoticeTitle}>{detourNotice.title || 'Detour notice'}</Text>
+          <DetourRouteContext notice={detourNotice} />
           <Text style={styles.closureText}>
             {detourNotice.message || 'This stop may be affected by the active detour.'}
           </Text>
@@ -407,6 +446,37 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.warning,
     marginBottom: SPACING.xxs,
+  },
+  routeContextRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  routeContextPill: {
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+  },
+  routeContextPillWarning: {
+    backgroundColor: COLORS.warningSubtle,
+    borderColor: COLORS.warning,
+  },
+  routeContextPillInfo: {
+    backgroundColor: COLORS.infoSubtle,
+    borderColor: COLORS.primary,
+  },
+  routeContextPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  routeContextPillTextWarning: {
+    color: COLORS.accentDark,
+  },
+  routeContextPillTextInfo: {
+    color: COLORS.primaryDark,
   },
   noticeLinkButton: {
     alignSelf: 'flex-start',

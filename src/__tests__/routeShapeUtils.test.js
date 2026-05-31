@@ -96,4 +96,39 @@ describe('routeShapeUtils', () => {
     expect(result).toContain('dir0Long');
     expect(result).toContain('dir1Long');
   });
+
+  test('does not add extra variants from the same direction', () => {
+    const shapeSource = {
+      route7Regular: [
+        { latitude: 44.34, longitude: -79.68 },
+        { latitude: 44.36, longitude: -79.69 },
+        { latitude: 44.38, longitude: -79.7 },
+        { latitude: 44.41, longitude: -79.67 },
+      ],
+      route7ShortTurn: [
+        { latitude: 44.34, longitude: -79.68 },
+        { latitude: 44.36, longitude: -79.69 },
+      ],
+      route7RareVariant: [
+        { latitude: 44.34, longitude: -79.68 },
+        { latitude: 44.35, longitude: -79.71 },
+        { latitude: 44.39, longitude: -79.69 },
+      ],
+    };
+
+    const shapeDirectionMap = {
+      route7Regular: new Set(['0']),
+      route7ShortTurn: new Set(['0']),
+      route7RareVariant: new Set(['0']),
+    };
+
+    const result = getRepresentativeShapeIdsByDirection(
+      ['route7Regular', 'route7ShortTurn', 'route7RareVariant'],
+      shapeSource,
+      shapeDirectionMap,
+      { maxShapes: 2, precision: 3 }
+    );
+
+    expect(result).toEqual(['route7Regular']);
+  });
 });

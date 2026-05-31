@@ -40,6 +40,7 @@ const buildFeedDiagnostic = ({
   lastSuccessAt = null,
   lastFailureAt = null,
   error = null,
+  feedHealth = null,
   now = Date.now(),
 }) => {
   const successAt = toTimestamp(lastSuccessAt);
@@ -52,6 +53,9 @@ const buildFeedDiagnostic = ({
     Number.isFinite(staleAfterMs) &&
     staleAgeMs > staleAfterMs
   );
+  const feedFreshness = feedHealth?.freshness || null;
+  const isFeedStale = feedFreshness?.status === 'stale' || feedFreshness?.stale === true;
+  const isFeedFreshnessUnknown = feedFreshness?.status === 'unknown';
 
   let status = DIAGNOSTIC_STATUS.IDLE;
   let reason = 'idle';
@@ -59,6 +63,12 @@ const buildFeedDiagnostic = ({
   if (isLoading && !isAvailable) {
     status = DIAGNOSTIC_STATUS.LOADING;
     reason = 'loading';
+  } else if (isFeedStale) {
+    status = DIAGNOSTIC_STATUS.DEGRADED;
+    reason = 'gps_feed_stale';
+  } else if (isFeedFreshnessUnknown) {
+    status = DIAGNOSTIC_STATUS.DEGRADED;
+    reason = 'gps_feed_unknown';
   } else if (!isAvailable && isOffline) {
     status = DIAGNOSTIC_STATUS.OFFLINE;
     reason = 'offline';
@@ -98,6 +108,10 @@ const buildFeedDiagnostic = ({
     lastSuccessAt: successAt,
     lastFailureAt: failureAt,
     errorMessage,
+    feedHealth,
+    feedFreshness,
+    isFeedStale,
+    isFeedFreshnessUnknown,
   };
 };
 

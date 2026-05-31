@@ -16,6 +16,8 @@ const DEFAULT_BLOCKED_PROXIMITY_METERS = 15;
 const DEFAULT_BLOCKED_OVERLAP_RATIO = 0.05;
 const DEFAULT_BLOCKED_ENDPOINT_RATIO = 0.12;
 const DEFAULT_BLOCKED_MIN_POINTS = 3;
+const DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS = 35;
+const DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS = 35;
 const DEFAULT_BACKTRACK_PROXIMITY_METERS = 12;
 const DEFAULT_BACKTRACK_MIN_SEGMENT_METERS = 20;
 const DEFAULT_BACKTRACK_MIN_TURN_DEGREES = 150;
@@ -341,6 +343,81 @@ function doesPathUseBlockedSegment(path, blockedPolyline, env = process.env) {
   return nearBlockedCount >= minPoints && (nearBlockedCount / interior.length) >= overlapRatio;
 }
 
+function polylineLengthMeters(polyline) {
+  const points = normalizePolyline(polyline);
+  if (points.length < 2) return 0;
+
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const distance = haversineDistance(points[index - 1], points[index]);
+    if (Number.isFinite(distance)) length += distance;
+  }
+  return length;
+}
+
+function getEndpointRouteOverlapRun(path, routeShapePolyline, env = process.env, fromEnd = false) {
+  const orderedPath = fromEnd ? [...path].reverse() : path;
+  const run = [];
+  const proximityMeters = parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_PROXIMITY_METERS,
+    DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS,
+    5,
+    200
+  );
+
+  for (const point of orderedPath) {
+    if (pointToPolylineDistance(point, routeShapePolyline) > proximityMeters) {
+      break;
+    }
+    run.push(point);
+  }
+
+  if (run.length < 2) return null;
+
+  const runLengthMeters = polylineLengthMeters(fromEnd ? run.reverse() : run);
+  const minRunMeters = parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_MIN_RUN_METERS,
+    DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS,
+    1,
+    500
+  );
+  if (runLengthMeters < minRunMeters) return null;
+
+  return {
+    pointCount: run.length,
+    runLengthMeters,
+  };
+}
+
+function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.env) {
+  const points = normalizePolyline(path);
+  const route = normalizePolyline(routeShapePolyline);
+  if (points.length < 2 || route.length < 2) {
+    return {
+      path: points,
+      prefixTrimmed: false,
+      suffixTrimmed: false,
+    };
+  }
+
+  const prefixRun = getEndpointRouteOverlapRun(points, route, env, false);
+  const suffixRun = getEndpointRouteOverlapRun(points, route, env, true);
+  let startIndex = prefixRun ? prefixRun.pointCount : 0;
+  let endIndex = suffixRun ? points.length - suffixRun.pointCount - 1 : points.length - 1;
+
+  startIndex = Math.max(0, Math.min(startIndex, points.length));
+  endIndex = Math.max(-1, Math.min(endIndex, points.length - 1));
+
+  const trimmed = startIndex <= endIndex ? points.slice(startIndex, endIndex + 1) : [];
+  return {
+    path: trimmed.length >= 2 ? trimmed : [],
+    prefixTrimmed: Boolean(prefixRun),
+    suffixTrimmed: Boolean(suffixRun),
+    prefixOverlapMeters: prefixRun?.runLengthMeters || 0,
+    suffixOverlapMeters: suffixRun?.runLengthMeters || 0,
+  };
+}
+
 function samplePolyline(points, maxPoints = DEFAULT_MAX_POINTS) {
   if (!Array.isArray(points) || points.length <= maxPoints) return points || [];
 
@@ -524,7 +601,7 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
     return null;
   }
 
-  const matchedPolyline = removeAvoidableBacktracksFromPolyline(
+  let matchedPolyline = removeAvoidableBacktracksFromPolyline(
     parseMatchedPolyline(matchable),
     options.env
   );
@@ -537,6 +614,22 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
   ) {
     addRejectionReason(options, 'endpoint-mismatch', { mismatchMeters });
     return null;
+  }
+
+  const routeTrim = trimNormalRouteEndpointOverlap(
+    matchedPolyline,
+    options.routeShapePolyline,
+    options.env
+  );
+  if (routeTrim.prefixTrimmed || routeTrim.suffixTrimmed) {
+    matchedPolyline = routeTrim.path;
+    if (matchedPolyline.length < 2) {
+      addRejectionReason(options, 'normal-route-overlap', {
+        prefixOverlapMeters: routeTrim.prefixOverlapMeters,
+        suffixOverlapMeters: routeTrim.suffixOverlapMeters,
+      });
+      return null;
+    }
   }
 
   if (doesPathUseBlockedSegment(matchedPolyline, options.blockedPolyline, options.env)) {
@@ -610,9 +703,7 @@ async function matchPolylineToRoads(polyline, options = {}) {
         : null;
       if (matchResult) return matchResult;
       if (matching) {
-        if (rejectionReasons.some(({ reason }) => (
-          reason === 'low-confidence' || reason === 'endpoint-mismatch'
-        ))) {
+        if (rejectionReasons.some(({ reason }) => reason === 'endpoint-mismatch')) {
           rejectedForTrust = true;
         }
         console.warn('[detourRoadMatcher] OSRM match result rejected or unusable', {
@@ -678,6 +769,26 @@ function getMatchCandidate(segment) {
   return [];
 }
 
+function getRouteShapePolylineForSegment(segment, options = {}) {
+  if (Array.isArray(options.routeShapePolyline) && options.routeShapePolyline.length >= 2) {
+    return options.routeShapePolyline;
+  }
+
+  const shapeId = segment?.shapeId || options.shapeId || null;
+  const shapes = options.shapes || options.routeShapes || null;
+  if (!shapeId || !shapes) return [];
+
+  if (typeof shapes.get === 'function') {
+    return shapes.get(shapeId) || [];
+  }
+
+  if (typeof shapes === 'object') {
+    return shapes[shapeId] || [];
+  }
+
+  return [];
+}
+
 async function matchSegment(segment, options) {
   const candidate = getMatchCandidate(segment);
   if (candidate.length < 2) {
@@ -688,6 +799,7 @@ async function matchSegment(segment, options) {
     const match = await matchPolylineToRoads(candidate, {
       ...options,
       blockedPolyline: segment?.skippedSegmentPolyline,
+      routeShapePolyline: getRouteShapePolylineForSegment(segment, options),
     });
     if (!match) return clearRoadMatchedFields(segment);
     return {

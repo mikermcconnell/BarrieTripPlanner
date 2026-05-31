@@ -142,9 +142,13 @@ export const getSystemHealthChipState = (diagnostics) => {
   }
 
   if (realtimeVehicles?.status === 'degraded' || realtimeVehicles?.status === 'error') {
+    const gpsFeedStale = realtimeVehicles?.reason === 'gps_feed_stale' ||
+      realtimeVehicles?.isFeedStale;
     return {
-      label: 'LIVE',
-      accessibilityLabel: 'Transit status live bus locations delayed',
+      label: gpsFeedStale ? 'FEED DOWN' : 'DELAYED',
+      accessibilityLabel: gpsFeedStale
+        ? 'Transit status bus feed down'
+        : 'Transit status live bus locations delayed',
       backgroundColor: COLORS.warningSubtle,
       dotColor: COLORS.warning,
       textColor: COLORS.warning,
@@ -255,6 +259,16 @@ export const getSystemHealthBannerState = (diagnostics) => {
   }
 
   if (realtimeVehicles?.status === 'degraded') {
+    if (realtimeVehicles?.reason === 'gps_feed_stale' || realtimeVehicles?.isFeedStale) {
+      return {
+        tone: 'warning',
+        title: 'Bus Feed is down.',
+        detail: 'Bus locations are hidden until the Bus Feed is back online. Schedules are still available.',
+        actionLabel: 'Refresh live buses',
+        actionKey: 'realtime',
+      };
+    }
+
     return {
       tone: 'warning',
       title: 'Live bus locations may be delayed.',

@@ -1,4 +1,9 @@
-import { shouldKeepHiddenRouteShapeLayerMounted, shouldRenderRouteShape } from '../utils/detourFocusUtils';
+import {
+  DETOUR_ROUTE_LAYER_ORDER,
+  getDetourRouteLayerOrder,
+  shouldKeepHiddenRouteShapeLayerMounted,
+  shouldRenderRouteShape,
+} from '../utils/detourFocusUtils';
 
 describe('shouldRenderRouteShape', () => {
   test('renders all shapes when detour focus is inactive', () => {
@@ -85,5 +90,36 @@ describe('shouldRenderRouteShape', () => {
       activeDetourRouteIds: new Set(['8A', '8B']),
       isDetourView: false,
     })).toBe(false);
+  });
+
+  test('draws detoured route corridors above non-detoured context routes in detour view', () => {
+    const activeDetours = new Set(['11']);
+
+    const detouredOrder = getDetourRouteLayerOrder({
+      routeId: '11',
+      activeDetourRouteIds: activeDetours,
+      isDetourView: true,
+      hasDetourFocus: false,
+    });
+    const contextOrder = getDetourRouteLayerOrder({
+      routeId: '10',
+      activeDetourRouteIds: activeDetours,
+      isDetourView: true,
+      hasDetourFocus: false,
+    });
+
+    expect(detouredOrder).toBe(DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE);
+    expect(contextOrder).toBe(DETOUR_ROUTE_LAYER_ORDER.CONTEXT_ROUTE);
+    expect(detouredOrder).toBeGreaterThan(contextOrder);
+  });
+
+  test('draws the focused detour family above context routes', () => {
+    expect(getDetourRouteLayerOrder({
+      routeId: '12B',
+      activeDetourRouteIds: new Set(['12A']),
+      isDetourView: true,
+      hasDetourFocus: true,
+      focusedDetourRouteId: '12A',
+    })).toBe(DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE);
   });
 });

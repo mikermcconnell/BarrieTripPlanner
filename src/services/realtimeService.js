@@ -2,6 +2,28 @@ import { GTFS_URLS } from '../config/constants';
 import { decodeVarint, skipField, decodeFloat } from '../utils/protobufDecoder';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
 
+export const VEHICLE_POSITION_STALE_THRESHOLD_SECONDS = 5 * 60;
+
+const emptyVehicleFeedStatus = {
+  checkedAt: null,
+  rawEntityCount: 0,
+  positionedVehicleCount: 0,
+  usableVehicleCount: 0,
+  staleFilteredCount: 0,
+  freshness: {
+    vehicleCount: 0,
+    timestampedVehicleCount: 0,
+    newestTimestampMs: null,
+    oldestTimestampMs: null,
+    newestAgeMs: null,
+    staleThresholdMs: VEHICLE_POSITION_STALE_THRESHOLD_SECONDS * 1000,
+    stale: false,
+    status: 'empty',
+  },
+};
+
+let lastVehicleFeedStatus = { ...emptyVehicleFeedStatus };
+
 // GTFS-RT protobuf message types
 // Based on gtfs-realtime.proto specification
 
@@ -256,6 +278,102 @@ const decodePosition = (buffer) => {
   return position;
 };
 
+export const toVehicleTimestampMs = (vehicle) => {
+  const raw = vehicle?.timestampMs ?? vehicle?.timestamp;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed < 10_000_000_000 ? parsed * 1000 : parsed;
+};
+
+export const summarizeVehicleFeedFreshness = (
+  vehicles,
+  {
+    now = Date.now(),
+    staleThresholdMs = VEHICLE_POSITION_STALE_THRESHOLD_SECONDS * 1000,
+  } = {}
+) => {
+  const list = Array.isArray(vehicles) ? vehicles : [];
+  const timestamps = list
+    .map(toVehicleTimestampMs)
+    .filter((value) => Number.isFinite(value));
+  const newestTimestampMs = timestamps.length > 0 ? Math.max(...timestamps) : null;
+  const oldestTimestampMs = timestamps.length > 0 ? Math.min(...timestamps) : null;
+  const newestAgeMs = Number.isFinite(newestTimestampMs)
+    ? Math.max(0, now - newestTimestampMs)
+    : null;
+  const stale = list.length > 0 &&
+    Number.isFinite(newestAgeMs) &&
+    newestAgeMs > staleThresholdMs;
+  let status = 'empty';
+  if (list.length > 0 && timestamps.length === 0) {
+    status = 'unknown';
+  } else if (stale) {
+    status = 'stale';
+  } else if (list.length > 0) {
+    status = 'fresh';
+  }
+
+  return {
+    vehicleCount: list.length,
+    timestampedVehicleCount: timestamps.length,
+    newestTimestampMs,
+    oldestTimestampMs,
+    newestAgeMs,
+    staleThresholdMs,
+    stale,
+    status,
+  };
+};
+
+const hasUsablePosition = (vehicle) => (
+  vehicle &&
+  Number.isFinite(vehicle.latitude) &&
+  Number.isFinite(vehicle.longitude)
+);
+
+const isFreshVehicle = (
+  vehicle,
+  nowMs = Date.now(),
+  staleThresholdMs = VEHICLE_POSITION_STALE_THRESHOLD_SECONDS * 1000
+) => {
+  const timestampMs = toVehicleTimestampMs(vehicle);
+  return timestampMs == null || Math.max(0, nowMs - timestampMs) <= staleThresholdMs;
+};
+
+export const buildVehicleFeedStatus = (
+  entities,
+  {
+    now = Date.now(),
+    staleThresholdMs = VEHICLE_POSITION_STALE_THRESHOLD_SECONDS * 1000,
+  } = {}
+) => {
+  const list = Array.isArray(entities) ? entities : [];
+  const positionedVehicles = list
+    .map((entity) => entity?.vehicle)
+    .filter(hasUsablePosition);
+  const usableVehicles = positionedVehicles.filter((vehicle) => (
+    isFreshVehicle(vehicle, now, staleThresholdMs)
+  ));
+  const freshness = summarizeVehicleFeedFreshness(positionedVehicles, {
+    now,
+    staleThresholdMs,
+  });
+
+  return {
+    checkedAt: new Date(now).toISOString(),
+    rawEntityCount: list.length,
+    positionedVehicleCount: positionedVehicles.length,
+    usableVehicleCount: usableVehicles.length,
+    staleFilteredCount: Math.max(0, positionedVehicles.length - usableVehicles.length),
+    freshness,
+  };
+};
+
+export const getLastVehicleFeedStatus = () => ({
+  ...lastVehicleFeedStatus,
+  freshness: { ...lastVehicleFeedStatus.freshness },
+});
+
 /**
  * Fetch vehicle positions from GTFS-RT feed
  * @returns {Promise<Array<Object>>} Array of vehicle position objects
@@ -268,6 +386,8 @@ export const fetchVehiclePositions = async () => {
 
     const buffer = await response.arrayBuffer();
     const entities = decodeGTFSRT(new Uint8Array(buffer));
+    const now = Date.now();
+    lastVehicleFeedStatus = buildVehicleFeedStatus(entities, { now });
 
     // Extract and clean vehicle data
     return entities
@@ -275,7 +395,8 @@ export const fetchVehiclePositions = async () => {
         (entity) =>
           entity.vehicle &&
           Number.isFinite(entity.vehicle.latitude) &&
-          Number.isFinite(entity.vehicle.longitude)
+          Number.isFinite(entity.vehicle.longitude) &&
+          isFreshVehicle(entity.vehicle, now)
       )
       .map((entity) => ({
         id: entity.id,

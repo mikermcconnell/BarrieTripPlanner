@@ -2,7 +2,11 @@ jest.mock('../utils/fetchWithCORS', () => ({
   fetchWithCORS: jest.fn(),
 }));
 
-const { formatVehiclesForMap } = require('../services/realtimeService');
+const {
+  buildVehicleFeedStatus,
+  formatVehiclesForMap,
+  summarizeVehicleFeedFreshness,
+} = require('../services/realtimeService');
 
 describe('formatVehiclesForMap', () => {
   test('preserves missing speed so bearing updates are not treated as stopped buses', () => {
@@ -91,6 +95,69 @@ describe('formatVehiclesForMap', () => {
         longitude: -79.691,
       },
     });
+  });
+});
+
+describe('vehicle feed freshness', () => {
+  test('detects stale bus feed data before map markers are shown', () => {
+    const now = Date.parse('2026-05-28T15:40:19.000Z');
+    const timestamp = Math.floor(Date.parse('2026-05-28T15:05:16.000Z') / 1000);
+
+    const status = buildVehicleFeedStatus([
+      {
+        id: 'entity-1',
+        vehicle: {
+          latitude: 44.39,
+          longitude: -79.69,
+          timestamp,
+        },
+      },
+    ], { now });
+
+    expect(status).toMatchObject({
+      rawEntityCount: 1,
+      positionedVehicleCount: 1,
+      usableVehicleCount: 0,
+      staleFilteredCount: 1,
+      freshness: {
+        stale: true,
+        status: 'stale',
+      },
+    });
+  });
+
+  test('treats recent bus feed data as usable', () => {
+    const now = Date.parse('2026-05-28T15:40:19.000Z');
+    const timestamp = Math.floor((now - 30 * 1000) / 1000);
+
+    expect(buildVehicleFeedStatus([
+      {
+        id: 'entity-1',
+        vehicle: {
+          latitude: 44.39,
+          longitude: -79.69,
+          timestamp,
+        },
+      },
+    ], { now })).toMatchObject({
+      positionedVehicleCount: 1,
+      usableVehicleCount: 1,
+      staleFilteredCount: 0,
+      freshness: {
+        stale: false,
+        status: 'fresh',
+      },
+    });
+  });
+
+  test('summarizes vehicles without timestamps as unknown instead of live', () => {
+    expect(summarizeVehicleFeedFreshness([{ latitude: 44.39, longitude: -79.69 }]))
+      .toMatchObject({
+        vehicleCount: 1,
+        timestampedVehicleCount: 0,
+        stale: false,
+        status: 'unknown',
+      });
   });
 });
 

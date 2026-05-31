@@ -24,7 +24,8 @@ const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.
 const MAPLIBRE_JS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js';
 const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
 const BUS_HUB_ICON_URI = RNImage.resolveAssetSource?.(BUS_HUB_ICON_SOURCE)?.uri || BUS_HUB_ICON_SOURCE;
-const BUS_HUB_ICON_SCALE = 0.5;
+const BUS_HUB_ICON_SCALE = 1.5;
+const BUS_HUB_ICON_CENTER_OFFSET = [0, 10];
 const MapContext = createContext(null);
 const webMarkerDebugState = new Map();
 const ROUTE_LABEL_DEBUG =
@@ -181,10 +182,10 @@ const resetCursorIfNeeded = (map) => {
   }
 };
 
-const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0, accessibilityLabel }) => {
+const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0, accessibilityLabel, pointerEvents }) => {
   const element = document.createElement('div');
   element.className = className;
-  element.style.pointerEvents = 'auto';
+  element.style.pointerEvents = pointerEvents || 'auto';
   element.style.cursor = onClickRef?.current ? 'pointer' : 'default';
   element.style.zIndex = String(zIndexOffset);
   if (accessibilityLabel) {
@@ -202,10 +203,11 @@ const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 
   return element;
 };
 
-const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, accessibilityLabel }) => {
+const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, accessibilityLabel, pointerEvents }) => {
   if (!element) return;
   element.className = className;
   element.style.zIndex = String(zIndexOffset);
+  element.style.pointerEvents = pointerEvents || 'auto';
   if (accessibilityLabel) {
     element.setAttribute('aria-label', accessibilityLabel);
   } else {
@@ -305,7 +307,7 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
   const iconSize = (isMajor ? 54 : 46) * BUS_HUB_ICON_SCALE;
   const labelHtml = safeLabel
     ? `<div style="
-        margin-top:1px;
+        margin-top:-10px;
         max-width:${isMajor ? 184 : 142}px;
         padding:3px 8px;
         border-radius:999px;
@@ -327,7 +329,7 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
   return `
     <div data-bus-hub-icon="true" style="
       width:${isMajor ? 190 : 150}px;
-      min-height:${isMajor ? 74 : 66}px;
+      min-height:${isMajor ? 132 : 116}px;
       display:flex;
       flex-direction:column;
       align-items:center;
@@ -367,6 +369,7 @@ const WebHtmlMarkerComponent = ({
   onPress,
   popupHtml,
   accessibilityLabel,
+  pointerEvents,
 }) => {
   const context = useMapContext();
   const markerRef = useRef(null);
@@ -389,6 +392,7 @@ const WebHtmlMarkerComponent = ({
       onClickRef: onPressRef,
       zIndexOffset,
       accessibilityLabel,
+      pointerEvents,
     });
     const marker = new context.maplibre.Marker({
       element,
@@ -411,7 +415,7 @@ const WebHtmlMarkerComponent = ({
       markerRef.current = null;
       elementRef.current = null;
     };
-  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, offset]);
+  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, offset, pointerEvents]);
 
   useEffect(() => {
     if (!markerRef.current || !hasValidCoordinate) return;
@@ -420,8 +424,8 @@ const WebHtmlMarkerComponent = ({
 
   useEffect(() => {
     if (!elementRef.current) return;
-    updateMarkerElement(elementRef.current, { html, className, zIndexOffset, accessibilityLabel });
-  }, [accessibilityLabel, className, html, zIndexOffset]);
+    updateMarkerElement(elementRef.current, { html, className, zIndexOffset, accessibilityLabel, pointerEvents });
+  }, [accessibilityLabel, className, html, pointerEvents, zIndexOffset]);
 
   useEffect(() => {
     if (!elementRef.current) return;
@@ -493,6 +497,75 @@ const removeSourceIfExists = (map, sourceId) => {
   if (safeGetSource(map, sourceId)) {
     map.removeSource(sourceId);
   }
+};
+
+const DEFAULT_WEB_LAYER_ORDER = 100;
+const orderedMapLayerRegistries = new WeakMap();
+let orderedMapLayerSequence = 0;
+
+const normalizeLayerOrder = (layerOrder) => {
+  const numericOrder = Number(layerOrder);
+  return Number.isFinite(numericOrder) ? numericOrder : DEFAULT_WEB_LAYER_ORDER;
+};
+
+const getOrderedMapLayerRegistry = (map) => {
+  let registry = orderedMapLayerRegistries.get(map);
+  if (!registry) {
+    registry = new Map();
+    orderedMapLayerRegistries.set(map, registry);
+  }
+  return registry;
+};
+
+const reorderRegisteredMapLayers = (map) => {
+  const registry = orderedMapLayerRegistries.get(map);
+  if (!registry || typeof map?.moveLayer !== 'function') return;
+
+  [...registry.values()]
+    .sort((a, b) => (
+      a.layerOrder === b.layerOrder
+        ? a.sequence - b.sequence
+        : a.layerOrder - b.layerOrder
+    ))
+    .forEach((entry) => {
+      entry.layerIds.forEach((layerId) => {
+        if (!safeGetLayer(map, layerId)) return;
+        try {
+          map.moveLayer(layerId);
+        } catch {
+          // Layers can disappear during style reloads or component teardown.
+        }
+      });
+    });
+};
+
+const registerOrderedMapLayers = ({ map, registryKey, layerOrder, layerIds }) => {
+  if (!map || !registryKey || !Array.isArray(layerIds) || layerIds.length === 0) {
+    return () => {};
+  }
+
+  const registry = getOrderedMapLayerRegistry(map);
+  const previousEntry = registry.get(registryKey);
+  const entry = {
+    layerOrder: normalizeLayerOrder(layerOrder),
+    layerIds: layerIds.filter(Boolean),
+    sequence: previousEntry?.sequence ?? orderedMapLayerSequence,
+  };
+  if (!previousEntry) {
+    orderedMapLayerSequence += 1;
+  }
+
+  registry.set(registryKey, entry);
+  reorderRegisteredMapLayers(map);
+
+  return () => {
+    registry.delete(registryKey);
+    if (registry.size === 0) {
+      orderedMapLayerRegistries.delete(map);
+    } else {
+      reorderRegisteredMapLayers(map);
+    }
+  };
 };
 
 const addLineLayers = ({
@@ -631,6 +704,7 @@ const WebRoutePolylineComponent = ({
   routeLabel = null,
   labelStyle = null,
   showArrows = false,
+  layerOrder = DEFAULT_WEB_LAYER_ORDER,
 }) => {
   const context = useMapContext();
   const baseId = useStableMapId('web-route');
@@ -679,6 +753,18 @@ const WebRoutePolylineComponent = ({
       showArrows,
     });
 
+    const unregisterLayerOrder = registerOrderedMapLayers({
+      map: context.map,
+      registryKey: baseId,
+      layerOrder,
+      layerIds: [
+        outlineWidth > 0 ? outlineId : null,
+        fillId,
+        showArrows ? arrowId : null,
+        routeLabel ? labelId : null,
+      ].filter(Boolean),
+    });
+
     const cleanupEvents = applyLayerEvents({
       map: context.map,
       layerId: fillId,
@@ -693,6 +779,7 @@ const WebRoutePolylineComponent = ({
       removeLayerIfExists(context.map, fillId);
       removeLayerIfExists(context.map, outlineId);
       removeSourceIfExists(context.map, sourceId);
+      unregisterLayerOrder();
     };
   }, [
     baseId,
@@ -702,6 +789,7 @@ const WebRoutePolylineComponent = ({
     coordinates,
     dashArray,
     interactive,
+    layerOrder,
     lineCap,
     lineJoin,
     offset,
@@ -722,6 +810,7 @@ export const WebRoutePolyline = memo(WebRoutePolylineComponent);
 const WebLineLabelLayerComponent = ({
   labels = [],
   labelStyle = {},
+  layerOrder = DEFAULT_WEB_LAYER_ORDER,
 }) => {
   const context = useMapContext();
   const baseId = useStableMapId('web-line-labels');
@@ -807,11 +896,19 @@ const WebLineLabelLayerComponent = ({
       },
     });
 
+    const unregisterLayerOrder = registerOrderedMapLayers({
+      map: context.map,
+      registryKey: baseId,
+      layerOrder,
+      layerIds: [layerId],
+    });
+
     return () => {
       removeLayerIfExists(context.map, layerId);
       removeSourceIfExists(context.map, sourceId);
+      unregisterLayerOrder();
     };
-  }, [baseId, context?.isReady, context?.map, labelStyle, labels]);
+  }, [baseId, context?.isReady, context?.map, labelStyle, labels, layerOrder]);
 
   return null;
 };
@@ -839,6 +936,7 @@ const WebBusHubLayerComponent = ({ featureCollection }) => {
             html={createBusHubHtml({ label, hubType })}
             className={`bus-hub-marker bus-hub-marker-${hubType}`}
             anchor="center"
+            offset={BUS_HUB_ICON_CENTER_OFFSET}
             zIndexOffset={hubType === 'major' ? 655 : 652}
             accessibilityLabel={label ? `${label} bus hub` : 'Bus hub'}
           />
@@ -968,6 +1066,8 @@ export const __TEST_ONLY__ = {
   applyLayerEvents,
   createBusHubHtml,
   createBusHtml,
+  registerOrderedMapLayers,
+  reorderRegisteredMapLayers,
   resolveLayerCallbacks,
 };
 

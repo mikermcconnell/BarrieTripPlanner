@@ -1,6 +1,6 @@
 # Auto-Detour Validation Matrix
 
-Status: Current as of 2026-05-25
+Status: Current as of 2026-05-29
 
 Use this file to turn detour bugs, live observations, and product decisions into repeatable validation scenarios.
 
@@ -33,24 +33,138 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 |---|---|---|---|---|---|---|
 | DET-001 | Normal confirmed detour | Publish an active detour only after confirmed off-route evidence from the required unique same-route vehicles. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourIntegration.test.js` | QA sections 3, 4, 9 | Covered | False positives from noisy GPS or bad baseline |
 | DET-002 | Likely path confidence gate | Keep the alert active, but hide the rider-facing likely path until trusted entry/exit and corridor evidence exist. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 6, 7 | Covered | Sparse evidence producing a convincing but wrong purple path |
-| DET-003 | Very short recurring detour | Capture a first off-route point as candidate evidence, but publish only when two unique same-route trips/vehicles corroborate the same segment. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12 | Covered | Counting repeated snapshots from the same trip as independent evidence |
+| DET-003 | Very short recurring detour | Capture a first off-route point as candidate evidence, but publish only when the same corridor has at least three matching off-route pings and two unique same-route trips/vehicles. The three pings can be split across trips. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12 | Covered | Counting repeated snapshots from the same trip as independent evidence |
 | DET-004 | Low-frequency / Sunday service | Keep candidate evidence long enough for the next low-frequency bus to corroborate; do not clear from bus absence. | `api-proxy/__tests__/detourDetector.test.js` | QA section 12 | Covered | Candidate memory too short or stale warnings mistaken for clear proof |
-| DET-005 | GPS-proven normal clearing | Clear only after same-bus normal-route traversal through the affected segment, then delete the active Firestore doc. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11 | Covered | Premature clearing when a bus is merely near the route |
+| DET-005 | GPS-proven normal clearing | Clear only after normal-route traversal proof through the affected segment: either same-bus traversal or two unique same-route trips/vehicles collectively covering the clear window after latest off-route evidence. Default proof requires at least 60% overlap and enough route-progress movement through it (up to 100m; shorter segments use their 60% span), then delete the active Firestore doc after `clear-pending`. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11 | Covered | Premature clearing when a bus is merely near the route or when a fixed on-route ping count is met without traversal coverage |
 | DET-006 | Stale active detour | Keep active detours visible with `currentVehicleCount: 0` until new evidence confirms detour or normal routing. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 11, 12 | Covered | Old evidence staying visible too long without operator review context |
 | DET-007 | Backend cold start with active detours | Rehydrate runtime state or active Firestore snapshots so the first post-restart tick does not delete valid detours. | `api-proxy/__tests__/detourIntegration.test.js` | QA section 13 | Covered | Empty runtime state causing accidental deletion |
 | DET-008 | Same-route multiple independent detours | Publish separate `segments[]` under one route document; do not merge separated closures into one giant lifecycle. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourIntegration.test.js` | QA sections 5, 14 | Covered | Normal in-between route travel clearing or merging unrelated segments |
 | DET-009 | Multi-vehicle noisy geometry | Select a representative trajectory instead of weaving all vehicle points into overlapping reroute branches. | `api-proxy/__tests__/detourGeometry.test.js` | QA section 5 | Covered | Messy inferred path when vehicles take different alternates |
 | DET-010 | Route-family projection | Project a confirmed physical closure to sibling route variants only when the source segment has reliable closure geometry. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourGeometry.test.js` | QA sections 4, 12, 15 | Covered | A bus using a sibling's regular route being mislabeled as a detour |
 | DET-011 | Same-stop self-loop / turnaround | Reject same-stop self-loop geometry when no real closed route segment is identified. | `api-proxy/__tests__/detourGeometry.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Route-fallback spurs appearing as false detours |
-| DET-012 | Rider map rendering | Show closed route sections, likely detour paths, stops, buses, banner, and details without stale overlays after tab switching. | `src/__tests__/detourOverlays.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 6, 7, 8, 9 | Partially covered | Visual regressions that only appear in native/web map rendering |
+| DET-012 | Rider map rendering | Show closed route sections, likely detour paths, stops, buses, banner, and details without stale overlays after tab switching. | `src/__tests__/detourOverlays.test.js`, `src/__tests__/detourIntegration.test.js`, `src/__tests__/detourRouteMasking.test.js` | QA sections 6, 7, 8, 9 | Partially covered | Visual regressions that only appear in native/web map rendering |
 | DET-013 | Baseline safety | Block detection when the baseline is unsafe or silently refreshed from live detoured GTFS. | Existing backend status and rollout-health checks | QA sections 1, 13, 14 | Needs explicit scenario review before launch | Treating a live detour as normal service |
 | DET-014 | Rollout health / flapping | Surface recent failures, flapping, short-lived detections, and false-positive indicators before public launch. | `api-proxy` rollout-health coverage where present | QA section 14 | Needs ongoing live review | Launching with noisy but test-passing behavior |
 | DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
 | DET-016 | Short detour sampling cadence | If the GTFS-RT feed updates about every 30 seconds, the detector should support true half-minute sampling without keeping a Cloud Run request open. | `api-proxy/__tests__/detourOps.test.js`, `api-proxy/__tests__/detourOffsetTasks.test.js`, `api-proxy/__tests__/detourRunLock.test.js`, `api-proxy/__tests__/detourRoutes.test.js` | QA section 13 | Covered | Extra scheduler/task overlap; duplicate feed snapshots; cost from sleeping requests |
 | DET-017 | Unanchored no-stop geometry | Reject rider-facing geometry segments that have no entry stop, no exit stop, no skipped route segment, and explicit empty skipped/affected stop fields. Keep any valid anchored segment in the same route document. | `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Over-filtering older geometry that omitted stop-impact fields instead of explicitly proving none exist |
-| DET-018 | Stale rider visibility | Keep stale backend detour records until normal-route GPS proof clears them, but hide rider UI when confirmed evidence is stale beyond the headway-aware threshold and no route-family vehicle is currently reporting. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered | Hiding a true long-running detour during a long gap if the headway estimate or live vehicle feed is wrong |
+| DET-018 | Stale rider visibility | Keep stale backend detour records until normal-route GPS proof clears them. Treat `staleForReview` as operations-review metadata, not a client-side hide rule; the rider UI hides only when the backend explicitly publishes `riderVisible=false`. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered, needs GPS-clear-window follow-up | Hiding a true long-running detour during a long gap if the app infers too much from stale GPS metadata |
+| DET-019 | Shared physical detour event cards | When several active route documents describe the same physical closure, publish a shared event ID so the alert strip shows one event card with multiple routes. Keep route-specific detour geometry and map overlays separate. | `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourEvents.test.js` | QA sections 2, 7, 9 | Covered | Over-grouping route variants that have no physical geometry, or nearby but unrelated downtown closures |
+| DET-020 | Loop-route terminal trip rollover | When a loop route starts and ends at the same terminal, a bus changing GTFS trips must not clear the previous detour segment by itself. The old vehicle association should drop, but clearing still needs valid normal-route proof outside that rollover context. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 10, 13, 14 | Covered | Suppressing a legitimate clear if the only available proof is the same bus immediately after a terminal rollover |
+| DET-021 | Tiny-span long out-and-back geometry | Reject and do not preserve a long likely/inferred path when the identified closed span is tiny and no skipped route segment exists. | `api-proxy/__tests__/segmentValidity.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Hiding geometry temporarily if a real closure cannot yet be anchored to a credible skipped segment |
+| DET-022 | Geometryless stale active detour | Keep records with no trustworthy geometry backend-only with `riderVisible=false`. Do not let route-family vehicles revive them. If no affected-segment clear window exists, do not auto-clear from generic same-route normal service; wait for a recovered clear window plus GPS traversal, or an explicit operator/admin clear. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11, 12 | Covered, policy corrected | Hiding a true detour until usable geometry appears; retaining unresolved records that need operator review |
+| DET-023 | Route-scoped stop impacts | A skipped stop is not treated as globally closed when another route still serves it; the rider UI says "not served by Route X" and "still served by Route Y" where known. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/stopNoticeUtils.test.js`, `src/__tests__/stopClosureMapUtils.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 6, 7, 9 | Covered | Accidentally hiding valid arrivals or making riders think a shared stop is closed to every route |
+| DET-024 | Global learned persistent geometry | Store trusted learned GPS geometry globally by physical detour fingerprint, while keeping route-specific publish and clear rules. Global geometry can seed rendering/restart recovery only after a route has already published or has a prior route persistent record. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/persistentDetourStore.test.js` | QA sections 2, 13, 14 | Covered | Accidentally treating global geometry as publish proof, or confusing GPS evidence time with geometry age |
+| DET-025 | Rider visibility flapping | Rider-facing visibility must not toggle merely because a normal route-family vehicle appears or disappears in the current GTFS-RT snapshot. Public visibility requires the detour publish rule, including two unique same-route vehicles/trips and trustworthy geometry. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js` | QA sections 2, 3, 4, 11 | Covered, needs live Route 11 recheck | Hiding a real detour if geometry is temporarily unavailable; showing a stale learned record without enough confirmation |
+| DET-026 | GPS supersedes stale published path | If a route already has a rider-visible detour path but a different same-route corridor gets the normal two-bus/three-ping proof while no bus is currently on the old path, promote the newer GPS-proven path and suppress preservation of the old path. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 4, 5, 9, 14 | Covered, needs live Route 11 recheck | Replacing a valid old path too aggressively if both paths are genuinely active; preserving stale road-matched geometry over newer GPS evidence |
+| DET-027 | Detour path passes a skipped stop | If the final rider-facing detour path passes a regular stop, do not show that stop as skipped/closed for detour purposes. Keep only stops actually bypassed by the detour path in `skippedStops`. | `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 6, 7, 9 | Covered, needs live Route 11 recheck | Over-pruning stops near the path endpoints or on nearby parallel streets |
 
 ## Recorded issues
+
+### DET-026A — Route 11 bus GPS showed a different path than the currently published detour path
+
+- Date/time observed: 2026-05-29 during Route `11` map review
+- Environment: app map with active auto-detour overlay and live bus marker
+- Route(s): `11`
+- What happened: the app had a published detour path, but the live Route `11` bus appeared to be using a different off-route corridor.
+- What should have happened: the existing path should remain visible until the alternate corridor independently meets the normal GPS publish rule. Once the alternate has at least three off-route pings and two unique same-route buses/trips, the newer GPS-proven path should replace the stale published path. Public MyRide notices should not participate in this decision.
+- Classification:
+  - geometry
+  - publishing/history
+  - lifecycle / clearing
+- Fix:
+  - added detector-side alternate-path supersession for stale published paths with no current vehicle on the old path
+  - inherited the previous closure anchors only after the alternate corridor met the same two-bus/three-ping proof
+  - marked the replacement geometry with `gpsSupersedesPreviousPath` so publisher trusted-path preservation does not reintroduce the stale likely path
+- Tests added/updated:
+  - `api-proxy/__tests__/detourDetector.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: live Route `11` should be rechecked after deployment to confirm the alternate path replaces only after corroboration and does not hide a legitimately active older corridor.
+
+### DET-027A — Route 11 detour path passed stops that were still marked closed
+
+- Date/time observed: 2026-05-29 during Route `11` map review
+- Environment: app map with active auto-detour overlay
+- Route(s): `11`
+- What happened: the detour path passed regular stops, but those stops still appeared as closed/skipped markers.
+- What should have happened: if the bus detour path passes a stop, that stop should be treated as served for detour purposes and should not show as closed/skipped.
+- Classification:
+  - stop impact data model
+  - publishing / history
+  - frontend rendering
+- Root cause: skipped-stop impact data could be derived from the closed regular-route segment before the final rider-facing detour path was finalized. The frontend also trusted explicit skipped-stop data without checking whether the final rendered detour path passed the stop.
+- Fix:
+  - publisher prunes skipped stops against the final trusted/road-matched detour path before writing Firestore
+  - pruned stops are tracked as `detourPathServedStops`
+  - frontend overlay and stop-impact derivation apply the same detour-path service safeguard before drawing closed markers
+- Tests added/updated:
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `api-proxy/__tests__/stopImpacts.test.js`
+  - `src/__tests__/useAffectedStops.test.js`
+  - `src/__tests__/detourOverlays.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: live Route `11` should be rechecked after deployment to confirm nearby parallel-street stops are not incorrectly reopened.
+
+### DET-025A — Route 11 rider visibility flapped on/off
+
+- Date/time observed: 2026-05-25 to 2026-05-27 during Route `11` downtown detour review
+- Environment: production Firestore `detourHistory`
+- Route(s): `11`
+- What happened: the Route `11` active detour document stayed present, but `riderVisible` toggled between true and false. The visible reason switched between `current-route-family-vehicle`, `suppressed-invalid-geometry`, and a former age-based visibility reason.
+- What should have happened: Route `11` should either remain public because it meets the two-vehicle/three-ping rule with trusted geometry, or stay backend-only until it does. Ordinary route-family vehicle presence should not make an otherwise hidden detour public.
+- Evidence:
+  - 2026-05-25 15:13 UTC: `DETOUR_UPDATED`, `vehicleCount=2`, `riderVisible=true`, reason `current-route-family-vehicle`
+  - 2026-05-25 17:10 UTC: `DETOUR_UPDATED`, `riderVisible=false`, reason `suppressed-invalid-geometry`
+  - 2026-05-27 14:25 UTC: `DETOUR_UPDATED`, `riderVisible=false`, former age-based visibility reason
+  - 2026-05-27 14:26 UTC: `DETOUR_UPDATED`, `riderVisible=true`, reason `current-route-family-vehicle`
+- Classification:
+  - lifecycle / clearing
+  - publishing / history
+  - frontend rendering
+- Root cause: stale rider-visibility evaluation used current route-family vehicle presence as a visibility override and ran before the publisher finalized preserved/trusted geometry. This let normal Route `11` vehicle snapshots toggle public visibility independent of actual detour confirmation.
+- Fix:
+  - zero-confirmed records are always hidden from riders, even if route-family vehicles are reporting
+  - rider visibility no longer uses route-family vehicle presence as a rider-visible override
+  - publisher evaluates visibility after final geometry preservation/matching decisions
+  - frontend detour visibility also requires explicit confirmed count fields to meet the two-vehicle rule
+- Tests added/updated:
+  - `api-proxy/__tests__/staleClear.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `src/__tests__/detourVisibility.test.js`
+- Docs updated:
+  - this matrix
+- Remaining risk: live Route `11` should be rechecked after deployment to confirm `riderVisible` stays stable across several worker ticks.
+
+### DET-023A — shared stop shown as closed when only some routes detour
+
+- Date/time observed: 2026-05-26 during route-specific detour UX review
+- Environment: product design and local regression coverage
+- Route(s): shared stops such as Stop `192`, where one detoured route may skip the stop while Route `8` may still serve it
+- What happened: a stop skipped by one detoured route could be described like a closed stop, even when another route still served the same physical stop.
+- What should have happened: route-specific detour impacts should say the stop is not served by the affected route, while preserving normal service and arrivals for other routes.
+- Classification:
+  - frontend rendering
+  - stop impact data model
+  - rider communication
+- Fix:
+  - backend stop impacts now carry route-scoped metadata, including affected routes and still-served routes
+  - frontend stop notices and map markers no longer treat route-scoped skipped stops as globally closed
+  - stop sheets show friendly route chips for "Not served" and "Still served" context
+- Tests added/updated:
+  - `api-proxy/__tests__/detourGeometry.test.js`
+  - `src/__tests__/stopNoticeUtils.test.js`
+  - `src/__tests__/stopClosureMapUtils.test.js`
+  - `src/__tests__/useAffectedStops.test.js`
+  - `src/__tests__/detourIntegration.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: live/manual validation should confirm the copy remains clear on small screens and that route-specific impacts align with official service notices when those are present.
 
 ### DET-011A — same-stop out-and-back path shown as a detour
 
@@ -87,7 +201,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 - Route(s): `10`
 - Vehicle/trip IDs, if known: vehicle `02155a60-ef99-420b-a797-6217f8c979cf`, trip `f493d53c-1ba7-4006-aa04-c9c7ca5f5df7`
 - What happened: the map showed Route 10 appearing to leave the expected path briefly near Downtown/Simcoe, but no Route 10 auto-detour was published.
-- What should have happened: if the off-route movement was visible in GTFS-RT for at least one sample, it should have been retained as backend candidate evidence. It should still require a second unique same-route trip/vehicle before rider-facing publication.
+- What should have happened: if the off-route movement was visible in GTFS-RT for at least one sample, it should have been retained as backend candidate evidence. It should still require at least three matching off-route pings and two unique same-route trips/vehicles before rider-facing publication.
 - Evidence:
   - activeDetours doc: no `activeDetours/10`
   - detourHistory event: no current Route 10 event; latest Route 10 events were from May 15, 2026
@@ -100,7 +214,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 - Root cause: not proven from stored evidence because the backend did not retain per-sample projection diagnostics at the time. The most likely failure mode is that the short off-route portion happened between scheduled one-minute samples, or that only on-route samples were retained after the fact. The detector also waited for the same bus to return on-route before recording short-deviation candidate evidence, which could lose one-sample deviations.
 - Fix:
   - record global short-deviation candidate evidence as soon as a first off-route point is seen
-  - keep two-unique-trip/vehicle confirmation before rider-facing publication
+  - keep the three-off-route-ping plus two-unique-trip/vehicle confirmation before rider-facing publication; the three pings can be split across matching trips
   - persist latest per-vehicle route projection diagnostics in runtime state and route debug output
 - Tests added/updated:
   - `api-proxy/__tests__/detourDetector.test.js`
@@ -137,29 +251,30 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-DETECTION.md`
   - `AUTO-DETOUR-QA-CHECKLIST.md`
   - this matrix
-- Remaining risk: active route documents with zero vehicles or stale evidence can still remain visible by design until normal-route GPS traversal proves clearing. That lifecycle question is separate from this geometry-publication fix and should be handled with stale/lifecycle regression coverage, not by hiding valid geometry.
+- Remaining risk: active route documents with zero current vehicles can remain visible by design until normal-route GPS traversal proves clearing. That lifecycle question is separate from this geometry-publication fix and should be handled with lifecycle regression coverage, not by hiding valid geometry.
 
 
-### DET-018A — stale zero-current detours stayed rider-visible too long
+### DET-018A — zero-current detours stayed rider-visible too long
 
 - Date/time observed: 2026-05-25 around 9:50-10:08 AM ET
 - Environment: live Firestore capture during auto-detour validation
-- Route(s): `7A`, `7B`, `10`, `12A`, `12B`, `100`, and similar stale active records
-- What happened: active backend detour records with `currentVehicleCount: 0` and stale evidence could remain visible to riders as active detours.
-- What should have happened: the backend record should remain until normal-route GPS proof clears it, but the rider UI should hide or suppress stale uncertain records after a headway-aware limit.
+- Route(s): `7A`, `7B`, `10`, `12A`, `12B`, `100`, and similar active records
+- What happened: active backend detour records with `currentVehicleCount: 0` and old evidence could remain visible to riders as active detours.
+- Current policy: the backend record should remain until normal-route GPS proof clears it. Time alone must not hide a confirmed, renderable detour. Zero-confirmed, insufficient-geometry, or invalid-geometry records can be hidden for safety.
 - Evidence:
   - activeDetours review: captured in `logs/detour-review-20260525/active-analysis.json`
-  - examples included stale `lastEvidenceAt`, zero current detour vehicles, and in some cases zero confirmed vehicle counts
+  - examples included old `lastEvidenceAt`, zero current detour vehicles, and in some cases zero confirmed vehicle counts
 - Initial classification:
   - lifecycle / clearing
   - publishing/history
   - frontend rendering
-- Root cause: stale monitoring correctly avoided backend deletion without GPS clear proof, but there was no separate rider-visibility field to distinguish “active for backend review” from “safe to show riders.”
+- Root cause: lifecycle monitoring correctly avoided backend deletion without GPS clear proof, but there was no separate rider-visibility field to distinguish “active for backend review” from “safe to show riders.”
 - Fix:
-  - added headway-aware rider visibility evaluation using `max(45min, 2 × headway + 10min)`, capped at 3 hours
-  - suppresses rider visibility when no route-family vehicle is currently reporting and evidence is older than the threshold
+  - removed the time-based rider visibility threshold
+  - suppresses rider visibility for zero-confirmed and insufficient/unsafe-geometry records
+  - keeps renderable confirmed records visible until GPS clear proof exists
   - suppresses zero-confirmed-vehicle active records from rider UI
-  - publishes `riderVisible`, `riderVisibilityReason`, `staleForReview`, and stale/headway metadata
+  - publishes `riderVisible`, `riderVisibilityReason`, and `staleForReview`
   - client filters detours with `riderVisible: false`
 - Tests added/updated:
   - `api-proxy/__tests__/staleClear.test.js`
@@ -170,7 +285,200 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-DETECTION.md`
   - `AUTO-DETOUR-QA-CHECKLIST.md`
   - this matrix
-- Remaining risk: if schedule headway data is wrong, the app may hide a real long-running detour too early. Operations review should watch `staleForReview`, `staleAgeMs`, `staleThresholdMs`, and `scheduleSource` during launch validation.
+- Remaining risk: active docs can remain visible longer than desired until a bus provides normal-route GPS traversal proof through the affected segment. Planned/manual notices can support rider messaging and operations review, but they are not a clear rule.
+
+
+### DET-018B — route-family vehicles kept stale Mulcaster/Simcoe detours visible
+
+- Date/time observed: 2026-05-26 around 9:30 AM ET
+- Environment: live Firestore capture during active Mulcaster/Simcoe detour review
+- Route(s): `10`, `11`, `101`; `100` had no active record at review time
+- What happened: old downtown detour documents from 2026-05-25 stayed rider-visible because a current route-family vehicle elsewhere could satisfy the rider-visibility check.
+- What should have happened: the system should distinguish “old nightly detour no longer active” from “valid construction detour between vehicle observations” using GPS evidence. Without normal-route GPS traversal proof, `staleForReview` should not be treated as a client-side hide rule or a backend clear rule.
+- Evidence:
+  - active `10`, `11`, and `101` documents had `staleForReview: true`, `currentVehicleCount: 0`, and old `updatedAt`/evidence timestamps
+  - `10` stayed visible with `riderVisibilityReason: current-route-family-vehicle`
+  - official MyRide news described the Mulcaster/Simcoe paving detour as nightly between 8 PM and 7 AM
+- Classification:
+  - lifecycle / clearing
+  - frontend rendering
+- Fix status:
+  - removed the over-aggressive time-based hide rule after it hid valid Route 12A/12B Hooper detours
+  - client now hides only explicit backend suppression, not `staleForReview` alone
+  - renderable confirmed detours no longer depend on a current route-family vehicle to stay visible
+  - geometryless/invalid-geometry records are no longer revived by route-family vehicles for rider visibility
+  - time and headway metadata must not clear or hide records without GPS proof
+  - follow-up still needed: improve GPS-based clear-window recovery for records with missing geometry
+- Tests added/updated:
+  - `api-proxy/__tests__/staleClear.test.js`
+  - `api-proxy/__tests__/detourDetector.test.js`
+  - `src/__tests__/detourVisibility.test.js`
+- Remaining risk: old downtown nightly records may remain visible until a bus provides normal-route GPS traversal proof through the affected segment.
+
+
+### DET-018C — stale suppression hid valid Hooper Route 12A/12B detours
+
+- Date/time observed: 2026-05-26 after stale-visibility regression fix
+- Environment: local app against live `activeDetours`
+- Route(s): `12A`, `12B`
+- What happened: the app hid all old zero-current detours, including valid active Hooper detours.
+- What should have happened: valid active construction detours should remain visible between vehicle observations. Old GPS metadata is not enough to prove a detour is inactive.
+- Root cause: client-side defensive filtering used `staleForReview`, stale age, and vehicle counts as a hide rule instead of relying on backend/source-of-truth visibility.
+- Fix:
+  - app now treats `staleForReview` as review metadata only
+  - app still honors explicit `riderVisible: false` and explicit `zero-confirmed-vehicle-count`
+  - backend keeps renderable confirmed detours visible with `riderVisibilityReason: gps-clear-required`
+  - publisher deletion is gated on prior `clearReason: normal-route-observed`, so route absence or staleness cannot clear Hooper-style records by itself
+  - backend visibility behavior now ignores elapsed time, route-family activity, and planned/manual notices as clear/hide proof
+- Tests added/updated:
+  - `src/__tests__/detourVisibility.test.js`
+  - `api-proxy/__tests__/staleClear.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `api-proxy/__tests__/detourIntegration.test.js`
+- Remaining risk: old downtown nightly records may remain visible until the system observes normal-route GPS traversal through the affected segment.
+
+
+### DET-012A — trusted inferred detour path hidden when road matching was absent
+
+- Date/time observed: 2026-05-26 during active Mulcaster/Simcoe detour review
+- Environment: live Firestore capture plus app overlay regression tests
+- Route(s): `10`, `101`
+- What happened: documents could have `canShowDetourPath: true` and a trusted `inferredDetourPolyline`, but no road-matched `likelyDetourPolyline`; the app still hid the alternate path.
+- What should have happened: when the backend explicitly marks the detour path as safe to show, the app may draw the inferred path if no likely path exists.
+- Classification:
+  - frontend rendering
+  - geometry confidence
+- Fix:
+  - overlay rendering now uses `likelyDetourPolyline` first, then trusted `inferredDetourPolyline` when `canShowDetourPath: true`
+  - segment-scoped overlays no longer fall back to a stale top-level likely path when a trusted segment path exists
+- Tests added/updated:
+  - `src/__tests__/detourOverlays.test.js`
+  - `src/__tests__/detourIntegration.test.js`
+- Remaining risk: inferred geometry is less polished than road-matched geometry; backend should still prefer likely paths when road matching succeeds.
+
+
+### DET-012B — Route 10 loop route drew duplicate frontend lines
+
+- Date/time observed: 2026-05-26 during active Mulcaster/Simcoe detour review
+- Environment: app screenshot plus local route-masking regression test
+- Route(s): `10`
+- What happened: after the alternate path began rendering, the frontend still drew extra regular route linework through/near the active detour area.
+- What should have happened: the normal route shape should be masked where the active closed section or alternate detour path is already rendered.
+- Classification:
+  - frontend rendering
+- Root cause: Route 10 is a loop shape that starts and ends at the Downtown Hub. The route masking projected the terminal endpoint to the first matching point, so it could mask the wrong side of the loop and leave the affected tail visible. It also only masked closed-route geometry, not the active alternate path.
+- Fix:
+  - route masking is now loop-aware when a route starts and ends at the same terminal
+  - route masking also removes the base route line between active detour path endpoints
+- Tests added/updated:
+  - `src/__tests__/detourRouteMasking.test.js`
+- Remaining risk: still needs a final native/web visual check because map renderer z-order and line offsets can create device-specific clutter.
+
+
+### DET-009A — Mulcaster/Simcoe alternate paths zigzagged between repeated trips
+
+- Date/time observed: 2026-05-26 during active Route 11 review
+- Environment: live Firestore/runtime-state capture during Mulcaster/Simcoe validation
+- Route(s): `10`, `11`, `101`
+- What happened: the alternate detour path was drawn back and forth across the same downtown detour corridor instead of as one continuous path.
+- What should have happened: the backend should publish one representative continuous detour trace and avoid anchoring it to a stale far exit candidate.
+- Evidence:
+  - Route `11` selected vehicle `70ae2e3e...` had 13 learned points across 4 trips over about 242 minutes
+  - Route `11` live path was about 1,884m compared with an operator-supplied path around 450m
+  - Routes `10` and `101` showed the same repeated-trip stitching pattern
+- Classification:
+  - geometry confidence
+  - publishing/history
+- Root cause: representative path selection grouped points by vehicle ID only. When the same bus repeated the same detour over multiple trips, the backend stitched separate trips into one path. Exit-anchor selection could also keep an older farther rejoin candidate instead of the candidate closest to the selected representative trace.
+- Fix:
+  - split representative path candidates on trip changes, large time gaps, and route-progress reversals
+  - prefer an exit boundary near the selected representative path end when it is materially closer than the stale candidate
+  - do not preserve an older much-longer backtracking likely path when new trusted geometry is cleaner
+- Tests added/updated:
+  - `api-proxy/__tests__/detourGeometry.test.js`
+- Remaining risk: active Firestore records with preserved older likely paths need a backend republish/run-once after deployment so stale geometry is replaced.
+
+
+### DET-019A — same downtown closure showed as multiple event cards
+
+- Date/time observed: 2026-05-25 around 2:30 PM ET
+- Environment: live production validation
+- Route(s): `10`, `11`, `101` and related downtown routes when active
+- What happened: route documents for the same downtown closure produced multiple alert-strip event cards because each route had its own route-specific detour event ID.
+- What should have happened: the rider-facing event card should group aligned detours into one physical detour event with multiple route chips, while the map keeps separate route overlays.
+- Evidence:
+  - activeDetours docs showed overlapping skipped/likely paths for `10`, `11`, and `101`
+  - app screenshot showed separate cards for the same downtown closure path
+- Initial classification:
+  - publishing/history
+  - frontend rendering
+- Root cause: backend event IDs were route/segment specific and did not publish a shared physical-event grouping field for the client to trust.
+- Fix:
+  - publish `sharedDetourEventId`, `sharedRouteIds`, `eventPrimaryRouteId`, `eventRouteCount`, `eventLocationLabel`, and `eventConfidence`
+  - annotate segments with the same shared event metadata when geometry is written
+  - group frontend event cards by `sharedDetourEventId` before route-specific `detourEventId`
+  - keep routes without physical event geometry as singleton events so route-family variants are not grouped by name alone
+- Tests added/updated:
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `src/__tests__/detourEvents.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: two nearby downtown closures with overlapping road names could be over-grouped if their geometry overlaps within the same corridor. Watch `sharedRouteIds`, `eventLocationLabel`, and map overlays during live validation.
+
+### DET-020A — Route 100 cleared at Downtown Hub trip rollover
+
+- Date/time observed: 2026-05-25 around 2:00 PM ET
+- Environment: live production validation and local regression test
+- Route(s): `100`
+- What happened: Route 100 was detected, then cleared, while routes using the same downtown detour path remained active. Recent Route 100 geometry/logs showed terminal-loop symptoms, including same/near-same entry and exit context around Downtown Hub.
+- What should have happened: the same bus starting its next Route 100 trip at Downtown Hub should not by itself prove that the previous detour segment cleared.
+- Evidence:
+  - `activeDetours/100`: absent after clear
+  - detourHistory: Route 100 detected at 8:14 AM and 8:59 AM ET, then cleared at 8:49 AM and 10:39 AM ET
+  - GTFS: Route 100 trips start and end at Downtown Hub on a closed loop shape
+- Initial classification:
+  - lifecycle / clearing
+  - persistence / restart
+  - baseline/operations
+- Root cause: vehicle clear-tracking did not distinguish a same-bus GTFS trip rollover from same-trip normal-route traversal proof.
+- Fix:
+  - on same-route trip ID changes, drop the old detour vehicle association
+  - suppress clear proof from that same bus for the previous detour segment during the new trip
+  - persist the rollover suppression in detector runtime state
+- Tests added/updated:
+  - `api-proxy/__tests__/detourDetector.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: if the same bus after rollover is genuinely the only normal-route clear proof, the backend may keep the detour active until another bus or later valid evidence confirms clearing.
+
+### DET-021A — Route 101 kept a looped out-and-back likely path
+
+- Date/time observed: 2026-05-25 around 2:20 PM ET
+- Environment: live production validation
+- Route(s): `101`
+- What happened: Route 101 still showed a likely detour path that went out and back to the same downtown area, even though the actual closure was much longer and the previous segment span was only about 79m.
+- What should have happened: the backend should suppress that likely/inferred path until it has a credible downstream rejoin and skipped route segment, and it should not preserve the old bad path from Firestore.
+- Evidence:
+  - activeDetours doc: `segments[0].spanMeters` about 79m, no segment `skippedSegmentPolyline`, and a roughly 800m likely/inferred path
+  - screenshot/video: app map showed the Route 101 path leaving and returning to nearly the same spot
+- Initial classification:
+  - geometry
+  - publishing/history
+- Root cause: the geometry builder can now suppress tiny-span long-path candidates, but the publisher trust gate still treated the older Firestore segment as preserveable trusted geometry.
+- Fix:
+  - reject segments that have no skipped route segment, a tiny closed span, and a much longer likely/inferred path
+  - apply that rejection before publishing and before preserving previous trusted geometry
+- Tests added/updated:
+  - `api-proxy/__tests__/segmentValidity.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: if live evidence is still too sparse to identify the downstream rejoin, Route 101 may temporarily show the active detour without a likely path instead of showing the wrong path.
 
 ## Status definitions
 

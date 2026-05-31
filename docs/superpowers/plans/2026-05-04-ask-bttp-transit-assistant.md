@@ -559,6 +559,38 @@ The context packet should include:
 
 For Phase 1, use existing backend-accessible sources and static knowledge. If a live source is not yet available server-side for a given intent, return a clear missing-source fact instead of adding broad new GTFS parsing in this task.
 
+- [ ] **Step 4a: Enforce the premium assistant data-access policy**
+
+The assistant should receive clean rider-facing transit context, not unrestricted raw data access.
+
+Safe rider-facing context may include:
+
+- static GTFS stops, routes, shapes, stop sequences, schedules, route names, and route colours
+- GTFS real-time trip updates, vehicle positions, and service alerts
+- active detours, including affected routes, skipped segments, likely detour paths, affected stops, confidence, detected time, and last-seen time
+- selected stop, selected route, current trip plan, favourites, saved stops/routes, and current location only when permission is already granted
+
+Detour history may be used only as a filtered summary, such as first detected time, repeated detection area, or confidence explanation. Do not pass raw `detourHistory` documents into model prompts.
+
+Admin-only or blocked for normal premium riders:
+
+- route-specific `/api/detour-debug` evidence
+- raw vehicle-level traces
+- backend process logs
+- Firebase runtime state
+- baseline mutation tools
+- API keys, auth tokens, and environment variables
+
+Expose data through narrow backend context helpers rather than direct Firestore or feed access:
+
+- `getRouteContext(routeId)`
+- `getStopContext(stopId)`
+- `getActiveDetours(routeId?)`
+- `getArrivals(stopId)`
+- `explainDetour(routeId)`
+- `compareTripOptions(from, to)`
+- `summarizeServiceStatus()`
+
 - [ ] **Step 5: Verify context tests pass**
 
 Run:

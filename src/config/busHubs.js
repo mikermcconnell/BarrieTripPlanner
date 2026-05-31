@@ -63,14 +63,6 @@ export const BUS_HUBS = [
     stopCodes: ['559', '569'],
   },
   {
-    id: 'east-bayfield-community-centre',
-    type: BUS_HUB_TYPES.MINOR,
-    displayName: 'East Bayfield Community Centre',
-    shortName: 'East Bayfield CC',
-    coordinate: { latitude: 44.41430522, longitude: -79.70283155 },
-    stopCodes: ['447'],
-  },
-  {
     id: 'peggy-hill-team-community-centre',
     type: BUS_HUB_TYPES.MINOR,
     displayName: 'Peggy Hill Team Community Centre',

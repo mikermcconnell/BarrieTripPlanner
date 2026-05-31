@@ -103,7 +103,16 @@ export const useDisplayedEntities = ({
           shapeSource,
           shapes
         );
-        shapeIds.forEach((shapeId) => {
+        const representativeIds = getRepresentativeShapeIdsByDirection(
+          shapeIds,
+          shapeSource,
+          shapeDirectionMap,
+          {
+            maxShapes: 2,
+            precision: 3,
+          }
+        );
+        representativeIds.forEach((shapeId) => {
           if (shapeSource[shapeId]) {
             const renderedShapeId = `${routeId}:${shapeId}`;
             shapesToDisplay.push({

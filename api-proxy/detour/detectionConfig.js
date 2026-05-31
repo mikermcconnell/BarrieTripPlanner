@@ -58,11 +58,11 @@ const DETOUR_CANDIDATE_EVIDENCE_TTL_MS =
     ? configuredCandidateEvidenceTtlMs
     : 3 * 60 * 60 * 1000;
 
-const configuredConsecutiveReadings = Number.parseInt(process.env.DETOUR_CONSECUTIVE_READINGS || '4', 10);
+const configuredConsecutiveReadings = Number.parseInt(process.env.DETOUR_CONSECUTIVE_READINGS || '3', 10);
 const CONSECUTIVE_READINGS_REQUIRED =
   Number.isFinite(configuredConsecutiveReadings) && configuredConsecutiveReadings > 0
     ? configuredConsecutiveReadings
-    : 4;
+    : 3;
 
 const STALE_VEHICLE_TIMEOUT_MS = 5 * 60 * 1000;
 

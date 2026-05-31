@@ -1,0 +1,41 @@
+{
+  "id": "route-10-mulcaster-simcoe-2026-05-26",
+  "routeId": "10",
+  "status": "active",
+  "source": "operator-supplied",
+  "capturedAt": "2026-05-26T10:15:00-04:00",
+  "notes": "Validation case for the auto-detour detector. Do not hardcode this as a route-specific detour.",
+  "closedSection": {
+    "start": {
+      "latitude": 44.3904722222,
+      "longitude": -79.6880277778,
+      "sourceText": "44°23'25.7\"N 79°41'16.9\"W"
+    },
+    "end": {
+      "latitude": 44.3878611111,
+      "longitude": -79.6891666667,
+      "sourceText": "44°23'16.3\"N 79°41'21.0\"W"
+    }
+  },
+  "detourPath": [
+    {
+      "latitude": 44.3902777778,
+      "longitude": -79.6854722222,
+      "sourceText": "44°23'25.0\"N 79°41'07.7\"W"
+    },
+    {
+      "latitude": 44.3886944444,
+      "longitude": -79.6855277778,
+      "sourceText": "44°23'19.3\"N 79°41'07.9\"W"
+    },
+    {
+      "latitude": 44.3879722222,
+      "longitude": -79.6888333333,
+      "sourceText": "44°23'16.7\"N 79°41'19.8\"W"
+    }
+  ],
+  "tolerances": {
+    "closedSectionMaxDistanceMeters": 120,
+    "detourPathMaxDistanceMeters": 120
+  }
+}

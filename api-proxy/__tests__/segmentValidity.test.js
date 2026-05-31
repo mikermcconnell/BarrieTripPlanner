@@ -1,5 +1,6 @@
 const {
   isPointLoopNoClosureSegment,
+  isMisleadingTinySpanLongPathSegment,
   isInvalidNonClosureSegment,
   filterNonClosureSelfLoopSegments,
 } = require('../detour/geometry/segmentValidity');
@@ -44,5 +45,37 @@ describe('segment validity filters', () => {
     expect(isPointLoopNoClosureSegment(segment)).toBe(false);
     expect(isInvalidNonClosureSegment(segment)).toBe(false);
     expect(filterNonClosureSelfLoopSegments([segment])).toEqual([segment]);
+  });
+
+  test('rejects long detour paths anchored to a tiny closed span with no skipped segment', () => {
+    const segment = {
+      spanMeters: 79,
+      entryPoint: { latitude: 44.387414, longitude: -79.690039 },
+      exitPoint: { latitude: 44.387761, longitude: -79.689189 },
+      skippedSegmentPolyline: null,
+      inferredDetourPolyline: [
+        { latitude: 44.387414, longitude: -79.690039 },
+        { latitude: 44.3899, longitude: -79.6892 },
+        { latitude: 44.3917, longitude: -79.6881 },
+        { latitude: 44.3936, longitude: -79.6870 },
+        { latitude: 44.387761, longitude: -79.689189 },
+      ],
+      likelyDetourPolyline: [
+        { latitude: 44.387414, longitude: -79.690039 },
+        { latitude: 44.3899, longitude: -79.6892 },
+        { latitude: 44.3917, longitude: -79.6881 },
+        { latitude: 44.3936, longitude: -79.6870 },
+        { latitude: 44.387761, longitude: -79.689189 },
+      ],
+      debug: {
+        entryCandidateCount: 12,
+        exitCandidateCount: 12,
+        exitAnchorSource: 'boundary-candidate',
+      },
+    };
+
+    expect(isMisleadingTinySpanLongPathSegment(segment)).toBe(true);
+    expect(isInvalidNonClosureSegment(segment)).toBe(true);
+    expect(filterNonClosureSelfLoopSegments([segment])).toEqual([]);
   });
 });

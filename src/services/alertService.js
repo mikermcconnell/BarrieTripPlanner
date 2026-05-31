@@ -1,6 +1,7 @@
 import { GTFS_URLS } from '../config/constants';
 import { decodeVarint, skipField, decodeString } from '../utils/protobufDecoder';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
+import logger from '../utils/logger';
 
 /**
  * Parse GTFS-RT ServiceAlerts feed
@@ -403,7 +404,9 @@ export const fetchServiceAlerts = async () => {
       severity: getSeverity(alert.effect),
     }));
   } catch (error) {
-    console.error('Error fetching service alerts:', error);
+    logger.warn('Service alerts feed unavailable; continuing without alerts:', {
+      message: error?.message || String(error),
+    });
     return [];
   }
 };

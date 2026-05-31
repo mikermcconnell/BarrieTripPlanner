@@ -15,6 +15,7 @@ const createMockMap = () => {
   const map = {
     getLayer: jest.fn(() => ({ id: 'fill-layer' })),
     getCanvas: jest.fn(() => canvas),
+    moveLayer: jest.fn(),
     on: jest.fn((event, layerId, handler) => {
       handlers[event] = handler;
     }),
@@ -95,6 +96,34 @@ describe('WebMapView layer events', () => {
   });
 });
 
+describe('WebMapView ordered line layers', () => {
+  test('keeps detoured route layers above lower-priority context routes even when context mounts later', () => {
+    const { map } = createMockMap();
+
+    __TEST_ONLY__.registerOrderedMapLayers({
+      map,
+      registryKey: 'route-11',
+      layerOrder: 180,
+      layerIds: ['route-11-outline', 'route-11-fill'],
+    });
+    map.moveLayer.mockClear();
+
+    __TEST_ONLY__.registerOrderedMapLayers({
+      map,
+      registryKey: 'route-10',
+      layerOrder: 90,
+      layerIds: ['route-10-outline', 'route-10-fill'],
+    });
+
+    expect(map.moveLayer.mock.calls.map((call) => call[0])).toEqual([
+      'route-10-outline',
+      'route-10-fill',
+      'route-11-outline',
+      'route-11-fill',
+    ]);
+  });
+});
+
 describe('WebMapView bus marker HTML', () => {
   test('uses a black rim tab with white outline when bearing is valid', () => {
     const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', 45);
@@ -133,8 +162,8 @@ describe('WebMapView bus hub marker HTML', () => {
     expect(html).not.toContain('<svg');
     expect(html).not.toContain('HUB</text>');
     expect(html).toContain('text-shadow');
-    expect(html).toContain('width:27px;height:27px');
-    expect(html).toContain('margin-top:1px');
+    expect(html).toContain('width:81px;height:81px');
+    expect(html).toContain('margin-top:-10px');
     expect(html).toContain('font:800 11px/1.2 Avenir, Arial, sans-serif');
     expect(html).not.toContain('transform:scale(0.5)');
   });

@@ -80,4 +80,68 @@ describe('persistentDetourStore', () => {
       }),
     }));
   });
+
+  test('loads and syncs global learned geometry separately from route records', async () => {
+    const set = jest.fn(async () => {});
+    const del = jest.fn(async () => {});
+    const routeGet = jest.fn(async () => ({
+      forEach: () => {},
+    }));
+    const geometryGet = jest.fn(async () => ({
+      forEach: (callback) => {
+        callback({
+          id: 'shared-geometry-1',
+          data: () => ({
+            sharedGeometryFingerprint: 'shared-geometry-1',
+            routeIds: ['12A'],
+            latestGpsEvidenceAt: 2000,
+            geometryLastEvidenceAt: 1500,
+            geometry: {
+              shapeId: 'shape-12',
+              canShowDetourPath: true,
+              inferredDetourPolyline: [
+                { latitude: 44.39, longitude: -79.69 },
+                { latitude: 44.391, longitude: -79.691 },
+              ],
+            },
+            evidence: {
+              points: [{ latitude: 44.395, longitude: -79.690, timestampMs: 2000, vehicleId: 'bus-1' }],
+            },
+          }),
+        });
+      },
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => ({
+          get: name === 'persistentDetourGeometriesAuto' ? geometryGet : routeGet,
+          doc: () => ({ set, delete: del }),
+        }),
+      }),
+    }));
+
+    const {
+      loadPersistentDetourGeometries,
+      syncPersistentDetours,
+    } = require('../persistentDetourStore');
+
+    const loaded = await loadPersistentDetourGeometries();
+
+    expect(loaded['shared-geometry-1'].geometry.canShowDetourPath).toBe(true);
+    expect(loaded['shared-geometry-1'].latestGpsEvidenceAt).toBe(2000);
+    expect(loaded['shared-geometry-1'].geometryLastEvidenceAt).toBe(1500);
+
+    await syncPersistentDetours({}, loaded);
+
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      sharedGeometryFingerprint: 'shared-geometry-1',
+      routeIds: ['12A'],
+      latestGpsEvidenceAt: 2000,
+      geometryLastEvidenceAt: 1500,
+      geometry: expect.objectContaining({
+        canShowDetourPath: true,
+      }),
+    }));
+  });
 });

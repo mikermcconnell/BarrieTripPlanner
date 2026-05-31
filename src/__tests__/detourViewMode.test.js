@@ -28,6 +28,7 @@ describe('detourViewMode', () => {
       showLineLabels: false,
       showStopMarkers: false,
       showClosedStopMarkers: false,
+      showClosedRouteMask: false,
       opacity: 0.58,
       lineStyleScale: expect.any(Number),
       directionArrowMode: 'none',

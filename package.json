@@ -33,7 +33,9 @@
     "prebuild:android:production": "node scripts/preflight-android-production-env.js --profile production",
     "eas:build:android": "npm run prebuild:android:eas && eas build --platform android --profile production --clear-cache",
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",
-    "prebuild:android:eas": "eas env:exec production \"node scripts/preflight-android-production-env.js --profile production\" --non-interactive"
+    "prebuild:android:eas": "eas env:exec production \"node scripts/preflight-android-production-env.js --profile production\" --non-interactive",
+    "validate:detour-ground-truth": "node scripts/validate-detour-ground-truth.js",
+    "check:detour-scheduler": "node scripts/check-detour-scheduler-health.js"
   },
   "dependencies": {
     "@expo-google-fonts/outfit": "^0.4.2",

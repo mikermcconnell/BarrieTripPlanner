@@ -4,7 +4,6 @@ const {
   buildUpdatedEvent,
   buildDetectedEvent,
   buildClearedEvent,
-  buildStaleClearedEvent,
   enforceGeometryTrustGate,
   preserveTrustedDetourPath,
   shouldAttemptRoadMatchBackfill,
@@ -62,8 +61,348 @@ describe('buildDetourEventId', () => {
 });
 
 describe('publishDetours event ids', () => {
+  test('removes skipped stops when the final detour path passes the stop', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-05-29T16:00:00Z');
+    const closedPath = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.392, longitude: -79.700 },
+      { latitude: 44.394, longitude: -79.700 },
+    ];
+    const detourPath = [
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.392, longitude: -79.698 },
+      { latitude: 44.394, longitude: -79.698 },
+    ];
+    const servedStop = {
+      id: 'stop-696',
+      code: '696',
+      name: 'Served on detour',
+      latitude: 44.392,
+      longitude: -79.698,
+    };
+    const missedStop = {
+      id: 'stop-700',
+      code: '700',
+      name: 'Still missed',
+      latitude: 44.393,
+      longitude: -79.700,
+    };
 
-  test('writes stale rider visibility metadata without deleting active detours', async () => {
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '11': {
+        routeId: '11',
+        detectedAt: new Date(now - 20 * 60 * 1000),
+        lastSeenAt: new Date(now - 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['bus-11']),
+        geometry: {
+          shapeId: 'shape-11',
+          confidence: 'high',
+          canShowDetourPath: true,
+          evidencePointCount: 8,
+          lastEvidenceAt: now - 60 * 1000,
+          segments: [{
+            shapeId: 'shape-11',
+            confidence: 'high',
+            canShowDetourPath: true,
+            skippedSegmentPolyline: closedPath,
+            inferredDetourPolyline: detourPath,
+            likelyDetourPolyline: detourPath,
+            entryPoint: closedPath[0],
+            exitPoint: closedPath[closedPath.length - 1],
+            skippedStops: [servedStop, missedStop],
+            skippedStopIds: ['stop-696', 'stop-700'],
+            skippedStopCodes: ['696', '700'],
+            firstSkippedStop: servedStop,
+            firstSkippedStopId: 'stop-696',
+            firstSkippedStopCode: '696',
+          }],
+          skippedStops: [servedStop, missedStop],
+          skippedStopIds: ['stop-696', 'stop-700'],
+          skippedStopCodes: ['696', '700'],
+        },
+      },
+    }, { now });
+
+    const written = writes['activeDetours/11'];
+    expect(written.segments[0].skippedStopCodes).toEqual(['700']);
+    expect(written.segments[0].skippedStops.map((stop) => stop.code)).toEqual(['700']);
+    expect(written.segments[0].firstSkippedStopCode).toBe('700');
+    expect(written.segments[0].detourPathServedStopCodes).toEqual(['696']);
+  });
+
+  test('publishes a shared event for overlapping downtown closures while keeping route geometry separate', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const now = Date.parse('2026-05-25T18:30:00Z');
+    const closedLong = [
+      { latitude: 44.3889, longitude: -79.6912 },
+      { latitude: 44.3900, longitude: -79.6902 },
+      { latitude: 44.3910, longitude: -79.6892 },
+      { latitude: 44.3920, longitude: -79.6882 },
+      { latitude: 44.3930, longitude: -79.6872 },
+    ];
+    const downtownLikelyPath = [
+      { latitude: 44.3892, longitude: -79.6920 },
+      { latitude: 44.3902, longitude: -79.6910 },
+      { latitude: 44.3912, longitude: -79.6900 },
+      { latitude: 44.3922, longitude: -79.6890 },
+      { latitude: 44.3932, longitude: -79.6880 },
+    ];
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => { deletes.push(`${name}/${id}`); },
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '10': {
+        routeId: '10',
+        detectedAt: new Date(now - 30 * 60 * 1000),
+        lastSeenAt: new Date(now - 2 * 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['10-a']),
+        geometry: {
+          confidence: 'high',
+          canShowDetourPath: true,
+          evidencePointCount: 20,
+          lastEvidenceAt: now - 2 * 60 * 1000,
+          segments: [{
+            canShowDetourPath: true,
+            confidence: 'high',
+            skippedSegmentPolyline: closedLong,
+            inferredDetourPolyline: downtownLikelyPath,
+            likelyDetourPolyline: downtownLikelyPath,
+            likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Lakeshore Mews', 'Dunlop Street East'],
+            entryPoint: closedLong[0],
+            exitPoint: closedLong[closedLong.length - 1],
+          }],
+        },
+      },
+      '11': {
+        routeId: '11',
+        detectedAt: new Date(now - 30 * 60 * 1000),
+        lastSeenAt: new Date(now - 2 * 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        state: 'active',
+        vehiclesOffRoute: new Set(),
+        geometry: {
+          confidence: 'high',
+          canShowDetourPath: true,
+          evidencePointCount: 17,
+          lastEvidenceAt: now - 2 * 60 * 1000,
+          segments: [{
+            canShowDetourPath: true,
+            confidence: 'high',
+            skippedSegmentPolyline: closedLong.slice(1),
+            inferredDetourPolyline: closedLong.slice(1),
+            entryPoint: closedLong[1],
+            exitPoint: closedLong[closedLong.length - 1],
+          }],
+        },
+      },
+      '101': {
+        routeId: '101',
+        detectedAt: new Date(now - 30 * 60 * 1000),
+        lastSeenAt: new Date(now - 2 * 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['101-a']),
+        geometry: {
+          confidence: 'high',
+          canShowDetourPath: true,
+          evidencePointCount: 12,
+          lastEvidenceAt: now - 2 * 60 * 1000,
+          segments: [{
+            canShowDetourPath: true,
+            confidence: 'high',
+            skippedSegmentPolyline: closedLong.slice(3),
+            inferredDetourPolyline: downtownLikelyPath,
+            likelyDetourPolyline: downtownLikelyPath,
+            likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+            entryPoint: closedLong[3],
+            exitPoint: closedLong[closedLong.length - 1],
+          }],
+        },
+      },
+      '7A': {
+        routeId: '7A',
+        detectedAt: new Date(now - 30 * 60 * 1000),
+        lastSeenAt: new Date(now - 2 * 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['7a-a']),
+        geometry: {
+          confidence: 'high',
+          canShowDetourPath: true,
+          evidencePointCount: 10,
+          lastEvidenceAt: now - 2 * 60 * 1000,
+          segments: [{
+            canShowDetourPath: true,
+            confidence: 'high',
+            skippedSegmentPolyline: [
+              { latitude: 44.4000, longitude: -79.7000 },
+              { latitude: 44.4010, longitude: -79.7010 },
+            ],
+            inferredDetourPolyline: [
+              { latitude: 44.4003, longitude: -79.7003 },
+              { latitude: 44.4013, longitude: -79.7013 },
+            ],
+            entryPoint: { latitude: 44.4000, longitude: -79.7000 },
+            exitPoint: { latitude: 44.4010, longitude: -79.7010 },
+          }],
+        },
+      },
+    }, { now });
+
+    expect(deletes).toEqual([]);
+    const route10 = writes['activeDetours/10'];
+    const route11 = writes['activeDetours/11'];
+    const route101 = writes['activeDetours/101'];
+    const route7A = writes['activeDetours/7A'];
+
+    expect(route10.detourEventId).not.toBe(route11.detourEventId);
+    expect(route10.detourEventId).not.toBe(route101.detourEventId);
+    expect(route10.sharedDetourEventId).toBeTruthy();
+    expect(route10.sharedDetourEventId).toBe(route11.sharedDetourEventId);
+    expect(route10.sharedDetourEventId).toBe(route101.sharedDetourEventId);
+    expect(route10.sharedRouteIds).toEqual(['10', '11', '101']);
+    expect(route11.sharedRouteIds).toEqual(['10', '11', '101']);
+    expect(route101.sharedRouteIds).toEqual(['10', '11', '101']);
+    expect(route10.eventPrimaryRouteId).toBe('10');
+    expect(route10.eventRouteCount).toBe(3);
+    expect(route10.eventLocationLabel).toBe('Mulcaster Street & Simcoe Street +2');
+    expect(route10.segments[0].sharedDetourEventId).toBe(route10.sharedDetourEventId);
+    expect(route11.segments[0].sharedDetourEventId).toBe(route10.sharedDetourEventId);
+    expect(route101.segments[0].sharedDetourEventId).toBe(route10.sharedDetourEventId);
+
+    expect(route7A.sharedRouteIds).toEqual(['7A']);
+    expect(route7A.sharedDetourEventId).not.toBe(route10.sharedDetourEventId);
+  });
+
+  test('does not group route variants that have no physical event geometry', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-05-25T19:00:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '12A': {
+        routeId: '12A',
+        detectedAt: new Date(now - 10 * 60 * 1000),
+        lastSeenAt: new Date(now - 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['12a-a']),
+      },
+      '12B': {
+        routeId: '12B',
+        detectedAt: new Date(now - 10 * 60 * 1000),
+        lastSeenAt: new Date(now - 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['12b-a']),
+      },
+    }, { now });
+
+    expect(writes['activeDetours/12A'].sharedRouteIds).toEqual(['12A']);
+    expect(writes['activeDetours/12B'].sharedRouteIds).toEqual(['12B']);
+    expect(writes['activeDetours/12A'].sharedDetourEventId)
+      .not.toBe(writes['activeDetours/12B'].sharedDetourEventId);
+  });
+
+  test('keeps old renderable detours rider-visible until GPS clear proof', async () => {
     jest.resetModules();
     const writes = {};
     const deletes = [];
@@ -136,13 +475,483 @@ describe('publishDetours event ids', () => {
 
     const written = writes['activeDetours/8A'];
     expect(deletes).toEqual([]);
+    expect(written.riderVisible).toBe(true);
+    expect(written.riderVisibilityReason).toBe('gps-clear-required');
+    expect(written.staleForReview).toBe(false);
+  });
+
+  test('does not delete an existing active detour without normal-route GPS clear proof', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-05-27T14:40:00Z');
+    const activeDoc = {
+      routeId: '12B',
+      detectedAt: new Date(now - 60 * 60 * 1000),
+      updatedAt: now - 30 * 60 * 1000,
+      lastSeenAt: new Date(now - 30 * 60 * 1000),
+      lastEvidenceAt: now - 140 * 60 * 1000,
+      vehicleCount: 5,
+      uniqueVehicleCount: 5,
+      currentVehicleCount: 0,
+      state: 'active',
+      clearReason: null,
+      confidence: 'high',
+      canShowDetourPath: true,
+      skippedSegmentPolyline: [
+        { latitude: 44.33424, longitude: -79.66897 },
+        { latitude: 44.33229, longitude: -79.67731 },
+      ],
+      likelyDetourPolyline: [
+        { latitude: 44.333067, longitude: -79.673553 },
+        { latitude: 44.337165, longitude: -79.669397 },
+      ],
+      likelyDetourRoadNames: ['Hooper Road'],
+      segments: [{
+        confidence: 'high',
+        canShowDetourPath: true,
+        skippedSegmentPolyline: [
+          { latitude: 44.33424, longitude: -79.66897 },
+          { latitude: 44.33229, longitude: -79.67731 },
+        ],
+        likelyDetourPolyline: [
+          { latitude: 44.333067, longitude: -79.673553 },
+          { latitude: 44.337165, longitude: -79.669397 },
+        ],
+        likelyDetourRoadNames: ['Hooper Road'],
+      }],
+    };
+    const activeDocs = [{ id: '12B', data: () => activeDoc }];
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          if (name === 'activeDetours') {
+            return {
+              doc: (id) => ({
+                set: async (data) => { writes[`${name}/${id}`] = data; },
+                delete: async () => { deletes.push(`${name}/${id}`); },
+              }),
+              get: async () => ({
+                size: activeDocs.length,
+                docs: activeDocs,
+                forEach: (fn) => activeDocs.forEach(fn),
+              }),
+              orderBy: () => ({ limit: () => emptyQuery }),
+              where: () => whereQuery,
+            };
+          }
+          return {
+            doc: () => ({
+              set: async (data) => { historyWrites.push(data); },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '10': {
+        routeId: '10',
+        detectedAt: new Date(now - 10 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['10-bus']),
+      },
+    }, { now });
+
+    expect(deletes).not.toContain('activeDetours/12B');
+    expect(historyWrites.some((event) =>
+      event.routeId === '12B' && event.eventType === 'DETOUR_CLEARED'
+    )).toBe(false);
+    expect(publisher.getLastPublishedIds().has('12B')).toBe(true);
+  });
+
+  test('hides an absent geometryless detour instead of leaving it public', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-05-29T21:05:00Z');
+    const geometrylessDoc = {
+      routeId: '10',
+      detectedAt: new Date(now - 4 * 60 * 60 * 1000),
+      updatedAt: now - 2 * 60 * 60 * 1000,
+      lastSeenAt: new Date(now - 2 * 60 * 60 * 1000),
+      lastEvidenceAt: now - 3 * 60 * 60 * 1000,
+      vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 2,
+      state: 'active',
+      riderVisible: true,
+      riderVisibilityReason: 'current-detour-vehicle',
+      canShowDetourPath: true,
+      segments: [{
+        canShowDetourPath: true,
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: null,
+        likelyDetourPolyline: null,
+      }],
+    };
+    const activeDocs = [{ id: '10', data: () => geometrylessDoc }];
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          if (name === 'activeDetours') {
+            return {
+              doc: (id) => ({
+                set: async (data) => { writes[`${name}/${id}`] = data; },
+                delete: async () => { deletes.push(`${name}/${id}`); },
+              }),
+              get: async () => ({
+                size: activeDocs.length,
+                docs: activeDocs,
+                forEach: (fn) => activeDocs.forEach(fn),
+              }),
+              orderBy: () => ({ limit: () => emptyQuery }),
+              where: () => whereQuery,
+            };
+          }
+          return {
+            doc: () => ({
+              set: async (data) => { historyWrites.push(data); },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '12A': {
+        routeId: '12A',
+        detectedAt: new Date(now - 10 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['12A-bus']),
+        geometry: {
+          confidence: 'high',
+          lastEvidenceAt: now,
+          skippedSegmentPolyline: [
+            { latitude: 44.33424, longitude: -79.66897 },
+            { latitude: 44.33229, longitude: -79.67731 },
+          ],
+        },
+      },
+    }, { now });
+
+    expect(deletes).not.toContain('activeDetours/10');
+    expect(writes['activeDetours/10']).toMatchObject({
+      routeId: '10',
+      updatedAt: now,
+      currentVehicleCount: 0,
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
+      staleForReview: true,
+    });
+    expect(historyWrites.some((event) =>
+      event.routeId === '10' &&
+      event.eventType === 'DETOUR_UPDATED' &&
+      event.riderVisible === false
+    )).toBe(true);
+  });
+
+  test('deletes an absent detour when the previous snapshot has normal-route GPS clear proof', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-05-27T14:40:00Z');
+    const clearPendingDoc = {
+      routeId: '12B',
+      detectedAt: new Date(now - 60 * 60 * 1000),
+      updatedAt: now - 60 * 1000,
+      lastSeenAt: new Date(now - 60 * 1000),
+      vehicleCount: 5,
+      uniqueVehicleCount: 5,
+      currentVehicleCount: 0,
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+      confidence: 'high',
+      canShowDetourPath: true,
+      skippedSegmentPolyline: [
+        { latitude: 44.33424, longitude: -79.66897 },
+        { latitude: 44.33229, longitude: -79.67731 },
+      ],
+      segments: [{
+        confidence: 'high',
+        canShowDetourPath: true,
+        skippedSegmentPolyline: [
+          { latitude: 44.33424, longitude: -79.66897 },
+          { latitude: 44.33229, longitude: -79.67731 },
+        ],
+      }],
+    };
+    const activeDocs = [{ id: '12B', data: () => clearPendingDoc }];
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          if (name === 'activeDetours') {
+            return {
+              doc: (id) => ({
+                set: async (data) => { writes[`${name}/${id}`] = data; },
+                delete: async () => { deletes.push(`${name}/${id}`); },
+              }),
+              get: async () => ({
+                size: activeDocs.length,
+                docs: activeDocs,
+                forEach: (fn) => activeDocs.forEach(fn),
+              }),
+              orderBy: () => ({ limit: () => emptyQuery }),
+              where: () => whereQuery,
+            };
+          }
+          return {
+            doc: () => ({
+              set: async (data) => { historyWrites.push(data); },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '10': {
+        routeId: '10',
+        detectedAt: new Date(now - 10 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        vehicleCount: 1,
+        uniqueVehicleCount: 1,
+        currentVehicleCount: 1,
+        state: 'active',
+        vehiclesOffRoute: new Set(['10-bus']),
+      },
+    }, { now });
+
+    expect(deletes).toContain('activeDetours/12B');
+    const clearEvent = historyWrites.find((event) =>
+      event.routeId === '12B' && event.eventType === 'DETOUR_CLEARED'
+    );
+    expect(clearEvent).toBeDefined();
+    expect(clearEvent.clearReason).toBe('normal-route-observed');
+    expect(publisher.getLastPublishedIds().has('12B')).toBe(false);
+  });
+
+
+  test('keeps old geometryless detours active without GPS clear proof', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-04-26T20:00:00Z');
+    const previousDoc = {
+      routeId: '8A',
+      detectedAt: new Date(now - 4 * 60 * 60 * 1000),
+      lastSeenAt: new Date(now - 140 * 60 * 1000),
+      lastEvidenceAt: now - 140 * 60 * 1000,
+      vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 0,
+      state: 'active',
+      canShowDetourPath: false,
+      geometry: {
+        lastEvidenceAt: now - 140 * 60 * 1000,
+        canShowDetourPath: false,
+        segments: [],
+        skippedSegmentPolyline: null,
+        likelyDetourPolyline: null,
+      },
+    };
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          if (name === 'activeDetours') {
+            return {
+              doc: (id) => ({
+                set: async (data) => { writes[`${name}/${id}`] = data; },
+                delete: async () => { deletes.push(`${name}/${id}`); },
+              }),
+              get: async () => ({
+                size: 1,
+                docs: [{ id: '8A', data: () => previousDoc }],
+                forEach: (fn) => fn({ id: '8A', data: () => previousDoc }),
+              }),
+              orderBy: () => ({ limit: () => emptyQuery }),
+              where: () => whereQuery,
+            };
+          }
+          return {
+            doc: () => ({
+              set: async (data) => { historyWrites.push(data); },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    const result = await publisher.publishDetours({
+      '8A': previousDoc,
+    }, {
+      now,
+      vehicles: [{ routeId: '8A' }],
+      scheduleIndex: {
+        timeZone: 'America/Toronto',
+        tripsByRouteId: new Map([['8A', [
+          { tripId: '8a-1', routeId: '8A', serviceId: 'svc', startTimeSeconds: 15 * 3600 },
+          { tripId: '8a-2', routeId: '8A', serviceId: 'svc', startTimeSeconds: 16 * 3600 },
+          { tripId: '8a-3', routeId: '8A', serviceId: 'svc', startTimeSeconds: 17 * 3600 },
+        ]]]),
+        calendarByServiceId: new Map([['svc', {
+          sunday: true,
+          monday: false,
+          tuesday: false,
+          wednesday: false,
+          thursday: false,
+          friday: false,
+          saturday: false,
+          startDate: '20260401',
+          endDate: '20260430',
+        }]]),
+        calendarDatesByServiceId: new Map(),
+      },
+    });
+
+    expect(result.staleAutoClearedRouteIds).toEqual([]);
+    expect(deletes).not.toContain('activeDetours/8A');
+    expect(writes['activeDetours/8A']).toMatchObject({
+      routeId: '8A',
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
+      staleForReview: true,
+    });
+    expect(historyWrites.some((event) => event.eventType === 'DETOUR_AUTO_CLEARED_STALE')).toBe(false);
+  });
+
+  test('keeps fresh geometryless detours backend-only until trustworthy geometry exists', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const now = Date.parse('2026-05-27T14:00:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => { deletes.push(`${name}/${id}`); },
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '10': {
+        routeId: '10',
+        detectedAt: new Date(now - 5 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        geometry: {
+          confidence: 'medium',
+          lastEvidenceAt: now,
+          canShowDetourPath: false,
+          segments: [],
+          skippedSegmentPolyline: null,
+          inferredDetourPolyline: null,
+          likelyDetourPolyline: null,
+          entryPoint: null,
+          exitPoint: null,
+        },
+      },
+    }, { now });
+
+    const written = writes['activeDetours/10'];
+    expect(deletes).toEqual([]);
     expect(written.riderVisible).toBe(false);
-    expect(written.riderVisibilityReason).toBe('stale-evidence-gps-clear-required');
+    expect(written.riderVisibilityReason).toBe('insufficient-geometry');
     expect(written.staleForReview).toBe(true);
-    expect(written.staleAgeMs).toBe(140 * 60 * 1000);
-    expect(written.staleThresholdMs).toBe(130 * 60 * 1000);
-    expect(written.scheduledHeadwayMs).toBe(60 * 60 * 1000);
-    expect(written.scheduleSource).toBe('exact-route');
   });
 
   test('clears stale geometry fields when every current segment is invalid', async () => {
@@ -1010,6 +1819,47 @@ describe('enforceGeometryTrustGate', () => {
     expect(result.likelyDetourPolyline).toBeNull();
     expect(result.likelyDetourRoadNames).toEqual([]);
   });
+
+  test('filters long out-and-back paths when the closed segment span is tiny', () => {
+    const outAndBackPath = [
+      { latitude: 44.387414, longitude: -79.690039 },
+      { latitude: 44.3899, longitude: -79.6892 },
+      { latitude: 44.3917, longitude: -79.6881 },
+      { latitude: 44.3936, longitude: -79.6870 },
+      { latitude: 44.387761, longitude: -79.689189 },
+    ];
+
+    const result = enforceGeometryTrustGate({
+      canShowDetourPath: true,
+      inferredDetourPolyline: outAndBackPath,
+      likelyDetourPolyline: outAndBackPath,
+      likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        canShowDetourPath: true,
+        spanMeters: 79,
+        entryPoint: { latitude: 44.387414, longitude: -79.690039 },
+        exitPoint: { latitude: 44.387761, longitude: -79.689189 },
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: outAndBackPath,
+        likelyDetourPolyline: outAndBackPath,
+        likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+        debug: {
+          entryCandidateCount: 12,
+          exitCandidateCount: 12,
+          exitAnchorSource: 'boundary-candidate',
+        },
+      }],
+    });
+
+    expect(result.segments).toEqual([]);
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.inferredDetourPolyline).toBeNull();
+    expect(result.likelyDetourPolyline).toBeNull();
+  });
 });
 
 describe('preserveTrustedDetourPath', () => {
@@ -1148,6 +1998,60 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.canShowDetourPath).toBe(false);
     expect(result.likelyDetourPolyline).toBeNull();
     expect(result.likelyDetourRoadNames).toEqual([]);
+    expect(result.segments).toEqual([]);
+  });
+
+  test('does not preserve a trusted path from a tiny-span long out-and-back segment', () => {
+    const outAndBackPath = [
+      { latitude: 44.387414, longitude: -79.690039 },
+      { latitude: 44.3899, longitude: -79.6892 },
+      { latitude: 44.3917, longitude: -79.6881 },
+      { latitude: 44.3936, longitude: -79.6870 },
+      { latitude: 44.387761, longitude: -79.689189 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: outAndBackPath,
+      inferredDetourPolyline: outAndBackPath,
+      likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      skippedSegmentPolyline: [
+        { latitude: 44.387388, longitude: -79.690014 },
+        { latitude: 44.3900, longitude: -79.6898 },
+        { latitude: 44.3929, longitude: -79.6885 },
+        { latitude: 44.3934, longitude: -79.6874 },
+      ],
+      segments: [{
+        canShowDetourPath: true,
+        spanMeters: 79,
+        entryPoint: { latitude: 44.387414, longitude: -79.690039 },
+        exitPoint: { latitude: 44.387761, longitude: -79.689189 },
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: outAndBackPath,
+        likelyDetourPolyline: outAndBackPath,
+        likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+        debug: {
+          entryCandidateCount: 12,
+          exitCandidateCount: 12,
+          exitAnchorSource: 'boundary-candidate',
+        },
+      }],
+    };
+    const weakGeometry = {
+      canShowDetourPath: false,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [],
+    };
+
+    const result = preserveTrustedDetourPath(weakGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.inferredDetourPolyline).toBeUndefined();
     expect(result.segments).toEqual([]);
   });
 
@@ -1369,6 +2273,95 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.canShowDetourPath).toBe(true);
     expect(result.likelyDetourPolyline).toEqual(trustedPath);
     expect(result.segments[0].likelyDetourPolyline).toEqual(trustedPath);
+  });
+
+  test('does not preserve the previous likely path when GPS evidence supersedes it', () => {
+    const stalePath = [
+      { latitude: 44.395, longitude: -79.698 },
+      { latitude: 44.395, longitude: -79.690 },
+      { latitude: 44.395, longitude: -79.682 },
+    ];
+    const alternatePath = [
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.397, longitude: -79.698 },
+      { latitude: 44.397, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.684 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: stalePath,
+      roadMatchConfidence: 'high',
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: stalePath,
+      }],
+    };
+    const currentGpsConfirmedAlternate = {
+      canShowDetourPath: true,
+      gpsSupersedesPreviousPath: true,
+      inferredDetourPolyline: alternatePath,
+      likelyDetourPolyline: null,
+      segments: [{
+        canShowDetourPath: true,
+        gpsSupersedesPreviousPath: true,
+        inferredDetourPolyline: alternatePath,
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(currentGpsConfirmedAlternate, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.inferredDetourPolyline).toEqual(alternatePath);
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].inferredDetourPolyline).toEqual(alternatePath);
+  });
+
+  test('does not preserve a much longer previous likely path over new trusted geometry', () => {
+    const staleZigzag = [
+      { latitude: 44.3874, longitude: -79.6900 },
+      { latitude: 44.3894, longitude: -79.6854 },
+      { latitude: 44.3882, longitude: -79.6879 },
+      { latitude: 44.3892, longitude: -79.6854 },
+      { latitude: 44.3931, longitude: -79.6855 },
+    ];
+    const cleanPath = [
+      { latitude: 44.3874, longitude: -79.6900 },
+      { latitude: 44.3887, longitude: -79.6854 },
+      { latitude: 44.3905, longitude: -79.6855 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: staleZigzag,
+      likelyDetourPolyline: staleZigzag,
+      likelyDetourRoadNames: ['Simcoe Street'],
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: staleZigzag,
+        likelyDetourPolyline: staleZigzag,
+      }],
+    };
+    const currentTrustedButUnmatched = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: cleanPath,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [{
+        canShowDetourPath: true,
+        inferredDetourPolyline: cleanPath,
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(currentTrustedButUnmatched, previous, { state: 'active' });
+
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.inferredDetourPolyline).toEqual(cleanPath);
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].inferredDetourPolyline).toEqual(cleanPath);
   });
 });
 
@@ -1610,6 +2603,162 @@ describe('shouldAttemptRoadMatchBackfill', () => {
   });
 });
 
+describe('publishDetours road-match backfill persistence', () => {
+  test('writes a successful road-match backfill even when confidence and geometry signature are unchanged', async () => {
+    jest.resetModules();
+
+    const writes = {};
+    const now = Date.parse('2026-05-26T16:00:00Z');
+    const rawPath = [
+      { latitude: 44.390278, longitude: -79.685472 },
+      { latitude: 44.388694, longitude: -79.685528 },
+      { latitude: 44.387972, longitude: -79.688833 },
+    ];
+    const closedPath = [
+      { latitude: 44.390472, longitude: -79.688028 },
+      { latitude: 44.387861, longitude: -79.689167 },
+    ];
+    const snappedPath = [
+      { latitude: 44.390278, longitude: -79.685472 },
+      { latitude: 44.388667, longitude: -79.685500 },
+      { latitude: 44.387944, longitude: -79.688806 },
+      { latitude: 44.387861, longitude: -79.689167 },
+    ];
+    const existingRoute10 = {
+      routeId: '10',
+      detectedAt: new Date(now - 60 * 60 * 1000),
+      lastSeenAt: new Date(now - 60 * 1000),
+      updatedAt: now,
+      vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 1,
+      state: 'active',
+      confidence: 'high',
+      canShowDetourPath: true,
+      evidencePointCount: 4,
+      lastEvidenceAt: now - 60 * 1000,
+      segments: [{
+        canShowDetourPath: true,
+        confidence: 'high',
+        skippedSegmentPolyline: closedPath,
+        inferredDetourPolyline: rawPath,
+        likelyDetourPolyline: null,
+        likelyDetourRoadNames: [],
+        roadMatchConfidence: null,
+        roadMatchRawConfidence: null,
+        roadMatchSource: null,
+        entryPoint: closedPath[0],
+        exitPoint: closedPath[closedPath.length - 1],
+      }],
+      skippedSegmentPolyline: closedPath,
+      inferredDetourPolyline: rawPath,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      roadMatchConfidence: null,
+      roadMatchRawConfidence: null,
+      roadMatchSource: null,
+      entryPoint: closedPath[0],
+      exitPoint: closedPath[closedPath.length - 1],
+    };
+    const activeDoc = { id: '10', data: () => existingRoute10 };
+    const activeSnapshot = {
+      size: 1,
+      docs: [activeDoc],
+      forEach: (cb) => cb(activeDoc),
+    };
+    const emptySnapshot = {
+      empty: true,
+      size: 0,
+      docs: [],
+      forEach: () => {},
+    };
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => emptySnapshot };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => (name === 'activeDetours' ? activeSnapshot : emptySnapshot),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const matchDetourGeometry = jest.fn(async (geo) => ({
+      ...geo,
+      likelyDetourPolyline: snappedPath,
+      likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Bayfield Street'],
+      roadMatchConfidence: null,
+      roadMatchRawConfidence: null,
+      roadMatchSource: 'osrm-route',
+      segments: geo.segments.map((segment) => ({
+        ...segment,
+        likelyDetourPolyline: snappedPath,
+        likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Bayfield Street'],
+        roadMatchConfidence: null,
+        roadMatchRawConfidence: null,
+        roadMatchSource: 'osrm-route',
+      })),
+    }));
+    jest.doMock('../detourRoadMatcher', () => ({
+      DETOUR_PATH_LABEL: 'Likely detour path',
+      matchDetourGeometry,
+    }));
+
+    try {
+      const publisher = require('../detourPublisher');
+      await publisher.publishDetours({
+        '10': {
+          routeId: '10',
+          detectedAt: new Date(now - 60 * 60 * 1000),
+          lastSeenAt: new Date(now - 60 * 1000),
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 1,
+          state: 'active',
+          vehiclesOffRoute: new Set(['route-10-bus']),
+          geometry: {
+            confidence: 'high',
+            canShowDetourPath: true,
+            evidencePointCount: 4,
+            lastEvidenceAt: now - 60 * 1000,
+            skippedSegmentPolyline: closedPath,
+            inferredDetourPolyline: rawPath,
+            entryPoint: closedPath[0],
+            exitPoint: closedPath[closedPath.length - 1],
+            segments: existingRoute10.segments,
+          },
+        },
+      }, {
+        now,
+        vehicles: [{ routeId: '10', id: 'route-10-bus' }],
+      });
+      expect(matchDetourGeometry).toHaveBeenCalledTimes(1);
+      expect(writes['activeDetours/10'].roadMatchSource).toBe('osrm-route');
+      expect(writes['activeDetours/10'].likelyDetourPolyline).toEqual(snappedPath);
+      expect(writes['activeDetours/10'].segments[0].roadMatchSource).toBe('osrm-route');
+      expect(writes['activeDetours/10'].segments[0].likelyDetourPolyline).toEqual(snappedPath);
+    } finally {
+      jest.dontMock('../firebaseAdmin');
+      jest.dontMock('../detourRoadMatcher');
+    }
+  });
+});
+
 describe('buildUpdatedEvent', () => {
   const NOW = Date.now();
 
@@ -1624,7 +2773,7 @@ describe('buildUpdatedEvent', () => {
       currentVehicleCount: 0,
       state: 'active',
       riderVisible: true,
-      riderVisibilityReason: 'fresh-enough',
+      riderVisibilityReason: 'gps-clear-required',
     }, {
       routeId: '8A',
       detectedAtMs: 1000,
@@ -1633,22 +2782,14 @@ describe('buildUpdatedEvent', () => {
       currentVehicleCount: 0,
       state: 'active',
       riderVisible: false,
-      riderVisibilityReason: 'stale-evidence-gps-clear-required',
+      riderVisibilityReason: 'insufficient-geometry',
       staleForReview: true,
-      staleAgeMs: 8400000,
-      staleThresholdMs: 7800000,
-      scheduledHeadwayMs: 3600000,
-      scheduleSource: 'exact-route',
     }, 9000);
 
     expect(event.changedFields).toEqual(['riderVisible', 'riderVisibilityReason']);
     expect(event.riderVisible).toBe(false);
-    expect(event.riderVisibilityReason).toBe('stale-evidence-gps-clear-required');
+    expect(event.riderVisibilityReason).toBe('insufficient-geometry');
     expect(event.staleForReview).toBe(true);
-    expect(event.staleAgeMs).toBe(8400000);
-    expect(event.staleThresholdMs).toBe(7800000);
-    expect(event.scheduledHeadwayMs).toBe(3600000);
-    expect(event.scheduleSource).toBe('exact-route');
   });
 
   test('detects state change', () => {
@@ -1740,30 +2881,6 @@ describe('buildUpdatedEvent', () => {
   test('returns null when previous is null', () => {
     const event = buildUpdatedEvent('8A', null, { vehicleCount: 1 }, NOW);
     expect(event).toBeNull();
-  });
-});
-
-describe('buildStaleClearedEvent', () => {
-  test('records stale auto-clear metadata for operations review', () => {
-    const now = Date.parse('2026-04-26T20:00:00Z');
-    const event = buildStaleClearedEvent('8A', {
-      detectedAtMs: now - 4 * 60 * 60 * 1000,
-      vehicleCount: 2,
-      lastEvidenceAt: now - 140 * 60 * 1000,
-    }, now, {
-      reason: 'stale-evidence-with-live-route-family-vehicles',
-      staleAgeMs: 140 * 60 * 1000,
-      thresholdMs: 130 * 60 * 1000,
-      headwayMs: 60 * 60 * 1000,
-      scheduleSource: 'exact-route',
-      serviceDate: '20260426',
-    });
-
-    expect(event.eventType).toBe('DETOUR_AUTO_CLEARED_STALE');
-    expect(event.routeId).toBe('8A');
-    expect(event.clearReason).toBe('stale-evidence-with-live-route-family-vehicles');
-    expect(event.staleThresholdMs).toBe(130 * 60 * 1000);
-    expect(event.scheduledHeadwayMs).toBe(60 * 60 * 1000);
   });
 });
 

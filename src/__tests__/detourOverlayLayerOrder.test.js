@@ -85,6 +85,19 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
   });
 
+  test('web geometry mode keeps detour lines above regular route layers', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+      }));
+    });
+
+    const lines = inst.root.findAllByType('WebRoutePolyline');
+    expect(lines.map((line) => line.props.layerOrder)).toEqual([300, 304, 320]);
+  });
+
   test('native regular-view geometry renders closed and alternate paths with lighter line weight', () => {
     let inst;
     act(() => {
@@ -105,6 +118,24 @@ describe('DetourOverlay layer split', () => {
     expect(closedLine.props.outlineWidth).toBeLessThan(1.25);
     expect(detourLine.props.strokeWidth).toBeLessThan(4.5);
     expect(detourLine.props.outlineWidth).toBeLessThan(1.25);
+  });
+
+  test('native regular-view geometry can omit the white closed-route mask', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        showClosedRouteMask: false,
+      }));
+    });
+
+    const lines = inst.root.findAllByType('RoutePolyline');
+    expect(lines.map((line) => line.props.id)).toEqual([
+      'detour-context-10',
+      'detour-path-10',
+    ]);
+    expect(lines.map((line) => line.props.layerIndex)).toEqual([304, 320]);
   });
 
   test('native alternate detour path uses route color with a green outline', () => {
@@ -276,10 +307,10 @@ describe('DetourOverlay layer split', () => {
     expect(markers).toHaveLength(5);
     expect(markers.map((marker) => marker.props.zIndexOffset)).toEqual([660, 660, 690, 690, 700]);
     expect(markers.some((marker) => String(marker.props.html).includes('123'))).toBe(true);
-    expect(markers.some((marker) => String(marker.props.html).includes('Not serviced by this detour'))).toBe(true);
+    expect(markers.some((marker) => String(marker.props.html).includes('Not served by'))).toBe(true);
     const skippedStopMarker = markers.find((marker) => marker.props.zIndexOffset === 700);
     expect(typeof skippedStopMarker.props.onPress).toBe('function');
-    expect(skippedStopMarker.props.popupHtml).toContain('Not serviced by this detour');
+    expect(skippedStopMarker.props.popupHtml).toContain('Not served by');
   });
 
   test('web regular-view geometry renders closed and alternate paths with lighter line weight', () => {
@@ -302,6 +333,21 @@ describe('DetourOverlay layer split', () => {
     expect(closedLine.props.outlineWidth).toBeLessThan(1.25);
     expect(detourLine.props.strokeWidth).toBeLessThan(4.5);
     expect(detourLine.props.outlineWidth).toBeLessThan(1.25);
+  });
+
+  test('web regular-view geometry can omit the white closed-route mask', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'geometry',
+        showClosedRouteMask: false,
+      }));
+    });
+
+    const lines = inst.root.findAllByType('WebRoutePolyline');
+    expect(lines.map((line) => line.props.color)).not.toContain('#FFFFFF');
+    expect(lines.map((line) => line.props.layerOrder)).toEqual([304, 320]);
   });
 
   test('web alternate detour path uses route color with a green outline', () => {

@@ -23,6 +23,15 @@ function hasRenderablePolyline(value) {
 const POINT_LOOP_NO_CLOSURE_MAX_METERS = Number.parseFloat(
   process.env.DETOUR_POINT_LOOP_NO_CLOSURE_MAX_METERS || '35'
 );
+const TINY_CLOSED_SPAN_MAX_METERS = Number.parseFloat(
+  process.env.DETOUR_TINY_CLOSED_SPAN_MAX_METERS || '100'
+);
+const LONG_PATH_WITH_TINY_SPAN_MIN_METERS = Number.parseFloat(
+  process.env.DETOUR_LONG_PATH_WITH_TINY_SPAN_MIN_METERS || '200'
+);
+const LONG_PATH_TINY_SPAN_MIN_RATIO = Number.parseFloat(
+  process.env.DETOUR_LONG_PATH_TINY_SPAN_MIN_RATIO || '3'
+);
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(degrees) {
@@ -46,6 +55,18 @@ function distanceMeters(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(h));
+}
+
+function polylineLengthMeters(polyline) {
+  if (!Array.isArray(polyline) || polyline.length < 2) return 0;
+  let total = 0;
+  for (let index = 1; index < polyline.length; index += 1) {
+    const from = normalizeCoordinate(polyline[index - 1]);
+    const to = normalizeCoordinate(polyline[index]);
+    if (!from || !to) continue;
+    total += distanceMeters(from, to);
+  }
+  return total;
 }
 
 function hasStopImpact(segment) {
@@ -112,11 +133,40 @@ function isPointLoopNoClosureSegment(segment) {
   return distanceMeters(entryPoint, exitPoint) <= POINT_LOOP_NO_CLOSURE_MAX_METERS;
 }
 
+function isMisleadingTinySpanLongPathSegment(segment) {
+  if (hasRenderablePolyline(segment?.skippedSegmentPolyline)) return false;
+  if (hasStopImpact(segment)) return false;
+
+  const spanMeters = Number(segment?.spanMeters);
+  if (!Number.isFinite(spanMeters) || spanMeters <= 0 || spanMeters >= TINY_CLOSED_SPAN_MAX_METERS) {
+    return false;
+  }
+
+  const pathLengthMeters = Math.max(
+    polylineLengthMeters(segment?.likelyDetourPolyline),
+    polylineLengthMeters(segment?.inferredDetourPolyline)
+  );
+  if (pathLengthMeters < LONG_PATH_WITH_TINY_SPAN_MIN_METERS) return false;
+
+  const ratio = pathLengthMeters / Math.max(spanMeters, 1);
+  if (ratio < LONG_PATH_TINY_SPAN_MIN_RATIO) return false;
+
+  const debug = segment?.debug || {};
+  const hasAmbiguousBoundarySelection =
+    Number(debug.entryCandidateCount) > 1 ||
+    Number(debug.exitCandidateCount) > 1 ||
+    debug.entryAnchorSource === 'boundary-candidate' ||
+    debug.exitAnchorSource === 'boundary-candidate';
+
+  return hasAmbiguousBoundarySelection || ratio >= LONG_PATH_TINY_SPAN_MIN_RATIO * 2;
+}
+
 function isInvalidNonClosureSegment(segment) {
   return (
     isNonClosureSelfLoopSegment(segment) ||
     isUnanchoredNoStopSegment(segment) ||
-    isPointLoopNoClosureSegment(segment)
+    isPointLoopNoClosureSegment(segment) ||
+    isMisleadingTinySpanLongPathSegment(segment)
   );
 }
 
@@ -129,6 +179,7 @@ module.exports = {
   isNonClosureSelfLoopSegment,
   isUnanchoredNoStopSegment,
   isPointLoopNoClosureSegment,
+  isMisleadingTinySpanLongPathSegment,
   isInvalidNonClosureSegment,
   filterNonClosureSelfLoopSegments,
 };

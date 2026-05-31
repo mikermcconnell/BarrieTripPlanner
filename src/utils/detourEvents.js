@@ -245,6 +245,8 @@ const combineLocationAndStopTitle = (locationTitle, stopCodeTitle, codes) => {
 
 export const buildDetourEventTitle = ({ routeId, detour = {}, segment = null }) => {
   const explicitSources = [
+    segment?.eventLocationLabel,
+    detour?.eventLocationLabel,
     segment?.title,
     segment?.description,
     detour?.title,
@@ -276,6 +278,11 @@ export const buildDetourEventTitle = ({ routeId, detour = {}, segment = null }) 
 
 const buildCandidateGroupKey = ({ routeId, detour, segment, segmentIndex }) => {
   const hasMultipleRouteSegments = hasMultipleSegments(detour);
+  const sharedEventId =
+    segment?.sharedDetourEventId ||
+    (!hasMultipleRouteSegments ? detour?.sharedDetourEventId : null);
+  if (sharedEventId) return `event:${sharedEventId}`;
+
   const backendEventId = segment?.detourEventId || (!hasMultipleRouteSegments ? detour?.detourEventId : null);
   if (backendEventId) return `event:${backendEventId}`;
 
@@ -314,6 +321,7 @@ const createCandidate = ({ routeId, detour, segment, segmentIndex }) => ({
   segmentIndex,
   title: buildDetourEventTitle({ routeId, detour, segment }),
   groupKey: buildCandidateGroupKey({ routeId, detour, segment, segmentIndex }),
+  eventPrimaryRouteId: normalizeRouteId(segment?.eventPrimaryRouteId || detour?.eventPrimaryRouteId),
   confidence: normalizeConfidence(segment?.confidence || detour?.confidence),
   state: detour?.state === 'clear-pending' || segment?.state === 'clear-pending' ? 'clear-pending' : 'active',
 });
@@ -386,7 +394,12 @@ const getDetourCandidates = (routeId, detour) => {
 
 const buildEventFromCandidates = (groupKey, candidates) => {
   const routeIds = sortRouteIds(candidates.map((candidate) => candidate.routeId));
-  const primary = [...candidates].sort((a, b) => {
+  const requestedPrimaryRouteId = candidates
+    .map((candidate) => candidate.eventPrimaryRouteId)
+    .find((routeId) => routeId && routeIds.includes(routeId));
+  const primary = (requestedPrimaryRouteId
+    ? candidates.find((candidate) => candidate.routeId === requestedPrimaryRouteId)
+    : null) || [...candidates].sort((a, b) => {
     const routeCompare = sortRouteIds([a.routeId, b.routeId])[0] === a.routeId ? -1 : 1;
     if (a.routeId !== b.routeId) return routeCompare;
     return (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0);

@@ -195,6 +195,20 @@ describe('map and navigation button interactions', () => {
     press(buttonByLabel(inst.root, 'Switch to detour-focused map view'));
     expect(onChange).toHaveBeenCalledWith('regular');
     expect(onChange).toHaveBeenCalledWith('detour');
+
+    const regularTextValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(regularTextValues).toContain(2);
+
+    const detourModeInst = render(React.createElement(MapViewModeToggle, {
+      visible: true,
+      mode: 'detour',
+      detourCount: 2,
+      onChange,
+      inline: true,
+    }));
+    const detourTextValues = detourModeInst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(detourTextValues).toContain('Detours');
+    expect(detourTextValues).not.toContain(2);
   });
 
   test('trip preview viewport controls trigger follow, location, and full-trip actions', () => {

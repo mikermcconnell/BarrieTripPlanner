@@ -68,9 +68,13 @@ const DetourMapLegend = ({
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Expand detour legend"
+          accessibilityHint="Shows the map key for detour lines and stops"
         >
-          <Text style={styles.collapsedTitle}>Map key</Text>
-          <Text style={styles.collapsedHint}>Lines & stops</Text>
+          <View style={styles.collapsedIcon} pointerEvents="none">
+            <View style={styles.collapsedIconLine} />
+            <View style={[styles.collapsedIconLine, styles.collapsedIconLineShort]} />
+          </View>
+          <Text style={styles.collapsedTitle}>Key</Text>
         </TouchableOpacity>
       </View>
     );
@@ -180,24 +184,42 @@ const styles = StyleSheet.create({
     ...SHADOWS.medium,
   },
   collapsedCard: {
-    width: 164,
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: SPACING.xs,
     backgroundColor: 'rgba(255,255,255,0.96)',
-    borderRadius: BORDER_RADIUS.lg,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: 'rgba(223, 225, 230, 0.92)',
     ...SHADOWS.medium,
   },
+  collapsedIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: COLORS.infoSubtle,
+  },
+  collapsedIconLine: {
+    width: 12,
+    height: 3,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primary,
+  },
+  collapsedIconLineShort: {
+    width: 8,
+    backgroundColor: COLORS.error,
+  },
   collapsedTitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: FONT_SIZES.sm,
     fontFamily: FONT_FAMILIES.bold,
     color: COLORS.textPrimary,
-  },
-  collapsedHint: {
-    marginTop: 2,
-    fontSize: FONT_SIZES.xxs,
-    color: COLORS.textSecondary,
   },
   headerRow: {
     flexDirection: 'row',

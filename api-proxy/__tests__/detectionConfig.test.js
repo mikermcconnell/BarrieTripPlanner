@@ -34,6 +34,15 @@ describe('detour detection config', () => {
     expect(config.DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE).toBe(7);
   });
 
+  test('uses three off-route readings as the default detection threshold', () => {
+    delete process.env.DETOUR_CONSECUTIVE_READINGS;
+
+    const config = require('../detour/detectionConfig');
+
+    expect(config.CONSECUTIVE_READINGS_REQUIRED).toBe(3);
+    expect(config.BASE_ROUTE_DETECTOR_CONFIG.consecutiveReadingsRequired).toBe(3);
+  });
+
   test('requires two unique vehicles for detour publishing by default', () => {
     delete process.env.DETOUR_MIN_UNIQUE_VEHICLES;
 

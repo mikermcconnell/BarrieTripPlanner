@@ -83,6 +83,57 @@ describe('deriveDetourOverlays', () => {
     expect(result.every((overlay) => overlay.showStopMarkers)).toBe(false);
   });
 
+  test('does not show a skipped stop marker when the detour path passes the stop', () => {
+    const servedStop = {
+      id: 'stop-696',
+      code: '696',
+      latitude: 44.392,
+      longitude: -79.698,
+    };
+    const closedPath = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.392, longitude: -79.700 },
+      { latitude: 44.394, longitude: -79.700 },
+    ];
+    const detourPath = [
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.392, longitude: -79.698 },
+      { latitude: 44.394, longitude: -79.698 },
+    ];
+
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['11']),
+      activeDetours: {
+        '11': {
+          state: 'active',
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: [{
+            skippedSegmentPolyline: closedPath,
+            likelyDetourPolyline: detourPath,
+            canShowDetourPath: true,
+          }],
+        },
+      },
+      detourStopDetailsByRouteId: {
+        '11': {
+          routeStops: [servedStop],
+          segmentStopDetails: [{
+            skippedSegmentPolyline: closedPath,
+            likelyDetourPolyline: detourPath,
+            canShowDetourPath: true,
+            skippedStops: [servedStop],
+          }],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].skippedStops).toEqual([]);
+    expect(result[0].segmentStopDetails[0].skippedStops).toEqual([]);
+  });
+
   test('does not render low-confidence detours', () => {
     const result = deriveDetourOverlays({
       enabled: true,
@@ -250,7 +301,7 @@ describe('deriveDetourOverlays', () => {
     expect(result).toHaveLength(0);
   });
 
-  test('keeps the skipped route segment but hides raw inferred detour geometry until road matching succeeds', () => {
+  test('draws backend-trusted inferred detour geometry while road matching is unavailable', () => {
     const rawInferredPolyline = [
       { latitude: 44.381, longitude: -79.695 },
       { latitude: 44.386, longitude: -79.692 },
@@ -280,10 +331,10 @@ describe('deriveDetourOverlays', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('5');
-    expect(result[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].inferredDetourPolyline).toBe(rawInferredPolyline);
     expect(result[0].likelyDetourPolyline).toBeNull();
     expect(result[0].skippedSegmentPolyline).toBe(SAMPLE_POLYLINE);
-    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBe(rawInferredPolyline);
   });
 
   test('uses likely detour geometry ahead of raw inferred geometry', () => {
@@ -399,6 +450,81 @@ describe('deriveDetourOverlays', () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('1');
+  });
+
+  test('event drill-down shows only the routes in the selected detour event', () => {
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(),
+      activeDetours: {
+        '10': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+        '11': { state: 'active', confidence: 'high', skippedSegmentPolyline: LONG_POLYLINE },
+        '7A': { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE },
+      },
+      detourExplorerSelection: {
+        level: 'event',
+        event: {
+          eventId: 'event:downtown',
+          routeIds: ['10', '11'],
+          candidates: [
+            { routeId: '10', segmentIndex: 0 },
+            { routeId: '11', segmentIndex: 0 },
+          ],
+        },
+      },
+    });
+
+    expect(result.map((overlay) => overlay.routeId).sort()).toEqual(['10', '11']);
+  });
+
+  test('route drill-down shows only the selected event route and segment', () => {
+    const secondSegment = [
+      { latitude: 44.40, longitude: -79.70 },
+      { latitude: 44.41, longitude: -79.71 },
+    ];
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(),
+      activeDetours: {
+        '10': {
+          state: 'active',
+          confidence: 'high',
+          segments: [
+            { skippedSegmentPolyline: SAMPLE_POLYLINE },
+            { skippedSegmentPolyline: secondSegment },
+          ],
+        },
+        '11': { state: 'active', confidence: 'high', skippedSegmentPolyline: LONG_POLYLINE },
+      },
+      detourStopDetailsByRouteId: {
+        '10': {
+          segmentStopDetails: [
+            { skippedSegmentPolyline: SAMPLE_POLYLINE, skippedStops: [{ code: '1001' }] },
+            { skippedSegmentPolyline: secondSegment, skippedStops: [{ code: '1002' }] },
+          ],
+        },
+      },
+      detourExplorerSelection: {
+        level: 'route',
+        routeId: '10',
+        event: {
+          eventId: 'event:downtown',
+          routeIds: ['10', '11'],
+          candidates: [
+            { routeId: '10', segmentIndex: 1 },
+            { routeId: '11', segmentIndex: 0 },
+          ],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].routeId).toBe('10');
+    expect(result[0].routeIds).toEqual(['10']);
+    expect(result[0].routeLineLabel).toBe('10');
+    expect(result[0].segmentStopDetails).toHaveLength(1);
+    expect(result[0].segmentStopDetails[0].skippedSegmentPolyline).toBe(secondSegment);
+    expect(result[0].skippedStops.map((stop) => stop.code)).toEqual(['1002']);
   });
 
   test('shows active variant detours when a base route is selected in regular route mode', () => {
@@ -862,7 +988,7 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].segmentStopDetails[1].inferredDetourPolyline).toBeNull();
   });
 
-  test('hides raw segment geometry instead of falling back to a stale top-level road match for multi-segment detours', () => {
+  test('uses trusted segment geometry instead of falling back to a stale top-level road match for multi-segment detours', () => {
     const trustedSegmentPath = [
       { latitude: 44.333, longitude: -79.674 },
       { latitude: 44.335, longitude: -79.674 },
@@ -904,10 +1030,10 @@ describe('deriveDetourOverlays', () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].inferredDetourPolyline).toBe(trustedSegmentPath);
     expect(result[0].likelyDetourPolyline).toBeNull();
     expect(result[0].segmentStopDetails).toHaveLength(2);
-    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBe(trustedSegmentPath);
     expect(result[0].segmentStopDetails[0].likelyDetourPolyline).toBeNull();
     expect(result[0].segmentStopDetails[1].inferredDetourPolyline).toBeNull();
   });

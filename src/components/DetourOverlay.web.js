@@ -6,7 +6,7 @@
  * - Secondary skipped-route context as a muted dashed line when available
  * - White route stop markers with dark outlines
  * - Red slashed markers for closed road points
- * - Red outlined markers for stops not serviced by the detour
+ * - Amber markers for stops not served by the selected detoured route
  *
  * Accepts pre-computed props from useDetourOverlays hook.
  */
@@ -15,6 +15,11 @@ import { WebHtmlMarker, WebLineLabelLayer, WebRoutePolyline } from './WebMapView
 import { haversineDistance, offsetPath, simplifyPath } from '../utils/geometryUtils';
 import { getDirectionalArrowPoints } from '../utils/detourDirectionArrows';
 import { COLORS } from '../config/theme';
+import { formatDetourMapLabel } from '../utils/detourLabeling';
+import {
+  canPlaceLineCenterLabel as canFitLineCenterLabel,
+  getClosureMarkerPoints,
+} from '../utils/detourOverlayDisplay';
 
 const DETOUR_LINE_STYLE = {
   strokeWidth: 4.5,
@@ -38,6 +43,13 @@ const CLOSED_ROUTE_MASK_STYLE = {
   opacityMultiplier: 0.95,
 };
 
+const DETOUR_LAYER_ORDER = {
+  CLOSED_MASK: 300,
+  CLOSED_LINE: 304,
+  DETOUR_LINE: 320,
+  LINE_LABELS: 340,
+};
+
 const scaleLineMetric = (value, scale = 1) => {
   const numericScale = Number(scale);
   return Number.isFinite(numericScale) && numericScale > 0
@@ -51,6 +63,7 @@ const MARKER_Z_INDEX = {
   CLOSURE_POINT: 690,
   SKIPPED_STOP: 700,
   ENTRY_EXIT_CALLOUT: 1320,
+  DETOUR_MAP_LABEL: 1340,
 };
 
 const DETOUR_LINE_LABEL_STYLE = {
@@ -69,37 +82,14 @@ const DETOUR_LINE_LABEL_STYLE = {
 };
 
 const DETOUR_LINE_LABEL_MIN_ZOOM = 14.5;
+const DETOUR_MAP_LABEL_MIN_ZOOM = 13.25;
 const DIMMED_DETOUR_SEGMENT_OPACITY = 0.26;
-const DETOUR_LABEL_BASE_PADDING_PX = 28;
-const DETOUR_LABEL_APPROX_CHAR_WIDTH_PX = 7;
-const DETOUR_LABEL_SAFE_FIT_BUFFER_PX = 18;
-const WEB_MERCATOR_EQUATOR_METERS_PER_PIXEL = 156543.03392;
-
 const simplifyOverlayPath = (path, minDistanceMeters = 28) => {
   if (!Array.isArray(path) || path.length < 2) {
     return null;
   }
 
   return simplifyPath(path, minDistanceMeters);
-};
-
-const getClosureMarkerPoints = (path) => {
-  if (!Array.isArray(path) || path.length < 2) {
-    return [];
-  }
-
-  const indexes = [0, path.length - 1];
-  const seen = new Set();
-
-  return indexes
-    .map((index) => path[index])
-    .filter((point) => {
-      if (!point) return false;
-      const key = `${point.latitude?.toFixed?.(6) ?? point.latitude}:${point.longitude?.toFixed?.(6) ?? point.longitude}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
 };
 
 const isFiniteStopCoordinate = (point) => (
@@ -136,42 +126,41 @@ const getStopDisplayName = (stop) => {
   return stop?.name || (stopNumber ? `Stop #${stopNumber}` : 'Stop');
 };
 
-const getPathDistanceMeters = (path) => {
-  const points = Array.isArray(path)
-    ? path.filter(isFiniteStopCoordinate)
-    : [];
-
-  if (points.length < 2) return 0;
-
-  return points.slice(1).reduce((total, point, index) => {
-    const previous = points[index];
-    const distance = haversineDistance(
-      previous.latitude,
-      previous.longitude,
-      point.latitude,
-      point.longitude
-    );
-    return Number.isFinite(distance) ? total + distance : total;
-  }, 0);
-};
-
-const getAverageLatitude = (path) => {
-  const points = Array.isArray(path)
-    ? path.filter(isFiniteStopCoordinate)
-    : [];
-
-  if (points.length === 0) return 44.39;
-
-  return points.reduce((sum, point) => sum + Number(point.latitude), 0) / points.length;
-};
-
-const getMetersPerPixelAtZoom = (zoom, latitude) => (
-  (WEB_MERCATOR_EQUATOR_METERS_PER_PIXEL * Math.cos((latitude * Math.PI) / 180)) /
-  Math.pow(2, zoom)
+const normalizeRouteLabel = (routeId) => (
+  routeId == null ? null : String(routeId).trim().toUpperCase()
 );
 
-const estimateLabelWidthPx = (label) => (
-  DETOUR_LABEL_BASE_PADDING_PX + (String(label || '').length * DETOUR_LABEL_APPROX_CHAR_WIDTH_PX)
+const getStopRouteLabels = (stop, fallbackRouteId) => {
+  const seen = new Set();
+  return [
+    ...(Array.isArray(stop?.affectedRouteIds) ? stop.affectedRouteIds : []),
+    ...(Array.isArray(stop?.routeIds) ? stop.routeIds : []),
+    stop?.routeId,
+    fallbackRouteId,
+  ]
+    .map(normalizeRouteLabel)
+    .filter((routeLabel) => {
+      if (!routeLabel || seen.has(routeLabel)) return false;
+      seen.add(routeLabel);
+      return true;
+    });
+};
+
+const formatRouteList = (routes = []) => {
+  if (routes.length === 0) return 'this route';
+  if (routes.length === 1) return `Route ${routes[0]}`;
+  if (routes.length === 2) return `Routes ${routes[0]} and ${routes[1]}`;
+  return `Routes ${routes.slice(0, -1).join(', ')}, and ${routes[routes.length - 1]}`;
+};
+
+const getSkippedStopImpactText = (stop, routeId) => (
+  `Not served by ${formatRouteList(getStopRouteLabels(stop, routeId))} during this detour`
+);
+
+const canPlaceLineCenterLabel = (path, label, currentZoom) => (
+  Number.isFinite(currentZoom) &&
+  currentZoom >= DETOUR_LINE_LABEL_MIN_ZOOM &&
+  canFitLineCenterLabel(path, label, currentZoom)
 );
 
 const hasSelectedSegment = (selectedSegmentIndex) => Number.isInteger(selectedSegmentIndex);
@@ -202,21 +191,6 @@ const normalizeRoadNameForLabel = (roadName) => String(roadName || '')
 const isGenericDetourPathLabel = (label) => {
   const normalized = String(label || '').trim().toLowerCase();
   return !normalized || normalized === 'likely detour path' || normalized === 'detour path';
-};
-
-const canPlaceLineCenterLabel = (path, label, currentZoom) => {
-  if (!Number.isFinite(currentZoom) || currentZoom < DETOUR_LINE_LABEL_MIN_ZOOM) {
-    return false;
-  }
-
-  const distanceMeters = getPathDistanceMeters(path);
-  if (distanceMeters <= 0) return false;
-
-  const metersPerPixel = getMetersPerPixelAtZoom(currentZoom, getAverageLatitude(path));
-  if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) return false;
-
-  const screenLengthPx = distanceMeters / metersPerPixel;
-  return screenLengthPx >= estimateLabelWidthPx(label) + DETOUR_LABEL_SAFE_FIT_BUFFER_PX;
 };
 
 const formatSegmentDetourLabel = (routeId, routeLineLabel, segment) => {
@@ -289,6 +263,55 @@ const buildLineLabelDescriptors = ({
 };
 
 const buildCalloutLabelPlacements = () => [];
+
+const getMiddlePoint = (path) => {
+  const points = Array.isArray(path) ? path.filter(isFiniteStopCoordinate) : [];
+  if (points.length === 0) return null;
+  return points[Math.floor(points.length / 2)];
+};
+
+const buildDetourMapLabelPlacements = ({
+  renderableSegments,
+  hasMultipleSegments,
+  routeId,
+  routeLineLabel,
+  showCallouts,
+  labelDensity,
+  currentZoom,
+  selectedSegmentIndex,
+  detourColor,
+}) => {
+  if (!showCallouts || labelDensity === 'minimal') return [];
+  if (Number.isFinite(currentZoom) && currentZoom < DETOUR_MAP_LABEL_MIN_ZOOM) return [];
+
+  return renderableSegments
+    .map((segment, segmentIndex) => {
+      if (!isSegmentSelected(segmentIndex, selectedSegmentIndex)) return null;
+      const path = segment?.detourLabelPath ?? segment?.inferredDetourPath;
+      const point = getMiddlePoint(path);
+      if (!point) return null;
+
+      const segmentKey = hasMultipleSegments ? `-${segmentIndex}` : '';
+      return {
+        id: `detour-map-label-${routeId}${segmentKey}`,
+        type: 'detour-map-label',
+        visible: true,
+        point,
+        offset: [0, 0],
+        label: formatDetourMapLabel({
+          routeId,
+          routeLineLabel,
+          roadNames: segment?.likelyDetourRoadNames,
+          title: segment?.eventLocationLabel || segment?.title || segment?.description,
+        }),
+        borderColor: detourColor,
+        dotColor: detourColor,
+        fillColor: '#FFFBEB',
+        textColor: COLORS.textPrimary,
+      };
+    })
+    .filter(Boolean);
+};
 
 const getDetourLineOffsets = (directionArrowMode, detourLaneOffsetMeters) => (
   directionArrowMode === 'both'
@@ -421,10 +444,11 @@ const makeNoEntryHtml = (color, size = 20) => `
 
 const makeSkippedStopHtml = (stop, color, { showLabel = true, labelSide = 'right' } = {}) => {
   const stopNumber = escapeHtml(getStopNumber(stop) || '!');
+  const impactText = escapeHtml(stop?.impactText || 'Not served by this route during this detour');
   const labelMargin = labelSide === 'left' ? 'margin-right:28px;' : 'margin-left:28px;';
 
   return `
-    <div title="Not serviced by this detour" style="
+    <div title="${impactText}" style="
       display:flex;
       flex-direction:column;
       align-items:center;
@@ -432,7 +456,7 @@ const makeSkippedStopHtml = (stop, color, { showLabel = true, labelSide = 'right
       gap:3px;
       min-width:76px;
       pointer-events:auto;
-    " aria-label="Stop ${stopNumber}. Not serviced by this detour">
+    " aria-label="Stop ${stopNumber}. ${impactText}">
       ${showLabel ? `<div style="
         padding:1px 5px;
         ${labelMargin}
@@ -496,6 +520,40 @@ const makeEntryStopHtml = (eyebrow, label, fillColor, borderColor, textColor, do
       <span style="font:800 8px/1 Avenir, Arial, sans-serif; letter-spacing:0.45px;">${eyebrow}</span>
       <span style="font:800 10px/1.1 Avenir, Arial, sans-serif; letter-spacing:0.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:72px;">${label}</span>
     </div>
+  </div>
+`;
+
+const makeDetourMapLabelHtml = (label, fillColor, borderColor, textColor, dotColor) => `
+  <div title="${escapeHtml(label)}" style="
+    min-height:30px;
+    max-width:176px;
+    padding:5px 10px;
+    border-radius:16px;
+    background:${fillColor};
+    border:2px solid ${borderColor};
+    box-sizing:border-box;
+    box-shadow:0 3px 10px rgba(15,23,42,0.18);
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    gap:6px;
+    color:${textColor};
+    pointer-events:none;
+  ">
+    <div style="
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:${dotColor};
+      flex:0 0 auto;
+    "></div>
+    <span style="
+      font:800 11px/14px Avenir, Arial, sans-serif;
+      letter-spacing:0.15px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    ">${escapeHtml(label)}</span>
   </div>
 `;
 
@@ -564,6 +622,7 @@ const DetourOverlay = ({
   showCallouts,
   showStopMarkers,
   showClosedStopMarkers = false,
+  showClosedRouteMask = true,
   onPress,
   onStopPress,
   renderMode = 'all',
@@ -600,9 +659,16 @@ const DetourOverlay = ({
       canRenderDetourPath && segment?.likelyDetourPolyline?.length >= 2
         ? segment.likelyDetourPolyline
         : null;
+    const trustedInferredDetourPolyline =
+      !likelyDetourPolyline &&
+      segment?.canShowDetourPath === true &&
+      segment?.inferredDetourPolyline?.length >= 2
+        ? segment.inferredDetourPolyline
+        : null;
+    const renderableDetourPolyline = likelyDetourPolyline ?? trustedInferredDetourPolyline;
     const inferredDetourPath =
-      likelyDetourPolyline?.length >= 2
-        ? simplifyOverlayPath(likelyDetourPolyline, 28)
+      renderableDetourPolyline?.length >= 2
+        ? simplifyOverlayPath(renderableDetourPolyline, 28)
         : null;
     const skippedRoutePath =
       segment?.skippedSegmentPolyline?.length >= 2
@@ -622,16 +688,29 @@ const DetourOverlay = ({
     };
   });
   const calloutLabelPlacements = shouldRenderCallouts
-    ? buildCalloutLabelPlacements({
-      normalizedSegments,
-      hasMultipleSegments,
-      routeId,
-      showCallouts,
-      routeBaseColor,
-      routeStopFillColor,
-      currentZoom,
-      labelDensity,
-    })
+    ? [
+      ...buildCalloutLabelPlacements({
+        normalizedSegments,
+        hasMultipleSegments,
+        routeId,
+        showCallouts,
+        routeBaseColor,
+        routeStopFillColor,
+        currentZoom,
+        labelDensity,
+      }),
+      ...buildDetourMapLabelPlacements({
+        renderableSegments,
+        hasMultipleSegments,
+        routeId,
+        routeLineLabel,
+        showCallouts,
+        labelDensity,
+        currentZoom,
+        selectedSegmentIndex,
+        detourColor,
+      }),
+    ]
     : [];
   const lineLabelDescriptors = shouldRenderCallouts
     ? buildLineLabelDescriptors({
@@ -662,6 +741,7 @@ const DetourOverlay = ({
         <WebLineLabelLayer
           labels={lineLabelDescriptors}
           labelStyle={DETOUR_LINE_LABEL_STYLE}
+          layerOrder={DETOUR_LAYER_ORDER.LINE_LABELS}
         />
       )}
 
@@ -687,16 +767,19 @@ const DetourOverlay = ({
           <React.Fragment key={pathId}>
             {skippedRoutePath ? (
               <>
-                <WebRoutePolyline
-                  key={`${skippedPathId}-mask`}
-                  coordinates={skippedRoutePath}
-                  color={CLOSED_ROUTE_MASK_STYLE.color}
-                  strokeWidth={scaleLineMetric(CLOSED_ROUTE_MASK_STYLE.strokeWidth, lineStyleScale)}
-                  opacity={Math.min(segmentOpacity, 0.95) * CLOSED_ROUTE_MASK_STYLE.opacityMultiplier}
-                  outlineWidth={0}
-                  interactive={Boolean(onPress)}
-                  onPress={handleSegmentPress}
-                />
+                {showClosedRouteMask ? (
+                  <WebRoutePolyline
+                    key={`${skippedPathId}-mask`}
+                    coordinates={skippedRoutePath}
+                    color={CLOSED_ROUTE_MASK_STYLE.color}
+                    strokeWidth={scaleLineMetric(CLOSED_ROUTE_MASK_STYLE.strokeWidth, lineStyleScale)}
+                    opacity={Math.min(segmentOpacity, 0.95) * CLOSED_ROUTE_MASK_STYLE.opacityMultiplier}
+                    outlineWidth={0}
+                    interactive={Boolean(onPress)}
+                    onPress={handleSegmentPress}
+                    layerOrder={DETOUR_LAYER_ORDER.CLOSED_MASK}
+                  />
+                ) : null}
                 <WebRoutePolyline
                   key={skippedPathId}
                   coordinates={skippedRoutePath}
@@ -708,6 +791,7 @@ const DetourOverlay = ({
                   outlineColor={SKIPPED_ROUTE_STYLE.outlineColor}
                   interactive={Boolean(onPress)}
                   onPress={handleSegmentPress}
+                  layerOrder={DETOUR_LAYER_ORDER.CLOSED_LINE}
                 />
               </>
             ) : null}
@@ -725,6 +809,7 @@ const DetourOverlay = ({
                     interactive={Boolean(onPress)}
                     onPress={handleSegmentPress}
                     showArrows={lineOffsetIndex === 0}
+                    layerOrder={DETOUR_LAYER_ORDER.DETOUR_LINE + lineOffsetIndex}
                   />
                 ))}
                 {getDirectionalArrowPoints(inferredDetourPath, {
@@ -767,15 +852,26 @@ const DetourOverlay = ({
             coordinate={{ latitude: label.point.latitude, longitude: label.point.longitude }}
             anchor="center"
             offset={label.offset}
-            html={makeEntryStopHtml(
-              label.eyebrow,
-              label.label,
-              label.fillColor,
-              label.borderColor,
-              label.textColor,
-              label.dotColor
-            )}
-            zIndexOffset={MARKER_Z_INDEX.ENTRY_EXIT_CALLOUT}
+            html={label.type === 'detour-map-label'
+              ? makeDetourMapLabelHtml(
+                label.label,
+                label.fillColor,
+                label.borderColor,
+                label.textColor,
+                label.dotColor
+              )
+              : makeEntryStopHtml(
+                label.eyebrow,
+                label.label,
+                label.fillColor,
+                label.borderColor,
+                label.textColor,
+                label.dotColor
+              )}
+            zIndexOffset={label.type === 'detour-map-label'
+              ? MARKER_Z_INDEX.DETOUR_MAP_LABEL
+              : MARKER_Z_INDEX.ENTRY_EXIT_CALLOUT}
+            pointerEvents={label.type === 'detour-map-label' ? 'none' : undefined}
           />
         );
       })}
@@ -809,6 +905,8 @@ const DetourOverlay = ({
           const labelSide = stopIndex % 2 === 0 ? 'right' : 'left';
           const markerLatitude = stop.markerLatitude ?? stop.latitude;
           const markerLongitude = stop.markerLongitude ?? stop.longitude;
+          const impactText = getSkippedStopImpactText(stop, stop.routeId || routeId);
+          const displayStop = { ...stop, impactText };
 
           return (
             <WebHtmlMarker
@@ -816,14 +914,14 @@ const DetourOverlay = ({
               coordinate={{ latitude: markerLatitude, longitude: markerLongitude }}
               anchor="center"
               offset={[0, -12]}
-              html={makeSkippedStopHtml(stop, skippedColor, {
+              html={makeSkippedStopHtml(displayStop, skippedColor, {
                 showLabel: showSkippedStopCodes,
                 labelSide,
               })}
               zIndexOffset={MARKER_Z_INDEX.SKIPPED_STOP}
               onPress={() => (onStopPress ? onStopPress(stop, { routeId: stop.routeId || routeId, segment: stop.detourSegment ?? null, segmentIndex: stop.detourSegmentIndex ?? null }) : onPress?.())}
-              popupHtml={`<strong>${escapeHtml(stopName)}</strong>${stopNumber ? `<br />Stop #${escapeHtml(stopNumber)}` : ''}<br />Not serviced by this detour`}
-              accessibilityLabel={`${stopName}, not serviced by this detour`}
+              popupHtml={`<strong>${escapeHtml(stopName)}</strong>${stopNumber ? `<br />Stop #${escapeHtml(stopNumber)}` : ''}<br />${escapeHtml(impactText)}`}
+              accessibilityLabel={`${stopName}, ${impactText}`}
             />
           );
         })}

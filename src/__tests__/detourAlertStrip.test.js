@@ -74,7 +74,7 @@ describe('DetourAlertStrip', () => {
           '8A': {
             state: 'active',
             confidence: 'medium',
-            vehicleCount: 1,
+            vehicleCount: 2,
             title: 'Sophia Street Detour - Route 8A',
           },
         },
@@ -175,5 +175,80 @@ describe('DetourAlertStrip', () => {
 
     const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
     expect(textValues).toContain('Active detour: Mulcaster & McDonald · Stop #946');
+  });
+
+  test('expanded detour rows show a numbered card and route summary', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourAlertStrip, {
+        activeDetours: {
+          '10': {
+            state: 'active',
+            confidence: 'high',
+            sharedDetourEventId: 'downtown',
+            segments: [{
+              sharedDetourEventId: 'downtown',
+              likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street'],
+            }],
+          },
+          '11': {
+            state: 'active',
+            confidence: 'high',
+            sharedDetourEventId: 'downtown',
+            segments: [{
+              sharedDetourEventId: 'downtown',
+              likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street'],
+            }],
+          },
+          '101': {
+            state: 'active',
+            confidence: 'high',
+            sharedDetourEventId: 'downtown',
+            segments: [{
+              sharedDetourEventId: 'downtown',
+              likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street'],
+            }],
+          },
+          '12A': {
+            state: 'active',
+            confidence: 'high',
+            title: 'Hooper Road detour',
+          },
+        },
+        routes: [
+          { id: '10', shortName: '10' },
+          { id: '11', shortName: '11' },
+          { id: '101', shortName: '101' },
+          { id: '12A', shortName: '12A' },
+        ],
+        onPress: jest.fn(),
+      }));
+    });
+
+    const collapsedButton = inst.root.findAllByType('TouchableOpacity')[0];
+    act(() => {
+      collapsedButton.props.onPress();
+    });
+
+    const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textValues).toContain(1);
+    expect(textValues).toContain('Active detour');
+    expect(textValues).toContain('10');
+    expect(textValues).toContain('11');
+    expect(textValues).toContain('101');
+    expect(textValues).toContain('Tap or click a highlighted route line on the map for details.');
+
+    const titleText = inst.root.findAllByType('Text')
+      .find((node) => node.props.children === 'Mulcaster & Simcoe');
+    expect(titleText.props.numberOfLines).toBe(2);
+
+    const detailRow = inst.root.findAllByType('TouchableOpacity')
+      .find((node) => String(node.props.accessibilityLabel || '').includes('Mulcaster & Simcoe'));
+    expect(detailRow.props.accessibilityLabel).toContain('Routes 10, 11, 101');
+
+    act(() => {
+      inst.unmount();
+    });
   });
 });

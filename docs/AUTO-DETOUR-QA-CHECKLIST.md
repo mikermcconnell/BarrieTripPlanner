@@ -24,9 +24,7 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
 - [ ] Confirm baseline is safe:
   - [ ] `DETOUR_REQUIRE_SAFE_BASELINE=true`
   - [ ] `/api/baseline-status` reports a trusted baseline.
-- [ ] Confirm stale/headway monitoring is configured:
-  - [ ] `DETOUR_STALE_AUTO_CLEAR_ENABLED=true`
-  - [ ] Active detours still require normal-route GPS proof to clear.
+- [ ] Confirm active detours require normal-route GPS proof to clear or become hidden solely because of lifecycle state.
 - [ ] Confirm road matching is configured if testing rider-facing detour paths:
   - [ ] `DETOUR_ROAD_MATCHING_ENABLED=true`
   - [ ] OSRM base URL is reachable.
@@ -40,17 +38,23 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
   - [ ] `detectedAt`
   - [ ] `lastSeenAt`
   - [ ] `lastEvidenceAt`
+  - [ ] `latestGpsEvidenceAt`
+  - [ ] `geometryLastEvidenceAt`
   - [ ] `vehicleCount`
   - [ ] `uniqueVehicleCount`
   - [ ] `currentVehicleCount`
   - [ ] `riderVisible`
   - [ ] `riderVisibilityReason`
   - [ ] `staleForReview`
-  - [ ] `staleAgeMs` / `staleThresholdMs`
   - [ ] `evidencePointCount`
   - [ ] `roadMatchSource`
   - [ ] `likelyDetourPolyline` point count
+- [ ] Query `persistentDetoursAuto` and `persistentDetourGeometriesAuto` for long-running detours.
+- [ ] Confirm global learned geometry is only used after the route has a published/persistent route record; it must not publish a one-vehicle candidate by itself.
   - [ ] `skippedSegmentPolyline` point count
+  - [ ] `sharedDetourEventId`
+  - [ ] `sharedRouteIds`
+  - [ ] `eventPrimaryRouteId`
 - [ ] Check recent `detourHistory` events for those routes.
 - [ ] Flag stale active detours for review; they may remain active until normal-route GPS proves service has resumed.
 
@@ -71,7 +75,9 @@ When a suspected detour exists:
 - [ ] Confirm detection waits for consecutive off-route readings.
 - [ ] Confirm one-off GPS noise does not create a detour.
 - [ ] For short detours, confirm a first off-route point creates candidate evidence but does not create rider UI by itself.
-- [ ] Confirm a second unique same-route trip/vehicle can confirm the same short candidate even if neither bus stays off-route for the full consecutive-reading window.
+- [ ] Confirm the three required off-route pings can accumulate across two same-route trips/vehicles; they do not all need to be from one trip.
+- [ ] Confirm one trip with three off-route pings stays candidate-only when two unique trips/vehicles are required.
+- [ ] Confirm a second unique same-route trip/vehicle can confirm the same short candidate once the same corridor has at least three matching off-route pings.
 - [ ] For missed-detour reviews, check the latest per-vehicle projection diagnostic: distance from shape, classification, shape ID, and threshold used.
 - [ ] Confirm `DETOUR_DETECTED` is written to `detourHistory`.
 - [ ] Confirm `activeDetours/{routeId}` appears.
@@ -92,9 +98,12 @@ For each active detour:
 - [ ] Weird spurs, loops, or unnecessary deviations are not shown.
 - [ ] Same-stop turnarounds are not shown as detours when no closed route segment is identified.
 - [ ] Paths with no entry stop, no exit stop, no skipped route segment, and no skipped/affected stops are not shown as detours.
+- [ ] Long out-and-back paths are not shown when the identified closed segment span is tiny and no skipped route segment exists.
 - [ ] Entry and exit points make sense.
 - [ ] Multiple independent detour sections are separate, not merged into one giant section.
-- [ ] If road matching fails, raw off-road GPS lines are not shown to riders.
+- [ ] If road matching fails, untrusted raw off-road GPS lines are not shown to riders.
+- [ ] If `canShowDetourPath=true` and road matching has not produced a `likelyDetourPolyline`, the trusted `inferredDetourPolyline` can still appear as the alternate path.
+- [ ] If there is no trustworthy skipped segment or detour path, the backend keeps the record but publishes `riderVisible=false`, and the rider UI does not show the detour.
 
 ## 6. Map Rendering Check — Regular Tab
 
@@ -109,6 +118,8 @@ For each active detour:
 ## 7. Map Rendering Check — Detours Tab
 
 - [ ] Detours tab shows all active detours.
+- [ ] One physical closure affecting multiple routes appears as one event card with multiple route chips.
+- [ ] Shared event cards do not merge the route lines or route-specific map overlays.
 - [ ] Normal route line is hidden or de-emphasized on closed detoured sections.
 - [ ] Orange dashed closed sections remain visible.
 - [ ] Likely detour path remains visible and road-following.
@@ -132,6 +143,8 @@ Repeat several times:
 ## 9. Details Sheet / Rider Information Check
 
 - [ ] Detour banner lists the correct affected route(s).
+- [ ] If multiple routes share the same physical closure, they appear on one event card.
+- [ ] If two detours are nearby but have different physical closure geometry, they stay as separate event cards.
 - [ ] Tapping the banner opens the correct detour details.
 - [ ] Details sheet shows:
   - [ ] route ID
@@ -149,25 +162,28 @@ When buses return to route:
 
 - [ ] Vehicles are back within the on-route clear threshold.
 - [ ] Clear does not happen before the minimum active/grace window.
-- [ ] Clear waits for the configured consecutive on-route readings.
+- [ ] For geometry-backed detours, clear requires normal-route GPS traversal through the affected segment.
+- [ ] Confirm clearing is not just a fixed ping count; one on-route GPS point alone does not clear.
+- [ ] Confirm at least two useful same-bus on-route GPS samples show route-progress movement through the affected segment.
+- [ ] Confirm two unique same-route trips/vehicles can collectively clear only when their on-route samples cover the affected segment window and no newer off-route evidence has returned.
+- [ ] Confirm long segments may require more samples to prove the 60% overlap / up-to-100m movement rule; short segments can clear before the fixed consecutive-on-route threshold once traversal proof exists.
+- [ ] For geometryless stale records with no clear window, generic same-route normal-service pings do not clear; the record stays backend-only until a clear window is recovered and GPS-traversed, or an operator/admin explicitly clears it.
 - [ ] `DETOUR_CLEARED` is written to `detourHistory`.
 - [ ] The `activeDetours` doc is deleted.
 - [ ] The app removes the rider-facing detour promptly.
 - [ ] The detour does not immediately flap back on.
+- [ ] For loop routes that start/end at Downtown Hub, a same-bus GTFS trip rollover does not count as clear proof by itself.
 
 ## 11. Stale Monitoring Check
 
-For stale detour protection:
+For old active detour protection:
 
-- [ ] Latest `lastEvidenceAt` is older than the schedule-aware threshold.
-- [ ] There are recent live vehicles in the same route family.
-- [ ] The system keeps the active detour visible unless normal-route GPS traversal proof exists.
+- [ ] The backend keeps the active detour record until normal-route GPS traversal proof exists.
+- [ ] `staleForReview` alone does not hide a rider-facing detour.
+- [ ] The rider UI hides an active detour only when the backend explicitly publishes `riderVisible=false`.
+- [ ] Geometryless/unsafe detours stay hidden from riders while the backend keeps monitoring for better geometry, a recoverable clear window, or operator review.
+- [ ] Confirm valid active construction detours, such as route-family detours between vehicle observations, remain active until normal-route GPS traversal proof exists.
 - [ ] No `DETOUR_AUTO_CLEARED_STALE` event is expected for current active detours; treat that event type as legacy/ops-review history.
-- [ ] Monitoring output includes enough context to review:
-  - [ ] `staleAgeMs`
-  - [ ] `staleThresholdMs`
-  - [ ] `scheduledHeadwayMs`
-  - [ ] `scheduleSource`
 - [ ] The backend keeps the stale active doc until a `DETOUR_CLEARED` flow deletes it.
 - [ ] If `riderVisible=false`, the app hides the detour from the main rider map, alert strip, and detours tab while retaining the backend record for review.
 - [ ] The detour is not recreated after GPS clear unless fresh off-route evidence returns.
@@ -177,10 +193,7 @@ For stale detour protection:
 Use this to avoid false clears on hourly service:
 
 - [ ] Confirm route headway from GTFS for the current day/time.
-- [ ] Confirm stale threshold is approximately:
-  - [ ] `max(45 min, 2 × headway + 10 min)`
-  - [ ] capped at 3 hours
-- [ ] For 60-minute service, confirm stale monitoring warns at about 130 minutes.
+- [ ] Confirm there is no elapsed-time rule that clears or hides confirmed detours.
 - [ ] Confirm the system does not clear just because no bus reached the detour area yet.
 - [ ] Confirm no-scheduled-service periods do not clear from staleness alone.
 - [ ] Confirm no-scheduled-service periods do not hide otherwise valid detours solely because no bus is scheduled.

@@ -73,6 +73,83 @@ describe('detourEvents', () => {
     });
   });
 
+  test('uses backend shared detour event fields for one event card without merging route geometry', () => {
+    const events = buildActiveDetourEvents({
+      '10': {
+        routeId: '10',
+        state: 'active',
+        confidence: 'high',
+        detourEventId: 'detour-event-route-10',
+        sharedDetourEventId: 'shared-downtown',
+        sharedRouteIds: ['10', '11', '101'],
+        eventPrimaryRouteId: '101',
+        eventLocationLabel: 'Mulcaster Street & Simcoe Street +2',
+        segments: [{
+          detourEventId: 'detour-event-route-10',
+          sharedDetourEventId: 'shared-downtown',
+          likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Lakeshore Mews', 'Dunlop Street East'],
+        }],
+      },
+      '11': {
+        routeId: '11',
+        state: 'active',
+        confidence: 'high',
+        detourEventId: 'detour-event-route-11',
+        sharedDetourEventId: 'shared-downtown',
+        sharedRouteIds: ['10', '11', '101'],
+        eventPrimaryRouteId: '101',
+        eventLocationLabel: 'Mulcaster Street & Simcoe Street +2',
+        segments: [{
+          detourEventId: 'detour-event-route-11',
+          sharedDetourEventId: 'shared-downtown',
+        }],
+      },
+      '101': {
+        routeId: '101',
+        state: 'active',
+        confidence: 'high',
+        detourEventId: 'detour-event-route-101',
+        sharedDetourEventId: 'shared-downtown',
+        sharedRouteIds: ['10', '11', '101'],
+        eventPrimaryRouteId: '101',
+        eventLocationLabel: 'Mulcaster Street & Simcoe Street +2',
+        segments: [{
+          detourEventId: 'detour-event-route-101',
+          sharedDetourEventId: 'shared-downtown',
+          likelyDetourRoadNames: ['Simcoe Street', 'Lakeshore Mews'],
+        }],
+      },
+      '7A': {
+        routeId: '7A',
+        state: 'active',
+        confidence: 'high',
+        detourEventId: 'detour-event-route-7a',
+        sharedDetourEventId: 'shared-maple',
+        sharedRouteIds: ['7A'],
+        eventLocationLabel: 'Maple Avenue & Wellington Street',
+        segments: [{
+          detourEventId: 'detour-event-route-7a',
+          sharedDetourEventId: 'shared-maple',
+          likelyDetourRoadNames: ['Maple Avenue', 'Wellington Street'],
+        }],
+      },
+    });
+
+    expect(events).toHaveLength(2);
+    const downtown = events.find((event) => event.eventId === 'event:shared-downtown');
+    expect(downtown).toMatchObject({
+      title: 'Mulcaster Street & Simcoe Street +2',
+      routeIds: ['10', '11', '101'],
+      primaryRouteId: '101',
+      confidence: 'high',
+    });
+    expect(new Set(downtown.candidates.map((candidate) => candidate.segment.detourEventId))).toEqual(new Set([
+      'detour-event-route-10',
+      'detour-event-route-11',
+      'detour-event-route-101',
+    ]));
+  });
+
   test('keeps unrelated detour events separate', () => {
     const events = buildActiveDetourEvents({
       '12A': {

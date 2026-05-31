@@ -192,14 +192,5 @@ export const getRepresentativeShapeIdsByDirection = (
     }
   });
 
-  if (selected.length < maxShapes) {
-    const fallback = getRepresentativeShapeIds(shapeIds, shapeSource, { maxShapes, precision });
-    fallback.forEach((shapeId) => {
-      if (selected.length >= maxShapes || seen.has(shapeId)) return;
-      selected.push(shapeId);
-      seen.add(shapeId);
-    });
-  }
-
   return selected.slice(0, Math.max(1, maxShapes));
 };

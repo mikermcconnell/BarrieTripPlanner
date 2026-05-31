@@ -117,13 +117,16 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - Each run collects one GTFS-RT snapshot.
   - Continuity comes from backend memory, not multiple pulses inside one request.
   - Duplicate GTFS vehicle snapshots are skipped so repeated feed data does not count as fresh detector evidence.
-- Optional stale-detour monitoring:
-  - Active detector-owned detours clear from same-bus normal-route GPS traversal through the affected segment, not from elapsed time or bus absence.
-  - Default clear proof requires the same bus to cover at least 100m and 60% of the affected segment on the baseline route (`DETOUR_CLEAR_MIN_TRAVERSAL_METERS`, `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO`). Once this proof exists, short segments can clear without waiting for the fixed consecutive on-route tick threshold.
-  - `DETOUR_STALE_AUTO_CLEAR_*` values are retained for stale/headway monitoring context. They should not clear an active detour by themselves.
-  - There is intentionally no short zero-vehicle stale clear. A detour with `currentVehicleCount: 0` stays active until another bus either adds detour evidence or proves normal routing.
+- Detour clearing policy:
+  - Active detector-owned detours clear from same-bus normal-route GPS traversal through the affected segment, not from elapsed time, bus absence, route-family activity, or official notice timing.
+  - Default clear proof requires the same bus to overlap at least 60% of the affected segment and show enough route-progress movement through it (up to 100m; shorter segments use their 60% span) on the baseline route (`DETOUR_CLEAR_MIN_TRAVERSAL_METERS`, `DETOUR_CLEAR_MIN_TRAVERSAL_RATIO`). Once this proof exists, short segments can clear without waiting for the fixed consecutive on-route tick threshold.
+  - Collective clear fallback: if no single bus gives a clean traversal, two or more unique same-route trips/vehicles can collectively clear a geometry-backed detour when their on-route samples cover the same affected segment window and no newer off-route evidence has returned.
+  - Clear-count gotcha: do not treat clearing as "4 pings anywhere on route". The configured consecutive-on-route value is a sampling guard/diagnostic; active geometry-backed detours clear only after same-bus normal-route traversal or the collective two-trip/vehicle fallback through the affected segment. A single GPS point cannot prove traversal. In practice this means at least two useful on-route GPS samples far enough apart to show route progress, often more on long segments, followed by a later tick to finalize `clear-pending`.
+  - The publisher delete path is also proof-gated: if a route disappears from the current detector output, the Firestore `activeDetours` document is retained unless the previous published snapshot has `clearReason: "normal-route-observed"`.
+  - Zero-current detours are not cleared automatically. They stay active until another bus adds off-route detour evidence or proves normal routing with GPS traversal through the affected segment.
+  - If an active snapshot has no usable closure geometry or clear window, the automated detector must not infer a clear from elapsed time, same-route reporting, or two generic same-route normal pings. Keep the record for operations review and hide it from riders only for safety reasons such as insufficient or invalid geometry; automatic clearing still requires GPS evidence that can be tied to the affected segment, or an explicit operator/admin clear.
   - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
-  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until a second unique same-route trip/vehicle corroborates the same segment.
+  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until the same corridor has the required three off-route pings and a second unique same-route trip/vehicle corroborates the same segment.
   - Runtime state stores the latest per-vehicle projection diagnostic (`lastRouteProjection`) with distance from route, thresholds, shape ID, classification, and sample time. Use this to explain missed detections before changing thresholds.
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
@@ -159,7 +162,22 @@ For non-production validation and cost control, prefer `manual` or `scheduled`.
 
 `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=false` is useful during detour debugging when you need to verify whether wrong geometry is coming from sibling-route projection rather than the underlying detector.
 
-Long-running detours also retain learned GPS evidence separately from the short live evidence window. This lets trusted alternate paths and boundary candidates survive worker restarts and scheduled/manual run-once hydration. `lastEvidenceAt` is only advanced when new GPS evidence exists; ordinary persistence refreshes do not make stale evidence look new.
+Long-running detours also retain learned GPS evidence separately from the short live evidence window. This lets trusted alternate paths and boundary candidates survive worker restarts and scheduled/manual run-once hydration.
+
+Persistence is split into:
+
+- `persistentDetoursAuto` — route-specific persistent records and clear state.
+- `persistentDetourGeometriesAuto` — global learned physical geometry keyed by `sharedGeometryFingerprint`.
+
+Global learned geometry does not publish a detour by itself. A route still needs the normal confirmation rule first: three matching off-route pings and two unique same-route trip/vehicle signatures. After that, the route can reuse trusted global geometry for display or restart recovery.
+
+For operations, prefer the explicit timestamp fields:
+
+- `latestGpsEvidenceAt` — newest actual off-route GPS evidence.
+- `geometryLastEvidenceAt` — newest GPS evidence used to build the displayed geometry.
+- `recordUpdatedAt` / Firestore `updatedAt` — persistence or document write time.
+
+Do not treat ordinary persistence refreshes as fresh GPS evidence.
 
 ### Optional admin flows
 
@@ -230,6 +248,12 @@ Operational tasks are expected to be driven externally when possible:
 - survey digest is triggered by `POST /api/survey/send-digest`
 - any recurring digest or refresh flow should be run by platform cron/scheduler, not hidden process-local timers
 
+Operational simplification rule:
+
+- Treat `scheduled` and `manual` as the supported normal modes.
+- Treat `interval` and burst sampling as legacy/diagnostic paths only.
+- Do not add new production behavior that depends on a long-running in-process loop.
+
 
 ### Platform map endpoint
 
@@ -268,6 +292,7 @@ If Firebase Admin credentials are missing, run-once ticks still execute, but run
 6. verify:
    - `GET /api/health`
    - `GET /api/detour-status`
+     - confirm `vehicleFeed.freshness.status` is not `stale` before judging detour detection output; a stale feed can legitimately produce `0` usable vehicles
    - `GET /api/detour-rollout-health`
    - `POST /api/detour-run-once` with scheduler auth or a detour-admin Firebase token (for manual/scheduled mode)
 7. for production detour rollout, confirm `detour-rollout-health.launchReadiness.status` is at least `pilot_ready_with_cautions` and review every failed warning before enabling the rider feature flag
@@ -434,6 +459,10 @@ Instead:
 - `GET /api/health`
 - `GET /api/detour-status`
 - one manual `POST /api/detour-run-once`
+- `npm run check:detour-scheduler`
+  - confirms the Cloud Scheduler `x-scheduler-token` still matches Cloud Run `SCHEDULER_API_TOKEN`
+  - confirms recent scheduler calls are `2xx`, with no recent `401`
+  - confirms active detour documents are still being refreshed
 - confirm Firestore writes:
   - `activeDetours`
   - `detourHistory`

@@ -194,7 +194,7 @@ describe('Firestore → detourService → context → overlay derivation chain',
       '3': mapFirestoreDoc('3', {
         state: 'clear-pending',
         skippedSegmentPolyline: SAMPLE_POLYLINE,
-        vehicleCount: 1,
+        vehicleCount: 2,
         confidence: 'high',
       }),
     };
@@ -261,8 +261,8 @@ describe('Firestore → detourService → context → overlay derivation chain',
 
   test('multi-route: two detouring, both selected', () => {
     const activeDetours = {
-      '8A': mapFirestoreDoc('8A', { state: 'active', confidence: 'high', skippedSegmentPolyline: SAMPLE_POLYLINE }),
-      '3': mapFirestoreDoc('3', { state: 'clear-pending', confidence: 'high', likelyDetourPolyline: LONG_POLYLINE }),
+      '8A': mapFirestoreDoc('8A', { state: 'active', confidence: 'high', vehicleCount: 2, skippedSegmentPolyline: SAMPLE_POLYLINE }),
+      '3': mapFirestoreDoc('3', { state: 'clear-pending', confidence: 'high', vehicleCount: 2, likelyDetourPolyline: LONG_POLYLINE }),
     };
 
     const overlays = deriveDetourOverlays({
@@ -347,6 +347,36 @@ describe('DetourOverlay component rendering', () => {
       expect(path.props.outlineWidth).toBe(1.25);
       expect(path.props.outlineColor).toBe('#2E7D32');
       expect(path.props.showArrows).toBe(true);
+    });
+
+    test('renders trusted inferred segment path when road-matched likely path is missing', () => {
+      const trustedInferredPath = [
+        { latitude: 44.3902777778, longitude: -79.6854722222 },
+        { latitude: 44.3886944444, longitude: -79.6855277778 },
+        { latitude: 44.3879722222, longitude: -79.6888333333 },
+      ];
+      const inst = renderComponent(DetourOverlayNative, {
+        ...OVERLAY_ACTIVE,
+        routeId: '10',
+        likelyDetourPolyline: null,
+        inferredDetourPolyline: trustedInferredPath,
+        canShowDetourPath: true,
+        segmentStopDetails: [{
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          inferredDetourPolyline: trustedInferredPath,
+          likelyDetourPolyline: null,
+          canShowDetourPath: true,
+          skippedStops: [],
+          entryStop: null,
+          exitStop: null,
+        }],
+        showStopMarkers: false,
+      });
+      const polylines = inst.root.findAllByType(MockRoutePolyline);
+      const path = polylines.find((p) => p.props.id === 'detour-path-10');
+
+      expect(path).toBeDefined();
+      expect(path.props.coordinates).toEqual(trustedInferredPath);
     });
 
     test('native detour and skipped lines open details for the tapped segment', () => {
@@ -542,8 +572,11 @@ describe('DetourOverlay component rendering', () => {
       const annotations = inst.root.findAllByType('PointAnnotation');
       const markerViews = inst.root.findAllByType('MarkerView');
       expect(annotations).toHaveLength(0);
-      expect(markerViews).toHaveLength(4);
+      expect(markerViews).toHaveLength(5);
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
+      const detourMapLabel = markerViews.find((a) => String(a.props.id).includes('detour-map-label-8A'));
+      expect(detourMapLabel).toBeDefined();
+      expect(detourMapLabel.props.anchor).toEqual({ x: 0.5, y: 0.5 });
       expect(markerViews.find((a) => a.props.id === 'detour-entry-point-8A')).toBeUndefined();
       expect(markerViews.find((a) => a.props.id === 'detour-exit-point-8A')).toBeUndefined();
     });
@@ -564,6 +597,36 @@ describe('DetourOverlay component rendering', () => {
       expect(path.props.dashArray).toBeUndefined();
       expect(path.props.outlineColor).toBe('#2E7D32');
       expect(path.props.showArrows).toBe(true);
+    });
+
+    test('web renders trusted inferred segment path when road-matched likely path is missing', () => {
+      const trustedInferredPath = [
+        { latitude: 44.3902777778, longitude: -79.6854722222 },
+        { latitude: 44.3886944444, longitude: -79.6855277778 },
+        { latitude: 44.3879722222, longitude: -79.6888333333 },
+      ];
+      const inst = renderComponent(DetourOverlayWeb, {
+        ...OVERLAY_ACTIVE,
+        routeId: '10',
+        likelyDetourPolyline: null,
+        inferredDetourPolyline: trustedInferredPath,
+        canShowDetourPath: true,
+        segmentStopDetails: [{
+          skippedSegmentPolyline: SAMPLE_POLYLINE,
+          inferredDetourPolyline: trustedInferredPath,
+          likelyDetourPolyline: null,
+          canShowDetourPath: true,
+          skippedStops: [],
+          entryStop: null,
+          exitStop: null,
+        }],
+        showStopMarkers: false,
+      });
+      const polylines = inst.root.findAllByType(MockWebRoutePolyline);
+      const path = polylines.find((p) => p.props.color === '#F48FB1');
+
+      expect(path).toBeDefined();
+      expect(path.props.coordinates).toEqual(trustedInferredPath);
     });
 
     test('web skipped route context is thinner, dashed, and muted', () => {
@@ -668,16 +731,21 @@ describe('DetourOverlay component rendering', () => {
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(6);
+      expect(markers).toHaveLength(7);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',
       ]);
+      const detourMapLabel = markers.find((m) => m.props.zIndexOffset === 1340);
+      expect(detourMapLabel).toBeDefined();
+      expect(detourMapLabel.props.offset).toEqual([0, 0]);
+      expect(detourMapLabel.props.pointerEvents).toBe('none');
+      expect(detourMapLabel.props.html).toContain('8A detour');
       const coords = markers.map((m) => m.props.coordinate);
       expect(coords).toContainEqual({ latitude: 44.38, longitude: -79.69 });
       expect(coords).toContainEqual({ latitude: 44.39, longitude: -79.68 });
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
-      const skippedMarker = markers.find((m) => m.props.accessibilityLabel?.includes('not serviced'));
+      const skippedMarker = markers.find((m) => m.props.accessibilityLabel?.includes('Not served'));
       expect(skippedMarker.props.html).toContain('2002');
       expect(skippedMarker.props.html).toContain('border-radius:50%');
       expect(skippedMarker.props.html).not.toContain('min-width:30px');
@@ -736,11 +804,12 @@ describe('DetourOverlay component rendering', () => {
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(4);
+      expect(markers).toHaveLength(5);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',
       ]);
+      expect(markers.find((m) => m.props.zIndexOffset === 1340)).toBeDefined();
       expect(markers.filter((m) => m.props.html.includes('background:#DE350B')).length).toBeGreaterThanOrEqual(2);
       expect(markers.some((m) => m.props.html.includes('DETOUR'))).toBe(false);
       expect(markers.some((m) => m.props.html.includes('RESUMES'))).toBe(false);

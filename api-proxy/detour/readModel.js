@@ -32,6 +32,7 @@ function createDetectorReadModel({
   activeDetours,
   persistentDetourCandidates,
   learnedPersistentDetours,
+  learnedPersistentGeometries,
   getLastReportedDetours,
   setLastReportedDetours,
   getSegmentCount,
@@ -41,6 +42,7 @@ function createDetectorReadModel({
   trackPersistentLearning,
   resetPersistentCandidate,
   buildRouteSnapshot,
+  trackSharedPersistentGeometries,
   reconcileRouteFamilyGeometries,
   enrichDetourMapStopImpacts,
   toTimestampMs,
@@ -84,6 +86,7 @@ function createDetectorReadModel({
 
     if (shapes && routeShapeMapping) {
       reconcileRouteFamilyGeometries(result, shapes, routeShapeMapping);
+      trackSharedPersistentGeometries?.(result, now);
       enrichDetourMapStopImpacts?.(result, shapes, options.stopImpactData || null);
     }
     setLastReportedDetours(result);
@@ -284,6 +287,15 @@ function createDetectorReadModel({
     );
   }
 
+  function getPersistentDetourGeometries() {
+    return Object.fromEntries(
+      [...(learnedPersistentGeometries?.entries?.() || [])].map(([fingerprint, record]) => [
+        fingerprint,
+        cloneJson(record),
+      ])
+    );
+  }
+
   return {
     getActiveDetours,
     getState,
@@ -291,6 +303,7 @@ function createDetectorReadModel({
     getRawDetourEvidence,
     getRouteDebug,
     getPersistentDetours,
+    getPersistentDetourGeometries,
   };
 }
 

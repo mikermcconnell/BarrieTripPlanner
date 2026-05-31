@@ -13,6 +13,10 @@ const hasCoordinates = (stop) => (
   toNumber(stop?.latitude) != null && toNumber(stop?.longitude) != null
 );
 
+const isRouteScopedImpact = (impact) => (
+  Array.isArray(impact?.affectedRoutes) && impact.affectedRoutes.length > 0
+);
+
 const buildStopLookups = (stops = []) => {
   const byId = new Map();
   const byCode = new Map();
@@ -54,6 +58,8 @@ export const deriveMappableStopClosureStops = ({ impacts = [], stops = [] } = {}
     const key = normalizeKey(id ?? impact.id ?? code);
     if (!key || closuresByKey.has(key)) return;
 
+    const routeScoped = isRouteScopedImpact(impact);
+
     closuresByKey.set(key, {
       ...(resolvedStop || {}),
       id: id != null ? String(id) : `closure-${closuresByKey.size}`,
@@ -61,8 +67,15 @@ export const deriveMappableStopClosureStops = ({ impacts = [], stops = [] } = {}
       name: resolvedStop?.name ?? impact.stopName ?? `Stop ${code ?? id ?? ''}`.trim(),
       latitude,
       longitude,
-      closureImpact: impact,
-      isClosed: true,
+      ...(!routeScoped ? { closureImpact: impact } : {}),
+      ...(routeScoped
+        ? {
+          isRouteScopedClosure: true,
+          routeScopedClosureImpact: impact,
+        }
+        : {
+          isClosed: true,
+        }),
       isNewsClosure: true,
     });
   });
@@ -105,8 +118,15 @@ export const mergeStopClosuresForDetourMap = ({
     if (existingIndex >= 0) {
       merged[existingIndex] = {
         ...merged[existingIndex],
-        closureImpact: stop.closureImpact,
-        isClosed: true,
+        ...(stop.isRouteScopedClosure
+          ? {
+            routeScopedClosureImpact: stop.routeScopedClosureImpact || stop.closureImpact,
+            isRouteScopedClosure: true,
+          }
+          : {
+            closureImpact: stop.closureImpact,
+            isClosed: true,
+          }),
         isNewsClosure: true,
       };
       return;

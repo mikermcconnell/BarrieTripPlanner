@@ -26,6 +26,7 @@ export const getDetourGeometryOverlayProps = ({
     showLineLabels: false,
     showStopMarkers: false,
     showClosedStopMarkers: false,
+    showClosedRouteMask: false,
     opacity: Math.min(overlay?.opacity ?? 0.95, 0.58),
     lineStyleScale: 0.72,
     directionArrowMode: 'none',

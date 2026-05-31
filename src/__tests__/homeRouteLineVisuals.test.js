@@ -19,7 +19,7 @@ describe('buildNativeHomeAllRoutesShapes', () => {
     '3': '#6d4c41',
   }[routeId] || '#455a64');
 
-  test('collapses explicit branch families into one family corridor in all-routes mode', () => {
+  test('preserves both Route 2 branches in all-routes mode', () => {
     const shapes = {
       '2a-shape': makePath([
         [44.38, -79.69],
@@ -52,10 +52,12 @@ describe('buildNativeHomeAllRoutesShapes', () => {
       getRouteColor,
     });
 
-    const familyShapes = result.filter((shape) => shape.visualType === 'family');
-    expect(familyShapes).toHaveLength(1);
-    expect(familyShapes[0].routeId).toBe('2');
-    expect(familyShapes[0].sourceRouteIds).toEqual(['2A', '2B']);
+    const route2Shapes = result.filter((shape) => shape.visualType === 'family' && ['2A', '2B'].includes(shape.routeId));
+    expect(route2Shapes).toHaveLength(2);
+    expect(route2Shapes.map((shape) => shape.shapeId).sort()).toEqual([
+      '2a-shape',
+      '2b-shape',
+    ]);
 
     const routeThree = result.find((shape) => shape.routeId === '3');
     expect(routeThree).toBeDefined();

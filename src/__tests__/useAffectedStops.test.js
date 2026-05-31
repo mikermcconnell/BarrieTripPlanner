@@ -304,6 +304,85 @@ describe('deriveAffectedStops', () => {
     expect(result.segmentStopDetails[0].exitStop.id).toBe('s4');
   });
 
+  it('preserves backend route-scope metadata on explicit skipped stops', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          skippedStops: [
+            {
+              id: 's3',
+              code: 's3',
+              affectedRouteIds: ['R1'],
+              servedRouteIds: ['R8'],
+              impactScope: 'partial',
+            },
+          ],
+          affectedStops: [
+            {
+              id: 's3',
+              code: 's3',
+              affectedRouteIds: ['R1'],
+              servedRouteIds: ['R8'],
+              impactScope: 'partial',
+            },
+          ],
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails[0].skippedStops[0]).toMatchObject({
+      id: 's3',
+      name: 'Third St',
+      affectedRouteIds: ['R1'],
+      servedRouteIds: ['R8'],
+      impactScope: 'partial',
+    });
+  });
+
+  it('removes explicit skipped stops that are served by the detour path', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          canShowDetourPath: true,
+          likelyDetourPolyline: [
+            { latitude: 44.395, longitude: -79.692 },
+            { latitude: 44.390, longitude: -79.690 },
+            { latitude: 44.385, longitude: -79.692 },
+          ],
+          skippedStops: [
+            {
+              id: 's3',
+              code: 's3',
+              latitude: 44.390,
+              longitude: -79.690,
+            },
+          ],
+          affectedStops: [
+            {
+              id: 's3',
+              code: 's3',
+              latitude: 44.390,
+              longitude: -79.690,
+            },
+          ],
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
+  });
+
   it('keeps very short boundary-only sections open unless official data marks the stop closed', () => {
     const result = deriveAffectedStops({
       routeId: 'R1',

@@ -23,6 +23,7 @@ const ClosedStopMarkerComponent = ({
   labelSide = 'right',
   onPress,
   pointerEvents,
+  accessibilityLabel,
 }) => {
   const latitude = toFiniteNumber(stop?.latitude);
   const longitude = toFiniteNumber(stop?.longitude);
@@ -72,7 +73,7 @@ const ClosedStopMarkerComponent = ({
       {onPress ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Stop ${stopCode || stop.id || ''}. Not serviced during this detour`}
+          accessibilityLabel={accessibilityLabel || `Stop ${stopCode || stop.id || ''}. Not served by this route during the detour`}
           onPress={() => onPress(stop)}
           style={styles.touchTarget}
         >
@@ -95,7 +96,8 @@ const arePropsEqual = (prev, next) => (
   prev.opacity === next.opacity &&
   prev.labelSide === next.labelSide &&
   prev.onPress === next.onPress &&
-  prev.pointerEvents === next.pointerEvents
+  prev.pointerEvents === next.pointerEvents &&
+  prev.accessibilityLabel === next.accessibilityLabel
 );
 
 const styles = StyleSheet.create({

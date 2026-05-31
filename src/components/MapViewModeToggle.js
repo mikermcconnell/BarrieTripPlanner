@@ -16,6 +16,7 @@ const MapViewModeToggle = ({
   if (!visible) return null;
 
   const topOffset = (alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP) + 42;
+  const shouldShowDetourCount = Number(detourCount) > 0 && mode !== 'detour';
 
   return (
     <View
@@ -48,9 +49,11 @@ const MapViewModeToggle = ({
             accessibilityLabel="Switch to detour-focused map view"
           >
             <Text style={[styles.segmentText, mode === 'detour' && styles.segmentTextActive]}>Detours</Text>
-            <View style={[styles.countBadge, mode === 'detour' && styles.countBadgeActive]}>
-              <Text style={[styles.countText, mode === 'detour' && styles.countTextActive]}>{detourCount}</Text>
-            </View>
+            {shouldShowDetourCount && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{detourCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -139,16 +142,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     backgroundColor: COLORS.grey200,
   },
-  countBadgeActive: {
-    backgroundColor: COLORS.warning,
-  },
   countText: {
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textSecondary,
-  },
-  countTextActive: {
-    color: COLORS.white,
   },
 });
 

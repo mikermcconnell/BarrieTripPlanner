@@ -2,14 +2,22 @@
 
 const { pointToPolylineDistance, haversineDistance } = require('../geometry');
 const { buildCumulativeDistances, findClosestShapePoint } = require('./geometry/polyline');
+const { pickPrimarySegment } = require('./geometry/segmentSelection');
 
 const DEFAULT_ROUTE_STOP_SEQUENCE_KEY = '__default__';
 const STOP_ROUTE_PROJECTION_MAX_METERS = 120;
 const ROUTE_PROGRESS_TOLERANCE_METERS = 20;
 const DETOUR_PATH_STOP_SERVICE_PROXIMITY_METERS = 45;
 const DETOUR_PATH_ENDPOINT_BUFFER_METERS = 60;
+const DETOUR_STOP_IMPACT_BOUNDARY_BUFFER_METERS = 45;
+const STOP_SERVICE_GPS_PROXIMITY_METERS = 55;
+const STOP_SERVICE_GPS_PROGRESS_TOLERANCE_METERS = 70;
 
 function normalizeStopId(value) {
+  return value == null ? null : String(value).trim();
+}
+
+function normalizeRouteId(value) {
   return value == null ? null : String(value).trim();
 }
 
@@ -126,6 +134,44 @@ function getRouteStopSequence(routeId, shapeId, routeStopSequencesMapping = {}) 
   return [];
 }
 
+function getRoutesServingStop(stopId, routeStopSequencesMapping = {}) {
+  const normalizedStopId = normalizeStopId(stopId);
+  if (!normalizedStopId || !routeStopSequencesMapping || typeof routeStopSequencesMapping !== 'object') {
+    return [];
+  }
+
+  return Object.entries(routeStopSequencesMapping)
+    .filter(([, routeSequences]) => {
+      if (!routeSequences || typeof routeSequences !== 'object') return false;
+      return Object.values(routeSequences).some((stopIds) => (
+        Array.isArray(stopIds) &&
+        stopIds.some((candidateStopId) => normalizeStopId(candidateStopId) === normalizedStopId)
+      ));
+    })
+    .map(([servingRouteId]) => normalizeRouteId(servingRouteId))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function attachRouteImpact(stop, routeId, routeStopSequencesMapping = {}) {
+  const normalizedRouteId = normalizeRouteId(routeId);
+  const affectedRouteIds = normalizedRouteId ? [normalizedRouteId] : [];
+  const servingRouteIds = getRoutesServingStop(stop?.id, routeStopSequencesMapping);
+  const servedRouteIds = servingRouteIds.filter((servingRouteId) => servingRouteId !== normalizedRouteId);
+
+  return {
+    ...stop,
+    routeId: normalizedRouteId,
+    routeIds: affectedRouteIds,
+    affectedRouteIds,
+    servedRouteIds,
+    allServingRouteIds: servingRouteIds.length > 0
+      ? servingRouteIds
+      : affectedRouteIds,
+    impactScope: servedRouteIds.length > 0 ? 'partial' : 'route',
+  };
+}
+
 function projectionProgressMeters(projection, polyline, cumulativeDistances) {
   if (!projection?.projectedPoint || !Array.isArray(polyline) || polyline.length === 0) return null;
   const segmentStart = polyline[projection.index] || polyline[0];
@@ -209,12 +255,94 @@ function isServedByDetourPath(stop, segment) {
   );
 }
 
+function getEffectiveBoundaryBufferMeters(startProgress, endProgress) {
+  const segmentLengthMeters = Math.abs(endProgress - startProgress);
+  if (!Number.isFinite(segmentLengthMeters) || segmentLengthMeters <= 0) return 0;
+  return Math.min(
+    DETOUR_STOP_IMPACT_BOUNDARY_BUFFER_METERS,
+    Math.max(0, (segmentLengthMeters - ROUTE_PROGRESS_TOLERANCE_METERS) / 2)
+  );
+}
+
+function getStopCode(stop) {
+  return normalizeStopId(stop?.code) || normalizeStopId(stop?.id) || null;
+}
+
+function getStopKey(stop) {
+  return normalizeStopId(stop?.id) || getStopCode(stop) || normalizeStopId(stop?.name);
+}
+
+function mergeUniqueStops(...stopLists) {
+  const seen = new Set();
+  const merged = [];
+
+  stopLists.flat().forEach((stop) => {
+    if (!stop) return;
+    const key = getStopKey(stop);
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    merged.push(stop);
+  });
+
+  return merged;
+}
+
+function compactStopImpactFields(prefix, entry) {
+  const stop = entry?.stop || null;
+  return {
+    [`${prefix}StopId`]: stop?.id || null,
+    [`${prefix}StopCode`]: getStopCode(stop),
+    [`${prefix}Stop`]: stop || null,
+  };
+}
+
+function normalizeServiceEvidenceEntries(serviceEvidencePoints, polyline, cumulativeDistances) {
+  if (!Array.isArray(serviceEvidencePoints) || serviceEvidencePoints.length === 0) return [];
+
+  return serviceEvidencePoints
+    .map((point) => {
+      if (!isFiniteCoordinate(point)) return null;
+      const projected = Number.isFinite(point.progressMeters) && Number.isFinite(point.distanceMeters)
+        ? point
+        : projectPointWithProgress(point, polyline, cumulativeDistances);
+      if (!projected || !Number.isFinite(projected.progressMeters)) return null;
+      return {
+        latitude: Number(point.latitude),
+        longitude: Number(point.longitude),
+        progressMeters: projected.progressMeters,
+        distanceMeters: Number.isFinite(projected.distanceMeters) ? projected.distanceMeters : 0,
+        timestampMs: point.timestampMs ?? null,
+        vehicleId: point.vehicleId ?? null,
+      };
+    })
+    .filter(Boolean);
+}
+
+function hasGpsServiceEvidence(stopEntry, serviceEvidenceEntries) {
+  const stop = stopEntry?.stop;
+  if (!stop || !Array.isArray(serviceEvidenceEntries) || serviceEvidenceEntries.length === 0) {
+    return false;
+  }
+
+  return serviceEvidenceEntries.some((evidence) => (
+    Math.abs(evidence.progressMeters - stopEntry.progressMeters) <= STOP_SERVICE_GPS_PROGRESS_TOLERANCE_METERS &&
+    evidence.distanceMeters <= STOP_ROUTE_PROJECTION_MAX_METERS &&
+    haversineDistance(
+      stop.latitude,
+      stop.longitude,
+      evidence.latitude,
+      evidence.longitude
+    ) <= STOP_SERVICE_GPS_PROXIMITY_METERS
+  ));
+}
+
 function deriveSegmentStopImpacts({
   routeId,
   shapeId,
   segment,
   polyline,
   stopImpactData = {},
+  serviceEvidencePoints = [],
 }) {
   const routeStopIds = getRouteStopSequence(
     routeId,
@@ -228,6 +356,11 @@ function deriveSegmentStopImpacts({
   if (!Array.isArray(polyline) || polyline.length < 2) return {};
 
   const cumulativeDistances = buildCumulativeDistances(polyline);
+  const serviceEvidenceEntries = normalizeServiceEvidenceEntries(
+    serviceEvidencePoints,
+    polyline,
+    cumulativeDistances
+  );
   const { entry, exit } = getClosedRouteBoundaryPoints(segment);
   const entryProjection = projectPointWithProgress(entry, polyline, cumulativeDistances);
   const exitProjection = projectPointWithProgress(exit, polyline, cumulativeDistances);
@@ -236,14 +369,18 @@ function deriveSegmentStopImpacts({
   const startProgress = Math.min(entryProjection.progressMeters, exitProjection.progressMeters);
   const endProgress = Math.max(entryProjection.progressMeters, exitProjection.progressMeters);
 
-  const affectedStops = routeStopIds
+  const affectedStopEntries = routeStopIds
     .map((stopId) => normalizeStop(stopsById.get(String(stopId))))
     .filter(Boolean)
     .map((stop) => {
       const projection = projectPointWithProgress(stop, polyline, cumulativeDistances);
       return projection
         ? {
-          stop,
+          stop: attachRouteImpact(
+            stop,
+            routeId,
+            stopImpactData.routeStopSequencesMapping
+          ),
           progressMeters: projection.progressMeters,
           distanceMeters: projection.distanceMeters,
         }
@@ -255,12 +392,37 @@ function deriveSegmentStopImpacts({
       entry.progressMeters >= startProgress - ROUTE_PROGRESS_TOLERANCE_METERS &&
       entry.progressMeters <= endProgress + ROUTE_PROGRESS_TOLERANCE_METERS
     ))
-    .sort((a, b) => a.progressMeters - b.progressMeters)
-    .map((entry) => entry.stop);
+    .sort((a, b) => a.progressMeters - b.progressMeters);
+
+  const affectedStops = affectedStopEntries.map((entry) => entry.stop);
 
   if (affectedStops.length === 0) return {};
 
-  const skippedStops = affectedStops.filter((stop) => !isServedByDetourPath(stop, segment));
+  const boundaryBufferMeters = getEffectiveBoundaryBufferMeters(startProgress, endProgress);
+  const gpsServedStopEntries = affectedStopEntries.filter((entry) => (
+    hasGpsServiceEvidence(entry, serviceEvidenceEntries)
+  ));
+  const isGpsServed = (entry) => gpsServedStopEntries.some((served) => served.stop.id === entry.stop.id);
+  const firstSkippedStopEntry = affectedStopEntries.find((entry) => (
+    entry.progressMeters > startProgress + boundaryBufferMeters &&
+    entry.progressMeters < endProgress - boundaryBufferMeters &&
+    !isGpsServed(entry) &&
+    !isServedByDetourPath(entry.stop, segment)
+  )) || null;
+  const skippedStopEntries = affectedStopEntries.filter((entry) => (
+    entry.progressMeters > startProgress + boundaryBufferMeters &&
+    entry.progressMeters < endProgress - boundaryBufferMeters &&
+    !isGpsServed(entry) &&
+    !isServedByDetourPath(entry.stop, segment)
+  ));
+  const skippedStops = skippedStopEntries.map((entry) => entry.stop);
+  const gpsServedStops = gpsServedStopEntries.map((entry) => entry.stop);
+  const lastServedBeforeDetourStopEntry = affectedStopEntries
+    .filter((entry) => entry.progressMeters <= startProgress + boundaryBufferMeters)
+    .at(-1) || null;
+  const firstServedAfterDetourStopEntry = affectedStopEntries.find((entry) => (
+    entry.progressMeters >= endProgress - boundaryBufferMeters
+  )) || null;
 
   return {
     affectedStopIds: affectedStops.map((stop) => stop.id),
@@ -269,8 +431,101 @@ function deriveSegmentStopImpacts({
     skippedStopIds: skippedStops.map((stop) => stop.id),
     skippedStopCodes: skippedStops.map((stop) => stop.code).filter(Boolean),
     skippedStops,
+    gpsServedStopIds: gpsServedStops.map((stop) => stop.id),
+    gpsServedStopCodes: gpsServedStops.map((stop) => stop.code).filter(Boolean),
+    gpsServedStops,
+    firstSkippedStopId: firstSkippedStopEntry?.stop?.id || null,
+    firstSkippedStopCode: getStopCode(firstSkippedStopEntry?.stop),
+    firstSkippedStop: firstSkippedStopEntry?.stop || null,
+    ...compactStopImpactFields('lastServedBeforeDetour', lastServedBeforeDetourStopEntry),
+    ...compactStopImpactFields('firstServedAfterDetour', firstServedAfterDetourStopEntry),
     entryStopId: affectedStops[0]?.id || null,
     exitStopId: affectedStops[affectedStops.length - 1]?.id || null,
+  };
+}
+
+function buildSegmentForDetourPathService(segment, fallbackGeometry = null) {
+  return {
+    ...(fallbackGeometry || {}),
+    ...(segment || {}),
+    likelyDetourPolyline:
+      segment?.likelyDetourPolyline ||
+      fallbackGeometry?.likelyDetourPolyline ||
+      null,
+    inferredDetourPolyline:
+      segment?.inferredDetourPolyline ||
+      fallbackGeometry?.inferredDetourPolyline ||
+      null,
+    canShowDetourPath:
+      segment?.canShowDetourPath ??
+      fallbackGeometry?.canShowDetourPath ??
+      null,
+  };
+}
+
+function pruneDetourPathServedStopsFromSegment(segment, fallbackGeometry = null) {
+  if (!segment || typeof segment !== 'object') return segment;
+
+  const skippedStops = Array.isArray(segment.skippedStops)
+    ? segment.skippedStops.filter(Boolean)
+    : [];
+  if (skippedStops.length === 0) return segment;
+
+  const serviceSegment = buildSegmentForDetourPathService(segment, fallbackGeometry);
+  const servedStops = skippedStops.filter((stop) => isServedByDetourPath(stop, serviceSegment));
+  if (servedStops.length === 0) return segment;
+
+  const servedStopKeys = new Set(servedStops.map(getStopKey).filter(Boolean));
+  const remainingSkippedStops = skippedStops.filter((stop) => {
+    const key = getStopKey(stop);
+    return key
+      ? !servedStopKeys.has(key)
+      : !servedStops.includes(stop);
+  });
+  const detourPathServedStops = mergeUniqueStops(
+    segment.detourPathServedStops,
+    servedStops
+  );
+  const firstSkippedStop = remainingSkippedStops[0] || null;
+
+  return {
+    ...segment,
+    skippedStops: remainingSkippedStops,
+    skippedStopIds: remainingSkippedStops.map((stop) => stop.id).filter(Boolean),
+    skippedStopCodes: remainingSkippedStops.map((stop) => getStopCode(stop)).filter(Boolean),
+    firstSkippedStopId: firstSkippedStop?.id || null,
+    firstSkippedStopCode: getStopCode(firstSkippedStop),
+    firstSkippedStop,
+    detourPathServedStops,
+    detourPathServedStopIds: detourPathServedStops.map((stop) => stop.id).filter(Boolean),
+    detourPathServedStopCodes: detourPathServedStops.map((stop) => getStopCode(stop)).filter(Boolean),
+  };
+}
+
+function pruneDetourPathServedStopsFromGeometry(geometry) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+
+  const segments = Array.isArray(geometry.segments)
+    ? geometry.segments.map((segment) => pruneDetourPathServedStopsFromSegment(segment, geometry))
+    : [];
+
+  if (segments.length === 0) {
+    return pruneDetourPathServedStopsFromSegment(geometry, geometry);
+  }
+
+  const primarySegment = pickPrimarySegment(segments);
+  return {
+    ...geometry,
+    segments,
+    skippedStopIds: primarySegment?.skippedStopIds || [],
+    skippedStopCodes: primarySegment?.skippedStopCodes || [],
+    skippedStops: primarySegment?.skippedStops || [],
+    firstSkippedStopId: primarySegment?.firstSkippedStopId || null,
+    firstSkippedStopCode: primarySegment?.firstSkippedStopCode || null,
+    firstSkippedStop: primarySegment?.firstSkippedStop || null,
+    detourPathServedStopIds: primarySegment?.detourPathServedStopIds || [],
+    detourPathServedStopCodes: primarySegment?.detourPathServedStopCodes || [],
+    detourPathServedStops: primarySegment?.detourPathServedStops || [],
   };
 }
 
@@ -279,4 +534,7 @@ module.exports = {
   buildRouteStopSequencesMapping,
   deriveSegmentStopImpacts,
   getRouteStopSequence,
+  isServedByDetourPath,
+  pruneDetourPathServedStopsFromGeometry,
+  pruneDetourPathServedStopsFromSegment,
 };

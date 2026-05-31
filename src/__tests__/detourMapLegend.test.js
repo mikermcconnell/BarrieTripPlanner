@@ -81,8 +81,8 @@ describe('DetourMapLegend', () => {
     });
 
     let texts = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(texts).toContain('Map key');
-    expect(texts).toContain('Lines & stops');
+    expect(texts).toContain('Key');
+    expect(texts).not.toContain('Lines & stops');
     expect(texts).not.toContain('Closed bus stops');
 
     act(() => {
@@ -103,8 +103,8 @@ describe('DetourMapLegend', () => {
     });
 
     let texts = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(texts).toContain('Map key');
-    expect(texts).toContain('Lines & stops');
+    expect(texts).toContain('Key');
+    expect(texts).not.toContain('Lines & stops');
     expect(texts).not.toContain('Closed bus stops');
 
     act(() => {
@@ -152,7 +152,8 @@ describe('DetourMapLegend', () => {
     });
 
     const texts = inst.root.findAllByType('Text').map((node) => node.props.children);
-    expect(texts).toContain('Lines & stops');
+    expect(texts).toContain('Key');
+    expect(texts).not.toContain('Lines & stops');
     expect(texts).not.toContain('Closed bus stops');
   });
 

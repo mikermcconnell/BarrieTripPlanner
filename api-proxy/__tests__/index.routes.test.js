@@ -36,6 +36,15 @@ describe('api-proxy route hardening', () => {
     mockGetDetourHistory.mockResolvedValue([]);
 
     global.fetch = jest.fn().mockResolvedValue(makeFetchResponse({ body: [{ ok: true }] }));
+    jest.doMock('../services/platformMapImageService', () => ({
+      createPlatformMapImageService: () => ({
+        getPlatformMapImage: jest.fn().mockResolvedValue({
+          status: 404,
+          body: Buffer.from('not-found'),
+          contentType: 'text/plain',
+        }),
+      }),
+    }));
   });
 
   afterEach(() => {

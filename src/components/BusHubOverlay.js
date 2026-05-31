@@ -5,7 +5,8 @@ import { BUS_HUBS, BUS_HUB_TYPES, getBusHubDisplayLabel } from '../config/busHub
 import { COLORS, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
 const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
-const HUB_ICON_SCALE = 0.5;
+const HUB_ICON_SCALE = 1.5;
+const HUB_ICON_CENTER_ANCHOR_Y = 0.42;
 
 const getHubLabel = (hub, currentZoom) => {
   return getBusHubDisplayLabel(hub, currentZoom) || null;
@@ -40,7 +41,7 @@ const BusHubOverlay = ({ currentZoom }) => (
           key={hub.id}
           id={`bus-hub-${hub.id}`}
           coordinate={[hub.coordinate.longitude, hub.coordinate.latitude]}
-          anchor={{ x: 0.5, y: 0.5 }}
+          anchor={{ x: 0.5, y: HUB_ICON_CENTER_ANCHOR_Y }}
           pointerEvents="none"
         >
           <View
@@ -89,11 +90,11 @@ const styles = StyleSheet.create({
   },
   markerFrameMajor: {
     width: 190,
-    minHeight: 74,
+    minHeight: 132,
   },
   markerFrameMinor: {
     width: 150,
-    minHeight: 66,
+    minHeight: 116,
   },
   iconWrap: {
     alignItems: 'center',
@@ -101,15 +102,15 @@ const styles = StyleSheet.create({
     ...SHADOWS.medium,
   },
   iconWrapMajor: {
-    width: 28,
-    height: 28,
+    width: 84,
+    height: 84,
   },
   iconWrapMinor: {
-    width: 24,
-    height: 24,
+    width: 72,
+    height: 72,
   },
   labelPill: {
-    marginTop: 1,
+    marginTop: -10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { haversineDistance, pointToPolylineDistance, projectPointToPolyline } from '../utils/geometryUtils';
 import { getRouteStopSequence } from '../utils/gtfsStopSequences';
 import { getUniqueDetourSections } from '../utils/detourHelpers';
+import { isStopServedByRenderableDetourPath } from '../utils/detourOverlayGeometry';
 
 const SKIPPED_STOP_POLYLINE_PROXIMITY_METERS = 50;
 const BOUNDARY_STOP_OPEN_BUFFER_METERS = 60;
@@ -66,11 +67,12 @@ const resolveStopReference = (reference, lookups) => {
   if (typeof reference === 'object') {
     const idKey = getStopKey(reference);
     const codeKey = getStopCodeKey(reference);
-    return (
+    const resolvedStop = (
       (idKey && lookups.byId.get(idKey)) ||
       (codeKey && lookups.byCode.get(codeKey)) ||
-      reference
+      null
     );
+    return resolvedStop ? { ...resolvedStop, ...reference } : reference;
   }
 
   const key = normalizeStopKey(reference);
@@ -92,6 +94,11 @@ const hasExplicitStopImpacts = (segment) => (
   hasNonEmptyArray(segment?.affectedStops)
 );
 
+const removeDetourPathServedSkippedStops = (skippedStops = [], segment = {}) => (
+  (Array.isArray(skippedStops) ? skippedStops : [])
+    .filter((stop) => !isStopServedByRenderableDetourPath(stop, segment))
+);
+
 const deriveExplicitAffectedStops = ({
   routeId,
   shapeId,
@@ -104,12 +111,12 @@ const deriveExplicitAffectedStops = ({
   const stopMap = new Map((Array.isArray(stops) ? stops : []).map((stop) => [stop.id, stop]));
   const routeStops = stopIds.map((id) => stopMap.get(id)).filter(Boolean);
   const lookups = buildStopLookups(stops);
-  const skippedStops = resolveStopList(
+  const skippedStops = removeDetourPathServedSkippedStops(resolveStopList(
     Array.isArray(segment?.skippedStops) && segment.skippedStops.length > 0
       ? segment.skippedStops
       : segment?.skippedStopIds,
     lookups
-  );
+  ), segment);
   const affectedStops = resolveStopList(
     Array.isArray(segment?.affectedStops) && segment.affectedStops.length > 0
       ? segment.affectedStops

@@ -11,7 +11,7 @@ import {
 } from './routeShapeUtils';
 
 const BRANCH_FAMILIES = [
-  { familyId: '2', routeIds: ['2A', '2B'] },
+  { familyId: '2', routeIds: ['2A', '2B'], preserveRouteDirections: true },
   { familyId: '8', routeIds: ['8A', '8B'], preserveRouteDirections: true },
   { familyId: '12', routeIds: ['12A', '12B'] },
 ];

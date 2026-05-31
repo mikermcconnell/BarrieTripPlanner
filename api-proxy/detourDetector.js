@@ -17,6 +17,7 @@ const {
   detourEvidence,
   persistentDetourCandidates,
   learnedPersistentDetours,
+  learnedPersistentGeometries,
   normalDetourCandidates,
   recurringShortDeviationCandidates,
   clearDetourState,
@@ -67,10 +68,20 @@ const {
   getRouteVehicleCount,
   hasPublishedSegments,
 } = require('./detour/lifecycle');
+const {
+  buildRouteProjectionDiagnostic,
+  projectCoordinateToRoute,
+  projectCoordinateToShape,
+  projectOntoPolyline,
+} = require('./detour/projection');
 
 let MIN_VEHICLES_FOR_DETOUR = DEFAULT_MIN_VEHICLES_FOR_DETOUR;
 let wasInService = true;
 let lastReportedDetours = null;
+const KNOWN_DETOUR_PATH_MATCH_THRESHOLD_METERS = 60;
+const ALTERNATE_DETOUR_PATH_REPLACE_MIN_DISTANCE_METERS = 90;
+const ALTERNATE_DETOUR_PATH_REPLACE_MIN_FAR_POINTS = 2;
+const SUPERSEDED_BY_NEWER_GPS_PATH_REASON = 'superseded-by-newer-gps-path';
 
 function setMinVehicles(n) {
   MIN_VEHICLES_FOR_DETOUR = n;
@@ -227,97 +238,6 @@ function confidenceRank(confidence) {
   }
 }
 
-function projectOntoPolyline(coordinate, polyline) {
-  if (!coordinate || !Array.isArray(polyline) || polyline.length < 2) return null;
-  const closest = findClosestShapePoint(coordinate, polyline);
-  if (!closest || !closest.projectedPoint) return null;
-  const cumulative = buildCumulativeDistances(polyline);
-  const segmentStart = polyline[closest.index];
-  const progressMeters =
-    cumulative[closest.index] +
-    haversineDistance(
-      segmentStart.latitude,
-      segmentStart.longitude,
-      closest.projectedPoint.latitude,
-      closest.projectedPoint.longitude
-    );
-
-  return {
-    index: closest.index,
-    projectedPoint: closest.projectedPoint,
-    distanceMeters: closest.distanceMeters,
-    progressMeters,
-  };
-}
-
-function projectCoordinateToRoute(routeId, coordinate, shapes, routeShapeMapping, tripShapeId = null) {
-  const shapeIds = routeShapeMapping.get(routeId);
-  if (!Array.isArray(shapeIds) || shapeIds.length === 0 || !coordinate) return null;
-
-  let candidateShapeIds = shapeIds;
-  if (tripShapeId && shapeIds.includes(tripShapeId)) {
-    candidateShapeIds = [tripShapeId, ...shapeIds.filter((shapeId) => shapeId !== tripShapeId)];
-  }
-
-  let best = null;
-  for (const shapeId of candidateShapeIds) {
-    const polyline = shapes.get(shapeId);
-    if (!polyline || polyline.length < 2) continue;
-    const projection = projectOntoPolyline(coordinate, polyline);
-    if (!projection) continue;
-
-    if (!best || projection.distanceMeters < best.distanceMeters) {
-      best = {
-        ...projection,
-        shapeId,
-      };
-    }
-
-    if (tripShapeId && shapeId === tripShapeId) {
-      break;
-    }
-  }
-
-  return best;
-}
-
-function classifyRouteProjection(distanceMeters, routeConfig) {
-  if (!Number.isFinite(distanceMeters)) return 'no-projection';
-  if (distanceMeters > routeConfig.offRouteThresholdMeters) return 'off-route';
-  if (distanceMeters <= routeConfig.onRouteClearThresholdMeters) return 'on-route-clear';
-  return 'deadband';
-}
-
-function buildRouteProjectionDiagnostic({
-  routeId,
-  coordinate,
-  routeProjection,
-  distanceMeters,
-  routeConfig,
-  sampleTimeMs,
-  checkedAt,
-  tripId,
-  tripShapeId,
-}) {
-  const normalizedCoordinate = normalizePoint(coordinate);
-  return {
-    routeId: routeId || null,
-    tripId: tripId || null,
-    tripShapeId: tripShapeId || null,
-    shapeId: routeProjection?.shapeId || null,
-    classification: classifyRouteProjection(distanceMeters, routeConfig),
-    distanceMeters: Number.isFinite(distanceMeters) ? distanceMeters : null,
-    progressMeters: Number.isFinite(routeProjection?.progressMeters)
-      ? routeProjection.progressMeters
-      : null,
-    offRouteThresholdMeters: routeConfig.offRouteThresholdMeters,
-    onRouteClearThresholdMeters: routeConfig.onRouteClearThresholdMeters,
-    sampledAt: Number.isFinite(sampleTimeMs) ? sampleTimeMs : null,
-    checkedAt: Number.isFinite(checkedAt) ? checkedAt : null,
-    coordinate: normalizedCoordinate,
-  };
-}
-
 function getPersistedGeometryProgressWindow(segment, shapes) {
   const geometry = segment?.persistedGeometry;
   if (!geometry || !shapes) return null;
@@ -412,6 +332,7 @@ function findBestMatchingSegment(routeState, projection, shapes) {
 
   let best = null;
   for (const segment of routeState.segments.values()) {
+    if (segment?.supersededAt) continue;
     const distance = getProjectionDistanceToSegment(segment, projection, shapes);
     if (!Number.isFinite(distance)) continue;
     if (!best || distance < best.distance) {
@@ -438,14 +359,6 @@ function getProjectionDistanceToSegment(segment, projection, shapes) {
 
   const center = (window.min + window.max) / 2;
   return Math.abs(projection.progressMeters - center);
-}
-
-function projectCoordinateToShape(shapeId, coordinate, shapes) {
-  if (!shapeId || !coordinate || !shapes) return null;
-  const polyline = shapes.get(shapeId);
-  if (!Array.isArray(polyline) || polyline.length < 2) return null;
-  const projection = projectOntoPolyline(coordinate, polyline);
-  return projection ? { ...projection, shapeId } : null;
 }
 
 function getProjectionForSegmentClear(routeId, coordinate, segment, projection, shapes, routeShapeMapping, routeConfig) {
@@ -590,6 +503,294 @@ function hasRegularRouteTraversalForClear(state, segment, projection, shapes, ro
   return overlapMeters >= requiredOverlapMeters && observedSpan >= requiredSpanMeters;
 }
 
+function normalizePolyline(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizePoint).filter(Boolean);
+}
+
+function getKnownDetourPathPolylines(segment) {
+  const geometry = segment?.persistedGeometry || null;
+  if (!geometry || typeof geometry !== 'object') return [];
+
+  const polylines = [];
+  const directLikely = normalizePolyline(geometry.likelyDetourPolyline);
+  if (directLikely.length >= 2) polylines.push(directLikely);
+
+  const directInferred = geometry.canShowDetourPath === true
+    ? normalizePolyline(geometry.inferredDetourPolyline)
+    : [];
+  if (directInferred.length >= 2) polylines.push(directInferred);
+
+  for (const item of Array.isArray(geometry.segments) ? geometry.segments : []) {
+    const likely = normalizePolyline(item?.likelyDetourPolyline);
+    if (likely.length >= 2) polylines.push(likely);
+
+    const inferred = item?.canShowDetourPath === true
+      ? normalizePolyline(item?.inferredDetourPolyline)
+      : [];
+    if (inferred.length >= 2) polylines.push(inferred);
+  }
+
+  return polylines;
+}
+
+function findPublishedSegmentNearKnownDetourPath(routeState, coordinate) {
+  if (!routeState?.segments || !coordinate) return null;
+
+  let best = null;
+  for (const segment of routeState.segments.values()) {
+    if (!segment?.isPublished) continue;
+
+    for (const polyline of getKnownDetourPathPolylines(segment)) {
+      const projection = projectOntoPolyline(coordinate, polyline);
+      if (!projection) continue;
+      if (!best || projection.distanceMeters < best.distanceMeters) {
+        best = { segment, distanceMeters: projection.distanceMeters };
+      }
+    }
+  }
+
+  return best && best.distanceMeters <= KNOWN_DETOUR_PATH_MATCH_THRESHOLD_METERS
+    ? best.segment
+    : null;
+}
+
+function getDistanceToKnownDetourPath(segment, coordinate) {
+  if (!segment || !coordinate) return Infinity;
+  let bestDistance = Infinity;
+  for (const polyline of getKnownDetourPathPolylines(segment)) {
+    const projection = projectOntoPolyline(coordinate, polyline);
+    if (Number.isFinite(projection?.distanceMeters)) {
+      bestDistance = Math.min(bestDistance, projection.distanceMeters);
+    }
+  }
+  return bestDistance;
+}
+
+function getCandidateEvidenceCoordinates(candidate) {
+  return (candidate?.evidencePoints || [])
+    .map(coordinateFromEvidencePoint)
+    .filter(Boolean);
+}
+
+function candidateDivergesFromKnownDetourPath(segment, candidate) {
+  const coordinates = getCandidateEvidenceCoordinates(candidate);
+  if (coordinates.length === 0) return false;
+
+  const distances = coordinates
+    .map((coordinate) => getDistanceToKnownDetourPath(segment, coordinate))
+    .filter(Number.isFinite);
+  if (distances.length === 0) return false;
+
+  const farPointCount = distances.filter(
+    (distance) => distance >= ALTERNATE_DETOUR_PATH_REPLACE_MIN_DISTANCE_METERS
+  ).length;
+  return farPointCount >= Math.min(ALTERNATE_DETOUR_PATH_REPLACE_MIN_FAR_POINTS, distances.length);
+}
+
+function getPersistedGeometryBoundaryPoints(segment) {
+  const geometry = segment?.persistedGeometry;
+  if (!geometry || typeof geometry !== 'object') return null;
+
+  const primarySegment = Array.isArray(geometry.segments) && geometry.segments.length > 0
+    ? pickPrimarySegment(geometry.segments)
+    : null;
+  const skippedSegmentPolyline = Array.isArray(primarySegment?.skippedSegmentPolyline)
+    ? primarySegment.skippedSegmentPolyline
+    : Array.isArray(geometry.skippedSegmentPolyline)
+      ? geometry.skippedSegmentPolyline
+      : [];
+
+  const entry = normalizePoint(primarySegment?.entryPoint) ||
+    normalizePoint(geometry.entryPoint) ||
+    normalizePoint(skippedSegmentPolyline[0]);
+  const exit = normalizePoint(primarySegment?.exitPoint) ||
+    normalizePoint(geometry.exitPoint) ||
+    normalizePoint(skippedSegmentPolyline[skippedSegmentPolyline.length - 1]);
+
+  if (!entry || !exit) return null;
+  return { entry, exit };
+}
+
+function findSupersededPublishedSegmentForCandidate(routeState, candidate, shapes) {
+  if (!routeState?.segments || !candidate) return null;
+
+  const midpoint = (candidate.progressMinMeters + candidate.progressMaxMeters) / 2;
+  if (!Number.isFinite(midpoint)) return null;
+
+  let best = null;
+  for (const segment of routeState.segments.values()) {
+    if (!segment?.isPublished || segment.supersededAt) continue;
+    if (getSegmentCurrentVehicleCount(segment) > 0) continue;
+    if (getKnownDetourPathPolylines(segment).length === 0) continue;
+    if (!getPersistedGeometryBoundaryPoints(segment)) continue;
+
+    const distanceToSegmentWindow = getProjectionDistanceToSegment(
+      segment,
+      { shapeId: candidate.shapeId || null, progressMeters: midpoint },
+      shapes
+    );
+    if (!Number.isFinite(distanceToSegmentWindow)) continue;
+    if (!candidateDivergesFromKnownDetourPath(segment, candidate)) continue;
+
+    if (!best || distanceToSegmentWindow < best.distanceToSegmentWindow) {
+      best = { segment, distanceToSegmentWindow };
+    }
+  }
+
+  return best?.segment || null;
+}
+
+function getCandidateEvidenceTimeRange(candidate) {
+  const timestamps = (candidate?.evidencePoints || [])
+    .map((point) => Number(point?.timestampMs))
+    .filter(Number.isFinite);
+  if (timestamps.length === 0) return null;
+  return {
+    first: Math.min(...timestamps),
+    last: Math.max(...timestamps),
+  };
+}
+
+function inheritBoundaryCandidatesFromSupersededSegment(
+  targetSegment,
+  sourceSegment,
+  candidate,
+  routeConfig,
+  tripShapeId = null
+) {
+  const boundaryPoints = getPersistedGeometryBoundaryPoints(sourceSegment);
+  const timeRange = getCandidateEvidenceTimeRange(candidate);
+  if (!targetSegment || !boundaryPoints || !timeRange) return;
+
+  recordBoundaryCandidate(
+    targetSegment,
+    'entry',
+    { coordinate: boundaryPoints.entry, timestampMs: timeRange.first },
+    null,
+    routeConfig,
+    tripShapeId
+  );
+  recordBoundaryCandidate(
+    targetSegment,
+    'exit',
+    { coordinate: boundaryPoints.exit, timestampMs: timeRange.last },
+    null,
+    routeConfig,
+    tripShapeId
+  );
+}
+
+function makeNormalServiceClearEvidenceId(vehicleId, tripId) {
+  if (tripId) return `trip:${tripId}`;
+  return `vehicle:${vehicleId || 'unknown'}`;
+}
+
+function normalizeNormalRouteClearProof(proof, fallbackProofId = null) {
+  if (!proof || typeof proof !== 'object') return null;
+  const proofId = proof.proofId || fallbackProofId || makeNormalServiceClearEvidenceId(proof.vehicleId, proof.tripId);
+  const minProgressMeters = Number.isFinite(proof.minProgressMeters) ? proof.minProgressMeters : null;
+  const maxProgressMeters = Number.isFinite(proof.maxProgressMeters) ? proof.maxProgressMeters : null;
+  if (!proofId || !Number.isFinite(minProgressMeters) || !Number.isFinite(maxProgressMeters)) {
+    return null;
+  }
+  return {
+    proofId,
+    vehicleId: proof.vehicleId || null,
+    tripId: proof.tripId || null,
+    shapeId: proof.shapeId || null,
+    minProgressMeters,
+    maxProgressMeters,
+    firstSeenAt: toTimestampMs(proof.firstSeenAt) || toTimestampMs(proof.lastSeenAt) || Date.now(),
+    lastSeenAt: toTimestampMs(proof.lastSeenAt) || toTimestampMs(proof.firstSeenAt) || Date.now(),
+    pointCount: Math.max(Number(proof.pointCount) || 0, 1),
+  };
+}
+
+function normalizeNormalRouteClearProofMap(value) {
+  if (value instanceof Map) {
+    return new Map(
+      [...value.entries()]
+        .map(([proofId, proof]) => normalizeNormalRouteClearProof(proof, proofId))
+        .filter(Boolean)
+        .map((proof) => [proof.proofId, proof])
+    );
+  }
+  if (Array.isArray(value)) {
+    return new Map(
+      value
+        .map((proof) => normalizeNormalRouteClearProof(proof))
+        .filter(Boolean)
+        .map((proof) => [proof.proofId, proof])
+    );
+  }
+  if (value && typeof value === 'object') {
+    return new Map(
+      Object.entries(value)
+        .map(([proofId, proof]) => normalizeNormalRouteClearProof(proof, proofId))
+        .filter(Boolean)
+        .map((proof) => [proof.proofId, proof])
+    );
+  }
+  return new Map();
+}
+
+function recordNormalRouteClearProof(segment, vehicleId, tripId, projection, timestampMs = Date.now()) {
+  if (!segment || !projection || !Number.isFinite(projection.progressMeters)) return;
+  ensureSegmentEvidenceSets(segment);
+  const proofId = makeNormalServiceClearEvidenceId(vehicleId, tripId);
+  if (!proofId) return;
+
+  const existing = segment.normalRouteClearProofs.get(proofId) || null;
+  const progressMeters = projection.progressMeters;
+  const proof = {
+    proofId,
+    vehicleId: vehicleId || existing?.vehicleId || null,
+    tripId: tripId || existing?.tripId || null,
+    shapeId: projection.shapeId || existing?.shapeId || null,
+    minProgressMeters: Number.isFinite(existing?.minProgressMeters)
+      ? Math.min(existing.minProgressMeters, progressMeters)
+      : progressMeters,
+    maxProgressMeters: Number.isFinite(existing?.maxProgressMeters)
+      ? Math.max(existing.maxProgressMeters, progressMeters)
+      : progressMeters,
+    firstSeenAt: toTimestampMs(existing?.firstSeenAt) || timestampMs,
+    lastSeenAt: timestampMs,
+    pointCount: (Number(existing?.pointCount) || 0) + 1,
+  };
+  segment.normalRouteClearProofs.set(proofId, proof);
+  segment.normalRouteVehicleIds.add(proofId);
+}
+
+function hasCollectiveRegularRouteTraversalForClear(segment, shapes, routeConfig) {
+  const window = getUsableSegmentProgressWindow(segment, shapes);
+  if (!window) return false;
+
+  ensureSegmentEvidenceSets(segment);
+  const lastOffRouteEvidenceAt = toTimestampMs(segment.lastOffRouteEvidenceAt) || 0;
+  const proofs = [...segment.normalRouteClearProofs.values()].filter((proof) => {
+    if (!proof) return false;
+    if (window.shapeId && proof.shapeId && window.shapeId !== proof.shapeId) return false;
+    if (!Number.isFinite(proof.minProgressMeters) || !Number.isFinite(proof.maxProgressMeters)) return false;
+    if ((toTimestampMs(proof.lastSeenAt) || 0) <= lastOffRouteEvidenceAt) return false;
+    return true;
+  });
+
+  const requiredProofCount = Math.max(2, Number(MIN_VEHICLES_FOR_DETOUR) || 0);
+  if (proofs.length < requiredProofCount) return false;
+
+  const observedMin = Math.min(...proofs.map((proof) => proof.minProgressMeters));
+  const observedMax = Math.max(...proofs.map((proof) => proof.maxProgressMeters));
+  const observedSpan = observedMax - observedMin;
+  const overlapMeters = Math.max(0, Math.min(observedMax, window.max) - Math.max(observedMin, window.min));
+  const ratio = Math.min(Math.max(Number(routeConfig?.clearMinTraversalRatio) || 0.6, 0), 1);
+  const minTraversalMeters = Math.max(Number(routeConfig?.clearMinTraversalMeters) || 0, 0);
+  const requiredOverlapMeters = window.spanMeters * ratio;
+  const requiredSpanMeters = Math.min(minTraversalMeters, requiredOverlapMeters);
+
+  return overlapMeters >= requiredOverlapMeters && observedSpan >= requiredSpanMeters;
+}
+
 function updateSegmentProjectionWindow(segment, projection) {
   if (!segment || !projection) return;
   segment.shapeIdHint = projection.shapeId || segment.shapeIdHint || null;
@@ -621,6 +822,58 @@ function buildDetourFingerprint(routeId, detour, geometry) {
   return null;
 }
 
+function getGeometryTimestamp(geometry) {
+  const segmentTimes = Array.isArray(geometry?.segments)
+    ? geometry.segments.map((segment) => toTimestampMs(segment?.lastEvidenceAt) || 0)
+    : [];
+  return Math.max(
+    toTimestampMs(geometry?.lastEvidenceAt) || 0,
+    ...segmentTimes,
+    0
+  ) || null;
+}
+
+function buildSharedDetourGeometryFingerprint(geometry) {
+  const primarySegment = Array.isArray(geometry?.segments) && geometry.segments.length > 0
+    ? pickPrimarySegment(geometry.segments)
+    : null;
+  const explicitEventId =
+    geometry?.sharedDetourEventId ||
+    primarySegment?.sharedDetourEventId ||
+    geometry?.detourEventId ||
+    primarySegment?.detourEventId ||
+    null;
+  if (explicitEventId) return `event:${explicitEventId}`;
+
+  const entryKey = pointKey(primarySegment?.entryPoint || geometry?.entryPoint);
+  const exitKey = pointKey(primarySegment?.exitPoint || geometry?.exitPoint);
+  if (!entryKey || !exitKey) return null;
+
+  const endpoints = [entryKey, exitKey].sort();
+  const skipped = Array.isArray(primarySegment?.skippedSegmentPolyline)
+    ? primarySegment.skippedSegmentPolyline
+    : (Array.isArray(geometry?.skippedSegmentPolyline) ? geometry.skippedSegmentPolyline : []);
+  const skippedKeys = skipped
+    .map(pointKey)
+    .filter(Boolean)
+    .filter((key, index, all) => index === 0 || index === all.length - 1);
+  const skippedPart = skippedKeys.length >= 2 ? `:${skippedKeys.sort().join(':')}` : '';
+  return `points:${endpoints.join(':')}${skippedPart}`;
+}
+
+function resolveSharedGeometryRecord(fingerprint) {
+  if (!fingerprint) return null;
+  return learnedPersistentGeometries.get(fingerprint) || null;
+}
+
+function getBestPersistentGeometry(record = {}) {
+  const shared = resolveSharedGeometryRecord(record.sharedGeometryFingerprint);
+  if (hasRenderableGeometry(shared?.geometry) && !hasRenderableGeometry(record.geometry)) {
+    return cloneJson(shared.geometry);
+  }
+  return cloneJson(record.geometry) || null;
+}
+
 function resolvePersistentLastEvidenceAt(detour, geometry, existing, now) {
   return (
     toTimestampMs(detour?.lastOffRouteEvidenceAt) ||
@@ -631,11 +884,65 @@ function resolvePersistentLastEvidenceAt(detour, geometry, existing, now) {
   );
 }
 
+function upsertSharedPersistentGeometry(sharedGeometryFingerprint, routeId, geometry, evidence, now, existingRouteRecord = {}) {
+  if (!sharedGeometryFingerprint || !hasRenderableGeometry(geometry)) return null;
+  const existing = learnedPersistentGeometries.get(sharedGeometryFingerprint) || {};
+  const routeIds = Array.from(new Set([
+    ...(Array.isArray(existing.routeIds) ? existing.routeIds : []),
+    ...(Array.isArray(existingRouteRecord.routeIds) ? existingRouteRecord.routeIds : []),
+    routeId,
+  ].filter(Boolean))).sort();
+  const latestGpsEvidenceAt = Math.max(
+    toTimestampMs(existing.latestGpsEvidenceAt) || 0,
+    toTimestampMs(existing.lastEvidenceAt) || 0,
+    toTimestampMs(existingRouteRecord.latestGpsEvidenceAt) || 0,
+    toTimestampMs(existingRouteRecord.lastEvidenceAt) || 0,
+    0
+  ) || null;
+  const geometryLastEvidenceAt = Math.max(
+    getGeometryTimestamp(geometry) || 0,
+    toTimestampMs(existing.geometryLastEvidenceAt) || 0,
+    0
+  ) || null;
+  const record = {
+    sharedGeometryFingerprint,
+    routeIds,
+    learnedAt: existing.learnedAt || existingRouteRecord.learnedAt || now,
+    updatedAt: now,
+    recordUpdatedAt: now,
+    latestGpsEvidenceAt,
+    geometryLastEvidenceAt,
+    lastEvidenceAt: latestGpsEvidenceAt || geometryLastEvidenceAt || now,
+    geometry: cloneJson(geometry),
+    evidence: normalizeLearnedEvidence({
+      points: [
+        ...(existing.evidence?.points || []),
+        ...(evidence?.points || []),
+      ],
+      confidencePoints: [
+        ...(existing.evidence?.confidencePoints || []),
+        ...(evidence?.confidencePoints || []),
+      ],
+      entryCandidates: [
+        ...(existing.evidence?.entryCandidates || []),
+        ...(evidence?.entryCandidates || []),
+      ],
+      exitCandidates: [
+        ...(existing.evidence?.exitCandidates || []),
+        ...(evidence?.exitCandidates || []),
+      ],
+    }),
+  };
+  learnedPersistentGeometries.set(sharedGeometryFingerprint, record);
+  return record;
+}
+
 function upsertLearnedPersistentDetour(routeId, detour, geometry, now, routeState = null) {
   const fingerprint = buildDetourFingerprint(routeId, detour, geometry);
   if (!fingerprint) return null;
 
   const existing = learnedPersistentDetours.get(routeId) || {};
+  const existingSharedGeometry = resolveSharedGeometryRecord(existing.sharedGeometryFingerprint);
   const currentEvidence = routeState ? collectLearnedEvidenceFromRouteState(routeState) : null;
   const evidence = normalizeLearnedEvidence({
     points: [
@@ -655,21 +962,53 @@ function upsertLearnedPersistentDetour(routeId, detour, geometry, now, routeStat
       ...(currentEvidence?.exitCandidates || []),
     ],
   });
+  const latestGpsEvidenceAt = resolvePersistentLastEvidenceAt(detour, geometry, existing, now);
+  const computedSharedGeometryFingerprint =
+    buildSharedDetourGeometryFingerprint(geometry) ||
+    existing.sharedGeometryFingerprint ||
+    null;
+  const renderableGeometry = hasRenderableGeometry(geometry)
+    ? cloneJson(geometry)
+    : null;
+  const geometryForRecord =
+    renderableGeometry ||
+    (hasRenderableGeometry(existingSharedGeometry?.geometry) ? cloneJson(existingSharedGeometry.geometry) : null) ||
+    (hasRenderableGeometry(existing.geometry) ? cloneJson(existing.geometry) : null);
+  const geometryLastEvidenceAt = Math.max(
+    getGeometryTimestamp(geometryForRecord) || 0,
+    toTimestampMs(existing.geometryLastEvidenceAt) || 0,
+    toTimestampMs(existingSharedGeometry?.geometryLastEvidenceAt) || 0,
+    0
+  ) || null;
   const record = {
     routeId,
     fingerprint,
+    sharedGeometryFingerprint: computedSharedGeometryFingerprint,
     detectedAt: detour.detectedAt instanceof Date ? detour.detectedAt.getTime() : Number(detour.detectedAt) || now,
     learnedAt: existing.learnedAt || now,
     updatedAt: now,
+    recordUpdatedAt: now,
     lastSeenAt: detour.lastSeenAt instanceof Date ? detour.lastSeenAt.getTime() : Number(detour.lastSeenAt) || now,
-    lastEvidenceAt: resolvePersistentLastEvidenceAt(detour, geometry, existing, now),
+    lastEvidenceAt: latestGpsEvidenceAt,
+    latestGpsEvidenceAt,
+    geometryLastEvidenceAt,
     triggerVehicleId: detour.triggerVehicleId || existing.triggerVehicleId || null,
-    geometry: hasRenderableGeometry(geometry) ? cloneJson(geometry) : cloneJson(existing.geometry) || null,
+    geometry: geometryForRecord,
     detourZone: detour.detourZone ? cloneJson(detour.detourZone) : cloneJson(existing.detourZone) || null,
     evidence,
   };
 
   learnedPersistentDetours.set(routeId, record);
+  if (computedSharedGeometryFingerprint && hasRenderableGeometry(geometryForRecord)) {
+    upsertSharedPersistentGeometry(
+      computedSharedGeometryFingerprint,
+      routeId,
+      geometryForRecord,
+      evidence,
+      now,
+      record
+    );
+  }
 
   detour.isPersistent = true;
   detour.persistentFingerprint = fingerprint;
@@ -701,7 +1040,7 @@ function seedPersistentDetours(now) {
     segment.isPublished = true;
     segment.isPersistent = true;
     segment.persistentFingerprint = record.fingerprint;
-    segment.persistedGeometry = cloneJson(record.geometry);
+    segment.persistedGeometry = getBestPersistentGeometry(record);
     segment.learnedEvidence = cloneJson(record.evidence) || {
       points: [],
       confidencePoints: [],
@@ -719,16 +1058,26 @@ function resetPersistentCandidate(routeId) {
   persistentDetourCandidates.delete(routeId);
 }
 
+function shouldRemoveLearnedPersistentOnFinalize(routeId, segment) {
+  if (!segment) return false;
+  if (segment.isPersistent) return true;
+  return (
+    segment.clearReason === 'normal-route-observed' &&
+    doesSegmentMatchLearnedPersistentDetour(routeId, segment)
+  );
+}
+
 function finalizeSegment(routeId, segmentId) {
   const routeState = activeDetours.get(routeId);
   if (!routeState?.segments) return;
   const segment = routeState.segments.get(segmentId);
+  const removeLearned = shouldRemoveLearnedPersistentOnFinalize(routeId, segment);
   routeState.segments.delete(segmentId);
-  if (segment?.isPersistent) {
-    learnedPersistentDetours.delete(routeId);
+  if (removeLearned) {
+    clearLearnedPersistentDetour(routeId);
   }
   if (routeState.segments.size === 0) {
-    finalizeDetour(routeId, { removeLearned: Boolean(segment?.isPersistent) });
+    finalizeDetour(routeId, { removeLearned });
   }
 }
 
@@ -739,12 +1088,40 @@ function finalizeDetour(routeId, options = {}) {
   const hasPersistentSegment = current?.segments instanceof Map
     ? [...current.segments.values()].some((segment) => segment.isPersistent)
     : false;
-  if (options.removeLearned || hasPersistentSegment) {
-    learnedPersistentDetours.delete(routeId);
+  const hasNormalRouteClearedLearnedSegment = current?.segments instanceof Map
+    ? [...current.segments.values()].some((segment) =>
+      shouldRemoveLearnedPersistentOnFinalize(routeId, segment)
+    )
+    : false;
+  if (options.removeLearned || hasPersistentSegment || hasNormalRouteClearedLearnedSegment) {
+    clearLearnedPersistentDetour(routeId);
   }
 }
 
+function clearRouteDetour(routeId) {
+  if (!routeId) return;
+  activeDetours.delete(routeId);
+  persistentDetourCandidates.delete(routeId);
+  clearLearnedPersistentDetour(routeId);
+}
+
 function clearLearnedPersistentDetour(routeId) {
+  const existing = learnedPersistentDetours.get(routeId);
+  if (existing?.sharedGeometryFingerprint) {
+    const shared = learnedPersistentGeometries.get(existing.sharedGeometryFingerprint);
+    if (shared) {
+      const routeIds = (Array.isArray(shared.routeIds) ? shared.routeIds : [])
+        .filter((id) => id !== routeId);
+      if (routeIds.length > 0) {
+        learnedPersistentGeometries.set(existing.sharedGeometryFingerprint, {
+          ...shared,
+          routeIds,
+        });
+      } else {
+        learnedPersistentGeometries.delete(existing.sharedGeometryFingerprint);
+      }
+    }
+  }
   learnedPersistentDetours.delete(routeId);
   persistentDetourCandidates.delete(routeId);
 }
@@ -823,6 +1200,9 @@ function ensureSegmentEvidenceSets(segment) {
   if (!(segment.normalRouteVehicleIds instanceof Set)) {
     segment.normalRouteVehicleIds = new Set((segment.normalRouteVehicleIds || []).filter(Boolean));
   }
+  if (!(segment.normalRouteClearProofs instanceof Map)) {
+    segment.normalRouteClearProofs = normalizeNormalRouteClearProofMap(segment.normalRouteClearProofs);
+  }
 }
 
 function addEvidenceVehicleIds(ids, items) {
@@ -849,10 +1229,12 @@ function getEvidenceBackedVehicleIds(segment) {
 
 function getSegmentConfirmationVehicleIds(segment) {
   ensureSegmentEvidenceSets(segment);
+  if (segment?.candidateConfirmationIds?.size > 0) {
+    return new Set([...(segment.candidateConfirmationIds || [])].filter(Boolean));
+  }
   const evidenceBackedVehicleIds = getEvidenceBackedVehicleIds(segment);
   const ids = new Set([
     ...evidenceBackedVehicleIds,
-    ...(segment?.candidateConfirmationIds || []),
   ].filter(Boolean));
   if (ids.size > 0) return ids;
   return new Set([
@@ -867,9 +1249,11 @@ function shouldUseEvidenceBackedConfirmation(segment) {
 
 function syncMatchedVehicleIdsToCurrentEvidence(segment) {
   if (!shouldUseEvidenceBackedConfirmation(segment)) return;
-  const confirmationVehicleIds = getSegmentConfirmationVehicleIds(segment);
-  if (confirmationVehicleIds.size > 0) {
-    segment.matchedVehicleIds = confirmationVehicleIds;
+  ensureSegmentEvidenceSets(segment);
+  if (segment.matchedVehicleIds.size === 0) {
+    for (const vehicleId of getEvidenceBackedVehicleIds(segment)) {
+      segment.matchedVehicleIds.add(vehicleId);
+    }
   }
 }
 
@@ -938,6 +1322,25 @@ function evidenceItemKey(item) {
     normalized.latitude.toFixed(6),
     normalized.longitude.toFixed(6),
   ].join('|');
+}
+
+function countEvidenceItems(items) {
+  let count = 0;
+  for (const item of Array.isArray(items) ? items : []) {
+    if (normalizeEvidenceEntry(item)) count++;
+  }
+  return count;
+}
+
+function countCandidateEvidencePoints(candidate) {
+  return countEvidenceItems(candidate?.evidencePoints || []);
+}
+
+function getRequiredCandidateEvidencePoints(routeConfig) {
+  return Math.max(
+    Number(routeConfig?.consecutiveReadingsRequired) || CONSECUTIVE_READINGS_REQUIRED,
+    1
+  );
 }
 
 function dedupeEvidenceItems(items) {
@@ -1017,6 +1420,27 @@ function mergeEvidenceForGeometry(currentEvidence = {}, learnedEvidence = {}) {
       LEARNED_EVIDENCE_MAX_BOUNDARY_CANDIDATES
     ),
   };
+}
+
+function hasUsableLearnedGeometryEvidence(segment, currentEvidence = {}) {
+  if (!segment?.isPublished || segment.isPersistent || segment.state === 'clear-pending') return false;
+  const learned = normalizeLearnedEvidence(segment.learnedEvidence || {});
+  const learnedPointCount = Array.isArray(learned.points) ? learned.points.length : 0;
+  const learnedConfidenceCount = Math.max(
+    Array.isArray(learned.confidencePoints) ? learned.confidencePoints.length : 0,
+    learnedPointCount
+  );
+  const currentPointCount = Array.isArray(currentEvidence.points) ? currentEvidence.points.length : 0;
+  const currentConfidenceCount = Math.max(
+    Array.isArray(currentEvidence.confidencePoints) ? currentEvidence.confidencePoints.length : 0,
+    currentPointCount
+  );
+  const learnedUsableCount = Math.max(learnedPointCount, learnedConfidenceCount);
+  const currentUsableCount = Math.max(currentPointCount, currentConfidenceCount);
+
+  return learnedPointCount > 0 &&
+    learnedUsableCount >= MIN_EVIDENCE_FOR_GEOMETRY &&
+    learnedUsableCount > currentUsableCount;
 }
 
 function collectLearnedEvidenceFromRouteState(routeState) {
@@ -1169,6 +1593,51 @@ function trackPersistentLearning(routeId, detour, geometry, now, routeState = nu
   }
 }
 
+function trackSharedPersistentGeometries(detourMap = {}, now = Date.now()) {
+  for (const [routeId, detour] of Object.entries(detourMap || {})) {
+    const existing = learnedPersistentDetours.get(routeId);
+    if (!existing || !hasRenderableGeometry(detour?.geometry)) continue;
+
+    const sharedGeometryFingerprint =
+      buildSharedDetourGeometryFingerprint(detour.geometry) ||
+      existing.sharedGeometryFingerprint ||
+      null;
+    if (!sharedGeometryFingerprint) continue;
+
+    const evidence = normalizeLearnedEvidence(existing.evidence || {});
+    const sharedRecord = upsertSharedPersistentGeometry(
+      sharedGeometryFingerprint,
+      routeId,
+      detour.geometry,
+      evidence,
+      now,
+      existing
+    );
+    if (!sharedRecord) continue;
+
+    const geometryLastEvidenceAt = Math.max(
+      getGeometryTimestamp(detour.geometry) || 0,
+      toTimestampMs(existing.geometryLastEvidenceAt) || 0,
+      toTimestampMs(sharedRecord.geometryLastEvidenceAt) || 0,
+      0
+    ) || null;
+
+    learnedPersistentDetours.set(routeId, {
+      ...existing,
+      sharedGeometryFingerprint,
+      updatedAt: now,
+      recordUpdatedAt: now,
+      latestGpsEvidenceAt: toTimestampMs(existing.latestGpsEvidenceAt) ||
+        toTimestampMs(existing.lastEvidenceAt) ||
+        null,
+      geometryLastEvidenceAt,
+      geometry: hasRenderableGeometry(detour.geometry)
+        ? cloneJson(detour.geometry)
+        : getBestPersistentGeometry(existing),
+    });
+  }
+}
+
 function hydratePersistentDetours(records = {}) {
   learnedPersistentDetours.clear();
   for (const [routeId, record] of Object.entries(records || {})) {
@@ -1176,14 +1645,49 @@ function hydratePersistentDetours(records = {}) {
     learnedPersistentDetours.set(routeId, {
       routeId,
       fingerprint: record.fingerprint,
+      sharedGeometryFingerprint: record.sharedGeometryFingerprint || buildSharedDetourGeometryFingerprint(record.geometry) || null,
       detectedAt: Number(record.detectedAt) || Date.now(),
       learnedAt: Number(record.learnedAt) || Date.now(),
       updatedAt: Number(record.updatedAt) || Date.now(),
+      recordUpdatedAt: Number(record.recordUpdatedAt) || Number(record.updatedAt) || Date.now(),
       lastSeenAt: Number(record.lastSeenAt) || Number(record.detectedAt) || Date.now(),
       lastEvidenceAt: Number(record.lastEvidenceAt) || Number(record.lastSeenAt) || Number(record.detectedAt) || Date.now(),
+      latestGpsEvidenceAt: Number(record.latestGpsEvidenceAt) ||
+        Number(record.lastEvidenceAt) ||
+        Number(record.lastSeenAt) ||
+        Number(record.detectedAt) ||
+        Date.now(),
+      geometryLastEvidenceAt: Number(record.geometryLastEvidenceAt) || getGeometryTimestamp(record.geometry) || null,
       triggerVehicleId: record.triggerVehicleId || null,
       geometry: cloneJson(record.geometry) || null,
       detourZone: cloneJson(record.detourZone) || null,
+      evidence: normalizeLearnedEvidence(record.evidence || {}),
+    });
+  }
+}
+
+function hydratePersistentDetourGeometries(records = {}) {
+  learnedPersistentGeometries.clear();
+  for (const [fingerprint, record] of Object.entries(records || {})) {
+    const sharedGeometryFingerprint =
+      record?.sharedGeometryFingerprint ||
+      fingerprint;
+    if (!sharedGeometryFingerprint || !record || typeof record !== 'object') continue;
+    learnedPersistentGeometries.set(sharedGeometryFingerprint, {
+      sharedGeometryFingerprint,
+      routeIds: Array.isArray(record.routeIds) ? record.routeIds.filter(Boolean).sort() : [],
+      learnedAt: Number(record.learnedAt) || Date.now(),
+      updatedAt: Number(record.updatedAt) || Date.now(),
+      recordUpdatedAt: Number(record.recordUpdatedAt) || Number(record.updatedAt) || Date.now(),
+      latestGpsEvidenceAt: Number(record.latestGpsEvidenceAt) ||
+        Number(record.lastEvidenceAt) ||
+        Date.now(),
+      geometryLastEvidenceAt: Number(record.geometryLastEvidenceAt) || getGeometryTimestamp(record.geometry) || null,
+      lastEvidenceAt: Number(record.lastEvidenceAt) ||
+        Number(record.latestGpsEvidenceAt) ||
+        Number(record.geometryLastEvidenceAt) ||
+        Date.now(),
+      geometry: cloneJson(record.geometry) || null,
       evidence: normalizeLearnedEvidence(record.evidence || {}),
     });
   }
@@ -1224,6 +1728,7 @@ function hydrateActiveDetourSnapshots(records = {}) {
     segment.matchedVehicleIds = new Set(confirmationIds);
     segment.candidateConfirmationIds = new Set(confirmationIds);
     segment.normalRouteVehicleIds = new Set();
+    segment.normalRouteClearProofs = new Map();
     segment.state = 'active';
     segment.clearPendingAt = null;
     segment.clearReason = null;
@@ -1297,6 +1802,16 @@ function removeVehicleFromAssignedSegment(state) {
     segment.vehiclesOffRoute.delete(state.vehicleId || state.id || null);
   }
   state.detourSegmentId = null;
+}
+
+function isTripRolloverClearSuppressed(state, routeId, tripId, segmentId) {
+  const suppression = state?.tripRolloverClearSuppression;
+  if (!suppression || !routeId || !tripId || !segmentId) return false;
+  return (
+    suppression.routeId === routeId &&
+    suppression.tripId === tripId &&
+    suppression.segmentId === segmentId
+  );
 }
 
 function reconcileActiveDetourVehicleMembership() {
@@ -1373,15 +1888,16 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
   const preferredSegmentId = boundarySignals.preferredSegmentId || null;
   const projection = boundarySignals.projection || null;
   const allowSegmentSwitch = Boolean(boundarySignals.allowSegmentSwitch);
+  const forceNewSegment = Boolean(boundarySignals.forceNewSegment);
 
-  let segment = preferredSegmentId ? routeState.segments.get(preferredSegmentId) : null;
+  let segment = forceNewSegment ? null : (preferredSegmentId ? routeState.segments.get(preferredSegmentId) : null);
   if (segment && projection && allowSegmentSwitch) {
     const preferredDistance = getProjectionDistanceToSegment(segment, projection, shapes);
     if (!Number.isFinite(preferredDistance)) {
       segment = null;
     }
   }
-  if (!segment && projection) {
+  if (!forceNewSegment && !segment && projection) {
     segment = findBestMatchingSegment(routeState, projection, shapes);
   }
   if (!segment) {
@@ -1397,6 +1913,18 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
     }
   }
 
+  const supersedesSegmentId = boundarySignals.supersedesSegmentId || null;
+  const supersededSegment = supersedesSegmentId ? routeState.segments.get(supersedesSegmentId) : null;
+  if (supersededSegment && supersededSegment.segmentId !== segment.segmentId) {
+    supersededSegment.isPublished = false;
+    supersededSegment.supersededAt = now || Date.now();
+    supersededSegment.supersededBySegmentId = segment.segmentId;
+    supersededSegment.clearReason = SUPERSEDED_BY_NEWER_GPS_PATH_REASON;
+    supersededSegment.vehiclesOffRoute.clear();
+    segment.supersedesSegmentId = supersededSegment.segmentId;
+    segment.gpsSupersedesPreviousPath = true;
+  }
+
   ensureSegmentEvidenceSets(segment);
   const vehicleWasAlreadyOffRoute = segment.vehiclesOffRoute.has(vehicleId);
   segment.routeConfig = routeConfig;
@@ -1404,6 +1932,8 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
     segment.vehiclesOffRoute.add(vehicleId);
     segment.matchedVehicleIds.add(vehicleId);
   }
+  segment.normalRouteVehicleIds.clear();
+  segment.normalRouteClearProofs.clear();
   segment.lastSeenAt = new Date(now || Date.now());
   segment.lastOffRouteEvidenceAt = now || Date.now();
   updateSegmentProjectionWindow(segment, projection);
@@ -1420,6 +1950,15 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
       'entry',
       boundarySignals.entryObservation,
       vehicleId,
+      routeConfig,
+      boundarySignals.tripShapeId
+    );
+  }
+  if (boundarySignals.inheritedBoundaryCandidateSource) {
+    inheritBoundaryCandidatesFromSupersededSegment(
+      segment,
+      boundarySignals.inheritedBoundaryCandidateSource,
+      boundarySignals.inheritedBoundaryCandidate,
       routeConfig,
       boundarySignals.tripShapeId
     );
@@ -1548,11 +2087,8 @@ function buildNormalDetourCandidateObservation(
 }
 
 function getCandidateConfirmationId(observation) {
-  if (observation?.vehicleId) return observation.vehicleId;
-  if (observation?.tripId) return `trip:${observation.tripId}`;
   const signature = observation?.signature || makeCandidateObservationSignature(observation);
   if (!signature || signature === 'unknown') return null;
-  if (signature.startsWith('vehicle:')) return signature.slice('vehicle:'.length);
   return signature;
 }
 
@@ -1573,6 +2109,12 @@ function publishNormalDetourCandidate(candidate, observation, shapes, routeShape
   const routeConfig = observation.routeConfig || resolveRouteDetectorConfig(observation.routeId);
   const candidateEvidencePoints = (candidate.observations || [])
     .flatMap((candidateObservation) => candidateObservation.evidencePoints || []);
+  const routeStateBeforePublish = activeDetours.get(observation.routeId);
+  const supersededSegment = findSupersededPublishedSegmentForCandidate(
+    routeStateBeforePublish,
+    candidate,
+    shapes
+  );
 
   const segmentId = addVehicleToDetour(
     observation.vehicleId || null,
@@ -1588,6 +2130,11 @@ function publishNormalDetourCandidate(candidate, observation, shapes, routeShape
         progressMeters: midpoint,
         distanceMeters: (routeConfig?.offRouteThresholdMeters || OFF_ROUTE_THRESHOLD_METERS) + 1,
       },
+      forceNewSegment: Boolean(supersededSegment),
+      supersedesSegmentId: supersededSegment?.segmentId || null,
+      inheritedBoundaryCandidateSource: supersededSegment || null,
+      inheritedBoundaryCandidate: candidate,
+      gpsSupersedesPreviousPath: Boolean(supersededSegment),
     },
     shapes,
     routeShapeMapping
@@ -1642,6 +2189,12 @@ function recordNormalDetourCandidateObservation(
   });
 
   if (!hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: MIN_VEHICLES_FOR_DETOUR })) {
+    return null;
+  }
+  if (
+    countCandidateEvidencePoints(candidate) <
+    getRequiredCandidateEvidencePoints(observation.routeConfig)
+  ) {
     return null;
   }
 
@@ -2123,7 +2676,8 @@ function recordRecurringShortDeviationObservation(observation, shapes, routeShap
   const signatures = new Set(candidate.observations.map((item) => item.signature).filter(Boolean));
   if (
     candidate.observations.length >= RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS &&
-    signatures.size >= RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES
+    signatures.size >= RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES &&
+    countCandidateEvidencePoints(candidate) >= getRequiredCandidateEvidencePoints(observation.routeConfig)
   ) {
     const segment = publishRecurringShortDeviationCandidate(candidate, observation, shapes, routeShapeMapping);
     if (segment) {
@@ -2210,6 +2764,7 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
   const publishedSegments = [];
   const vehiclesOffRoute = new Set();
   const matchedVehicleIds = new Set();
+  const confirmationIds = new Set();
   const normalRouteVehicleIds = new Set();
 
   for (const segment of routeState.segments.values()) {
@@ -2235,7 +2790,9 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
       ? (() => {
         const currentEvidence = getOrCreateSegmentEvidence(segment);
         const shouldUseLearnedEvidence =
-          segment.isPersistent || doesSegmentMatchLearnedPersistentDetour(routeId, segment);
+          segment.isPersistent ||
+          doesSegmentMatchLearnedPersistentDetour(routeId, segment) ||
+          hasUsableLearnedGeometryEvidence(segment, currentEvidence);
         const geometryEvidence = shouldUseLearnedEvidence
           ? mergeEvidenceForGeometry(currentEvidence, segment.learnedEvidence)
           : currentEvidence;
@@ -2248,6 +2805,15 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
           detectedAtMs,
           stopImpactData
         );
+        if (computedGeometry && segment.gpsSupersedesPreviousPath === true) {
+          computedGeometry.gpsSupersedesPreviousPath = true;
+          if (Array.isArray(computedGeometry.segments)) {
+            computedGeometry.segments = computedGeometry.segments.map((geometrySegment) => ({
+              ...geometrySegment,
+              gpsSupersedesPreviousPath: true,
+            }));
+          }
+        }
         return hasRenderableGeometry(computedGeometry)
           ? computedGeometry
           : cloneJson(segment.persistedGeometry) || computedGeometry;
@@ -2265,8 +2831,11 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
     const segmentMatchedVehicleIds = shouldUseEvidenceBackedConfirmation(segment)
       ? getSegmentConfirmationVehicleIds(segment)
       : segment.matchedVehicleIds || new Set();
-    for (const vehicleId of segmentMatchedVehicleIds) {
+    for (const vehicleId of segment.matchedVehicleIds || segment.vehiclesOffRoute || []) {
       matchedVehicleIds.add(vehicleId);
+    }
+    for (const confirmationId of segmentMatchedVehicleIds) {
+      confirmationIds.add(confirmationId);
     }
     for (const vehicleId of segment.normalRouteVehicleIds || []) {
       normalRouteVehicleIds.add(vehicleId);
@@ -2334,6 +2903,12 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
       }
       return String(a.segmentId).localeCompare(String(b.segmentId));
     })[0];
+  const gpsSupersedesPreviousPath = publishedSegments.some((segment) => (
+    segment.gpsSupersedesPreviousPath === true ||
+    segment.geometry?.gpsSupersedesPreviousPath === true ||
+    (Array.isArray(segment.geometry?.segments) &&
+      segment.geometry.segments.some((geometrySegment) => geometrySegment?.gpsSupersedesPreviousPath === true))
+  ));
   const routeGeometry = shapes && routeShapeMapping
     ? {
       shapeId: primarySegment?.shapeId ?? publishedSegments[0]?.geometry?.shapeId ?? null,
@@ -2341,6 +2916,7 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
       skippedSegmentPolyline: primarySegment?.skippedSegmentPolyline ?? null,
       inferredDetourPolyline: primarySegment?.inferredDetourPolyline ?? null,
       canShowDetourPath: primarySegment?.canShowDetourPath === true,
+      gpsSupersedesPreviousPath,
       entryPoint: primarySegment?.entryPoint ?? null,
       exitPoint: primarySegment?.exitPoint ?? null,
       confidence: aggregateConfidence,
@@ -2360,9 +2936,11 @@ function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now,
     vehiclesOffRoute,
     matchedVehicleIds,
     normalRouteVehicleIds,
-    uniqueVehicleCount: matchedVehicleIds.size,
+    uniqueVehicleCount: confirmationIds.size,
     currentVehicleCount: vehiclesOffRoute.size,
-    vehicleCount: matchedVehicleIds.size,
+    vehicleCount: confirmationIds.size,
+    latestGpsEvidenceAt: routeLastEvidenceAt,
+    geometryLastEvidenceAt: getGeometryTimestamp(routeGeometry),
     state: routeStateLabel,
     clearReason: publishedSegments.find((segment) => segment.clearReason)?.clearReason || null,
     isPersistent: publishedSegments.length === 1 ? Boolean(publishedSegments[0].isPersistent) : false,
@@ -2437,6 +3015,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
         onRouteStreakPointCount: 0,
         tripShapeId: null,
         tripId: null,
+        tripRolloverClearSuppression: null,
         hasReturnedOnRouteSinceDetour: false,
       };
       vehicleState.set(id, state);
@@ -2453,12 +3032,48 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
       resetOnRouteClearTraversal(state);
       state.tripShapeId = null;
       state.tripId = null;
+      state.tripRolloverClearSuppression = null;
       state.hasReturnedOnRouteSinceDetour = false;
+    }
+
+    const currentTripId = vehicle.tripId || null;
+    const previousTripId = state.tripId || null;
+    const tripChangedOnSameRoute = Boolean(
+      previousTripId &&
+      currentTripId &&
+      previousTripId !== currentTripId &&
+      state.routeId === routeId
+    );
+    if (tripChangedOnSameRoute) {
+      const suppressedSegmentId = state.detourSegmentId || null;
+      if (suppressedSegmentId) {
+        state.tripRolloverClearSuppression = {
+          routeId,
+          tripId: currentTripId,
+          segmentId: suppressedSegmentId,
+        };
+      }
+      removeVehicleFromAssignedSegment(state);
+      state.consecutiveOffRoute = 0;
+      state.consecutiveOnRoute = 0;
+      state.lastOnRouteObservation = null;
+      state.offRouteStreakStart = null;
+      clearOffRouteStreakPoints(state);
+      resetOnRouteClearTraversal(state);
+      state.hasReturnedOnRouteSinceDetour = false;
+    } else if (
+      state.tripRolloverClearSuppression &&
+      (
+        state.tripRolloverClearSuppression.routeId !== routeId ||
+        state.tripRolloverClearSuppression.tripId !== currentTripId
+      )
+    ) {
+      state.tripRolloverClearSuppression = null;
     }
 
     state.lastCheckedAt = now;
     state.tripShapeId = tripShapeId || null;
-    state.tripId = vehicle.tripId || null;
+    state.tripId = currentTripId;
     state.lastRouteProjection = buildRouteProjectionDiagnostic({
       routeId,
       coordinate,
@@ -2472,6 +3087,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
     });
 
     if (minDist > routeConfig.offRouteThresholdMeters) {
+      state.tripRolloverClearSuppression = null;
       if (state.consecutiveOffRoute === 0) {
         state.offRouteStreakStart = {
           coordinate,
@@ -2484,6 +3100,41 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
       recordOffRouteStreakPoint(state, coordinate, sampleTimeMs, tripShapeId, routeConfig);
       state.consecutiveOnRoute = 0;
       resetOnRouteClearTraversal(state);
+
+      const publishedKnownDetourSegment = findPublishedSegmentNearKnownDetourPath(
+        activeDetours.get(routeId),
+        coordinate
+      );
+      if (publishedKnownDetourSegment) {
+        state.detourSegmentId = addVehicleToDetour(id, routeId, coordinate, sampleTimeMs, {
+          entryObservation: state.lastOnRouteObservation || state.offRouteStreakStart,
+          offRouteStreakPoints: state.offRouteStreakPoints,
+          tripShapeId,
+          projection: routeProjection,
+          preferredSegmentId: publishedKnownDetourSegment.segmentId,
+        }, shapes, routeShapeMapping);
+        clearOffRouteStreakPoints(state);
+        state.hasReturnedOnRouteSinceDetour = false;
+      }
+
+      if (!state.detourSegmentId && MIN_VEHICLES_FOR_DETOUR > 1) {
+        const normalCandidateSegmentId = recordNormalDetourCandidateObservation(
+          buildNormalDetourCandidateObservation(
+            state,
+            routeId,
+            routeConfig,
+            shapes,
+            routeShapeMapping,
+            sampleTimeMs
+          ),
+          shapes,
+          routeShapeMapping,
+          stopImpactData?.scheduleIndex || null
+        );
+        if (normalCandidateSegmentId) {
+          state.detourSegmentId = normalCandidateSegmentId;
+        }
+      }
 
       if (state.consecutiveOffRoute === 1 && !state.detourSegmentId) {
         const recurringSegment = recordRecurringShortDeviationObservation(
@@ -2580,6 +3231,12 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
         clearProjection = match?.projection || routeProjection;
       }
       if (segment && segment.isPublished) {
+        if (isTripRolloverClearSuppressed(state, routeId, currentTripId, segment.segmentId)) {
+          state.detourSegmentId = null;
+          state.consecutiveOnRoute = 0;
+          resetOnRouteClearTraversal(state);
+          continue;
+        }
         if (!state.detourSegmentId) {
           state.detourSegmentId = segment.segmentId;
         }
@@ -2595,6 +3252,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
             };
           }
           updateOnRouteClearTraversal(state, clearProjection, sampleTimeMs);
+          recordNormalRouteClearProof(segment, id, currentTripId, clearProjection, sampleTimeMs);
           state.consecutiveOnRoute++;
           maybeRemoveVehicleFromDetour(
             id,
@@ -2603,7 +3261,8 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
             now,
             state.onRouteStreakStart,
             state.tripShapeId,
-            hasRegularRouteTraversalForClear(state, segment, clearProjection, shapes, routeConfig)
+            hasRegularRouteTraversalForClear(state, segment, clearProjection, shapes, routeConfig) ||
+              hasCollectiveRegularRouteTraversalForClear(segment, shapes, routeConfig)
           );
         } else {
           state.consecutiveOnRoute = 0;
@@ -2638,6 +3297,7 @@ const detectorReadModel = createDetectorReadModel({
   activeDetours,
   persistentDetourCandidates,
   learnedPersistentDetours,
+  learnedPersistentGeometries,
   getLastReportedDetours: () => lastReportedDetours,
   setLastReportedDetours: (value) => { lastReportedDetours = value; },
   getSegmentCount,
@@ -2645,6 +3305,7 @@ const detectorReadModel = createDetectorReadModel({
   hasPublishedSegments,
   getOrCreateSegmentEvidence,
   trackPersistentLearning,
+  trackSharedPersistentGeometries,
   resetPersistentCandidate,
   buildRouteSnapshot,
   reconcileRouteFamilyGeometries,
@@ -2659,6 +3320,7 @@ const {
   getRawDetourEvidence,
   getRouteDebug,
   getPersistentDetours,
+  getPersistentDetourGeometries,
 } = detectorReadModel;
 
 module.exports = {
@@ -2670,7 +3332,10 @@ module.exports = {
   getRawDetourEvidence,
   getRouteDebug,
   getPersistentDetours,
+  getPersistentDetourGeometries,
+  clearRouteDetour,
   hydratePersistentDetours,
+  hydratePersistentDetourGeometries,
   hydrateActiveDetourSnapshots,
   serializeDetectorRuntimeState,
   hydrateRuntimeState,

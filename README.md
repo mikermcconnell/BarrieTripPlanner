@@ -319,7 +319,7 @@ Deploy updated rules so clients can read:
 
 ### Client behavior
 
-`TransitContext` now prefers backend detours when the shared feed is live; it falls back to local detector logic if backend feed is unavailable.
+`TransitContext` renders the backend Firestore detour feed only. If the feed is unavailable, the app does not create local detector evidence; use dev fixtures or the simulation endpoint for local UI checks.
 To temporarily disable all auto-detour behavior during testing, set `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=false`.
 
 ## License

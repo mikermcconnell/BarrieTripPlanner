@@ -1,8 +1,11 @@
 'use strict';
 
 function makeCandidateObservationSignature(observation) {
-  if (observation?.vehicleId) return `vehicle:${observation.vehicleId}`;
+  if (observation?.vehicleId && observation?.tripId) {
+    return `vehicle-trip:${observation.vehicleId}:${observation.tripId}`;
+  }
   if (observation?.tripId) return `trip:${observation.tripId}`;
+  if (observation?.vehicleId) return `vehicle:${observation.vehicleId}`;
   return 'unknown';
 }
 
@@ -71,6 +74,12 @@ function normalizeObservation(observation = {}) {
 }
 
 function mergeObservation(previous, next) {
+  const previousEvidencePoints = previous.evidencePoints || [];
+  const nextEvidencePoints = next.evidencePoints || [];
+  const evidencePoints = nextEvidencePoints.length >= previousEvidencePoints.length
+    ? nextEvidencePoints
+    : [...previousEvidencePoints, ...nextEvidencePoints].slice(-10);
+
   return {
     ...previous,
     ...next,
@@ -78,10 +87,7 @@ function mergeObservation(previous, next) {
     progressMaxMeters: Math.max(previous.progressMaxMeters, next.progressMaxMeters),
     timestampMs: Math.max(previous.timestampMs, next.timestampMs),
     entryObservation: previous.entryObservation || next.entryObservation,
-    evidencePoints: [
-      ...(previous.evidencePoints || []),
-      ...(next.evidencePoints || []),
-    ].slice(-10),
+    evidencePoints,
     lastCoordinate: next.lastCoordinate || previous.lastCoordinate || null,
   };
 }

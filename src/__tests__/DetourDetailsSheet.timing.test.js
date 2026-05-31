@@ -7,6 +7,15 @@ jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
   TouchableOpacity: 'TouchableOpacity',
+  ScrollView: ({ children }) => require('react').createElement('ScrollView', null, children),
+  Animated: {
+    Value: jest.fn(() => ({
+      interpolate: jest.fn(() => 0),
+    })),
+    View: 'Animated.View',
+    spring: jest.fn(() => ({ start: jest.fn((callback) => callback?.()) })),
+    timing: jest.fn(() => ({ start: jest.fn((callback) => callback?.()) })),
+  },
   StyleSheet: { create: (styles) => styles },
   Linking: { openURL: jest.fn() },
   useWindowDimensions: () => ({ width: 390, height: 844 }),
@@ -26,6 +35,7 @@ jest.mock('../components/Icon', () => 'Icon');
 jest.mock('../components/DetourImpactSummary', () => 'DetourImpactSummary');
 
 const DetourDetailsSheet = require('../components/DetourDetailsSheet').default;
+const DetourDetailsSheetWeb = require('../components/DetourDetailsSheet.web').default;
 
 const collectText = (node) => {
   if (node == null || typeof node === 'boolean') return [];
@@ -162,5 +172,131 @@ describe('DetourDetailsSheet MyRide timing', () => {
 
     const impactSummary = inst.root.findByType('DetourImpactSummary');
     expect(impactSummary.props.routeLabel).toBe('Routes 12A/12B');
+  });
+
+  test('lets riders drill from an event to one route and back out', () => {
+    const onSelectEventRoute = jest.fn();
+    const onShowEvent = jest.fn();
+    const onShowAllDetours = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '12A',
+        routeColor: '#F39AC2',
+        detour: { routeId: '12A', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detourEvent: {
+          title: 'Saunders & Welham',
+          routeIds: ['12A', '12B'],
+        },
+        detourExplorerLevel: 'route',
+        selectedEventRouteId: '12A',
+        routeColorByRouteId: {
+          '12A': '#F39AC2',
+          '12B': '#F39AC2',
+        },
+        transitNews: [],
+        onClose: jest.fn(),
+        onSelectEventRoute,
+        onShowEvent,
+        onShowAllDetours,
+      }));
+    });
+
+    const selectRoute12B = inst.root.findByProps({ accessibilityLabel: 'Show Route 12B detour only' });
+    act(() => selectRoute12B.props.onPress());
+    expect(onSelectEventRoute).toHaveBeenCalledWith('12B');
+
+    const showEvent = inst.root.findByProps({ accessibilityLabel: 'Show all routes in this detour event' });
+    act(() => showEvent.props.onPress());
+    expect(onShowEvent).toHaveBeenCalledTimes(1);
+
+    const showAll = inst.root.findByProps({ accessibilityLabel: 'Show all active detours' });
+    act(() => showAll.props.onPress());
+    expect(onShowAllDetours).toHaveBeenCalledTimes(1);
+  });
+
+  test('lets riders return from a selected route detour to all detours', () => {
+    const onShowAllDetours = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+        onShowAllDetours,
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Selected: Route 11');
+    expect(texts).toContain('View all');
+
+    const showAll = inst.root.findByProps({ accessibilityLabel: 'Show all active detours' });
+    act(() => showAll.props.onPress());
+    expect(onShowAllDetours).toHaveBeenCalledTimes(1);
+  });
+
+  test('web lets riders return from a selected route detour to all detours', () => {
+    const onShowAllDetours = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheetWeb, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+        onShowAllDetours,
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Selected: Route 11');
+    expect(texts).toContain('View all');
+
+    const showAll = inst.root.findByProps({ accessibilityLabel: 'Show all active detours' });
+    act(() => showAll.props.onPress());
+    expect(onShowAllDetours).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows a clear hint that highlighted route lines remain tappable', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Map tip');
+    expect(texts).toContain('Tap or click a highlighted route line on the map to open that route’s detour details.');
+  });
+
+  test('web details card does not block map route clicks behind the sheet', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheetWeb, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const closeButtons = inst.root.findAllByProps({ accessibilityLabel: 'Close detour details' });
+    const backdrop = inst.root.findAllByType('View').find((node) => node.props.style?.zIndex === 999);
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+
+    expect(closeButtons).toHaveLength(1);
+    expect(backdrop.props.pointerEvents).toBe('none');
+    expect(texts).toContain('Tap or click a highlighted route line on the map to open that route’s detour details.');
   });
 });

@@ -21,7 +21,6 @@ describe('bus hub metadata', () => {
     expect(BUS_HUB_MINOR_IDS).toEqual([
       'georgian-mall',
       'rvh',
-      'east-bayfield-community-centre',
       'peggy-hill-team-community-centre',
     ]);
 
