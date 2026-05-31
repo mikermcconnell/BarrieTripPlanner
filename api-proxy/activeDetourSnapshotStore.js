@@ -1,7 +1,9 @@
 const { getDb } = require('./firebaseAdmin');
+const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 
 const COLLECTION = 'activeDetours';
 let hydratePromise = null;
+let hydrateCacheKey = null;
 
 function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -54,11 +56,16 @@ function normalizeSnapshot(routeId, data = {}) {
 async function loadActiveDetourSnapshots(options = {}) {
   const db = getDb();
   if (!db) return {};
-  if (options.force) hydratePromise = null;
+  const storageConfig = resolveDetourStorageConfig(options.storageConfig);
+  const collectionName = storageConfig.activeCollection;
+  if (options.force || hydrateCacheKey !== collectionName) {
+    hydratePromise = null;
+    hydrateCacheKey = collectionName;
+  }
   if (!hydratePromise) {
     hydratePromise = (async () => {
       const records = {};
-      const snapshot = await db.collection(COLLECTION).get();
+      const snapshot = await db.collection(collectionName).get();
       snapshot.forEach((doc) => {
         const data = doc.data() || {};
         const routeId = data.routeId || doc.id;

@@ -1,5 +1,6 @@
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import runtimeConfig from '../../config/runtimeConfig';
 import { getEnabledDevDetourFixtures } from '../devDetourFixtures';
 
 /**
@@ -115,7 +116,7 @@ export function subscribeToActiveDetours(onUpdate, onError) {
     return () => {};
   }
 
-  const detoursRef = collection(db, 'activeDetours');
+  const detoursRef = collection(db, runtimeConfig.detours.activeCollection || 'activeDetours');
 
   return onSnapshot(
     detoursRef,

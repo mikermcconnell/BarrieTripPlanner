@@ -264,3 +264,15 @@ describe('mapActiveDetourDoc', () => {
     ]);
   });
 });
+
+test('reads detour updates from configured active detours collection', () => {
+  jest.resetModules();
+  process.env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION = 'activeDetoursV2';
+  const firestore = require('firebase/firestore');
+  firestore.onSnapshot.mockImplementation(() => () => {});
+
+  const { subscribeToActiveDetours } = require('../services/firebase/detourService');
+  subscribeToActiveDetours(() => {});
+
+  expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetoursV2');
+});

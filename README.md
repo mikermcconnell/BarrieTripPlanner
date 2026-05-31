@@ -305,6 +305,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
 Deploy updated rules so clients can read:
 - `activeDetours/*`
 - `detourHistory/*`
+- `activeDetoursV2/*` and `detourHistoryV2/*` for the isolated lab feed
 
 ### EAS Android Firebase file
 

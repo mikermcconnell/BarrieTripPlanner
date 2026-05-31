@@ -60,6 +60,73 @@ describe('buildDetourEventId', () => {
   });
 });
 
+describe('detourPublisher storage config', () => {
+  test('getDetourHistory reads from the configured history collection only', async () => {
+    jest.resetModules();
+    const get = jest.fn(async () => ({ docs: [] }));
+    const limit = jest.fn(() => ({ get }));
+    const orderBy = jest.fn(() => ({ limit }));
+    const collection = jest.fn(() => ({ orderBy }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { getDetourHistory } = require('../detourPublisher');
+    await getDetourHistory({ storageConfig: { historyCollection: 'detourHistoryV2' } });
+
+    expect(collection).toHaveBeenCalledWith('detourHistoryV2');
+    expect(collection).not.toHaveBeenCalledWith('detourHistory');
+  });
+
+  test('publishDetours writes only configured V2 active and history collections', async () => {
+    jest.resetModules();
+    const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
+    process.env.DETOUR_HISTORY_RETENTION_DAYS = '0';
+    const set = jest.fn(async () => {});
+    const get = jest.fn(async () => ({ size: 0, forEach() {} }));
+    const doc = jest.fn(() => ({ set, delete: jest.fn(async () => {}) }));
+    const collection = jest.fn(() => ({ doc, get }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    try {
+      await publishDetours({
+        '8A': {
+          routeId: '8A',
+          detectedAt: new Date('2026-05-31T10:00:00Z'),
+          lastSeenAt: new Date('2026-05-31T10:01:00Z'),
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 2,
+          vehiclesOffRoute: new Set(['bus-1', 'bus-2']),
+          geometry: {},
+        },
+      }, {
+        now: Date.parse('2026-05-31T10:02:00Z'),
+        storageConfig: {
+          activeCollection: 'activeDetoursV2',
+          historyCollection: 'detourHistoryV2',
+        },
+      });
+    } finally {
+      if (originalRetentionDays == null) {
+        delete process.env.DETOUR_HISTORY_RETENTION_DAYS;
+      } else {
+        process.env.DETOUR_HISTORY_RETENTION_DAYS = originalRetentionDays;
+      }
+    }
+
+    expect(collection).toHaveBeenCalledWith('activeDetoursV2');
+    expect(collection).toHaveBeenCalledWith('detourHistoryV2');
+    expect(collection).not.toHaveBeenCalledWith('activeDetours');
+    expect(collection).not.toHaveBeenCalledWith('detourHistory');
+  });
+});
+
 describe('publishDetours event ids', () => {
   test('removes skipped stops when the final detour path passes the stop', async () => {
     jest.resetModules();
