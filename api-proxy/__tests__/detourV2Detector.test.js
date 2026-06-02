@@ -70,6 +70,50 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].geometry.inferredDetourPolyline).toHaveLength(3);
   });
 
+  test('uses one coherent recent corridor instead of stitching old repeated detour evidence', () => {
+    const detector = createDetourV2Detector();
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-old',
+        tripId: 'trip-old',
+        coordinate: { latitude: 44.395, longitude: -79.700 },
+        timestampMs: 1000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-1',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.395, longitude: -79.684 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.682 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.680 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: true,
+      canShowDetourPath: true,
+    }));
+    expect(result['8A'].geometry.inferredDetourPolyline).toHaveLength(3);
+    expect(result['8A'].geometry.inferredDetourPolyline[0].longitude).toBeCloseTo(-79.684, 3);
+    expect(result['8A'].geometry.inferredDetourPolyline[2].longitude).toBeCloseTo(-79.680, 3);
+    expect(result['8A'].geometry.entryPoint.longitude).toBeGreaterThan(-79.686);
+    expect(result['8A'].detourZone.startProgressMeters).toBeGreaterThan(1000);
+  });
+
   test('does not count duplicate vehicle snapshots as new evidence', () => {
     const detector = createDetourV2Detector();
     const duplicate = vehicle({

@@ -5,14 +5,37 @@ const {
   enrichDetourMapStopImpacts,
 } = require('../detourGeometry');
 const { projectCoordinateToRoute } = require('../detour/projection');
+const { haversineDistance } = require('../geometry');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = 75;
 const DEFAULT_ON_ROUTE_CLEAR_THRESHOLD_METERS = 40;
 const MIN_OFF_ROUTE_POINTS = 3;
 const MIN_UNIQUE_SIGNATURES = 2;
 const MIN_SAFE_SPAN_METERS = 100;
+const GEOMETRY_CLUSTER_GAP_METERS = positiveNumber(
+  process.env.DETOUR_V2_GEOMETRY_CLUSTER_GAP_METERS,
+  1000
+);
+const INFERRED_DETOUR_POINT_DEDUPE_METERS = positiveNumber(
+  process.env.DETOUR_V2_INFERRED_POINT_DEDUPE_METERS,
+  20
+);
+const MAX_INFERRED_DETOUR_POINTS = positiveInteger(
+  process.env.DETOUR_V2_MAX_INFERRED_POINTS,
+  16
+);
 const CLEAR_MIN_TRAVERSAL_RATIO = 0.6;
 const CLEAR_MIN_TRAVERSAL_METERS = 100;
+
+function positiveNumber(value, fallback) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function positiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 function toMillis(value, fallback = Date.now()) {
   if (value == null) return fallback;
@@ -106,6 +129,122 @@ function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
+function coordinateDistanceMeters(a, b) {
+  if (!a || !b) return Infinity;
+  return haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+}
+
+function getPointStats(points = []) {
+  const progressValues = points
+    .map((point) => Number(point.progressMeters))
+    .filter(Number.isFinite);
+  const minProgressMeters = progressValues.length > 0 ? Math.min(...progressValues) : Infinity;
+  const maxProgressMeters = progressValues.length > 0 ? Math.max(...progressValues) : -Infinity;
+  const timestamps = points
+    .map((point) => Number(point.timestampMs))
+    .filter(Number.isFinite);
+
+  return {
+    points,
+    pointCount: points.length,
+    signatureCount: new Set(points.map((point) => point.signature).filter(Boolean)).size,
+    minProgressMeters,
+    maxProgressMeters,
+    spanMeters: maxProgressMeters - minProgressMeters,
+    lastEvidenceAt: timestamps.length > 0 ? Math.max(...timestamps) : null,
+  };
+}
+
+function splitPointsByProgress(points = []) {
+  const sorted = points
+    .filter((point) => point?.coordinate && Number.isFinite(point.progressMeters))
+    .sort((a, b) => {
+      if (a.progressMeters !== b.progressMeters) return a.progressMeters - b.progressMeters;
+      return (a.timestampMs || 0) - (b.timestampMs || 0);
+    });
+  const clusters = [];
+  let current = [];
+
+  for (const point of sorted) {
+    const previous = current[current.length - 1];
+    if (
+      previous &&
+      point.progressMeters - previous.progressMeters > GEOMETRY_CLUSTER_GAP_METERS
+    ) {
+      clusters.push(current);
+      current = [];
+    }
+    current.push(point);
+  }
+
+  if (current.length > 0) clusters.push(current);
+  return clusters;
+}
+
+function isPublishableGeometryStats(stats) {
+  return stats.pointCount >= MIN_OFF_ROUTE_POINTS &&
+    stats.signatureCount >= MIN_UNIQUE_SIGNATURES &&
+    stats.spanMeters >= MIN_SAFE_SPAN_METERS;
+}
+
+function selectGeometryEvidence(candidate) {
+  const allStats = getPointStats(candidate.points || []);
+  const validClusters = splitPointsByProgress(candidate.points || [])
+    .map(getPointStats)
+    .filter(isPublishableGeometryStats)
+    .sort((a, b) => {
+      if ((b.lastEvidenceAt || 0) !== (a.lastEvidenceAt || 0)) {
+        return (b.lastEvidenceAt || 0) - (a.lastEvidenceAt || 0);
+      }
+      if (b.signatureCount !== a.signatureCount) return b.signatureCount - a.signatureCount;
+      if (b.pointCount !== a.pointCount) return b.pointCount - a.pointCount;
+      return b.spanMeters - a.spanMeters;
+    });
+
+  return validClusters[0] || allStats;
+}
+
+function thinPolyline(polyline, maxPoints = MAX_INFERRED_DETOUR_POINTS) {
+  if (!Array.isArray(polyline) || polyline.length <= maxPoints) return polyline;
+  const result = [];
+  const lastIndex = polyline.length - 1;
+
+  for (let index = 0; index < maxPoints; index += 1) {
+    const sourceIndex = Math.round((index * lastIndex) / (maxPoints - 1));
+    const point = polyline[sourceIndex];
+    const previous = result[result.length - 1];
+    if (!previous || coordinateDistanceMeters(previous, point) > 0) {
+      result.push(point);
+    }
+  }
+
+  return result;
+}
+
+function buildInferredDetourPolyline(points = []) {
+  const sorted = points
+    .filter((point) => point?.coordinate && Number.isFinite(point.progressMeters))
+    .sort((a, b) => {
+      if (a.progressMeters !== b.progressMeters) return a.progressMeters - b.progressMeters;
+      return (a.timestampMs || 0) - (b.timestampMs || 0);
+    });
+  const deduped = [];
+
+  for (const point of sorted) {
+    const coordinate = cloneJson(point.coordinate);
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      coordinateDistanceMeters(previous, coordinate) <= INFERRED_DETOUR_POINT_DEDUPE_METERS
+    ) {
+      continue;
+    }
+    deduped.push(coordinate);
+  }
+
+  return thinPolyline(deduped);
+}
+
 function makeCandidate(routeId, shapeId) {
   return {
     routeId,
@@ -140,17 +279,23 @@ function hasEnoughEvidence(candidate) {
 }
 
 function buildGeometry(candidate, shapes) {
-  const sortedPoints = [...candidate.points].sort((a, b) => a.timestampMs - b.timestampMs);
+  const geometryEvidence = selectGeometryEvidence(candidate);
   const polyline = shapes.get(candidate.shapeId);
-  const startProgress = candidate.minProgressMeters;
-  const endProgress = candidate.maxProgressMeters;
-  const spanMeters = endProgress - startProgress;
-  const skippedSegmentPolyline = Array.isArray(polyline) && polyline.length >= 2
+  const startProgress = geometryEvidence.minProgressMeters;
+  const endProgress = geometryEvidence.maxProgressMeters;
+  const hasSafeProgress =
+    Number.isFinite(startProgress) &&
+    Number.isFinite(endProgress) &&
+    endProgress >= startProgress;
+  const spanMeters = hasSafeProgress ? endProgress - startProgress : 0;
+  const skippedSegmentPolyline = hasSafeProgress && Array.isArray(polyline) && polyline.length >= 2
     ? getShapeSpan(polyline, startProgress, endProgress)
     : [];
-  const inferredDetourPolyline = sortedPoints.map((point) => cloneJson(point.coordinate));
+  const inferredDetourPolyline = buildInferredDetourPolyline(geometryEvidence.points);
   const entryPoint = skippedSegmentPolyline[0] || null;
   const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1] || null;
+  const evidencePointCount = geometryEvidence.pointCount || candidate.points.length;
+  const lastEvidenceAt = geometryEvidence.lastEvidenceAt || candidate.lastSeenAt;
   const canShowDetourPath =
     spanMeters >= MIN_SAFE_SPAN_METERS &&
     skippedSegmentPolyline.length >= 2 &&
@@ -166,8 +311,10 @@ function buildGeometry(candidate, shapes) {
     entryPoint,
     exitPoint,
     confidence: candidate.signatures.size >= 3 || candidate.points.length >= 5 ? 'high' : 'medium',
-    evidencePointCount: candidate.points.length,
-    lastEvidenceAt: candidate.lastSeenAt,
+    evidencePointCount,
+    lastEvidenceAt,
+    startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
+    endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
     segments: [{
       shapeId: candidate.shapeId,
       skippedSegmentPolyline: canShowDetourPath ? skippedSegmentPolyline : null,
@@ -177,8 +324,10 @@ function buildGeometry(candidate, shapes) {
       entryPoint,
       exitPoint,
       confidence: candidate.signatures.size >= 3 || candidate.points.length >= 5 ? 'high' : 'medium',
-      evidencePointCount: candidate.points.length,
-      lastEvidenceAt: candidate.lastSeenAt,
+      evidencePointCount,
+      lastEvidenceAt,
+      startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
+      endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
     }],
   };
 }
@@ -205,8 +354,12 @@ function buildDetour(candidate, shapes) {
     canShowDetourPath: geometry.canShowDetourPath,
     geometry,
     detourZone: {
-      startProgressMeters: candidate.minProgressMeters,
-      endProgressMeters: candidate.maxProgressMeters,
+      startProgressMeters: Number.isFinite(geometry.startProgressMeters)
+        ? geometry.startProgressMeters
+        : candidate.minProgressMeters,
+      endProgressMeters: Number.isFinite(geometry.endProgressMeters)
+        ? geometry.endProgressMeters
+        : candidate.maxProgressMeters,
       shapeId: candidate.shapeId,
     },
     latestGpsEvidenceAt: candidate.lastSeenAt,
