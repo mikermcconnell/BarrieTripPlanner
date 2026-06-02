@@ -1,4 +1,5 @@
 const { createDetourV2Detector } = require('../detourV2/detector');
+const { projectOntoPolyline } = require('../detour/projection');
 
 const shapes = new Map();
 shapes.set('shape-1', [
@@ -42,6 +43,24 @@ function vehicle(overrides = {}) {
     coordinate: { latitude: 44.395, longitude: -79.690 },
     timestampMs: Date.parse('2026-05-31T10:00:00Z'),
     ...overrides,
+  };
+}
+
+function route12CandidatePoint({
+  id,
+  tripId,
+  coordinate,
+  timestampMs,
+}) {
+  const projection = projectOntoPolyline(coordinate, route12Shapes.get('shape-12'));
+  return {
+    vehicleId: id,
+    signature: tripId,
+    coordinate,
+    progressMeters: projection.progressMeters,
+    projectedPoint: projection.projectedPoint,
+    distanceMeters: projection.distanceMeters,
+    timestampMs,
   };
 }
 
@@ -193,6 +212,91 @@ describe('Auto Detour V2 detector', () => {
       latitude: route12EntryPoint.latitude,
       longitude: route12EntryPoint.longitude,
     });
+  });
+
+  test('rebuilds hydrated active geometry from V2 candidate evidence without a new ping', () => {
+    const detector = createDetourV2Detector();
+    const stalePath = [
+      { latitude: 44.3320, longitude: -79.6786 },
+      { latitude: 44.3406, longitude: -79.6631 },
+    ];
+
+    detector.hydrateRuntimeState({
+      candidates: [{
+        routeId: '12B',
+        shapeId: 'shape-12',
+        points: [
+          route12CandidatePoint({
+            id: 'bus-1',
+            tripId: 'trip-current-1',
+            coordinate: { latitude: 44.3342, longitude: -79.6741 },
+            timestampMs: 2000,
+          }),
+          route12CandidatePoint({
+            id: 'bus-2',
+            tripId: 'trip-current-2',
+            coordinate: { latitude: 44.3364, longitude: -79.6716 },
+            timestampMs: 3000,
+          }),
+          route12CandidatePoint({
+            id: 'bus-2',
+            tripId: 'trip-current-2',
+            coordinate: { latitude: 44.3376, longitude: -79.6696 },
+            timestampMs: 4000,
+          }),
+        ],
+      }],
+      activeDetours: {
+        '12B': {
+          routeId: '12B',
+          detourVersion: 'v2',
+          detectedAt: 1000,
+          lastSeenAt: 5000,
+          triggerVehicleId: 'bus-old',
+          vehiclesOffRoute: ['bus-old'],
+          matchedVehicleIds: ['bus-old'],
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 1,
+          state: 'active',
+          confidence: 'high',
+          riderVisible: true,
+          canShowDetourPath: true,
+          geometry: {
+            shapeId: 'shape-12',
+            skippedSegmentPolyline: stalePath,
+            inferredDetourPolyline: stalePath,
+            canShowDetourPath: true,
+            entryPoint: stalePath[0],
+            exitPoint: stalePath[1],
+            confidence: 'high',
+            segments: [{
+              shapeId: 'shape-12',
+              skippedSegmentPolyline: stalePath,
+              inferredDetourPolyline: stalePath,
+              canShowDetourPath: true,
+              entryPoint: stalePath[0],
+              exitPoint: stalePath[1],
+              confidence: 'high',
+            }],
+          },
+          detourZone: {
+            startProgressMeters: 0,
+            endProgressMeters: 1500,
+            shapeId: 'shape-12',
+          },
+        },
+      },
+      seenSamples: [],
+    });
+
+    const result = detector.processVehicles([], route12Shapes, route12ShapeMapping);
+    const geometry = result['12B'].geometry;
+
+    expect(geometry.entryPoint).toEqual(route12ExitPoint);
+    expect(geometry.exitPoint).toEqual(route12EntryPoint);
+    expect(geometry.inferredDetourPolyline[0]).toEqual(route12ExitPoint);
+    expect(geometry.inferredDetourPolyline[2]).toEqual(route12EntryPoint);
   });
 
   test('does not count duplicate vehicle snapshots as new evidence', () => {

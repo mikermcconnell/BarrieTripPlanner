@@ -667,6 +667,18 @@ function createDetourV2Detector(config = {}) {
       }
     }
 
+    for (const [routeId, candidate] of candidates.entries()) {
+      if (!hasEnoughEvidence(candidate)) continue;
+      const previousDetour = activeDetours.get(routeId);
+      if (previousDetour?.state === 'clear-pending') continue;
+      const detour = buildDetour(candidate, shapes);
+      if (previousDetour) {
+        detour.detectedAt = previousDetour.detectedAt || detour.detectedAt;
+        detour.triggerVehicleId = previousDetour.triggerVehicleId || detour.triggerVehicleId;
+      }
+      activeDetours.set(routeId, detour);
+    }
+
     for (const [routeId, detour] of [...activeDetours.entries()]) {
       if (
         detour.state === 'clear-pending' &&
