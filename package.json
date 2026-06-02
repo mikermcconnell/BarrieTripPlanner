@@ -18,7 +18,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "proxy": "node proxy-server.js",
-    "web:dev": "concurrently -k -n proxy,expo \"node proxy-server.js\" \"expo start --web\"",
+    "web:dev": "concurrently -k -n proxy,expo \"node proxy-server.js\" \"node scripts/start-web-dev.js\"",
     "fetch-addresses": "node scripts/fetchBarrieAddresses.js",
     "dev:android": "expo start --dev-client",
     "postinstall": "patch-package",
