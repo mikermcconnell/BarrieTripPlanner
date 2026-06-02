@@ -6,6 +6,10 @@ const {
 } = require('../detourGeometry');
 const { projectCoordinateToRoute, projectOntoPolyline } = require('../detour/projection');
 const { haversineDistance } = require('../geometry');
+const {
+  getRouteDetectorConfig,
+  normalizeConfiguredDetourCorridor,
+} = require('../detourRouteConfig');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = 75;
 const DEFAULT_ON_ROUTE_CLEAR_THRESHOLD_METERS = 40;
@@ -24,30 +28,13 @@ const MAX_INFERRED_DETOUR_POINTS = positiveInteger(
   process.env.DETOUR_V2_MAX_INFERRED_POINTS,
   16
 );
-const KNOWN_CORRIDOR_PROGRESS_PADDING_METERS = positiveNumber(
-  process.env.DETOUR_V2_KNOWN_CORRIDOR_PADDING_METERS,
+const DEFAULT_CONFIGURED_CORRIDOR_PROGRESS_PADDING_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIGURED_CORRIDOR_PADDING_METERS ||
+    process.env.DETOUR_V2_KNOWN_CORRIDOR_PADDING_METERS,
   150
 );
 const CLEAR_MIN_TRAVERSAL_RATIO = 0.6;
 const CLEAR_MIN_TRAVERSAL_METERS = 100;
-const SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT = {
-  latitude: 44.33658333333333,
-  longitude: -79.66955555555555,
-};
-const SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT = {
-  latitude: 44.33325,
-  longitude: -79.67405555555556,
-};
-const KNOWN_DETOUR_CORRIDORS = {
-  '12A': {
-    entryPoint: SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT,
-    exitPoint: SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT,
-  },
-  '12B': {
-    entryPoint: SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT,
-    exitPoint: SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT,
-  },
-};
 
 function positiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -209,8 +196,36 @@ function isPublishableGeometryStats(stats) {
     stats.spanMeters >= MIN_SAFE_SPAN_METERS;
 }
 
-function getKnownDetourCorridor(routeId) {
-  return KNOWN_DETOUR_CORRIDORS[normalizeRouteId(routeId).toUpperCase()] || null;
+function getRouteKeyedConfigValue(values, routeId) {
+  if (!values || typeof values !== 'object') return null;
+  const normalizedRouteId = normalizeRouteId(routeId);
+  return values[normalizedRouteId] ||
+    values[normalizedRouteId.toUpperCase()] ||
+    values[normalizedRouteId.toLowerCase()] ||
+    null;
+}
+
+function isConfiguredCorridorActive(corridor, nowMs = Date.now()) {
+  if (!corridor || corridor.enabled === false) return false;
+  if (Number.isFinite(corridor.startsAt) && nowMs < corridor.startsAt) return false;
+  if (Number.isFinite(corridor.expiresAt) && nowMs > corridor.expiresAt) return false;
+  return true;
+}
+
+function resolveConfiguredDetourCorridor(routeId, detectorConfig = {}) {
+  const directConfig = getRouteKeyedConfigValue(
+    detectorConfig.configuredDetourCorridors || detectorConfig.detourCorridors,
+    routeId
+  );
+  const routeConfig = getRouteDetectorConfig(routeId, {});
+  const corridor = normalizeConfiguredDetourCorridor(
+    directConfig ||
+    detectorConfig.configuredDetourCorridor ||
+    routeConfig.configuredDetourCorridor ||
+    routeConfig.detourCorridor
+  );
+
+  return isConfiguredCorridorActive(corridor) ? corridor : null;
 }
 
 function buildDirectionalShapeSpan(polyline, startProgress, endProgress, direction, entryPoint, exitPoint) {
@@ -227,8 +242,7 @@ function buildDirectionalShapeSpan(polyline, startProgress, endProgress, directi
   return shapeSpan;
 }
 
-function selectKnownCorridorEvidence(candidate, polyline) {
-  const corridor = getKnownDetourCorridor(candidate.routeId);
+function selectConfiguredCorridorEvidence(candidate, polyline, corridor) {
   if (!corridor || !Array.isArray(polyline) || polyline.length < 2) return null;
 
   const entryProjection = projectOntoPolyline(corridor.entryPoint, polyline);
@@ -243,10 +257,13 @@ function selectKnownCorridorEvidence(candidate, polyline) {
   const startProgress = Math.min(entryProjection.progressMeters, exitProjection.progressMeters);
   const endProgress = Math.max(entryProjection.progressMeters, exitProjection.progressMeters);
   const spanMeters = endProgress - startProgress;
+  const paddingMeters = Number.isFinite(corridor.paddingMeters)
+    ? corridor.paddingMeters
+    : DEFAULT_CONFIGURED_CORRIDOR_PROGRESS_PADDING_METERS;
   const points = (candidate.points || []).filter((point) => (
     Number.isFinite(point?.progressMeters) &&
-    point.progressMeters >= startProgress - KNOWN_CORRIDOR_PROGRESS_PADDING_METERS &&
-    point.progressMeters <= endProgress + KNOWN_CORRIDOR_PROGRESS_PADDING_METERS
+    point.progressMeters >= startProgress - paddingMeters &&
+    point.progressMeters <= endProgress + paddingMeters
   ));
   const stats = getPointStats(points);
   if (
@@ -275,12 +292,17 @@ function selectKnownCorridorEvidence(candidate, polyline) {
     ),
     progressSortDirection: direction,
     gpsSupersedesPreviousPath: true,
+    configuredCorridorLabel: corridor.label || null,
   };
 }
 
-function selectGeometryEvidence(candidate, polyline) {
-  const knownCorridorStats = selectKnownCorridorEvidence(candidate, polyline);
-  if (knownCorridorStats) return knownCorridorStats;
+function selectGeometryEvidence(candidate, polyline, detectorConfig) {
+  const configuredCorridorStats = selectConfiguredCorridorEvidence(
+    candidate,
+    polyline,
+    resolveConfiguredDetourCorridor(candidate.routeId, detectorConfig)
+  );
+  if (configuredCorridorStats) return configuredCorridorStats;
 
   const allStats = getPointStats(candidate.points || []);
   const validClusters = splitPointsByProgress(candidate.points || [])
@@ -374,9 +396,9 @@ function hasEnoughEvidence(candidate) {
     candidate.signatures.size >= MIN_UNIQUE_SIGNATURES;
 }
 
-function buildGeometry(candidate, shapes) {
+function buildGeometry(candidate, shapes, detectorConfig = {}) {
   const polyline = shapes.get(candidate.shapeId);
-  const geometryEvidence = selectGeometryEvidence(candidate, polyline);
+  const geometryEvidence = selectGeometryEvidence(candidate, polyline, detectorConfig);
   const startProgress = geometryEvidence.minProgressMeters;
   const endProgress = geometryEvidence.maxProgressMeters;
   const hasSafeProgress =
@@ -427,6 +449,7 @@ function buildGeometry(candidate, shapes) {
     startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
     endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
     gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
+    configuredCorridorLabel: geometryEvidence.configuredCorridorLabel || null,
     segments: [{
       shapeId: candidate.shapeId,
       skippedSegmentPolyline: canShowDetourPath ? skippedSegmentPolyline : null,
@@ -441,12 +464,13 @@ function buildGeometry(candidate, shapes) {
       startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
       endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
       gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
+      configuredCorridorLabel: geometryEvidence.configuredCorridorLabel || null,
     }],
   };
 }
 
-function buildDetour(candidate, shapes) {
-  const geometry = buildGeometry(candidate, shapes);
+function buildDetour(candidate, shapes, detectorConfig = {}) {
+  const geometry = buildGeometry(candidate, shapes, detectorConfig);
   const riderVisible = geometry.canShowDetourPath === true;
   return {
     routeId: candidate.routeId,
@@ -652,7 +676,7 @@ function createDetourV2Detector(config = {}) {
 
         if (hasEnoughEvidence(candidate)) {
           const previousDetour = activeDetours.get(routeId);
-          const detour = buildDetour(candidate, shapes);
+          const detour = buildDetour(candidate, shapes, config);
           if (previousDetour) {
             detour.detectedAt = previousDetour.detectedAt || detour.detectedAt;
             detour.triggerVehicleId = previousDetour.triggerVehicleId || detour.triggerVehicleId;
@@ -671,7 +695,7 @@ function createDetourV2Detector(config = {}) {
       if (!hasEnoughEvidence(candidate)) continue;
       const previousDetour = activeDetours.get(routeId);
       if (previousDetour?.state === 'clear-pending') continue;
-      const detour = buildDetour(candidate, shapes);
+      const detour = buildDetour(candidate, shapes, config);
       if (previousDetour) {
         detour.detectedAt = previousDetour.detectedAt || detour.detectedAt;
         detour.triggerVehicleId = previousDetour.triggerVehicleId || detour.triggerVehicleId;

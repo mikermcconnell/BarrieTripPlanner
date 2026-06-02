@@ -22,6 +22,53 @@ function normalizePositiveInteger(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function normalizeCoordinate(value) {
+  if (!value || typeof value !== 'object') return null;
+  const latitude = Number(value.latitude ?? value.lat);
+  const longitude = Number(value.longitude ?? value.lon ?? value.lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
+function normalizeOptionalTimestamp(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+  if (value instanceof Date) return value.getTime();
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeConfiguredDetourCorridor(rawCorridor) {
+  if (!rawCorridor || typeof rawCorridor !== 'object' || rawCorridor.enabled === false) {
+    return null;
+  }
+
+  const entryPoint = normalizeCoordinate(rawCorridor.entryPoint);
+  const exitPoint = normalizeCoordinate(rawCorridor.exitPoint);
+  if (!entryPoint || !exitPoint) return null;
+
+  const corridor = {
+    enabled: true,
+    entryPoint,
+    exitPoint,
+  };
+
+  const paddingMeters = normalizePositiveNumber(rawCorridor.paddingMeters);
+  const startsAt = normalizeOptionalTimestamp(rawCorridor.startsAt);
+  const expiresAt = normalizeOptionalTimestamp(rawCorridor.expiresAt);
+
+  if (paddingMeters != null) corridor.paddingMeters = paddingMeters;
+  if (startsAt != null) corridor.startsAt = startsAt;
+  if (expiresAt != null) corridor.expiresAt = expiresAt;
+  if (typeof rawCorridor.label === 'string' && rawCorridor.label.trim()) {
+    corridor.label = rawCorridor.label.trim();
+  }
+
+  return corridor;
+}
+
 function normalizeRouteOverride(rawOverride) {
   if (!rawOverride || typeof rawOverride !== 'object') return {};
 
@@ -64,6 +111,9 @@ function normalizeRouteOverride(rawOverride) {
   );
   const multiVehiclePathPreferMergedSegment = rawOverride.multiVehiclePathPreferMergedSegment === true;
   const staleEntryAnchorMaxGapMeters = normalizePositiveNumber(rawOverride.staleEntryAnchorMaxGapMeters);
+  const configuredDetourCorridor = normalizeConfiguredDetourCorridor(
+    rawOverride.configuredDetourCorridor || rawOverride.detourCorridor
+  );
 
   if (offRouteThresholdMeters != null) override.offRouteThresholdMeters = offRouteThresholdMeters;
   if (onRouteClearThresholdMeters != null) override.onRouteClearThresholdMeters = onRouteClearThresholdMeters;
@@ -106,6 +156,9 @@ function normalizeRouteOverride(rawOverride) {
   if (staleEntryAnchorMaxGapMeters != null) {
     override.staleEntryAnchorMaxGapMeters = staleEntryAnchorMaxGapMeters;
   }
+  if (configuredDetourCorridor) {
+    override.configuredDetourCorridor = configuredDetourCorridor;
+  }
 
   return override;
 }
@@ -130,15 +183,31 @@ function parseEnvRouteOverrides(rawJson) {
 
 const ENV_ROUTE_DETECTOR_OVERRIDES = parseEnvRouteOverrides(process.env.DETOUR_ROUTE_OVERRIDES_JSON);
 
-const ROUTE_DETECTOR_OVERRIDES = Object.freeze({
-  ...DEFAULT_ROUTE_DETECTOR_OVERRIDES,
-  ...ENV_ROUTE_DETECTOR_OVERRIDES,
-});
+function getRouteOverride(overrides, routeId) {
+  if (!routeId) return {};
+  const normalizedRouteId = String(routeId).trim();
+  return overrides[normalizedRouteId] ||
+    overrides[normalizedRouteId.toUpperCase()] ||
+    overrides[normalizedRouteId.toLowerCase()] ||
+    {};
+}
+
+const ROUTE_DETECTOR_OVERRIDES = Object.freeze(
+  Object.fromEntries(
+    [...new Set([
+      ...Object.keys(DEFAULT_ROUTE_DETECTOR_OVERRIDES),
+      ...Object.keys(ENV_ROUTE_DETECTOR_OVERRIDES),
+    ])].map((routeId) => [routeId, {
+      ...(DEFAULT_ROUTE_DETECTOR_OVERRIDES[routeId] || {}),
+      ...(ENV_ROUTE_DETECTOR_OVERRIDES[routeId] || {}),
+    }])
+  )
+);
 
 function getRouteDetectorConfig(routeId, defaults) {
   return {
     ...defaults,
-    ...(routeId ? ROUTE_DETECTOR_OVERRIDES[routeId] || {} : {}),
+    ...getRouteOverride(ROUTE_DETECTOR_OVERRIDES, routeId),
   };
 }
 
@@ -146,4 +215,5 @@ module.exports = {
   DEFAULT_ROUTE_DETECTOR_OVERRIDES,
   ROUTE_DETECTOR_OVERRIDES,
   getRouteDetectorConfig,
+  normalizeConfiguredDetourCorridor,
 };

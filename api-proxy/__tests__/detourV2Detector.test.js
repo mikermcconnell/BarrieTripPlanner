@@ -34,6 +34,20 @@ route12Shapes.set('shape-12', [
 const route12ShapeMapping = new Map(routeShapeMapping);
 route12ShapeMapping.set('12A', ['shape-12']);
 route12ShapeMapping.set('12B', ['shape-12']);
+const route12DetectorConfig = {
+  detourCorridors: {
+    '12A': {
+      entryPoint: route12EntryPoint,
+      exitPoint: route12ExitPoint,
+      label: 'Saunders-Welham',
+    },
+    '12B': {
+      entryPoint: route12ExitPoint,
+      exitPoint: route12EntryPoint,
+      label: 'Saunders-Welham',
+    },
+  },
+};
 
 function vehicle(overrides = {}) {
   return {
@@ -147,8 +161,60 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].detourZone.startProgressMeters).toBeGreaterThan(1000);
   });
 
-  test('clamps 12A and 12B geometry to the known Saunders-Welham corridor', () => {
-    const detector = createDetourV2Detector();
+  test('clamps any route with a configured corridor', () => {
+    const corridorEntryPoint = { latitude: 44.39, longitude: -79.684 };
+    const corridorExitPoint = { latitude: 44.39, longitude: -79.680 };
+    const detector = createDetourV2Detector({
+      detourCorridors: {
+        '8A': {
+          entryPoint: corridorEntryPoint,
+          exitPoint: corridorExitPoint,
+          label: 'generic-test-corridor',
+        },
+      },
+    });
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-old',
+        tripId: 'trip-old',
+        coordinate: { latitude: 44.395, longitude: -79.700 },
+        timestampMs: 1000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-1',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.395, longitude: -79.684 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.682 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.680 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const geometry = result['8A'].geometry;
+    expect(geometry.entryPoint).toEqual(corridorEntryPoint);
+    expect(geometry.exitPoint).toEqual(corridorExitPoint);
+    expect(geometry.configuredCorridorLabel).toBe('generic-test-corridor');
+    expect(geometry.gpsSupersedesPreviousPath).toBe(true);
+    expect(geometry.inferredDetourPolyline[0]).toEqual(corridorEntryPoint);
+    expect(geometry.inferredDetourPolyline[2]).toEqual(corridorExitPoint);
+  });
+
+  test('clamps 12A and 12B geometry from route corridor config', () => {
+    const detector = createDetourV2Detector(route12DetectorConfig);
 
     const result = detector.processVehicles([
       vehicle({
@@ -203,6 +269,7 @@ describe('Auto Detour V2 detector', () => {
     });
     expect(geometry.gpsSupersedesPreviousPath).toBe(true);
     expect(geometry.segments[0].gpsSupersedesPreviousPath).toBe(true);
+    expect(geometry.configuredCorridorLabel).toBe('Saunders-Welham');
     expect(geometry.inferredDetourPolyline).toHaveLength(3);
     expect(geometry.inferredDetourPolyline[0]).toEqual({
       latitude: route12ExitPoint.latitude,
@@ -215,7 +282,7 @@ describe('Auto Detour V2 detector', () => {
   });
 
   test('rebuilds hydrated active geometry from V2 candidate evidence without a new ping', () => {
-    const detector = createDetourV2Detector();
+    const detector = createDetourV2Detector(route12DetectorConfig);
     const stalePath = [
       { latitude: 44.3320, longitude: -79.6786 },
       { latitude: 44.3406, longitude: -79.6631 },

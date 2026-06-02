@@ -354,7 +354,7 @@ Key env vars for the detour system, set in the backend environment or `.env` loc
 | `DETOUR_MIN_LINEAR_SEGMENT_LENGTH_METERS` | `100` | Minimum skipped-route span before route-aligned skipped-segment geometry is published |
 | `DETOUR_MIN_SAME_VEHICLE_PATH_POINTS` | `2` | Minimum off-route points from the same bus, between matching entry/exit anchors, before the likely detour path can be road-matched and shown to riders |
 | `DETOUR_NO_VEHICLE_TIMEOUT_MS` | `1800000` | Advisory no-current-vehicle timeout; absence alone does not clear or hide a confirmed detour |
-| `DETOUR_ROUTE_OVERRIDES_JSON` | unset | Optional per-route detector tuning. Use sparingly; prefer route-agnostic fixes. |
+| `DETOUR_ROUTE_OVERRIDES_JSON` | unset | Optional per-route detector tuning. Use sparingly; prefer route-agnostic fixes. May include `configuredDetourCorridor` with `entryPoint`, `exitPoint`, optional `paddingMeters`, optional `startsAt`/`expiresAt`, and optional `label` for operator-confirmed active corridors. |
 | `DETOUR_CANDIDATE_EVIDENCE_TTL_MS` | `10800000` | Legacy/advisory evidence-retention value. Active detector-owned detours are no longer cleared solely because this time has elapsed. |
 | `DETOUR_PERSIST_CONSECUTIVE_MATCHES` | `10` | Matching active-detour snapshots required before a long-running detour becomes persistent |
 | `DETOUR_PERSIST_MIN_AGE_MS` | `18000000` | Minimum detour age before persistence learning is allowed (5 hours) |
