@@ -20,6 +20,20 @@ const routeShapeMapping = new Map([
   ['8B', ['shape-1']],
 ]);
 
+const route12EntryPoint = { latitude: 44.33658333333333, longitude: -79.66955555555555 };
+const route12ExitPoint = { latitude: 44.33325, longitude: -79.67405555555556 };
+const route12Shapes = new Map(shapes);
+route12Shapes.set('shape-12', [
+  { latitude: 44.3406, longitude: -79.6631 },
+  route12EntryPoint,
+  { latitude: 44.3351, longitude: -79.6716 },
+  route12ExitPoint,
+  { latitude: 44.3320, longitude: -79.6786 },
+]);
+const route12ShapeMapping = new Map(routeShapeMapping);
+route12ShapeMapping.set('12A', ['shape-12']);
+route12ShapeMapping.set('12B', ['shape-12']);
+
 function vehicle(overrides = {}) {
   return {
     id: 'bus-1',
@@ -112,6 +126,71 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].geometry.inferredDetourPolyline[2].longitude).toBeCloseTo(-79.680, 3);
     expect(result['8A'].geometry.entryPoint.longitude).toBeGreaterThan(-79.686);
     expect(result['8A'].detourZone.startProgressMeters).toBeGreaterThan(1000);
+  });
+
+  test('clamps 12A and 12B geometry to the known Saunders-Welham corridor', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-old',
+        routeId: '12B',
+        tripId: 'trip-old',
+        coordinate: { latitude: 44.3416, longitude: -79.6631 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'bus-1',
+        routeId: '12B',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.3342, longitude: -79.6741 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        routeId: '12B',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.3364, longitude: -79.6716 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-2',
+        routeId: '12B',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.3376, longitude: -79.6696 },
+        timestampMs: 4000,
+      }),
+      vehicle({
+        id: 'bus-extra',
+        routeId: '12B',
+        tripId: 'trip-extra',
+        coordinate: { latitude: 44.3330, longitude: -79.6786 },
+        timestampMs: 5000,
+      }),
+    ], route12Shapes, route12ShapeMapping);
+
+    const geometry = result['12B'].geometry;
+    expect(result['12B']).toEqual(expect.objectContaining({
+      riderVisible: true,
+      canShowDetourPath: true,
+    }));
+    expect(geometry.entryPoint).toEqual({
+      latitude: route12ExitPoint.latitude,
+      longitude: route12ExitPoint.longitude,
+    });
+    expect(geometry.exitPoint).toEqual({
+      latitude: route12EntryPoint.latitude,
+      longitude: route12EntryPoint.longitude,
+    });
+    expect(geometry.inferredDetourPolyline).toHaveLength(3);
+    expect(geometry.inferredDetourPolyline[0]).toEqual({
+      latitude: route12ExitPoint.latitude,
+      longitude: route12ExitPoint.longitude,
+    });
+    expect(geometry.inferredDetourPolyline[2]).toEqual({
+      latitude: route12EntryPoint.latitude,
+      longitude: route12EntryPoint.longitude,
+    });
   });
 
   test('does not count duplicate vehicle snapshots as new evidence', () => {

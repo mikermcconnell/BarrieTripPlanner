@@ -4,7 +4,7 @@ const {
   buildCumulativeDistances,
   enrichDetourMapStopImpacts,
 } = require('../detourGeometry');
-const { projectCoordinateToRoute } = require('../detour/projection');
+const { projectCoordinateToRoute, projectOntoPolyline } = require('../detour/projection');
 const { haversineDistance } = require('../geometry');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = 75;
@@ -24,8 +24,30 @@ const MAX_INFERRED_DETOUR_POINTS = positiveInteger(
   process.env.DETOUR_V2_MAX_INFERRED_POINTS,
   16
 );
+const KNOWN_CORRIDOR_PROGRESS_PADDING_METERS = positiveNumber(
+  process.env.DETOUR_V2_KNOWN_CORRIDOR_PADDING_METERS,
+  150
+);
 const CLEAR_MIN_TRAVERSAL_RATIO = 0.6;
 const CLEAR_MIN_TRAVERSAL_METERS = 100;
+const SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT = {
+  latitude: 44.33658333333333,
+  longitude: -79.66955555555555,
+};
+const SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT = {
+  latitude: 44.33325,
+  longitude: -79.67405555555556,
+};
+const KNOWN_DETOUR_CORRIDORS = {
+  '12A': {
+    entryPoint: SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT,
+    exitPoint: SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT,
+  },
+  '12B': {
+    entryPoint: SAUNDERS_WELHAM_ROUTE_12_EXIT_POINT,
+    exitPoint: SAUNDERS_WELHAM_ROUTE_12_ENTRY_POINT,
+  },
+};
 
 function positiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -187,7 +209,78 @@ function isPublishableGeometryStats(stats) {
     stats.spanMeters >= MIN_SAFE_SPAN_METERS;
 }
 
-function selectGeometryEvidence(candidate) {
+function getKnownDetourCorridor(routeId) {
+  return KNOWN_DETOUR_CORRIDORS[normalizeRouteId(routeId).toUpperCase()] || null;
+}
+
+function buildDirectionalShapeSpan(polyline, startProgress, endProgress, direction, entryPoint, exitPoint) {
+  const shapeSpan = getShapeSpan(
+    polyline,
+    Math.min(startProgress, endProgress),
+    Math.max(startProgress, endProgress)
+  );
+  if (direction < 0) shapeSpan.reverse();
+  if (shapeSpan.length >= 2) {
+    shapeSpan[0] = cloneJson(entryPoint);
+    shapeSpan[shapeSpan.length - 1] = cloneJson(exitPoint);
+  }
+  return shapeSpan;
+}
+
+function selectKnownCorridorEvidence(candidate, polyline) {
+  const corridor = getKnownDetourCorridor(candidate.routeId);
+  if (!corridor || !Array.isArray(polyline) || polyline.length < 2) return null;
+
+  const entryProjection = projectOntoPolyline(corridor.entryPoint, polyline);
+  const exitProjection = projectOntoPolyline(corridor.exitPoint, polyline);
+  if (
+    !Number.isFinite(entryProjection?.progressMeters) ||
+    !Number.isFinite(exitProjection?.progressMeters)
+  ) {
+    return null;
+  }
+
+  const startProgress = Math.min(entryProjection.progressMeters, exitProjection.progressMeters);
+  const endProgress = Math.max(entryProjection.progressMeters, exitProjection.progressMeters);
+  const spanMeters = endProgress - startProgress;
+  const points = (candidate.points || []).filter((point) => (
+    Number.isFinite(point?.progressMeters) &&
+    point.progressMeters >= startProgress - KNOWN_CORRIDOR_PROGRESS_PADDING_METERS &&
+    point.progressMeters <= endProgress + KNOWN_CORRIDOR_PROGRESS_PADDING_METERS
+  ));
+  const stats = getPointStats(points);
+  if (
+    stats.pointCount < MIN_OFF_ROUTE_POINTS ||
+    stats.signatureCount < MIN_UNIQUE_SIGNATURES ||
+    spanMeters < MIN_SAFE_SPAN_METERS
+  ) {
+    return null;
+  }
+
+  const direction = entryProjection.progressMeters <= exitProjection.progressMeters ? 1 : -1;
+  return {
+    ...stats,
+    minProgressMeters: startProgress,
+    maxProgressMeters: endProgress,
+    spanMeters,
+    entryPoint: cloneJson(corridor.entryPoint),
+    exitPoint: cloneJson(corridor.exitPoint),
+    skippedSegmentPolyline: buildDirectionalShapeSpan(
+      polyline,
+      entryProjection.progressMeters,
+      exitProjection.progressMeters,
+      direction,
+      corridor.entryPoint,
+      corridor.exitPoint
+    ),
+    progressSortDirection: direction,
+  };
+}
+
+function selectGeometryEvidence(candidate, polyline) {
+  const knownCorridorStats = selectKnownCorridorEvidence(candidate, polyline);
+  if (knownCorridorStats) return knownCorridorStats;
+
   const allStats = getPointStats(candidate.points || []);
   const validClusters = splitPointsByProgress(candidate.points || [])
     .map(getPointStats)
@@ -221,11 +314,13 @@ function thinPolyline(polyline, maxPoints = MAX_INFERRED_DETOUR_POINTS) {
   return result;
 }
 
-function buildInferredDetourPolyline(points = []) {
+function buildInferredDetourPolyline(points = [], progressSortDirection = 1) {
   const sorted = points
     .filter((point) => point?.coordinate && Number.isFinite(point.progressMeters))
     .sort((a, b) => {
-      if (a.progressMeters !== b.progressMeters) return a.progressMeters - b.progressMeters;
+      if (a.progressMeters !== b.progressMeters) {
+        return (a.progressMeters - b.progressMeters) * progressSortDirection;
+      }
       return (a.timestampMs || 0) - (b.timestampMs || 0);
     });
   const deduped = [];
@@ -279,8 +374,8 @@ function hasEnoughEvidence(candidate) {
 }
 
 function buildGeometry(candidate, shapes) {
-  const geometryEvidence = selectGeometryEvidence(candidate);
   const polyline = shapes.get(candidate.shapeId);
+  const geometryEvidence = selectGeometryEvidence(candidate, polyline);
   const startProgress = geometryEvidence.minProgressMeters;
   const endProgress = geometryEvidence.maxProgressMeters;
   const hasSafeProgress =
@@ -288,12 +383,27 @@ function buildGeometry(candidate, shapes) {
     Number.isFinite(endProgress) &&
     endProgress >= startProgress;
   const spanMeters = hasSafeProgress ? endProgress - startProgress : 0;
-  const skippedSegmentPolyline = hasSafeProgress && Array.isArray(polyline) && polyline.length >= 2
-    ? getShapeSpan(polyline, startProgress, endProgress)
-    : [];
-  const inferredDetourPolyline = buildInferredDetourPolyline(geometryEvidence.points);
-  const entryPoint = skippedSegmentPolyline[0] || null;
-  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1] || null;
+  const skippedSegmentPolyline = geometryEvidence.skippedSegmentPolyline || (
+    hasSafeProgress && Array.isArray(polyline) && polyline.length >= 2
+      ? getShapeSpan(polyline, startProgress, endProgress)
+      : []
+  );
+  const inferredDetourPolyline = buildInferredDetourPolyline(
+    geometryEvidence.points,
+    geometryEvidence.progressSortDirection || 1
+  );
+  const entryPoint = geometryEvidence.entryPoint || skippedSegmentPolyline[0] || null;
+  const exitPoint = geometryEvidence.exitPoint ||
+    skippedSegmentPolyline[skippedSegmentPolyline.length - 1] ||
+    null;
+  if (
+    geometryEvidence.entryPoint &&
+    geometryEvidence.exitPoint &&
+    inferredDetourPolyline.length >= 2
+  ) {
+    inferredDetourPolyline[0] = cloneJson(geometryEvidence.entryPoint);
+    inferredDetourPolyline[inferredDetourPolyline.length - 1] = cloneJson(geometryEvidence.exitPoint);
+  }
   const evidencePointCount = geometryEvidence.pointCount || candidate.points.length;
   const lastEvidenceAt = geometryEvidence.lastEvidenceAt || candidate.lastSeenAt;
   const canShowDetourPath =
