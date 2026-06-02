@@ -1,5 +1,6 @@
 const { createDetourV2Detector } = require('../detourV2/detector');
 const { projectOntoPolyline } = require('../detour/projection');
+const { pointToPolylineDistance } = require('../geometry');
 
 const shapes = new Map();
 shapes.set('shape-1', [
@@ -115,6 +116,48 @@ describe('Auto Detour V2 detector', () => {
       lastEvidenceAt: 3000,
     }));
     expect(result['8A'].geometry.inferredDetourPolyline).toHaveLength(3);
+  });
+
+  test('keeps jumpy sparse GPS paths hidden from riders', () => {
+    const detector = createDetourV2Detector();
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-1',
+        tripId: 'trip-1',
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+    ], shapes, routeShapeMapping);
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-2',
+        coordinate: { latitude: 44.450, longitude: -79.690 },
+        timestampMs: 2000,
+      }),
+    ], shapes, routeShapeMapping);
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-2',
+        tripId: 'trip-2',
+        coordinate: { latitude: 44.395, longitude: -79.682 },
+        timestampMs: 3000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: false,
+      canShowDetourPath: false,
+      riderVisibilityReason: 'insufficient-geometry',
+    }));
+    expect(result['8A'].geometry).toEqual(expect.objectContaining({
+      skippedSegmentPolyline: null,
+      inferredDetourPolyline: null,
+      likelyDetourPolyline: null,
+      geometryTrustBlockedReason: 'jumpy-inferred-path',
+    }));
+    expect(result['8A'].geometry.inferredDetourPathStats.maxGapMeters).toBeGreaterThan(1200);
   });
 
   test('uses one coherent recent corridor instead of stitching old repeated detour evidence', () => {
@@ -246,6 +289,13 @@ describe('Auto Detour V2 detector', () => {
         timestampMs: 4000,
       }),
       vehicle({
+        id: 'bus-outlier',
+        routeId: '12B',
+        tripId: 'trip-outlier',
+        coordinate: { latitude: 44.326088, longitude: -79.670364 },
+        timestampMs: 4500,
+      }),
+      vehicle({
         id: 'bus-extra',
         routeId: '12B',
         tripId: 'trip-extra',
@@ -270,12 +320,15 @@ describe('Auto Detour V2 detector', () => {
     expect(geometry.gpsSupersedesPreviousPath).toBe(true);
     expect(geometry.segments[0].gpsSupersedesPreviousPath).toBe(true);
     expect(geometry.configuredCorridorLabel).toBe('Saunders-Welham');
-    expect(geometry.inferredDetourPolyline).toHaveLength(3);
+    expect(geometry.inferredDetourPolyline.some((point) => (
+      pointToPolylineDistance(point, [route12ExitPoint, route12EntryPoint]) > 600
+    ))).toBe(false);
+    expect(geometry.inferredDetourPolyline.length).toBeGreaterThanOrEqual(3);
     expect(geometry.inferredDetourPolyline[0]).toEqual({
       latitude: route12ExitPoint.latitude,
       longitude: route12ExitPoint.longitude,
     });
-    expect(geometry.inferredDetourPolyline[2]).toEqual({
+    expect(geometry.inferredDetourPolyline[geometry.inferredDetourPolyline.length - 1]).toEqual({
       latitude: route12EntryPoint.latitude,
       longitude: route12EntryPoint.longitude,
     });

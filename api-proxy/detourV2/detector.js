@@ -5,7 +5,7 @@ const {
   enrichDetourMapStopImpacts,
 } = require('../detourGeometry');
 const { projectCoordinateToRoute, projectOntoPolyline } = require('../detour/projection');
-const { haversineDistance } = require('../geometry');
+const { haversineDistance, pointToPolylineDistance } = require('../geometry');
 const {
   getRouteDetectorConfig,
   normalizeConfiguredDetourCorridor,
@@ -23,6 +23,18 @@ const GEOMETRY_CLUSTER_GAP_METERS = positiveNumber(
 const INFERRED_DETOUR_POINT_DEDUPE_METERS = positiveNumber(
   process.env.DETOUR_V2_INFERRED_POINT_DEDUPE_METERS,
   20
+);
+const MAX_INFERRED_DETOUR_POINT_GAP_METERS = positiveNumber(
+  process.env.DETOUR_V2_MAX_INFERRED_POINT_GAP_METERS,
+  1200
+);
+const MAX_INFERRED_DETOUR_AVERAGE_GAP_METERS = positiveNumber(
+  process.env.DETOUR_V2_MAX_INFERRED_AVERAGE_GAP_METERS,
+  900
+);
+const CONFIGURED_CORRIDOR_OUTLIER_DISTANCE_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIGURED_CORRIDOR_OUTLIER_DISTANCE_METERS,
+  600
 );
 const MAX_INFERRED_DETOUR_POINTS = positiveInteger(
   process.env.DETOUR_V2_MAX_INFERRED_POINTS,
@@ -293,6 +305,7 @@ function selectConfiguredCorridorEvidence(candidate, polyline, corridor) {
     progressSortDirection: direction,
     gpsSupersedesPreviousPath: true,
     configuredCorridorLabel: corridor.label || null,
+    configuredCorridor: true,
   };
 }
 
@@ -363,6 +376,69 @@ function buildInferredDetourPolyline(points = [], progressSortDirection = 1) {
   return thinPolyline(deduped);
 }
 
+function removeConfiguredCorridorOutliers(polyline, geometryEvidence = {}) {
+  if (
+    geometryEvidence.configuredCorridor !== true ||
+    !geometryEvidence.entryPoint ||
+    !geometryEvidence.exitPoint ||
+    !Array.isArray(polyline) ||
+    polyline.length < 3
+  ) {
+    return polyline;
+  }
+
+  const corridorLine = [geometryEvidence.entryPoint, geometryEvidence.exitPoint];
+  const filtered = polyline.filter((point, index) => (
+    index === 0 ||
+    index === polyline.length - 1 ||
+    pointToPolylineDistance(point, corridorLine) <= CONFIGURED_CORRIDOR_OUTLIER_DISTANCE_METERS
+  ));
+
+  return filtered.length >= 2 ? filtered : polyline;
+}
+
+function getPolylineGapStats(polyline = []) {
+  if (!Array.isArray(polyline) || polyline.length < 2) {
+    return {
+      maxGapMeters: Infinity,
+      averageGapMeters: Infinity,
+    };
+  }
+
+  const gaps = [];
+  for (let index = 1; index < polyline.length; index += 1) {
+    gaps.push(coordinateDistanceMeters(polyline[index - 1], polyline[index]));
+  }
+
+  const totalGapMeters = gaps.reduce((sum, gap) => sum + gap, 0);
+  return {
+    maxGapMeters: Math.max(...gaps),
+    averageGapMeters: totalGapMeters / gaps.length,
+  };
+}
+
+function getInferredDetourPathSafety(polyline = []) {
+  if (!Array.isArray(polyline) || polyline.length < MIN_OFF_ROUTE_POINTS) {
+    return {
+      safe: false,
+      reason: 'insufficient-inferred-points',
+      maxGapMeters: Infinity,
+      averageGapMeters: Infinity,
+    };
+  }
+
+  const stats = getPolylineGapStats(polyline);
+  const safe = (
+    stats.maxGapMeters <= MAX_INFERRED_DETOUR_POINT_GAP_METERS &&
+    stats.averageGapMeters <= MAX_INFERRED_DETOUR_AVERAGE_GAP_METERS
+  );
+  return {
+    safe,
+    reason: safe ? null : 'jumpy-inferred-path',
+    ...stats,
+  };
+}
+
 function makeCandidate(routeId, shapeId) {
   return {
     routeId,
@@ -411,7 +487,7 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
       ? getShapeSpan(polyline, startProgress, endProgress)
       : []
   );
-  const inferredDetourPolyline = buildInferredDetourPolyline(
+  let inferredDetourPolyline = buildInferredDetourPolyline(
     geometryEvidence.points,
     geometryEvidence.progressSortDirection || 1
   );
@@ -427,12 +503,23 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     inferredDetourPolyline[0] = cloneJson(geometryEvidence.entryPoint);
     inferredDetourPolyline[inferredDetourPolyline.length - 1] = cloneJson(geometryEvidence.exitPoint);
   }
+  inferredDetourPolyline = removeConfiguredCorridorOutliers(inferredDetourPolyline, geometryEvidence);
+  if (
+    geometryEvidence.entryPoint &&
+    geometryEvidence.exitPoint &&
+    inferredDetourPolyline.length >= 2
+  ) {
+    inferredDetourPolyline[0] = cloneJson(geometryEvidence.entryPoint);
+    inferredDetourPolyline[inferredDetourPolyline.length - 1] = cloneJson(geometryEvidence.exitPoint);
+  }
   const evidencePointCount = geometryEvidence.pointCount || candidate.points.length;
   const lastEvidenceAt = geometryEvidence.lastEvidenceAt || candidate.lastSeenAt;
+  const inferredDetourPathSafety = getInferredDetourPathSafety(inferredDetourPolyline);
+  const hasSafeInferredDetourPath = inferredDetourPathSafety.safe;
   const canShowDetourPath =
     spanMeters >= MIN_SAFE_SPAN_METERS &&
     skippedSegmentPolyline.length >= 2 &&
-    inferredDetourPolyline.length >= MIN_OFF_ROUTE_POINTS &&
+    hasSafeInferredDetourPath &&
     Boolean(entryPoint && exitPoint);
 
   return {
@@ -450,6 +537,11 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
     gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
     configuredCorridorLabel: geometryEvidence.configuredCorridorLabel || null,
+    geometryTrustBlockedReason: canShowDetourPath ? null : inferredDetourPathSafety.reason,
+    inferredDetourPathStats: {
+      maxGapMeters: Number.isFinite(inferredDetourPathSafety.maxGapMeters) ? inferredDetourPathSafety.maxGapMeters : null,
+      averageGapMeters: Number.isFinite(inferredDetourPathSafety.averageGapMeters) ? inferredDetourPathSafety.averageGapMeters : null,
+    },
     segments: [{
       shapeId: candidate.shapeId,
       skippedSegmentPolyline: canShowDetourPath ? skippedSegmentPolyline : null,
@@ -465,6 +557,11 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
       endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
       gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
       configuredCorridorLabel: geometryEvidence.configuredCorridorLabel || null,
+      geometryTrustBlockedReason: canShowDetourPath ? null : inferredDetourPathSafety.reason,
+      inferredDetourPathStats: {
+        maxGapMeters: Number.isFinite(inferredDetourPathSafety.maxGapMeters) ? inferredDetourPathSafety.maxGapMeters : null,
+        averageGapMeters: Number.isFinite(inferredDetourPathSafety.averageGapMeters) ? inferredDetourPathSafety.averageGapMeters : null,
+      },
     }],
   };
 }

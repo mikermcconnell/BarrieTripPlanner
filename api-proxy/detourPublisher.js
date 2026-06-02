@@ -610,6 +610,7 @@ function gpsSupersedesPreviousPath(geometry) {
 function preserveTrustedDetourPath(geometry, previousSnapshot, detour = {}) {
   if (!geometry || typeof geometry !== 'object') return geometry;
   if (detour?.state === 'clear-pending' || geometry?.state === 'clear-pending') return geometry;
+  if (geometry.geometryTrustBlockedReason === 'jumpy-inferred-path') return geometry;
   if (gpsSupersedesPreviousPath(geometry)) return geometry;
   if (hasLikelyDetourPath(geometry)) return geometry;
 

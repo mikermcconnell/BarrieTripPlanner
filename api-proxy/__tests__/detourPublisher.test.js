@@ -1981,6 +1981,47 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.segments[0].likelyDetourPolyline).toEqual(trustedPath);
   });
 
+  test('does not preserve an old path when current GPS evidence is too jumpy to trust', () => {
+    const trustedPath = [
+      { latitude: 44.395, longitude: -79.698 },
+      { latitude: 44.395, longitude: -79.690 },
+      { latitude: 44.395, longitude: -79.682 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: trustedPath,
+      roadMatchConfidence: 'high',
+      roadMatchSource: 'osrm-match',
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: trustedPath,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'osrm-match',
+      }],
+    };
+    const unsafeGeometry = {
+      canShowDetourPath: false,
+      geometryTrustBlockedReason: 'jumpy-inferred-path',
+      skippedSegmentPolyline: null,
+      inferredDetourPolyline: null,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [{
+        canShowDetourPath: false,
+        geometryTrustBlockedReason: 'jumpy-inferred-path',
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: null,
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(unsafeGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+
   test('does not preserve a trusted path when current weak geometry is in a different location', () => {
     const duckworthPath = [
       { latitude: 44.41042, longitude: -79.67381 },
