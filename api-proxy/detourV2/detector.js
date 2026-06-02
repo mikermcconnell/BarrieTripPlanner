@@ -274,6 +274,7 @@ function selectKnownCorridorEvidence(candidate, polyline) {
       corridor.exitPoint
     ),
     progressSortDirection: direction,
+    gpsSupersedesPreviousPath: true,
   };
 }
 
@@ -425,6 +426,7 @@ function buildGeometry(candidate, shapes) {
     lastEvidenceAt,
     startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
     endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
+    gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
     segments: [{
       shapeId: candidate.shapeId,
       skippedSegmentPolyline: canShowDetourPath ? skippedSegmentPolyline : null,
@@ -438,6 +440,7 @@ function buildGeometry(candidate, shapes) {
       lastEvidenceAt,
       startProgressMeters: Number.isFinite(startProgress) ? startProgress : null,
       endProgressMeters: Number.isFinite(endProgress) ? endProgress : null,
+      gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
     }],
   };
 }

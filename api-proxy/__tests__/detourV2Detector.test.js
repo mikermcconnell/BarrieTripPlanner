@@ -182,6 +182,8 @@ describe('Auto Detour V2 detector', () => {
       latitude: route12EntryPoint.latitude,
       longitude: route12EntryPoint.longitude,
     });
+    expect(geometry.gpsSupersedesPreviousPath).toBe(true);
+    expect(geometry.segments[0].gpsSupersedesPreviousPath).toBe(true);
     expect(geometry.inferredDetourPolyline).toHaveLength(3);
     expect(geometry.inferredDetourPolyline[0]).toEqual({
       latitude: route12ExitPoint.latitude,
