@@ -6,7 +6,17 @@ import { COLORS, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
 const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
 const HUB_ICON_SCALE = 1.5;
-const HUB_ICON_CENTER_ANCHOR_Y = 0.42;
+const HUB_MAJOR_ICON_WRAP_SIZE = 84;
+const HUB_MINOR_ICON_WRAP_SIZE = 72;
+const HUB_MAJOR_FRAME_HEIGHT = 112;
+const HUB_MINOR_FRAME_HEIGHT = 98;
+
+const getHubMarkerAnchor = (type) => {
+  const isMajor = type === BUS_HUB_TYPES.MAJOR;
+  const iconSize = isMajor ? HUB_MAJOR_ICON_WRAP_SIZE : HUB_MINOR_ICON_WRAP_SIZE;
+  const frameHeight = isMajor ? HUB_MAJOR_FRAME_HEIGHT : HUB_MINOR_FRAME_HEIGHT;
+  return { x: 0.5, y: (iconSize / 2) / frameHeight };
+};
 
 const getHubLabel = (hub, currentZoom) => {
   return getBusHubDisplayLabel(hub, currentZoom) || null;
@@ -41,7 +51,7 @@ const BusHubOverlay = ({ currentZoom }) => (
           key={hub.id}
           id={`bus-hub-${hub.id}`}
           coordinate={[hub.coordinate.longitude, hub.coordinate.latitude]}
-          anchor={{ x: 0.5, y: HUB_ICON_CENTER_ANCHOR_Y }}
+          anchor={getHubMarkerAnchor(hub.type)}
           pointerEvents="none"
         >
           <View
@@ -83,18 +93,18 @@ const BusHubOverlay = ({ currentZoom }) => (
 const styles = StyleSheet.create({
   markerFrame: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     overflow: 'visible',
     zIndex: 65,
     elevation: 65,
   },
   markerFrameMajor: {
-    width: 190,
-    minHeight: 132,
+    width: 220,
+    height: HUB_MAJOR_FRAME_HEIGHT,
   },
   markerFrameMinor: {
-    width: 150,
-    minHeight: 116,
+    width: 170,
+    height: HUB_MINOR_FRAME_HEIGHT,
   },
   iconWrap: {
     alignItems: 'center',
@@ -102,29 +112,34 @@ const styles = StyleSheet.create({
     ...SHADOWS.medium,
   },
   iconWrapMajor: {
-    width: 84,
-    height: 84,
+    width: HUB_MAJOR_ICON_WRAP_SIZE,
+    height: HUB_MAJOR_ICON_WRAP_SIZE,
   },
   iconWrapMinor: {
-    width: 72,
-    height: 72,
+    width: HUB_MINOR_ICON_WRAP_SIZE,
+    height: HUB_MINOR_ICON_WRAP_SIZE,
   },
   labelPill: {
-    marginTop: -10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(12, 140, 229, 0.24)',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    maxWidth: 184,
+    maxWidth: 210,
     ...SHADOWS.small,
   },
   labelPillMajor: {
+    position: 'absolute',
+    top: 74,
+    alignSelf: 'center',
     borderColor: 'rgba(0, 78, 128, 0.28)',
   },
   labelPillMinor: {
-    maxWidth: 142,
+    position: 'absolute',
+    top: 62,
+    alignSelf: 'center',
+    maxWidth: 160,
     borderColor: 'rgba(52, 69, 99, 0.22)',
   },
   labelText: {

@@ -59,7 +59,7 @@ export const resolveVehicleSnapPath = (
 
   const tripInfo = resolveTripInfo(tripMapping, vehicle.tripId);
   const resolvedShapeId = vehicle.shapeId || tripInfo?.shapeId;
-  const resolvedRouteId = vehicle.routeId || tripInfo?.routeId;
+  const resolvedRouteId = tripInfo?.routeId || vehicle.routeId;
   const vehicleShapeId = resolvedShapeId ? String(resolvedShapeId) : null;
   const vehicleRouteId = resolvedRouteId ? String(resolvedRouteId) : null;
 

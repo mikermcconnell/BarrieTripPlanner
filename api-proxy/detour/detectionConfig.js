@@ -1,7 +1,7 @@
-const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '75');
+const configuredThreshold = Number.parseFloat(process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS || '40');
 const OFF_ROUTE_THRESHOLD_METERS = Number.isFinite(configuredThreshold) && configuredThreshold > 0
   ? configuredThreshold
-  : 75;
+  : 40;
 
 const configuredOnRouteThreshold = Number.parseFloat(process.env.DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS || '40');
 const ON_ROUTE_CLEAR_THRESHOLD_METERS =
@@ -49,6 +49,15 @@ const DETOUR_NO_VEHICLE_TIMEOUT_MS =
   Number.isFinite(configuredNoVehicleTimeoutMs) && configuredNoVehicleTimeoutMs > 0
     ? configuredNoVehicleTimeoutMs
     : 30 * 60 * 1000;
+
+const configuredObsoleteShapeClearNoOffRouteMs = Number.parseFloat(
+  process.env.DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS || String(45 * 60 * 1000)
+);
+const DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS =
+  Number.isFinite(configuredObsoleteShapeClearNoOffRouteMs) &&
+  configuredObsoleteShapeClearNoOffRouteMs > 0
+    ? configuredObsoleteShapeClearNoOffRouteMs
+    : 45 * 60 * 1000;
 
 const configuredCandidateEvidenceTtlMs = Number.parseFloat(
   process.env.DETOUR_CANDIDATE_EVIDENCE_TTL_MS || String(3 * 60 * 60 * 1000)
@@ -201,6 +210,7 @@ const BASE_ROUTE_DETECTOR_CONFIG = Object.freeze({
   clearMinTraversalRatio: DETOUR_CLEAR_MIN_TRAVERSAL_RATIO,
   clearGraceMs: DETOUR_CLEAR_GRACE_MS,
   noVehicleTimeoutMs: DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  obsoleteShapeClearNoOffRouteMs: DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS,
   candidateEvidenceTtlMs: DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   evidenceWindowMs: EVIDENCE_WINDOW_MS,
 });
@@ -225,6 +235,7 @@ module.exports = {
   DETOUR_CLEAR_MIN_TRAVERSAL_METERS,
   DETOUR_CLEAR_MIN_TRAVERSAL_RATIO,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS,
   DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   CONSECUTIVE_READINGS_REQUIRED,
   STALE_VEHICLE_TIMEOUT_MS,

@@ -3,6 +3,7 @@ jest.mock('../lib/ai/runJsonTask', () => ({
 }));
 
 const {
+  buildNoticeStopImpactsFromText,
   buildRuleStopClosures,
   extractStopClosureImpacts,
   extractStopCodesFromText,
@@ -138,5 +139,46 @@ describe('newsImpactParser', () => {
     expect(new Date(window.startsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
     expect(new Date(window.endsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
     expect(statusForDateWindow(window, new Date('2026-05-15T12:00:00-04:00'))).toBe('upcoming');
+  });
+
+  test('buildNoticeStopImpactsFromText captures Saunders/Welham official PDF stop impacts', () => {
+    const pdfText = [
+      'Detour Notice',
+      'Route 12',
+      'Stop 931',
+      'Welham at Hooper',
+      'Stop 932',
+      'Welham at Hooper',
+      'Temp Stop 6170',
+      'Saunders at Hooper',
+      'Stop 933',
+      'Saunders at Welham',
+      'Stop 618',
+      'Saunders at Welham',
+      'Stop 756',
+      'Saunders at Hooper',
+      'Stop 617',
+      'Saunders at Hooper',
+      'Temp Stop 7560',
+      'Saunders at Hooper',
+      'Temp Stop 9310',
+      'Hooper at Welham',
+    ].join('\n');
+
+    const impacts = buildNoticeStopImpactsFromText(pdfText);
+
+    expect(impacts.stopClosureCandidates.map((stop) => stop.stopCode).sort()).toEqual([
+      '617',
+      '618',
+      '756',
+      '931',
+      '932',
+      '933',
+    ]);
+    expect(impacts.temporaryStops.map((stop) => stop.stopCode).sort()).toEqual([
+      '6170',
+      '7560',
+      '9310',
+    ]);
   });
 });

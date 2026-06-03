@@ -20,7 +20,6 @@ async function loadStopIndex() {
 async function archiveMissingImpacts(db, currentIds, now) {
   const snapshot = await db
     .collection(COLLECTION)
-    .where('type', '==', 'stop_closure')
     .where('source', '==', 'myridebarrie')
     .where('archivedAt', '==', null)
     .get();
@@ -42,7 +41,9 @@ async function publishNewsImpacts(newsItems) {
   }
 
   const stopIndex = await loadStopIndex();
-  const impacts = await extractStopClosureImpacts(newsItems, stopIndex);
+  const impacts = await extractStopClosureImpacts(newsItems, stopIndex, {
+    fetchOfficialNotices: true,
+  });
   const currentIds = new Set(impacts.map((impact) => impact.id));
   const now = Date.now();
 

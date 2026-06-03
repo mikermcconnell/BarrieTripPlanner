@@ -5,6 +5,7 @@ const {
   clearBaseline,
   getBaselineStatus,
 } = require('../baselineManager');
+const { buildBaselineDivergence: compareBaselineDivergence } = require('../baselineDivergence');
 
 async function buildBaselineDivergence(status) {
   if (!status.loaded) {
@@ -14,39 +15,13 @@ async function buildBaselineDivergence(status) {
   try {
     const { getStaticData } = require('../gtfsLoader');
     const liveData = await getStaticData();
-    const baselineMapping = (await getBaselineData(liveData)).routeShapeMapping;
-    const liveMapping = liveData.routeShapeMapping;
-
-    const added = [];
-    const removed = [];
-
-    for (const [routeId, liveShapeIds] of liveMapping) {
-      const baseIds = baselineMapping.get(routeId);
-      if (!baseIds) {
-        added.push({ routeId, shapeCount: liveShapeIds.length });
-        continue;
-      }
-
-      const baseSet = new Set(baseIds);
-      const liveSet = new Set(liveShapeIds);
-      const addedShapes = liveShapeIds.filter((id) => !baseSet.has(id));
-      const removedShapes = baseIds.filter((id) => !liveSet.has(id));
-
-      if (addedShapes.length > 0) added.push({ routeId, shapes: addedShapes });
-      if (removedShapes.length > 0) removed.push({ routeId, shapes: removedShapes });
-    }
-
-    for (const routeId of baselineMapping.keys()) {
-      if (!liveMapping.has(routeId)) {
-        removed.push({ routeId, note: 'route removed from live' });
-      }
-    }
-
-    return {
-      hasChanges: added.length > 0 || removed.length > 0,
-      added,
-      removed,
-    };
+    const baseline = await getBaselineData(liveData);
+    return compareBaselineDivergence({
+      baselineShapes: baseline.shapes,
+      baselineRouteShapeMapping: baseline.routeShapeMapping,
+      liveShapes: liveData.shapes,
+      liveRouteShapeMapping: liveData.routeShapeMapping,
+    });
   } catch (_err) {
     return { error: 'Could not load live GTFS for comparison' };
   }

@@ -47,13 +47,16 @@ describe('BusHubOverlay', () => {
 
     expect(markers).toHaveLength(BUS_HUBS.length);
     expect(markers[0].props.id).toBe('bus-hub-allandale-terminal');
-    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 0.42 });
+    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 0.375 });
     expect(markers.every((marker) => marker.props.pointerEvents === 'none')).toBe(true);
     expect(images).toHaveLength(BUS_HUBS.length);
     expect(images[0].props.accessibilityLabel).toBe('Bus hub');
     expect(images[0].props.style).toEqual(expect.objectContaining({ width: 81, height: 81 }));
     expect(iconWraps[0].props.style).toEqual(expect.arrayContaining([
       expect.objectContaining({ width: 84, height: 84 }),
+    ]));
+    expect(frames[0].props.style).toEqual(expect.arrayContaining([
+      expect.objectContaining({ width: 220, height: 112 }),
     ]));
     expect(text.some((node) => node.children.includes('Barrie Allandale Hub'))).toBe(true);
     expect(text.some((node) => node.children.includes('Barrie Allandale Transit Terminal'))).toBe(false);
@@ -64,7 +67,7 @@ describe('BusHubOverlay', () => {
       expect.objectContaining({ fontSize: 11 }),
     ]));
     expect(labelPills[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ marginTop: -10 }),
+      expect.objectContaining({ position: 'absolute', top: 74 }),
     ]));
   });
 

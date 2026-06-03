@@ -2,11 +2,12 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { getDesktopTabBarStyle, isWideWebViewport } from '../utils/webLayout';
 
 // Import screens
 import HomeScreen from '../screens/HomeScreen';
@@ -86,14 +87,23 @@ const ProfileStack = () => (
 // Main Tab Navigator
 const MainTabs = () => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWideWeb = isWideWebViewport({ platform: Platform.OS, width });
   const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomChromeLift = useAndroidBottomChromeLift();
   const tabBarPaddingBottom = Math.max(bottomInset, 10);
   const visibleTabBarStyle = {
     ...styles.tabBar,
-    height: 72 + bottomInset,
-    marginBottom: bottomChromeLift,
-    paddingBottom: tabBarPaddingBottom,
+    ...(isWideWeb
+      ? {
+          ...styles.tabBarDesktop,
+          ...getDesktopTabBarStyle({ isWideWeb }),
+        }
+      : {
+          height: 72 + bottomInset,
+          marginBottom: bottomChromeLift,
+          paddingBottom: tabBarPaddingBottom,
+        }),
   };
 
   return (
@@ -105,9 +115,12 @@ const MainTabs = () => {
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.grey500,
         tabBarStyle: visibleTabBarStyle,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarPosition: isWideWeb ? 'left' : 'bottom',
+        tabBarLabelPosition: isWideWeb ? 'beside-icon' : 'below-icon',
+        tabBarLabelStyle: [styles.tabBarLabel, isWideWeb && styles.tabBarLabelDesktop],
+        tabBarItemStyle: [styles.tabBarItem, isWideWeb && styles.tabBarItemDesktop],
         headerShown: false,
+        freezeOnBlur: Platform.OS === 'web',
       })}
     >
       <Tab.Screen
@@ -160,6 +173,11 @@ const styles = StyleSheet.create({
       backgroundColor: 'rgba(255, 255, 255, 0.98)',
     }),
   },
+  tabBarDesktop: {
+    borderTopWidth: 0,
+    borderRadius: 0,
+    alignItems: 'stretch',
+  },
   tabBarLabel: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
@@ -167,8 +185,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     letterSpacing: 0.1,
   },
+  tabBarLabelDesktop: {
+    marginTop: 0,
+    marginBottom: 0,
+    fontSize: FONT_SIZES.md,
+  },
   tabBarItem: {
     paddingTop: 2,
+  },
+  tabBarItemDesktop: {
+    minHeight: 56,
+    borderRadius: BORDER_RADIUS.lg,
+    marginVertical: 4,
   },
   iconContainer: {
     alignItems: 'center',

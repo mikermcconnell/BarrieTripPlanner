@@ -18,7 +18,7 @@ const BUILT_IN_PUBLIC_ENV = {
   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:
     '648843426695-7o1ji1vd60fgrckv1gd9kvnqok8uuprl.apps.googleusercontent.com',
   EXPO_PUBLIC_API_PROXY_URL: 'https://apiproxy-r7pziiwpua-uc.a.run.app',
-  EXPO_PUBLIC_ENABLE_AUTO_DETOURS: 'false',
+  EXPO_PUBLIC_ENABLE_AUTO_DETOURS: 'true',
   EXPO_PUBLIC_SHOW_LOW_CONFIDENCE_DETOURS: 'false',
   EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: 'activeDetoursV2',
 };

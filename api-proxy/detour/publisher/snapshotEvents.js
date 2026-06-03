@@ -41,6 +41,10 @@ function hasGeometryPayload(source) {
     'likelyDetourRoadNames',
     'roadMatchConfidence',
     'detourPathLabel',
+    'detourZone',
+    'clearWindow',
+    'clearWindows',
+    'clearedSegments',
   ].some((key) => hasOwn(source, key));
 }
 
@@ -111,6 +115,10 @@ function makeSnapshot(doc, previousSnapshot = null) {
   const detourPathLabel = hasOwn(doc, 'detourPathLabel')
     ? doc.detourPathLabel || DETOUR_PATH_LABEL
     : (previousSnapshot?.detourPathLabel || DETOUR_PATH_LABEL);
+  const detourZone = pickGeometryValue(doc, previousSnapshot, 'detourZone', null);
+  const clearWindow = pickGeometryValue(doc, previousSnapshot, 'clearWindow', null);
+  const clearWindows = pickGeometryValue(doc, previousSnapshot, 'clearWindows', []);
+  const clearedSegments = pickGeometryValue(doc, previousSnapshot, 'clearedSegments', []);
   const confidence = hasOwn(doc, 'confidence')
     ? doc.confidence || null
     : (previousSnapshot?.confidence || null);
@@ -163,6 +171,10 @@ function makeSnapshot(doc, previousSnapshot = null) {
     roadMatchRawConfidence,
     roadMatchSource,
     detourPathLabel,
+    detourZone,
+    clearWindow,
+    clearWindows,
+    clearedSegments,
     detourEventId: hasOwn(doc, 'detourEventId')
       ? doc.detourEventId || null
       : previousSnapshot?.detourEventId || null,

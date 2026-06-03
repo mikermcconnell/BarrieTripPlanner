@@ -7,9 +7,11 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useTransitStatic } from '../context/TransitContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { autocompleteAddress } from '../services/locationIQService';
@@ -23,9 +25,13 @@ import { trackEvent } from '../services/analyticsService';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { getHighlightedStops } from '../utils/searchHighlights';
+import { getDesktopContentFrameStyle, isWideWebViewport } from '../utils/webLayout';
 
 const SearchScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWideWeb = isWideWebViewport({ platform: Platform?.OS || 'ios', width });
+  const isFocused = typeof useIsFocused === 'function' ? useIsFocused() : true;
   const bottomInset = useSafeBottomInset(insets.bottom);
   const { stops, routes, isLoadingStatic } = useTransitStatic();
   const [searchQuery, setSearchQuery] = useState('');
@@ -216,7 +222,12 @@ const SearchScreen = ({ navigation }) => {
 
   if (isLoadingStatic) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        accessibilityElementsHidden={!isFocused}
+        importantForAccessibility={isFocused ? 'auto' : 'no-hide-descendants'}
+        aria-hidden={!isFocused}
+      >
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
@@ -225,7 +236,13 @@ const SearchScreen = ({ navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      accessibilityElementsHidden={!isFocused}
+      importantForAccessibility={isFocused ? 'auto' : 'no-hide-descendants'}
+      aria-hidden={!isFocused}
+    >
+      <View style={[styles.contentFrame, getDesktopContentFrameStyle({ isWideWeb })]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Search</Text>
       </View>
@@ -322,7 +339,7 @@ const SearchScreen = ({ navigation }) => {
         style={styles.resultsList}
         contentContainerStyle={[
           styles.resultsContent,
-          { paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) },
+          { paddingBottom: isWideWeb ? SPACING.xxl : addSafeBottomPadding(SPACING.lg, bottomInset) },
         ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={showRecent && hasRecent ? (
@@ -372,6 +389,7 @@ const SearchScreen = ({ navigation }) => {
           </View>
         }
       />
+      </View>
     </SafeAreaView>
   );
 };
@@ -380,6 +398,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  contentFrame: {
+    flex: 1,
+    width: '100%',
   },
   header: {
     paddingHorizontal: SPACING.md,

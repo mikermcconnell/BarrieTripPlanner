@@ -3,7 +3,7 @@
  * Features: Refined header, collapsible route filters, prominent alerts, modern controls
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Animated, TextInput, useWindowDimensions } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
 import { useAuth } from '../context/AuthContext';
@@ -111,6 +111,7 @@ import {
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 import { trackEvent } from '../services/analyticsService';
 import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
+import { getMapChromeOffsets, getRouteFilterPanelStyle, isWideWebViewport } from '../utils/webLayout';
 import {
   buildSavedPlacePayload,
   buildSavedTripPayload,
@@ -466,6 +467,8 @@ const buildSavedPlaceMarkerHtml = (marker) => {
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  const isWideWeb = isWideWebViewport({ platform: 'web', width });
   const {
     addTripToHistory,
     savedPlaces,
@@ -954,6 +957,13 @@ const HomeScreen = ({ route }) => {
     })
   ), [displayedStopsForMap, detourMapClosureStops, isDetourView, hasDetourFocus]);
   const detourMapBadgeCount = getActiveDetourEventCount(statusDetours);
+  const mapChromeOffsets = getMapChromeOffsets({
+    isWideWeb,
+    hasDetours: Object.keys(statusDetours || {}).length > 0,
+  });
+  const desktopMapMainLeft = isWideWeb
+    ? mapChromeOffsets.leftPanelWidth + (SPACING.md * 2)
+    : SPACING.sm;
 
   // Helper to check if a route has active alerts
   const getRouteAlerts = useCallback((routeId) => {
@@ -1563,7 +1573,12 @@ const HomeScreen = ({ route }) => {
   const routeMaskingDetourOverlays = shouldRenderDetourMapOverlays ? detourOverlays : [];
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityElementsHidden={!isFocused}
+      importantForAccessibility={isFocused ? 'auto' : 'no-hide-descendants'}
+      aria-hidden={!isFocused}
+    >
       {/* Web Map using Leaflet */}
       <WebMapView
         ref={mapRef}
@@ -2072,6 +2087,11 @@ const HomeScreen = ({ route }) => {
             }}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
             routes={routes}
+            style={isWideWeb ? {
+              top: mapChromeOffsets.detourTop,
+              left: desktopMapMainLeft,
+              right: SPACING.md,
+            } : undefined}
           />
           <MapViewModeToggle
             visible={canUseDetourView}
@@ -2079,6 +2099,11 @@ const HomeScreen = ({ route }) => {
             onChange={handleMapViewModeChange}
             detourCount={detourMapBadgeCount}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
+            style={isWideWeb ? {
+              top: mapChromeOffsets.mapViewTop,
+              left: desktopMapMainLeft,
+              right: 'auto',
+            } : undefined}
           />
           <UpcomingDetourStrip
             notices={!isTripPlanningMode && isDetourView ? upcomingDetourNotices : []}
@@ -2086,7 +2111,14 @@ const HomeScreen = ({ route }) => {
             routeColorByRouteId={routeColorByRouteId}
             collapsedByDefault
             onCollapsedChange={setUpcomingDetoursCollapsed}
-            style={styles.upcomingDetourStrip}
+            style={[
+              styles.upcomingDetourStrip,
+              isWideWeb && {
+                top: mapChromeOffsets.mapViewTop + 54,
+                left: desktopMapMainLeft,
+                right: 'auto',
+              },
+            ]}
           />
 
           <DetourMapLegend
@@ -2122,12 +2154,25 @@ const HomeScreen = ({ route }) => {
 
           {/* Route Filter - Collapsible Left Side Panel */}
           {!routePanelExpanded && (
-            <TouchableOpacity style={styles.routePanelPill} onPress={toggleRoutePanel}>
+            <TouchableOpacity
+              style={[
+                styles.routePanelPill,
+                isWideWeb && { top: mapChromeOffsets.routeFilterTop, left: SPACING.md },
+              ]}
+              onPress={toggleRoutePanel}
+            >
               <BusIcon size={14} color={COLORS.textSecondary} />
               <Text style={styles.routePanelPillText}>Routes{hasSelection ? ` (${selectedRoutes.size})` : ''}</Text>
             </TouchableOpacity>
           )}
-          <View style={[styles.filterPanel, !routePanelExpanded && styles.filterPanelCollapsed]}>
+          <View
+            style={[
+              styles.filterPanel,
+              getRouteFilterPanelStyle({ isWideWeb }),
+              isWideWeb && styles.filterPanelDesktop,
+              !routePanelExpanded && styles.filterPanelCollapsed,
+            ]}
+          >
             <View style={styles.filterPanelHeader}>
               <Text style={styles.filterPanelTitle}>Routes</Text>
               <TouchableOpacity onPress={toggleRoutePanel} style={styles.filterPanelClose}>
@@ -2643,6 +2688,14 @@ const styles = StyleSheet.create({
     overflowY: 'auto',
     overflowX: 'visible',
     transition: 'opacity 0.25s ease, transform 0.25s ease',
+  },
+  filterPanelDesktop: {
+    width: 280,
+    maxHeight: 520,
+    padding: SPACING.md,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    alignContent: 'flex-start',
   },
   filterPanelCollapsed: {
     opacity: 0,

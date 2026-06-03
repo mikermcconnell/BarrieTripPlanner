@@ -43,6 +43,15 @@ describe('detour detection config', () => {
     expect(config.BASE_ROUTE_DETECTOR_CONFIG.consecutiveReadingsRequired).toBe(3);
   });
 
+  test('uses 40m as the default off-route distance threshold', () => {
+    delete process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS;
+
+    const config = require('../detour/detectionConfig');
+
+    expect(config.OFF_ROUTE_THRESHOLD_METERS).toBe(40);
+    expect(config.BASE_ROUTE_DETECTOR_CONFIG.offRouteThresholdMeters).toBe(40);
+  });
+
   test('requires two unique vehicles for detour publishing by default', () => {
     delete process.env.DETOUR_MIN_UNIQUE_VEHICLES;
 

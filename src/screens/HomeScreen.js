@@ -91,6 +91,7 @@ import HolidayServiceDetailsSheet from '../components/HolidayServiceDetailsSheet
 import MapViewModeToggle from '../components/MapViewModeToggle';
 import DetourMapLegend from '../components/DetourMapLegend';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
+import DevMapControlPad from '../components/DevMapControlPad';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { getSelectedDetourSegments, mergeFamilySegmentStopDetails } from '../utils/detourSheetSelection';
 import StatusBadge from '../components/StatusBadge';
@@ -245,6 +246,13 @@ const getRenderZoom = (zoom) => (
     ? Math.round(zoom / MAP_ZOOM_RENDER_STEP) * MAP_ZOOM_RENDER_STEP
     : zoom
 );
+const clampMapLatitude = (latitude) => Math.max(-85, Math.min(85, latitude));
+const clampMapLongitude = (longitude) => {
+  let value = longitude;
+  while (value > 180) value -= 360;
+  while (value < -180) value += 360;
+  return value;
+};
 
 const getSelectedRouteLabelThreshold = (selectedRouteCount) => (
   selectedRouteCount === 1 ? 13.4 : 13.6
@@ -2012,6 +2020,97 @@ const HomeScreen = ({ route }) => {
     });
   }, [activeDetours, compatMapRef, floatingBottomOffset]);
 
+  const handleDevMapPan = useCallback((direction) => {
+    const region = mapRegionRef.current || MAP_CONFIG.INITIAL_REGION;
+    const latitudeDelta = Number(region.latitudeDelta) || MAP_CONFIG.INITIAL_REGION.latitudeDelta;
+    const longitudeDelta = Number(region.longitudeDelta) || MAP_CONFIG.INITIAL_REGION.longitudeDelta || latitudeDelta;
+    const latitudeStep = latitudeDelta * 0.28;
+    const longitudeStep = longitudeDelta * 0.28;
+    const nextRegion = {
+      ...region,
+      latitude: clampMapLatitude(
+        region.latitude +
+          (direction === 'north' ? latitudeStep : direction === 'south' ? -latitudeStep : 0)
+      ),
+      longitude: clampMapLongitude(
+        region.longitude +
+          (direction === 'east' ? longitudeStep : direction === 'west' ? -longitudeStep : 0)
+      ),
+      latitudeDelta,
+      longitudeDelta,
+    };
+
+    tripPreviewUserMovedMapRef.current = true;
+    mapRegionRef.current = nextRegion;
+    setMapRegion((prevRegion) =>
+      hasMeaningfulRegionChange(prevRegion, nextRegion) ? nextRegion : prevRegion
+    );
+    cameraRef.current?.setCamera({
+      centerCoordinate: [nextRegion.longitude, nextRegion.latitude],
+      zoomLevel: Math.log2(360 / nextRegion.latitudeDelta),
+      followUserLocation: false,
+      animationDuration: 220,
+    });
+  }, []);
+
+  const handleDevMapZoom = useCallback((delta) => {
+    const region = mapRegionRef.current || MAP_CONFIG.INITIAL_REGION;
+    const baseZoom = Number.isFinite(currentZoom)
+      ? currentZoom
+      : Math.log2(360 / (Number(region.latitudeDelta) || MAP_CONFIG.INITIAL_REGION.latitudeDelta));
+    const nextZoom = Math.max(10, Math.min(18.5, baseZoom + delta));
+    const nextLatitudeDelta = 360 / (2 ** nextZoom);
+    const aspectRatio = (Number(region.longitudeDelta) || nextLatitudeDelta) /
+      (Number(region.latitudeDelta) || nextLatitudeDelta);
+    const nextRegion = {
+      ...region,
+      latitudeDelta: nextLatitudeDelta,
+      longitudeDelta: nextLatitudeDelta * aspectRatio,
+    };
+
+    tripPreviewUserMovedMapRef.current = true;
+    mapRegionRef.current = nextRegion;
+    setCurrentZoom(getRenderZoom(nextZoom));
+    setMapRegion((prevRegion) =>
+      hasMeaningfulRegionChange(prevRegion, nextRegion) ? nextRegion : prevRegion
+    );
+    cameraRef.current?.setCamera({
+      centerCoordinate: [nextRegion.longitude, nextRegion.latitude],
+      zoomLevel: nextZoom,
+      followUserLocation: false,
+      animationDuration: 220,
+    });
+  }, [currentZoom]);
+
+  const handleDevFocusActiveDetours = useCallback(() => {
+    if (statusDetourRouteIds.size === 0) return;
+    setFocusedDetourRouteId(null);
+    setDetourSheetRouteId(null);
+    setDetourSheetSegmentIndex(null);
+    setDetourSheetEvent(null);
+    setDetourSheetSegmentStopDetailsOverride(null);
+    setDetourExplorerSelection(DEFAULT_DETOUR_EXPLORER_SELECTION);
+    handleMapViewModeChange('detour');
+    focusMapToDetour({
+      activeDetours: statusDetours,
+      routeIds: Array.from(statusDetourRouteIds),
+      mapRef: compatMapRef,
+      edgePadding: {
+        top: 180,
+        right: 80,
+        bottom: 320 + floatingBottomOffset,
+        left: 80,
+      },
+      animated: true,
+    });
+  }, [
+    compatMapRef,
+    floatingBottomOffset,
+    handleMapViewModeChange,
+    statusDetourRouteIds,
+    statusDetours,
+  ]);
+
   const showDetourEventOnMap = useCallback((routeId, detourEvent = null) => {
     const primaryRouteId = getDetourEventPrimaryRouteId(detourEvent, routeId);
     if (!primaryRouteId) return;
@@ -2587,6 +2686,11 @@ const HomeScreen = ({ route }) => {
   ]);
 
   const routeLineLabelMarkers = useMemo(() => [], []);
+  const showDevMapControlPad =
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ &&
+    Platform.OS === 'android' &&
+    mapReadyToMount;
 
   if (staticError && routes.length === 0) {
     return (
@@ -2653,6 +2757,15 @@ const HomeScreen = ({ route }) => {
         />
       ) : (
         <View style={styles.mapPlaceholder} />
+      )}
+
+      {showDevMapControlPad && (
+        <DevMapControlPad
+          onPan={handleDevMapPan}
+          onZoom={handleDevMapZoom}
+          onFocusActiveDetours={handleDevFocusActiveDetours}
+          hasActiveDetours={statusDetourRouteIds.size > 0}
+        />
       )}
 
       {!isTripPlanningMode && (

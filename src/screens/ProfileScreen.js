@@ -7,6 +7,8 @@ import {
   ScrollView,
   Alert,
   Linking,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -19,9 +21,13 @@ import {
   buildProfileStatsViewModel,
   formatSavedTransitSummary,
 } from '../utils/profileViewModel';
+import { getDesktopContentFrameStyle, isWideWebViewport } from '../utils/webLayout';
 
 const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWideWeb = isWideWebViewport({ platform: Platform?.OS || 'ios', width });
+  const isFocused = true;
   const bottomInset = useSafeBottomInset(insets.bottom);
   const {
     user,
@@ -212,10 +218,19 @@ const ProfileScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      accessibilityElementsHidden={!isFocused}
+      importantForAccessibility={isFocused ? 'auto' : 'no-hide-descendants'}
+      aria-hidden={!isFocused}
+    >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: addSafeBottomPadding(SPACING.lg, bottomInset) }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          getDesktopContentFrameStyle({ isWideWeb }),
+          { paddingBottom: isWideWeb ? SPACING.xxl : addSafeBottomPadding(SPACING.lg, bottomInset) },
+        ]}
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
@@ -320,6 +335,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  scrollContent: {
+    width: '100%',
   },
   header: {
     paddingHorizontal: SPACING.md,

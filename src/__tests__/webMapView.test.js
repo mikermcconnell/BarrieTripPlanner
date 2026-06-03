@@ -124,12 +124,88 @@ describe('WebMapView ordered line layers', () => {
   });
 });
 
+
+describe('WebMapView keyboard controls', () => {
+  const createKeyboardEvent = (key, target = { tagName: 'div' }) => ({
+    key,
+    target,
+    preventDefault: jest.fn(),
+    stopPropagation: jest.fn(),
+  });
+
+  test('pans the map with arrow keys and marks it as user interaction', () => {
+    const map = {
+      stop: jest.fn(),
+      panBy: jest.fn(),
+    };
+    const onUserInteraction = jest.fn();
+    const event = createKeyboardEvent('ArrowRight');
+
+    const handled = __TEST_ONLY__.handleWebMapKeyboardPan({ map, event, onUserInteraction });
+
+    expect(handled).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(map.stop).toHaveBeenCalledTimes(1);
+    expect(map.panBy).toHaveBeenCalledWith([140, 0], { duration: 220 });
+    expect(onUserInteraction).toHaveBeenCalledTimes(1);
+  });
+
+  test('zooms with plus and minus keys', () => {
+    const map = {
+      stop: jest.fn(),
+      zoomIn: jest.fn(),
+      zoomOut: jest.fn(),
+    };
+
+    __TEST_ONLY__.handleWebMapKeyboardPan({ map, event: createKeyboardEvent('+') });
+    __TEST_ONLY__.handleWebMapKeyboardPan({ map, event: createKeyboardEvent('-') });
+
+    expect(map.zoomIn).toHaveBeenCalledWith({ duration: 220 });
+    expect(map.zoomOut).toHaveBeenCalledWith({ duration: 220 });
+  });
+
+  test('does not intercept typing in text fields', () => {
+    const map = {
+      stop: jest.fn(),
+      panBy: jest.fn(),
+    };
+    const event = createKeyboardEvent('ArrowDown', { tagName: 'input' });
+
+    const handled = __TEST_ONLY__.handleWebMapKeyboardPan({ map, event });
+
+    expect(handled).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(map.panBy).not.toHaveBeenCalled();
+  });
+});
+
 describe('WebMapView bus marker HTML', () => {
+  test('uses route bus-marker artwork on web when an asset exists', () => {
+    const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8', Number.NaN);
+
+    expect(html).toContain('data-live-bus-marker="image"');
+    expect(html).toContain('width:46px;height:46px');
+    expect(html).toContain('data-live-bus-artwork="true"');
+    expect(html).toContain('src="test-file-stub"');
+    expect(html).not.toContain('data-live-bus-marker="generated"');
+  });
+
+  test('falls back to a generated bus badge with a bus glyph for routes without artwork', () => {
+    const html = __TEST_ONLY__.createBusHtml('#C6E51A', '12B', Number.NaN);
+
+    expect(html).toContain('data-live-bus-marker="generated"');
+    expect(html).toContain('width:44px;height:44px');
+    expect(html).toContain('data-live-bus-glyph="true"');
+    expect(html).toContain('12B');
+    expect(html).not.toContain('data-live-bus-artwork="true"');
+  });
+
   test('uses a black rim tab with white outline when bearing is valid', () => {
     const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8A', 45);
 
     expect(html).toContain('width="104" height="104"');
-    expect(html).toContain('top:-8px;left:-8px');
+    expect(html).toContain('top:-29px;left:-29px');
     expect(html).toContain('rotate(45, 52, 52)');
     expect(html).toContain('z-index:3');
     expect(html).toContain('data-heading-tab="true"');
@@ -163,7 +239,10 @@ describe('WebMapView bus hub marker HTML', () => {
     expect(html).not.toContain('HUB</text>');
     expect(html).toContain('text-shadow');
     expect(html).toContain('width:81px;height:81px');
-    expect(html).toContain('margin-top:-10px');
+    expect(html).toContain('height:81px');
+    expect(html).toContain('position:absolute');
+    expect(html).toContain('top:71px');
+    expect(html).not.toContain('min-height:132px');
     expect(html).toContain('font:800 11px/1.2 Avenir, Arial, sans-serif');
     expect(html).not.toContain('transform:scale(0.5)');
   });

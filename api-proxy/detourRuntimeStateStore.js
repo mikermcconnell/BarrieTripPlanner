@@ -7,6 +7,25 @@ const DOC_ID = 'detourRuntime';
 let hydratePromise = null;
 let hydrateCacheKey = null;
 
+function stripUndefined(value) {
+  if (value === undefined) return undefined;
+  if (value == null) return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) {
+    return value
+      .map(stripUndefined)
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key, stripUndefined(item)])
+        .filter(([, item]) => item !== undefined)
+    );
+  }
+  return value;
+}
+
 async function loadDetourRuntimeState(options = {}) {
   const db = getDb();
   if (!db) {
@@ -52,9 +71,10 @@ async function saveDetourRuntimeState(state, options = {}) {
   hydrateCacheKey = `${storageConfig.runtimeStateCollection}/${storageConfig.runtimeStateDoc}`;
 
   try {
-    hydratePromise = Promise.resolve(state || null);
+    const sanitizedState = stripUndefined(state || {});
+    hydratePromise = Promise.resolve(sanitizedState || null);
     await db.collection(storageConfig.runtimeStateCollection).doc(storageConfig.runtimeStateDoc).set({
-      ...(state || {}),
+      ...(sanitizedState || {}),
       updatedAt: Date.now(),
     });
   } catch (error) {

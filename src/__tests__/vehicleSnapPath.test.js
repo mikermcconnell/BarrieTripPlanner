@@ -43,6 +43,21 @@ describe('resolveVehicleSnapPath', () => {
     expect(snapPath).toBe(routeShapeB);
   });
 
+  test('uses trip-mapped branch route instead of raw base route for fallback snapping', () => {
+    const snapPath = resolveVehicleSnapPath(
+      { routeId: '2', tripId: 'trip-2B-west' },
+      [
+        { routeId: '2', shapeId: 'shape-base', coordinates: routeShapeA },
+        { routeId: '2B', shapeId: 'shape-branch', coordinates: routeShapeB },
+      ],
+      {
+        'trip-2B-west': { routeId: '2B' },
+      }
+    );
+
+    expect(snapPath).toBe(routeShapeB);
+  });
+
   test('uses supplemental full trip shape when the exact shape is not currently rendered', () => {
     const snapPath = resolveVehicleSnapPath(
       { routeId: '2A', tripId: 'trip-2A-east' },

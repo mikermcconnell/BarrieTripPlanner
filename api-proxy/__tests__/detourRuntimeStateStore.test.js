@@ -33,6 +33,37 @@ describe('detourRuntimeStateStore', () => {
     expect(forced.savedAt).toBe(2000);
     expect(get).toHaveBeenCalledTimes(2);
   });
+
+  test('save strips undefined fields before writing Firestore runtime state', async () => {
+    const set = jest.fn(async () => {});
+    const doc = jest.fn(() => ({ set }));
+    const collection = jest.fn(() => ({ doc }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { saveDetourRuntimeState } = require('../detourRuntimeStateStore');
+    await saveDetourRuntimeState({
+      activeDetours: {
+        '12A': {
+          state: 'active',
+          clearPendingTick: undefined,
+          nested: {
+            keep: true,
+            drop: undefined,
+          },
+          values: [1, undefined, { keep: 'yes', drop: undefined }],
+        },
+      },
+    });
+
+    const written = set.mock.calls[0][0];
+    expect(written.activeDetours['12A']).not.toHaveProperty('clearPendingTick');
+    expect(written.activeDetours['12A'].nested).toEqual({ keep: true });
+    expect(written.activeDetours['12A'].values).toEqual([1, { keep: 'yes' }]);
+    expect(written.updatedAt).toEqual(expect.any(Number));
+  });
 });
 
 test('V2 runtime state uses the configured V2 runtime document', async () => {

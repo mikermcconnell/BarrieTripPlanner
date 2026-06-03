@@ -16,6 +16,7 @@ const {
   saveDetourRuntimeState,
 } = require('./detourRuntimeStateStore');
 const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
+const { buildBaselineDivergence } = require('./baselineDivergence');
 const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
 const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
@@ -184,6 +185,12 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         'Set a trusted baseline before running auto-detour detection, or set DETOUR_REQUIRE_SAFE_BASELINE=false for diagnostics only.'
       );
     }
+    const baselineDivergence = buildBaselineDivergence({
+      baselineShapes: baseline.shapes,
+      baselineRouteShapeMapping: baseline.routeShapeMapping,
+      liveShapes: data.shapes,
+      liveRouteShapeMapping: data.routeShapeMapping,
+    });
     const tripObj = Object.fromEntries(data.tripMapping);
     const fetchedVehicles = await fetchVehicles(tripObj);
     const vehicleFeedStatus = getVehicleFeedStatus();
@@ -223,7 +230,10 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         vehicles,
         scheduleIndex: data.scheduleIndex,
         shapes: baseline.shapes,
+        gtfsData: data,
         storageConfig: detourStorageConfig,
+        baselineDivergedRouteIds: baselineDivergence.changedRouteIds,
+        baselineDivergence,
         suppressDeletesWhenEmpty,
         suppressDeleteReason: suppressDeletesWhenEmpty
           ? 'runtime-and-active-snapshot-hydration-empty'

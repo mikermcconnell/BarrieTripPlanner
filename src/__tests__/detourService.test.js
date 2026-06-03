@@ -276,3 +276,23 @@ test('reads detour updates from configured active detours collection', () => {
 
   expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetoursV2');
 });
+
+test('falls back to V2 active detours collection when config is blank', () => {
+  jest.resetModules();
+  jest.doMock('../config/runtimeConfig', () => ({
+    __esModule: true,
+    default: {
+      detours: {
+        activeCollection: '',
+      },
+    },
+  }));
+  const firestore = require('firebase/firestore');
+  firestore.collection.mockClear();
+  firestore.onSnapshot.mockImplementation(() => () => {});
+
+  const { subscribeToActiveDetours } = require('../services/firebase/detourService');
+  subscribeToActiveDetours(() => {});
+
+  expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetoursV2');
+});

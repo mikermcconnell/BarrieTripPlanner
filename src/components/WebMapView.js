@@ -25,7 +25,22 @@ const MAPLIBRE_JS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.j
 const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
 const BUS_HUB_ICON_URI = RNImage.resolveAssetSource?.(BUS_HUB_ICON_SOURCE)?.uri || BUS_HUB_ICON_SOURCE;
 const BUS_HUB_ICON_SCALE = 1.5;
-const BUS_HUB_ICON_CENTER_OFFSET = [0, 10];
+const BUS_HUB_ICON_CENTER_OFFSET = [0, 0];
+const WEB_BUS_MARKER_IMAGE_SIZE = 46;
+const WEB_BUS_MARKER_FALLBACK_SIZE = 44;
+const WEB_BUS_MARKER_HEADING_SVG_SIZE = 104;
+const BUS_MARKER_SOURCES = {
+  1: require('../../assets/bus-markers/route-1.png'),
+  2: require('../../assets/bus-markers/route-2.png'),
+  3: require('../../assets/bus-markers/route-3.png'),
+  4: require('../../assets/bus-markers/route-4.png'),
+  5: require('../../assets/bus-markers/route-5.png'),
+  6: require('../../assets/bus-markers/route-6.png'),
+  7: require('../../assets/bus-markers/route-7.png'),
+  8: require('../../assets/bus-markers/route-8.png'),
+  90: require('../../assets/bus-markers/route-90.png'),
+  100: require('../../assets/bus-markers/route-100.png'),
+};
 const MapContext = createContext(null);
 const webMarkerDebugState = new Map();
 const ROUTE_LABEL_DEBUG =
@@ -49,6 +64,49 @@ const buildMapPadding = (edgePadding = {}) => ({
   bottom: edgePadding.bottom || 50,
   left: edgePadding.left || 50,
 });
+
+
+const WEB_MAP_KEYBOARD_PAN_PIXELS = 140;
+
+const isEditableKeyboardTarget = (target) => {
+  const tagName = String(target?.tagName || '').toLowerCase();
+  return Boolean(
+    target?.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
+  );
+};
+
+const handleWebMapKeyboardPan = ({ map, event, onUserInteraction }) => {
+  if (!map || !event || isEditableKeyboardTarget(event.target)) {
+    return false;
+  }
+
+  const pan = WEB_MAP_KEYBOARD_PAN_PIXELS;
+  const keyActions = {
+    ArrowUp: () => map.panBy?.([0, -pan], { duration: 220 }),
+    ArrowDown: () => map.panBy?.([0, pan], { duration: 220 }),
+    ArrowLeft: () => map.panBy?.([-pan, 0], { duration: 220 }),
+    ArrowRight: () => map.panBy?.([pan, 0], { duration: 220 }),
+    '+': () => map.zoomIn?.({ duration: 220 }),
+    '=': () => map.zoomIn?.({ duration: 220 }),
+    '-': () => map.zoomOut?.({ duration: 220 }),
+    _: () => map.zoomOut?.({ duration: 220 }),
+  };
+
+  const action = keyActions[event.key];
+  if (!action) {
+    return false;
+  }
+
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  map.stop?.();
+  action();
+  onUserInteraction?.();
+  return true;
+};
 
 const darkenColorHex = (hex, factor = 0.3) => {
   if (!hex || !hex.startsWith('#')) return hex;
@@ -74,6 +132,40 @@ const parseDashArray = (dashArray, strokeWidth) => {
 };
 
 let mapLibreScriptPromise = null;
+
+const resolveAssetUri = (assetSource) => {
+  if (!assetSource) return null;
+  const uri = RNImage.resolveAssetSource?.(assetSource)?.uri || assetSource;
+  return typeof uri === 'string' && uri.length > 8 && uri !== '[object Object]' ? uri : null;
+};
+
+const getBusMarkerAssetKey = (routeId) => {
+  const normalized = String(routeId || '').trim().toUpperCase();
+  const match = normalized.match(/^(\d+)/);
+  if (!match) return null;
+  return BUS_MARKER_SOURCES[match[1]] ? match[1] : null;
+};
+
+const getBusMarkerImageUri = (routeId) => {
+  const assetKey = getBusMarkerAssetKey(routeId);
+  return assetKey ? resolveAssetUri(BUS_MARKER_SOURCES[assetKey]) : null;
+};
+
+const createHeadingArrowHtml = ({ bearing, markerSize, opacity }) => {
+  const arrowOffset = (markerSize - WEB_BUS_MARKER_HEADING_SVG_SIZE) / 2;
+  return `
+    <svg width="${WEB_BUS_MARKER_HEADING_SVG_SIZE}" height="${WEB_BUS_MARKER_HEADING_SVG_SIZE}" viewBox="0 0 ${WEB_BUS_MARKER_HEADING_SVG_SIZE} ${WEB_BUS_MARKER_HEADING_SVG_SIZE}"
+      data-heading-tab="true"
+      style="position:absolute;top:${arrowOffset}px;left:${arrowOffset}px;pointer-events:none;z-index:3;opacity:${opacity};overflow:visible;">
+      <g transform="rotate(${bearing}, 52, 52)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22));">
+        <path d="M52 8 L42 30 L49 30 L49 34 L55 34 L55 30 L62 30 Z"
+          fill="rgba(255,255,255,0.96)" />
+        <path d="M52 12 L46 28 L50 28 L50 30 L54 30 L54 28 L58 28 Z"
+          fill="#111111" />
+      </g>
+    </svg>
+  `;
+};
 
 const ensureGlobalAssets = () => {
   if (typeof document === 'undefined') return;
@@ -220,37 +312,91 @@ const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, 
 const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false, directionLabel = null) => {
   const routeLabel = escapeHtml(routeId || '?');
   const routeDirectionLabel = directionLabel ? escapeHtml(directionLabel) : '';
+  const assetUri = getBusMarkerImageUri(routeId);
+  const assetKey = getBusMarkerAssetKey(routeId);
+  const shouldShowSupplementalLabel =
+    assetUri && (
+      String(routeId || '').trim().toUpperCase() !== String(assetKey || '').trim().toUpperCase() ||
+      Boolean(routeDirectionLabel)
+    );
   const numericBearing = Number(bearing);
   const hasValidBearing = Number.isFinite(numericBearing);
   const resolvedScale = scale * (dimmed ? 0.84 : 1);
   const resolvedOpacity = dimmed ? 0.42 : 1;
 
-  const arrowHtml = hasValidBearing ? `
-    <svg width="104" height="104" viewBox="0 0 104 104"
-      data-heading-tab="true"
-      style="position:absolute;top:-8px;left:-8px;pointer-events:none;z-index:3;opacity:${resolvedOpacity};overflow:visible;">
-      <g transform="rotate(${numericBearing}, 52, 52)" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.22));">
-        <path d="M52 8 L42 30 L49 30 L49 34 L55 34 L55 30 L62 30 Z"
-          fill="rgba(255,255,255,0.96)" />
-        <path d="M52 12 L46 28 L50 28 L50 30 L54 30 L54 28 L58 28 Z"
-          fill="#111111" />
-      </g>
-    </svg>
-  ` : '';
+  if (assetUri) {
+    const arrowHtml = hasValidBearing
+      ? createHeadingArrowHtml({
+          bearing: numericBearing,
+          markerSize: WEB_BUS_MARKER_IMAGE_SIZE,
+          opacity: resolvedOpacity,
+        })
+      : '';
+
+    return `
+      <div
+        data-live-bus-marker="image"
+        style="position:relative;width:${WEB_BUS_MARKER_IMAGE_SIZE}px;height:${WEB_BUS_MARKER_IMAGE_SIZE}px;overflow:visible;transform:scale(${resolvedScale});transform-origin:center center;transition:transform 0.1s ease-out;opacity:${resolvedOpacity};"
+      >
+        ${arrowHtml}
+        <img
+          data-live-bus-artwork="true"
+          src="${escapeHtml(assetUri)}"
+          alt=""
+          aria-hidden="true"
+          style="
+            position:absolute;
+            top:0;left:0;
+            display:block;
+            width:${WEB_BUS_MARKER_IMAGE_SIZE}px;
+            height:${WEB_BUS_MARKER_IMAGE_SIZE}px;
+            object-fit:contain;
+            filter:drop-shadow(0 1px 3px rgba(0,0,0,0.30)) drop-shadow(0 3px 8px rgba(0,0,0,0.12));
+            z-index:2;
+          "
+        />
+        ${shouldShowSupplementalLabel ? `<div style="
+          position:absolute;
+          left:50%;
+          top:${WEB_BUS_MARKER_IMAGE_SIZE - 6}px;
+          transform:translateX(-50%);
+          min-width:28px;
+          padding:1px 6px;
+          border-radius:999px;
+          background:rgba(23,43,77,0.92);
+          border:1px solid rgba(255,255,255,0.95);
+          color:#ffffff;
+          font:900 10px/1.15 Avenir, Arial, sans-serif;
+          letter-spacing:0.3px;
+          text-align:center;
+          white-space:nowrap;
+          box-shadow:0 1px 3px rgba(0,0,0,0.22);
+          z-index:4;
+        ">${routeLabel}${routeDirectionLabel ? ` ${routeDirectionLabel}` : ''}</div>` : ''}
+      </div>
+    `;
+  }
+
+  const arrowHtml = hasValidBearing
+    ? createHeadingArrowHtml({
+        bearing: numericBearing,
+        markerSize: WEB_BUS_MARKER_FALLBACK_SIZE,
+        opacity: resolvedOpacity,
+      })
+    : '';
 
   return `
-    <div style="position:relative;width:88px;height:88px;overflow:visible;transform:scale(${resolvedScale});transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
+    <div data-live-bus-marker="generated" style="position:relative;width:${WEB_BUS_MARKER_FALLBACK_SIZE}px;height:${WEB_BUS_MARKER_FALLBACK_SIZE}px;overflow:visible;transform:scale(${resolvedScale});transform-origin:center center;transition:transform 0.1s ease-out;opacity:${resolvedOpacity};">
       ${arrowHtml}
       <div style="
         position:absolute;
-        top:50%;left:50%;
-        transform:translate(-50%,-50%);
+        top:0;left:0;
         display:inline-flex;
         flex-direction:column;
         align-items:center;
         justify-content:center;
-        width:44px;
-        height:44px;
+        width:${WEB_BUS_MARKER_FALLBACK_SIZE}px;
+        height:${WEB_BUS_MARKER_FALLBACK_SIZE}px;
         background:linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 50%), ${color};
         border-radius:50%;
         border:2.5px solid rgba(255,255,255,0.92);
@@ -259,9 +405,19 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
         overflow:hidden;
         box-sizing:border-box;
       ">
+        <svg
+          data-live-bus-glyph="true"
+          width="16"
+          height="12"
+          viewBox="0 0 24 18"
+          aria-hidden="true"
+          style="position:relative;z-index:1;margin-bottom:1px;filter:drop-shadow(0 1px 1px rgba(0,0,0,0.24));"
+        >
+          <path d="M5 0h14c2.2 0 4 1.8 4 4v8c0 1.1-.9 2-2 2v2c0 1.1-.9 2-2 2h-1c-1.1 0-2-.9-2-2v-2H8v2c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-2c-1.1 0-2-.9-2-2V4c0-2.2 1.8-4 4-4Zm0 3v5h14V3H5Zm1 9.8a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Zm12 0a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Z" fill="rgba(255,255,255,0.92)" />
+        </svg>
         <span style="
           color:white;
-          font-size:${routeDirectionLabel ? 14 : 17}px;
+          font-size:${routeDirectionLabel ? 13 : 14}px;
           font-weight:800;
           letter-spacing:0.5px;
           text-shadow:0 1px 2px rgba(0,0,0,0.25);
@@ -305,9 +461,41 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
   const isMajor = hubType === 'major';
   const safeLabel = escapeHtml(label);
   const iconSize = (isMajor ? 54 : 46) * BUS_HUB_ICON_SCALE;
+  const markerWidth = isMajor ? 190 : 150;
+  const labelTop = iconSize - 10;
+  const hasUsableIconUri = typeof BUS_HUB_ICON_URI === 'string' &&
+    BUS_HUB_ICON_URI.length > 8 &&
+    BUS_HUB_ICON_URI !== '[object Object]';
+  const artworkHtml = hasUsableIconUri
+    ? `<img
+        data-bus-hub-artwork="true"
+        src="${escapeHtml(String(BUS_HUB_ICON_URI))}"
+        alt=""
+        aria-hidden="true"
+        style="display:block;width:${iconSize}px;height:${iconSize}px;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.24));"
+      />`
+    : `<div
+        data-bus-hub-artwork="true"
+        aria-hidden="true"
+        style="
+          width:${iconSize}px;
+          height:${iconSize}px;
+          border-radius:${iconSize / 2}px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:linear-gradient(180deg, #ffffff 0%, #eef7ff 100%);
+          border:2px solid rgba(0,78,128,0.24);
+          box-shadow:0 3px 8px rgba(0,0,0,0.18);
+          color:${COLORS.primaryDark || '#0b6fa4'};
+          font:900 ${Math.round(iconSize * 0.42)}px/1 Avenir, Arial, sans-serif;
+        ">🚌</div>`;
   const labelHtml = safeLabel
     ? `<div style="
-        margin-top:-10px;
+        position:absolute;
+        top:${labelTop}px;
+        left:50%;
+        transform:translateX(-50%);
         max-width:${isMajor ? 184 : 142}px;
         padding:3px 8px;
         border-radius:999px;
@@ -328,22 +516,16 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
 
   return `
     <div data-bus-hub-icon="true" style="
-      width:${isMajor ? 190 : 150}px;
-      min-height:${isMajor ? 132 : 116}px;
+      position:relative;
+      width:${markerWidth}px;
+      height:${iconSize}px;
       display:flex;
-      flex-direction:column;
       align-items:center;
       justify-content:center;
       pointer-events:none;
       overflow:visible;
     ">
-      <img
-        data-bus-hub-artwork="true"
-        src="${escapeHtml(String(BUS_HUB_ICON_URI))}"
-        alt=""
-        aria-hidden="true"
-        style="display:block;width:${iconSize}px;height:${iconSize}px;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.24));"
-      />
+      ${artworkHtml}
       ${labelHtml}
     </div>
   `;
@@ -1066,6 +1248,8 @@ export const __TEST_ONLY__ = {
   applyLayerEvents,
   createBusHubHtml,
   createBusHtml,
+  handleWebMapKeyboardPan,
+  isEditableKeyboardTarget,
   registerOrderedMapLayers,
   reorderRegisteredMapLayers,
   resolveLayerCallbacks,
@@ -1128,6 +1312,7 @@ const WebMapView = forwardRef(({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const maplibreRef = useRef(null);
+  const eventCleanupRef = useRef(() => {});
   const [isReady, setIsReady] = useState(false);
   const callbacksRef = useRef({
     onRegionChangeComplete,
@@ -1168,6 +1353,9 @@ const WebMapView = forwardRef(({
         center: [initialRegion.longitude, initialRegion.latitude],
         zoom: getZoomFromDelta(initialRegion.latitudeDelta),
         attributionControl: true,
+        dragPan: true,
+        scrollZoom: true,
+        keyboard: false,
       });
 
       mapRef.current = map;
@@ -1190,6 +1378,7 @@ const WebMapView = forwardRef(({
         callbacksRef.current.onUserInteraction?.();
       };
       const handleClick = (event) => {
+        containerRef.current?.focus?.({ preventScroll: true });
         callbacksRef.current.onPress?.({
           nativeEvent: {
             coordinate: {
@@ -1198,6 +1387,23 @@ const WebMapView = forwardRef(({
             },
           },
         });
+      };
+      const handleKeyDown = (event) => {
+        handleWebMapKeyboardPan({
+          map,
+          event,
+          onUserInteraction: callbacksRef.current.onUserInteraction,
+        });
+      };
+      const handlePointerDown = () => {
+        containerRef.current?.focus?.({ preventScroll: true });
+      };
+
+      containerRef.current?.addEventListener?.('keydown', handleKeyDown);
+      containerRef.current?.addEventListener?.('pointerdown', handlePointerDown);
+      eventCleanupRef.current = () => {
+        containerRef.current?.removeEventListener?.('keydown', handleKeyDown);
+        containerRef.current?.removeEventListener?.('pointerdown', handlePointerDown);
       };
 
       map.on('load', handleLoad);
@@ -1217,6 +1423,8 @@ const WebMapView = forwardRef(({
     return () => {
       isCancelled = true;
       setIsReady(false);
+      eventCleanupRef.current?.();
+      eventCleanupRef.current = () => {};
       map?.remove();
       mapRef.current = null;
       maplibreRef.current = null;
@@ -1275,7 +1483,17 @@ const WebMapView = forwardRef(({
   return (
     <MapContext.Provider value={contextValue}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
-        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        <div
+          ref={containerRef}
+          tabIndex={0}
+          aria-label="Transit map. Use arrow keys to move the map and plus or minus to zoom."
+          style={{
+            width: '100%',
+            height: '100%',
+            outline: 'none',
+            touchAction: 'none',
+          }}
+        />
       </div>
       {isReady ? children : null}
     </MapContext.Provider>

@@ -138,6 +138,195 @@ function buildRuleStopClosures(newsItem) {
   }));
 }
 
+function normalizeStopCode(value) {
+  return String(value || '').trim();
+}
+
+function buildNoticeStopImpactsFromText(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const stopClosureCandidates = [];
+  const temporaryStops = [];
+  const seenClosure = new Set();
+  const seenTemporary = new Set();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const tempMatch = /^temp(?:orary)?\s+stop\s+(\d{1,5})\b/i.exec(line);
+    if (tempMatch) {
+      const stopCode = normalizeStopCode(tempMatch[1]);
+      if (!seenTemporary.has(stopCode)) {
+        seenTemporary.add(stopCode);
+        temporaryStops.push({
+          stopCode,
+          label: line,
+          name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
+          source: 'official-notice',
+        });
+      }
+      continue;
+    }
+
+    const stopMatch = /^stop\s+(\d{1,5})\b/i.exec(line);
+    if (stopMatch) {
+      const stopCode = normalizeStopCode(stopMatch[1]);
+      if (!seenClosure.has(stopCode)) {
+        seenClosure.add(stopCode);
+        stopClosureCandidates.push({
+          stopCode,
+          label: line,
+          name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
+          source: 'official-notice',
+        });
+      }
+    }
+  }
+
+  return {
+    stopClosureCandidates,
+    temporaryStops,
+  };
+}
+
+function isLikelyRouteDetourNotice(newsItem) {
+  const text = `${newsItem?.title || ''}\n${newsItem?.body || ''}`.toLowerCase();
+  return text.includes('detour') && /\broute\s+\d+/i.test(text);
+}
+
+function extractPdfLinksFromHtml(html, baseUrl) {
+  const links = [];
+  const seen = new Set();
+  const pattern = /href=["']([^"']+\.pdf(?:\?[^"']*)?)["']/gi;
+  let match;
+  while ((match = pattern.exec(String(html || ''))) !== null) {
+    try {
+      const url = new URL(match[1], baseUrl).toString();
+      if (!seen.has(url)) {
+        seen.add(url);
+        links.push(url);
+      }
+    } catch (_error) {
+      // Ignore malformed notice links.
+    }
+  }
+  return links.slice(0, 3);
+}
+
+async function extractPdfText(buffer) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const document = await pdfjs.getDocument({
+    data,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    disableFontFace: true,
+  }).promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item) => item.str).join('\n'));
+  }
+  return pages.join('\n');
+}
+
+async function fetchText(url, fetchImpl) {
+  const response = await fetchImpl(url, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,application/pdf',
+      'User-Agent': 'BarrieTransitApp/1.0',
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+
+async function fetchPdfText(url, fetchImpl) {
+  const response = await fetchImpl(url, {
+    headers: {
+      Accept: 'application/pdf',
+      'User-Agent': 'BarrieTransitApp/1.0',
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return extractPdfText(await response.arrayBuffer());
+}
+
+function resolveNoticeStop(stopInfo, stopIndex = {}) {
+  const stopCode = normalizeStopCode(stopInfo?.stopCode);
+  const resolved = resolveStop(stopCode, stopIndex);
+  return {
+    stopCode,
+    stopId: resolved?.id || null,
+    code: resolved?.code || stopCode,
+    name: resolved?.name || stopInfo?.name || '',
+    latitude: Number.isFinite(resolved?.latitude) ? resolved.latitude : null,
+    longitude: Number.isFinite(resolved?.longitude) ? resolved.longitude : null,
+    mappable: Boolean(resolved),
+  };
+}
+
+async function buildOfficialNoticeStopImpacts(newsItem, stopIndex = {}, options = {}) {
+  if (!isLikelyRouteDetourNotice(newsItem)) return [];
+  const fetchImpl = options.fetchImpl || global.fetch;
+  if (options.fetchOfficialNotices !== true || typeof fetchImpl !== 'function' || !newsItem?.url) return [];
+
+  let html;
+  try {
+    html = await fetchText(newsItem.url, fetchImpl);
+  } catch (error) {
+    console.warn(`[newsImpactParser] Failed to fetch notice page ${newsItem.url}:`, error.message);
+    return [];
+  }
+
+  const pdfLinks = extractPdfLinksFromHtml(html, newsItem.url);
+  const impacts = [];
+  const dateWindow = parseDateWindow(newsItem, options.now ? new Date(options.now) : new Date());
+  const status = statusForDateWindow(dateWindow, options.now ? new Date(options.now) : new Date());
+
+  for (const pdfUrl of pdfLinks) {
+    let pdfText;
+    try {
+      pdfText = await fetchPdfText(pdfUrl, fetchImpl);
+    } catch (error) {
+      console.warn(`[newsImpactParser] Failed to fetch/parse notice PDF ${pdfUrl}:`, error.message);
+      continue;
+    }
+
+    const parsed = buildNoticeStopImpactsFromText(pdfText);
+    if (parsed.stopClosureCandidates.length === 0 && parsed.temporaryStops.length === 0) continue;
+
+    impacts.push({
+      id: `routeDetourStopImpacts_${newsItem.id}_${Math.abs(pdfUrl.split('').reduce(
+        (hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
+        0
+      ))}`,
+      type: 'route_detour_stop_impacts',
+      status,
+      affectedRoutes: uniqueStrings(newsItem.affectedRoutes || []),
+      source: newsItem.source || 'myridebarrie',
+      sourceNewsId: newsItem.id,
+      sourceTitle: newsItem.title,
+      sourceUrl: newsItem.url,
+      officialNoticeUrl: pdfUrl,
+      stopClosureCandidates: parsed.stopClosureCandidates.map((stop) => resolveNoticeStop(stop, stopIndex)),
+      temporaryStops: parsed.temporaryStops.map((stop) => resolveNoticeStop(stop, stopIndex)),
+      parser: 'official-pdf',
+      confidence: 'high',
+      reason: 'Parsed stop labels from linked official detour notice PDF.',
+      publishedAt: newsItem.publishedAt || null,
+      startsAt: dateWindow.startsAt,
+      endsAt: dateWindow.endsAt,
+    });
+  }
+
+  return impacts;
+}
+
 function validateAiPayload(payload) {
   const closures = Array.isArray(payload?.stopClosures) ? payload.stopClosures : [];
   return closures
@@ -246,13 +435,18 @@ async function extractStopClosureImpacts(newsItems, stopIndex = {}, options = {}
         endsAt: dateWindow.endsAt,
       });
     }
+
+    impacts.push(...await buildOfficialNoticeStopImpacts(newsItem, stopIndex, options));
   }
 
   return impacts;
 }
 
 module.exports = {
+  buildNoticeStopImpactsFromText,
+  buildOfficialNoticeStopImpacts,
   extractStopCodesFromText,
+  extractPdfLinksFromHtml,
   parseDateWindow,
   statusForDateWindow,
   buildRuleStopClosures,

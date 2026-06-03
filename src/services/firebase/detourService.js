@@ -116,7 +116,7 @@ export function subscribeToActiveDetours(onUpdate, onError) {
     return () => {};
   }
 
-  const detoursRef = collection(db, runtimeConfig.detours.activeCollection || 'activeDetours');
+  const detoursRef = collection(db, runtimeConfig.detours.activeCollection || 'activeDetoursV2');
 
   return onSnapshot(
     detoursRef,

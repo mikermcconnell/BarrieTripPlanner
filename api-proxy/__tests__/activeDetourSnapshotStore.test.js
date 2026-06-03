@@ -46,6 +46,50 @@ test('returns an empty snapshot set when Firestore is unavailable', async () => 
   await expect(loadActiveDetourSnapshots({ force: true })).resolves.toEqual({});
 });
 
+test('normalizes active snapshots with clear state and a recoverable clear window', () => {
+  const { normalizeSnapshot } = require('../activeDetourSnapshotStore');
+
+  const snapshot = normalizeSnapshot('100', {
+    routeId: '100',
+    detectedAt: 1779620000000,
+    lastSeenAt: 1779620300000,
+    latestGpsEvidenceAt: 1779620250000,
+    geometryLastEvidenceAt: 1779620240000,
+    state: 'clear-pending',
+    clearReason: 'normal-route-observed',
+    shapeId: 'shape-100',
+    clearWindow: {
+      shapeId: 'shape-100',
+      startProgressMeters: 0,
+      endProgressMeters: 1000,
+      minCoverageRatio: 0.95,
+    },
+    segments: [{
+      shapeId: 'shape-100',
+      startProgressMeters: 125,
+      endProgressMeters: 625,
+    }],
+  });
+
+  expect(snapshot.state).toBe('clear-pending');
+  expect(snapshot.clearReason).toBe('normal-route-observed');
+  expect(snapshot.latestGpsEvidenceAt).toBe(1779620250000);
+  expect(snapshot.geometryLastEvidenceAt).toBe(1779620240000);
+  expect(snapshot.detourZone).toEqual({
+    shapeId: 'shape-100',
+    startProgressMeters: 125,
+    endProgressMeters: 625,
+  });
+  expect(snapshot.clearWindow).toEqual({
+    shapeId: 'shape-100',
+    startProgressMeters: 0,
+    endProgressMeters: 1000,
+    minCoverageRatio: 0.95,
+  });
+  expect(snapshot.geometry.startProgressMeters).toBe(125);
+  expect(snapshot.geometry.endProgressMeters).toBe(625);
+});
+
 test('V2 active snapshot hydration reads only the configured V2 collection', async () => {
   jest.resetModules();
   const get = jest.fn().mockResolvedValue({ forEach() {} });

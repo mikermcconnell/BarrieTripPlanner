@@ -58,8 +58,8 @@ routeShapeMapping.set('8B', ['shape-1']);
 const OFF_ROUTE_COORD = { latitude: 44.395, longitude: -79.695 };
 // On-route: directly on the shape (well within 40m clear threshold)
 const ON_ROUTE_COORD = { latitude: 44.39, longitude: -79.695 };
-// Dead band: ~55m from shape — between 40m clear threshold and 75m detect threshold
-const DEAD_BAND_COORD = { latitude: 44.3905, longitude: -79.695 };
+// Near miss: ~55m from shape — above the current 40m off-route threshold.
+const NEAR_OFF_ROUTE_COORD = { latitude: 44.3905, longitude: -79.695 };
 
 // Zone-specific coordinates for clearing tests
 // Off-route at west end of shape — projects near index 0
@@ -74,7 +74,7 @@ const ON_ROUTE_ZONE_WEST = { latitude: 44.39, longitude: -79.696 };
 const ON_ROUTE_ZONE_EAST = { latitude: 44.39, longitude: -79.684 };
 // On-route outside core zone — projects to index 0 (outside core)
 const ON_ROUTE_OUTSIDE_ZONE = { latitude: 44.39, longitude: -79.700 };
-// Small detour: ~50m north of the shape, below the global threshold but above Route 8 tuning.
+// Small detour: ~50m north of the shape, above the current global threshold.
 const SMALL_DETOUR_COORD = { latitude: 44.39045, longitude: -79.695 };
 
 function makeVehicle(overrides = {}) {
@@ -477,6 +477,112 @@ describe('hysteresis clearing', () => {
     }
   });
 
+  test('obsolete-shape active snapshot clears after 45 minutes with same-route buses on current GTFS route', () => {
+    const realDateNow = Date.now;
+    const baseTime = Date.parse('2026-06-02T14:00:00.000Z');
+
+    try {
+      Date.now = () => baseTime;
+      setMinVehicles(2);
+      hydrateActiveDetourSnapshots({
+        'route-1': {
+          routeId: 'route-1',
+          detectedAt: baseTime - 2 * 60 * 60 * 1000,
+          lastSeenAt: baseTime - 46 * 60 * 1000,
+          lastEvidenceAt: baseTime - 46 * 60 * 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 0,
+          geometry: {
+            shapeId: 'old-shape-id',
+            canShowDetourPath: true,
+            skippedSegmentPolyline: [
+              { latitude: 44.39, longitude: -79.696 },
+              { latitude: 44.39, longitude: -79.684 },
+            ],
+            segments: [{
+              shapeId: 'old-shape-id',
+              canShowDetourPath: true,
+              skippedSegmentPolyline: [
+                { latitude: 44.39, longitude: -79.696 },
+                { latitude: 44.39, longitude: -79.684 },
+              ],
+            }],
+            evidencePointCount: 2,
+            lastEvidenceAt: baseTime - 46 * 60 * 1000,
+          },
+          detourZone: {
+            shapeId: 'old-shape-id',
+            entryIndex: 2,
+            exitIndex: 8,
+          },
+        },
+      });
+
+      const shapesWithUnmappedOldShape = new Map(shapes);
+      shapesWithUnmappedOldShape.set('old-shape-id', [
+        { latitude: 44.40, longitude: -79.700 },
+        { latitude: 44.40, longitude: -79.680 },
+      ]);
+
+      const result = processVehicles([
+        makeVehicle({ id: 'regular-bus-1', tripId: 'regular-trip-1', coordinate: ON_ROUTE_IN_ZONE }),
+        makeVehicle({ id: 'regular-bus-2', tripId: 'regular-trip-2', coordinate: ON_ROUTE_ZONE_EAST }),
+      ], shapesWithUnmappedOldShape, routeShapeMapping);
+
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].state).toBe('clear-pending');
+      expect(result['route-1'].clearReason).toBe('obsolete-shape-normal-route-observed');
+      expect(result['route-1'].currentVehicleCount).toBe(0);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('obsolete-shape active snapshot waits for 45 minutes without off-route evidence before clearing', () => {
+    const realDateNow = Date.now;
+    const baseTime = Date.parse('2026-06-02T14:00:00.000Z');
+
+    try {
+      Date.now = () => baseTime;
+      setMinVehicles(2);
+      hydrateActiveDetourSnapshots({
+        'route-1': {
+          routeId: 'route-1',
+          detectedAt: baseTime - 2 * 60 * 60 * 1000,
+          lastSeenAt: baseTime - 44 * 60 * 1000,
+          lastEvidenceAt: baseTime - 44 * 60 * 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 0,
+          geometry: {
+            shapeId: 'old-shape-id',
+            canShowDetourPath: true,
+            segments: [{ shapeId: 'old-shape-id', canShowDetourPath: true }],
+            evidencePointCount: 2,
+            lastEvidenceAt: baseTime - 44 * 60 * 1000,
+          },
+          detourZone: {
+            shapeId: 'old-shape-id',
+            entryIndex: 2,
+            exitIndex: 8,
+          },
+        },
+      });
+
+      const result = processVehicles([
+        makeVehicle({ id: 'regular-bus-1', tripId: 'regular-trip-1', coordinate: ON_ROUTE_IN_ZONE }),
+        makeVehicle({ id: 'regular-bus-2', tripId: 'regular-trip-2', coordinate: ON_ROUTE_ZONE_EAST }),
+      ], shapes, routeShapeMapping);
+
+      expect(result['route-1']).toBeDefined();
+      expect(result['route-1'].state).toBe('active');
+      expect(result['route-1'].clearReason).toBeNull();
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
   test('fast normal-route traversal clears a retained detour before the fixed on-route tick threshold', () => {
     const realDateNow = Date.now;
     const BASE_TIME = realDateNow();
@@ -756,25 +862,24 @@ describe('hysteresis clearing', () => {
   });
 });
 
-describe('dead band behavior', () => {
-  test('vehicle in dead band (40-75m) does not clear an active detour', () => {
+describe('near-threshold off-route behavior', () => {
+  test('vehicle above 40m does not clear an active detour', () => {
     const offVehicle = makeVehicle({ coordinate: OFF_ROUTE_COORD });
-    const deadBandVehicle = makeVehicle({ coordinate: DEAD_BAND_COORD });
+    const nearOffRouteVehicle = makeVehicle({ coordinate: NEAR_OFF_ROUTE_COORD });
 
     confirmDetour(offVehicle);
 
-    // Vehicle moves to dead band — should not increment on-route counter
-    const result = runTicks([deadBandVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
+    // Vehicle remains above the off-route threshold — should not increment on-route counter.
+    const result = runTicks([nearOffRouteVehicle], DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE + 2);
     expect(Object.keys(result)).toHaveLength(1);
     expect(result['route-1'].state).toBe('active');
   });
 
-  test('vehicle in dead band does not trigger a new detour', () => {
-    const deadBandVehicle = makeVehicle({ coordinate: DEAD_BAND_COORD });
+  test('vehicle above 40m can trigger a new detour candidate', () => {
+    const nearOffRouteVehicle = makeVehicle({ coordinate: NEAR_OFF_ROUTE_COORD });
 
-    // 10 ticks in dead band — should never trigger
-    const result = runTicks([deadBandVehicle], 10);
-    expect(Object.keys(result)).toHaveLength(0);
+    const result = runTicks([nearOffRouteVehicle], 10);
+    expect(Object.keys(result)).toContain('route-1');
   });
 });
 
@@ -1908,10 +2013,10 @@ describe('recurring short deviations', () => {
     expect(vehicle.lastRouteProjection).toMatchObject({
       classification: 'off-route',
       shapeId: 'shape-1',
-      offRouteThresholdMeters: 75,
+      offRouteThresholdMeters: 40,
       onRouteClearThresholdMeters: 40,
     });
-    expect(vehicle.lastRouteProjection.distanceMeters).toBeGreaterThan(75);
+    expect(vehicle.lastRouteProjection.distanceMeters).toBeGreaterThan(40);
     expect(vehicle.lastRouteProjection.sampledAt).toEqual(expect.any(Number));
 
     const debug = getRouteDebug('route-1');
@@ -2167,7 +2272,7 @@ describe('route-specific detector tuning', () => {
     expect(config8A.evidenceWindowMs).toBe(configDefault.evidenceWindowMs);
   });
 
-  test('does not detect the small route 8 detour on default-tuned routes', () => {
+  test('detects the small route 8 detour on default-tuned routes', () => {
     const vehicle = makeVehicle({
       id: 'bus-default-small-detour',
       routeId: 'route-1',
@@ -2175,10 +2280,10 @@ describe('route-specific detector tuning', () => {
     });
 
     const result = runTicks([vehicle], CONSECUTIVE_READINGS_REQUIRED + 2);
-    expect(Object.keys(result)).toHaveLength(0);
+    expect(Object.keys(result)).toContain('route-1');
   });
 
-  test('does not detect the small route 8A deviation with default tuning', () => {
+  test('detects the small route 8A deviation with default tuning', () => {
     const config8A = resolveRouteDetectorConfig('8A');
     const vehicle = makeVehicle({
       id: 'bus-8a-small-detour',
@@ -2187,7 +2292,7 @@ describe('route-specific detector tuning', () => {
     });
 
     const result = runTicks([vehicle], config8A.consecutiveReadingsRequired);
-    expect(result['8A']).toBeUndefined();
+    expect(result['8A']).toBeDefined();
   });
 });
 

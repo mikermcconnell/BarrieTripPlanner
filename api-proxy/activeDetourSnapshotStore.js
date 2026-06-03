@@ -24,18 +24,60 @@ function toCount(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeDetourZone(data = {}) {
+  const explicit = data.detourZone && typeof data.detourZone === 'object'
+    ? cloneJson(data.detourZone)
+    : null;
+  const segments = Array.isArray(data.segments) ? data.segments : [];
+  const primarySegment = segments.find((segment) => (
+    Number.isFinite(Number(segment?.startProgressMeters)) &&
+    Number.isFinite(Number(segment?.endProgressMeters))
+  )) || null;
+  const source = explicit || primarySegment || data;
+  const start = toFiniteNumber(source?.startProgressMeters);
+  const end = toFiniteNumber(source?.endProgressMeters);
+  const shapeId = source?.shapeId || data.shapeId || primarySegment?.shapeId || null;
+
+  if (Number.isFinite(start) && Number.isFinite(end) && end !== start && shapeId) {
+    return {
+      startProgressMeters: Math.min(start, end),
+      endProgressMeters: Math.max(start, end),
+      shapeId,
+    };
+  }
+
+  return explicit;
+}
+
 function normalizeSnapshot(routeId, data = {}) {
+  const lastEvidenceAt = toMillis(data.lastEvidenceAt) || toMillis(data.lastSeenAt) || null;
+  const latestGpsEvidenceAt = toMillis(data.latestGpsEvidenceAt) || lastEvidenceAt;
+  const geometryLastEvidenceAt = toMillis(data.geometryLastEvidenceAt) || lastEvidenceAt;
+  const detourZone = normalizeDetourZone(data);
   return {
     routeId,
     detectedAt: toMillis(data.detectedAt) || Date.now(),
     lastSeenAt: toMillis(data.lastSeenAt) || toMillis(data.detectedAt) || Date.now(),
-    lastEvidenceAt: toMillis(data.lastEvidenceAt) || toMillis(data.lastSeenAt) || null,
+    lastEvidenceAt,
+    latestGpsEvidenceAt,
+    geometryLastEvidenceAt,
     triggerVehicleId: data.triggerVehicleId || null,
     vehicleCount: toCount(data.uniqueVehicleCount ?? data.vehicleCount),
     currentVehicleCount: toCount(data.currentVehicleCount),
     matchedVehicleIds: Array.isArray(data.matchedVehicleIds)
       ? data.matchedVehicleIds.filter(Boolean)
       : [],
+    state: data.state || 'active',
+    clearReason: data.clearReason || null,
+    riderVisible: data.riderVisible !== false,
+    riderVisibilityReason: data.riderVisibilityReason || null,
+    staleForReview: Boolean(data.staleForReview),
+    canShowDetourPath: data.canShowDetourPath ?? null,
     confidence: data.confidence || null,
     geometry: {
       shapeId: data.shapeId || null,
@@ -47,9 +89,15 @@ function normalizeSnapshot(routeId, data = {}) {
       exitPoint: cloneJson(data.exitPoint) || null,
       confidence: data.confidence || null,
       evidencePointCount: data.evidencePointCount ?? null,
-      lastEvidenceAt: toMillis(data.lastEvidenceAt) || null,
+      lastEvidenceAt,
+      startProgressMeters: detourZone?.startProgressMeters ?? null,
+      endProgressMeters: detourZone?.endProgressMeters ?? null,
+      canShowDetourPath: data.canShowDetourPath ?? null,
     },
-    detourZone: cloneJson(data.detourZone) || null,
+    detourZone,
+    clearWindow: cloneJson(data.clearWindow) || null,
+    clearWindows: cloneJson(data.clearWindows) || [],
+    clearedSegments: cloneJson(data.clearedSegments) || [],
   };
 }
 

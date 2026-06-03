@@ -100,6 +100,11 @@ function normalizeVehicleCount(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function cloneJson(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
@@ -253,7 +258,242 @@ function stopImpactSignature(segment) {
       segment.detourPathServedStopIds,
       segment.detourPathServedStopCodes
     ),
+    stopListSignature(
+      segment.noticeTemporaryStops,
+      segment.noticeTemporaryStopIds,
+      segment.noticeTemporaryStopCodes
+    ),
+    stopListSignature(
+      segment.noticeActiveStops,
+      segment.noticeActiveStopIds,
+      segment.noticeActiveStopCodes
+    ),
   ].join('/');
+}
+
+function hasNoticeStopImpacts(geo) {
+  if (!geo || typeof geo !== 'object') return false;
+  if (geo.noticeStopImpactSource === 'official-notice') return true;
+  return Array.isArray(geo.segments) && geo.segments.some((segment) => (
+    segment?.noticeStopImpactSource === 'official-notice'
+  ));
+}
+
+function getPrimaryStopImpactSegment(source) {
+  if (!source || typeof source !== 'object') return null;
+  if (Array.isArray(source.segments) && source.segments.length > 0) {
+    return source.segments[0] || null;
+  }
+  return source;
+}
+
+function hasNoticeStopImpactWriteDelta(previousSnapshot, geo) {
+  if (!hasNoticeStopImpacts(geo)) return false;
+  const previousSegment = getPrimaryStopImpactSegment(previousSnapshot);
+  const currentSegment = getPrimaryStopImpactSegment(geo);
+  if (!currentSegment) return false;
+  if (!previousSegment) return true;
+  if (stopImpactSignature(previousSegment) !== stopImpactSignature(currentSegment)) return true;
+  const previousSource = previousSnapshot?.noticeStopImpactSource ||
+    previousSegment?.noticeStopImpactSource ||
+    null;
+  const currentSource = geo?.noticeStopImpactSource ||
+    currentSegment?.noticeStopImpactSource ||
+    null;
+  return previousSource !== currentSource;
+}
+
+function normalizeStopCode(value) {
+  return String(value || '').trim();
+}
+
+function getRouteFamily(routeId) {
+  const normalized = normalizeRouteId(routeId);
+  const match = normalized.match(/^(\d+)[A-Z]$/);
+  return match ? match[1] : normalized;
+}
+
+function noticeAppliesToRoute(routeId, noticeImpact = {}) {
+  const route = normalizeRouteId(routeId);
+  const family = getRouteFamily(route);
+  const affectedRoutes = Array.isArray(noticeImpact.affectedRoutes)
+    ? noticeImpact.affectedRoutes.map(normalizeRouteId).filter(Boolean)
+    : [];
+  return affectedRoutes.some((affectedRoute) => (
+    affectedRoute === route ||
+    affectedRoute === family ||
+    getRouteFamily(affectedRoute) === family
+  ));
+}
+
+function getRouteStopIds(routeId, routeStopSequencesMapping = {}) {
+  const routeSequences = routeStopSequencesMapping?.[routeId] || routeStopSequencesMapping?.[normalizeRouteId(routeId)];
+  if (!routeSequences || typeof routeSequences !== 'object') return new Set();
+  return new Set(Object.values(routeSequences)
+    .flat()
+    .map((stopId) => normalizeStopCode(stopId))
+    .filter(Boolean));
+}
+
+function getStopCodeFromStop(stop) {
+  return normalizeStopCode(stop?.code ?? stop?.stopCode ?? stop?.id ?? stop?.stopId);
+}
+
+function resolveNoticeStop(stopLike, gtfsData = {}) {
+  const code = normalizeStopCode(stopLike?.stopCode ?? stopLike?.code ?? stopLike?.id);
+  const resolved = gtfsData.stopsByCode?.get(code) || gtfsData.stopsById?.get(code) || null;
+  return {
+    id: resolved?.id || stopLike?.stopId || stopLike?.id || null,
+    code: resolved?.code || code,
+    name: resolved?.name || stopLike?.name || '',
+    latitude: Number.isFinite(resolved?.latitude) ? resolved.latitude : stopLike?.latitude ?? null,
+    longitude: Number.isFinite(resolved?.longitude) ? resolved.longitude : stopLike?.longitude ?? null,
+    source: 'official-notice',
+  };
+}
+
+function mergeStopsByCode(existingStops = [], addedStops = []) {
+  const byCode = new Map();
+  for (const stop of [...existingStops, ...addedStops]) {
+    const code = getStopCodeFromStop(stop);
+    if (!code || byCode.has(code)) continue;
+    byCode.set(code, stop);
+  }
+  return [...byCode.values()];
+}
+
+function setStopListFields(target, prefix, stops) {
+  const list = Array.isArray(stops) ? stops : [];
+  target[`${prefix}Stops`] = list;
+  target[`${prefix}StopIds`] = list.map((stop) => stop?.id).filter(Boolean);
+  target[`${prefix}StopCodes`] = list.map(getStopCodeFromStop).filter(Boolean);
+}
+
+function refreshSkippedStopFields(segment, skippedStops) {
+  setStopListFields(segment, 'skipped', skippedStops);
+  const firstSkippedStop = skippedStops[0] || null;
+  segment.firstSkippedStop = firstSkippedStop;
+  segment.firstSkippedStopId = firstSkippedStop?.id || null;
+  segment.firstSkippedStopCode = firstSkippedStop ? getStopCodeFromStop(firstSkippedStop) : null;
+}
+
+function getSegmentBoundaryStopCodes(segment = {}) {
+  return new Set([
+    segment.entryStopId,
+    segment.entryStopCode,
+    segment.exitStopId,
+    segment.exitStopCode,
+  ].map(normalizeStopCode).filter(Boolean));
+}
+
+function mergeNoticeStopImpactsIntoGeometry(routeId, geo, noticeStopImpacts = [], gtfsData = {}) {
+  if (!geo || typeof geo !== 'object') return geo;
+  const relevantImpacts = (noticeStopImpacts || []).filter((impact) => noticeAppliesToRoute(routeId, impact));
+  if (relevantImpacts.length === 0) return geo;
+
+  const routeStopIds = getRouteStopIds(routeId, gtfsData.routeStopSequencesMapping || {});
+  const closureCandidates = relevantImpacts
+    .flatMap((impact) => Array.isArray(impact.stopClosureCandidates) ? impact.stopClosureCandidates : [])
+    .map((stop) => ({ ...stop, stopCode: normalizeStopCode(stop.stopCode ?? stop.code ?? stop.id) }))
+    .filter((stop) => stop.stopCode);
+  const temporaryStops = relevantImpacts
+    .flatMap((impact) => Array.isArray(impact.temporaryStops) ? impact.temporaryStops : [])
+    .map((stop) => ({ ...stop, stopCode: normalizeStopCode(stop.stopCode ?? stop.code ?? stop.id) }))
+    .filter((stop) => stop.stopCode);
+  const temporaryStopCodes = new Set(temporaryStops.map((stop) => stop.stopCode));
+
+  const mergeSegment = (segment = {}) => {
+    const currentSkippedStops = Array.isArray(segment.skippedStops) ? segment.skippedStops : [];
+    const currentSkippedCodes = new Set([
+      ...(Array.isArray(segment.skippedStopCodes) ? segment.skippedStopCodes : []),
+      ...(Array.isArray(segment.skippedStopIds) ? segment.skippedStopIds : []),
+      ...currentSkippedStops.map(getStopCodeFromStop),
+    ].map(normalizeStopCode).filter(Boolean));
+    const boundaryStopCodes = getSegmentBoundaryStopCodes(segment);
+    const routeCandidates = closureCandidates.filter((stop) => (
+      routeStopIds.size === 0 ||
+      routeStopIds.has(stop.stopCode) ||
+      currentSkippedCodes.has(stop.stopCode) ||
+      boundaryStopCodes.has(stop.stopCode)
+    ));
+    const officialClosureCodes = new Set(currentSkippedCodes);
+    const activeStops = [];
+
+    for (const candidate of routeCandidates) {
+      const code = candidate.stopCode;
+      const hasOwnTempReplacement = temporaryStopCodes.has(`${code}0`);
+      const isBoundary = boundaryStopCodes.has(code);
+      if (currentSkippedCodes.has(code) || (isBoundary && hasOwnTempReplacement)) {
+        officialClosureCodes.add(code);
+      } else {
+        activeStops.push(resolveNoticeStop(candidate, gtfsData));
+      }
+    }
+
+    const addedClosureStops = routeCandidates
+      .filter((candidate) => officialClosureCodes.has(candidate.stopCode))
+      .map((candidate) => resolveNoticeStop(candidate, gtfsData));
+    const skippedStops = mergeStopsByCode(currentSkippedStops, addedClosureStops)
+      .filter((stop) => officialClosureCodes.has(getStopCodeFromStop(stop)));
+    const nextSegment = {
+      ...segment,
+      noticeStopImpactSource: 'official-notice',
+      noticeStopImpactSourceNewsIds: [...new Set(relevantImpacts.map((impact) => String(impact.sourceNewsId || '')).filter(Boolean))],
+    };
+    refreshSkippedStopFields(nextSegment, skippedStops);
+    setStopListFields(nextSegment, 'noticeTemporary', temporaryStops.map((stop) => resolveNoticeStop(stop, gtfsData)));
+    setStopListFields(nextSegment, 'noticeActive', activeStops);
+    return nextSegment;
+  };
+
+  const nextGeo = { ...geo };
+  const segments = Array.isArray(geo.segments) && geo.segments.length > 0
+    ? geo.segments.map(mergeSegment)
+    : [mergeSegment(geo)];
+  nextGeo.segments = segments;
+
+  const primary = segments[0] || {};
+  [
+    'skippedStops',
+    'skippedStopIds',
+    'skippedStopCodes',
+    'firstSkippedStop',
+    'firstSkippedStopId',
+    'firstSkippedStopCode',
+    'noticeTemporaryStops',
+    'noticeTemporaryStopIds',
+    'noticeTemporaryStopCodes',
+    'noticeActiveStops',
+    'noticeActiveStopIds',
+    'noticeActiveStopCodes',
+    'noticeStopImpactSource',
+    'noticeStopImpactSourceNewsIds',
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(primary, key)) nextGeo[key] = primary[key];
+  });
+
+  return nextGeo;
+}
+
+async function loadActiveNoticeStopImpacts(db) {
+  try {
+    const collection = db.collection('transitNewsImpacts');
+    if (!collection || typeof collection.where !== 'function') return [];
+    const typeQuery = collection.where('type', '==', 'route_detour_stop_impacts');
+    if (!typeQuery || typeof typeQuery.get !== 'function') return [];
+    const snapshot = await typeQuery.get();
+    const impacts = [];
+    snapshot.forEach((doc) => {
+      const impact = doc.data();
+      if (impact?.source === 'myridebarrie' && impact?.status === 'active' && impact?.archivedAt == null) {
+        impacts.push(impact);
+      }
+    });
+    return impacts;
+  } catch (error) {
+    console.warn('[detourPublisher] Failed to load official notice stop impacts:', error.message);
+    return [];
+  }
 }
 
 function geometrySignatureFromSegments(segments) {
@@ -616,6 +856,7 @@ function preserveTrustedDetourPath(geometry, previousSnapshot, detour = {}) {
 
   const trusted = getTrustedDetourPathSnapshot(previousSnapshot);
   if (!trusted) return geometry;
+  if (!trusted.likelyDetourPolyline && hasTrustedInferredDetourPath(geometry)) return geometry;
   if (shouldReplacePreservedTrustedPath(geometry, trusted)) return geometry;
   if (!geometryMatchesTrustedPathLocation(geometry, previousSnapshot, trusted)) return geometry;
 
@@ -1333,6 +1574,39 @@ function shouldClearSuppressedGeometry(geo, previousSnapshot = null) {
   );
 }
 
+function normalizeDetourZoneForWrite(source, fallbackShapeId = null) {
+  if (!source || typeof source !== 'object') return null;
+  const start = toFiniteNumber(source.startProgressMeters);
+  const end = toFiniteNumber(source.endProgressMeters);
+  const shapeId = source.shapeId || fallbackShapeId || null;
+
+  if (Number.isFinite(start) && Number.isFinite(end) && end !== start && shapeId) {
+    return {
+      startProgressMeters: Math.min(start, end),
+      endProgressMeters: Math.max(start, end),
+      shapeId,
+    };
+  }
+
+  return source.shapeId ? cloneJson(source) : null;
+}
+
+function deriveDetourZoneForWrite(detour = {}, geo = null) {
+  const explicit = normalizeDetourZoneForWrite(detour.detourZone, detour.shapeId || geo?.shapeId || null);
+  if (explicit) return explicit;
+
+  const geometryZone = normalizeDetourZoneForWrite(geo, geo?.shapeId || detour.shapeId || null);
+  if (geometryZone) return geometryZone;
+
+  const primarySegment = Array.isArray(geo?.segments)
+    ? geo.segments.find((segment) => (
+      Number.isFinite(Number(segment?.startProgressMeters)) &&
+      Number.isFinite(Number(segment?.endProgressMeters))
+    ))
+    : null;
+  return normalizeDetourZoneForWrite(primarySegment, primarySegment?.shapeId || geo?.shapeId || detour.shapeId || null);
+}
+
 function applyGeometryMetadata(doc, geo) {
   if (!geo || typeof geo !== 'object') return;
 
@@ -1439,6 +1713,10 @@ function rememberPublishedDetour(routeId, data = {}) {
     lastEvidenceAt: data.lastEvidenceAt || null,
     latestGpsEvidenceAt: data.latestGpsEvidenceAt || data.lastEvidenceAt || null,
     geometryLastEvidenceAt: data.geometryLastEvidenceAt || data.lastEvidenceAt || null,
+    detourZone: cloneJson(data.detourZone) || null,
+    clearWindow: cloneJson(data.clearWindow) || null,
+    clearWindows: cloneJson(data.clearWindows) || [],
+    clearedSegments: cloneJson(data.clearedSegments) || [],
     segments: Array.isArray(data.segments) ? data.segments : [],
     shapeId: data.shapeId || null,
     skippedSegmentPolyline: data.skippedSegmentPolyline || null,
@@ -1598,7 +1876,10 @@ async function deletePublishedDetour(db, routeId, event, logPrefix = 'delete', s
 }
 
 function hasNormalRouteClearProof(previousSnapshot) {
-  return previousSnapshot?.clearReason === 'normal-route-observed';
+  return (
+    previousSnapshot?.clearReason === 'normal-route-observed' ||
+    previousSnapshot?.clearReason === 'obsolete-shape-normal-route-observed'
+  );
 }
 
 function assignSnapshotDate(doc, key, valueMs) {
@@ -1626,6 +1907,10 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now) {
     latestGpsEvidenceAt: previousSnapshot?.latestGpsEvidenceAt ?? null,
     geometryLastEvidenceAt: previousSnapshot?.geometryLastEvidenceAt ?? null,
     lastEvidenceAt: previousSnapshot?.lastEvidenceAt ?? null,
+    detourZone: cloneJson(previousSnapshot?.detourZone) || null,
+    clearWindow: cloneJson(previousSnapshot?.clearWindow) || null,
+    clearWindows: cloneJson(previousSnapshot?.clearWindows) || [],
+    clearedSegments: cloneJson(previousSnapshot?.clearedSegments) || [],
     confidence: previousSnapshot?.confidence || null,
     evidencePointCount: previousSnapshot?.evidencePointCount ?? null,
   };
@@ -1659,6 +1944,34 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now) {
   return doc;
 }
 
+function getBaselineDivergedRouteIds(options = {}) {
+  const ids = new Set();
+  const addRouteId = (routeId) => {
+    if (routeId != null && String(routeId).trim()) {
+      ids.add(String(routeId).trim());
+    }
+  };
+
+  (options.baselineDivergedRouteIds || []).forEach(addRouteId);
+  (options.baselineDivergence?.changedRouteIds || []).forEach(addRouteId);
+  (options.baselineDivergence?.added || []).forEach((entry) => addRouteId(entry?.routeId));
+  (options.baselineDivergence?.removed || []).forEach((entry) => addRouteId(entry?.routeId));
+
+  return ids;
+}
+
+function applyBaselineDivergenceSuppression(doc, routeId, baselineDivergedRouteIds) {
+  if (!baselineDivergedRouteIds?.has(String(routeId))) {
+    return doc;
+  }
+
+  doc.riderVisible = false;
+  doc.riderVisibilityReason = 'baseline-diverged';
+  doc.staleForReview = true;
+  doc.baselineDiverged = true;
+  return doc;
+}
+
 async function publishDetours(activeDetours, options = {}) {
   const db = getDb();
   if (!db) {
@@ -1671,6 +1984,11 @@ async function publishDetours(activeDetours, options = {}) {
   const now = options.now || Date.now();
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
   const scheduleIndex = options.scheduleIndex || options.gtfsData?.scheduleIndex || null;
+  const baselineDivergedRouteIds = getBaselineDivergedRouteIds(options);
+  const gtfsData = options.gtfsData || {};
+  const noticeStopImpacts = Array.isArray(options.noticeStopImpacts)
+    ? options.noticeStopImpacts
+    : await loadActiveNoticeStopImpacts(db);
   const activeEntries = Object.entries(activeDetours || {});
   const stalePublishSuppressedIds = new Set();
   const publishableDetours = Object.fromEntries(activeEntries.filter(([routeId, detour]) => {
@@ -1721,6 +2039,7 @@ async function publishDetours(activeDetours, options = {}) {
     const previous = lastPublishedState.get(routeId);
     if (!hasNormalRouteClearProof(previous)) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now);
+      applyBaselineDivergenceSuppression(retainedDoc, routeId, baselineDivergedRouteIds);
       try {
         await db.collection(storageConfig.activeCollection).doc(routeId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
@@ -1779,12 +2098,14 @@ async function publishDetours(activeDetours, options = {}) {
       detour
     );
     geo = pruneDetourPathServedStopsFromGeometry(geo);
+    geo = mergeNoticeStopImpactsIntoGeometry(routeId, geo, noticeStopImpacts, gtfsData);
     if (hasRenderableGeometry(geo)) {
       geo = withDetourEventIds(routeId, geo);
     }
     let detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
     applyGeometryMetadata(doc, geo);
-    let writeGeo = shouldClearSuppressedGeometry(geo, previousSnapshot) || (
+    let noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
+    let writeGeo = noticeStopImpactWriteDelta || shouldClearSuppressedGeometry(geo, previousSnapshot) || (
       hasRenderableGeometry(geo) &&
       (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
     );
@@ -1792,6 +2113,7 @@ async function publishDetours(activeDetours, options = {}) {
       geo?.preservedTrustedDetourPath === true &&
       previousSnapshot &&
       !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
+      !noticeStopImpactWriteDelta &&
       now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
     ) {
       writeGeo = false;
@@ -1816,11 +2138,13 @@ async function publishDetours(activeDetours, options = {}) {
       }
       geo = preserveTrustedDetourPath(geo, previousSnapshot, detour);
       geo = pruneDetourPathServedStopsFromGeometry(geo);
+      geo = mergeNoticeStopImpactsIntoGeometry(routeId, geo, noticeStopImpacts, gtfsData);
       if (hasRenderableGeometry(geo)) {
         geo = withDetourEventIds(routeId, geo);
       }
       detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
-      writeGeo = shouldClearSuppressedGeometry(geo, previousSnapshot) || (
+      noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
+      writeGeo = noticeStopImpactWriteDelta || shouldClearSuppressedGeometry(geo, previousSnapshot) || (
         hasRenderableGeometry(geo) &&
         (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
       );
@@ -1828,6 +2152,7 @@ async function publishDetours(activeDetours, options = {}) {
         geo?.preservedTrustedDetourPath === true &&
         previousSnapshot &&
         !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
+        !noticeStopImpactWriteDelta &&
         now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
       ) {
         writeGeo = false;
@@ -1844,11 +2169,28 @@ async function publishDetours(activeDetours, options = {}) {
     if (geo) {
       geo = applySharedDetourEventAssignmentsToGeometry(routeId, geo, sharedEventAssignments);
       detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
+      noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
+      if (noticeStopImpactWriteDelta) {
+        writeGeo = true;
+      }
     }
     const sharedAssignment = getPrimarySharedAssignment(routeId, geo, sharedEventAssignments) ||
       sharedEventAssignments.byRoute.get(normalizeRouteId(routeId)) ||
       null;
     applySharedDetourEventMetadata(doc, sharedAssignment);
+    const detourZone = deriveDetourZoneForWrite(detour, geo);
+    if (detourZone) {
+      doc.detourZone = detourZone;
+    }
+    if (detour.clearWindow) {
+      doc.clearWindow = cloneJson(detour.clearWindow);
+    }
+    if (Array.isArray(detour.clearWindows)) {
+      doc.clearWindows = cloneJson(detour.clearWindows);
+    }
+    if (Array.isArray(detour.clearedSegments)) {
+      doc.clearedSegments = cloneJson(detour.clearedSegments);
+    }
     if (
       hasRenderableGeometry(geo) &&
       (sharedAssignment?.eventRouteCount || 0) > 1 &&
@@ -1882,6 +2224,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.riderVisibilityReason = 'insufficient-geometry';
       doc.staleForReview = true;
     }
+    applyBaselineDivergenceSuppression(doc, routeId, baselineDivergedRouteIds);
 
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;
@@ -1900,6 +2243,16 @@ async function publishDetours(activeDetours, options = {}) {
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;
+      doc.noticeTemporaryStops = Array.isArray(geo.noticeTemporaryStops) ? geo.noticeTemporaryStops : [];
+      doc.noticeTemporaryStopIds = Array.isArray(geo.noticeTemporaryStopIds) ? geo.noticeTemporaryStopIds : [];
+      doc.noticeTemporaryStopCodes = Array.isArray(geo.noticeTemporaryStopCodes) ? geo.noticeTemporaryStopCodes : [];
+      doc.noticeActiveStops = Array.isArray(geo.noticeActiveStops) ? geo.noticeActiveStops : [];
+      doc.noticeActiveStopIds = Array.isArray(geo.noticeActiveStopIds) ? geo.noticeActiveStopIds : [];
+      doc.noticeActiveStopCodes = Array.isArray(geo.noticeActiveStopCodes) ? geo.noticeActiveStopCodes : [];
+      doc.noticeStopImpactSource = geo.noticeStopImpactSource || null;
+      doc.noticeStopImpactSourceNewsIds = Array.isArray(geo.noticeStopImpactSourceNewsIds)
+        ? geo.noticeStopImpactSourceNewsIds
+        : [];
       doc.confidence = geo.confidence || null;
       doc.evidencePointCount = geo.evidencePointCount ?? null;
       doc.lastEvidenceAt = geo.lastEvidenceAt ?? null;
@@ -2037,6 +2390,9 @@ module.exports = {
   enforceGeometryTrustGate,
   preserveTrustedDetourPath,
   buildDetourEventId,
+  mergeNoticeStopImpactsIntoGeometry,
+  hasNoticeStopImpactWriteDelta,
+  hasNormalRouteClearProof,
   deriveSharedDetourEventAssignments,
   makeSnapshot,
   buildUpdatedEvent,

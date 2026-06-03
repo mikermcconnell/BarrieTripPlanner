@@ -28,6 +28,7 @@ const {
   DETOUR_CLEAR_GRACE_MS,
   DETOUR_CLEAR_CONSECUTIVE_ON_ROUTE,
   DETOUR_NO_VEHICLE_TIMEOUT_MS,
+  DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS,
   DETOUR_CANDIDATE_EVIDENCE_TTL_MS,
   CONSECUTIVE_READINGS_REQUIRED,
   STALE_VEHICLE_TIMEOUT_MS,
@@ -2758,6 +2759,99 @@ function tickClearPending(now) {
   }
 }
 
+function getSegmentShapeIds(segment) {
+  const ids = new Set();
+  const add = (value) => {
+    if (value != null && String(value).trim()) ids.add(String(value).trim());
+  };
+
+  add(segment?.shapeIdHint);
+  add(segment?.detourZone?.shapeId);
+  add(segment?.persistedGeometry?.shapeId);
+
+  for (const geometrySegment of Array.isArray(segment?.persistedGeometry?.segments)
+    ? segment.persistedGeometry.segments
+    : []) {
+    add(geometrySegment?.shapeId);
+  }
+
+  return [...ids];
+}
+
+function hasObsoleteShapeReference(routeId, segment, shapes, routeShapeMapping) {
+  const mappedShapeIds = routeShapeMapping?.get(routeId);
+  if (!Array.isArray(mappedShapeIds) || mappedShapeIds.length === 0) return false;
+
+  const currentShapeIds = new Set(mappedShapeIds);
+  return getSegmentShapeIds(segment).some((shapeId) => (
+    shapeId && !currentShapeIds.has(shapeId)
+  ));
+}
+
+function getSegmentLastOffRouteEvidenceMs(segment) {
+  return Math.max(
+    toTimestampMs(segment?.lastOffRouteEvidenceAt) || 0,
+    toTimestampMs(segment?.persistedGeometry?.lastEvidenceAt) || 0,
+    ...(Array.isArray(segment?.persistedGeometry?.segments)
+      ? segment.persistedGeometry.segments.map((item) => toTimestampMs(item?.lastEvidenceAt) || 0)
+      : [])
+  ) || null;
+}
+
+function routeHasOnlyCurrentOnRouteVehicles(routeId, vehicles, shapes, routeShapeMapping, tripMapping, routeConfig) {
+  const sameRouteVehicles = (vehicles || []).filter((vehicle) => String(vehicle?.routeId) === String(routeId));
+  if (sameRouteVehicles.length === 0) return false;
+
+  return sameRouteVehicles.every((vehicle) => {
+    if (!vehicle?.coordinate) return false;
+    const tripData = vehicle.tripId && tripMapping ? tripMapping.get(vehicle.tripId) : null;
+    const projection = projectCoordinateToRoute(
+      routeId,
+      vehicle.coordinate,
+      shapes,
+      routeShapeMapping,
+      tripData?.shapeId ?? null
+    );
+    return (
+      projection &&
+      Number.isFinite(projection.distanceMeters) &&
+      projection.distanceMeters <= routeConfig.onRouteClearThresholdMeters
+    );
+  });
+}
+
+function markObsoleteShapeDetoursClearPending(now, vehicles, shapes, routeShapeMapping, tripMapping) {
+  for (const [routeId, routeState] of activeDetours) {
+    if (!routeState?.segments || routeState.segments.size === 0) continue;
+    const routeConfig = routeState.routeConfig || resolveRouteDetectorConfig(routeId);
+    if (!routeHasOnlyCurrentOnRouteVehicles(routeId, vehicles, shapes, routeShapeMapping, tripMapping, routeConfig)) {
+      continue;
+    }
+
+    for (const segment of routeState.segments.values()) {
+      ensureSegmentEvidenceSets(segment);
+      if (!segment.isPublished || segment.state === 'clear-pending') continue;
+      if (!hasObsoleteShapeReference(routeId, segment, shapes, routeShapeMapping)) continue;
+
+      const lastOffRouteEvidenceMs = getSegmentLastOffRouteEvidenceMs(segment);
+      if (
+        !Number.isFinite(lastOffRouteEvidenceMs) ||
+        now - lastOffRouteEvidenceMs < (
+          routeConfig.obsoleteShapeClearNoOffRouteMs ||
+          DETOUR_OBSOLETE_SHAPE_CLEAR_NO_OFF_ROUTE_MS
+        )
+      ) {
+        continue;
+      }
+
+      segment.vehiclesOffRoute.clear();
+      segment.state = 'clear-pending';
+      segment.clearPendingAt = now;
+      segment.clearReason = 'obsolete-shape-normal-route-observed';
+    }
+  }
+}
+
 function buildRouteSnapshot(routeId, routeState, shapes, routeShapeMapping, now, stopImpactData = null) {
   if (!routeState?.segments || routeState.segments.size === 0) return null;
 
@@ -3286,6 +3380,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
   }
   reconcileActiveDetourVehicleMembership();
 
+  markObsoleteShapeDetoursClearPending(now, vehicles, shapes, routeShapeMapping, tripMapping);
   promoteMatureRecurringFamilyCandidates(now, shapes, routeShapeMapping);
   tickClearPending(now);
 
