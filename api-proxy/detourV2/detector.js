@@ -81,6 +81,18 @@ const CLEAR_WINDOW_MAX_PROGRESS_GAP_METERS = positiveNumber(
   process.env.DETOUR_CLEAR_WINDOW_MAX_PROGRESS_GAP_METERS,
   700
 );
+const TINY_DETOUR_SOURCE_SPAN_METERS = positiveNumber(
+  process.env.DETOUR_TINY_CLEAR_SOURCE_SPAN_METERS,
+  250
+);
+const TINY_DETOUR_SOURCE_PADDING_METERS = positiveNumber(
+  process.env.DETOUR_TINY_CLEAR_SOURCE_PADDING_METERS,
+  75
+);
+const MARGINAL_OFF_ROUTE_RESET_GRACE_METERS = positiveNumber(
+  process.env.DETOUR_CLEAR_RESET_OFF_ROUTE_GRACE_METERS,
+  15
+);
 const OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS = positiveNumber(
   process.env.DETOUR_OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS,
   45 * 60 * 1000
@@ -302,6 +314,39 @@ function getClearWindowCoreBounds(clearWindow = {}) {
     };
   }
   return getWindowBounds(clearWindow);
+}
+
+function isTinyRouteEdgeClearWindow(clearWindow = {}) {
+  const sourceBounds = getClearWindowCoreBounds(clearWindow);
+  if (!sourceBounds) return false;
+  const sourceSpan = sourceBounds.end - sourceBounds.start;
+  if (
+    !Number.isFinite(sourceSpan) ||
+    sourceSpan <= 0 ||
+    sourceSpan > TINY_DETOUR_SOURCE_SPAN_METERS
+  ) {
+    return false;
+  }
+
+  const windowBounds = getWindowBounds(clearWindow);
+  if (!windowBounds) return false;
+  const nearRouteStart = windowBounds.start <= TINY_DETOUR_SOURCE_PADDING_METERS;
+  const nearRouteEnd = windowBounds.end - sourceBounds.end <= TINY_DETOUR_SOURCE_PADDING_METERS;
+  return nearRouteStart || nearRouteEnd;
+}
+
+function sampleMatchesTinyClearSource(clearWindow = {}, sample = {}) {
+  if (!isTinyRouteEdgeClearWindow(clearWindow)) return false;
+  const sourceBounds = getClearWindowCoreBounds(clearWindow);
+  const progress = Number(sample?.progressMeters);
+  if (!sourceBounds || !Number.isFinite(progress)) return false;
+  const windowShapeId = clearWindow.shapeId ? String(clearWindow.shapeId) : null;
+  const sampleShapeId = sample.shapeId ? String(sample.shapeId) : null;
+  if (windowShapeId && sampleShapeId && windowShapeId !== sampleShapeId) return false;
+  return (
+    progress >= sourceBounds.start - TINY_DETOUR_SOURCE_PADDING_METERS &&
+    progress <= sourceBounds.end + TINY_DETOUR_SOURCE_PADDING_METERS
+  );
 }
 
 function sampleMatchesClearWindowCore(clearWindow, sample) {
@@ -964,6 +1009,92 @@ function serializeDetour(detour) {
   };
 }
 
+function getSourceProgressWindow(window = {}) {
+  if (!window) return null;
+  const shapeId = window.shapeId ? String(window.shapeId) : null;
+  const sourceStart = Number(window.sourceStartProgressMeters ?? window.startProgressMeters);
+  const sourceEnd = Number(window.sourceEndProgressMeters ?? window.endProgressMeters);
+  if (!shapeId || !Number.isFinite(sourceStart) || !Number.isFinite(sourceEnd) || sourceStart === sourceEnd) {
+    return null;
+  }
+  return {
+    shapeId,
+    start: Math.min(sourceStart, sourceEnd),
+    end: Math.max(sourceStart, sourceEnd),
+  };
+}
+
+function getRestoredProgressWindow(data = {}) {
+  const segment = Array.isArray(data.geometry?.segments) ? data.geometry.segments[0] : null;
+  const candidates = [
+    data.detourZone,
+    segment?.detourZone,
+    data.clearWindow,
+    segment?.clearWindow,
+  ];
+  for (const candidate of candidates) {
+    const window = getSourceProgressWindow(candidate);
+    if (window) return window;
+  }
+  return null;
+}
+
+function eventWindowMatchesProgressWindow(eventWindow = {}, progressWindow = {}) {
+  if (!eventWindow || !progressWindow) return false;
+  const eventShapeId = eventWindow.shapeId ? String(eventWindow.shapeId) : null;
+  if (eventShapeId && eventShapeId !== progressWindow.shapeId) return false;
+  const coreStart = Number(eventWindow.coreStartProgressMeters);
+  const coreEnd = Number(eventWindow.coreEndProgressMeters);
+  if (!Number.isFinite(coreStart) || !Number.isFinite(coreEnd) || coreStart === coreEnd) return false;
+  const eventStart = Math.min(coreStart, coreEnd);
+  const eventEnd = Math.max(coreStart, coreEnd);
+  const gap = progressWindow.end < eventStart
+    ? eventStart - progressWindow.end
+    : progressWindow.start > eventEnd
+      ? progressWindow.start - eventEnd
+      : 0;
+  return gap <= GEOMETRY_CLUSTER_GAP_METERS;
+}
+
+function buildEventWindowFromProgressWindow(routeId, priorEventWindow = {}, progressWindow = {}) {
+  const start = Math.max(0, Number(progressWindow.start));
+  const end = Math.max(start, Number(progressWindow.end));
+  return {
+    routeId,
+    shapeId: progressWindow.shapeId,
+    coreStartProgressMeters: start,
+    coreEndProgressMeters: end,
+    confirmStartProgressMeters: Math.max(0, start - 250),
+    confirmEndProgressMeters: end + 250,
+    clearStartProgressMeters: Math.max(0, start - 400),
+    clearEndProgressMeters: end + 400,
+    geoCenter: cloneJson(priorEventWindow?.geoCenter) || null,
+    geoBounds: cloneJson(priorEventWindow?.geoBounds) || null,
+    frozen: priorEventWindow?.frozen === true,
+  };
+}
+
+function getProgressWindowFromPoints(shapeId, points = []) {
+  const progresses = points
+    .map((point) => Number(point?.progressMeters))
+    .filter(Number.isFinite);
+  if (progresses.length === 0) return null;
+  return {
+    shapeId: shapeId ? String(shapeId) : null,
+    start: Math.min(...progresses),
+    end: Math.max(...progresses),
+  };
+}
+
+function repairRestoredEventWindow(routeId, eventWindow, data = {}) {
+  const progressWindow = getRestoredProgressWindow(data);
+  if (!progressWindow) return cloneJson(eventWindow);
+  if (eventWindowMatchesProgressWindow(eventWindow, progressWindow)) {
+    return cloneJson(eventWindow);
+  }
+  return buildEventWindowFromProgressWindow(routeId, eventWindow, progressWindow);
+}
+
 function restoreDetour(eventIdOrRouteId, data = {}) {
   const routeId = data.routeId || eventIdOrRouteId;
   const eventId = data.eventId || eventIdOrRouteId;
@@ -991,7 +1122,7 @@ function restoreDetour(eventIdOrRouteId, data = {}) {
     clearPendingTick: restoredClearPendingTick,
     geometry: cloneJson(data.geometry),
     detourZone: cloneJson(data.detourZone),
-    eventWindow: cloneJson(data.eventWindow),
+    eventWindow: repairRestoredEventWindow(routeId, data.eventWindow, data),
     clearWindow: cloneJson(data.clearWindow) || clearWindows[0] || buildClearWindow(data.detourZone),
     clearWindows,
     clearedSegments: cloneJson(data.clearedSegments) || [],
@@ -1224,6 +1355,14 @@ function createDetourV2Detector(config = {}) {
         shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
       });
     }
+    const pointWindow = getProgressWindowFromPoints(candidate.shapeId, candidate.points);
+    if (pointWindow && !eventWindowMatchesProgressWindow(candidate.eventWindow, pointWindow)) {
+      candidate.eventWindow = buildEventWindowFromProgressWindow(
+        candidate.routeId,
+        candidate.eventWindow,
+        pointWindow
+      );
+    }
     candidate.eventId = item.eventId || candidate.eventId;
     return candidate;
   }
@@ -1363,6 +1502,15 @@ function createDetourV2Detector(config = {}) {
   function shouldClearWindowFromCollectiveSamples(clearWindow, samples) {
     const matchingSamples = samples.filter((sample) => sampleMatchesClearWindow(clearWindow, sample));
     if (!hasEnoughCollectiveClearSources(matchingSamples)) return false;
+    const tinySourceSamples = matchingSamples.filter((sample) => (
+      sampleMatchesTinyClearSource(clearWindow, sample)
+    ));
+    if (
+      tinySourceSamples.length >= 2 &&
+      hasEnoughCollectiveClearSources(tinySourceSamples)
+    ) {
+      return true;
+    }
     const metrics = getClearWindowMetrics(clearWindow, matchingSamples);
     if (
       !metrics ||
@@ -1475,8 +1623,19 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function isMarginalOffRoutePoint(point = {}) {
+    const distanceMeters = Number(point.distanceMeters);
+    return (
+      Number.isFinite(distanceMeters) &&
+      distanceMeters <= offRouteThresholdMeters + MARGINAL_OFF_ROUTE_RESET_GRACE_METERS
+    );
+  }
+
   function currentOffRouteEvidenceMatchesWindow(points = [], clearWindow = {}) {
-    return points.some((point) => pointMatchesProgressWindow(point, clearWindow));
+    return points.some((point) => (
+      !isMarginalOffRoutePoint(point) &&
+      pointMatchesProgressWindow(point, clearWindow)
+    ));
   }
 
   function currentOffRouteEvidenceBlocksClearPending(detour, points = []) {
@@ -1488,6 +1647,7 @@ function createDetourV2Detector(config = {}) {
   }
 
   function resetClearTracksForOffRoutePoint(routeId, point = {}) {
+    if (isMarginalOffRoutePoint(point)) return;
     const matchingEvents = getActiveEventsForRoute(routeId);
     if (matchingEvents.length === 0) return;
 
@@ -1730,6 +1890,7 @@ function createDetourV2Detector(config = {}) {
         const offRoutePoints = offRoutePointsThisTickByRoute.get(routeId) || [];
         const offRoutePoint = {
           progressMeters: projection.progressMeters,
+          distanceMeters: projection.distanceMeters,
           timestampMs,
           shapeId: projection.shapeId,
           vehicleId: id,

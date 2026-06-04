@@ -89,6 +89,203 @@ function detourForRoute(result, routeId) {
 
 describe('Auto Detour V2 detector', () => {
 
+  test('fast-clears tiny start-of-route detours from multi-vehicle normal samples through the source span', () => {
+    const shapeId = 'tiny-start-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.697 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.691 },
+      { latitude: 44.390, longitude: -79.688 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['8A', [shapeId]]]);
+    const progress = (index) => projectOntoPolyline(shape[index], shape).progressMeters;
+    const clearWindow = {
+      startProgressMeters: 0,
+      endProgressMeters: 1000,
+      sourceStartProgressMeters: progress(0),
+      sourceEndProgressMeters: progress(1),
+      minCoverageRatio: 0.95,
+      shapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A:tiny-start-shape:0-100': {
+          eventId: '8A:tiny-start-shape:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8A',
+            shapeId,
+            coreStartProgressMeters: progress(0),
+            coreEndProgressMeters: progress(1),
+            frozen: true,
+          },
+          detourZone: {
+            startProgressMeters: progress(0),
+            endProgressMeters: progress(1),
+            shapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId,
+            segments: [{
+              state: 'active',
+              shapeId,
+              startProgressMeters: progress(0),
+              endProgressMeters: progress(1),
+              detourZone: {
+                startProgressMeters: progress(0),
+                endProgressMeters: progress(1),
+                shapeId,
+              },
+              clearWindow,
+            }],
+          },
+        },
+      },
+    });
+
+    const firstTick = detector.processVehicles([
+      vehicle({ id: 'bus-clear-a', routeId: '8A', tripId: 'trip-clear-a', coordinate: shape[0], timestampMs: 2000 }),
+      vehicle({ id: 'bus-clear-b', routeId: '8A', tripId: 'trip-clear-b', coordinate: shape[1], timestampMs: 3000 }),
+    ], testShapes, testMapping);
+
+    expect(firstTick['8A:tiny-start-shape:0-100']).toEqual(expect.objectContaining({
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    }));
+
+    const secondTick = detector.processVehicles([], testShapes, testMapping);
+    expect(Object.keys(secondTick)).toEqual([]);
+  });
+
+  test('keeps clear evidence when a same-window off-route point is only marginally over threshold', () => {
+    const shapeId = 'marginal-clear-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.697 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.691 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['8A', [shapeId]]]);
+    const clearWindow = {
+      startProgressMeters: 0,
+      endProgressMeters: 1000,
+      sourceStartProgressMeters: 0,
+      sourceEndProgressMeters: 170,
+      minCoverageRatio: 0.95,
+      shapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A:marginal-clear-shape:0-100': {
+          eventId: '8A:marginal-clear-shape:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId,
+            segments: [{ state: 'active', shapeId, clearWindow }],
+          },
+        },
+      },
+      clearTracksByEvent: {
+        '8A:marginal-clear-shape:0-100': {
+          'trip-clear': [{
+            progressMeters: 100,
+            timestampMs: 2000,
+            shapeId,
+            vehicleId: 'bus-clear',
+          }],
+        },
+      },
+    });
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-noisy',
+        routeId: '8A',
+        tripId: 'trip-noisy',
+        coordinate: { latitude: 44.39042, longitude: -79.6988 },
+        timestampMs: 3000,
+      }),
+    ], testShapes, testMapping);
+
+    const tracks = detector.serializeDetectorRuntimeState().clearTracksByEvent['8A:marginal-clear-shape:0-100'];
+    expect(tracks['trip-clear']).toHaveLength(1);
+  });
+
+  test('repairs restored event windows that are pinned to zero but have a later geometry window', () => {
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A:shape-1:0-100': {
+          eventId: '8A:shape-1:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'old-shape',
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 0,
+            confirmStartProgressMeters: 0,
+            confirmEndProgressMeters: 0,
+            clearStartProgressMeters: 0,
+            clearEndProgressMeters: 0,
+            frozen: false,
+          },
+          detourZone: {
+            shapeId: 'shape-1',
+            startProgressMeters: 21800,
+            endProgressMeters: 21900,
+          },
+          clearWindow: {
+            shapeId: 'shape-1',
+            sourceStartProgressMeters: 21800,
+            sourceEndProgressMeters: 21900,
+            startProgressMeters: 21400,
+            endProgressMeters: 22300,
+          },
+          geometry: {
+            shapeId: 'shape-1',
+            segments: [{
+              shapeId: 'shape-1',
+              detourZone: {
+                shapeId: 'shape-1',
+                startProgressMeters: 21800,
+                endProgressMeters: 21900,
+              },
+            }],
+          },
+        },
+      },
+    });
+
+    const eventWindow = detector.serializeDetectorRuntimeState().activeEvents['8A:shape-1:0-100'].eventWindow;
+    expect(eventWindow.shapeId).toBe('shape-1');
+    expect(eventWindow.coreStartProgressMeters).toBeGreaterThan(21000);
+  });
+
   test('drops superseded legacy route-keyed detours when event-window snapshots exist', () => {
     const detector = createDetourV2Detector();
     detector.hydrateRuntimeState({
