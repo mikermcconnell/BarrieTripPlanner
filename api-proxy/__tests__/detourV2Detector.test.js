@@ -169,6 +169,72 @@ describe('Auto Detour V2 detector', () => {
     expect(Object.keys(secondTick)).toEqual([]);
   });
 
+  test('fast-clears tiny detours from restored clear tracks even without a new vehicle sample', () => {
+    const shapeId = 'tiny-restored-shape';
+    const clearWindow = {
+      startProgressMeters: 0,
+      endProgressMeters: 1000,
+      sourceStartProgressMeters: 20,
+      sourceEndProgressMeters: 170,
+      minCoverageRatio: 0.95,
+      shapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A:tiny-restored-shape:0-100': {
+          eventId: '8A:tiny-restored-shape:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8A',
+            shapeId,
+            coreStartProgressMeters: 20,
+            coreEndProgressMeters: 170,
+            frozen: true,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId,
+            segments: [{ state: 'active', shapeId, clearWindow }],
+          },
+        },
+      },
+      clearTracksByEvent: {
+        '8A:tiny-restored-shape:0-100': {
+          'trip-clear-a': [{
+            progressMeters: 95,
+            timestampMs: 2000,
+            shapeId,
+            vehicleId: 'bus-clear-a',
+          }],
+          'trip-clear-b': [{
+            progressMeters: 165,
+            timestampMs: 3000,
+            shapeId,
+            vehicleId: 'bus-clear-b',
+          }],
+        },
+      },
+    });
+
+    const firstTick = detector.processVehicles([], new Map([[shapeId, []]]), new Map([['8A', [shapeId]]]));
+
+    expect(firstTick['8A:tiny-restored-shape:0-100']).toEqual(expect.objectContaining({
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    }));
+
+    const secondTick = detector.processVehicles([], new Map([[shapeId, []]]), new Map([['8A', [shapeId]]]));
+    expect(Object.keys(secondTick)).toEqual([]);
+  });
+
   test('keeps clear evidence when a same-window off-route point is only marginally over threshold', () => {
     const shapeId = 'marginal-clear-shape';
     const shape = [

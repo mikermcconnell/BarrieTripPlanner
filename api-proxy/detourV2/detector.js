@@ -1809,6 +1809,22 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function enqueueRestoredCollectiveClears(currentTickId) {
+    for (const [eventId, detour] of activeDetours.entries()) {
+      if (!eventId || !detour || detour.state === 'clear-pending') continue;
+      const eventTracks = clearTracksByEvent.get(eventId);
+      if (!eventTracks) continue;
+      const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, eventTracks);
+      if (collectivelyClearedSegments.length === 0) continue;
+      const samples = getUsableClearTrackSamples(detour, eventTracks);
+      const clearPendingAt = samples
+        .map((item) => Number(item.timestampMs))
+        .filter(Number.isFinite)
+        .reduce((max, value) => Math.max(max, value), 0);
+      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+    }
+  }
+
   function trackClearSample(routeId, signature, sample, currentTickId) {
     for (const detour of getActiveEventsForRoute(routeId)) {
       trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId);
@@ -1950,6 +1966,7 @@ function createDetourV2Detector(config = {}) {
       }
     }
 
+    enqueueRestoredCollectiveClears(tickId);
     applyPendingSegmentClears(tickId, offRoutePointsThisTickByRoute);
 
     for (const [eventId, candidate] of eventCandidates.entries()) {
