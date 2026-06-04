@@ -8,9 +8,9 @@ export const DETOUR_ROUTE_LAYER_ORDER = {
 
 export const ROUTE_POLYLINE_LAYER_OFFSETS = {
   OUTLINE: 0,
-  FILL: 100,
-  ARROWS: 110,
-  LABEL: 119,
+  FILL: 1,
+  ARROWS: 2,
+  LABEL: 3,
 };
 
 const routeIsInFocusedDetourFamily = (routeId, focusedDetourRouteId) => {
