@@ -26,6 +26,9 @@ function loadProxyEnvFiles(baseDir = __dirname) {
 function buildProxyConfig(env = process.env) {
   const apiKey = (env.LOCATIONIQ_API_KEY || '').trim();
   const isProd = env.NODE_ENV === 'production';
+  const requireApiAuthValue = (env.REQUIRE_API_AUTH || '').trim();
+  const requireFirebaseAuthValue = (env.REQUIRE_FIREBASE_AUTH || '').trim();
+  const allowSharedTokenAuthValue = (env.ALLOW_SHARED_TOKEN_AUTH || '').trim();
 
   return {
     port: env.PORT || 3001,
@@ -33,10 +36,10 @@ function buildProxyConfig(env = process.env) {
     baseUrl: 'https://us1.locationiq.com/v1',
     hasLocationIQKey: Boolean(apiKey),
     isProd,
-    requireApiAuth: env.REQUIRE_API_AUTH ? env.REQUIRE_API_AUTH === 'true' : true,
-    requireFirebaseAuth: env.REQUIRE_FIREBASE_AUTH === 'true',
-    allowSharedTokenAuth: env.ALLOW_SHARED_TOKEN_AUTH
-      ? env.ALLOW_SHARED_TOKEN_AUTH === 'true'
+    requireApiAuth: requireApiAuthValue ? requireApiAuthValue === 'true' : true,
+    requireFirebaseAuth: requireFirebaseAuthValue === 'true',
+    allowSharedTokenAuth: allowSharedTokenAuthValue
+      ? allowSharedTokenAuthValue === 'true'
       : !isProd,
     apiTokens: new Set(
       (env.API_PROXY_TOKENS || env.API_PROXY_TOKEN || '')
