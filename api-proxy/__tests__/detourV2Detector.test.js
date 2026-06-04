@@ -323,6 +323,46 @@ describe('Auto Detour V2 detector', () => {
     expect(state.detours['8A']).toEqual(state.detours['8A:shape-1:0-100']);
   });
 
+  test('drops route-keyed restored detours even after their event window is repaired', () => {
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A': {
+          eventId: '8A',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: 10,
+            coreEndProgressMeters: 90,
+          },
+        },
+        '8A:shape-1:0-100': {
+          eventId: '8A:shape-1:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 100,
+          },
+        },
+      },
+    });
+
+    expect(Object.keys(detector.serializeDetectorRuntimeState().activeEvents)).toEqual(['8A:shape-1:0-100']);
+  });
+
   test('skips legacy Firestore snapshots when event-window snapshots exist for the same route', () => {
     const detector = createDetourV2Detector();
     const count = detector.hydrateActiveDetourSnapshots({

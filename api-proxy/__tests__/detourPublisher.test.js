@@ -166,7 +166,7 @@ describe('event-window legacy migration helpers', () => {
     expect(isLegacyRouteScopedSnapshot('8A', {
       eventId: '8A',
       routeId: '8A',
-      eventWindow: null,
+      eventWindow: { routeId: '8A', shapeId: 'shape-1' },
     })).toBe(true);
 
     expect(isLegacyRouteScopedSnapshot('8A:shape-1:0-100', {
@@ -344,7 +344,7 @@ describe('detourPublisher storage config', () => {
         vehicleCount: 2,
         uniqueVehicleCount: 2,
         currentVehicleCount: 0,
-        eventWindow: null,
+        eventWindow: { routeId: '8A', shapeId: 'shape-1' },
       }),
     }];
     const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };

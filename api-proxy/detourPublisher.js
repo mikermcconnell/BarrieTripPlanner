@@ -1923,7 +1923,7 @@ function hasUsableEventWindow(snapshot) {
 function isLegacyRouteScopedSnapshot(publishId, snapshot) {
   const routeId = snapshot?.routeId || publishId;
   const eventId = snapshot?.eventId || snapshot?.detourEventId || publishId;
-  return Boolean(routeId && eventId === routeId && !hasUsableEventWindow(snapshot));
+  return Boolean(routeId && eventId === routeId);
 }
 
 function hasEventWindowDetourForRoute(routeId, publishableDetours = {}) {

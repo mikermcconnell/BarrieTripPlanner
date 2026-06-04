@@ -1289,7 +1289,7 @@ function createDetourV2Detector(config = {}) {
   function isLegacyRouteScopedDetour(key, detour) {
     const routeId = detour?.routeId || key;
     const eventId = detour?.eventId || key;
-    return Boolean(routeId && eventId === routeId && !hasUsableEventWindow(detour));
+    return Boolean(routeId && eventId === routeId);
   }
 
   function pruneSupersededLegacyRouteDetours() {
