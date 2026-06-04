@@ -39,6 +39,22 @@ describe('RoutePolyline', () => {
     expect(source.props.hitbox).toEqual({ width: 32, height: 32 });
   });
 
+  test('keeps native shape source hitbox stable when press handler is removed', () => {
+    const inst = render({ onPress: jest.fn() });
+    const source = inst.root.findByType('ShapeSource');
+    expect(source.props.hitbox).toEqual({ width: 32, height: 32 });
+
+    act(() => {
+      inst.update(React.createElement(RoutePolyline, {
+        id: 'route-test',
+        coordinates,
+        onPress: undefined,
+      }));
+    });
+
+    expect(inst.root.findByType('ShapeSource').props.hitbox).toEqual({ width: 32, height: 32 });
+  });
+
   test('passes explicit layer indexes to line and symbol layers', () => {
     const inst = render({
       outlineWidth: 2,

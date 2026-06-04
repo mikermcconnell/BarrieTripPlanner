@@ -110,7 +110,7 @@ const RoutePolylineComponent = ({
         id={`${sourceId}-src`}
         shape={geoJson}
         onPress={onPress}
-        hitbox={onPress ? POLYLINE_HITBOX : undefined}
+        hitbox={POLYLINE_HITBOX}
       >
         <MapLibreGL.LineLayer
           id={`${sourceId}-outline`}
@@ -164,7 +164,7 @@ const RoutePolylineComponent = ({
       id={`${sourceId}-src`}
       shape={geoJson}
       onPress={onPress}
-      hitbox={onPress ? POLYLINE_HITBOX : undefined}
+      hitbox={POLYLINE_HITBOX}
     >
       <MapLibreGL.LineLayer
         id={`${sourceId}-fill`}
