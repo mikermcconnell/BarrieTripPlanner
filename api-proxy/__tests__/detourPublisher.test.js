@@ -11,6 +11,8 @@ const {
   mergeNoticeStopImpactsIntoGeometry,
   hasNoticeStopImpactWriteDelta,
   hasNormalRouteClearProof,
+  isLegacyRouteScopedSnapshot,
+  hasEventWindowDetourForRoute,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
 
@@ -159,6 +161,30 @@ describe('hasNormalRouteClearProof', () => {
   });
 });
 
+describe('event-window legacy migration helpers', () => {
+  test('identifies route-keyed legacy docs superseded by event-window docs', () => {
+    expect(isLegacyRouteScopedSnapshot('8A', {
+      eventId: '8A',
+      routeId: '8A',
+      eventWindow: null,
+    })).toBe(true);
+
+    expect(isLegacyRouteScopedSnapshot('8A:shape-1:0-100', {
+      eventId: '8A:shape-1:0-100',
+      routeId: '8A',
+      eventWindow: { routeId: '8A', shapeId: 'shape-1' },
+    })).toBe(false);
+
+    expect(hasEventWindowDetourForRoute('8A', {
+      '8A:shape-1:0-100': {
+        eventId: '8A:shape-1:0-100',
+        routeId: '8A',
+        eventWindow: { routeId: '8A', shapeId: 'shape-1' },
+      },
+    })).toBe(true);
+  });
+});
+
 describe('detourPublisher storage config', () => {
   test('getDetourHistory reads from the configured history collection only', async () => {
     jest.resetModules();
@@ -297,6 +323,93 @@ describe('detourPublisher storage config', () => {
       detourVersion: 'v2-event-window',
       eventWindow: expect.objectContaining({ frozen: true }),
     }));
+  });
+
+  test('publishDetours deletes superseded legacy route-keyed docs when event-window docs exist', async () => {
+    jest.resetModules();
+    const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
+    process.env.DETOUR_HISTORY_RETENTION_DAYS = '0';
+    const deletes = [];
+    const historyWrites = [];
+    const activeWrites = {};
+    const activeDocs = [{
+      id: '8A',
+      data: () => ({
+        eventId: '8A',
+        routeId: '8A',
+        state: 'active',
+        detectedAt: new Date(1000),
+        lastSeenAt: new Date(2000),
+        updatedAt: new Date(2000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        eventWindow: null,
+      }),
+    }];
+    const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+    const collection = jest.fn((name) => ({
+      doc: (id = 'auto') => ({
+        set: async (data) => {
+          if (name === 'detourEventHistoryV2') historyWrites.push(data);
+          else activeWrites[`${name}/${id}`] = data;
+        },
+        delete: async () => { deletes.push(`${name}/${id}`); },
+      }),
+      get: async () => (
+        name === 'activeDetourEventsV2'
+          ? { size: activeDocs.length, docs: activeDocs, forEach: (fn) => activeDocs.forEach(fn) }
+          : { size: 0, docs: [], forEach: () => {} }
+      ),
+      orderBy: () => ({ limit: () => emptyQuery }),
+      where: () => ({ orderBy: () => ({ limit: () => emptyQuery }), limit: () => emptyQuery }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    try {
+      await publishDetours({
+        '8A:shape-1:0-100': {
+          eventId: '8A:shape-1:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 3000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: { routeId: '8A', shapeId: 'shape-1' },
+          geometry: { shapeId: 'shape-1', canShowDetourPath: true, segments: [] },
+        },
+      }, {
+        now: 4000,
+        storageConfig: {
+          detourVersion: 'v2',
+          activeCollection: 'activeDetourEventsV2',
+          historyCollection: 'detourEventHistoryV2',
+        },
+      });
+    } finally {
+      if (originalRetentionDays == null) {
+        delete process.env.DETOUR_HISTORY_RETENTION_DAYS;
+      } else {
+        process.env.DETOUR_HISTORY_RETENTION_DAYS = originalRetentionDays;
+      }
+    }
+
+    expect(deletes).toContain('activeDetourEventsV2/8A');
+    expect(activeWrites['activeDetourEventsV2/8A']).toBeUndefined();
+    expect(activeWrites['activeDetourEventsV2/8A:shape-1:0-100']).toEqual(expect.objectContaining({
+      eventId: '8A:shape-1:0-100',
+      routeId: '8A',
+    }));
+    expect(historyWrites.some((event) => (
+      event.eventId === '8A' &&
+      event.eventType === 'DETOUR_CLEARED' &&
+      event.clearReason === 'superseded-by-event-window'
+    ))).toBe(true);
   });
 
   test('publishDetours writes the detour clear window to active documents', async () => {

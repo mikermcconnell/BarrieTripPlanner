@@ -1909,6 +1909,33 @@ function hasNormalRouteClearProof(previousSnapshot) {
   );
 }
 
+function hasUsableEventWindow(snapshot) {
+  const eventWindow = snapshot?.eventWindow;
+  return Boolean(
+    eventWindow &&
+    typeof eventWindow === 'object' &&
+    !Object.prototype.hasOwnProperty.call(eventWindow, 'nullValue') &&
+    eventWindow.routeId &&
+    eventWindow.shapeId
+  );
+}
+
+function isLegacyRouteScopedSnapshot(publishId, snapshot) {
+  const routeId = snapshot?.routeId || publishId;
+  const eventId = snapshot?.eventId || snapshot?.detourEventId || publishId;
+  return Boolean(routeId && eventId === routeId && !hasUsableEventWindow(snapshot));
+}
+
+function hasEventWindowDetourForRoute(routeId, publishableDetours = {}) {
+  if (!routeId) return false;
+  return Object.entries(publishableDetours).some(([publishId, detour]) => {
+    const eventId = detour?.eventId || detour?.detourEventId || publishId;
+    return detourRouteId(publishId, detour) === routeId &&
+      eventId !== routeId &&
+      hasUsableEventWindow(detour);
+  });
+}
+
 function assignSnapshotDate(doc, key, valueMs) {
   if (valueMs != null && Number.isFinite(valueMs)) {
     doc[key] = new Date(valueMs);
@@ -2073,6 +2100,17 @@ async function publishDetours(activeDetours, options = {}) {
   for (const publishId of removedIds) {
     const previous = lastPublishedState.get(publishId);
     const routeId = previous?.routeId || publishId;
+    if (
+      isLegacyRouteScopedSnapshot(publishId, previous) &&
+      hasEventWindowDetourForRoute(routeId, publishableDetours)
+    ) {
+      const event = {
+        ...buildClearedEvent(routeId, previous, now),
+        clearReason: 'superseded-by-event-window',
+      };
+      await deletePublishedDetour(db, publishId, event, 'delete superseded legacy route detour', storageConfig);
+      continue;
+    }
     if (!hasNormalRouteClearProof(previous)) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
       applyBaselineDivergenceSuppression(retainedDoc, routeId, baselineDivergedRouteIds);
@@ -2435,6 +2473,8 @@ module.exports = {
   mergeNoticeStopImpactsIntoGeometry,
   hasNoticeStopImpactWriteDelta,
   hasNormalRouteClearProof,
+  isLegacyRouteScopedSnapshot,
+  hasEventWindowDetourForRoute,
   deriveSharedDetourEventAssignments,
   makeSnapshot,
   buildUpdatedEvent,

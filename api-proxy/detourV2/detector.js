@@ -1144,6 +1144,40 @@ function createDetourV2Detector(config = {}) {
     return events[0] || null;
   }
 
+  function hasUsableEventWindow(detour) {
+    const eventWindow = detour?.eventWindow;
+    return Boolean(
+      eventWindow &&
+      typeof eventWindow === 'object' &&
+      !Object.prototype.hasOwnProperty.call(eventWindow, 'nullValue') &&
+      eventWindow.routeId &&
+      eventWindow.shapeId
+    );
+  }
+
+  function isLegacyRouteScopedDetour(key, detour) {
+    const routeId = detour?.routeId || key;
+    const eventId = detour?.eventId || key;
+    return Boolean(routeId && eventId === routeId && !hasUsableEventWindow(detour));
+  }
+
+  function pruneSupersededLegacyRouteDetours() {
+    const routesWithEventWindowDetours = new Set();
+    for (const [eventId, detour] of activeDetours.entries()) {
+      if (!isLegacyRouteScopedDetour(eventId, detour) && hasUsableEventWindow(detour) && detour?.routeId) {
+        routesWithEventWindowDetours.add(detour.routeId);
+      }
+    }
+
+    for (const [eventId, detour] of [...activeDetours.entries()]) {
+      if (isLegacyRouteScopedDetour(eventId, detour) && routesWithEventWindowDetours.has(detour.routeId || eventId)) {
+        activeDetours.delete(eventId);
+        clearTracksByEvent.delete(eventId);
+        pendingClearsByEvent.delete(eventId);
+      }
+    }
+  }
+
   function defineRouteAliases(detourMap) {
     const byRoute = new Map();
     for (const detour of Object.values(detourMap || {})) {
@@ -2056,16 +2090,30 @@ function createDetourV2Detector(config = {}) {
       });
       activeDetours.set(restored.eventId || key, restored);
     }
+    pruneSupersededLegacyRouteDetours();
     if (snapshot.clearTracksByEvent) {
       hydrateClearTracks(snapshot.clearTracksByEvent, { eventKeyed: true });
     } else {
       hydrateClearTracks(snapshot.clearTracks || {}, { eventKeyed: false });
     }
+    pruneSupersededLegacyRouteDetours();
   }
 
   function hydrateActiveDetourSnapshots(records = {}) {
     let count = 0;
+    const hasEventWindowRecordForRoute = new Set();
     for (const [key, record] of Object.entries(records || {})) {
+      const routeId = record?.routeId || key;
+      if (routeId && !isLegacyRouteScopedDetour(key, record) && hasUsableEventWindow(record)) {
+        hasEventWindowRecordForRoute.add(routeId);
+      }
+    }
+
+    for (const [key, record] of Object.entries(records || {})) {
+      const routeId = record?.routeId || key;
+      if (isLegacyRouteScopedDetour(key, record) && hasEventWindowRecordForRoute.has(routeId)) {
+        continue;
+      }
       const restored = restoreDetour(key, {
         ...record,
         geometry: record.geometry || record,
@@ -2075,6 +2123,7 @@ function createDetourV2Detector(config = {}) {
       activeDetours.set(restored.eventId || key, restored);
       count += 1;
     }
+    pruneSupersededLegacyRouteDetours();
     return count;
   }
 

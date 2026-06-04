@@ -89,6 +89,73 @@ function detourForRoute(result, routeId) {
 
 describe('Auto Detour V2 detector', () => {
 
+  test('drops superseded legacy route-keyed detours when event-window snapshots exist', () => {
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8A': {
+          eventId: '8A',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: null,
+        },
+        '8A:shape-1:0-100': {
+          eventId: '8A:shape-1:0-100',
+          routeId: '8A',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 100,
+          },
+        },
+      },
+    });
+
+    const state = detector.getState();
+    expect(Object.keys(state.detours)).toEqual(['8A:shape-1:0-100']);
+    expect(state.detours['8A']).toEqual(state.detours['8A:shape-1:0-100']);
+  });
+
+  test('skips legacy Firestore snapshots when event-window snapshots exist for the same route', () => {
+    const detector = createDetourV2Detector();
+    const count = detector.hydrateActiveDetourSnapshots({
+      '8A': {
+        eventId: '8A',
+        routeId: '8A',
+        state: 'active',
+        detectedAt: 1000,
+        lastSeenAt: 1000,
+        eventWindow: null,
+      },
+      '8A:shape-1:0-100': {
+        eventId: '8A:shape-1:0-100',
+        routeId: '8A',
+        state: 'active',
+        detectedAt: 1000,
+        lastSeenAt: 1000,
+        eventWindow: {
+          routeId: '8A',
+          shapeId: 'shape-1',
+          coreStartProgressMeters: 0,
+          coreEndProgressMeters: 100,
+        },
+      },
+    });
+
+    expect(count).toBe(1);
+    expect(Object.keys(detector.getState().detours)).toEqual(['8A:shape-1:0-100']);
+  });
+
   test('keeps far-apart same-route evidence as separate event candidates', () => {
     const longShapes = new Map([['long-shape', [
       { latitude: 44.390, longitude: -79.760 },
