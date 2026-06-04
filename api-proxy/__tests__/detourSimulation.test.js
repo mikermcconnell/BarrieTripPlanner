@@ -110,7 +110,7 @@ describe('detourSimulation', () => {
     }));
   });
 
-  test('create and clear use configured V2 active detours collection', async () => {
+  test('create and clear use configured V2 active detour event collection', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
       env: {
@@ -125,9 +125,15 @@ describe('detourSimulation', () => {
     await ops.create({ routeId: '1', durationMinutes: 5 });
     await ops.clear({ routeId: '1' });
 
-    expect(db._writes[0].collectionName).toBe('activeDetoursV2');
+    expect(db._writes[0].collectionName).toBe('activeDetourEventsV2');
+    expect(db._writes[0].docId).toBe('simulated:1');
+    expect(db._writes[0].data).toEqual(expect.objectContaining({
+      eventId: 'simulated:1',
+      detourEventId: 'simulated:1',
+      routeId: '1',
+    }));
     expect(db._deletes).toEqual([
-      { collectionName: 'activeDetoursV2', docId: '1' },
+      { collectionName: 'activeDetourEventsV2', docId: 'simulated:1' },
     ]);
   });
 

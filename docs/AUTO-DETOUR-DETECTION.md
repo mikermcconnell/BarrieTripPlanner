@@ -425,14 +425,14 @@ Key env vars for the detour system, set in the backend environment or `.env` loc
 | Variable | Default | Description |
 |---|---|---|
 | `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` | `false` | Enable the rider-facing auto detour feature |
-| `EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION` | `activeDetoursV2` in the lab branch | Firestore collection the client subscribes to for active detours. Use `activeDetoursV2` for isolated V2 lab testing so the app does not hydrate V1 records. |
+| `EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION` | `activeDetourEventsV2` in the lab branch | Firestore collection the client subscribes to for active detour events. Use `activeDetourEventsV2` for isolated V2 event-window testing so the app does not hydrate V1 records. |
 | `EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI` | `false` | Legacy fallback for older builds; prefer `EXPO_PUBLIC_ENABLE_AUTO_DETOURS` |
 | `EXPO_PUBLIC_SHOW_LOW_CONFIDENCE_DETOURS` | `false` | Development/validation-only display option for low-confidence detour previews |
 
 ### V2 Lab Storage Isolation
 | Variable | Default | Description |
 |---|---|---|
-| `DETOUR_DETECTOR_VERSION` | `v1` | Backend storage selector. `v2` uses `activeDetoursV2`, `detourHistoryV2`, and `systemState/detourRuntimeV2`. |
+| `DETOUR_DETECTOR_VERSION` | `v1` | Backend storage selector. `v2` uses `activeDetourEventsV2`, `detourEventHistoryV2`, and `systemState/detourRuntimeV2`. |
 | `DETOUR_ACTIVE_COLLECTION` | version default | Optional explicit active-detour collection override. |
 | `DETOUR_HISTORY_COLLECTION` | version default | Optional explicit history collection override. |
 | `DETOUR_RUNTIME_STATE_COLLECTION` | `systemState` | Optional runtime-state collection override. |

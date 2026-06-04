@@ -80,7 +80,7 @@ describe('detour ground-truth validator', () => {
       json: async () => ({
         documents: [
           {
-            name: 'projects/proj/databases/(default)/documents/activeDetoursV2/12A',
+            name: 'projects/proj/databases/(default)/documents/activeDetourEventsV2/12A:shape-1:100-300',
             fields: {
               routeId: { stringValue: '12A' },
               riderVisible: { booleanValue: true },
@@ -93,14 +93,14 @@ describe('detour ground-truth validator', () => {
     const result = await fetchLiveActiveDetours({
       apiKey: 'public-key',
       projectId: 'proj',
-      collectionName: 'activeDetoursV2',
+      collectionName: 'activeDetourEventsV2',
       fetchImpl,
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://firestore.googleapis.com/v1/projects/proj/databases/(default)/documents/activeDetoursV2?key=public-key'
+      'https://firestore.googleapis.com/v1/projects/proj/databases/(default)/documents/activeDetourEventsV2?key=public-key'
     );
-    expect(result['12A']).toEqual(expect.objectContaining({
+    expect(result['12A:shape-1:100-300']).toEqual(expect.objectContaining({
       routeId: '12A',
       riderVisible: true,
     }));

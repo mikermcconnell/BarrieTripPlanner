@@ -466,7 +466,7 @@ describe('detourOps rollout health', () => {
         getStatus: () => ({
           running: false,
           detourVersion: 'v2',
-          storage: { activeCollection: 'activeDetoursV2' },
+          storage: { activeCollection: 'activeDetourEventsV2' },
         }),
       },
       env: { DETOUR_DETECTOR_VERSION: 'v2' },
@@ -474,12 +474,12 @@ describe('detourOps rollout health', () => {
 
     expect(ops.getStatus()).toEqual(expect.objectContaining({
       detourVersion: 'v2',
-      storage: { activeCollection: 'activeDetoursV2' },
+      storage: { activeCollection: 'activeDetourEventsV2' },
       evidenceSummary: { '8A': { pointCount: 2, uniqueVehicles: 2 } },
     }));
     expect(ops.getDebug('8A')).toEqual(expect.objectContaining({
       detourVersion: 'v2',
-      storage: { activeCollection: 'activeDetoursV2' },
+      storage: { activeCollection: 'activeDetourEventsV2' },
       routeId: '8A',
       evidence: expect.objectContaining({
         candidateEvidence: { pointCount: 2, uniqueSignatureCount: 2 },
@@ -498,8 +498,8 @@ describe('detourOps rollout health', () => {
           mode: 'scheduled',
           detourVersion: 'v2',
           storage: {
-            activeCollection: 'activeDetoursV2',
-            historyCollection: 'detourHistoryV2',
+            activeCollection: 'activeDetourEventsV2',
+            historyCollection: 'detourEventHistoryV2',
           },
           tickCount: 3,
           lastSuccessfulTick: new Date(now - 60 * 1000).toISOString(),
@@ -525,14 +525,14 @@ describe('detourOps rollout health', () => {
     expect(result).toEqual(expect.objectContaining({
       detourVersion: 'v2',
       storage: expect.objectContaining({
-        activeCollection: 'activeDetoursV2',
-        historyCollection: 'detourHistoryV2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
       }),
     }));
     expect(queryDetourHistory).toHaveBeenCalledWith(expect.objectContaining({
       storageConfig: expect.objectContaining({
         detourVersion: 'v2',
-        historyCollection: 'detourHistoryV2',
+        historyCollection: 'detourEventHistoryV2',
       }),
     }));
   });
