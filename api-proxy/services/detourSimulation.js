@@ -314,6 +314,25 @@ function createSimulatedDetourDocument({ routeId, shapeId, geometry, durationMin
   };
 }
 
+function getSimulatedDetourDocumentId(routeId, storageConfig = {}) {
+  const normalizedRouteId = String(routeId || '').trim();
+  if (storageConfig.detourVersion === 'v2') {
+    return `simulated:${normalizedRouteId}`;
+  }
+  return normalizedRouteId;
+}
+
+function prepareSimulatedDetourDocument(doc, docId, storageConfig = {}) {
+  if (storageConfig.detourVersion !== 'v2') return doc;
+  return {
+    ...doc,
+    eventId: docId,
+    detourEventId: docId,
+    detourVersion: doc.detourVersion || 'v2-simulated',
+    eventWindow: doc.eventWindow ?? null,
+  };
+}
+
 function parsePositiveOffset(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -517,7 +536,10 @@ function createDetourSimulationOps({
           affectedStops: ['191', '192', '556', '557'],
         };
 
-        await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
+        const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+        await db.collection(storageConfig.activeCollection)
+          .doc(docId)
+          .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
         writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
       }
 
@@ -564,7 +586,10 @@ function createDetourSimulationOps({
           affectedStops: ['618', '933', '738', '757', '680', '681'],
         };
 
-        await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
+        const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+        await db.collection(storageConfig.activeCollection)
+          .doc(docId)
+          .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
         writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
       }
 
@@ -600,7 +625,10 @@ function createDetourSimulationOps({
       durationMinutes: options.durationMinutes,
     });
 
-    await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
+    const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+    await db.collection(storageConfig.activeCollection)
+      .doc(docId)
+      .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
 
     return {
       status: 200,
@@ -646,7 +674,8 @@ function createDetourSimulationOps({
       };
     }
 
-    await db.collection(storageConfig.activeCollection).doc(routeId).delete();
+    const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+    await db.collection(storageConfig.activeCollection).doc(docId).delete();
 
     return {
       status: 200,

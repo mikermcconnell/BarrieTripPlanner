@@ -70,7 +70,7 @@ describe('runtimeConfig', () => {
     const { default: runtimeConfig } = loadRuntimeConfig();
 
     expect(runtimeConfig.detours.enabledByDefault).toBe(true);
-    expect(runtimeConfig.detours.activeCollection).toBe('activeDetoursV2');
+    expect(runtimeConfig.detours.activeCollection).toBe('activeDetourEventsV2');
   });
 });
 

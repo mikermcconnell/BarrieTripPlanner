@@ -46,7 +46,7 @@ export function normalizeRoadNames(roadNames) {
     .filter(Boolean);
 }
 
-export function normalizeDetourSegment(segment) {
+export function normalizeDetourSegment(segment, fallbackDetourEventId = null) {
   if (!segment || typeof segment !== 'object') return null;
 
   return {
@@ -60,13 +60,18 @@ export function normalizeDetourSegment(segment) {
     roadMatchConfidence: segment.roadMatchConfidence ?? null,
     roadMatchSource: segment.roadMatchSource ?? null,
     detourPathLabel: segment.detourPathLabel ?? 'Likely detour path',
-    detourEventId: segment.detourEventId ?? null,
+    detourEventId: segment.detourEventId ?? fallbackDetourEventId ?? null,
   };
 }
 
-export function mapActiveDetourDoc(docId, data) {
+export function mapActiveDetourDoc(docId, data = {}) {
+  const eventId = data.eventId ?? data.detourEventId ?? docId;
+  const routeId = data.routeId ?? docId;
+
   return {
-    routeId: docId,
+    eventId,
+    detourEventId: eventId,
+    routeId,
     shapeId: data.shapeId ?? null,
     title: data.title ?? null,
     description: data.description ?? null,
@@ -82,7 +87,7 @@ export function mapActiveDetourDoc(docId, data) {
     riderVisibilityReason: data.riderVisibilityReason ?? null,
     staleForReview: Boolean(data.staleForReview),
     segments: Array.isArray(data.segments)
-      ? data.segments.map((segment) => normalizeDetourSegment(segment)).filter(Boolean)
+      ? data.segments.map((segment) => normalizeDetourSegment(segment, eventId)).filter(Boolean)
       : [],
     skippedSegmentPolyline: normalizeDetourPolyline(data.skippedSegmentPolyline),
     inferredDetourPolyline: normalizeDetourPolyline(data.inferredDetourPolyline),
@@ -92,7 +97,10 @@ export function mapActiveDetourDoc(docId, data) {
     roadMatchRawConfidence: data.roadMatchRawConfidence ?? null,
     roadMatchSource: data.roadMatchSource ?? null,
     detourPathLabel: data.detourPathLabel ?? 'Likely detour path',
-    detourEventId: data.detourEventId ?? null,
+    eventWindow: data.eventWindow ?? null,
+    detourVersion: data.detourVersion ?? null,
+    detourModel: data.detourModel ?? null,
+    eventCount: data.eventCount ?? 1,
     skippedStopIds: Array.isArray(data.skippedStopIds) ? data.skippedStopIds : [],
     skippedStopCodes: Array.isArray(data.skippedStopCodes) ? data.skippedStopCodes : [],
     skippedStops: Array.isArray(data.skippedStops) ? data.skippedStops : [],
@@ -109,6 +117,80 @@ export function mapActiveDetourDoc(docId, data) {
   };
 }
 
+const confidenceRank = (confidence) => {
+  const value = String(confidence || '').trim().toLowerCase();
+  if (value === 'high') return 3;
+  if (value === 'medium') return 2;
+  if (value === 'low') return 1;
+  return 0;
+};
+
+const betterConfidence = (first, second) => (
+  confidenceRank(second) > confidenceRank(first) ? second : first
+);
+
+const mergeArrays = (...arrays) => (
+  arrays.flatMap((items) => (Array.isArray(items) ? items : []))
+);
+
+const mergeUniqueScalars = (...arrays) => {
+  const seen = new Set();
+  const merged = [];
+  mergeArrays(...arrays).forEach((value) => {
+    const key = String(value ?? '').trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push(value);
+  });
+  return merged;
+};
+
+export function groupActiveDetourEventsByRoute(eventMap = {}) {
+  const grouped = {};
+
+  Object.values(eventMap || {}).forEach((event) => {
+    if (!event?.routeId) return;
+    const routeId = event.routeId;
+    const existing = grouped[routeId];
+    if (!existing) {
+      grouped[routeId] = {
+        ...event,
+        eventCount: 1,
+        detourEvents: [event],
+        eventWindows: event.eventWindow ? [event.eventWindow] : [],
+        segments: Array.isArray(event.segments) ? [...event.segments] : [],
+      };
+      return;
+    }
+
+    existing.eventCount += 1;
+    existing.detourEvents.push(event);
+    if (event.eventWindow) {
+      existing.eventWindows = [
+        ...(Array.isArray(existing.eventWindows) ? existing.eventWindows : []),
+        event.eventWindow,
+      ];
+    }
+    existing.vehicleCount = Math.max(existing.vehicleCount || 0, event.vehicleCount || 0);
+    existing.uniqueVehicleCount = Math.max(existing.uniqueVehicleCount || 0, event.uniqueVehicleCount || 0);
+    existing.currentVehicleCount = Math.max(existing.currentVehicleCount || 0, event.currentVehicleCount || 0);
+    existing.riderVisible = existing.riderVisible || event.riderVisible;
+    existing.staleForReview = Boolean(existing.staleForReview || event.staleForReview);
+    existing.confidence = betterConfidence(existing.confidence, event.confidence);
+    existing.state = existing.state === 'active' || event.state === 'active' ? 'active' : (existing.state || event.state || 'active');
+    existing.segments = mergeArrays(existing.segments, event.segments);
+    existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
+    existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
+    existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
+    existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
+    existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
+    existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
+  });
+
+  return grouped;
+}
+
+
 export function subscribeToActiveDetours(onUpdate, onError) {
   const devFixtures = getEnabledDevDetourFixtures();
   if (Object.keys(devFixtures).length > 0) {
@@ -116,16 +198,16 @@ export function subscribeToActiveDetours(onUpdate, onError) {
     return () => {};
   }
 
-  const detoursRef = collection(db, runtimeConfig.detours.activeCollection || 'activeDetoursV2');
+  const detoursRef = collection(db, runtimeConfig.detours.activeCollection || 'activeDetourEventsV2');
 
   return onSnapshot(
     detoursRef,
     (snapshot) => {
-      const detourMap = {};
+      const eventMap = {};
       snapshot.docs.forEach((doc) => {
-        detourMap[doc.id] = mapActiveDetourDoc(doc.id, doc.data());
+        eventMap[doc.id] = mapActiveDetourDoc(doc.id, doc.data());
       });
-      onUpdate(detourMap);
+      onUpdate(groupActiveDetourEventsByRoute(eventMap));
     },
     (error) => {
       if (error.code === 'permission-denied') {

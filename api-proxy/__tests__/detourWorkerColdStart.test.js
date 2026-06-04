@@ -299,8 +299,8 @@ describe('detourWorker cold-start active snapshot fallback', () => {
 
     const expectedStorageConfig = expect.objectContaining({
       detourVersion: 'v2',
-      activeCollection: 'activeDetoursV2',
-      historyCollection: 'detourHistoryV2',
+      activeCollection: 'activeDetourEventsV2',
+      historyCollection: 'detourEventHistoryV2',
       runtimeStateCollection: 'systemState',
       runtimeStateDoc: 'detourRuntimeV2',
     });
@@ -321,8 +321,8 @@ describe('detourWorker cold-start active snapshot fallback', () => {
       expect.objectContaining({
         detourVersion: 'v2',
         storage: expect.objectContaining({
-          activeCollection: 'activeDetoursV2',
-          historyCollection: 'detourHistoryV2',
+          activeCollection: 'activeDetourEventsV2',
+          historyCollection: 'detourEventHistoryV2',
           runtimeStateCollection: 'systemState',
           runtimeStateDoc: 'detourRuntimeV2',
         }),

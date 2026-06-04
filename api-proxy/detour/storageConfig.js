@@ -8,8 +8,8 @@ const V1_DEFAULTS = {
 
 const V2_DEFAULTS = {
   detourVersion: 'v2',
-  activeCollection: 'activeDetoursV2',
-  historyCollection: 'detourHistoryV2',
+  activeCollection: 'activeDetourEventsV2',
+  historyCollection: 'detourEventHistoryV2',
   runtimeStateCollection: 'systemState',
   runtimeStateDoc: 'detourRuntimeV2',
 };

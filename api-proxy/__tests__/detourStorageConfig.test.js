@@ -14,8 +14,8 @@ describe('detour storage config', () => {
   test('uses isolated V2 collection and runtime names', () => {
     expect(buildDetourStorageConfig({ DETOUR_DETECTOR_VERSION: 'v2' })).toEqual({
       detourVersion: 'v2',
-      activeCollection: 'activeDetoursV2',
-      historyCollection: 'detourHistoryV2',
+      activeCollection: 'activeDetourEventsV2',
+      historyCollection: 'detourEventHistoryV2',
       runtimeStateCollection: 'systemState',
       runtimeStateDoc: 'detourRuntimeV2',
     });

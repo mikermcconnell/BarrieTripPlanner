@@ -169,6 +169,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+
+    match /activeDetourEventsV2/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /detourEventHistoryV2/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ==================== TRANSIT NEWS ====================
 
     // Backend news worker writes via Admin SDK.

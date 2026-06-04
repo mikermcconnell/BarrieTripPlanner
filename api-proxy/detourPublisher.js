@@ -65,6 +65,25 @@ function resolvePublisherStorageConfig(storageConfig) {
   return resolved;
 }
 
+function detourPublishId(inputId, detour = {}) {
+  return String(detour?.eventId || detour?.detourEventId || inputId || '').trim();
+}
+
+function detourRouteId(inputId, detour = {}) {
+  return String(detour?.routeId || inputId || '').trim();
+}
+
+function normalizePublishEntry(inputId, detour = {}) {
+  const publishId = detourPublishId(inputId, detour);
+  const routeId = detourRouteId(inputId, detour);
+  return [publishId, {
+    ...detour,
+    eventId: publishId,
+    detourEventId: publishId,
+    routeId,
+  }];
+}
+
 function getRouteFamilyId(routeId) {
   const normalized = String(routeId || '').trim().toUpperCase();
   const match = normalized.match(/^(\d+)[A-Z]$/);
@@ -1483,8 +1502,9 @@ function getSharedDetourCandidates(routeId, source = {}) {
 function buildSharedDetourEventAssignmentsForPublish(publishableDetours = {}) {
   const candidates = [];
 
-  Object.entries(publishableDetours).forEach(([routeId, detour]) => {
-    const previousSnapshot = lastPublishedState.get(routeId);
+  Object.entries(publishableDetours).forEach(([publishId, detour]) => {
+    const routeId = detourRouteId(publishId, detour);
+    const previousSnapshot = lastPublishedState.get(publishId);
     let geo = preserveTrustedDetourPath(
       enforceGeometryTrustGate(detour?.geometry),
       previousSnapshot,
@@ -1685,8 +1705,12 @@ function shouldWriteGeometry(routeId, detour, previousSnapshot, now) {
   return false;
 }
 
-function rememberPublishedDetour(routeId, data = {}) {
+function rememberPublishedDetour(publishId, data = {}) {
+  const routeId = detourRouteId(publishId, data);
+  const eventId = detourPublishId(publishId, data);
   const normalized = {
+    eventId,
+    detourEventId: eventId,
     routeId,
     detectedAt: data.detectedAt || null,
     lastSeenAt: data.lastSeenAt || null,
@@ -1697,6 +1721,9 @@ function rememberPublishedDetour(routeId, data = {}) {
     currentVehicleCount: normalizeVehicleCount(data.currentVehicleCount ?? data.vehicleCount),
     state: data.state || 'active',
     clearReason: data.clearReason || null,
+    detourVersion: data.detourVersion || null,
+    detourModel: data.detourModel || null,
+    eventWindow: cloneJson(data.eventWindow) || null,
     handoffSourceRouteId: data.handoffSourceRouteId || null,
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
@@ -1725,7 +1752,6 @@ function rememberPublishedDetour(routeId, data = {}) {
     canShowDetourPath: data.canShowDetourPath ?? null,
     entryPoint: data.entryPoint || null,
     exitPoint: data.exitPoint || null,
-    detourEventId: data.detourEventId || null,
     sharedDetourEventId: data.sharedDetourEventId || null,
     sharedRouteIds: Array.isArray(data.sharedRouteIds) ? data.sharedRouteIds : [],
     eventPrimaryRouteId: data.eventPrimaryRouteId || null,
@@ -1734,13 +1760,13 @@ function rememberPublishedDetour(routeId, data = {}) {
     eventConfidence: data.eventConfidence || null,
   };
 
-  lastPublishedIds.add(routeId);
-  lastPublishedState.set(routeId, makeSnapshot(normalized));
+  lastPublishedIds.add(eventId);
+  lastPublishedState.set(eventId, makeSnapshot(normalized));
 
   const updatedAtMs = toMillis(normalized.updatedAt);
   if (updatedAtMs != null) {
-    lastSeenUpdateTime.set(routeId, updatedAtMs);
-    lastGeometryWriteTime.set(routeId, updatedAtMs);
+    lastSeenUpdateTime.set(eventId, updatedAtMs);
+    lastGeometryWriteTime.set(eventId, updatedAtMs);
   }
 
   const hydratedGeometry = {
@@ -1761,7 +1787,7 @@ function rememberPublishedDetour(routeId, data = {}) {
     lastEvidenceAt: data.lastEvidenceAt || null,
   };
   if (hasRenderableGeometry(hydratedGeometry)) {
-    lastKnownGeometry.set(routeId, {
+    lastKnownGeometry.set(publishId, {
       confidence: hydratedGeometry.confidence,
       roadMatchConfidence: hydratedGeometry.roadMatchConfidence,
       evidencePointCount: hydratedGeometry.evidencePointCount,
@@ -1776,8 +1802,8 @@ async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
   const snapshot = await db.collection(storageConfig.activeCollection).get();
   snapshot.forEach((doc) => {
     const data = doc.data() || {};
-    const routeId = data.routeId || doc.id;
-    rememberPublishedDetour(routeId, data);
+    const publishId = detourPublishId(doc.id, data);
+    rememberPublishedDetour(publishId, data);
   });
   return snapshot.size;
 }
@@ -1785,7 +1811,8 @@ async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
 async function writeHistoryEvent(db, event, storageConfig) {
   if (!HISTORY_ENABLED || !event) return;
   const suffix = Math.random().toString(36).slice(2, 8);
-  const docId = `${event.occurredAt}-${event.routeId}-${event.eventType}-${suffix}`;
+  const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
+  const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}-${suffix}`;
   await db.collection(storageConfig.historyCollection).doc(docId).set(event);
 }
 
@@ -1859,18 +1886,18 @@ function normalizeHistoryDoc(doc) {
   };
 }
 
-async function deletePublishedDetour(db, routeId, event, logPrefix = 'delete', storageConfig) {
+async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete', storageConfig) {
   try {
-    await db.collection(storageConfig.activeCollection).doc(routeId).delete();
+    await db.collection(storageConfig.activeCollection).doc(publishId).delete();
     await writeHistoryEvent(db, event, storageConfig);
-    lastPublishedIds.delete(routeId);
-    lastPublishedState.delete(routeId);
-    lastSeenUpdateTime.delete(routeId);
-    lastGeometryWriteTime.delete(routeId);
-    lastKnownGeometry.delete(routeId);
+    lastPublishedIds.delete(publishId);
+    lastPublishedState.delete(publishId);
+    lastSeenUpdateTime.delete(publishId);
+    lastGeometryWriteTime.delete(publishId);
+    lastKnownGeometry.delete(publishId);
     return true;
   } catch (err) {
-    console.error(`[detourPublisher] Failed to ${logPrefix} ${routeId}:`, err.message);
+    console.error(`[detourPublisher] Failed to ${logPrefix} ${publishId}:`, err.message);
     return false;
   }
 }
@@ -1888,13 +1915,19 @@ function assignSnapshotDate(doc, key, valueMs) {
   }
 }
 
-function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now) {
+function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId = null) {
   const vehicleCount = normalizeVehicleCount(previousSnapshot?.vehicleCount);
   const uniqueVehicleCount = normalizeVehicleCount(
     previousSnapshot?.uniqueVehicleCount ?? previousSnapshot?.vehicleCount
   );
+  const eventId = publishId || previousSnapshot?.eventId || previousSnapshot?.detourEventId || routeId;
   const doc = {
+    eventId,
+    detourEventId: eventId,
     routeId,
+    eventWindow: cloneJson(previousSnapshot?.eventWindow) || null,
+    detourVersion: previousSnapshot?.detourVersion || null,
+    detourModel: previousSnapshot?.detourModel || null,
     updatedAt: now,
     triggerVehicleId: previousSnapshot?.triggerVehicleId || null,
     vehicleCount,
@@ -1989,13 +2022,15 @@ async function publishDetours(activeDetours, options = {}) {
   const noticeStopImpacts = Array.isArray(options.noticeStopImpacts)
     ? options.noticeStopImpacts
     : await loadActiveNoticeStopImpacts(db);
-  const activeEntries = Object.entries(activeDetours || {});
+  const activeEntries = Object.entries(activeDetours || {})
+    .map(([inputId, detour]) => normalizePublishEntry(inputId, detour));
   const stalePublishSuppressedIds = new Set();
-  const publishableDetours = Object.fromEntries(activeEntries.filter(([routeId, detour]) => {
+  const publishableDetours = Object.fromEntries(activeEntries.filter(([publishId, detour]) => {
+    const routeId = detourRouteId(publishId, detour);
     const staleDecision = shouldAutoClearStaleDetour({
       routeId,
       detour,
-      previousSnapshot: lastPublishedState.get(routeId),
+      previousSnapshot: lastPublishedState.get(publishId),
       vehicles,
       scheduleIndex,
       now,
@@ -2004,7 +2039,7 @@ async function publishDetours(activeDetours, options = {}) {
       // Low-confidence validation-only stale outputs are monitoring evidence.
       // Do not publish them as rider-facing active detours, and do not clear an
       // existing detour without normal-route GPS proof.
-      stalePublishSuppressedIds.add(routeId);
+      stalePublishSuppressedIds.add(publishId);
       return false;
     }
     return true;
@@ -2035,37 +2070,44 @@ async function publishDetours(activeDetours, options = {}) {
   }
 
   const removedIds = [...lastPublishedIds].filter(id => !currentIds.has(id));
-  for (const routeId of removedIds) {
-    const previous = lastPublishedState.get(routeId);
+  for (const publishId of removedIds) {
+    const previous = lastPublishedState.get(publishId);
+    const routeId = previous?.routeId || publishId;
     if (!hasNormalRouteClearProof(previous)) {
-      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now);
+      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
       applyBaselineDivergenceSuppression(retainedDoc, routeId, baselineDivergedRouteIds);
       try {
-        await db.collection(storageConfig.activeCollection).doc(routeId).set(retainedDoc, { merge: true });
+        await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
         await writeHistoryEvent(db, buildUpdatedEvent(routeId, previous, currentSnapshot, now), storageConfig);
-        lastPublishedIds.add(routeId);
-        lastPublishedState.set(routeId, currentSnapshot);
-        lastSeenUpdateTime.set(routeId, now);
+        lastPublishedIds.add(publishId);
+        lastPublishedState.set(publishId, currentSnapshot);
+        lastSeenUpdateTime.set(publishId, now);
       } catch (err) {
-        console.error(`[detourPublisher] Failed to retain ${routeId}:`, err.message);
+        console.error(`[detourPublisher] Failed to retain ${publishId}:`, err.message);
       }
       continue;
     }
     const event = buildClearedEvent(routeId, previous, now);
-    await deletePublishedDetour(db, routeId, event, 'delete', storageConfig);
+    await deletePublishedDetour(db, publishId, event, 'delete', storageConfig);
   }
 
   const sharedEventAssignments = buildSharedDetourEventAssignmentsForPublish(publishableDetours);
 
-  for (const [routeId, detour] of Object.entries(publishableDetours)) {
-    const isNew = !lastPublishedIds.has(routeId);
-    const lastUpdate = lastSeenUpdateTime.get(routeId) || 0;
+  for (const [publishId, detour] of Object.entries(publishableDetours)) {
+    const routeId = detourRouteId(publishId, detour);
+    const isNew = !lastPublishedIds.has(publishId);
+    const lastUpdate = lastSeenUpdateTime.get(publishId) || 0;
     const shouldUpdateLastSeen = isNew || (now - lastUpdate >= LAST_SEEN_THROTTLE_MS);
-    const previousSnapshot = lastPublishedState.get(routeId);
+    const previousSnapshot = lastPublishedState.get(publishId);
 
     const doc = {
+      eventId: publishId,
+      detourEventId: publishId,
       routeId,
+      eventWindow: cloneJson(detour.eventWindow) || null,
+      detourVersion: detour.detourVersion || storageConfig.detourVersion || 'v2',
+      detourModel: detour.detourModel || null,
       detectedAt: toDate(detour.detectedAt, now),
       updatedAt: now,
       triggerVehicleId: detour.triggerVehicleId || null,
@@ -2107,18 +2149,18 @@ async function publishDetours(activeDetours, options = {}) {
     let noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
     let writeGeo = noticeStopImpactWriteDelta || shouldClearSuppressedGeometry(geo, previousSnapshot) || (
       hasRenderableGeometry(geo) &&
-      (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
+      (isNew || shouldWriteGeometry(publishId, detourForGeometry, previousSnapshot, now))
     );
     if (
       geo?.preservedTrustedDetourPath === true &&
       previousSnapshot &&
       !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
       !noticeStopImpactWriteDelta &&
-      now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
+      now - (lastGeometryWriteTime.get(publishId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
     ) {
       writeGeo = false;
     }
-    const knownGeometry = lastKnownGeometry.get(routeId);
+    const knownGeometry = lastKnownGeometry.get(publishId);
     const shouldBackfillRoadMatch = !writeGeo &&
       hasRenderableGeometry(geo) &&
       shouldAttemptRoadMatchBackfill(geo, previousSnapshot, knownGeometry);
@@ -2146,14 +2188,14 @@ async function publishDetours(activeDetours, options = {}) {
       noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
       writeGeo = noticeStopImpactWriteDelta || shouldClearSuppressedGeometry(geo, previousSnapshot) || (
         hasRenderableGeometry(geo) &&
-        (isNew || shouldWriteGeometry(routeId, detourForGeometry, previousSnapshot, now))
+        (isNew || shouldWriteGeometry(publishId, detourForGeometry, previousSnapshot, now))
       );
       if (
         geo?.preservedTrustedDetourPath === true &&
         previousSnapshot &&
         !hasNonClosureSelfLoopSegments(previousSnapshot?.segments) &&
         !noticeStopImpactWriteDelta &&
-        now - (lastGeometryWriteTime.get(routeId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
+        now - (lastGeometryWriteTime.get(publishId) || 0) < GEOMETRY_WRITE_THROTTLE_MS
       ) {
         writeGeo = false;
       }
@@ -2262,7 +2304,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
 
     try {
-      await db.collection(storageConfig.activeCollection).doc(routeId).set(doc, { merge: true });
+      await db.collection(storageConfig.activeCollection).doc(publishId).set(doc, { merge: true });
       const currentSnapshot = makeSnapshot(doc, previousSnapshot);
       if (isNew) {
         await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now), storageConfig);
@@ -2273,17 +2315,17 @@ async function publishDetours(activeDetours, options = {}) {
           storageConfig
         );
       }
-      lastPublishedIds.add(routeId);
-      lastPublishedState.set(routeId, currentSnapshot);
+      lastPublishedIds.add(publishId);
+      lastPublishedState.set(publishId, currentSnapshot);
       if (shouldUpdateLastSeen) {
-        lastSeenUpdateTime.set(routeId, now);
+        lastSeenUpdateTime.set(publishId, now);
       }
       if (writeGeo && geo) {
-        lastGeometryWriteTime.set(routeId, now);
+        lastGeometryWriteTime.set(publishId, now);
       }
       // Always track geometry state for accurate throttle decisions on next tick
       if (geo) {
-        lastKnownGeometry.set(routeId, {
+        lastKnownGeometry.set(publishId, {
           confidence: geo.confidence,
           roadMatchConfidence: geo.roadMatchConfidence || null,
           evidencePointCount: geo.evidencePointCount,
@@ -2313,7 +2355,7 @@ async function publishDetours(activeDetours, options = {}) {
         });
       }
     } catch (err) {
-      console.error(`[detourPublisher] Failed to write ${routeId}:`, err.message);
+      console.error(`[detourPublisher] Failed to write ${publishId}:`, err.message);
     }
   }
 

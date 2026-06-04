@@ -13,6 +13,7 @@ const {
   normalizeRoadNames,
   normalizeDetourSegment,
   mapActiveDetourDoc,
+  groupActiveDetourEventsByRoute,
 } = require('../services/firebase/detourService');
 const { deriveDetourOverlays } = require('../hooks/useDetourOverlays');
 
@@ -110,6 +111,50 @@ describe('detourService normalization helpers', () => {
 });
 
 describe('mapActiveDetourDoc', () => {
+
+  test('maps event-window detour documents', () => {
+    const detour = mapActiveDetourDoc('8A:shape-1:100-300', {
+      eventId: '8A:shape-1:100-300',
+      routeId: '8A',
+      state: 'active',
+      eventWindow: { shapeId: 'shape-1', coreStartProgressMeters: 100, coreEndProgressMeters: 300, frozen: true },
+      segments: [{ skippedStopIds: ['101'] }],
+    });
+
+    expect(detour).toEqual(expect.objectContaining({
+      eventId: '8A:shape-1:100-300',
+      detourEventId: '8A:shape-1:100-300',
+      routeId: '8A',
+      eventWindow: expect.objectContaining({ frozen: true }),
+    }));
+    expect(detour.segments[0].detourEventId).toBe('8A:shape-1:100-300');
+  });
+
+  test('groups active detour events by route for existing UI consumers', () => {
+    const grouped = groupActiveDetourEventsByRoute({
+      '8A:shape-1:100-300': mapActiveDetourDoc('8A:shape-1:100-300', {
+        eventId: '8A:shape-1:100-300',
+        routeId: '8A',
+        state: 'active',
+        segments: [{ skippedStopIds: ['101'] }],
+      }),
+      '8A:shape-1:900-1200': mapActiveDetourDoc('8A:shape-1:900-1200', {
+        eventId: '8A:shape-1:900-1200',
+        routeId: '8A',
+        state: 'active',
+        segments: [{ skippedStopIds: ['202'] }],
+      }),
+    });
+
+    expect(Object.keys(grouped)).toEqual(['8A']);
+    expect(grouped['8A'].eventCount).toBe(2);
+    expect(grouped['8A'].detourEvents).toHaveLength(2);
+    expect(grouped['8A'].segments).toHaveLength(2);
+    expect(grouped['8A'].segments.map((segment) => segment.detourEventId)).toEqual([
+      '8A:shape-1:100-300',
+      '8A:shape-1:900-1200',
+    ]);
+  });
 
   test('maps rider visibility fields', () => {
     const mapped = mapActiveDetourDoc('12A', {
@@ -277,7 +322,46 @@ test('reads detour updates from configured active detours collection', () => {
   expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetoursV2');
 });
 
-test('falls back to V2 active detours collection when config is blank', () => {
+test('groups subscribed event docs by route before notifying consumers', () => {
+  jest.resetModules();
+  jest.doMock('../config/runtimeConfig', () => ({
+    __esModule: true,
+    default: { detours: { activeCollection: 'activeDetourEventsV2' } },
+  }));
+  const firestore = require('firebase/firestore');
+  firestore.collection.mockClear();
+  firestore.onSnapshot.mockImplementation((_ref, onNext) => {
+    onNext({
+      docs: [
+        {
+          id: '8A:shape-1:100-300',
+          data: () => ({ eventId: '8A:shape-1:100-300', routeId: '8A', state: 'active', segments: [{ skippedStopIds: ['101'] }] }),
+        },
+        {
+          id: '8A:shape-1:900-1200',
+          data: () => ({ eventId: '8A:shape-1:900-1200', routeId: '8A', state: 'active', segments: [{ skippedStopIds: ['202'] }] }),
+        },
+      ],
+    });
+    return () => {};
+  });
+  const onUpdate = jest.fn();
+
+  const { subscribeToActiveDetours } = require('../services/firebase/detourService');
+  subscribeToActiveDetours(onUpdate);
+
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+    '8A': expect.objectContaining({
+      eventCount: 2,
+      detourEvents: expect.arrayContaining([
+        expect.objectContaining({ eventId: '8A:shape-1:100-300' }),
+        expect.objectContaining({ eventId: '8A:shape-1:900-1200' }),
+      ]),
+    }),
+  }));
+});
+
+test('falls back to V2 active detour events collection when config is blank', () => {
   jest.resetModules();
   jest.doMock('../config/runtimeConfig', () => ({
     __esModule: true,
@@ -294,5 +378,5 @@ test('falls back to V2 active detours collection when config is blank', () => {
   const { subscribeToActiveDetours } = require('../services/firebase/detourService');
   subscribeToActiveDetours(() => {});
 
-  expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetoursV2');
+  expect(firestore.collection).toHaveBeenCalledWith({}, 'activeDetourEventsV2');
 });

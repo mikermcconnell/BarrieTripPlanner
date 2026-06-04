@@ -45,6 +45,7 @@ function hasGeometryPayload(source) {
     'clearWindow',
     'clearWindows',
     'clearedSegments',
+    'eventWindow',
   ].some((key) => hasOwn(source, key));
 }
 
@@ -135,7 +136,14 @@ function makeSnapshot(doc, previousSnapshot = null) {
     ? (toMillis(doc.geometryLastEvidenceAt) ?? null)
     : (previousSnapshot?.geometryLastEvidenceAt ?? lastEvidenceAt);
 
+  const eventId = hasOwn(doc, 'eventId') || hasOwn(doc, 'detourEventId')
+    ? doc.eventId || doc.detourEventId || null
+    : previousSnapshot?.eventId || previousSnapshot?.detourEventId || null;
+  const eventWindow = pickGeometryValue(doc, previousSnapshot, 'eventWindow', null);
+
   return {
+    eventId,
+    detourEventId: eventId,
     routeId: doc.routeId,
     detectedAtMs: toMillis(doc.detectedAt),
     lastSeenAtMs: toMillis(doc.lastSeenAt),
@@ -175,9 +183,13 @@ function makeSnapshot(doc, previousSnapshot = null) {
     clearWindow,
     clearWindows,
     clearedSegments,
-    detourEventId: hasOwn(doc, 'detourEventId')
-      ? doc.detourEventId || null
-      : previousSnapshot?.detourEventId || null,
+    eventWindow,
+    detourVersion: hasOwn(doc, 'detourVersion')
+      ? doc.detourVersion || null
+      : previousSnapshot?.detourVersion || null,
+    detourModel: hasOwn(doc, 'detourModel')
+      ? doc.detourModel || null
+      : previousSnapshot?.detourModel || null,
     sharedDetourEventId: hasOwn(doc, 'sharedDetourEventId')
       ? doc.sharedDetourEventId || null
       : previousSnapshot?.sharedDetourEventId || null,
@@ -213,7 +225,10 @@ function buildDetectedEvent(routeId, current, now) {
   const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? now;
   const event = {
     eventType: 'DETOUR_DETECTED',
+    eventId: current.eventId || current.detourEventId || routeId,
+    detourEventId: current.eventId || current.detourEventId || routeId,
     routeId,
+    eventWindow: cloneJson(current.eventWindow) || null,
     occurredAt: now,
     detectedAt,
     lastSeenAt: current?.lastSeenAtMs ?? toMillis(current.lastSeenAt) ?? detectedAt,
@@ -266,7 +281,10 @@ function buildUpdatedEvent(routeId, previous, current, now) {
 
   return {
     eventType: 'DETOUR_UPDATED',
+    eventId: current.eventId || current.detourEventId || routeId,
+    detourEventId: current.eventId || current.detourEventId || routeId,
     routeId,
+    eventWindow: cloneJson(current.eventWindow) || null,
     occurredAt: now,
     detectedAt,
     lastSeenAt: current?.lastSeenAtMs ?? toMillis(current.lastSeenAt) ?? previous.lastSeenAtMs ?? detectedAt,
@@ -289,7 +307,10 @@ function buildClearedEvent(routeId, previous, now) {
   const detectedAt = previous?.detectedAtMs ?? null;
   const event = {
     eventType: 'DETOUR_CLEARED',
+    eventId: previous?.eventId || previous?.detourEventId || routeId,
+    detourEventId: previous?.eventId || previous?.detourEventId || routeId,
     routeId,
+    eventWindow: cloneJson(previous?.eventWindow) || null,
     occurredAt: now,
     detectedAt,
     clearedAt: now,

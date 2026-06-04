@@ -10,6 +10,14 @@ const {
   getRouteDetectorConfig,
   normalizeConfiguredDetourCorridor,
 } = require('../detourRouteConfig');
+const {
+  makeEventId,
+  buildInitialEventWindow,
+  pointMatchesEventWindow,
+  expandProvisionalEventWindow,
+  freezeEventWindow,
+  buildClearWindowForEvent,
+} = require('./eventWindows');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -867,6 +875,11 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
   const riderVisible = geometry.canShowDetourPath === true;
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
+  const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
+  const eventClearWindow = buildClearWindowForEvent(candidate.eventWindow, {
+    shapeLengthMeters,
+    quality: riderVisible ? 'normal' : 'weak',
+  });
   const detourZone = {
     startProgressMeters: Number.isFinite(geometry.startProgressMeters)
       ? geometry.startProgressMeters
@@ -881,9 +894,18 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
       .map((segment) => segment?.clearWindow)
       .filter(Boolean)
     : [];
+  const detourSpanMeters = Number.isFinite(detourZone.startProgressMeters) && Number.isFinite(detourZone.endProgressMeters)
+    ? Math.abs(detourZone.endProgressMeters - detourZone.startProgressMeters)
+    : 0;
+  const hiddenClearWindow = detourSpanMeters >= CLEAR_WINDOW_MIN_METERS && clearWindows[0]
+    ? clearWindows[0]
+    : eventClearWindow;
   return {
+    eventId: candidate.eventId || candidate.routeId,
     routeId: candidate.routeId,
     detourVersion: 'v2',
+    detourModel: 'event-window',
+    eventWindow: freezeEventWindow(candidate.eventWindow),
     detectedAt: new Date(candidate.firstSeenAt),
     lastSeenAt: new Date(candidate.lastSeenAt),
     triggerVehicleId: candidate.triggerVehicleId,
@@ -900,9 +922,12 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     canShowDetourPath: geometry.canShowDetourPath,
     geometry,
     detourZone,
-    clearWindow: clearWindows[0] ||
-      buildClearWindow(detourZone, getShapeLengthMeters(shapes, candidate.shapeId)),
-    clearWindows,
+    clearWindow: riderVisible
+      ? (clearWindows[0] || eventClearWindow || buildClearWindow(detourZone, shapeLengthMeters))
+      : (hiddenClearWindow || clearWindows[0] || buildClearWindow(detourZone, shapeLengthMeters)),
+    clearWindows: riderVisible
+      ? (clearWindows.length > 0 ? clearWindows : [eventClearWindow].filter(Boolean))
+      : [hiddenClearWindow || clearWindows[0]].filter(Boolean),
     clearedSegments: [],
     latestGpsEvidenceAt: candidate.lastSeenAt,
     geometryLastEvidenceAt: geometry.lastEvidenceAt,
@@ -917,6 +942,7 @@ function snapshotDetour(detour) {
     matchedVehicleIds: [...(detour.matchedVehicleIds || [])],
     geometry: cloneJson(detour.geometry),
     detourZone: cloneJson(detour.detourZone),
+    eventWindow: cloneJson(detour.eventWindow),
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
@@ -931,13 +957,16 @@ function serializeDetour(detour) {
     vehiclesOffRoute: [...(detour.vehiclesOffRoute || [])],
     geometry: cloneJson(detour.geometry),
     detourZone: cloneJson(detour.detourZone),
+    eventWindow: cloneJson(detour.eventWindow),
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
   };
 }
 
-function restoreDetour(routeId, data = {}) {
+function restoreDetour(eventIdOrRouteId, data = {}) {
+  const routeId = data.routeId || eventIdOrRouteId;
+  const eventId = data.eventId || eventIdOrRouteId;
   const matchedVehicleIds = data.matchedVehicleIds || data.vehiclesOffRoute || [];
   const restoredClearPendingTick = data.state === 'clear-pending' ? 0 : data.clearPendingTick;
   const segmentClearWindows = Array.isArray(data.geometry?.segments)
@@ -951,6 +980,7 @@ function restoreDetour(routeId, data = {}) {
     : segmentClearWindows;
   return {
     ...data,
+    eventId,
     routeId,
     detectedAt: new Date(toMillis(data.detectedAt, Date.now())),
     lastSeenAt: new Date(toMillis(data.lastSeenAt, Date.now())),
@@ -961,6 +991,7 @@ function restoreDetour(routeId, data = {}) {
     clearPendingTick: restoredClearPendingTick,
     geometry: cloneJson(data.geometry),
     detourZone: cloneJson(data.detourZone),
+    eventWindow: cloneJson(data.eventWindow),
     clearWindow: cloneJson(data.clearWindow) || clearWindows[0] || buildClearWindow(data.detourZone),
     clearWindows,
     clearedSegments: cloneJson(data.clearedSegments) || [],
@@ -977,10 +1008,10 @@ function createDetourV2Detector(config = {}) {
   let lastVehicleCount = 0;
   let lastReportedDetours = {};
   const seenSamples = new Set();
-  const candidates = new Map();
+  const eventCandidates = new Map();
   const activeDetours = new Map();
-  const clearTracks = new Map();
-  const pendingSegmentClears = new Map();
+  const clearTracksByEvent = new Map();
+  const pendingClearsByEvent = new Map();
   const projectionDiagnostics = new Map();
 
   function getRouteProjectionSummary(summaries, routeId) {
@@ -1043,18 +1074,123 @@ function createDetourV2Detector(config = {}) {
     lastVehicleCount = 0;
     lastReportedDetours = {};
     seenSamples.clear();
-    candidates.clear();
+    eventCandidates.clear();
     activeDetours.clear();
-    clearTracks.clear();
-    pendingSegmentClears.clear();
+    clearTracksByEvent.clear();
+    pendingClearsByEvent.clear();
     projectionDiagnostics.clear();
   }
 
-  function getCandidate(routeId, shapeId) {
-    const existing = candidates.get(routeId);
-    if (existing && existing.shapeId === shapeId) return existing;
-    const candidate = makeCandidate(routeId, shapeId);
-    candidates.set(routeId, candidate);
+  function makeEventCandidate(routeId, shapeId, point, shapes) {
+    const shapeLengthMeters = getShapeLengthMeters(shapes, shapeId);
+    const eventWindow = buildInitialEventWindow({
+      routeId,
+      shapeId,
+      progressMeters: point.progressMeters,
+      coordinate: point.coordinate,
+      shapeLengthMeters,
+    });
+    if (!eventWindow) return null;
+    const eventId = makeEventId({
+      routeId,
+      shapeId,
+      startProgressMeters: eventWindow.coreStartProgressMeters,
+      endProgressMeters: eventWindow.coreEndProgressMeters,
+    });
+    return { ...makeCandidate(routeId, shapeId), eventId, eventWindow };
+  }
+
+  function pointGapFromEventWindowMeters(point, eventWindow) {
+    const progress = Number(point?.progressMeters);
+    const start = Number(eventWindow?.coreStartProgressMeters);
+    const end = Number(eventWindow?.coreEndProgressMeters);
+    if (!Number.isFinite(progress) || !Number.isFinite(start) || !Number.isFinite(end)) return Infinity;
+    const normalizedStart = Math.min(start, end);
+    const normalizedEnd = Math.max(start, end);
+    if (progress >= normalizedStart && progress <= normalizedEnd) return 0;
+    return progress < normalizedStart ? normalizedStart - progress : progress - normalizedEnd;
+  }
+
+  function findMatchingEventCandidate(routeId, shapeId, point) {
+    let nearest = null;
+    let nearestGap = Infinity;
+    for (const candidate of eventCandidates.values()) {
+      if (candidate.routeId !== routeId || candidate.shapeId !== shapeId) continue;
+      if (pointMatchesEventWindow(point, candidate.eventWindow, 'confirm')) return candidate;
+      const gap = pointGapFromEventWindowMeters(point, candidate.eventWindow);
+      if (gap < nearestGap) {
+        nearest = candidate;
+        nearestGap = gap;
+      }
+    }
+    return nearestGap <= GEOMETRY_CLUSTER_GAP_METERS ? nearest : null;
+  }
+
+  function getEventCandidate(routeId, shapeId, point, shapes) {
+    const existing = findMatchingEventCandidate(routeId, shapeId, point);
+    if (existing) return existing;
+    const candidate = makeEventCandidate(routeId, shapeId, point, shapes);
+    if (!candidate) return null;
+    eventCandidates.set(candidate.eventId, candidate);
+    return candidate;
+  }
+
+  function getActiveEventsForRoute(routeId) {
+    return [...activeDetours.values()].filter((detour) => detour.routeId === routeId);
+  }
+
+  function getPrimaryActiveEventForRoute(routeId) {
+    const events = getActiveEventsForRoute(routeId);
+    return events[0] || null;
+  }
+
+  function defineRouteAliases(detourMap) {
+    const byRoute = new Map();
+    for (const detour of Object.values(detourMap || {})) {
+      if (!detour?.routeId) continue;
+      const events = byRoute.get(detour.routeId) || [];
+      events.push(detour);
+      byRoute.set(detour.routeId, events);
+    }
+    for (const [routeId, events] of byRoute.entries()) {
+      if (events.length > 0 && !Object.prototype.hasOwnProperty.call(detourMap, routeId)) {
+        Object.defineProperty(detourMap, routeId, {
+          value: events[0],
+          enumerable: false,
+          configurable: true,
+        });
+      }
+    }
+    return detourMap;
+  }
+
+  function serializeCandidate(candidate) {
+    return {
+      eventId: candidate.eventId,
+      routeId: candidate.routeId,
+      shapeId: candidate.shapeId,
+      points: candidate.points,
+      eventWindow: cloneJson(candidate.eventWindow),
+    };
+  }
+
+  function restoreCandidate(item = {}, shapes = new Map()) {
+    const points = Array.isArray(item.points) ? item.points : [];
+    const firstPoint = points.find((point) => Number.isFinite(point?.progressMeters));
+    const candidate = item.eventId && item.eventWindow
+      ? { ...makeCandidate(item.routeId, item.shapeId), eventId: item.eventId, eventWindow: cloneJson(item.eventWindow) }
+      : makeEventCandidate(item.routeId, item.shapeId, firstPoint || {
+        progressMeters: 0,
+        coordinate: null,
+      }, shapes);
+    if (!candidate) return null;
+    for (const point of points) {
+      addPointToCandidate(candidate, point);
+      candidate.eventWindow = expandProvisionalEventWindow(candidate.eventWindow, point, {
+        shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
+      });
+    }
+    candidate.eventId = item.eventId || candidate.eventId;
     return candidate;
   }
 
@@ -1264,9 +1400,9 @@ function createDetourV2Detector(config = {}) {
     detour.clearPendingTick = currentTickId;
   }
 
-  function enqueueSegmentClears(routeId, clearSegments, currentTickId, clearPendingAt) {
-    if (!routeId || !Array.isArray(clearSegments) || clearSegments.length === 0) return;
-    const entries = pendingSegmentClears.get(routeId) || [];
+  function enqueueSegmentClears(eventId, clearSegments, currentTickId, clearPendingAt) {
+    if (!eventId || !Array.isArray(clearSegments) || clearSegments.length === 0) return;
+    const entries = pendingClearsByEvent.get(eventId) || [];
     for (const item of clearSegments) {
       if (!item?.clearWindow) continue;
       if (entries.some((entry) => windowsDescribeSameSegment(entry.clearWindow, item.clearWindow))) {
@@ -1280,7 +1416,7 @@ function createDetourV2Detector(config = {}) {
         clearPendingAt,
       });
     }
-    if (entries.length > 0) pendingSegmentClears.set(routeId, entries);
+    if (entries.length > 0) pendingClearsByEvent.set(eventId, entries);
   }
 
   function rebuildCandidateSummary(candidate) {
@@ -1318,41 +1454,41 @@ function createDetourV2Detector(config = {}) {
   }
 
   function resetClearTracksForOffRoutePoint(routeId, point = {}) {
-    const routeTracks = clearTracks.get(routeId);
-    if (!routeTracks) return;
+    const matchingEvents = getActiveEventsForRoute(routeId);
+    if (matchingEvents.length === 0) return;
 
-    const detour = activeDetours.get(routeId);
-    if (!detour) {
-      clearTracks.delete(routeId);
-      return;
-    }
+    for (const detour of matchingEvents) {
+      const eventId = detour.eventId;
+      const eventTracks = clearTracksByEvent.get(eventId);
+      if (!eventTracks) continue;
 
-    const clearWindows = getDetourClearWindows(detour);
-    if (clearWindows.length === 0) {
-      clearTracks.delete(routeId);
-      return;
-    }
-
-    const matchingWindows = clearWindows.filter((clearWindow) => (
-      pointMatchesProgressWindow(point, clearWindow)
-    ));
-    if (matchingWindows.length === 0) return;
-
-    const prunedRouteTracks = new Map();
-    for (const [signature, track] of routeTracks.entries()) {
-      const retainedSamples = (Array.isArray(track) ? track : [])
-        .filter((sample) => !matchingWindows.some((clearWindow) => (
-          sampleMatchesClearWindow(clearWindow, sample)
-        )));
-      if (retainedSamples.length > 0) {
-        prunedRouteTracks.set(signature, retainedSamples);
+      const clearWindows = getDetourClearWindows(detour);
+      if (clearWindows.length === 0) {
+        clearTracksByEvent.delete(eventId);
+        continue;
       }
-    }
 
-    if (prunedRouteTracks.size > 0) {
-      clearTracks.set(routeId, prunedRouteTracks);
-    } else {
-      clearTracks.delete(routeId);
+      const matchingWindows = clearWindows.filter((clearWindow) => (
+        pointMatchesProgressWindow(point, clearWindow)
+      ));
+      if (matchingWindows.length === 0) continue;
+
+      const prunedEventTracks = new Map();
+      for (const [signature, track] of eventTracks.entries()) {
+        const retainedSamples = (Array.isArray(track) ? track : [])
+          .filter((sample) => !matchingWindows.some((clearWindow) => (
+            sampleMatchesClearWindow(clearWindow, sample)
+          )));
+        if (retainedSamples.length > 0) {
+          prunedEventTracks.set(signature, retainedSamples);
+        }
+      }
+
+      if (prunedEventTracks.size > 0) {
+        clearTracksByEvent.set(eventId, prunedEventTracks);
+      } else {
+        clearTracksByEvent.delete(eventId);
+      }
     }
   }
 
@@ -1399,15 +1535,16 @@ function createDetourV2Detector(config = {}) {
   }
 
   function applyPendingSegmentClears(currentTickId, offRoutePointsByRoute) {
-    for (const [routeId, pendingClears] of [...pendingSegmentClears.entries()]) {
-      const detour = activeDetours.get(routeId);
-      const candidate = candidates.get(routeId);
+    for (const [eventId, pendingClears] of [...pendingClearsByEvent.entries()]) {
+      const detour = activeDetours.get(eventId);
+      const candidate = eventCandidates.get(eventId);
       if (!detour || detour.state === 'clear-pending') {
-        pendingSegmentClears.delete(routeId);
+        pendingClearsByEvent.delete(eventId);
         continue;
       }
 
-      const currentOffRoutePoints = offRoutePointsByRoute.get(routeId) || [];
+      const routeId = detour.routeId || candidate?.routeId || null;
+      const currentOffRoutePoints = routeId ? (offRoutePointsByRoute.get(routeId) || []) : [];
       const applied = [];
       for (const pendingClear of pendingClears) {
         if (currentOffRouteEvidenceMatchesWindow(currentOffRoutePoints, pendingClear.clearWindow)) {
@@ -1418,7 +1555,7 @@ function createDetourV2Detector(config = {}) {
         applied.push(pendingClear);
       }
 
-      pendingSegmentClears.delete(routeId);
+      pendingClearsByEvent.delete(eventId);
 
       if (applied.length > 0 && (!candidate || !hasEnoughEvidence(candidate))) {
         markNormalRouteClearPending(detour, currentTickId);
@@ -1442,21 +1579,20 @@ function createDetourV2Detector(config = {}) {
     return detour;
   }
 
-  function trackClearSample(routeId, signature, sample, currentTickId) {
-    const detour = activeDetours.get(routeId);
-    if (!detour || detour.state === 'clear-pending') return;
+  function trackClearSampleForEvent(eventId, detour, signature, sample, currentTickId) {
+    if (!eventId || !detour || detour.state === 'clear-pending') return;
     if (sample.timestampMs <= Number(detour.latestGpsEvidenceAt || 0)) return;
 
-    const routeTracks = clearTracks.get(routeId) || new Map();
-    const track = routeTracks.get(signature) || [];
+    const eventTracks = clearTracksByEvent.get(eventId) || new Map();
+    const track = eventTracks.get(signature) || [];
     const normalizedSample = normalizeClearTrackSample({
       ...sample,
       signature,
     });
     if (!normalizedSample || !sampleMatchesDetourZone(detour, normalizedSample)) return;
     track.push(normalizedSample);
-    routeTracks.set(signature, track.slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE));
-    clearTracks.set(routeId, routeTracks);
+    eventTracks.set(signature, track.slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE));
+    clearTracksByEvent.set(eventId, eventTracks);
 
     const trackClearedSegments = getClearableSegmentsFromTrack(detour, track);
     if (trackClearedSegments.length > 0) {
@@ -1464,18 +1600,24 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(routeId, trackClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
       return;
     }
 
-    const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, routeTracks);
+    const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, eventTracks);
     if (collectivelyClearedSegments.length > 0) {
-      const samples = getUsableClearTrackSamples(detour, routeTracks);
+      const samples = getUsableClearTrackSamples(detour, eventTracks);
       const clearPendingAt = samples
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(routeId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+    }
+  }
+
+  function trackClearSample(routeId, signature, sample, currentTickId) {
+    for (const detour of getActiveEventsForRoute(routeId)) {
+      trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId);
     }
   }
 
@@ -1489,6 +1631,7 @@ function createDetourV2Detector(config = {}) {
     tickId += 1;
     lastVehicleCount = vehicles.length;
     const currentOffRouteVehicleIdsByRoute = new Map();
+    const currentOffRouteVehicleIdsByEvent = new Map();
     const offRoutePointsThisTickByRoute = new Map();
     const routeProjectionSummaries = new Map();
 
@@ -1564,7 +1707,14 @@ function createDetourV2Detector(config = {}) {
         const currentOffRouteVehicleIds = currentOffRouteVehicleIdsByRoute.get(routeId) || new Set();
         currentOffRouteVehicleIds.add(id);
         currentOffRouteVehicleIdsByRoute.set(routeId, currentOffRouteVehicleIds);
-        const candidate = getCandidate(routeId, projection.shapeId);
+        const candidate = getEventCandidate(routeId, projection.shapeId, {
+          ...offRoutePoint,
+          coordinate,
+        }, shapes);
+        if (!candidate) continue;
+        const currentEventOffRouteVehicleIds = currentOffRouteVehicleIdsByEvent.get(candidate.eventId) || new Set();
+        currentEventOffRouteVehicleIds.add(id);
+        currentOffRouteVehicleIdsByEvent.set(candidate.eventId, currentEventOffRouteVehicleIds);
         addPointToCandidate(candidate, {
           vehicleId: id,
           signature,
@@ -1575,19 +1725,25 @@ function createDetourV2Detector(config = {}) {
           shapeId: projection.shapeId,
           timestampMs,
         });
+        candidate.eventWindow = expandProvisionalEventWindow(candidate.eventWindow, {
+          ...offRoutePoint,
+          coordinate,
+        }, {
+          shapeLengthMeters: getShapeLengthMeters(shapes, projection.shapeId),
+        });
 
         if (hasEnoughEvidence(candidate)) {
-          const previousDetour = activeDetours.get(routeId);
+          const previousDetour = activeDetours.get(candidate.eventId);
           const detour = buildDetour(
             candidate,
             shapes,
             config,
-            currentOffRouteVehicleIdsByRoute.get(routeId)
+            currentOffRouteVehicleIdsByEvent.get(candidate.eventId)
           );
           if (previousDetour) {
             carryForwardDetourMetadata(detour, previousDetour);
           }
-          activeDetours.set(routeId, detour);
+          activeDetours.set(detour.eventId, detour);
         }
       } else if (projection.distanceMeters <= onRouteClearThresholdMeters) {
         trackClearSample(routeId, signature, {
@@ -1601,23 +1757,24 @@ function createDetourV2Detector(config = {}) {
 
     applyPendingSegmentClears(tickId, offRoutePointsThisTickByRoute);
 
-    for (const [routeId, candidate] of candidates.entries()) {
+    for (const [eventId, candidate] of eventCandidates.entries()) {
       if (!hasEnoughEvidence(candidate)) continue;
-      const previousDetour = activeDetours.get(routeId);
+      const previousDetour = activeDetours.get(eventId);
       if (previousDetour?.state === 'clear-pending') continue;
       const detour = buildDetour(
         candidate,
         shapes,
         config,
-        currentOffRouteVehicleIdsByRoute.get(routeId)
+        currentOffRouteVehicleIdsByEvent.get(eventId)
       );
       if (previousDetour) {
         carryForwardDetourMetadata(detour, previousDetour);
       }
-      activeDetours.set(routeId, detour);
+      activeDetours.set(detour.eventId, detour);
     }
 
-    for (const [routeId, detour] of activeDetours.entries()) {
+    for (const [eventId, detour] of activeDetours.entries()) {
+      const routeId = detour.routeId || eventId;
       maybeApplyObsoleteShapeGlobalClear(
         routeId,
         detour,
@@ -1627,7 +1784,8 @@ function createDetourV2Detector(config = {}) {
       );
     }
 
-    for (const [routeId, detour] of [...activeDetours.entries()]) {
+    for (const [eventId, detour] of [...activeDetours.entries()]) {
+      const routeId = detour.routeId || eventId;
       if (
         detour.state === 'clear-pending' &&
         tickId > detour.clearPendingTick &&
@@ -1636,24 +1794,30 @@ function createDetourV2Detector(config = {}) {
           offRoutePointsThisTickByRoute.get(routeId) || []
         )
       ) {
-        activeDetours.delete(routeId);
-        candidates.delete(routeId);
-        clearTracks.delete(routeId);
-        pendingSegmentClears.delete(routeId);
+        activeDetours.delete(eventId);
+        eventCandidates.delete(eventId);
+        clearTracksByEvent.delete(eventId);
+        pendingClearsByEvent.delete(eventId);
       }
     }
 
     lastReportedDetours = {};
-    for (const [routeId, detour] of activeDetours.entries()) {
-      lastReportedDetours[routeId] = snapshotDetour(detour);
+    for (const [eventId, detour] of activeDetours.entries()) {
+      lastReportedDetours[eventId] = snapshotDetour(detour);
     }
-    enrichDetourMapStopImpacts(lastReportedDetours, shapes, stopImpactData);
-    return lastReportedDetours;
+    for (const detour of Object.values(lastReportedDetours)) {
+      if (detour?.routeId) {
+        enrichDetourMapStopImpacts({ [detour.routeId]: detour }, shapes, stopImpactData);
+      }
+    }
+    return defineRouteAliases(lastReportedDetours);
   }
 
   function getState() {
     const detours = Object.fromEntries(
-      [...activeDetours.entries()].map(([routeId, detour]) => [routeId, {
+      [...activeDetours.entries()].map(([eventId, detour]) => [eventId, {
+        eventId,
+        routeId: detour.routeId || null,
         vehicleCount: detour.vehicleCount || 0,
         uniqueVehicleCount: detour.uniqueVehicleCount || 0,
         currentVehicleCount: detour.currentVehicleCount || 0,
@@ -1668,9 +1832,19 @@ function createDetourV2Detector(config = {}) {
           : 0,
       }])
     );
+    const detoursByRoute = new Map();
+    for (const detour of Object.values(detours)) {
+      if (detour?.routeId && !detoursByRoute.has(detour.routeId)) detoursByRoute.set(detour.routeId, detour);
+    }
+    for (const [routeId, detour] of detoursByRoute.entries()) {
+      if (!Object.prototype.hasOwnProperty.call(detours, routeId)) {
+        Object.defineProperty(detours, routeId, { value: detour, enumerable: false, configurable: true });
+      }
+    }
     const candidateEvidence = Object.fromEntries(
-      [...candidates.entries()].map(([routeId, candidate]) => [routeId, {
-        routeId,
+      [...eventCandidates.entries()].map(([eventId, candidate]) => [eventId, {
+        eventId,
+        routeId: candidate.routeId,
         pointCount: candidate.points.length,
         uniqueSignatureCount: candidate.signatures.size,
         oldestMs: candidate.firstSeenAt,
@@ -1678,6 +1852,30 @@ function createDetourV2Detector(config = {}) {
         shapeId: candidate.shapeId,
       }])
     );
+    const evidenceByRoute = new Map();
+    for (const candidate of eventCandidates.values()) {
+      const existing = evidenceByRoute.get(candidate.routeId) || {
+        routeId: candidate.routeId,
+        pointCount: 0,
+        uniqueSignatureCount: 0,
+        oldestMs: null,
+        newestMs: null,
+        shapeId: candidate.shapeId,
+      };
+      existing.pointCount += candidate.points.length;
+      const signatures = new Set([...(existing._signatures || []), ...candidate.signatures]);
+      existing._signatures = signatures;
+      existing.uniqueSignatureCount = signatures.size;
+      existing.oldestMs = existing.oldestMs == null ? candidate.firstSeenAt : Math.min(existing.oldestMs, candidate.firstSeenAt);
+      existing.newestMs = existing.newestMs == null ? candidate.lastSeenAt : Math.max(existing.newestMs, candidate.lastSeenAt);
+      evidenceByRoute.set(candidate.routeId, existing);
+    }
+    for (const [routeId, evidence] of evidenceByRoute.entries()) {
+      delete evidence._signatures;
+      if (!Object.prototype.hasOwnProperty.call(candidateEvidence, routeId)) {
+        Object.defineProperty(candidateEvidence, routeId, { value: evidence, enumerable: false, configurable: true });
+      }
+    }
 
     return {
       detourVersion: 'v2',
@@ -1693,7 +1891,7 @@ function createDetourV2Detector(config = {}) {
 
   function getDetourEvidence() {
     return Object.fromEntries(
-      [...candidates.entries()].map(([routeId, candidate]) => [routeId, {
+      [...eventCandidates.entries()].map(([eventId, candidate]) => [eventId, {
         pointCount: candidate.points.length,
         uniqueVehicles: candidate.vehicleIds.size,
         oldestMs: candidate.firstSeenAt,
@@ -1704,8 +1902,9 @@ function createDetourV2Detector(config = {}) {
 
   function getRawDetourEvidence() {
     return Object.fromEntries(
-      [...candidates.entries()].map(([routeId, candidate]) => [routeId, {
-        routeId,
+      [...eventCandidates.entries()].map(([eventId, candidate]) => [eventId, {
+        eventId,
+        routeId: candidate.routeId,
         pointCount: candidate.points.length,
         uniqueVehicles: candidate.vehicleIds.size,
         points: candidate.points.map((point) => ({
@@ -1718,23 +1917,27 @@ function createDetourV2Detector(config = {}) {
     );
   }
 
+  function detoursForRouteSnapshot(routeId) {
+    return Object.values(lastReportedDetours || {}).filter((detour) => detour.routeId === routeId);
+  }
+
   function getRouteDebug(routeId) {
     const route = normalizeRouteId(routeId);
     return {
       routeId: route,
       candidateEvidence: getState().candidateEvidence[route] || null,
-      snapshot: lastReportedDetours[route] ? serializeDetour(lastReportedDetours[route]) : null,
+      snapshot: (lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) ? serializeDetour(lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) : null,
       projectionDiagnostics: [...projectionDiagnostics.values()]
         .filter((diagnostic) => diagnostic.routeId === route),
     };
   }
 
-  function serializeClearTracks() {
+  function serializeClearTracksByEvent() {
     return Object.fromEntries(
-      [...clearTracks.entries()].map(([routeId, routeTracks]) => [
-        routeId,
+      [...clearTracksByEvent.entries()].map(([eventId, eventTracks]) => [
+        eventId,
         Object.fromEntries(
-          [...routeTracks.entries()].map(([signature, track]) => [
+          [...eventTracks.entries()].map(([signature, track]) => [
             signature,
             (Array.isArray(track) ? track : [])
               .map(normalizeClearTrackSample)
@@ -1746,47 +1949,85 @@ function createDetourV2Detector(config = {}) {
     );
   }
 
-  function hydrateClearTracks(snapshotClearTracks = {}) {
-    for (const [routeId, routeTracks] of Object.entries(snapshotClearTracks || {})) {
-      const detour = activeDetours.get(routeId);
-      if (!detour || detour.state === 'clear-pending') continue;
-
-      const hydratedRouteTracks = new Map();
-      for (const [signature, track] of Object.entries(routeTracks || {})) {
-        const samples = (Array.isArray(track) ? track : [])
-          .map((sample) => normalizeClearTrackSample({
-            ...sample,
-            signature: sample?.signature || signature,
-          }))
-          .filter((sample) => (
-            sample &&
-            sample.timestampMs > Number(detour.latestGpsEvidenceAt || 0) &&
-            sampleMatchesDetourZone(detour, sample)
-          ))
-          .slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE);
-        if (samples.length > 0) {
-          hydratedRouteTracks.set(signature, samples);
-        }
+  function serializeLegacyClearTracksByRoute() {
+    const byRoute = new Map();
+    for (const [eventId, eventTracks] of clearTracksByEvent.entries()) {
+      const routeId = activeDetours.get(eventId)?.routeId || eventCandidates.get(eventId)?.routeId;
+      if (!routeId) continue;
+      const routeTracks = byRoute.get(routeId) || new Map();
+      for (const [signature, track] of eventTracks.entries()) {
+        const existing = routeTracks.get(signature) || [];
+        routeTracks.set(signature, [...existing, ...(Array.isArray(track) ? track : [])]
+          .slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE));
       }
+      byRoute.set(routeId, routeTracks);
+    }
+    return Object.fromEntries(
+      [...byRoute.entries()].map(([routeId, routeTracks]) => [
+        routeId,
+        Object.fromEntries([...routeTracks.entries()]),
+      ])
+    );
+  }
 
-      if (hydratedRouteTracks.size > 0) {
-        clearTracks.set(routeId, hydratedRouteTracks);
+  function hydrateEventTracks(eventId, detour, sourceTracks = {}) {
+    if (!detour || detour.state === 'clear-pending') return;
+    const hydratedEventTracks = new Map();
+    for (const [signature, track] of Object.entries(sourceTracks || {})) {
+      const samples = (Array.isArray(track) ? track : [])
+        .map((sample) => normalizeClearTrackSample({
+          ...sample,
+          signature: sample?.signature || signature,
+        }))
+        .filter((sample) => (
+          sample &&
+          sample.timestampMs > Number(detour.latestGpsEvidenceAt || 0) &&
+          sampleMatchesDetourZone(detour, sample)
+        ))
+        .slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE);
+      if (samples.length > 0) {
+        hydratedEventTracks.set(signature, samples);
+      }
+    }
+    if (hydratedEventTracks.size > 0) {
+      clearTracksByEvent.set(eventId, hydratedEventTracks);
+    }
+  }
+
+  function hydrateClearTracks(snapshotClearTracks = {}, { eventKeyed = false } = {}) {
+    if (eventKeyed) {
+      for (const [eventId, eventTracks] of Object.entries(snapshotClearTracks || {})) {
+        hydrateEventTracks(eventId, activeDetours.get(eventId), eventTracks);
+      }
+      return;
+    }
+
+    for (const [routeId, routeTracks] of Object.entries(snapshotClearTracks || {})) {
+      for (const detour of getActiveEventsForRoute(routeId)) {
+        hydrateEventTracks(detour.eventId, detour, routeTracks);
       }
     }
   }
 
   function serializeDetectorRuntimeState() {
+    const activeEvents = Object.fromEntries(
+      [...activeDetours.entries()].map(([eventId, detour]) => [eventId, serializeDetour(detour)])
+    );
+    const activeDetoursByRoute = {};
+    for (const detour of Object.values(activeEvents)) {
+      if (detour?.routeId && !activeDetoursByRoute[detour.routeId]) activeDetoursByRoute[detour.routeId] = detour;
+    }
     return {
       detourVersion: 'v2',
-      candidates: [...candidates.entries()].map(([routeId, candidate]) => ({
-        routeId,
-        shapeId: candidate.shapeId,
-        points: candidate.points,
-      })),
-      activeDetours: Object.fromEntries(
-        [...activeDetours.entries()].map(([routeId, detour]) => [routeId, serializeDetour(detour)])
+      detourModel: 'event-window',
+      eventCandidates: Object.fromEntries(
+        [...eventCandidates.entries()].map(([eventId, candidate]) => [eventId, serializeCandidate(candidate)])
       ),
-      clearTracks: serializeClearTracks(),
+      candidates: [...eventCandidates.values()].map(serializeCandidate),
+      activeEvents,
+      activeDetours: activeDetoursByRoute,
+      clearTracksByEvent: serializeClearTracksByEvent(),
+      clearTracks: serializeLegacyClearTracksByRoute(),
       seenSamples: [...seenSamples].slice(-500),
     };
   }
@@ -1794,28 +2035,44 @@ function createDetourV2Detector(config = {}) {
   function hydrateRuntimeState(snapshot = {}) {
     clearVehicleState();
     (snapshot.seenSamples || []).forEach((key) => seenSamples.add(key));
-    for (const item of snapshot.candidates || []) {
-      const candidate = makeCandidate(item.routeId, item.shapeId);
-      for (const point of item.points || []) {
-        addPointToCandidate(candidate, point);
-      }
-      candidates.set(item.routeId, candidate);
+    const candidateItems = snapshot.eventCandidates && typeof snapshot.eventCandidates === 'object'
+      ? Object.values(snapshot.eventCandidates)
+      : (Array.isArray(snapshot.candidates) ? snapshot.candidates : Object.values(snapshot.candidates || {}));
+    for (const item of candidateItems) {
+      const candidate = restoreCandidate(item, new Map());
+      if (candidate?.eventId) eventCandidates.set(candidate.eventId, candidate);
     }
-    for (const [routeId, detour] of Object.entries(snapshot.activeDetours || {})) {
-      activeDetours.set(routeId, restoreDetour(routeId, detour));
+    const activeItems = snapshot.activeEvents && typeof snapshot.activeEvents === 'object'
+      ? Object.entries(snapshot.activeEvents)
+      : Object.entries(snapshot.activeDetours || {});
+    for (const [key, detour] of activeItems) {
+      const matchingCandidate = !detour?.eventId
+        ? [...eventCandidates.values()].find((candidate) => candidate.routeId === (detour?.routeId || key))
+        : null;
+      const restored = restoreDetour(matchingCandidate?.eventId || key, {
+        ...detour,
+        eventId: detour?.eventId || matchingCandidate?.eventId,
+        eventWindow: detour?.eventWindow || matchingCandidate?.eventWindow,
+      });
+      activeDetours.set(restored.eventId || key, restored);
     }
-    hydrateClearTracks(snapshot.clearTracks || {});
+    if (snapshot.clearTracksByEvent) {
+      hydrateClearTracks(snapshot.clearTracksByEvent, { eventKeyed: true });
+    } else {
+      hydrateClearTracks(snapshot.clearTracks || {}, { eventKeyed: false });
+    }
   }
 
   function hydrateActiveDetourSnapshots(records = {}) {
     let count = 0;
-    for (const [routeId, record] of Object.entries(records || {})) {
-      if (activeDetours.has(routeId)) continue;
-      activeDetours.set(routeId, restoreDetour(routeId, {
+    for (const [key, record] of Object.entries(records || {})) {
+      const restored = restoreDetour(key, {
         ...record,
         geometry: record.geometry || record,
         vehiclesOffRoute: record.matchedVehicleIds || [],
-      }));
+      });
+      if (activeDetours.has(restored.eventId || key)) continue;
+      activeDetours.set(restored.eventId || key, restored);
       count += 1;
     }
     return count;
@@ -1836,10 +2093,25 @@ function createDetourV2Detector(config = {}) {
     hydratePersistentDetours: () => {},
     hydratePersistentDetourGeometries: () => {},
     clearRouteDetour: (routeId) => {
-      pendingSegmentClears.delete(routeId);
-      clearTracks.delete(routeId);
-      candidates.delete(routeId);
-      return activeDetours.delete(routeId);
+      // Route id is a legacy API; delete all matching event-scoped clear state below.
+      let deleted = false;
+      for (const [eventId, candidate] of [...eventCandidates.entries()]) {
+        if (eventId === routeId || candidate.routeId === routeId) {
+          eventCandidates.delete(eventId);
+          clearTracksByEvent.delete(eventId);
+          pendingClearsByEvent.delete(eventId);
+          deleted = true;
+        }
+      }
+      for (const [eventId, detour] of [...activeDetours.entries()]) {
+        if (eventId === routeId || detour.routeId === routeId) {
+          activeDetours.delete(eventId);
+          clearTracksByEvent.delete(eventId);
+          pendingClearsByEvent.delete(eventId);
+          deleted = true;
+        }
+      }
+      return deleted;
     },
   };
 }
