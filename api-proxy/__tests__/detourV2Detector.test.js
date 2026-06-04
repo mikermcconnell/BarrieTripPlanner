@@ -235,6 +235,107 @@ describe('Auto Detour V2 detector', () => {
     expect(Object.keys(secondTick)).toEqual([]);
   });
 
+  test('fast-clears hidden tiny start-route detours from downstream normal service after GPS drift', () => {
+    const shapeId = 'tiny-start-drift-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.697 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.691 },
+      { latitude: 44.390, longitude: -79.688 },
+      { latitude: 44.390, longitude: -79.685 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['12A', [shapeId]]]);
+    const progress = (index) => projectOntoPolyline(shape[index], shape).progressMeters;
+    const clearWindow = {
+      startProgressMeters: 0,
+      endProgressMeters: 1000,
+      sourceStartProgressMeters: 25,
+      sourceEndProgressMeters: 125,
+      minCoverageRatio: 0.95,
+      shapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '12A:tiny-start-drift-shape:0-200': {
+          eventId: '12A:tiny-start-drift-shape:0-200',
+          routeId: '12A',
+          state: 'active',
+          riderVisible: false,
+          riderVisibilityReason: 'insufficient-geometry',
+          staleForReview: true,
+          canShowDetourPath: false,
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 3,
+          uniqueVehicleCount: 3,
+          currentVehicleCount: 0,
+          eventWindow: {
+            routeId: '12A',
+            shapeId,
+            coreStartProgressMeters: 25,
+            coreEndProgressMeters: 125,
+            clearStartProgressMeters: 0,
+            clearEndProgressMeters: 525,
+            frozen: true,
+          },
+          detourZone: {
+            startProgressMeters: 25,
+            endProgressMeters: 125,
+            shapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId,
+            canShowDetourPath: false,
+            segments: [{
+              state: 'active',
+              shapeId,
+              startProgressMeters: 25,
+              endProgressMeters: 125,
+              detourZone: {
+                startProgressMeters: 25,
+                endProgressMeters: 125,
+                shapeId,
+              },
+              clearWindow,
+            }],
+          },
+        },
+      },
+    });
+
+    const firstTick = detector.processVehicles([
+      vehicle({
+        id: 'bus-normal-after-drift',
+        routeId: '12A',
+        tripId: 'trip-normal-after-drift',
+        coordinate: shape[2],
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-normal-after-drift',
+        routeId: '12A',
+        tripId: 'trip-normal-after-drift',
+        coordinate: shape[4],
+        timestampMs: 3000,
+      }),
+    ], testShapes, testMapping);
+
+    expect(firstTick['12A:tiny-start-drift-shape:0-200']).toEqual(expect.objectContaining({
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    }));
+
+    const secondTick = detector.processVehicles([], testShapes, testMapping);
+    expect(Object.keys(secondTick)).toEqual([]);
+  });
+
   test('keeps clear evidence when a same-window off-route point is only marginally over threshold', () => {
     const shapeId = 'marginal-clear-shape';
     const shape = [

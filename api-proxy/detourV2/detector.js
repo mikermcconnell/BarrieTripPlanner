@@ -330,9 +330,19 @@ function isTinyRouteEdgeClearWindow(clearWindow = {}) {
 
   const windowBounds = getWindowBounds(clearWindow);
   if (!windowBounds) return false;
-  const nearRouteStart = windowBounds.start <= TINY_DETOUR_SOURCE_PADDING_METERS;
+  const nearRouteStart = sourceBounds.start - windowBounds.start <= TINY_DETOUR_SOURCE_PADDING_METERS;
   const nearRouteEnd = windowBounds.end - sourceBounds.end <= TINY_DETOUR_SOURCE_PADDING_METERS;
   return nearRouteStart || nearRouteEnd;
+}
+
+function getTinyRouteEdgeClearDirection(clearWindow = {}) {
+  if (!isTinyRouteEdgeClearWindow(clearWindow)) return null;
+  const sourceBounds = getClearWindowCoreBounds(clearWindow);
+  const windowBounds = getWindowBounds(clearWindow);
+  if (!sourceBounds || !windowBounds) return null;
+  if (sourceBounds.start - windowBounds.start <= TINY_DETOUR_SOURCE_PADDING_METERS) return 'start';
+  if (windowBounds.end - sourceBounds.end <= TINY_DETOUR_SOURCE_PADDING_METERS) return 'end';
+  return null;
 }
 
 function sampleMatchesTinyClearSource(clearWindow = {}, sample = {}) {
@@ -347,6 +357,21 @@ function sampleMatchesTinyClearSource(clearWindow = {}, sample = {}) {
     progress >= sourceBounds.start - TINY_DETOUR_SOURCE_PADDING_METERS &&
     progress <= sourceBounds.end + TINY_DETOUR_SOURCE_PADDING_METERS
   );
+}
+
+function sampleMatchesTinyRouteEdgeDownstreamClear(clearWindow = {}, sample = {}) {
+  const direction = getTinyRouteEdgeClearDirection(clearWindow);
+  const sourceBounds = getClearWindowCoreBounds(clearWindow);
+  const progress = Number(sample?.progressMeters);
+  if (!direction || !sourceBounds || !Number.isFinite(progress)) return false;
+  const windowShapeId = clearWindow.shapeId ? String(clearWindow.shapeId) : null;
+  const sampleShapeId = sample.shapeId ? String(sample.shapeId) : null;
+  if (windowShapeId && sampleShapeId && windowShapeId !== sampleShapeId) return false;
+  if (!progressInWindow(progress, clearWindow)) return false;
+  if (direction === 'start') {
+    return progress >= sourceBounds.end + TINY_DETOUR_SOURCE_PADDING_METERS;
+  }
+  return progress <= sourceBounds.start - TINY_DETOUR_SOURCE_PADDING_METERS;
 }
 
 function sampleMatchesClearWindowCore(clearWindow, sample) {
@@ -1500,9 +1525,35 @@ function createDetourV2Detector(config = {}) {
       metrics.maxProgressGapMeters <= metrics.maxAllowedProgressGapMeters;
   }
 
+  function isHiddenTinyRouteEdgeDetour(detour, clearWindow) {
+    return Boolean(
+      detour &&
+      detour.riderVisible === false &&
+      detour.canShowDetourPath === false &&
+      isTinyRouteEdgeClearWindow(clearWindow)
+    );
+  }
+
+  function isHiddenTinyRouteEdgeClearedByDownstreamTrack(detour, clearWindow, track) {
+    if (!isHiddenTinyRouteEdgeDetour(detour, clearWindow)) return false;
+    const latestEvidenceAt = Number(detour?.latestGpsEvidenceAt || 0);
+    const samples = (Array.isArray(track) ? track : [])
+      .map(normalizeClearTrackSample)
+      .filter((sample) => sample && sample.timestampMs > latestEvidenceAt)
+      .filter((sample) => sampleMatchesTinyRouteEdgeDownstreamClear(clearWindow, sample))
+      .sort((a, b) => a.timestampMs - b.timestampMs);
+    if (samples.length < 2) return false;
+    const progresses = samples.map((sample) => sample.progressMeters).filter(Number.isFinite);
+    if (progresses.length < 2) return false;
+    return Math.max(...progresses) - Math.min(...progresses) >= CLEAR_MIN_TRAVERSAL_METERS;
+  }
+
   function getClearableSegmentsFromTrack(detour, track) {
     return getDetourClearSegments(detour)
-      .filter((item) => isClearWindowClearedByTrack(item.clearWindow, track));
+      .filter((item) => (
+        isClearWindowClearedByTrack(item.clearWindow, track) ||
+        isHiddenTinyRouteEdgeClearedByDownstreamTrack(detour, item.clearWindow, track)
+      ));
   }
 
   function sampleMatchesClearWindow(clearWindow, sample) {
@@ -1860,6 +1911,15 @@ function createDetourV2Detector(config = {}) {
       if (!eventId || !detour || detour.state === 'clear-pending') continue;
       const eventTracks = clearTracksByEvent.get(eventId);
       if (!eventTracks) continue;
+      for (const track of eventTracks.values()) {
+        const trackClearedSegments = getClearableSegmentsFromTrack(detour, track);
+        if (trackClearedSegments.length === 0) continue;
+        const clearPendingAt = track
+          .map((item) => Number(item.timestampMs))
+          .filter(Number.isFinite)
+          .reduce((max, value) => Math.max(max, value), 0);
+        enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
+      }
       const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, eventTracks);
       if (collectivelyClearedSegments.length === 0) continue;
       const samples = getUsableClearTrackSamples(detour, eventTracks);
