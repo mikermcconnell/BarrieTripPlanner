@@ -20,7 +20,7 @@ const BUILT_IN_PUBLIC_ENV = {
   EXPO_PUBLIC_API_PROXY_URL: 'https://apiproxy-r7pziiwpua-uc.a.run.app',
   EXPO_PUBLIC_ENABLE_AUTO_DETOURS: 'true',
   EXPO_PUBLIC_SHOW_LOW_CONFIDENCE_DETOURS: 'false',
-  EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: 'activeDetoursV2',
+  EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: 'activeDetourEventsV2',
 };
 
 // Expo only embeds EXPO_PUBLIC_* values in native bundles when they are
