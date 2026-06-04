@@ -225,6 +225,80 @@ describe('detourPublisher storage config', () => {
     expect(collection).not.toHaveBeenCalledWith('detourHistory');
   });
 
+
+  test('publishDetours writes V2 active event docs by event id', async () => {
+    jest.resetModules();
+    const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
+    process.env.DETOUR_HISTORY_RETENTION_DAYS = '0';
+    const writes = {};
+    const activeSet = jest.fn(async (data) => {
+      writes.active = data;
+    });
+    const historySet = jest.fn(async (data) => {
+      writes.history = data;
+    });
+    const activeDoc = jest.fn(() => ({ set: activeSet, delete: jest.fn(async () => {}) }));
+    const historyDoc = jest.fn(() => ({ set: historySet }));
+    const collection = jest.fn((name) => ({
+      doc: name === 'detourEventHistoryV2' ? historyDoc : activeDoc,
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    try {
+      await publishDetours({
+        '8A:shape-1:100-300': {
+          eventId: '8A:shape-1:100-300',
+          routeId: '8A',
+          shapeId: 'shape-1',
+          detourVersion: 'v2-event-window',
+          state: 'active',
+          confidence: 'high',
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          detectedAt: 1000,
+          lastSeenAt: 2000,
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: 100,
+            coreEndProgressMeters: 300,
+            frozen: true,
+          },
+          geometry: { shapeId: 'shape-1', canShowDetourPath: true, segments: [] },
+        },
+      }, {
+        now: 3000,
+        storageConfig: {
+          detourVersion: 'v2',
+          activeCollection: 'activeDetourEventsV2',
+          historyCollection: 'detourEventHistoryV2',
+        },
+      });
+    } finally {
+      if (originalRetentionDays == null) {
+        delete process.env.DETOUR_HISTORY_RETENTION_DAYS;
+      } else {
+        process.env.DETOUR_HISTORY_RETENTION_DAYS = originalRetentionDays;
+      }
+    }
+
+    expect(collection).toHaveBeenCalledWith('activeDetourEventsV2');
+    expect(activeDoc).toHaveBeenCalledWith('8A:shape-1:100-300');
+    expect(writes.active).toEqual(expect.objectContaining({
+      eventId: '8A:shape-1:100-300',
+      detourEventId: '8A:shape-1:100-300',
+      routeId: '8A',
+      detourVersion: 'v2-event-window',
+      eventWindow: expect.objectContaining({ frozen: true }),
+    }));
+  });
+
   test('publishDetours writes the detour clear window to active documents', async () => {
     jest.resetModules();
     const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
@@ -390,7 +464,7 @@ describe('publishDetours event ids', () => {
     jest.doMock('../firebaseAdmin', () => ({
       getDb: () => ({
         collection: (name) => {
-          const emptyQuery = { get: async () => ({ empty: true, docs: [], forEach: () => {} }) };
+          const emptyQuery = { get: async () => ({ empty: true, docs: [], forEach: () => {} }), orderBy: () => emptyQuery, limit: () => emptyQuery, where: () => emptyQuery };
           return {
             doc: (id) => ({
               set: async (data) => { writes[`${name}/${id}`] = data; },
