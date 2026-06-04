@@ -18,7 +18,7 @@ describe('Firestore security rules', () => {
   });
 
   test('allow public reads for V2 active detours and history', () => {
-    expect(rules).toContain('match /activeDetoursV2/{routeId}');
-    expect(rules).toContain('match /detourHistoryV2/{eventId}');
+    expect(rules).toContain('match /activeDetourEventsV2/{eventId}');
+    expect(rules).toContain('match /detourEventHistoryV2/{eventId}');
   });
 });
