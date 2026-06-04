@@ -299,6 +299,151 @@ describe('Auto Detour V2 detector', () => {
     expect(tracks['trip-clear']).toHaveLength(1);
   });
 
+  test('does not activate tiny start-of-route hidden detours from only marginal off-route evidence', () => {
+    const shapeId = 'marginal-start-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.699 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.697 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['12A', [shapeId]]]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-marginal-a',
+        routeId: '12A',
+        tripId: 'trip-marginal-a',
+        coordinate: { latitude: 44.39038, longitude: -79.700 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-marginal-a',
+        routeId: '12A',
+        tripId: 'trip-marginal-a',
+        coordinate: { latitude: 44.39038, longitude: -79.6995 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-marginal-b',
+        routeId: '12A',
+        tripId: 'trip-marginal-b',
+        coordinate: { latitude: 44.39038, longitude: -79.699 },
+        timestampMs: 4000,
+      }),
+    ], testShapes, testMapping);
+
+    expect(detoursForRoute(result, '12A')).toEqual([]);
+    expect(Object.keys(detector.serializeDetectorRuntimeState().eventCandidates)).toEqual([
+      '12A:marginal-start-shape:0-100',
+    ]);
+  });
+
+  test('removes already-active tiny hidden detours that only have marginal start-of-route evidence', () => {
+    const shapeId = 'marginal-restored-start-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.699 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.697 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['12A', [shapeId]]]);
+    const marginalPoints = [
+      {
+        vehicleId: 'bus-marginal-a',
+        signature: 'trip-marginal-a',
+        coordinate: { latitude: 44.39038, longitude: -79.700 },
+        progressMeters: 0,
+        distanceMeters: 42,
+        shapeId,
+        timestampMs: 2000,
+      },
+      {
+        vehicleId: 'bus-marginal-a',
+        signature: 'trip-marginal-a',
+        coordinate: { latitude: 44.39038, longitude: -79.6995 },
+        progressMeters: 40,
+        distanceMeters: 43,
+        shapeId,
+        timestampMs: 3000,
+      },
+      {
+        vehicleId: 'bus-marginal-b',
+        signature: 'trip-marginal-b',
+        coordinate: { latitude: 44.39038, longitude: -79.699 },
+        progressMeters: 80,
+        distanceMeters: 41,
+        shapeId,
+        timestampMs: 4000,
+      },
+    ];
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '12A:marginal-restored-start-shape:0-100': {
+          eventId: '12A:marginal-restored-start-shape:0-100',
+          routeId: '12A',
+          state: 'active',
+          riderVisible: false,
+          riderVisibilityReason: 'insufficient-geometry',
+          detectedAt: 2000,
+          lastSeenAt: 4000,
+          latestGpsEvidenceAt: 4000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '12A',
+            shapeId,
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 100,
+            confirmStartProgressMeters: 0,
+            confirmEndProgressMeters: 350,
+            clearStartProgressMeters: 0,
+            clearEndProgressMeters: 500,
+          },
+          clearWindow: {
+            shapeId,
+            startProgressMeters: 0,
+            endProgressMeters: 300,
+            sourceStartProgressMeters: 0,
+            sourceEndProgressMeters: 100,
+          },
+          geometry: {
+            shapeId,
+            canShowDetourPath: false,
+            segments: [{ state: 'active', shapeId }],
+          },
+        },
+      },
+      eventCandidates: {
+        '12A:marginal-restored-start-shape:0-100': {
+          eventId: '12A:marginal-restored-start-shape:0-100',
+          routeId: '12A',
+          shapeId,
+          points: marginalPoints,
+          eventWindow: {
+            routeId: '12A',
+            shapeId,
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 100,
+            confirmStartProgressMeters: 0,
+            confirmEndProgressMeters: 350,
+            clearStartProgressMeters: 0,
+            clearEndProgressMeters: 500,
+          },
+        },
+      },
+    });
+
+    const result = detector.processVehicles([], testShapes, testMapping);
+
+    expect(detoursForRoute(result, '12A')).toEqual([]);
+    expect(detector.serializeDetectorRuntimeState().activeEvents).toEqual({});
+  });
+
   test('repairs restored event windows that are pinned to zero but have a later geometry window', () => {
     const detector = createDetourV2Detector();
     detector.hydrateRuntimeState({

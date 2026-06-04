@@ -787,6 +787,52 @@ function hasEnoughEvidence(candidate) {
     candidate.signatures.size >= MIN_UNIQUE_SIGNATURES;
 }
 
+function getEventWindowCoreBounds(eventWindow = {}) {
+  const start = Number(eventWindow.coreStartProgressMeters);
+  const end = Number(eventWindow.coreEndProgressMeters);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return {
+    start: Math.min(start, end),
+    end: Math.max(start, end),
+  };
+}
+
+function isTinyRouteEdgeEventWindow(eventWindow = {}, shapeLengthMeters = null) {
+  const bounds = getEventWindowCoreBounds(eventWindow);
+  if (!bounds) return false;
+  const span = bounds.end - bounds.start;
+  if (!Number.isFinite(span) || span <= 0 || span > TINY_DETOUR_SOURCE_SPAN_METERS) {
+    return false;
+  }
+  const nearRouteStart = bounds.start <= TINY_DETOUR_SOURCE_PADDING_METERS;
+  const shapeLength = Number(shapeLengthMeters);
+  const nearRouteEnd = Number.isFinite(shapeLength) &&
+    shapeLength - bounds.end <= TINY_DETOUR_SOURCE_PADDING_METERS;
+  return nearRouteStart || nearRouteEnd;
+}
+
+function hasStrongOffRoutePoint(candidate, offRouteThresholdMeters = DEFAULT_OFF_ROUTE_THRESHOLD_METERS) {
+  const strongThreshold = offRouteThresholdMeters + MARGINAL_OFF_ROUTE_RESET_GRACE_METERS;
+  return (candidate?.points || []).some((point) => {
+    const distanceMeters = Number(point?.distanceMeters);
+    return Number.isFinite(distanceMeters) && distanceMeters > strongThreshold;
+  });
+}
+
+function hasEnoughConfirmingEvidence(candidate, {
+  offRouteThresholdMeters = DEFAULT_OFF_ROUTE_THRESHOLD_METERS,
+  shapeLengthMeters = null,
+} = {}) {
+  if (!hasEnoughEvidence(candidate)) return false;
+  if (
+    isTinyRouteEdgeEventWindow(candidate?.eventWindow, shapeLengthMeters) &&
+    !hasStrongOffRoutePoint(candidate, offRouteThresholdMeters)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function getEvidenceConfidence(evidence = {}) {
   return evidence.signatureCount >= 3 || evidence.pointCount >= 5 ? 'high' : 'medium';
 }
@@ -1825,6 +1871,21 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function pruneWeakMarginalActiveDetours(shapes = new Map()) {
+    for (const [eventId, detour] of [...activeDetours.entries()]) {
+      if (!detour || detour.riderVisible === true) continue;
+      const candidate = eventCandidates.get(eventId);
+      if (!candidate || !hasEnoughEvidence(candidate)) continue;
+      const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
+      if (hasEnoughConfirmingEvidence(candidate, { offRouteThresholdMeters, shapeLengthMeters })) {
+        continue;
+      }
+      activeDetours.delete(eventId);
+      clearTracksByEvent.delete(eventId);
+      pendingClearsByEvent.delete(eventId);
+    }
+  }
+
   function trackClearSample(routeId, signature, sample, currentTickId) {
     for (const detour of getActiveEventsForRoute(routeId)) {
       trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId);
@@ -1943,7 +2004,10 @@ function createDetourV2Detector(config = {}) {
           shapeLengthMeters: getShapeLengthMeters(shapes, projection.shapeId),
         });
 
-        if (hasEnoughEvidence(candidate)) {
+        if (hasEnoughConfirmingEvidence(candidate, {
+          offRouteThresholdMeters,
+          shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
+        })) {
           const previousDetour = activeDetours.get(candidate.eventId);
           const detour = buildDetour(
             candidate,
@@ -1966,11 +2030,15 @@ function createDetourV2Detector(config = {}) {
       }
     }
 
+    pruneWeakMarginalActiveDetours(shapes);
     enqueueRestoredCollectiveClears(tickId);
     applyPendingSegmentClears(tickId, offRoutePointsThisTickByRoute);
 
     for (const [eventId, candidate] of eventCandidates.entries()) {
-      if (!hasEnoughEvidence(candidate)) continue;
+      if (!hasEnoughConfirmingEvidence(candidate, {
+        offRouteThresholdMeters,
+        shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
+      })) continue;
       const previousDetour = activeDetours.get(eventId);
       if (previousDetour?.state === 'clear-pending') continue;
       const detour = buildDetour(
