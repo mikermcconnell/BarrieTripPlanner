@@ -70,7 +70,7 @@ function detourPublishId(inputId, detour = {}) {
 }
 
 function detourRouteId(inputId, detour = {}) {
-  return normalizeRouteId(detour?.routeId || inputId);
+  return String(detour?.routeId || inputId || '').trim();
 }
 
 function normalizePublishEntry(inputId, detour = {}) {
