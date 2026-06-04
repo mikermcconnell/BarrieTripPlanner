@@ -120,7 +120,9 @@ function windowsOverlapOrNear(first, second, maxGapMeters = DEFAULT_NEARBY_GAP_M
 
 function expandProvisionalEventWindow(eventWindow, point, { shapeLengthMeters } = {}) {
   if (!eventWindow || eventWindow.frozen) return eventWindow;
-  if (!pointMatchesEventWindow(point, eventWindow, 'confirm')) return eventWindow;
+  const pointShapeId = clean(point?.shapeId, '');
+  const windowShapeId = clean(eventWindow?.shapeId, '');
+  if (pointShapeId && windowShapeId && pointShapeId !== windowShapeId) return eventWindow;
   const progress = numberOrNull(point.progressMeters);
   const core = boundsFor(eventWindow, 'core');
   const shapeLength = numberOrNull(shapeLengthMeters) ?? Infinity;
@@ -153,7 +155,9 @@ function buildClearWindowForEvent(eventWindow, { shapeLengthMeters, quality = 'n
   const minSpan = weak ? DEFAULT_WEAK_MIN_CLEAR_SPAN_METERS : DEFAULT_MIN_CLEAR_SPAN_METERS;
   const padding = weak ? DEFAULT_WEAK_CLEAR_PADDING_METERS : DEFAULT_CLEAR_PADDING_METERS;
   const coreSpan = Math.max(1, core.end - core.start);
-  const targetSpan = Math.max(minSpan, coreSpan + padding * 2);
+  const targetSpan = weak || coreSpan < minSpan
+    ? Math.max(minSpan, coreSpan + padding * 2)
+    : coreSpan;
   const extraPadding = Math.max(0, (targetSpan - coreSpan) / 2);
   return {
     startProgressMeters: clamp(core.start - extraPadding, 0, shapeLength),
