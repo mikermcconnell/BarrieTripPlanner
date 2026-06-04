@@ -22,6 +22,10 @@ const RoutePolylineComponent = ({
   showArrows = false,
   routeLabel = null,
   layerIndex = null,
+  outlineLayerIndex = null,
+  fillLayerIndex = null,
+  arrowLayerIndex = null,
+  labelLayerIndex = null,
   onPress,
   offset = 0,
 }) => {
@@ -52,14 +56,20 @@ const RoutePolylineComponent = ({
 
   const topLayerId = showArrows ? `${sourceId}-arrows` : `${sourceId}-fill`;
 
-  const getLayerIndex = (offset = 0) => (
+  const getLegacyLayerIndex = (offset = 0) => (
     Number.isFinite(layerIndex) ? layerIndex + offset : undefined
+  );
+
+  const getResolvedLayerIndex = (explicitLayerIndex, legacyOffset = 0) => (
+    Number.isFinite(explicitLayerIndex)
+      ? explicitLayerIndex
+      : getLegacyLayerIndex(legacyOffset)
   );
 
   const routeLabelLayer = routeLabel ? (
     <MapLibreGL.SymbolLayer
       id={`${sourceId}-label`}
-      layerIndex={getLayerIndex(showArrows ? 3 : 2)}
+      layerIndex={getResolvedLayerIndex(labelLayerIndex, showArrows ? 3 : 2)}
       style={{
         symbolPlacement: 'line',
         symbolSpacing: ROUTE_LINE_LABEL_STYLE.spacing,
@@ -104,7 +114,7 @@ const RoutePolylineComponent = ({
       >
         <MapLibreGL.LineLayer
           id={`${sourceId}-outline`}
-          layerIndex={getLayerIndex(0)}
+          layerIndex={getResolvedLayerIndex(outlineLayerIndex, 0)}
           style={{
             lineColor: outlineFill,
             lineWidth: outlineStrokeWidth,
@@ -116,7 +126,7 @@ const RoutePolylineComponent = ({
         />
         <MapLibreGL.LineLayer
           id={`${sourceId}-fill`}
-          layerIndex={getLayerIndex(1)}
+          layerIndex={getResolvedLayerIndex(fillLayerIndex, 1)}
           style={{
             lineColor: fillColor,
             lineWidth: strokeWidth,
@@ -130,7 +140,7 @@ const RoutePolylineComponent = ({
         {showArrows && (
           <MapLibreGL.SymbolLayer
             id={`${sourceId}-arrows`}
-            layerIndex={getLayerIndex(2)}
+            layerIndex={getResolvedLayerIndex(arrowLayerIndex, 2)}
             style={{
               symbolPlacement: 'line',
               symbolSpacing: 80,
@@ -158,7 +168,7 @@ const RoutePolylineComponent = ({
     >
       <MapLibreGL.LineLayer
         id={`${sourceId}-fill`}
-        layerIndex={getLayerIndex(0)}
+        layerIndex={getResolvedLayerIndex(fillLayerIndex, 0)}
         style={{
           lineColor: fillColor,
           lineWidth: strokeWidth,
@@ -171,7 +181,7 @@ const RoutePolylineComponent = ({
       {showArrows && (
         <MapLibreGL.SymbolLayer
           id={`${sourceId}-arrows`}
-          layerIndex={getLayerIndex(1)}
+          layerIndex={getResolvedLayerIndex(arrowLayerIndex, 1)}
           style={{
             symbolPlacement: 'line',
             symbolSpacing: 80,
@@ -213,6 +223,10 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.showArrows === next.showArrows &&
   prev.routeLabel === next.routeLabel &&
   prev.layerIndex === next.layerIndex &&
+  prev.outlineLayerIndex === next.outlineLayerIndex &&
+  prev.fillLayerIndex === next.fillLayerIndex &&
+  prev.arrowLayerIndex === next.arrowLayerIndex &&
+  prev.labelLayerIndex === next.labelLayerIndex &&
   prev.offset === next.offset &&
   prev.onPress === next.onPress &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)

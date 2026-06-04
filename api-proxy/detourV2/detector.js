@@ -1309,6 +1309,53 @@ function createDetourV2Detector(config = {}) {
     return points.some((point) => pointMatchesProgressWindow(point, clearWindow));
   }
 
+  function currentOffRouteEvidenceBlocksClearPending(detour, points = []) {
+    const clearWindows = getDetourClearWindows(detour);
+    if (clearWindows.length === 0) return points.length > 0;
+    return clearWindows.some((clearWindow) => (
+      currentOffRouteEvidenceMatchesWindow(points, clearWindow)
+    ));
+  }
+
+  function resetClearTracksForOffRoutePoint(routeId, point = {}) {
+    const routeTracks = clearTracks.get(routeId);
+    if (!routeTracks) return;
+
+    const detour = activeDetours.get(routeId);
+    if (!detour) {
+      clearTracks.delete(routeId);
+      return;
+    }
+
+    const clearWindows = getDetourClearWindows(detour);
+    if (clearWindows.length === 0) {
+      clearTracks.delete(routeId);
+      return;
+    }
+
+    const matchingWindows = clearWindows.filter((clearWindow) => (
+      pointMatchesProgressWindow(point, clearWindow)
+    ));
+    if (matchingWindows.length === 0) return;
+
+    const prunedRouteTracks = new Map();
+    for (const [signature, track] of routeTracks.entries()) {
+      const retainedSamples = (Array.isArray(track) ? track : [])
+        .filter((sample) => !matchingWindows.some((clearWindow) => (
+          sampleMatchesClearWindow(clearWindow, sample)
+        )));
+      if (retainedSamples.length > 0) {
+        prunedRouteTracks.set(signature, retainedSamples);
+      }
+    }
+
+    if (prunedRouteTracks.size > 0) {
+      clearTracks.set(routeId, prunedRouteTracks);
+    } else {
+      clearTracks.delete(routeId);
+    }
+  }
+
   function appendClearedSegment(detour, pendingClear) {
     if (!detour || !pendingClear?.clearWindow) return;
     const sourceSegments = Array.isArray(detour.geometry?.segments)
@@ -1441,7 +1488,6 @@ function createDetourV2Detector(config = {}) {
   ) {
     tickId += 1;
     lastVehicleCount = vehicles.length;
-    const offRouteThisTick = new Set();
     const currentOffRouteVehicleIdsByRoute = new Map();
     const offRoutePointsThisTickByRoute = new Map();
     const routeProjectionSummaries = new Map();
@@ -1504,17 +1550,17 @@ function createDetourV2Detector(config = {}) {
       });
 
       if (projection.distanceMeters > offRouteThresholdMeters) {
-        offRouteThisTick.add(routeId);
-        clearTracks.delete(routeId);
         const offRoutePoints = offRoutePointsThisTickByRoute.get(routeId) || [];
-        offRoutePoints.push({
+        const offRoutePoint = {
           progressMeters: projection.progressMeters,
           timestampMs,
           shapeId: projection.shapeId,
           vehicleId: id,
           signature,
-        });
+        };
+        offRoutePoints.push(offRoutePoint);
         offRoutePointsThisTickByRoute.set(routeId, offRoutePoints);
+        resetClearTracksForOffRoutePoint(routeId, offRoutePoint);
         const currentOffRouteVehicleIds = currentOffRouteVehicleIdsByRoute.get(routeId) || new Set();
         currentOffRouteVehicleIds.add(id);
         currentOffRouteVehicleIdsByRoute.set(routeId, currentOffRouteVehicleIds);
@@ -1585,7 +1631,10 @@ function createDetourV2Detector(config = {}) {
       if (
         detour.state === 'clear-pending' &&
         tickId > detour.clearPendingTick &&
-        !offRouteThisTick.has(routeId)
+        !currentOffRouteEvidenceBlocksClearPending(
+          detour,
+          offRoutePointsThisTickByRoute.get(routeId) || []
+        )
       ) {
         activeDetours.delete(routeId);
         candidates.delete(routeId);

@@ -1511,6 +1511,171 @@ describe('Auto Detour V2 detector', () => {
     }));
   });
 
+  test('does not reset clear evidence when same-route off-route noise is outside the detour window', () => {
+    const clearShapeId = 'long-clear-shape';
+    const clearShape = [
+      { latitude: 44.390, longitude: -79.760 },
+      { latitude: 44.390, longitude: -79.758 },
+      { latitude: 44.390, longitude: -79.756 },
+      { latitude: 44.390, longitude: -79.754 },
+      { latitude: 44.390, longitude: -79.752 },
+      { latitude: 44.390, longitude: -79.750 },
+      { latitude: 44.390, longitude: -79.740 },
+      { latitude: 44.390, longitude: -79.730 },
+      { latitude: 44.390, longitude: -79.720 },
+      { latitude: 44.390, longitude: -79.710 },
+      { latitude: 44.390, longitude: -79.700 },
+    ];
+    const clearShapes = new Map([[clearShapeId, clearShape]]);
+    const clearMapping = new Map([['10', [clearShapeId]]]);
+    const progress = (index) => projectOntoPolyline(clearShape[index], clearShape).progressMeters;
+    const clearWindow = {
+      startProgressMeters: progress(0),
+      endProgressMeters: progress(5),
+      sourceStartProgressMeters: progress(2),
+      sourceEndProgressMeters: progress(3),
+      minCoverageRatio: 0.95,
+      shapeId: clearShapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeDetours: {
+        '10': {
+          routeId: '10',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          detourZone: {
+            startProgressMeters: progress(2),
+            endProgressMeters: progress(3),
+            shapeId: clearShapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId: clearShapeId,
+            segments: [{
+              state: 'active',
+              clearWindow,
+              detourZone: {
+                startProgressMeters: progress(2),
+                endProgressMeters: progress(3),
+                shapeId: clearShapeId,
+              },
+            }],
+          },
+        },
+      },
+    });
+
+    let result = detector.processVehicles([
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[0], timestampMs: 2000 }),
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[1], timestampMs: 2200 }),
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[2], timestampMs: 2400 }),
+    ], clearShapes, clearMapping);
+
+    expect(result['10']).toEqual(expect.objectContaining({ state: 'active' }));
+
+    result = detector.processVehicles([
+      vehicle({
+        id: 'bus-far-noise',
+        routeId: '10',
+        tripId: 'trip-far-noise',
+        coordinate: { latitude: 44.395, longitude: -79.710 },
+        timestampMs: 2600,
+      }),
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[3], timestampMs: 3000 }),
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[4], timestampMs: 3200 }),
+      vehicle({ id: 'bus-clear', routeId: '10', tripId: 'trip-clear', coordinate: clearShape[5], timestampMs: 3400 }),
+    ], clearShapes, clearMapping);
+
+    expect(result['10']).toEqual(expect.objectContaining({
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    }));
+  });
+
+  test('deletes clear-pending detours when same-route off-route noise is outside the detour window', () => {
+    const clearShapeId = 'long-clear-shape';
+    const clearShape = [
+      { latitude: 44.390, longitude: -79.760 },
+      { latitude: 44.390, longitude: -79.758 },
+      { latitude: 44.390, longitude: -79.756 },
+      { latitude: 44.390, longitude: -79.754 },
+      { latitude: 44.390, longitude: -79.752 },
+      { latitude: 44.390, longitude: -79.750 },
+      { latitude: 44.390, longitude: -79.740 },
+      { latitude: 44.390, longitude: -79.730 },
+      { latitude: 44.390, longitude: -79.720 },
+      { latitude: 44.390, longitude: -79.710 },
+      { latitude: 44.390, longitude: -79.700 },
+    ];
+    const clearShapes = new Map([[clearShapeId, clearShape]]);
+    const clearMapping = new Map([['10', [clearShapeId]]]);
+    const progress = (index) => projectOntoPolyline(clearShape[index], clearShape).progressMeters;
+    const clearWindow = {
+      startProgressMeters: progress(0),
+      endProgressMeters: progress(5),
+      sourceStartProgressMeters: progress(2),
+      sourceEndProgressMeters: progress(3),
+      minCoverageRatio: 0.95,
+      shapeId: clearShapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeDetours: {
+        '10': {
+          routeId: '10',
+          state: 'clear-pending',
+          clearReason: 'normal-route-observed',
+          clearPendingTick: 0,
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          detourZone: {
+            startProgressMeters: progress(2),
+            endProgressMeters: progress(3),
+            shapeId: clearShapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId: clearShapeId,
+            segments: [{
+              state: 'active',
+              clearWindow,
+              detourZone: {
+                startProgressMeters: progress(2),
+                endProgressMeters: progress(3),
+                shapeId: clearShapeId,
+              },
+            }],
+          },
+        },
+      },
+    });
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-far-noise',
+        routeId: '10',
+        tripId: 'trip-far-noise',
+        coordinate: { latitude: 44.395, longitude: -79.710 },
+        timestampMs: 2000,
+      }),
+    ], clearShapes, clearMapping);
+
+    expect(result).toEqual({});
+    expect(detector.getState().detours).toEqual({});
+  });
+
   test('collectively clears from two unique buses covering the affected span', () => {
     const detector = createDetourV2Detector();
 

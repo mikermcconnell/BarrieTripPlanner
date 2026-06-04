@@ -6,6 +6,13 @@ export const DETOUR_ROUTE_LAYER_ORDER = {
   DETOURED_ROUTE: 180,
 };
 
+export const ROUTE_POLYLINE_LAYER_OFFSETS = {
+  OUTLINE: 0,
+  FILL: 100,
+  ARROWS: 110,
+  LABEL: 119,
+};
+
 const routeIsInFocusedDetourFamily = (routeId, focusedDetourRouteId) => {
   if (routeId == null || focusedDetourRouteId == null) return false;
 
@@ -74,4 +81,17 @@ export const getDetourRouteLayerOrder = ({
   }
 
   return DETOUR_ROUTE_LAYER_ORDER.BASE_ROUTE;
+};
+
+export const getRoutePolylineLayerIndexes = (routeLayerOrder) => {
+  if (!Number.isFinite(routeLayerOrder)) {
+    return {};
+  }
+
+  return {
+    outlineLayerIndex: routeLayerOrder + ROUTE_POLYLINE_LAYER_OFFSETS.OUTLINE,
+    fillLayerIndex: routeLayerOrder + ROUTE_POLYLINE_LAYER_OFFSETS.FILL,
+    arrowLayerIndex: routeLayerOrder + ROUTE_POLYLINE_LAYER_OFFSETS.ARROWS,
+    labelLayerIndex: routeLayerOrder + ROUTE_POLYLINE_LAYER_OFFSETS.LABEL,
+  };
 };

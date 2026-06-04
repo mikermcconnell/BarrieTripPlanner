@@ -793,18 +793,20 @@ const DetourOverlay = ({
           <React.Fragment key={pathId}>
             {skippedRoutePath ? (
               <>
-                {showClosedRouteMask ? (
-                  <RoutePolyline
-                    id={skippedMaskPathId}
-                    coordinates={skippedRoutePath}
-                    color={CLOSED_ROUTE_MASK_STYLE.color}
-                    strokeWidth={scaleLineMetric(CLOSED_ROUTE_MASK_STYLE.strokeWidth, lineStyleScale)}
-                    opacity={Math.min(segmentOpacity, 0.95) * CLOSED_ROUTE_MASK_STYLE.opacityMultiplier}
-                    outlineWidth={0}
-                    layerIndex={DETOUR_LAYER_INDEX.CLOSED_MASK}
-                    onPress={handleSegmentPress}
-                  />
-                ) : null}
+                <RoutePolyline
+                  id={skippedMaskPathId}
+                  coordinates={skippedRoutePath}
+                  color={CLOSED_ROUTE_MASK_STYLE.color}
+                  strokeWidth={scaleLineMetric(CLOSED_ROUTE_MASK_STYLE.strokeWidth, lineStyleScale)}
+                  opacity={
+                    showClosedRouteMask
+                      ? Math.min(segmentOpacity, 0.95) * CLOSED_ROUTE_MASK_STYLE.opacityMultiplier
+                      : 0
+                  }
+                  outlineWidth={0}
+                  layerIndex={DETOUR_LAYER_INDEX.CLOSED_MASK}
+                  onPress={showClosedRouteMask ? handleSegmentPress : undefined}
+                />
                 <RoutePolyline
                   id={skippedPathId}
                   coordinates={skippedRoutePath}

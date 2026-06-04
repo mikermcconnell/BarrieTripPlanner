@@ -57,6 +57,28 @@ describe('RoutePolyline', () => {
     ]);
   });
 
+  test('supports separated native layer indexes so route outlines stay below fills', () => {
+    const inst = render({
+      outlineWidth: 2,
+      showArrows: true,
+      routeLabel: '10',
+      layerIndex: 100,
+      outlineLayerIndex: 100,
+      fillLayerIndex: 200,
+      arrowLayerIndex: 210,
+      labelLayerIndex: 220,
+    });
+
+    expect(inst.root.findAllByType('LineLayer').map((layer) => layer.props.layerIndex)).toEqual([
+      100,
+      200,
+    ]);
+    expect(inst.root.findAllByType('SymbolLayer').map((layer) => layer.props.layerIndex)).toEqual([
+      210,
+      220,
+    ]);
+  });
+
   test('keeps requested dash caps on both native line layers', () => {
     const inst = render({
       strokeWidth: 5,

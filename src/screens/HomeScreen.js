@@ -43,6 +43,7 @@ import { projectPointToPolyline } from '../utils/geometryUtils';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
 import {
   getDetourRouteLayerOrder,
+  getRoutePolylineLayerIndexes,
   shouldKeepHiddenRouteShapeLayerMounted,
   shouldRenderRouteShape,
 } from '../utils/detourFocusUtils';
@@ -397,6 +398,7 @@ const HomeMapRoutesLayer = React.memo(({
           hasDetourFocus,
           focusedDetourRouteId,
         });
+        const routeLayerIndexes = getRoutePolylineLayerIndexes(routeLayerIndex);
         const shouldRenderShape = shouldRenderRouteShape({
           routeId: shape.routeId,
           activeDetourRouteIds,
@@ -423,6 +425,7 @@ const HomeMapRoutesLayer = React.memo(({
                 showArrows={false}
                 routeLabel={null}
                 layerIndex={routeLayerIndex}
+                {...routeLayerIndexes}
               />
             );
           }
@@ -459,6 +462,7 @@ const HomeMapRoutesLayer = React.memo(({
               showArrows={false}
               routeLabel={null}
               layerIndex={routeLayerIndex}
+              {...routeLayerIndexes}
             />
           );
         }
@@ -483,6 +487,7 @@ const HomeMapRoutesLayer = React.memo(({
                   showArrows={routeVisual.showArrows}
                   routeLabel={null}
                   layerIndex={routeLayerIndex}
+                  {...routeLayerIndexes}
                 />
               );
             })}

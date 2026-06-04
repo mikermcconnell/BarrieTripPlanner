@@ -1,6 +1,7 @@
 import {
   DETOUR_ROUTE_LAYER_ORDER,
   getDetourRouteLayerOrder,
+  getRoutePolylineLayerIndexes,
   shouldKeepHiddenRouteShapeLayerMounted,
   shouldRenderRouteShape,
 } from '../utils/detourFocusUtils';
@@ -121,5 +122,16 @@ describe('shouldRenderRouteShape', () => {
       hasDetourFocus: true,
       focusedDetourRouteId: '12A',
     })).toBe(DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE);
+  });
+
+  test('places native route fills in a higher band than route outlines', () => {
+    const context = getRoutePolylineLayerIndexes(DETOUR_ROUTE_LAYER_ORDER.CONTEXT_ROUTE);
+    const base = getRoutePolylineLayerIndexes(DETOUR_ROUTE_LAYER_ORDER.BASE_ROUTE);
+    const detoured = getRoutePolylineLayerIndexes(DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE);
+
+    expect(context.fillLayerIndex).toBeGreaterThan(detoured.outlineLayerIndex);
+    expect(base.fillLayerIndex).toBeGreaterThan(detoured.outlineLayerIndex);
+    expect(detoured.fillLayerIndex).toBeGreaterThan(base.fillLayerIndex);
+    expect(detoured.labelLayerIndex).toBeLessThan(300);
   });
 });

@@ -120,7 +120,7 @@ describe('DetourOverlay layer split', () => {
     expect(detourLine.props.outlineWidth).toBeLessThan(1.25);
   });
 
-  test('native regular-view geometry can omit the white closed-route mask', () => {
+  test('native regular-view geometry makes the white closed-route mask transparent', () => {
     let inst;
     act(() => {
       inst = create(React.createElement(NativeDetourOverlay, {
@@ -132,10 +132,13 @@ describe('DetourOverlay layer split', () => {
 
     const lines = inst.root.findAllByType('RoutePolyline');
     expect(lines.map((line) => line.props.id)).toEqual([
+      'detour-context-10-mask',
       'detour-context-10',
       'detour-path-10',
     ]);
-    expect(lines.map((line) => line.props.layerIndex)).toEqual([304, 320]);
+    expect(lines.map((line) => line.props.layerIndex)).toEqual([300, 304, 320]);
+    expect(lines[0].props.opacity).toBe(0);
+    expect(lines[0].props.onPress).toBeUndefined();
   });
 
   test('native alternate detour path uses route color with a green outline', () => {
