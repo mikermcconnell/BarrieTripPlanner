@@ -1936,6 +1936,10 @@ function hasEventWindowDetourForRoute(routeId, publishableDetours = {}) {
   });
 }
 
+function isHiddenSnapshot(snapshot) {
+  return snapshot?.riderVisible === false || snapshot?.staleForReview === true;
+}
+
 function assignSnapshotDate(doc, key, valueMs) {
   if (valueMs != null && Number.isFinite(valueMs)) {
     doc[key] = new Date(valueMs);
@@ -2109,6 +2113,14 @@ async function publishDetours(activeDetours, options = {}) {
         clearReason: 'superseded-by-event-window',
       };
       await deletePublishedDetour(db, publishId, event, 'delete superseded legacy route detour', storageConfig);
+      continue;
+    }
+    if (isHiddenSnapshot(previous)) {
+      const event = {
+        ...buildClearedEvent(routeId, previous, now),
+        clearReason: previous?.clearReason || 'hidden-detour-no-longer-confirmed',
+      };
+      await deletePublishedDetour(db, publishId, event, 'delete absent hidden detour', storageConfig);
       continue;
     }
     if (!hasNormalRouteClearProof(previous)) {

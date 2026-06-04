@@ -1286,6 +1286,87 @@ describe('publishDetours event ids', () => {
     )).toBe(true);
   });
 
+  test('deletes an absent hidden detour instead of retaining it', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-06-04T19:20:00Z');
+    const hiddenDoc = {
+      eventId: '12A:tiny-hidden:0-100',
+      routeId: '12A',
+      detectedAt: new Date(now - 60 * 60 * 1000),
+      updatedAt: now - 60 * 1000,
+      lastSeenAt: new Date(now - 60 * 1000),
+      vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 0,
+      state: 'active',
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
+      staleForReview: true,
+      canShowDetourPath: false,
+    };
+    const activeDocs = [{ id: '12A:tiny-hidden:0-100', data: () => hiddenDoc }];
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          if (name === 'activeDetourEventsV2') {
+            return {
+              doc: (id) => ({
+                set: async (data) => { writes[`${name}/${id}`] = data; },
+                delete: async () => { deletes.push(`${name}/${id}`); },
+              }),
+              get: async () => ({
+                size: activeDocs.length,
+                docs: activeDocs,
+                forEach: (fn) => activeDocs.forEach(fn),
+              }),
+              orderBy: () => ({ limit: () => emptyQuery }),
+              where: () => whereQuery,
+            };
+          }
+          return {
+            doc: () => ({
+              set: async (data) => { historyWrites.push(data); },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({}, {
+      now,
+      storageConfig: {
+        detourVersion: 'v2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
+      },
+    });
+
+    expect(deletes).toContain('activeDetourEventsV2/12A:tiny-hidden:0-100');
+    expect(writes['activeDetourEventsV2/12A:tiny-hidden:0-100']).toBeUndefined();
+    expect(historyWrites.some((event) =>
+      event.routeId === '12A' &&
+      event.eventType === 'DETOUR_CLEARED'
+    )).toBe(true);
+  });
+
   test('deletes an absent detour when the previous snapshot has normal-route GPS clear proof', async () => {
     jest.resetModules();
     const writes = {};
