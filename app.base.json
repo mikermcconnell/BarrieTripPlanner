@@ -70,6 +70,7 @@
           "name": "MyBarrie"
         }
       ],
+      "./plugins/withTransparentAndroidSplash",
       [
         "@sentry/react-native",
         {
