@@ -46,6 +46,7 @@ nul
 
 # Dev server logs
 .logs-*
+logs/
 
 # Local review/test artifacts
 .work-artifacts/

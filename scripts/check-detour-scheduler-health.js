@@ -201,7 +201,11 @@ async function main() {
     return;
   }
 
-  const env = loadEnvFile('.env');
+  const env = {
+    ...loadEnvFile('.env'),
+    ...loadEnvFile(path.join(process.cwd(), 'api-proxy', '.env')),
+    ...loadEnvFile(path.join(process.cwd(), 'api-proxy', '.env.barrie-transit-trip-plan-cc84e')),
+  };
   const activeCollection =
     args.activeCollection ||
     env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION ||

@@ -95,7 +95,12 @@ async function main() {
     }
     activeDetours = loadJsonFile(path.resolve(process.cwd(), args.activeDetoursJson));
   } else if (args.source === 'live') {
-    const env = { ...process.env, ...loadEnvFile() };
+    const env = {
+      ...process.env,
+      ...loadEnvFile(),
+      ...loadEnvFile(path.join(process.cwd(), 'api-proxy', '.env')),
+      ...loadEnvFile(path.join(process.cwd(), 'api-proxy', '.env.barrie-transit-trip-plan-cc84e')),
+    };
     activeDetours = await fetchLiveActiveDetours({
       apiKey: env.EXPO_PUBLIC_FIREBASE_API_KEY || env.FIREBASE_API_KEY,
       projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || env.FIREBASE_PROJECT_ID,
