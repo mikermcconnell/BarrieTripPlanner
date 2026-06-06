@@ -2,6 +2,7 @@ import {
   DETOUR_ROUTE_LAYER_ORDER,
   getDetourRouteLayerOrder,
   getRoutePolylineLayerIndexes,
+  getRoutePolylineRenderKey,
   shouldKeepHiddenRouteShapeLayerMounted,
   shouldRenderRouteShape,
 } from '../utils/detourFocusUtils';
@@ -133,5 +134,19 @@ describe('shouldRenderRouteShape', () => {
     expect(detoured.outlineLayerIndex).toBeGreaterThan(base.labelLayerIndex);
     expect(detoured.fillLayerIndex).toBeGreaterThan(base.fillLayerIndex);
     expect(detoured.labelLayerIndex).toBeLessThan(300);
+  });
+
+  test('changes native route render keys when layer band changes', () => {
+    const contextKey = getRoutePolylineRenderKey({
+      shapeId: '11:shape-main',
+      routeLayerOrder: DETOUR_ROUTE_LAYER_ORDER.CONTEXT_ROUTE,
+    });
+    const detouredKey = getRoutePolylineRenderKey({
+      shapeId: '11:shape-main',
+      routeLayerOrder: DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE,
+    });
+
+    expect(contextKey).not.toBe(detouredKey);
+    expect(detouredKey).toContain(`layer-${DETOUR_ROUTE_LAYER_ORDER.DETOURED_ROUTE}`);
   });
 });

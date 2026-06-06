@@ -8,6 +8,7 @@ function extractStopCodesFromText(text) {
   const input = String(text || '');
   const codes = [];
   const patterns = [
+    /\bstops?\s+(.{0,220}?)(?=\b(?:will|are|is|to|also|closure|notice|out[- ]of[- ]service)\b|$)/gi,
     /\bstops?\s*#?\s*(\d{1,5})\b/gi,
     /\bstops?\s+((?:\d{1,5}\s*(?:,|and|&)?\s*){1,8})\s+(?:will|are|is|to|also)/gi,
   ];
@@ -15,7 +16,8 @@ function extractStopCodesFromText(text) {
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(input)) !== null) {
-      const matches = String(match[1] || '').match(/\d{1,5}/g) || [];
+      const stopText = String(match[1] || '').replace(/\bRoutes?\s+\d+[A-Za-z]?\b/gi, '');
+      const matches = stopText.match(/\d{1,5}/g) || [];
       codes.push(...matches);
     }
   }
@@ -61,6 +63,7 @@ const MONTHS = {
 };
 
 const MONTH_PATTERN = '(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sept\\.?|Sep\\.?|Oct\\.?|Nov\\.?|Dec\\.?)';
+const SERVICE_TIME_ZONE = 'America/Toronto';
 
 function normalizeMonth(value) {
   return String(value || '').toLowerCase().replace('.', '');
@@ -72,6 +75,37 @@ function referenceYear(newsItem, now) {
   return now.getFullYear();
 }
 
+function getTimeZoneOffsetMs(utcMs, timeZone = SERVICE_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(utcMs));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const millisecond = ((utcMs % 1000) + 1000) % 1000;
+  const zonedAsUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+    millisecond
+  );
+  return zonedAsUtc - utcMs;
+}
+
+function zonedDateTimeMs(year, month, day, hour = 0, minute = 0, second = 0, millisecond = 0) {
+  const utcGuess = Date.UTC(year, month, day, hour, minute, second, millisecond);
+  const firstPass = utcGuess - getTimeZoneOffsetMs(utcGuess);
+  return utcGuess - getTimeZoneOffsetMs(firstPass);
+}
+
 function parseMonthDate(match, fallbackYear, endOfDay = false) {
   if (!match) return null;
   const month = MONTHS[normalizeMonth(match[1])];
@@ -79,14 +113,54 @@ function parseMonthDate(match, fallbackYear, endOfDay = false) {
   const year = match[3] ? Number(match[3]) : fallbackYear;
   if (!Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(year)) return null;
 
-  const date = new Date(year, month, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-  return Number.isFinite(date.getTime()) ? date.getTime() : null;
+  const time = zonedDateTimeMs(year, month, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  return Number.isFinite(time) ? time : null;
+}
+
+const WEEKDAY_PATTERN = '(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\s*,?\\s*';
+
+function parseTimeParts(hourValue, minuteValue, periodValue) {
+  let hour = Number(hourValue);
+  const minute = minuteValue == null ? 0 : Number(minuteValue);
+  const period = String(periodValue || '').toLowerCase().replace(/\./g, '');
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+  if (period === 'pm' && hour < 12) hour += 12;
+  if (period === 'am' && hour === 12) hour = 0;
+  return { hour, minute };
+}
+
+function parseMonthDateWithTime(monthValue, dayValue, yearValue, fallbackYear, timeParts, endOfDay = false) {
+  const month = MONTHS[normalizeMonth(monthValue)];
+  const day = Number(dayValue);
+  const year = yearValue ? Number(yearValue) : fallbackYear;
+  if (!Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(year)) return null;
+
+  const hour = timeParts?.hour ?? (endOfDay ? 23 : 0);
+  const minute = timeParts?.minute ?? (endOfDay ? 59 : 0);
+  const time = zonedDateTimeMs(year, month, day, hour, minute, endOfDay && !timeParts ? 59 : 0, endOfDay && !timeParts ? 999 : 0);
+  return Number.isFinite(time) ? time : null;
 }
 
 function parseDateWindow(newsItem, now = new Date()) {
   const text = `${newsItem.title || ''}\n${newsItem.body || ''}`;
   const fallbackYear = referenceYear(newsItem, now);
   const datePattern = `${MONTH_PATTERN}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`;
+  const timePattern = '(\\d{1,2})(?::(\\d{2}))?\\s*([ap]\\.?m\\.?)';
+
+  const timedSingleDay = new RegExp(
+    `\\bfrom\\s+${timePattern}\\s+(?:to|until|-)\\s+${timePattern}\\s+on\\s+(?:${WEEKDAY_PATTERN})?(${datePattern})\\b`,
+    'i'
+  ).exec(text);
+  if (timedSingleDay) {
+    const startTime = parseTimeParts(timedSingleDay[1], timedSingleDay[2], timedSingleDay[3]);
+    const endTime = parseTimeParts(timedSingleDay[4], timedSingleDay[5], timedSingleDay[6]);
+    const startsAt = parseMonthDateWithTime(timedSingleDay[8], timedSingleDay[9], timedSingleDay[10], fallbackYear, startTime);
+    const endsAt = parseMonthDateWithTime(timedSingleDay[8], timedSingleDay[9], timedSingleDay[10], fallbackYear, endTime, true);
+    if (startsAt != null || endsAt != null) {
+      return { startsAt, endsAt };
+    }
+  }
 
   const fromTo = new RegExp(`\\bfrom\\s+(${datePattern})\\s+(?:to|until|through|-)\\s+(${datePattern})`, 'i').exec(text);
   if (fromTo) {
@@ -99,7 +173,7 @@ function parseDateWindow(newsItem, now = new Date()) {
   const untilOnly = new RegExp(`\\b(?:until|through|to)\\s+(${datePattern})\\b`, 'i').exec(text);
   const fromOpen = new RegExp(`\\bfrom\\s+(${datePattern})\\b`, 'i').exec(text);
   const beginningOpen = new RegExp(`\\bbeginning\\s+(${datePattern})\\b`, 'i').exec(text);
-  const onSingleDay = new RegExp(`\\bon\\s+(${datePattern})\\b`, 'i').exec(text);
+  const onSingleDay = new RegExp(`\\bon\\s+(?:${WEEKDAY_PATTERN})?(${datePattern})\\b`, 'i').exec(text);
   if (onSingleDay) {
     return {
       startsAt: parseMonthDate([null, onSingleDay[2], onSingleDay[3], onSingleDay[4]], fallbackYear),
@@ -151,11 +225,71 @@ function buildNoticeStopImpactsFromText(text) {
   const temporaryStops = [];
   const seenClosure = new Set();
   const seenTemporary = new Set();
+  const firstStopIndex = lines.findIndex((line) => /^stop\s+\d{1,5}\b/i.test(line));
+  const firstLegendIndex = lines.findIndex((line) => /^legend$/i.test(line));
+  const headingAt = (index, first, second) => (
+    index >= 0 &&
+    new RegExp(`^${first}$`, 'i').test(lines[index] || '') &&
+    new RegExp(`^${second}$`, 'i').test(lines[index + 1] || '')
+  );
+  const isOutOfServiceStopsHeading = (index) => (
+    /^out[- ]of[- ]service\s+stops$/i.test(lines[index] || '') ||
+    headingAt(index, 'out[- ]of[- ]service', 'stops')
+  );
+  const isActiveStopsHeading = (index) => (
+    /^active\s+stops$/i.test(lines[index] || '') ||
+    headingAt(index, 'active', 'stops')
+  );
+  const isTemporaryStopsHeading = (index) => (
+    /^temporary\s+stops$/i.test(lines[index] || '') ||
+    headingAt(index, 'temporary', 'stops')
+  );
+  const firstOutOfServiceHeadingIndex = lines.findIndex((_line, index) => isOutOfServiceStopsHeading(index));
+  const legendBeforeOutOfServiceHeading =
+    firstLegendIndex >= 0 &&
+    firstOutOfServiceHeadingIndex >= 0 &&
+    firstLegendIndex < firstOutOfServiceHeadingIndex;
+  const activeHeadingBeforeFirstStop =
+    !legendBeforeOutOfServiceHeading &&
+    firstOutOfServiceHeadingIndex >= 0 &&
+    firstStopIndex > firstOutOfServiceHeadingIndex &&
+    lines.some((_line, index) => (
+      index > firstOutOfServiceHeadingIndex &&
+      index < firstStopIndex &&
+      isActiveStopsHeading(index)
+    ));
+  const shouldParseMapLabels = firstStopIndex >= 0 && !activeHeadingBeforeFirstStop;
+  let section = activeHeadingBeforeFirstStop
+    ? null
+    : shouldParseMapLabels
+      ? 'closure'
+      : null;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    if (legendBeforeOutOfServiceHeading && firstStopIndex >= 0 && index < firstStopIndex) {
+      continue;
+    }
+    if (/^legend$/i.test(line)) {
+      section = null;
+      continue;
+    }
+    if (isOutOfServiceStopsHeading(index)) {
+      section = activeHeadingBeforeFirstStop ? null : 'closure';
+      continue;
+    }
+    if (isActiveStopsHeading(index)) {
+      section = null;
+      continue;
+    }
+    if (isTemporaryStopsHeading(index)) {
+      section = 'temporary';
+      continue;
+    }
+
     const tempMatch = /^temp(?:orary)?\s+stop\s+(\d{1,5})\b/i.exec(line);
     if (tempMatch) {
+      if (section !== 'temporary' && !shouldParseMapLabels) continue;
       const stopCode = normalizeStopCode(tempMatch[1]);
       if (!seenTemporary.has(stopCode)) {
         seenTemporary.add(stopCode);
@@ -171,6 +305,7 @@ function buildNoticeStopImpactsFromText(text) {
 
     const stopMatch = /^stop\s+(\d{1,5})\b/i.exec(line);
     if (stopMatch) {
+      if (section !== 'closure') continue;
       const stopCode = normalizeStopCode(stopMatch[1]);
       if (!seenClosure.has(stopCode)) {
         seenClosure.add(stopCode);

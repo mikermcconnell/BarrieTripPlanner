@@ -55,6 +55,21 @@ const DetourAlertStrip = ({
     (familyId ? ROUTE_COLORS[familyId] : null) ||
     ROUTE_COLORS.DEFAULT
   );
+  const collapsedRouteBadges = detourEvents.length === 1
+    ? detourEvents[0].routeIds.map((routeId) => ({
+      key: routeId,
+      routeId,
+      label: getRouteName(routeId),
+      familyId: null,
+    }))
+    : routeGroups.map((group) => ({
+      key: group.familyId,
+      routeId: group.firstRouteId,
+      label: group.displayName,
+      familyId: group.familyId,
+    }));
+  const visibleCollapsedRouteBadges = collapsedRouteBadges.slice(0, 3);
+  const hiddenCollapsedRouteBadgeCount = Math.max(0, collapsedRouteBadges.length - visibleCollapsedRouteBadges.length);
 
   return (
     <View
@@ -83,18 +98,25 @@ const DetourAlertStrip = ({
         <Text style={styles.countText} numberOfLines={1}>
           {countText}
         </Text>
-        {!inline && (
+        {visibleCollapsedRouteBadges.length > 0 && (
           <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
-            {routeGroups.slice(0, 3).map((group) => {
-              const color = getRouteColor(group.firstRouteId, group.familyId);
+            {visibleCollapsedRouteBadges.map((badge) => {
+              const color = getRouteColor(badge.routeId, badge.familyId);
               return (
-                <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
-                  <Text style={styles.routePillText}>{group.displayName}</Text>
+                <View
+                  key={badge.key}
+                  style={[
+                    styles.routePill,
+                    inline && styles.routeCircle,
+                    { backgroundColor: color },
+                  ]}
+                >
+                  <Text style={[styles.routePillText, inline && styles.routeCircleText]}>{badge.label}</Text>
                 </View>
               );
             })}
-            {routeGroups.length > 3 && (
-              <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
+            {hiddenCollapsedRouteBadgeCount > 0 && (
+              <Text style={styles.pillOverflow}>+{hiddenCollapsedRouteBadgeCount}</Text>
             )}
           </View>
         )}
@@ -241,10 +263,25 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
   },
+  routeCircle: {
+    width: 27,
+    height: 27,
+    borderRadius: 13.5,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+  },
   routePillText: {
     fontSize: FONT_SIZES.xxs,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.white,
+  },
+  routeCircleText: {
+    fontSize: 10,
+    lineHeight: 12,
   },
   pillOverflow: {
     fontSize: FONT_SIZES.xxs,

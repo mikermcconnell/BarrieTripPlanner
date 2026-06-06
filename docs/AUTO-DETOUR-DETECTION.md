@@ -33,12 +33,12 @@ The system detects detours automatically by watching real-time GPS positions —
 2. Each vehicle's GPS is compared against its route's published shape
 3. When two buses on the same route produce confirmed off-route evidence, a detour is confirmed. The three required off-route pings can be accumulated across matching trips/vehicles in the same corridor; they do not all have to come from one trip. Short-deviation evidence is captured as soon as a vehicle produces one off-route point, but it is not rider-facing until the matching corridor has at least three off-route pings and two unique same-route trips/vehicles. On 30- to 60-minute headways, the detector can remember the first bus as candidate evidence and confirm when the next unique bus adds enough matching evidence.
 4. When that confirmed detour has a real closed segment, the backend can project the same physical detour event onto sibling route variants/directions that share the closure
-5. Detour geometry is published to Firestore. Rider-facing detour paths are shown after either a same-bus GPS trace confirms the bus left the regular route, travelled off-route, and returned, or two distinct buses corroborate the same detour corridor.
+5. Detour geometry is published to Firestore. Rider-facing detour paths are shown after either a same-bus GPS trace confirms the bus left the regular route, travelled off-route, and returned, or two distinct buses corroborate the same detour corridor. Short confirmed detours can be public when GPS-confirmed and geometry-safe, even when no stops are skipped; those use route/corridor-level messaging instead of closed-stop messaging.
 6. The app subscribes in real time and shows the detour on the main map
 
 Published detour paths are also corrected by GPS, not by public notices. If an already-published path has no current bus on it and a different same-route corridor inside the same affected regular-route window meets the normal publish rule — at least three off-route pings and two unique same-route buses/trips — the detector promotes the newer GPS-proven path and marks the old runtime segment as superseded. The publisher then skips trusted-path preservation so the stale likely path is not reintroduced over the newer GPS evidence.
 
-Official MyRide notices can enrich stop impacts, but they do not detect or clear detours. When a news item links to an official detour PDF, the news impact pipeline extracts labelled stops from the PDF and stores route-detour stop impact records in `transitNewsImpacts`. The detour publisher can merge those notice-backed impacts into active GPS detours. This is used for cases where GPS correctly finds the skipped route segment but the official notice marks boundary stops out of service and replaces them with temporary stops.
+Official MyRide notices can enrich stop impacts only after GPS has confirmed a detour. They never detect, expand, clear, or keep alive an auto-detour. Route family alone is not enough: notice stop impacts are merged only when their stops spatially overlap the GPS-confirmed segment.
 
 ---
 
@@ -138,11 +138,12 @@ If a route has multiple independent detour sections at the same time, they are p
 | `exitPoint` | `{ lat, lon }` \| null | Where vehicles rejoin the published route |
 | `entryStopId` / `exitStopId` | String \| null | Stop anchors for the primary segment when known |
 | `skippedStopIds` / `skippedStopCodes` / `skippedStops` | Array | Stops not served by this detoured route for the primary segment |
+| `boundaryStopIds` / `boundaryStopCodes` / `boundaryStops` | Array | Entry/exit or last-served/first-served stops that remain in service. These are context only and must not create closed-stop markers or stop-impact notifications. |
 | `detourPathServedStopIds` / `detourPathServedStopCodes` / `detourPathServedStops` | Array | Stops that were initially inside the skipped route section but are passed by the final rider-facing detour path, so they should not be shown as skipped/closed for detour purposes |
 | `noticeTemporaryStopIds` / `noticeTemporaryStopCodes` / `noticeTemporaryStops` | Array | Temporary stops extracted from an official linked detour notice. Temporary stops may be route-family scoped when they do not exist in GTFS. |
 | `noticeActiveStopIds` / `noticeActiveStopCodes` / `noticeActiveStops` | Array | Official-notice stops that are still usable for this route/segment and should not be shown as closed. |
 | `noticeStopImpactSource` / `noticeStopImpactSourceNewsIds` | String / Array | Marks stop-impact enrichment that came from an official notice, not GPS inference. |
-| `affectedStopIds` / `affectedStopCodes` / `affectedStops` | Array | Broader affected-stop data for the primary segment |
+| `affectedStopIds` / `affectedStopCodes` / `affectedStops` | Array | Broad stop context for the primary segment. This is not closure truth; rider closed-stop UI must use `skippedStops` or `detourStopRole: "skipped"`. |
 | `confidence` | String \| null | `"low"`, `"medium"`, or `"high"` |
 | `evidencePointCount` | Number \| null | GPS evidence points collected |
 | `lastEvidenceAt` | Timestamp \| null | Backward-compatible evidence timestamp, usually the geometry evidence time |
@@ -153,11 +154,11 @@ If a route has multiple independent detour sections at the same time, they are p
 
 Key `segments[]` fields mirror the top-level geometry and stop-impact fields: `shapeId`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `likelyDetourPolyline`, `canShowDetourPath`, `entryPoint`, `exitPoint`, `entryStopId`, `exitStopId`, `skippedStops`, `affectedStops`, `clearWindow`, `confidence`, `evidencePointCount`, `lastEvidenceAt`, `detourEventId`, and shared-event metadata.
 
-Stop impacts inside `segments[]` are route-scoped. A stop in `skippedStops` means "not served by this detoured route," not necessarily "closed to every route." Skipped/affected stop objects may include `routeId`, `affectedRouteIds`, `servedRouteIds`, `allServingRouteIds`, and `impactScope: "partial"` when another route still serves the same stop. The rider UI should use wording such as "Stop 192 is not served by Route 11" or "Still served by Route 8" instead of global "stop closed" copy unless all routes serving that stop are actually unavailable.
+Stop impacts inside `segments[]` are route-scoped. A stop in `skippedStops` means "not served by this detoured route," not necessarily "closed to every route." Stop objects may include `detourStopRole`: `"skipped"`, `"boundary"`, `"served-by-detour"`, `"served-by-gps"`, or `"notice-active"`. Only `"skipped"` should produce closed-stop markers, stop-specific trip warnings, or affected-stop notifications. Boundary and served stops are context only. The rider UI should use wording such as "Stop 192 is not served by Route 11" or "Still served by Route 8" instead of global "stop closed" copy unless all routes serving that stop are actually unavailable.
 
 The final rider-facing detour path is also service evidence. If a stop is close to the published `likelyDetourPolyline` or trusted renderable `inferredDetourPolyline`, and is not just at the entry/exit endpoint buffer, the backend removes it from `skippedStops` and records it under `detourPathServedStops`. The frontend applies the same safeguard before drawing closed-stop markers so stale explicit stop-impact data cannot label a stop closed when the bus path passes it.
 
-Official notice impacts are merged after path-based pruning. Existing GPS-skipped stops remain skipped. Boundary stops are added as skipped only when the official notice also exposes a matching temporary replacement code, such as stop `756` with temporary stop `7560`. This prevents active boundary stops, such as the Saunders/Welham Route 12 stop `932`, from being incorrectly marked closed just because they appear on the PDF map.
+Official notice impacts are merged after path-based pruning and only after the notice stops pass the spatial overlap gate for the GPS-confirmed segment. Existing GPS-skipped stops remain skipped. Boundary stops are added as skipped only when the official notice also exposes a matching temporary replacement code for the same physical segment, such as stop `756` with temporary stop `7560`. This prevents distant Route 12-family notice stops from being attached to unrelated Route 12B detours.
 
 Shared detour event fields are also written onto individual `segments[]` when geometry is available. The client groups event cards by `sharedDetourEventId` first, then falls back to `detourEventId` and geometry/title matching. This combines one physical closure into one event card while keeping each route's map overlay and route geometry separate. Routes with no physical closure geometry are not grouped only because they share a route family.
 
@@ -315,6 +316,7 @@ The feature is "done" when a rider can open the app and know a detour is happeni
 - [ ] Tapping the banner/overlay shows which stops are skipped
 - [ ] Detours publish only after two buses on the same route provide detour evidence, or as a projected sibling-route view of an already-confirmed physical closure segment
 - [ ] Detours without trustworthy rider geometry stay backend-only with `riderVisible=false`
+- [ ] Short GPS-confirmed detours with no skipped stops can be public, but they show route/corridor-level messaging and no closed-stop notification.
 - [ ] Candidate evidence is recorded within 5 minutes of a bus deviating. Rider-facing publication still requires a second unique same-route bus/trip, so low-frequency routes may confirm 30-60 minutes later.
 - [ ] For established detours (>10min old): clear within 5 minutes after normal-route GPS traversal proof is observed. Service gaps or bus absence alone do not start clearing.
 - [ ] Minimum visibility: detours stay shown for at least 10 minutes after detection, even if buses return to route quickly (grace period prevents flicker)

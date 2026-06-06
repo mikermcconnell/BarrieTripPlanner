@@ -177,6 +177,52 @@ describe('DetourAlertStrip', () => {
     expect(textValues).toContain('Active detour: Mulcaster & McDonald · Stop #946');
   });
 
+  test('shows individual route circles in the inline collapsed active-detour bar', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourAlertStrip, {
+        activeDetours: {
+          '12A': {
+            state: 'active',
+            confidence: 'high',
+            sharedDetourEventId: 'route-12-saunders',
+            configuredCorridorLabel: 'Saunders-Welham',
+            segments: [{
+              sharedDetourEventId: 'route-12-saunders',
+              configuredCorridorLabel: 'Saunders-Welham',
+              skippedStopCodes: ['933', '756'],
+              likelyDetourRoadNames: ['Hooper Road'],
+            }],
+          },
+          '12B': {
+            state: 'active',
+            confidence: 'high',
+            sharedDetourEventId: 'route-12-saunders',
+            configuredCorridorLabel: 'Saunders-Welham',
+            segments: [{
+              sharedDetourEventId: 'route-12-saunders',
+              configuredCorridorLabel: 'Saunders-Welham',
+              skippedStopCodes: ['618', '931'],
+              likelyDetourRoadNames: ['Hooper Road'],
+            }],
+          },
+        },
+        routes: [
+          { id: '12A', shortName: '12A' },
+          { id: '12B', shortName: '12B' },
+        ],
+        onPress: jest.fn(),
+        inline: true,
+      }));
+    });
+
+    const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textValues).toContain('12A');
+    expect(textValues).toContain('12B');
+    expect(textValues.some((value) => String(value).startsWith('Active detour: Saunders & Welham'))).toBe(true);
+  });
+
   test('expanded detour rows show a numbered card and route summary', () => {
     let inst;
 

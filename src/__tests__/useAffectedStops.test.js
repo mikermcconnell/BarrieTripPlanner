@@ -511,4 +511,29 @@ describe('deriveAffectedStopDetailsForDetour', () => {
       { latitude: 44.391, longitude: -79.690 },
     ]);
   });
+
+  it('keeps in-service boundary stops as context without making them notifying stops', () => {
+    const result = deriveAffectedStopDetailsForDetour({
+      routeId: 'R1',
+      segments: [
+        {
+          shapeId: 'shape-1',
+          affectedStops: [
+            { id: 's2', code: 's2', detourStopRole: 'boundary' },
+            { id: 's3', code: 's3', detourStopRole: 'served-by-detour' },
+          ],
+          skippedStops: [],
+          boundaryStops: [{ id: 's2', code: 's2', detourStopRole: 'boundary' }],
+          detourPathServedStops: [{ id: 's3', code: 's3', detourStopRole: 'served-by-detour' }],
+        },
+      ],
+      stops,
+      routeStopsMapping,
+      routeStopSequencesMapping,
+    });
+
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3']);
+    expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
+    expect(result.segmentStopDetails[0].notifyingAffectedStops).toEqual([]);
+  });
 });

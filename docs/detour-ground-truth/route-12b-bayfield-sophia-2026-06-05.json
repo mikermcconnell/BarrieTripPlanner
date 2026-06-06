@@ -1,0 +1,39 @@
+{
+  "id": "route-12b-bayfield-sophia-2026-06-05",
+  "routeId": "12B",
+  "status": "active",
+  "source": "operator-supplied",
+  "capturedAt": "2026-06-05T15:40:00-04:00",
+  "notes": "Short GPS-confirmed Bayfield/Sophia detour. It should stay public without skipped stops or distant official-notice stop impacts.",
+  "observedBadEventId": "12B:1fd211d5-ccc2-483b-a555-aa6ffdaa98b7:3300-3600",
+  "closedSection": {
+    "start": {
+      "latitude": 44.3919167,
+      "longitude": -79.69275,
+      "sourceText": "44°23'30.9\"N 79°41'33.9\"W"
+    },
+    "end": {
+      "latitude": 44.3908333,
+      "longitude": -79.6930278,
+      "sourceText": "44°23'27.0\"N 79°41'34.9\"W"
+    },
+    "maxLengthMeters": 290
+  },
+  "expectedSkippedStopCodes": [],
+  "disallowedNoticeSourceIds": ["1637"],
+  "disallowedStopCodes": [
+    "617",
+    "618",
+    "931",
+    "756",
+    "932",
+    "933",
+    "6170",
+    "7560",
+    "9310"
+  ],
+  "tolerances": {
+    "closedSectionMaxDistanceMeters": 40,
+    "detourPathMaxDistanceMeters": 40
+  }
+}

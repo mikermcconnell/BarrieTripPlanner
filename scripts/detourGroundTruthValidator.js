@@ -25,6 +25,14 @@ function segmentLengthMeters(start, end) {
   return haversineDistance(start.latitude, start.longitude, end.latitude, end.longitude);
 }
 
+function polylineLengthMeters(polyline) {
+  const line = normalizePolyline(polyline);
+  if (line.length < 2) return 0;
+  return line.slice(1).reduce((total, point, index) => (
+    total + segmentLengthMeters(line[index], point)
+  ), 0);
+}
+
 function nearestPointOnPolyline(point, polyline) {
   const target = normalizePoint(point);
   const line = normalizePolyline(polyline);
@@ -127,6 +135,215 @@ function makeCheck(name, pass, details = {}) {
   return { name, pass: Boolean(pass), ...details };
 }
 
+function normalizeComparable(value) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function uniqueNormalized(values = []) {
+  const seen = new Set();
+  const result = [];
+  values.map(normalizeComparable).filter(Boolean).forEach((value) => {
+    if (seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+  return result;
+}
+
+function sortedValues(values = []) {
+  return [...values].sort((a, b) => a.localeCompare(b));
+}
+
+function getDetourRouteIds(detour) {
+  return uniqueNormalized([
+    detour?.routeId,
+    detour?.eventPrimaryRouteId,
+    detour?.primaryRouteId,
+    ...(Array.isArray(detour?.routeIds) ? detour.routeIds : []),
+    ...(Array.isArray(detour?.sharedRouteIds) ? detour.sharedRouteIds : []),
+  ]);
+}
+
+function routeMatchesGroundTruth(detour, groundTruth) {
+  const expectedRouteId = normalizeComparable(groundTruth?.routeId);
+  if (!expectedRouteId) return true;
+  return getDetourRouteIds(detour).includes(expectedRouteId);
+}
+
+function extractCodesFromValue(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.flatMap(extractCodesFromValue);
+  if (typeof value === 'object') {
+    return [
+      value.code,
+      value.stopCode,
+      value.stop_code,
+      value.id,
+      value.stopId,
+      value.stop_id,
+    ].filter((item) => item != null);
+  }
+  return [value];
+}
+
+function collectValuesFromFields(detour, fieldNames = []) {
+  const targets = [
+    detour,
+    ...(Array.isArray(detour?.segments) ? detour.segments : []),
+  ].filter(Boolean);
+
+  return targets.flatMap((target) => (
+    fieldNames.flatMap((fieldName) => extractCodesFromValue(target?.[fieldName]))
+  ));
+}
+
+const SKIPPED_STOP_CODE_FIELDS = [
+  'skippedStopCodes',
+  'skippedStopIds',
+  'skippedStops',
+];
+
+const NOTICE_STOP_CODE_FIELDS = [
+  'noticeTemporaryStopCodes',
+  'noticeTemporaryStopIds',
+  'noticeTemporaryStops',
+  'noticeActiveStopCodes',
+  'noticeActiveStopIds',
+  'noticeActiveStops',
+  'noticeClosureStopCodes',
+  'noticeClosureStopIds',
+  'noticeClosureStops',
+];
+
+function collectSkippedStopCodes(detour) {
+  return uniqueNormalized(collectValuesFromFields(detour, SKIPPED_STOP_CODE_FIELDS));
+}
+
+function collectNoticeStopCodes(detour) {
+  return uniqueNormalized(collectValuesFromFields(detour, NOTICE_STOP_CODE_FIELDS));
+}
+
+function collectNoticeSourceIds(detour) {
+  return uniqueNormalized(collectValuesFromFields(detour, [
+    'sourceNewsId',
+    'sourceNewsIds',
+    'noticeSourceId',
+    'noticeSourceIds',
+    'noticeStopImpactSourceNewsId',
+    'noticeStopImpactSourceNewsIds',
+  ]));
+}
+
+function getDetourIdentityValues(detour) {
+  return uniqueNormalized([
+    detour?.id,
+    detour?.eventId,
+    detour?.detourEventId,
+    detour?.sharedDetourEventId,
+  ]);
+}
+
+function getExpectedEventId(groundTruth) {
+  return normalizeComparable(
+    groundTruth?.eventId ??
+    groundTruth?.detourEventId ??
+    groundTruth?.expectedEventId
+  );
+}
+
+function unwrapMaybeFirestoreDocument(document) {
+  if (!document || typeof document !== 'object') return null;
+  const id = document.id || (typeof document.name === 'string' ? document.name.split('/').pop() : null);
+  if (document.fields && typeof document.fields === 'object') {
+    return { id, ...unwrapFirestoreFields(document.fields) };
+  }
+  if (document.data && typeof document.data === 'object') {
+    return { id, ...document.data };
+  }
+  return { ...document, ...(id ? { id } : {}) };
+}
+
+function looksLikeDetourDocument(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Boolean(
+    value.routeId ||
+    value.eventPrimaryRouteId ||
+    value.eventId ||
+    value.detourEventId ||
+    value.skippedSegmentPolyline ||
+    value.entryPoint ||
+    value.exitPoint ||
+    Array.isArray(value.segments)
+  );
+}
+
+function normalizeActiveDetourEntries(payload) {
+  if (!payload) return [];
+
+  if (Array.isArray(payload)) {
+    return payload.map(unwrapMaybeFirestoreDocument).filter(looksLikeDetourDocument);
+  }
+
+  if (Array.isArray(payload.docs)) {
+    return payload.docs.map(unwrapMaybeFirestoreDocument).filter(looksLikeDetourDocument);
+  }
+
+  if (Array.isArray(payload.documents)) {
+    return payload.documents.map(unwrapMaybeFirestoreDocument).filter(looksLikeDetourDocument);
+  }
+
+  if (payload.activeDetours) {
+    return normalizeActiveDetourEntries(payload.activeDetours);
+  }
+
+  if (payload.activeDetourEventsV2) {
+    return normalizeActiveDetourEntries(payload.activeDetourEventsV2);
+  }
+
+  if (typeof payload === 'object') {
+    return Object.entries(payload)
+      .map(([id, value]) => (
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? { id: value.id ?? id, ...value }
+          : null
+      ))
+      .filter(looksLikeDetourDocument);
+  }
+
+  return [];
+}
+
+function scoreDetourAgainstGroundTruth(detour, groundTruth) {
+  const closedExpected = [
+    normalizePoint(groundTruth?.closedSection?.start),
+    normalizePoint(groundTruth?.closedSection?.end),
+  ].filter(Boolean);
+  const actualPolyline = getClosedSectionPolyline(detour);
+  if (closedExpected.length === 0 || actualPolyline.length < 2) return 0;
+  return closedExpected.reduce((total, point) => (
+    total + nearestPointOnPolyline(point, actualPolyline).distanceMeters
+  ), 0);
+}
+
+function selectDetourForGroundTruth(activeDetoursPayload, groundTruth) {
+  const entries = normalizeActiveDetourEntries(activeDetoursPayload);
+  const expectedEventId = getExpectedEventId(groundTruth);
+
+  if (expectedEventId) {
+    const byEventId = entries.find((detour) => (
+      getDetourIdentityValues(detour).includes(expectedEventId)
+    ));
+    if (byEventId) return byEventId;
+  }
+
+  const routeMatches = entries.filter((detour) => routeMatchesGroundTruth(detour, groundTruth));
+  if (routeMatches.length <= 1) return routeMatches[0] || null;
+
+  return routeMatches
+    .map((detour) => ({ detour, score: scoreDetourAgainstGroundTruth(detour, groundTruth) }))
+    .sort((a, b) => a.score - b.score)[0]?.detour || null;
+}
+
 function validatePointSetAgainstPolyline({
   label,
   expectedPoints,
@@ -178,12 +395,14 @@ function validateDetourAgainstGroundTruth(detour, groundTruth) {
     tolerances.detourPathMaxDistanceMeters ?? DEFAULT_DETOUR_PATH_MAX_DISTANCE_METERS
   );
   const expectedRouteId = String(groundTruth?.routeId || '').trim();
-  const actualRouteId = String(detour?.routeId || expectedRouteId || '').trim();
+  const actualRouteIds = getDetourRouteIds(detour);
+  const actualRouteId = actualRouteIds[0] || null;
 
   const checks = [
-    makeCheck('route id matches', actualRouteId === expectedRouteId, {
+    makeCheck('detour exists', Boolean(detour), {}),
+    makeCheck('route id matches', routeMatchesGroundTruth(detour, groundTruth), {
       expectedRouteId,
-      actualRouteId,
+      actualRouteIds,
     }),
   ];
 
@@ -203,12 +422,26 @@ function validateDetourAgainstGroundTruth(detour, groundTruth) {
     normalizePoint(groundTruth?.closedSection?.end),
   ].filter(Boolean);
   if (closedExpected.length > 0) {
+    const closedSectionPolyline = getClosedSectionPolyline(detour);
     checks.push(...validatePointSetAgainstPolyline({
       label: 'closed section',
       expectedPoints: closedExpected,
-      actualPolyline: getClosedSectionPolyline(detour),
+      actualPolyline: closedSectionPolyline,
       maxDistanceMeters: closedMaxDistanceMeters,
     }));
+    const closedSectionMaxLengthMeters = Number(
+      groundTruth?.closedSection?.maxLengthMeters ??
+      tolerances.closedSectionMaxLengthMeters
+    );
+    if (Number.isFinite(closedSectionMaxLengthMeters) && closedSectionMaxLengthMeters > 0) {
+      const actualLengthMeters = polylineLengthMeters(closedSectionPolyline);
+      checks.push(makeCheck('closed section: length is within maximum', (
+        actualLengthMeters <= closedSectionMaxLengthMeters
+      ), {
+        actualLengthMeters: Number(actualLengthMeters.toFixed(1)),
+        maxLengthMeters: closedSectionMaxLengthMeters,
+      }));
+    }
   }
 
   const detourPathExpected = normalizePolyline(groundTruth?.detourPath);
@@ -219,6 +452,46 @@ function validateDetourAgainstGroundTruth(detour, groundTruth) {
       actualPolyline: getRenderableDetourPath(detour),
       maxDistanceMeters: pathMaxDistanceMeters,
       requireForwardOrder: true,
+    }));
+  }
+
+  if (Array.isArray(groundTruth?.expectedSkippedStopCodes)) {
+    const expectedSkippedStopCodes = sortedValues(uniqueNormalized(groundTruth.expectedSkippedStopCodes));
+    const actualSkippedStopCodes = sortedValues(collectSkippedStopCodes(detour));
+    checks.push(makeCheck('skipped stop codes match expected', (
+      JSON.stringify(actualSkippedStopCodes) === JSON.stringify(expectedSkippedStopCodes)
+    ), {
+      expectedSkippedStopCodes,
+      actualSkippedStopCodes,
+    }));
+  }
+
+  const disallowedNoticeSourceIds = uniqueNormalized(groundTruth?.disallowedNoticeSourceIds || []);
+  if (disallowedNoticeSourceIds.length > 0) {
+    const actualNoticeSourceIds = collectNoticeSourceIds(detour);
+    const presentDisallowedNoticeSourceIds = actualNoticeSourceIds.filter((id) => (
+      disallowedNoticeSourceIds.includes(id)
+    ));
+    checks.push(makeCheck('disallowed notice source ids are absent', (
+      presentDisallowedNoticeSourceIds.length === 0
+    ), {
+      disallowedNoticeSourceIds,
+      presentDisallowedNoticeSourceIds,
+    }));
+  }
+
+  const disallowedStopCodes = uniqueNormalized(groundTruth?.disallowedStopCodes || []);
+  if (disallowedStopCodes.length > 0) {
+    const actualStopCodes = uniqueNormalized([
+      ...collectSkippedStopCodes(detour),
+      ...collectNoticeStopCodes(detour),
+    ]);
+    const presentDisallowedStopCodes = actualStopCodes.filter((code) => disallowedStopCodes.includes(code));
+    checks.push(makeCheck('disallowed stop codes are absent', (
+      presentDisallowedStopCodes.length === 0
+    ), {
+      disallowedStopCodes,
+      presentDisallowedStopCodes,
     }));
   }
 
@@ -304,14 +577,20 @@ async function fetchLiveActiveDetours({
 module.exports = {
   DEFAULT_CLOSED_SECTION_MAX_DISTANCE_METERS,
   DEFAULT_DETOUR_PATH_MAX_DISTANCE_METERS,
+  collectNoticeSourceIds,
+  collectNoticeStopCodes,
+  collectSkippedStopCodes,
   fetchLiveActiveDetours,
   getClosedSectionPolyline,
   getRenderableDetourPath,
   loadEnvFile,
   loadJsonFile,
   nearestPointOnPolyline,
+  normalizeActiveDetourEntries,
   normalizeActiveDetourCollectionName,
   normalizePoint,
   normalizePolyline,
+  polylineLengthMeters,
+  selectDetourForGroundTruth,
   validateDetourAgainstGroundTruth,
 };

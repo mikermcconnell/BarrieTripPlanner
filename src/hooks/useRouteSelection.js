@@ -91,6 +91,13 @@ export const useRouteSelection = ({
     }
   }, []);
 
+  const selectRoutes = useCallback((routeIds = []) => {
+    const ids = Array.isArray(routeIds)
+      ? routeIds.filter(Boolean)
+      : [...routeIds || []].filter(Boolean);
+    setSelectedRoutes(new Set(ids));
+  }, []);
+
   // Check if a specific route is selected
   const isRouteSelected = useCallback(
     (routeId) => selectedRoutes.has(routeId),
@@ -105,6 +112,7 @@ export const useRouteSelection = ({
     centerOnBarrie,
     zoomToRoutes,
     selectRoute,
+    selectRoutes,
     isRouteSelected,
   };
 };

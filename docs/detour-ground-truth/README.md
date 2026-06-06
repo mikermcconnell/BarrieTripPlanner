@@ -2,7 +2,7 @@
 
 This folder stores operator-supplied validation cases for the auto-detour detector.
 
-These files are **not** route-specific hardcoded detours. They are ground-truth checks used to confirm that live or saved `activeDetours` output matches known closures and detour paths.
+These files are **not** route-specific hardcoded detours. They are ground-truth checks used to confirm that live or saved `activeDetours` / `activeDetourEventsV2` output matches known closures and detour paths.
 
 ## Workflow
 
@@ -12,11 +12,19 @@ These files are **not** route-specific hardcoded detours. They are ground-truth 
    - whether it should be active now
    - closed section start/end
    - expected detour path waypoints in order
+   - expected skipped stop codes, if any
+   - disallowed distant notice source IDs or stop codes, if any
    - source and capture time
 3. Run the validator against live `activeDetours`:
 
 ```powershell
 node scripts\validate-detour-ground-truth.js --fixture docs\detour-ground-truth\route-10-mulcaster-simcoe-2026-05-26.json
+```
+
+To validate a saved V2 event snapshot:
+
+```powershell
+node scripts\validate-detour-ground-truth.js --fixture docs\detour-ground-truth\route-12b-bayfield-sophia-2026-06-05.json --active-detours-json logs\live-route-12b-active-detour-events-v2.json
 ```
 
 4. If validation fails, inspect detector output before changing code.
@@ -25,6 +33,7 @@ node scripts\validate-detour-ground-truth.js --fixture docs\detour-ground-truth\
 
 ## Current cases
 
-- oute-10-mulcaster-simcoe-2026-05-26.json — Route 10 active Mulcaster/Simcoe detour validation case.
-- oute-11-mulcaster-simcoe-2026-05-26.json — Route 11 active Mulcaster/Simcoe detour validation case.
+- `route-10-mulcaster-simcoe-2026-05-26.json` — Route 10 active Mulcaster/Simcoe detour validation case.
+- `route-11-mulcaster-simcoe-2026-05-26.json` — Route 11 active Mulcaster/Simcoe detour validation case.
+- `route-12b-bayfield-sophia-2026-06-05.json` — Route 12B short Bayfield/Sophia detour case with no skipped stops and no distant notice impacts.
 

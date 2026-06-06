@@ -132,4 +132,28 @@ describe('stopNoticeUtils', () => {
       title: 'Stop 192 is not served by Route 11',
     });
   });
+
+  test('standalone route-scoped closure markers still expose closure details without a selected route', () => {
+    const routeScopedImpact = {
+      ...impact,
+      stopId: '966',
+      stopCode: '966',
+      affectedRoutes: ['8B'],
+      message: 'Stop 966 is closed while Route 8B is detoured.',
+    };
+
+    const result = buildDetourStopNotice({
+      stop: {
+        id: '966',
+        code: '966',
+        name: 'Dean Avenue',
+        routeScopedClosureImpact: routeScopedImpact,
+      },
+      transitNewsImpacts: [routeScopedImpact],
+    });
+
+    expect(result.isClosed).toBe(true);
+    expect(result.closureImpact).toBe(routeScopedImpact);
+    expect(result.routeScopedClosureImpact).toBe(routeScopedImpact);
+  });
 });

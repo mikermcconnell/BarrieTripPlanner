@@ -59,6 +59,70 @@ describe('HomeScreen map performance', () => {
     expect(layerSource).toContain('{shouldRenderDetourMapOverlays && detourOverlays.map((overlay) => (');
   });
 
+  test('regular home map mode also mounts lightweight closed-stop markers', () => {
+    const nativeSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+    const webSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      'utf8'
+    );
+
+    [nativeSource, webSource].forEach((source) => {
+      const markerKeyStart = source.indexOf('key={`detour-stops-${overlay.routeId}`}');
+      const markerStart = source.lastIndexOf('{!isTripPreviewMode', markerKeyStart);
+      const markerEnd = source.indexOf('key={`detour-callouts-${overlay.routeId}`}');
+      const markerSource = source.slice(markerStart, markerEnd);
+
+      expect(markerStart).toBeGreaterThanOrEqual(0);
+      expect(markerKeyStart).toBeGreaterThan(markerStart);
+      expect(markerEnd).toBeGreaterThan(markerStart);
+      expect(
+        markerSource.includes('shouldRenderDetourMapOverlays') ||
+        markerSource.includes('shouldShowDetourGeometryOverlay({ isDetourView, hasDetourFocus })')
+      ).toBe(true);
+      expect(markerSource).toContain('getDetourGeometryOverlayProps({ overlay, isDetourView, hasDetourFocus })');
+      expect(markerSource).toContain('renderMode="markers"');
+    });
+  });
+
+  test('regular home map mode includes standalone MyRide closure stops lightly', () => {
+    const nativeSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+    const webSource = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      'utf8'
+    );
+
+    [nativeSource, webSource].forEach((source) => {
+      expect(source).toContain('includeClosures: true');
+      expect(source).toContain('const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;');
+    });
+
+    expect(nativeSource).toContain('showAllStopMarkers={isDetourView || hasDetourFocus}');
+    expect(nativeSource).toContain('isDetourView={isDetourView}');
+    expect(nativeSource).toContain('hasDetourFocus={hasDetourFocus}');
+    expect(nativeSource).toContain('isClosedStopMarker(stop)');
+    expect(nativeSource).toContain('Boolean(stop?.isClosed || stop?.isRouteScopedClosure)');
+    expect(nativeSource).toContain('closedStopOpacity={closedStopMarkerOpacity}');
+    expect(nativeSource).toContain('showStopCode={isDetourView || hasDetourFocus}');
+    expect(nativeSource).toContain('showSkippedStopCodes={isDetourView || hasDetourFocus}');
+    expect(webSource).toContain('showSkippedStopCodes={isDetourView || hasDetourFocus}');
+    expect(webSource).toContain('closedStopOpacity={closedStopMarkerOpacity}');
+
+    const nativeStopPressStart = nativeSource.indexOf('const handleStopLayerPress = useCallback');
+    const nativeStopPressEnd = nativeSource.indexOf('// Stable camera default settings', nativeStopPressStart);
+    const nativeStopPressSource = nativeSource.slice(nativeStopPressStart, nativeStopPressEnd);
+    expect(nativeStopPressStart).toBeGreaterThanOrEqual(0);
+    expect(nativeStopPressEnd).toBeGreaterThan(nativeStopPressStart);
+    expect(nativeStopPressSource).toContain('setSelectedStop(buildDetourStopNotice({');
+    expect(nativeStopPressSource).toContain('transitNewsImpacts,');
+    expect(nativeStopPressSource).toContain('}, [displayedStopsById, transitNewsImpacts]);');
+  });
+
   test('detour map tab turns the regular stops toggle off by default', () => {
     const nativeSource = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
@@ -81,7 +145,7 @@ describe('HomeScreen map performance', () => {
     });
   });
 
-  test('Android home-fleet bus markers do not run per-frame JS animation', () => {
+  test('Android home-fleet bus markers use lightweight animation without route snapping', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
       'utf8'
@@ -93,7 +157,8 @@ describe('HomeScreen map performance', () => {
 
     expect(componentStart).toBeGreaterThanOrEqual(0);
     expect(componentEnd).toBeGreaterThan(componentStart);
-    expect(componentSource).not.toContain('useAnimatedBusPosition');
+    expect(componentSource).toContain('useAnimatedBusPosition(vehicle');
+    expect(componentSource).toContain('snapPath: null');
   });
 
   test('Android home-fleet bus markers do not resolve route snap paths for every vehicle', () => {

@@ -3,8 +3,17 @@ import { getMatchingDetourRouteIds, normalizeRouteId } from './routeDetourMatchi
 const TRANSIT_MODES = new Set(['BUS', 'TRANSIT']);
 const STOP_IMPACT_SEVERITY = 'stop_affected';
 const ROUTE_IMPACT_SEVERITY = 'route_detour';
+const NON_NOTIFYING_DETOUR_STOP_ROLES = new Set([
+  'boundary',
+  'served-by-detour',
+  'served-by-gps',
+  'notice-active',
+]);
 
 const normalizeKey = (value) => String(value ?? '').trim().toUpperCase();
+const normalizeStopRole = (stop) => String(stop?.detourStopRole ?? '').trim().toLowerCase();
+const isNonNotifyingDetourStop = (stop) => NON_NOTIFYING_DETOUR_STOP_ROLES.has(normalizeStopRole(stop));
+const isNotifyingDetourStop = (stop) => normalizeStopRole(stop) === 'skipped';
 
 export const getStopKeys = (stop) => {
   if (!stop) return [];
@@ -79,15 +88,21 @@ const collectDetourStops = (details = {}) => {
 
   return {
     skippedStops: uniqueStops([
-      ...(Array.isArray(details?.skippedStops) ? details.skippedStops : []),
+      ...(Array.isArray(details?.skippedStops) ? details.skippedStops : []).filter((stop) => !isNonNotifyingDetourStop(stop)),
       ...segments.flatMap((segment) => (
-        Array.isArray(segment?.skippedStops) ? segment.skippedStops : []
+        Array.isArray(segment?.skippedStops)
+          ? segment.skippedStops.filter((stop) => !isNonNotifyingDetourStop(stop))
+          : []
       )),
     ]),
     affectedStops: uniqueStops([
-      ...(Array.isArray(details?.affectedStops) ? details.affectedStops : []),
+      ...(Array.isArray(details?.notifyingAffectedStops)
+        ? details.notifyingAffectedStops
+        : (Array.isArray(details?.affectedStops) ? details.affectedStops.filter(isNotifyingDetourStop) : [])),
       ...segments.flatMap((segment) => (
-        Array.isArray(segment?.affectedStops) ? segment.affectedStops : []
+        Array.isArray(segment?.notifyingAffectedStops)
+          ? segment.notifyingAffectedStops
+          : (Array.isArray(segment?.affectedStops) ? segment.affectedStops.filter(isNotifyingDetourStop) : [])
       )),
     ]),
   };

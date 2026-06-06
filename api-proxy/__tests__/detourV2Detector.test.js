@@ -442,6 +442,53 @@ describe('Auto Detour V2 detector', () => {
     ]);
   });
 
+  test('keeps short no-skipped-stop GPS detours rider-visible when geometry is safe', () => {
+    const shapeId = 'short-no-impact-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.699 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.697 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['8A', [shapeId]]]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-short-a',
+        routeId: '8A',
+        tripId: 'trip-short-a',
+        coordinate: { latitude: 44.391, longitude: -79.700 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-short-a',
+        routeId: '8A',
+        tripId: 'trip-short-a',
+        coordinate: { latitude: 44.391, longitude: -79.6992 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-short-b',
+        routeId: '8A',
+        tripId: 'trip-short-b',
+        coordinate: { latitude: 44.391, longitude: -79.6985 },
+        timestampMs: 4000,
+      }),
+    ], testShapes, testMapping);
+
+    const detour = detourForRoute(result, '8A');
+    const segment = detour.geometry.segments[0];
+
+    expect(segment.canShowDetourPath).toBe(true);
+    expect(segment.endProgressMeters - segment.startProgressMeters).toBeLessThan(200);
+    expect(detour).toEqual(expect.objectContaining({
+      riderVisible: true,
+    }));
+    expect(detour.riderVisibilityReason).not.toBe('short-no-rider-impact');
+  });
+
   test('removes already-active tiny hidden detours that only have marginal start-of-route evidence', () => {
     const shapeId = 'marginal-restored-start-shape';
     const shape = [
@@ -753,6 +800,56 @@ describe('Auto Detour V2 detector', () => {
     expect(events[0].eventId).toEqual(expect.any(String));
     expect(events[1].eventId).toEqual(expect.any(String));
     expect(events[0].eventId).not.toBe(events[1].eventId);
+  });
+
+  test('does not expand a short event with a downstream point from a different trip', () => {
+    const shortDetourShapes = new Map([['short-shape', [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.692 },
+      { latitude: 44.390, longitude: -79.690 },
+    ]]]);
+    const shortDetourMapping = new Map([['12B', ['short-shape']]]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'bus-short-1',
+        routeId: '12B',
+        tripId: 'trip-short-1',
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'bus-short-2',
+        routeId: '12B',
+        tripId: 'trip-short-2',
+        coordinate: { latitude: 44.395, longitude: -79.697 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-short-2',
+        routeId: '12B',
+        tripId: 'trip-short-2',
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-downstream',
+        routeId: '12B',
+        tripId: 'trip-downstream',
+        coordinate: { latitude: 44.395, longitude: -79.690 },
+        timestampMs: 4000,
+      }),
+    ], shortDetourShapes, shortDetourMapping);
+
+    const publicEvents = detoursForRoute(result, '12B');
+    expect(publicEvents).toHaveLength(1);
+    expect(publicEvents[0].detourZone.endProgressMeters - publicEvents[0].detourZone.startProgressMeters)
+      .toBeLessThan(350);
+    expect(Object.keys(detector.serializeDetectorRuntimeState().eventCandidates || {})).toHaveLength(2);
   });
 
   test('publishes only after two same-route signatures and three matching pings', () => {

@@ -11,6 +11,7 @@ const STARTUP_IMAGE_ASSETS = [APP_ICON, HERO_IMAGE, DETOUR_CARD_IMAGE];
 
 const DEFAULT_STATUS = 'Checking service alerts and detours...';
 const DEFAULT_PERCENT = 65;
+const STARTUP_LOADING_TEXT = 'Loading routes, stops, and live updates';
 
 function getStartupImageSource(moduleId, preferPreloadedImages = false) {
   if (!preferPreloadedImages || Platform.OS === 'web') {
@@ -95,7 +96,7 @@ function FeatureCard({
           useBrandFonts && styles.featureTitleFont,
           compact && styles.featureTitleCompact,
         ]}>
-          Live detour awareness
+          Live Detour Awareness
         </Text>
         <Text style={[
           styles.featureText,
@@ -115,8 +116,6 @@ function FeatureCard({
 export default function StartupLoadingScreen({
   percent = DEFAULT_PERCENT,
   statusText = DEFAULT_STATUS,
-  title = 'Getting Barrie Transit ready',
-  detail = 'Loading routes, stops, live buses, and detour updates.',
   showProgress = true,
   useBrandFonts = true,
   preferPreloadedImages = false,
@@ -183,20 +182,17 @@ export default function StartupLoadingScreen({
 
         <View style={[styles.copyWrap, compact && styles.copyWrapCompact]}>
           <Text style={[
-            styles.goodSoon,
-            useBrandFonts && styles.goodSoonFont,
-            compact && styles.goodSoonCompact,
-          ]}>Good to go soon</Text>
-          <Text style={[
             styles.title,
+            styles.loadingLine,
             useBrandFonts && styles.titleFont,
             compact && styles.titleCompact,
-          ]}>{title}</Text>
-          <Text style={[
-            styles.detail,
-            useBrandFonts && styles.detailFont,
-            compact && styles.detailCompact,
-          ]}>{detail}</Text>
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.82}
+          >
+            {STARTUP_LOADING_TEXT}
+          </Text>
         </View>
 
         <FeatureCard
@@ -329,21 +325,6 @@ const styles = StyleSheet.create({
   copyWrapCompact: {
     marginBottom: 6,
   },
-  goodSoon: {
-    fontSize: 23,
-    lineHeight: 28,
-    color: '#159C2E',
-    fontWeight: FONT_WEIGHTS.bold,
-    letterSpacing: -0.2,
-    marginBottom: 6,
-  },
-  goodSoonFont: {
-    fontFamily: FONT_FAMILIES.bold,
-  },
-  goodSoonCompact: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
   title: {
     fontSize: 27,
     lineHeight: 33,
@@ -355,24 +336,14 @@ const styles = StyleSheet.create({
   titleFont: {
     fontFamily: FONT_FAMILIES.bold,
   },
+  loadingLine: {
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+  },
   titleCompact: {
-    fontSize: 25,
-    lineHeight: 31,
-  },
-  detail: {
-    marginTop: 6,
-    fontSize: 17,
-    lineHeight: 24,
-    color: COLORS.grey800,
-    textAlign: 'center',
-  },
-  detailFont: {
-    fontFamily: FONT_FAMILIES.regular,
-  },
-  detailCompact: {
-    marginTop: 6,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 20,
+    lineHeight: 26,
   },
   featureDeck: {
     alignItems: 'center',

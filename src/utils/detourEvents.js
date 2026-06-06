@@ -109,6 +109,11 @@ const ampersandList = (items) => {
   return `${unique[0]} & ${unique[1]}`;
 };
 
+const cleanCorridorLabel = (value) => cleanDetourEventTitle(
+  String(value || '')
+    .replace(/\s*[-–—/]\s*/g, ' & ')
+);
+
 const isGenericTitle = (value) => {
   const text = String(value || '').trim().toLowerCase();
   if (!text) return true;
@@ -154,11 +159,45 @@ const getCandidateRoadNames = (detour, segment) => ([
 
 const buildRoadTitle = (detour, segment) => ampersandList(getCandidateRoadNames(detour, segment));
 
+const getClosedCorridorTitle = (detour, segment) => {
+  const labelSources = [
+    segment?.configuredCorridorLabel,
+    detour?.configuredCorridorLabel,
+    segment?.closedSegmentLabel,
+    detour?.closedSegmentLabel,
+  ];
+
+  for (const source of labelSources) {
+    const title = cleanCorridorLabel(source);
+    if (title) return title;
+  }
+
+  const roadNameSources = [
+    segment?.closedSegmentRoadNames,
+    segment?.skippedSegmentRoadNames,
+    segment?.closedRoadNames,
+    detour?.closedSegmentRoadNames,
+    detour?.skippedSegmentRoadNames,
+    detour?.closedRoadNames,
+  ];
+  for (const source of roadNameSources) {
+    const title = ampersandList(Array.isArray(source) ? source : []);
+    if (title) return title;
+  }
+
+  return '';
+};
+
 const roadOverlapScore = (a = {}, b = {}) => {
   const roadsA = new Set(getCandidateRoadNames(a.detour, a.segment).map(normalizeRoadNameForCompare).filter(Boolean));
   const roadsB = new Set(getCandidateRoadNames(b.detour, b.segment).map(normalizeRoadNameForCompare).filter(Boolean));
   if (roadsA.size === 0 || roadsB.size === 0) return 0;
   return [...roadsA].filter((road) => roadsB.has(road)).length;
+};
+
+const setOverlapScore = (a = new Set(), b = new Set()) => {
+  if (a.size === 0 || b.size === 0) return 0;
+  return [...a].filter((value) => b.has(value)).length;
 };
 
 const normalizeStopCode = (value) => {
@@ -209,6 +248,12 @@ const getCandidateStopCodes = (detour, segment) => ([
     : []),
 ]);
 
+const getCandidateStopCodeSet = (candidate = {}) => new Set(
+  getCandidateStopCodes(candidate.detour, candidate.segment)
+    .map((code) => normalizeStopCode(code).toLowerCase())
+    .filter(Boolean)
+);
+
 const uniqueStopCodes = (codes = []) => {
   const seen = new Set();
   return codes.filter((code) => {
@@ -244,6 +289,13 @@ const combineLocationAndStopTitle = (locationTitle, stopCodeTitle, codes) => {
 };
 
 export const buildDetourEventTitle = ({ routeId, detour = {}, segment = null }) => {
+  const stopCodes = getCandidateStopCodes(detour, segment);
+  const stopCodeTitle = formatStopCodeList(stopCodes);
+  const closedCorridorTitle = getClosedCorridorTitle(detour, segment);
+  if (closedCorridorTitle) {
+    return combineLocationAndStopTitle(closedCorridorTitle, stopCodeTitle, stopCodes);
+  }
+
   const explicitSources = [
     segment?.eventLocationLabel,
     detour?.eventLocationLabel,
@@ -258,13 +310,9 @@ export const buildDetourEventTitle = ({ routeId, detour = {}, segment = null }) 
   for (const source of explicitSources) {
     const title = cleanDetourEventTitle(source);
     if (title) {
-      const stopCodes = getCandidateStopCodes(detour, segment);
       return combineLocationAndStopTitle(title, formatStopCodeList(stopCodes), stopCodes);
     }
   }
-
-  const stopCodes = getCandidateStopCodes(detour, segment);
-  const stopCodeTitle = formatStopCodeList(stopCodes);
 
   const labelTitle = cleanDetourEventTitle(segment?.detourPathLabel || detour?.detourPathLabel);
   if (labelTitle) return combineLocationAndStopTitle(labelTitle, stopCodeTitle, stopCodes);
@@ -371,12 +419,41 @@ const samePhysicalDetour = (a, b) => {
   return centroidDistance <= SAME_EVENT_CENTROID_THRESHOLD_METERS && roadOverlap >= 2;
 };
 
+const getCandidateSharedEventId = (candidate = {}) => (
+  candidate.segment?.sharedDetourEventId ||
+  candidate.detour?.sharedDetourEventId ||
+  ''
+);
+
+const sameRouteFamilyDuplicateWindow = (a, b) => {
+  if (!a || !b || !a.familyId || a.familyId !== b.familyId) return false;
+
+  const sharedEventA = getCandidateSharedEventId(a);
+  const sharedEventB = getCandidateSharedEventId(b);
+  if (sharedEventA && sharedEventA === sharedEventB) return true;
+
+  const roadOverlap = roadOverlapScore(a, b);
+  if (roadOverlap <= 0) return false;
+
+  const stopsA = getCandidateStopCodeSet(a);
+  const stopsB = getCandidateStopCodeSet(b);
+  const stopOverlap = setOverlapScore(stopsA, stopsB);
+  const smallerStopSetSize = Math.min(stopsA.size, stopsB.size);
+
+  return smallerStopSetSize > 0 &&
+    stopOverlap === smallerStopSetSize &&
+    stopOverlap >= Math.min(2, smallerStopSetSize);
+};
+
 const candidateBelongsInGroup = (candidate, group) => {
   if (candidate.groupKey && group.groupKey && candidate.groupKey === group.groupKey) {
     return true;
   }
 
-  return group.candidates.some((existing) => samePhysicalDetour(candidate, existing));
+  return group.candidates.some((existing) => (
+    sameRouteFamilyDuplicateWindow(candidate, existing) ||
+    samePhysicalDetour(candidate, existing)
+  ));
 };
 
 const getDetourCandidates = (routeId, detour) => {

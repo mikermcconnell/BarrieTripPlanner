@@ -326,7 +326,7 @@ const buildOffsetDetourLinePaths = (path, directionArrowMode, detourLaneOffsetMe
   }))
 );
 
-const shouldShowSkippedStopCodeLabels = () => true;
+const shouldShowSkippedStopCodeLabels = ({ showSkippedStopCodes = true } = {}) => showSkippedStopCodes;
 
 const getRoundedStopKey = (stop) => (
   `${getStopNumber(stop) || stop?.id || 'stop'}:${Number(stop?.latitude).toFixed(4)},${Number(stop?.longitude).toFixed(4)}`
@@ -471,11 +471,11 @@ const makeSkippedStopHtml = (stop, color, { showLabel = true, labelSide = 'right
         white-space:nowrap;
       ">${stopNumber}</div>` : ''}
       <div style="
-        width:22px;
-        height:22px;
+        width:11px;
+        height:11px;
         border-radius:50%;
         background:#ffffff;
-        border:3px solid ${color};
+        border:1.5px solid ${color};
         box-sizing:border-box;
         box-shadow:0 1px 5px rgba(0,0,0,0.2);
         display:flex;
@@ -483,8 +483,8 @@ const makeSkippedStopHtml = (stop, color, { showLabel = true, labelSide = 'right
         justify-content:center;
       ">
         <div style="
-          width:7px;
-          height:7px;
+          width:3.5px;
+          height:3.5px;
           border-radius:50%;
           background:${color};
         "></div>
@@ -622,6 +622,7 @@ const DetourOverlay = ({
   showCallouts,
   showStopMarkers,
   showClosedStopMarkers = false,
+  showSkippedStopCodes = true,
   showClosedRouteMask = true,
   onPress,
   onStopPress,
@@ -730,7 +731,7 @@ const DetourOverlay = ({
     shouldRenderClosedStopMarkers,
     selectedSegmentIndex,
   });
-  const showSkippedStopCodes = shouldShowSkippedStopCodeLabels(currentZoom, selectedSegmentIndex);
+  const shouldShowSkippedStopCodes = shouldShowSkippedStopCodeLabels({ showSkippedStopCodes });
   const markerSegments = hasSelectedSegment(selectedSegmentIndex)
     ? normalizedSegments.filter((_segment, index) => index === selectedSegmentIndex)
     : normalizedSegments;
@@ -915,7 +916,7 @@ const DetourOverlay = ({
               anchor="center"
               offset={[0, -12]}
               html={makeSkippedStopHtml(displayStop, skippedColor, {
-                showLabel: showSkippedStopCodes,
+                showLabel: shouldShowSkippedStopCodes,
                 labelSide,
               })}
               zIndexOffset={MARKER_Z_INDEX.SKIPPED_STOP}

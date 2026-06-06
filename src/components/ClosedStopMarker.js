@@ -21,6 +21,7 @@ const ClosedStopMarkerComponent = ({
   color = COLORS.warning,
   opacity = 1,
   labelSide = 'right',
+  showStopCode = true,
   onPress,
   pointerEvents,
   accessibilityLabel,
@@ -41,7 +42,7 @@ const ClosedStopMarkerComponent = ({
       pointerEvents="none"
       style={[styles.frame, styles.aboveMapLines]}
     >
-      {stopCode ? (
+      {showStopCode && stopCode ? (
         <Text
           style={[
             styles.codeLabel,
@@ -53,11 +54,13 @@ const ClosedStopMarkerComponent = ({
           {stopCode}
         </Text>
       ) : null}
-      <View style={[
+      <View
+        testID="closed-stop-marker-icon"
+        style={[
         styles.marker,
         { borderColor: isSelected ? COLORS.accent : color, opacity },
       ]}>
-        <View style={[styles.markerDot, { backgroundColor: color }]} />
+        <View testID="closed-stop-marker-dot" style={[styles.markerDot, { backgroundColor: color }]} />
       </View>
     </View>
   );
@@ -68,7 +71,7 @@ const ClosedStopMarkerComponent = ({
       coordinate={[longitude, latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
       allowOverlap
-      pointerEvents={pointerEvents || (onPress ? 'box-none' : 'none')}
+      pointerEvents={pointerEvents || (onPress ? 'auto' : 'none')}
     >
       {onPress ? (
         <Pressable
@@ -93,9 +96,10 @@ const arePropsEqual = (prev, next) => (
   prev.id === next.id &&
   prev.isSelected === next.isSelected &&
   prev.color === next.color &&
-  prev.opacity === next.opacity &&
-  prev.labelSide === next.labelSide &&
-  prev.onPress === next.onPress &&
+    prev.opacity === next.opacity &&
+    prev.labelSide === next.labelSide &&
+    prev.showStopCode === next.showStopCode &&
+    prev.onPress === next.onPress &&
   prev.pointerEvents === next.pointerEvents &&
   prev.accessibilityLabel === next.accessibilityLabel
 );
@@ -143,19 +147,19 @@ const styles = StyleSheet.create({
     marginRight: 28,
   },
   marker: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 3,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    borderWidth: 1.5,
     backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.small,
   },
   markerDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 1.75,
   },
 });
 

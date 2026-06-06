@@ -1,8 +1,7 @@
 export const shouldShowDetailedDetourOverlay = ({ isDetourView = false, hasDetourFocus = false } = {}) =>
   Boolean(isDetourView || hasDetourFocus);
 
-export const shouldShowDetourGeometryOverlay = ({ isDetourView = false, hasDetourFocus = false } = {}) =>
-  Boolean(isDetourView || hasDetourFocus);
+export const shouldShowDetourGeometryOverlay = () => true;
 
 export const getDetourLabelDensity = ({ isDetourView = false, hasDetourFocus = false } = {}) => {
   if (hasDetourFocus) return 'full';
@@ -26,7 +25,7 @@ export const getDetourGeometryOverlayProps = ({
     showCallouts: false,
     showLineLabels: false,
     showStopMarkers: false,
-    showClosedStopMarkers: false,
+    showClosedStopMarkers: true,
     showClosedRouteMask: false,
     opacity: Math.min(overlay?.opacity ?? 0.95, 0.58),
     lineStyleScale: 0.72,

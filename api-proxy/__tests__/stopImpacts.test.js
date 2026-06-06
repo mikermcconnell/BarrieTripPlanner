@@ -169,4 +169,64 @@ describe('deriveSegmentStopImpacts', () => {
     expect(result.skippedStopCodes).not.toContain('696');
     expect(result.firstSkippedStopCode).toBe('700');
   });
+
+  test('marks in-service boundary and detour-served stops as non-notifying roles', () => {
+    const result = deriveSegmentStopImpacts({
+      routeId: '12B',
+      shapeId: 'shape-12b',
+      polyline: [
+        { latitude: 44.392146, longitude: -79.692739 },
+        { latitude: 44.390741, longitude: -79.692893 },
+        { latitude: 44.39018841, longitude: -79.69253335 },
+      ],
+      segment: {
+        entryPoint: { latitude: 44.391986, longitude: -79.692597 },
+        exitPoint: { latitude: 44.39018841, longitude: -79.69253335 },
+        skippedSegmentPolyline: [
+          { latitude: 44.391986, longitude: -79.692597 },
+          { latitude: 44.390741, longitude: -79.692893 },
+          { latitude: 44.39018841, longitude: -79.69253335 },
+        ],
+        inferredDetourPolyline: [
+          { latitude: 44.391917, longitude: -79.69275 },
+          { latitude: 44.390833, longitude: -79.693028 },
+          { latitude: 44.39018841, longitude: -79.69253335 },
+        ],
+        canShowDetourPath: true,
+      },
+      stopImpactData: {
+        routeStopSequencesMapping: {
+          '12B': {
+            'shape-12b': ['75', '486'],
+          },
+        },
+        stopsById: new Map([
+          ['75', {
+            id: '75',
+            code: '75',
+            name: 'Bayfield at Sophia',
+            latitude: 44.392146,
+            longitude: -79.692739,
+          }],
+          ['486', {
+            id: '486',
+            code: '486',
+            name: 'Maple at Ross',
+            latitude: 44.39018841,
+            longitude: -79.69253335,
+          }],
+        ]),
+      },
+    });
+
+    expect(result.skippedStopCodes).toEqual([]);
+    expect(result.boundaryStopCodes).toContain('75');
+    expect(result.boundaryStopCodes).toContain('486');
+    expect(result.affectedStops.find((stop) => stop.code === '75')).toEqual(
+      expect.objectContaining({ detourStopRole: 'boundary' })
+    );
+    expect(result.affectedStops.find((stop) => stop.code === '486')).toEqual(
+      expect.objectContaining({ detourStopRole: 'boundary' })
+    );
+  });
 });

@@ -10,8 +10,20 @@ import { getUniqueDetourSections } from '../utils/detourHelpers';
  * Props:
  *   sections        — array of segment objects with affectedStops / entryStopName / exitStopName
  */
-const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
-  const hasStops = affectedStops && affectedStops.length > 0;
+const getDetourStopRole = (stop) => (
+  stop?.detourStopRole == null ? null : String(stop.detourStopRole).trim().toLowerCase()
+);
+
+const TimelineSection = ({ affectedStops, skippedStops, entryStopName, exitStopName }) => {
+  const contextStops = Array.isArray(affectedStops) && affectedStops.length > 0
+    ? affectedStops
+    : (Array.isArray(skippedStops) ? skippedStops : []);
+  const closedStops = Array.isArray(skippedStops) && skippedStops.length > 0
+    ? skippedStops
+    : (Array.isArray(affectedStops)
+      ? affectedStops.filter((stop) => getDetourStopRole(stop) === 'skipped')
+      : []);
+  const hasStops = contextStops.length > 0 || closedStops.length > 0;
 
   if (!hasStops) {
     return (
@@ -22,9 +34,8 @@ const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
     );
   }
 
-  const entryName = entryStopName || affectedStops[0]?.name;
-  const exitName = exitStopName || affectedStops[affectedStops.length - 1]?.name;
-  const skippedStops = affectedStops.slice(1, -1);
+  const entryName = entryStopName || contextStops[0]?.name || closedStops[0]?.name;
+  const exitName = exitStopName || contextStops[contextStops.length - 1]?.name || closedStops[closedStops.length - 1]?.name;
 
   return (
     <View style={styles.section}>
@@ -47,7 +58,7 @@ const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
       </View>
 
       {/* Skipped stops */}
-      {skippedStops.map((stop, index) => (
+      {closedStops.length > 0 ? closedStops.map((stop, index) => (
         <View key={`${stop.stop_id || stop.id || 'stop'}-${index}`} style={styles.nodeRow}>
           <View style={styles.nodeColumn}>
             <View style={styles.xIconWrapper}>
@@ -57,7 +68,14 @@ const TimelineSection = ({ affectedStops, entryStopName, exitStopName }) => {
           </View>
           <Text style={styles.skippedText}>{stop.name}</Text>
         </View>
-      ))}
+      )) : (
+        <View style={styles.nodeRow}>
+          <View style={styles.nodeColumn}>
+            <View style={[styles.verticalLine, styles.redLine]} />
+          </View>
+          <Text style={styles.openText}>No stops currently marked closed.</Text>
+        </View>
+      )}
 
       {/* Exit stop node */}
       <View style={styles.nodeRow}>
@@ -96,6 +114,7 @@ const DetourTimeline = ({ sections = [] }) => {
           )}
           <TimelineSection
             affectedStops={section.affectedStops}
+            skippedStops={section.skippedStops}
             entryStopName={section.entryStopName}
             exitStopName={section.exitStopName}
           />
@@ -192,6 +211,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textDecorationLine: 'line-through',
+    marginLeft: SPACING.sm,
+    paddingTop: 2,
+  },
+  openText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
     marginLeft: SPACING.sm,
     paddingTop: 2,
   },

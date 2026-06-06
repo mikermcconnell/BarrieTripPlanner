@@ -1,13 +1,11 @@
 import React, { memo } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { BUS_HUBS, BUS_HUB_TYPES, getBusHubDisplayLabel } from '../config/busHubs';
 import { COLORS, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
-const BUS_HUB_ICON_SOURCE = require('../../assets/icons/bus-hub.png');
-const HUB_ICON_SCALE = 1.5;
-const HUB_MAJOR_ICON_WRAP_SIZE = 84;
-const HUB_MINOR_ICON_WRAP_SIZE = 72;
+const HUB_MAJOR_ICON_WRAP_SIZE = 21;
+const HUB_MINOR_ICON_WRAP_SIZE = HUB_MAJOR_ICON_WRAP_SIZE * 0.75;
 const HUB_MAJOR_FRAME_HEIGHT = 112;
 const HUB_MINOR_FRAME_HEIGHT = 98;
 
@@ -24,20 +22,14 @@ const getHubLabel = (hub, currentZoom) => {
 
 const BusHubIcon = ({ type }) => {
   const isMajor = type === BUS_HUB_TYPES.MAJOR;
-  const size = (isMajor ? 54 : 46) * HUB_ICON_SCALE;
 
   return (
     <View
       testID="bus-hub-icon-wrap"
+      accessible
+      accessibilityLabel={isMajor ? 'Major bus hub' : 'Minor bus hub'}
       style={[styles.iconWrap, isMajor ? styles.iconWrapMajor : styles.iconWrapMinor]}
-    >
-      <Image
-        source={BUS_HUB_ICON_SOURCE}
-        style={{ width: size, height: size }}
-        resizeMode="contain"
-        accessibilityLabel="Bus hub"
-      />
-    </View>
+    />
   );
 };
 
@@ -114,10 +106,18 @@ const styles = StyleSheet.create({
   iconWrapMajor: {
     width: HUB_MAJOR_ICON_WRAP_SIZE,
     height: HUB_MAJOR_ICON_WRAP_SIZE,
+    borderRadius: HUB_MAJOR_ICON_WRAP_SIZE / 2,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.white,
+    borderWidth: 2,
   },
   iconWrapMinor: {
     width: HUB_MINOR_ICON_WRAP_SIZE,
     height: HUB_MINOR_ICON_WRAP_SIZE,
+    borderRadius: HUB_MINOR_ICON_WRAP_SIZE / 2,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.white,
+    borderWidth: 2,
   },
   labelPill: {
     paddingHorizontal: 8,
@@ -131,13 +131,13 @@ const styles = StyleSheet.create({
   },
   labelPillMajor: {
     position: 'absolute',
-    top: 74,
+    top: 22,
     alignSelf: 'center',
     borderColor: 'rgba(0, 78, 128, 0.28)',
   },
   labelPillMinor: {
     position: 'absolute',
-    top: 62,
+    top: 17,
     alignSelf: 'center',
     maxWidth: 160,
     borderColor: 'rgba(52, 69, 99, 0.22)',

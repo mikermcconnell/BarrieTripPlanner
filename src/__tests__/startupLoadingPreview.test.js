@@ -37,7 +37,7 @@ describe('startup loading preview', () => {
     return style || {};
   }
 
-  test('renders the mock-up copy and progress state', () => {
+  test('renders simplified one-line startup copy and progress state', () => {
     let inst;
 
     act(() => {
@@ -52,10 +52,11 @@ describe('startup loading preview', () => {
       .filter((value) => typeof value === 'string');
 
     expect(texts).toContain('MyBarrie Transit');
-    expect(texts).toContain('Good to go soon');
-    expect(texts).toContain('Getting Barrie Transit ready');
-    expect(texts).toContain('Loading routes, stops, live buses, and detour updates.');
-    expect(texts).toContain('Live detour awareness');
+    expect(texts).toContain('Loading routes, stops, and live updates');
+    expect(texts).not.toContain('Good to go soon');
+    expect(texts).not.toContain('Getting Barrie Transit ready');
+    expect(texts).not.toContain('Loading routes, stops, live buses, and detour updates.');
+    expect(texts).toContain('Live Detour Awareness');
     expect(texts).toContain('We check live bus movement to inform you of possible detours.');
     expect(texts).toContain('Checking service alerts and detours...');
     expect(texts).toContain('65%');

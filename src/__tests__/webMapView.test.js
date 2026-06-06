@@ -224,7 +224,7 @@ describe('WebMapView bus marker HTML', () => {
 });
 
 describe('WebMapView bus hub marker HTML', () => {
-  test('renders a cartoon bus icon with a readable hub label', () => {
+  test('renders a simple major hub circle with a readable hub label', () => {
     const html = __TEST_ONLY__.createBusHubHtml({
       label: 'Downtown Hub',
       hubType: 'major',
@@ -232,18 +232,35 @@ describe('WebMapView bus hub marker HTML', () => {
 
     expect(html).toContain('data-bus-hub-icon="true"');
     expect(html).toContain('Downtown Hub');
-    expect(html).toContain('src="test-file-stub"');
-    expect(html).toContain('data-bus-hub-artwork="true"');
-    expect(html).toContain('<img');
+    expect(html).toContain('data-bus-hub-major-circle="true"');
+    expect(html).toContain('background:#0C8CE5');
+    expect(html).toContain('border:2px solid #FFFFFF');
+    expect(html).not.toContain('src="test-file-stub"');
+    expect(html).not.toContain('<img');
     expect(html).not.toContain('<svg');
     expect(html).not.toContain('HUB</text>');
     expect(html).toContain('text-shadow');
-    expect(html).toContain('width:81px;height:81px');
-    expect(html).toContain('height:81px');
+    expect(html).toContain('width:21px;height:21px');
+    expect(html).toContain('height:21px');
     expect(html).toContain('position:absolute');
-    expect(html).toContain('top:71px');
+    expect(html).toContain('top:22px');
     expect(html).not.toContain('min-height:132px');
     expect(html).toContain('font:800 11px/1.2 Avenir, Arial, sans-serif');
     expect(html).not.toContain('transform:scale(0.5)');
+  });
+
+  test('renders a simple minor hub circle 25 percent smaller than major hubs', () => {
+    const html = __TEST_ONLY__.createBusHubHtml({
+      label: 'RVH',
+      hubType: 'minor',
+    });
+
+    expect(html).toContain('data-bus-hub-minor-circle="true"');
+    expect(html).toContain('RVH');
+    expect(html).toContain('width:15.75px;height:15.75px');
+    expect(html).toContain('border:2px solid #FFFFFF');
+    expect(html).toContain('top:16.75px');
+    expect(html).not.toContain('src="test-file-stub"');
+    expect(html).not.toContain('<img');
   });
 });

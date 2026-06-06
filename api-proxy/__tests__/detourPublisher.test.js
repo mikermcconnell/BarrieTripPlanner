@@ -124,6 +124,48 @@ describe('notice stop impact merge', () => {
     expect(route12B.segments[0].noticeTemporaryStopCodes).toEqual(['6170', '7560', '9310']);
   });
 
+  test('does not attach a distant Route 12 notice to a different GPS-confirmed Route 12B event', () => {
+    const bayfieldSophia = mergeNoticeStopImpactsIntoGeometry('12B', {
+      segments: [{
+        shapeId: 'shape-12b-bayfield',
+        entryStopId: '75',
+        exitStopId: '486',
+        skippedStops: [],
+        skippedStopIds: [],
+        skippedStopCodes: [],
+        affectedStops: [
+          { id: '75', code: '75', name: 'Bayfield at Sophia', latitude: 44.392146, longitude: -79.692739 },
+          { id: '486', code: '486', name: 'Maple at Ross', latitude: 44.39018841, longitude: -79.69253335 },
+        ],
+        skippedSegmentPolyline: [
+          { latitude: 44.391986, longitude: -79.692597 },
+          { latitude: 44.390741, longitude: -79.692893 },
+        ],
+        inferredDetourPolyline: [
+          { latitude: 44.391917, longitude: -79.69275 },
+          { latitude: 44.390833, longitude: -79.693028 },
+        ],
+        canShowDetourPath: true,
+      }],
+    }, noticeImpacts, {
+      routeStopSequencesMapping: {
+        '12B': {
+          '__default__': ['75', '486', '617', '618', '931'],
+        },
+      },
+      stopsByCode: new Map([
+        ...stopsByCode,
+        ['75', { id: '75', code: '75', name: 'Bayfield at Sophia', latitude: 44.392146, longitude: -79.692739 }],
+        ['486', { id: '486', code: '486', name: 'Maple at Ross', latitude: 44.39018841, longitude: -79.69253335 }],
+      ]),
+    });
+
+    expect(bayfieldSophia.segments[0].skippedStopCodes).toEqual([]);
+    expect(bayfieldSophia.segments[0].noticeTemporaryStopCodes || []).toEqual([]);
+    expect(bayfieldSophia.segments[0].noticeActiveStopCodes || []).toEqual([]);
+    expect(bayfieldSophia.segments[0].noticeStopImpactSource).toBeUndefined();
+  });
+
   test('forces a geometry write when official notice impacts are not in the published snapshot', () => {
     const previousSnapshot = {
       routeId: '12A',
@@ -323,6 +365,106 @@ describe('detourPublisher storage config', () => {
       detourVersion: 'v2-event-window',
       eventWindow: expect.objectContaining({ frozen: true }),
     }));
+  });
+
+  test('publishDetours keeps short no-skipped-stop safe GPS geometry rider-visible', async () => {
+    jest.resetModules();
+    const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
+    process.env.DETOUR_HISTORY_RETENTION_DAYS = '0';
+    const writes = {};
+    const activeSet = jest.fn(async (data) => {
+      writes.active = data;
+    });
+    const historySet = jest.fn(async (data) => {
+      writes.history = data;
+    });
+    const activeDoc = jest.fn(() => ({ set: activeSet, delete: jest.fn(async () => {}) }));
+    const historyDoc = jest.fn(() => ({ set: historySet }));
+    const collection = jest.fn((name) => ({
+      doc: name === 'detourEventHistoryV2' ? historyDoc : activeDoc,
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    try {
+      await publishDetours({
+        '100:shape-1:0-200': {
+          eventId: '100:shape-1:0-200',
+          routeId: '100',
+          shapeId: 'shape-1',
+          detourVersion: 'v2',
+          state: 'active',
+          confidence: 'high',
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          currentVehicleCount: 1,
+          vehiclesOffRoute: new Set(['bus-1']),
+          detectedAt: 1000,
+          lastSeenAt: 2000,
+          eventWindow: {
+            routeId: '100',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: 0,
+            coreEndProgressMeters: 120,
+            frozen: true,
+          },
+          geometry: {
+            shapeId: 'shape-1',
+            canShowDetourPath: true,
+            confidence: 'high',
+            startProgressMeters: 0,
+            endProgressMeters: 120,
+            skippedSegmentPolyline: [
+              { latitude: 44.390, longitude: -79.700 },
+              { latitude: 44.390, longitude: -79.6985 },
+            ],
+            inferredDetourPolyline: [
+              { latitude: 44.391, longitude: -79.700 },
+              { latitude: 44.391, longitude: -79.6992 },
+              { latitude: 44.391, longitude: -79.6985 },
+            ],
+            segments: [{
+              shapeId: 'shape-1',
+              canShowDetourPath: true,
+              startProgressMeters: 0,
+              endProgressMeters: 120,
+              skippedSegmentPolyline: [
+                { latitude: 44.390, longitude: -79.700 },
+                { latitude: 44.390, longitude: -79.6985 },
+              ],
+              inferredDetourPolyline: [
+                { latitude: 44.391, longitude: -79.700 },
+                { latitude: 44.391, longitude: -79.6992 },
+                { latitude: 44.391, longitude: -79.6985 },
+              ],
+            }],
+          },
+        },
+      }, {
+        now: 3000,
+        storageConfig: {
+          detourVersion: 'v2',
+          activeCollection: 'activeDetourEventsV2',
+          historyCollection: 'detourEventHistoryV2',
+        },
+      });
+    } finally {
+      if (originalRetentionDays == null) {
+        delete process.env.DETOUR_HISTORY_RETENTION_DAYS;
+      } else {
+        process.env.DETOUR_HISTORY_RETENTION_DAYS = originalRetentionDays;
+      }
+    }
+
+    expect(writes.active).toEqual(expect.objectContaining({
+      riderVisible: true,
+    }));
+    expect(writes.active.riderVisibilityReason).not.toBe('short-no-rider-impact');
   });
 
   test('publishDetours deletes superseded legacy route-keyed docs when event-window docs exist', async () => {

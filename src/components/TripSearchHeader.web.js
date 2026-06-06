@@ -278,7 +278,12 @@ const TripSearchHeaderWeb = ({
   return (
   <View style={styles.tripPlanHeader}>
     <View style={styles.tripPlanHeaderTop}>
-      <Text style={styles.tripPlanTitle}>Plan Your Trip</Text>
+      <View style={styles.tripPlanTitleGroup}>
+        <Text style={styles.tripPlanTitle}>Plan your trip</Text>
+        <Text style={styles.tripPlanSubtitle}>
+          Choose a destination and we’ll show the best live transit options.
+        </Text>
+      </View>
       {compact && (
         <TouchableOpacity
           style={styles.doneEditingButton}
@@ -637,14 +642,23 @@ const styles = StyleSheet.create({
   },
   tripPlanHeaderTop: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.sm,
   },
-  tripPlanTitle: {
+  tripPlanTitleGroup: {
     flex: 1,
+    paddingRight: SPACING.md,
+  },
+  tripPlanTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
+  },
+  tripPlanSubtitle: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
   },
   doneEditingButton: {
     paddingVertical: 6,

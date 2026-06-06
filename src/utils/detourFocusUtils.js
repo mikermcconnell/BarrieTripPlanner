@@ -95,3 +95,13 @@ export const getRoutePolylineLayerIndexes = (routeLayerOrder) => {
     labelLayerIndex: routeLayerOrder + ROUTE_POLYLINE_LAYER_OFFSETS.LABEL,
   };
 };
+
+export const getRoutePolylineRenderKey = ({
+  shapeId,
+  routeLayerOrder,
+  state = 'visible',
+} = {}) => {
+  const shapeKey = shapeId == null ? 'unknown-shape' : String(shapeId);
+  const layerKey = Number.isFinite(routeLayerOrder) ? routeLayerOrder : 'default';
+  return `${shapeKey}-layer-${layerKey}-${state}`;
+};

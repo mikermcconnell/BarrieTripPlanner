@@ -5,6 +5,7 @@ const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOr
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
 const { pruneDetourPathServedStopsFromGeometry } = require('./detour/stopImpacts');
 const { resolveDetourStorageConfig } = require('./detour/storageConfig');
+const { applyRiderVisibilityGuard } = require('./detour/riderVisibilityGuard');
 const {
   buildClearedEvent,
   buildDetectedEvent,
@@ -36,6 +37,7 @@ const SHARED_EVENT_PATH_MIN_OVERLAP_RATIO = 0.7;
 const SHARED_EVENT_PATH_SECONDARY_OVERLAP_RATIO = 0.5;
 const SHARED_EVENT_ENDPOINT_THRESHOLD_METERS = 225;
 const SHARED_EVENT_CENTROID_THRESHOLD_METERS = 450;
+const NOTICE_STOP_IMPACT_SPATIAL_TOLERANCE_METERS = 250;
 
 const lastPublishedIds = new Set();
 const lastPublishedState = new Map();
@@ -405,6 +407,29 @@ function getSegmentBoundaryStopCodes(segment = {}) {
   ].map(normalizeStopCode).filter(Boolean));
 }
 
+function getNoticeSpatialReferencePolyline(segment = {}) {
+  const candidates = [
+    segment.skippedSegmentPolyline,
+    segment.likelyDetourPolyline,
+    segment.canShowDetourPath === true ? segment.inferredDetourPolyline : null,
+    segment.entryPoint && segment.exitPoint ? [segment.entryPoint, segment.exitPoint] : null,
+  ];
+  for (const candidate of candidates) {
+    const polyline = normalizePolyline(candidate);
+    if (polyline.length >= 2) return polyline;
+  }
+  return [];
+}
+
+function noticeStopSpatiallyOverlapsSegment(candidate = {}, segment = {}, gtfsData = {}) {
+  const resolved = resolveNoticeStop(candidate, gtfsData);
+  const point = normalizePoint(resolved);
+  if (!point) return false;
+  const referencePolyline = getNoticeSpatialReferencePolyline(segment);
+  if (referencePolyline.length < 2) return false;
+  return distancePointToPolylineMeters(point, referencePolyline) <= NOTICE_STOP_IMPACT_SPATIAL_TOLERANCE_METERS;
+}
+
 function mergeNoticeStopImpactsIntoGeometry(routeId, geo, noticeStopImpacts = [], gtfsData = {}) {
   if (!geo || typeof geo !== 'object') return geo;
   const relevantImpacts = (noticeStopImpacts || []).filter((impact) => noticeAppliesToRoute(routeId, impact));
@@ -434,7 +459,12 @@ function mergeNoticeStopImpactsIntoGeometry(routeId, geo, noticeStopImpacts = []
       routeStopIds.has(stop.stopCode) ||
       currentSkippedCodes.has(stop.stopCode) ||
       boundaryStopCodes.has(stop.stopCode)
+    )).filter((stop) => (
+      currentSkippedCodes.has(stop.stopCode) ||
+      boundaryStopCodes.has(stop.stopCode) ||
+      noticeStopSpatiallyOverlapsSegment(stop, segment, gtfsData)
     ));
+    if (routeCandidates.length === 0) return segment;
     const officialClosureCodes = new Set(currentSkippedCodes);
     const activeStops = [];
 
@@ -2004,6 +2034,7 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId 
     doc.riderVisibilityReason = 'insufficient-geometry';
     doc.staleForReview = true;
   }
+  applyRiderVisibilityGuard(doc, previousSnapshot);
 
   return doc;
 }
@@ -2316,6 +2347,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.riderVisibilityReason = 'insufficient-geometry';
       doc.staleForReview = true;
     }
+    applyRiderVisibilityGuard(doc, geo);
     applyBaselineDivergenceSuppression(doc, routeId, baselineDivergedRouteIds);
 
     if (writeGeo && geo) {

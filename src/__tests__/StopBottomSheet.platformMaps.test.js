@@ -84,6 +84,34 @@ describe('StopBottomSheet platform maps', () => {
     expect(texts).toContain('Expected end date: May 20, 2026');
   });
 
+  test('summarizes standalone closure details instead of telling riders to check MyRide', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(StopBottomSheet, {
+        stop: {
+          id: '934',
+          code: '934',
+          name: 'Sarjeant Drive',
+          closureImpact: {
+            message: 'Sarjeant Drive is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.',
+            affectedRoutes: ['8B'],
+            sourceTitle: 'Route 8B stop closure',
+            sourceUrl: 'https://www.myridebarrie.ca/news/stop-closure',
+          },
+        },
+        onClose: jest.fn(),
+      }));
+    });
+
+    const text = inst.root.findAllByType('Text').flatMap((node) => collectText(node)).join(' ');
+    expect(text).toContain('Sarjeant Drive is currently reported closed.');
+    expect(text).toContain('Affected route: 8B.');
+    expect(text).toContain('Notice: Route 8B stop closure.');
+    expect(text).not.toContain('Check the linked Barrie Transit news');
+    expect(text).not.toContain('Open MyRide notice');
+  });
+
   test('shows upcoming stop closure start date without closed wording', () => {
     let inst;
 

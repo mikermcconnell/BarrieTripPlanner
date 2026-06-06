@@ -7,9 +7,29 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import logger from '../../utils/logger';
 import { getUserFacingErrorMessage } from '../../utils/userFacingErrors';
 
 const COLLECTION = 'users';
+
+const isExpectedOfflineFirestoreError = (error) => {
+  const code = String(error?.code || error?.name || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  const combined = `${code} ${message}`;
+
+  return /unavailable|offline|network|timeout|timed out/.test(combined);
+};
+
+const logUserFirestoreError = (message, error) => {
+  if (isExpectedOfflineFirestoreError(error)) {
+    logger.info(`${message} Firestore is offline; using local fallback where available.`, {
+      code: error?.code,
+    });
+    return;
+  }
+
+  logger.error(message, error);
+};
 
 export const userFirestoreService = {
   // Create new user document
@@ -40,7 +60,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error creating user:', error);
+      logUserFirestoreError('Error creating user:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not create your profile. Please try again.') };
     }
   },
@@ -57,7 +77,7 @@ export const userFirestoreService = {
 
       return this.docToUser(snapshot);
     } catch (error) {
-      console.error('Error getting user:', error);
+      logUserFirestoreError('Error getting user:', error);
       return null;
     }
   },
@@ -74,7 +94,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating user:', error);
+      logUserFirestoreError('Error updating user:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update your profile. Please try again.') };
     }
   },
@@ -90,7 +110,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating last login:', error);
+      logUserFirestoreError('Error updating last login:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update your account. Please try again.') };
     }
   },
@@ -107,7 +127,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating notification settings:', error);
+      logUserFirestoreError('Error updating notification settings:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings. Please try again.') };
     }
   },
@@ -125,7 +145,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating push token:', error);
+      logUserFirestoreError('Error updating push token:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings. Please try again.') };
     }
   },
@@ -142,7 +162,7 @@ export const userFirestoreService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating subscribed routes:', error);
+      logUserFirestoreError('Error updating subscribed routes:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update route subscriptions. Please try again.') };
     }
   },

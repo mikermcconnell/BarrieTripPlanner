@@ -287,6 +287,10 @@ function mergeUniqueStops(...stopLists) {
   return merged;
 }
 
+function withDetourStopRole(stop, role) {
+  return stop && role ? { ...stop, detourStopRole: role } : stop;
+}
+
 function compactStopImpactFields(prefix, entry) {
   const stop = entry?.stop || null;
   return {
@@ -394,29 +398,55 @@ function deriveSegmentStopImpacts({
     ))
     .sort((a, b) => a.progressMeters - b.progressMeters);
 
-  const affectedStops = affectedStopEntries.map((entry) => entry.stop);
-
-  if (affectedStops.length === 0) return {};
-
   const boundaryBufferMeters = getEffectiveBoundaryBufferMeters(startProgress, endProgress);
   const gpsServedStopEntries = affectedStopEntries.filter((entry) => (
     hasGpsServiceEvidence(entry, serviceEvidenceEntries)
   ));
   const isGpsServed = (entry) => gpsServedStopEntries.some((served) => served.stop.id === entry.stop.id);
+  const detourPathServedStopEntries = affectedStopEntries.filter((entry) => (
+    isServedByDetourPath(entry.stop, segment)
+  ));
+  const isDetourPathServed = (entry) => detourPathServedStopEntries.some((served) => served.stop.id === entry.stop.id);
+  const isBoundary = (entry) => (
+    entry.progressMeters <= startProgress + boundaryBufferMeters ||
+    entry.progressMeters >= endProgress - boundaryBufferMeters
+  );
+  const getEntryRole = (entry) => {
+    if (!entry) return null;
+    if (
+      entry.progressMeters > startProgress + boundaryBufferMeters &&
+      entry.progressMeters < endProgress - boundaryBufferMeters &&
+      !isGpsServed(entry) &&
+      !isDetourPathServed(entry)
+    ) {
+      return 'skipped';
+    }
+    if (isBoundary(entry)) return 'boundary';
+    if (isGpsServed(entry)) return 'served-by-gps';
+    if (isDetourPathServed(entry)) return 'served-by-detour';
+    return 'affected';
+  };
+  const affectedStops = affectedStopEntries.map((entry) => withDetourStopRole(entry.stop, getEntryRole(entry)));
+
+  if (affectedStops.length === 0) return {};
+
   const firstSkippedStopEntry = affectedStopEntries.find((entry) => (
     entry.progressMeters > startProgress + boundaryBufferMeters &&
     entry.progressMeters < endProgress - boundaryBufferMeters &&
     !isGpsServed(entry) &&
-    !isServedByDetourPath(entry.stop, segment)
+    !isDetourPathServed(entry)
   )) || null;
   const skippedStopEntries = affectedStopEntries.filter((entry) => (
     entry.progressMeters > startProgress + boundaryBufferMeters &&
     entry.progressMeters < endProgress - boundaryBufferMeters &&
     !isGpsServed(entry) &&
-    !isServedByDetourPath(entry.stop, segment)
+    !isDetourPathServed(entry)
   ));
-  const skippedStops = skippedStopEntries.map((entry) => entry.stop);
-  const gpsServedStops = gpsServedStopEntries.map((entry) => entry.stop);
+  const boundaryStopEntries = affectedStopEntries.filter(isBoundary);
+  const skippedStops = skippedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'skipped'));
+  const gpsServedStops = gpsServedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'served-by-gps'));
+  const detourPathServedStops = detourPathServedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'served-by-detour'));
+  const boundaryStops = boundaryStopEntries.map((entry) => withDetourStopRole(entry.stop, 'boundary'));
   const lastServedBeforeDetourStopEntry = affectedStopEntries
     .filter((entry) => entry.progressMeters <= startProgress + boundaryBufferMeters)
     .at(-1) || null;
@@ -434,6 +464,12 @@ function deriveSegmentStopImpacts({
     gpsServedStopIds: gpsServedStops.map((stop) => stop.id),
     gpsServedStopCodes: gpsServedStops.map((stop) => stop.code).filter(Boolean),
     gpsServedStops,
+    detourPathServedStopIds: detourPathServedStops.map((stop) => stop.id),
+    detourPathServedStopCodes: detourPathServedStops.map((stop) => stop.code).filter(Boolean),
+    detourPathServedStops,
+    boundaryStopIds: boundaryStops.map((stop) => stop.id),
+    boundaryStopCodes: boundaryStops.map((stop) => stop.code).filter(Boolean),
+    boundaryStops,
     firstSkippedStopId: firstSkippedStopEntry?.stop?.id || null,
     firstSkippedStopCode: getStopCode(firstSkippedStopEntry?.stop),
     firstSkippedStop: firstSkippedStopEntry?.stop || null,

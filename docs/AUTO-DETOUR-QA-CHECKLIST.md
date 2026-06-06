@@ -99,6 +99,7 @@ For each active detour:
 - [ ] Same-stop turnarounds are not shown as detours when no closed route segment is identified.
 - [ ] Paths with no entry stop, no exit stop, no skipped route segment, and no skipped/affected stops are not shown as detours.
 - [ ] Long out-and-back paths are not shown when the identified closed segment span is tiny and no skipped route segment exists.
+- [ ] Short GPS-confirmed detours with no skipped stops remain public when geometry is safe, but show only route/corridor-level messaging and no closed-stop notification.
 - [ ] Entry and exit points make sense.
 - [ ] Multiple independent detour sections are separate, not merged into one giant section.
 - [ ] If road matching fails, untrusted raw off-road GPS lines are not shown to riders.

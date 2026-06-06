@@ -118,8 +118,8 @@ const TripBottomSheet = ({
       return (
         <View style={styles.centerContainer}>
           <EmptyIcon size={48} color={COLORS.grey400} />
-          <Text style={styles.emptyTitle}>Quick trips</Text>
-          <Text style={styles.emptySubtext}>Pick a saved or recent route, or enter where you’re going above.</Text>
+          <Text style={styles.emptyTitle}>Your trips start here</Text>
+          <Text style={styles.emptySubtext}>Enter a destination above, or choose a saved or recent trip when available.</Text>
           {savedTrips.length > 0 && (
             <View style={styles.recentSection}>
               <Text style={styles.recentTitle}>Saved routes</Text>

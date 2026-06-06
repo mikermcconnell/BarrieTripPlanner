@@ -5,6 +5,7 @@ const {
   fetchLiveActiveDetours,
   loadEnvFile,
   loadJsonFile,
+  selectDetourForGroundTruth,
   validateDetourAgainstGroundTruth,
 } = require('./detourGroundTruthValidator');
 
@@ -15,6 +16,7 @@ function parseArgs(argv) {
     activeDetoursJson: null,
     activeCollection: null,
   };
+  let positionalIndex = 0;
 
   for (let index = 2; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -33,6 +35,14 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
+    } else if (!String(arg).startsWith('--')) {
+      if (positionalIndex === 0) {
+        args.fixture = arg;
+      } else if (positionalIndex === 1) {
+        args.activeDetoursJson = arg;
+        args.source = 'json';
+      }
+      positionalIndex += 1;
     }
   }
 
@@ -99,7 +109,7 @@ async function main() {
     throw new Error(`Unknown source: ${args.source}`);
   }
 
-  const detour = activeDetours?.[groundTruth.routeId] || null;
+  const detour = selectDetourForGroundTruth(activeDetours, groundTruth);
   const result = validateDetourAgainstGroundTruth(detour, groundTruth);
   printResult(result);
   if (!result.pass) {

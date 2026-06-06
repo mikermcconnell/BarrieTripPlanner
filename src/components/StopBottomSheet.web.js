@@ -95,6 +95,24 @@ const DetourRouteContext = ({ notice }) => {
   );
 };
 
+const GENERIC_MYRIDEBARRIE_COPY = /check\s+(the\s+)?(linked\s+)?(barrie transit|myride)/i;
+
+const buildStopClosureSummary = ({ stop, impact, fallback }) => {
+  const message = String(impact?.message || '').trim();
+  if (message && !GENERIC_MYRIDEBARRIE_COPY.test(message)) {
+    return message;
+  }
+
+  const routes = uniqueRouteLabels(impact?.affectedRoutes || impact?.affectedRouteIds || stop?.affectedRouteIds || stop?.routeIds);
+  const routeText = routes.length > 0
+    ? ` Affected route${routes.length === 1 ? '' : 's'}: ${routes.join(', ')}.`
+    : '';
+  const sourceTitle = String(impact?.sourceTitle || impact?.title || '').trim();
+  const sourceText = sourceTitle ? ` Notice: ${sourceTitle}.` : '';
+
+  return `${fallback}${routeText}${sourceText}`.trim();
+};
+
 const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, platformMap, onOpenPlatformMap }) => {
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
   const [slideAnim] = useState(new Animated.Value(100)); // Start off-screen (100%)
@@ -158,15 +176,21 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
   const upcomingClosureImpact = stop.upcomingClosureImpact || null;
   const detourNotice = stop.detourNotice || null;
   const noticeSourceUrl = closureImpact?.sourceUrl || detourNotice?.sourceUrl || null;
-  const upcomingNoticeSourceUrl = upcomingClosureImpact?.sourceUrl || null;
   const closureEndText = closureImpact ? getNoticeEndText(closureImpact, 'Stop closure end date is not listed.') : null;
   const closureStartText = upcomingClosureImpact ? getNoticeStartText(upcomingClosureImpact, 'Stop closure start date is not listed.') : null;
   const detourEndText = detourNotice ? getNoticeEndText(detourNotice, 'Detour end date is not listed.') : null;
+  const closureSummary = closureImpact ? buildStopClosureSummary({
+    stop,
+    impact: closureImpact,
+    fallback: `${stop.name || 'This stop'} is currently reported closed.`,
+  }) : null;
+  const upcomingClosureSummary = upcomingClosureImpact ? buildStopClosureSummary({
+    stop,
+    impact: upcomingClosureImpact,
+    fallback: `${stop.name || 'This stop'} is scheduled to close.`,
+  }) : null;
   const handleOpenNotice = () => {
     if (noticeSourceUrl) Linking.openURL(noticeSourceUrl).catch(() => {});
-  };
-  const handleOpenUpcomingNotice = () => {
-    if (upcomingNoticeSourceUrl) Linking.openURL(upcomingNoticeSourceUrl).catch(() => {});
   };
 
   return (
@@ -216,30 +240,16 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
         {closureImpact && (
           <View style={styles.closureBanner}>
             <Text style={styles.closureTitle}>Stop closure reported</Text>
-            <Text style={styles.closureText}>
-              {closureImpact.message || 'This stop is reported closed in Barrie Transit news.'}
-            </Text>
+            <Text style={styles.closureText}>{closureSummary}</Text>
             {closureEndText && <Text style={styles.noticeTimingText}>{closureEndText}</Text>}
-            {noticeSourceUrl && (
-              <TouchableOpacity style={styles.noticeLinkButton} onPress={handleOpenNotice} accessibilityRole="button" accessibilityLabel="Open MyRide notice">
-                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
         {upcomingClosureImpact && !closureImpact && (
           <View style={styles.upcomingClosureBanner}>
             <Text style={styles.upcomingClosureTitle}>📅 Closure scheduled</Text>
-            <Text style={styles.closureText}>
-              {upcomingClosureImpact.message || 'This stop is scheduled to close based on Barrie Transit news.'}
-            </Text>
+            <Text style={styles.closureText}>{upcomingClosureSummary}</Text>
             {closureStartText && <Text style={styles.noticeTimingText}>{closureStartText}</Text>}
-            {upcomingNoticeSourceUrl && (
-              <TouchableOpacity style={styles.noticeLinkButton} onPress={handleOpenUpcomingNotice} accessibilityRole="button" accessibilityLabel="Open MyRide notice">
-                <Text style={styles.noticeLinkText}>Open MyRide notice</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 

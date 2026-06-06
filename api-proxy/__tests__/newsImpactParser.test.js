@@ -24,6 +24,7 @@ describe('newsImpactParser', () => {
   test('extractStopCodesFromText handles single and multiple stop references', () => {
     expect(extractStopCodesFromText('Stop 509 Closure')).toEqual(['509']);
     expect(extractStopCodesFromText('stops 981 and 153 will also be placed out-of-service')).toEqual(['981', '153']);
+    expect(extractStopCodesFromText('Stops 88 (Bayfield at Dunlop) and 89 (Bayfield at Chase McEachern) will be out of service.')).toEqual(['88', '89']);
   });
 
   test('buildRuleStopClosures only matches stop closure language', () => {
@@ -125,8 +126,8 @@ describe('newsImpactParser', () => {
       publishedAt: Date.parse('2026-05-01T12:00:00Z'),
     }, new Date('2026-05-14T12:00:00-04:00'));
 
-    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 10, 2026');
-    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 20, 2026');
+    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 10, 2026');
+    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 20, 2026');
   });
 
   test('parseDateWindow handles one-day "on May 27" detour wording', () => {
@@ -136,9 +137,34 @@ describe('newsImpactParser', () => {
       publishedAt: Date.parse('2026-05-15T15:04:43Z'),
     }, new Date('2026-05-15T12:00:00-04:00'));
 
-    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
-    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
+    expect(new Date(window.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
+    expect(new Date(window.endsAt).toLocaleDateString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', year: 'numeric' })).toBe('May 27, 2026');
     expect(statusForDateWindow(window, new Date('2026-05-15T12:00:00-04:00'))).toBe('upcoming');
+  });
+
+  test('parseDateWindow handles weekday-qualified single-day notices with time ranges', async () => {
+    const impacts = await extractStopClosureImpacts([
+      {
+        id: '1659',
+        title: 'Stops 88 & 89 Closure Notice',
+        body: 'Stops 88 (Bayfield at Dunlop) and 89 (Bayfield at Chase McEachern) will be out of service from 7:30 AM to 9:30 AM on Sunday, June 7, due to a road closure on Bayfield Street.',
+        affectedRoutes: ['10', '11', '100', '101'],
+        publishedAt: Date.parse('2026-06-04T13:11:53Z'),
+      },
+    ], {
+      stopsByCode: new Map([
+        ['88', { id: '88', code: '88', name: 'Bayfield at Dunlop', latitude: 44.4, longitude: -79.7 }],
+        ['89', { id: '89', code: '89', name: 'Bayfield at Chase McEachern', latitude: 44.41, longitude: -79.71 }],
+      ]),
+      stopsById: new Map(),
+    }, { now: '2026-06-05T16:00:00-04:00' });
+
+    expect(impacts.map((impact) => impact.stopCode)).toEqual(['88', '89']);
+    expect(impacts.map((impact) => impact.status)).toEqual(['upcoming', 'upcoming']);
+    expect(impacts[0].startsAt).toBe(Date.parse('2026-06-07T07:30:00-04:00'));
+    expect(impacts[0].endsAt).toBe(Date.parse('2026-06-07T09:30:00-04:00'));
+    expect(new Date(impacts[0].startsAt).toLocaleString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })).toBe('Jun 7, 7:30 a.m.');
+    expect(new Date(impacts[0].endsAt).toLocaleString('en-CA', { timeZone: 'America/Toronto', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })).toBe('Jun 7, 9:30 a.m.');
   });
 
   test('buildNoticeStopImpactsFromText captures Saunders/Welham official PDF stop impacts', () => {
@@ -180,5 +206,35 @@ describe('newsImpactParser', () => {
       '7560',
       '9310',
     ]);
+  });
+
+  test('buildNoticeStopImpactsFromText ignores active stops and map labels outside the out-of-service section', () => {
+    const downtownPdfText = [
+      'DETOUR NOTICE',
+      'Routes 7, 8A-NB, 8B-SB, 10, 11, 12, 100, & 101',
+      'Detour',
+      'Routing',
+      'Out-of-Service',
+      'Stops',
+      'Active',
+      'Stops',
+      'Stop 189',
+      'Stop 192',
+      'Stop 191',
+      'Stop 187',
+      'Stop 88',
+      'Stop 89',
+      'Temporary',
+      'Stops',
+      'Temp Stop',
+      'Simcoe at Meridian',
+      'Stop 1',
+      'Stop 2',
+    ].join('\n');
+
+    const impacts = buildNoticeStopImpactsFromText(downtownPdfText);
+
+    expect(impacts.stopClosureCandidates).toEqual([]);
+    expect(impacts.temporaryStops).toEqual([]);
   });
 });

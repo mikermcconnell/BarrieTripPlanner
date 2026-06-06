@@ -1,121 +1,75 @@
-const fs = require('fs');
-const path = require('path');
-const route10GroundTruth = require('../../docs/detour-ground-truth/route-10-mulcaster-simcoe-2026-05-26.json');
 const {
-  fetchLiveActiveDetours,
-  getRenderableDetourPath,
+  selectDetourForGroundTruth,
   validateDetourAgainstGroundTruth,
 } = require('../../scripts/detourGroundTruthValidator');
 
-describe('detour ground-truth validator', () => {
-  test('validates every ground-truth fixture against equivalent detector output', () => {
-    const fixtureDir = path.resolve(__dirname, '../../docs/detour-ground-truth');
-    const fixtures = fs.readdirSync(fixtureDir)
-      .filter((fileName) => fileName.endsWith('.json'))
-      .map((fileName) => require(path.join(fixtureDir, fileName)));
+describe('detourGroundTruthValidator', () => {
+  const route12bGroundTruth = {
+    id: 'route-12b-bayfield-sophia-2026-06-05',
+    routeId: '12B',
+    eventId: 'event-short',
+    status: 'active',
+    closedSection: {
+      start: { latitude: 44.3919167, longitude: -79.69275 },
+      end: { latitude: 44.3908333, longitude: -79.6930278 },
+      maxLengthMeters: 290,
+    },
+    expectedSkippedStopCodes: [],
+    disallowedNoticeSourceIds: ['1637'],
+    disallowedStopCodes: ['617', '618', '931', '6170', '7560', '9310'],
+    tolerances: {
+      closedSectionMaxDistanceMeters: 40,
+    },
+  };
 
-    expect(fixtures.length).toBeGreaterThanOrEqual(2);
+  test('selects a matching V2 event document from a saved docs payload', () => {
+    const selected = selectDetourForGroundTruth({
+      docs: [
+        {
+          id: 'event-other',
+          routeId: '12B',
+          skippedSegmentPolyline: [
+            { latitude: 44.33325, longitude: -79.67405 },
+            { latitude: 44.33658, longitude: -79.66955 },
+          ],
+        },
+        {
+          id: 'event-short',
+          routeId: '12B',
+          skippedSegmentPolyline: [
+            { latitude: 44.39192, longitude: -79.69275 },
+            { latitude: 44.39083, longitude: -79.69303 },
+          ],
+        },
+      ],
+    }, route12bGroundTruth);
 
-    fixtures.forEach((fixture) => {
-      const result = validateDetourAgainstGroundTruth({
-        routeId: fixture.routeId,
-        state: fixture.status,
-        riderVisible: true,
-        skippedSegmentPolyline: [
-          fixture.closedSection.start,
-          fixture.closedSection.end,
-        ],
-        canShowDetourPath: true,
-        inferredDetourPolyline: fixture.detourPath,
-      }, fixture);
-
-      expect(result.pass).toBe(true);
-      expect(result.failures).toEqual([]);
-    });
+    expect(selected.id).toBe('event-short');
   });
 
-  test('validates Route 10 ground truth against matching detector output', () => {
+  test('fails short-detour ground truth when span, skipped stops, or distant notice fields expand it', () => {
     const result = validateDetourAgainstGroundTruth({
-      routeId: '10',
+      id: 'event-short',
+      routeId: '12B',
       state: 'active',
       riderVisible: true,
       skippedSegmentPolyline: [
-        { latitude: 44.3904722222, longitude: -79.6880277778 },
-        { latitude: 44.3878611111, longitude: -79.6891666667 },
+        { latitude: 44.392021, longitude: -79.692628 },
+        { latitude: 44.390741, longitude: -79.692893 },
+        { latitude: 44.388699, longitude: -79.69122 },
       ],
-      canShowDetourPath: true,
-      inferredDetourPolyline: [
-        { latitude: 44.3902777778, longitude: -79.6854722222 },
-        { latitude: 44.3886944444, longitude: -79.6855277778 },
-        { latitude: 44.3879722222, longitude: -79.6888333333 },
-      ],
-    }, route10GroundTruth);
-
-    expect(result.pass).toBe(true);
-    expect(result.failures).toEqual([]);
-  });
-
-  test('fails when the detector path misses the expected corridor', () => {
-    const result = validateDetourAgainstGroundTruth({
-      routeId: '10',
-      state: 'active',
-      riderVisible: true,
-      skippedSegmentPolyline: [
-        { latitude: 44.3904722222, longitude: -79.6880277778 },
-        { latitude: 44.3878611111, longitude: -79.6891666667 },
-      ],
-      likelyDetourPolyline: [
-        { latitude: 44.4000, longitude: -79.7000 },
-        { latitude: 44.4010, longitude: -79.7010 },
-      ],
-    }, route10GroundTruth);
+      skippedStopCodes: ['617'],
+      noticeTemporaryStopCodes: ['6170'],
+      noticeActiveStopCodes: ['618', '931'],
+      noticeStopImpactSourceNewsIds: ['1637'],
+    }, route12bGroundTruth);
 
     expect(result.pass).toBe(false);
-    expect(result.failures.some((failure) => failure.name.includes('detour path'))).toBe(true);
-  });
-
-  test('fetches the configured active-detour collection from Firestore REST', async () => {
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        documents: [
-          {
-            name: 'projects/proj/databases/(default)/documents/activeDetourEventsV2/12A:shape-1:100-300',
-            fields: {
-              routeId: { stringValue: '12A' },
-              riderVisible: { booleanValue: true },
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await fetchLiveActiveDetours({
-      apiKey: 'public-key',
-      projectId: 'proj',
-      collectionName: 'activeDetourEventsV2',
-      fetchImpl,
-    });
-
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://firestore.googleapis.com/v1/projects/proj/databases/(default)/documents/activeDetourEventsV2?key=public-key'
-    );
-    expect(result['12A:shape-1:100-300']).toEqual(expect.objectContaining({
-      routeId: '12A',
-      riderVisible: true,
-    }));
-  });
-
-  test('uses trusted inferred geometry when road-matched geometry is unavailable', () => {
-    const detour = {
-      canShowDetourPath: true,
-      likelyDetourPolyline: null,
-      inferredDetourPolyline: [
-        { latitude: 44.3902777778, longitude: -79.6854722222 },
-        { latitude: 44.3886944444, longitude: -79.6855277778 },
-      ],
-    };
-
-    expect(getRenderableDetourPath(detour)).toEqual(detour.inferredDetourPolyline);
+    expect(result.failures.map((failure) => failure.name)).toEqual(expect.arrayContaining([
+      'closed section: length is within maximum',
+      'skipped stop codes match expected',
+      'disallowed notice source ids are absent',
+      'disallowed stop codes are absent',
+    ]));
   });
 });

@@ -238,6 +238,25 @@ describe('DetourOverlay layer split', () => {
     expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(true);
   });
 
+  test('native regular map detour markers can hide skipped stop codes', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(NativeDetourOverlay, {
+        ...BASE_PROPS,
+        renderMode: 'markers',
+        currentZoom: 15,
+        showSkippedStopCodes: false,
+      }));
+    });
+
+    const skippedStopMarkers = inst.root
+      .findAllByType('MarkerView')
+      .filter((marker) => String(marker.props.id).startsWith('detour-skipped-stop-'));
+
+    expect(skippedStopMarkers).toHaveLength(1);
+    expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(false);
+  });
+
   test('native skipped stop press uses the stop route when family stops are merged', () => {
     const onStopPress = jest.fn();
     let inst;

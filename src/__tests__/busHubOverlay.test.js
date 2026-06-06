@@ -27,7 +27,12 @@ jest.mock('../components/WebMapView', () => ({
 
 const BusHubOverlay = require('../components/BusHubOverlay').default;
 const WebBusHubOverlay = require('../components/BusHubOverlay.web').default;
-const { BUS_HUBS, BUS_HUB_MINOR_LABEL_MIN_ZOOM } = require('../config/busHubs');
+const {
+  BUS_HUBS,
+  BUS_HUB_MAJOR_IDS,
+  BUS_HUB_MINOR_IDS,
+  BUS_HUB_MINOR_LABEL_MIN_ZOOM,
+} = require('../config/busHubs');
 
 describe('BusHubOverlay', () => {
   test('native renders cartoon hub marker views above route lines but below priority marker callouts', () => {
@@ -47,13 +52,28 @@ describe('BusHubOverlay', () => {
 
     expect(markers).toHaveLength(BUS_HUBS.length);
     expect(markers[0].props.id).toBe('bus-hub-allandale-terminal');
-    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 0.375 });
+    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 0.09375 });
     expect(markers.every((marker) => marker.props.pointerEvents === 'none')).toBe(true);
-    expect(images).toHaveLength(BUS_HUBS.length);
-    expect(images[0].props.accessibilityLabel).toBe('Bus hub');
-    expect(images[0].props.style).toEqual(expect.objectContaining({ width: 81, height: 81 }));
+    expect(images).toHaveLength(0);
     expect(iconWraps[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ width: 84, height: 84 }),
+      expect.objectContaining({
+        width: 21,
+        height: 21,
+        borderRadius: 10.5,
+        backgroundColor: '#0C8CE5',
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
+      }),
+    ]));
+    expect(iconWraps[BUS_HUB_MAJOR_IDS.length].props.style).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        width: 15.75,
+        height: 15.75,
+        borderRadius: 7.875,
+        backgroundColor: '#0C8CE5',
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
+      }),
     ]));
     expect(frames[0].props.style).toEqual(expect.arrayContaining([
       expect.objectContaining({ width: 220, height: 112 }),
@@ -67,7 +87,10 @@ describe('BusHubOverlay', () => {
       expect.objectContaining({ fontSize: 11 }),
     ]));
     expect(labelPills[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ position: 'absolute', top: 74 }),
+      expect.objectContaining({ position: 'absolute', top: 22 }),
+    ]));
+    expect(labelPills[BUS_HUB_MAJOR_IDS.length].props.style).toEqual(expect.arrayContaining([
+      expect.objectContaining({ position: 'absolute', top: 17 }),
     ]));
   });
 

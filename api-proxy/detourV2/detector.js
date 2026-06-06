@@ -17,7 +17,9 @@ const {
   expandProvisionalEventWindow,
   freezeEventWindow,
   buildClearWindowForEvent,
+  windowsOverlapOrNear,
 } = require('./eventWindows');
+const { applyRiderVisibilityGuard } = require('../detour/riderVisibilityGuard');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -41,6 +43,10 @@ const SPARSE_TRACE_MAX_TIME_GAP_MS = positiveNumber(
 const TRACE_REVERSAL_TOLERANCE_METERS = positiveNumber(
   process.env.DETOUR_V2_TRACE_REVERSAL_TOLERANCE_METERS,
   75
+);
+const LONG_CANDIDATE_MERGE_MIN_CORE_SPAN_METERS = positiveNumber(
+  process.env.DETOUR_V2_LONG_CANDIDATE_MERGE_MIN_CORE_SPAN_METERS,
+  500
 );
 const INFERRED_DETOUR_POINT_DEDUPE_METERS = positiveNumber(
   process.env.DETOUR_V2_INFERRED_POINT_DEDUPE_METERS,
@@ -1319,13 +1325,138 @@ function createDetourV2Detector(config = {}) {
     for (const candidate of eventCandidates.values()) {
       if (candidate.routeId !== routeId || candidate.shapeId !== shapeId) continue;
       if (pointMatchesEventWindow(point, candidate.eventWindow, 'confirm')) return candidate;
+      if (!canExtendCandidateOutsideConfirmWindow(candidate, point)) continue;
       const gap = pointGapFromEventWindowMeters(point, candidate.eventWindow);
       if (gap < nearestGap) {
         nearest = candidate;
         nearestGap = gap;
       }
     }
-    return nearestGap <= GEOMETRY_CLUSTER_GAP_METERS ? nearest : null;
+    return nearest || null;
+  }
+
+  function canExtendCandidateOutsideConfirmWindow(candidate, point) {
+    const gap = pointGapFromEventWindowMeters(point, candidate?.eventWindow);
+    if (!Number.isFinite(gap) || gap > GEOMETRY_CLUSTER_GAP_METERS) return false;
+
+    const signature = point?.signature ? String(point.signature) : '';
+    if (!signature || !candidate?.signatures?.has(signature)) return false;
+
+    const timestampMs = Number(point?.timestampMs);
+    const progressMeters = Number(point?.progressMeters);
+    if (!Number.isFinite(timestampMs) || !Number.isFinite(progressMeters)) return false;
+
+    const sameSignaturePoints = (candidate.points || [])
+      .filter((candidatePoint) => (
+        String(candidatePoint?.signature || '') === signature &&
+        Number.isFinite(Number(candidatePoint?.timestampMs)) &&
+        Number.isFinite(Number(candidatePoint?.progressMeters))
+      ))
+      .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+
+    if (sameSignaturePoints.length === 0) return false;
+    const previousPoint = sameSignaturePoints
+      .filter((candidatePoint) => Number(candidatePoint.timestampMs) <= timestampMs)
+      .at(-1);
+    if (!previousPoint) return false;
+
+    const timestampGap = timestampMs - Number(previousPoint.timestampMs);
+    if (timestampGap > SPARSE_TRACE_MAX_TIME_GAP_MS) return false;
+
+    const progressDelta = progressMeters - Number(previousPoint.progressMeters);
+    if (progressDelta < -TRACE_REVERSAL_TOLERANCE_METERS) return false;
+
+    return true;
+  }
+
+  function refreshProvisionalCandidateEventId(candidate) {
+    if (!candidate?.eventWindow || activeDetours.has(candidate.eventId)) return candidate;
+    const nextEventId = makeEventId({
+      routeId: candidate.routeId,
+      shapeId: candidate.shapeId,
+      startProgressMeters: candidate.eventWindow.coreStartProgressMeters,
+      endProgressMeters: candidate.eventWindow.coreEndProgressMeters,
+    });
+    if (!nextEventId || nextEventId === candidate.eventId) return candidate;
+    const existing = eventCandidates.get(nextEventId);
+    if (existing && existing !== candidate) return candidate;
+    eventCandidates.delete(candidate.eventId);
+    candidate.eventId = nextEventId;
+    eventCandidates.set(candidate.eventId, candidate);
+    return candidate;
+  }
+
+  function getCandidateCoreSpanMeters(candidate) {
+    const start = Number(candidate?.eventWindow?.coreStartProgressMeters);
+    const end = Number(candidate?.eventWindow?.coreEndProgressMeters);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+    return Math.abs(end - start);
+  }
+
+  function getCandidatePointKey(point = {}) {
+    return [
+      point.vehicleId,
+      point.signature,
+      point.timestampMs,
+      Number.isFinite(Number(point.progressMeters)) ? Number(point.progressMeters).toFixed(2) : '',
+    ].map((part) => String(part ?? '')).join('|');
+  }
+
+  function mergeCurrentOffRouteVehicleSets(targetEventId, sourceEventId, currentOffRouteVehicleIdsByEvent) {
+    if (!targetEventId || !sourceEventId || targetEventId === sourceEventId) return;
+    if (!(currentOffRouteVehicleIdsByEvent instanceof Map)) return;
+    const targetSet = currentOffRouteVehicleIdsByEvent.get(targetEventId) || new Set();
+    const sourceSet = currentOffRouteVehicleIdsByEvent.get(sourceEventId) || new Set();
+    for (const vehicleId of sourceSet) targetSet.add(vehicleId);
+    if (targetSet.size > 0) currentOffRouteVehicleIdsByEvent.set(targetEventId, targetSet);
+    currentOffRouteVehicleIdsByEvent.delete(sourceEventId);
+  }
+
+  function mergeCandidateInto(target, source, { shapeLengthMeters, currentOffRouteVehicleIdsByEvent } = {}) {
+    if (!target || !source || target === source) return target;
+    const oldTargetEventId = target.eventId;
+    const sourceEventId = source.eventId;
+    const existingPointKeys = new Set((target.points || []).map(getCandidatePointKey));
+
+    for (const point of source.points || []) {
+      const pointKey = getCandidatePointKey(point);
+      if (existingPointKeys.has(pointKey)) continue;
+      existingPointKeys.add(pointKey);
+      addPointToCandidate(target, point);
+      target.eventWindow = expandProvisionalEventWindow(target.eventWindow, {
+        ...point,
+        coordinate: point.coordinate,
+      }, { shapeLengthMeters });
+    }
+
+    eventCandidates.delete(sourceEventId);
+    refreshProvisionalCandidateEventId(target);
+    mergeCurrentOffRouteVehicleSets(oldTargetEventId, sourceEventId, currentOffRouteVehicleIdsByEvent);
+    mergeCurrentOffRouteVehicleSets(target.eventId, oldTargetEventId, currentOffRouteVehicleIdsByEvent);
+    return target;
+  }
+
+  function mergeNearbyLongCandidate(candidate, { shapeLengthMeters, currentOffRouteVehicleIdsByEvent } = {}) {
+    if (!candidate?.eventWindow) return candidate;
+    const activeCandidateDetour = activeDetours.get(candidate.eventId);
+    if (activeCandidateDetour && activeCandidateDetour.riderVisible !== false) return candidate;
+    if (getCandidateCoreSpanMeters(candidate) < LONG_CANDIDATE_MERGE_MIN_CORE_SPAN_METERS) return candidate;
+
+    for (const other of [...eventCandidates.values()]) {
+      const activeOtherDetour = activeDetours.get(other?.eventId);
+      if (
+        !other ||
+        other === candidate ||
+        other.routeId !== candidate.routeId ||
+        other.shapeId !== candidate.shapeId ||
+        (activeOtherDetour && activeOtherDetour.riderVisible !== false)
+      ) {
+        continue;
+      }
+      if (!windowsOverlapOrNear(candidate.eventWindow, other.eventWindow, GEOMETRY_CLUSTER_GAP_METERS)) continue;
+      mergeCandidateInto(candidate, other, { shapeLengthMeters, currentOffRouteVehicleIdsByEvent });
+    }
+    return candidate;
   }
 
   function getEventCandidate(routeId, shapeId, point, shapes) {
@@ -2044,9 +2175,6 @@ function createDetourV2Detector(config = {}) {
           coordinate,
         }, shapes);
         if (!candidate) continue;
-        const currentEventOffRouteVehicleIds = currentOffRouteVehicleIdsByEvent.get(candidate.eventId) || new Set();
-        currentEventOffRouteVehicleIds.add(id);
-        currentOffRouteVehicleIdsByEvent.set(candidate.eventId, currentEventOffRouteVehicleIds);
         addPointToCandidate(candidate, {
           vehicleId: id,
           signature,
@@ -2063,6 +2191,14 @@ function createDetourV2Detector(config = {}) {
         }, {
           shapeLengthMeters: getShapeLengthMeters(shapes, projection.shapeId),
         });
+        refreshProvisionalCandidateEventId(candidate);
+        mergeNearbyLongCandidate(candidate, {
+          shapeLengthMeters: getShapeLengthMeters(shapes, projection.shapeId),
+          currentOffRouteVehicleIdsByEvent,
+        });
+        const currentEventOffRouteVehicleIds = currentOffRouteVehicleIdsByEvent.get(candidate.eventId) || new Set();
+        currentEventOffRouteVehicleIds.add(id);
+        currentOffRouteVehicleIdsByEvent.set(candidate.eventId, currentEventOffRouteVehicleIds);
 
         if (hasEnoughConfirmingEvidence(candidate, {
           offRouteThresholdMeters,
@@ -2148,6 +2284,7 @@ function createDetourV2Detector(config = {}) {
     for (const detour of Object.values(lastReportedDetours)) {
       if (detour?.routeId) {
         enrichDetourMapStopImpacts({ [detour.routeId]: detour }, shapes, stopImpactData);
+        applyRiderVisibilityGuard(detour, detour.geometry);
       }
     }
     return defineRouteAliases(lastReportedDetours);

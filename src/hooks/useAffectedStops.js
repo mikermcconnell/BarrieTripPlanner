@@ -6,6 +6,12 @@ import { isStopServedByRenderableDetourPath } from '../utils/detourOverlayGeomet
 
 const SKIPPED_STOP_POLYLINE_PROXIMITY_METERS = 50;
 const BOUNDARY_STOP_OPEN_BUFFER_METERS = 60;
+const NON_NOTIFYING_DETOUR_STOP_ROLES = new Set([
+  'boundary',
+  'served-by-detour',
+  'served-by-gps',
+  'notice-active',
+]);
 
 const normalizeStopKey = (value) => (
   value == null ? null : String(value).trim().toLowerCase()
@@ -87,11 +93,41 @@ const resolveStopList = (references, lookups) => (
 
 const hasNonEmptyArray = (value) => Array.isArray(value) && value.length > 0;
 
+const normalizeDetourStopRole = (stop) => (
+  stop?.detourStopRole == null ? null : String(stop.detourStopRole).trim().toLowerCase()
+);
+
+export const isNonNotifyingDetourStop = (stop) => (
+  NON_NOTIFYING_DETOUR_STOP_ROLES.has(normalizeDetourStopRole(stop))
+);
+
+export const isNotifyingDetourStop = (stop) => (
+  normalizeDetourStopRole(stop) === 'skipped'
+);
+
+const uniqueStops = (stops = []) => {
+  const seen = new Set();
+  return (Array.isArray(stops) ? stops : []).filter((stop) => {
+    const key = getStopKey(stop) || getStopCodeKey(stop) || normalizeStopKey(stop?.name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const hasExplicitStopImpacts = (segment) => (
   hasNonEmptyArray(segment?.skippedStopIds) ||
   hasNonEmptyArray(segment?.affectedStopIds) ||
+  hasNonEmptyArray(segment?.boundaryStopIds) ||
+  hasNonEmptyArray(segment?.detourPathServedStopIds) ||
+  hasNonEmptyArray(segment?.gpsServedStopIds) ||
+  hasNonEmptyArray(segment?.noticeActiveStopIds) ||
   hasNonEmptyArray(segment?.skippedStops) ||
-  hasNonEmptyArray(segment?.affectedStops)
+  hasNonEmptyArray(segment?.affectedStops) ||
+  hasNonEmptyArray(segment?.boundaryStops) ||
+  hasNonEmptyArray(segment?.detourPathServedStops) ||
+  hasNonEmptyArray(segment?.gpsServedStops) ||
+  hasNonEmptyArray(segment?.noticeActiveStops)
 );
 
 const removeDetourPathServedSkippedStops = (skippedStops = [], segment = {}) => (
@@ -116,22 +152,52 @@ const deriveExplicitAffectedStops = ({
       ? segment.skippedStops
       : segment?.skippedStopIds,
     lookups
-  ), segment);
+  ).filter((stop) => !isNonNotifyingDetourStop(stop)), segment);
   const affectedStops = resolveStopList(
     Array.isArray(segment?.affectedStops) && segment.affectedStops.length > 0
       ? segment.affectedStops
       : segment?.affectedStopIds,
     lookups
   );
+  const boundaryStops = resolveStopList(
+    Array.isArray(segment?.boundaryStops) && segment.boundaryStops.length > 0
+      ? segment.boundaryStops
+      : segment?.boundaryStopIds,
+    lookups
+  );
+  const detourPathServedStops = resolveStopList(
+    Array.isArray(segment?.detourPathServedStops) && segment.detourPathServedStops.length > 0
+      ? segment.detourPathServedStops
+      : segment?.detourPathServedStopIds,
+    lookups
+  );
+  const gpsServedStops = resolveStopList(
+    Array.isArray(segment?.gpsServedStops) && segment.gpsServedStops.length > 0
+      ? segment.gpsServedStops
+      : segment?.gpsServedStopIds,
+    lookups
+  );
+  const noticeActiveStops = resolveStopList(
+    Array.isArray(segment?.noticeActiveStops) && segment.noticeActiveStops.length > 0
+      ? segment.noticeActiveStops
+      : segment?.noticeActiveStopIds,
+    lookups
+  );
   const resolvedAffectedStops = affectedStops.length > 0 ? affectedStops : skippedStops;
+  const notifyingAffectedStops = uniqueStops([
+    ...skippedStops,
+    ...affectedStops.filter(isNotifyingDetourStop),
+  ]);
   const entryStop =
     resolveStopReference(segment?.entryStop, lookups) ||
     resolveStopReference(segment?.entryStopId, lookups) ||
+    boundaryStops[0] ||
     resolvedAffectedStops[0] ||
     null;
   const exitStop =
     resolveStopReference(segment?.exitStop, lookups) ||
     resolveStopReference(segment?.exitStopId, lookups) ||
+    boundaryStops[boundaryStops.length - 1] ||
     resolvedAffectedStops[resolvedAffectedStops.length - 1] ||
     null;
   const affectedKeys = new Set(resolvedAffectedStops.map(getStopKey).filter(Boolean));
@@ -140,6 +206,11 @@ const deriveExplicitAffectedStops = ({
     routeStops,
     affectedStops: resolvedAffectedStops,
     skippedStops,
+    notifyingAffectedStops,
+    boundaryStops,
+    detourPathServedStops,
+    gpsServedStops,
+    noticeActiveStops,
     unaffectedStops: affectedKeys.size > 0
       ? routeStops.filter((stop) => !affectedKeys.has(getStopKey(stop)))
       : [],
@@ -195,6 +266,7 @@ export function deriveAffectedStops({
     routeStops: [],
     affectedStops: [],
     skippedStops: [],
+    notifyingAffectedStops: [],
     unaffectedStops: [],
     entryStop: null,
     exitStop: null,
@@ -257,6 +329,7 @@ export function deriveAffectedStops({
     routeStops,
     affectedStops,
     skippedStops,
+    notifyingAffectedStops: skippedStops,
     unaffectedStops,
     entryStop,
     exitStop,

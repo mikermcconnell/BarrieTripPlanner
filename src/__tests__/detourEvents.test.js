@@ -150,6 +150,58 @@ describe('detourEvents', () => {
     ]));
   });
 
+  test('collapses split same-route event windows when shared IDs are missing from some segments', () => {
+    const events = buildActiveDetourEvents({
+      '12A': {
+        routeId: '12A',
+        state: 'active',
+        confidence: 'high',
+        sharedDetourEventId: 'detour-event-hooper',
+        sharedRouteIds: ['12A', '12B'],
+        eventLocationLabel: 'Hooper Road · Stops #933, #756 +1',
+        segments: [
+          {
+            detourEventId: 'detour-event-hooper',
+            sharedDetourEventId: 'detour-event-hooper',
+            likelyDetourRoadNames: ['Hooper Road'],
+            skippedStopCodes: ['933', '756'],
+          },
+          {
+            detourEventId: '12A:hooper:9500-9800',
+            likelyDetourRoadNames: ['Hooper Road'],
+            skippedStopCodes: ['933', '756'],
+          },
+          {
+            detourEventId: '12A:hooper:10100-10400',
+            likelyDetourRoadNames: ['Hooper Road'],
+            skippedStopCodes: ['933', '756'],
+          },
+        ],
+      },
+      '12B': {
+        routeId: '12B',
+        state: 'active',
+        confidence: 'high',
+        sharedDetourEventId: 'detour-event-hooper',
+        sharedRouteIds: ['12A', '12B'],
+        eventLocationLabel: 'Hooper Road · Stops #933, #756 +1',
+        segments: [{
+          detourEventId: 'detour-event-hooper',
+          sharedDetourEventId: 'detour-event-hooper',
+          likelyDetourRoadNames: ['Hooper Road'],
+          skippedStopCodes: ['933', '756'],
+        }],
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      title: 'Hooper Road · Stops #933, #756 +1',
+      routeIds: ['12A', '12B'],
+    });
+    expect(events[0].candidates).toHaveLength(4);
+  });
+
   test('keeps unrelated detour events separate', () => {
     const events = buildActiveDetourEvents({
       '12A': {
@@ -194,6 +246,22 @@ describe('detourEvents', () => {
       segment: { detourPathLabel: 'Likely detour path' },
       detour: { likelyDetourRoadNames: ['Hooper Road', 'Saunders Road'] },
     })).toBe('Hooper & Saunders');
+  });
+
+  test('prefers configured closed corridor labels over likely detour road names', () => {
+    expect(buildDetourEventTitle({
+      routeId: '12A',
+      detour: {
+        configuredCorridorLabel: 'Saunders-Welham',
+        eventLocationLabel: 'Hooper Road',
+        likelyDetourRoadNames: ['Hooper Road'],
+      },
+      segment: {
+        configuredCorridorLabel: 'Saunders-Welham',
+        likelyDetourRoadNames: ['Hooper Road'],
+        skippedStopCodes: ['933', '756', '617'],
+      },
+    })).toBe('Saunders & Welham · Stops #933, #756 +1');
   });
 
   test('adds stop codes to generated road-location titles', () => {

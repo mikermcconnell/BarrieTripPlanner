@@ -14,8 +14,8 @@ describe('detourViewMode', () => {
     showStopMarkers: true,
   };
 
-  test('regular map view leaves route geometry unmasked', () => {
-    expect(shouldShowDetourGeometryOverlay({ isDetourView: false, hasDetourFocus: false })).toBe(false);
+  test('regular map view keeps detours lightweight', () => {
+    expect(shouldShowDetourGeometryOverlay({ isDetourView: false, hasDetourFocus: false })).toBe(true);
     expect(shouldShowDetailedDetourOverlay({ isDetourView: false, hasDetourFocus: false })).toBe(false);
 
     expect(getDetourGeometryOverlayProps({
@@ -27,7 +27,7 @@ describe('detourViewMode', () => {
       showCallouts: false,
       showLineLabels: false,
       showStopMarkers: false,
-      showClosedStopMarkers: false,
+      showClosedStopMarkers: true,
       showClosedRouteMask: false,
       opacity: 0.58,
       lineStyleScale: expect.any(Number),

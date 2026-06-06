@@ -72,12 +72,11 @@ import BusHubOverlay from '../components/BusHubOverlay.web';
 import { useZoneOverlays } from '../hooks/useZoneOverlays';
 import ZoneOverlay from '../components/ZoneOverlay.web';
 import ZoneInfoSheet from '../components/ZoneInfoSheet.web';
-import HomeScreenControls from '../components/HomeScreenControls';
 import SurveyNudgeBanner from '../components/survey/SurveyNudgeBanner';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
-import MapViewModeToggle from '../components/MapViewModeToggle';
+import MapOptionsControl from '../components/MapOptionsControl';
 import DetourMapLegend from '../components/DetourMapLegend';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
 import TripViewportControls from '../components/TripViewportControls';
@@ -135,24 +134,6 @@ const getRenderZoom = (zoom) => (
 );
 
 // SVG Icons as components - Refined for premium feel
-const BusIcon = ({ size = 20, color = COLORS.textPrimary }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M4 16C4 16.88 4.39 17.67 5 18.22V20C5 20.55 5.45 21 6 21H7C7.55 21 8 20.55 8 20V19H16V20C16 20.55 16.45 21 17 21H18C18.55 21 19 20.55 19 20V18.22C19.61 17.67 20 16.88 20 16V6C20 2.5 16.42 2 12 2C7.58 2 4 2.5 4 6V16ZM7.5 17C6.67 17 6 16.33 6 15.5C6 14.67 6.67 14 7.5 14C8.33 14 9 14.67 9 15.5C9 16.33 8.33 17 7.5 17ZM16.5 17C15.67 17 15 16.33 15 15.5C15 14.67 15.67 14 16.5 14C17.33 14 18 14.67 18 15.5C18 16.33 17.33 17 16.5 17ZM18 11H6V6H18V11Z" fill={color} />
-  </svg>
-);
-
-const StopIconFilled = ({ size = 20, color = COLORS.textPrimary }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill={color} />
-  </svg>
-);
-
-const StopIconOutline = ({ size = 20, color = COLORS.textPrimary }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM7 9C7 6.24 9.24 4 12 4C14.76 4 17 6.24 17 9C17 12.18 14.12 16.5 12 19.05C9.92 16.53 7 12.22 7 9ZM12 11.5C13.38 11.5 14.5 10.38 14.5 9C14.5 7.62 13.38 6.5 12 6.5C10.62 6.5 9.5 7.62 9.5 9C9.5 10.38 10.62 11.5 12 11.5Z" fill={color} />
-  </svg>
-);
-
 const RouteIcon = ({ size = 20, color = COLORS.textPrimary }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M15 5L13.59 6.41L16.17 9H4V11H16.17L13.59 13.59L15 15L20 10L15 5Z" fill={color} />
@@ -174,12 +155,6 @@ const SearchIcon = ({ size = 20, color = COLORS.textSecondary }) => (
 const AlertIcon = ({ size = 16, color = COLORS.warning }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 2L1 21H23L12 2ZM12 18C11.45 18 11 17.55 11 17C11 16.45 11.45 16 12 16C12.55 16 13 16.45 13 17C13 17.55 12.55 18 12 18ZM13 14H11V10H13V14Z" fill={color} />
-  </svg>
-);
-
-const DirectionsIcon = ({ size = 20, color = COLORS.white }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M21.71 11.29L12.71 2.29C12.32 1.9 11.69 1.9 11.3 2.29L2.3 11.29C1.91 11.68 1.91 12.31 2.3 12.7L11.3 21.7C11.5 21.9 11.74 22 12 22C12.26 22 12.5 21.9 12.71 21.71L21.71 12.71C22.1 12.32 22.1 11.68 21.71 11.29ZM14 14.5V12H10V15H8V11C8 10.45 8.45 10 9 10H14V7.5L17.5 11L14 14.5Z" fill={color} />
   </svg>
 );
 
@@ -586,8 +561,9 @@ const HomeScreen = ({ route }) => {
   const [mapViewMode, setMapViewMode] = useState('regular');
   const [detourLegendAutoCollapseSignal, setDetourLegendAutoCollapseSignal] = useState(0);
   const [upcomingDetoursCollapsed, setUpcomingDetoursCollapsed] = useState(false);
+  const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
   const pulseAnim = useMapPulseAnimation();
-  const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel();
+  const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, expand: expandRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel({ defaultExpanded: false });
 
   // Wrap route select to auto-collapse panel on selection
   const handleRouteSelect = useCallback((routeId) => {
@@ -596,6 +572,11 @@ const HomeScreen = ({ route }) => {
       collapseRoutePanel();
     }
   }, [rawHandleRouteSelect, autoCollapseOnSelect, collapseRoutePanel]);
+
+  const openRoutePanelFromMapOptions = useCallback(() => {
+    setIsMapOptionsOpen(false);
+    expandRoutePanel();
+  }, [expandRoutePanel]);
 
   // Track newly selected routes for draw-on animation
   const prevSelectedRef = useRef(new Set());
@@ -953,9 +934,10 @@ const HomeScreen = ({ route }) => {
     mergeStopClosuresForDetourMap({
       displayedStops: displayedStopsForMap,
       closureStops: detourMapClosureStops,
-      includeClosures: isDetourView || hasDetourFocus,
+      includeClosures: true,
     })
-  ), [displayedStopsForMap, detourMapClosureStops, isDetourView, hasDetourFocus]);
+  ), [displayedStopsForMap, detourMapClosureStops]);
+  const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;
   const detourMapBadgeCount = getActiveDetourEventCount(statusDetours);
   const mapChromeOffsets = getMapChromeOffsets({
     isWideWeb,
@@ -1363,8 +1345,11 @@ const HomeScreen = ({ route }) => {
 
   // Handle stop press
   const handleStopPress = useCallback((stop) => {
-    setSelectedStop(stop);
-  }, []);
+    setSelectedStop(buildDetourStopNotice({
+      stop,
+      transitNewsImpacts,
+    }));
+  }, [transitNewsImpacts]);
 
   const handleDetourStopPress = useCallback((stop, context = {}) => {
     if (!stop) return;
@@ -1743,6 +1728,7 @@ const HomeScreen = ({ route }) => {
             currentZoom={currentZoom}
             labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
             selectedSegmentIndex={overlay.routeId === focusedDetourRouteId ? detourSheetSegmentIndex : null}
+            showSkippedStopCodes={isDetourView || hasDetourFocus}
             onPress={(segment, segmentIndex) => handleDetourOverlayPress(overlay.routeId, segment, segmentIndex, overlay)}
             onStopPress={handleDetourStopPress}
           />
@@ -1764,13 +1750,14 @@ const HomeScreen = ({ route }) => {
             stop={stop}
             onPress={handleStopPress}
             isSelected={selectedStop?.id === stop.id}
+            closedStopOpacity={closedStopMarkerOpacity}
           />
         ))}
         {/* Detour open/closed stop markers — above route and detour lines */}
-        {!isTripPreviewMode && shouldShowDetailedDetourOverlay({ isDetourView, hasDetourFocus }) && detourOverlays.map((overlay) => (
+        {!isTripPreviewMode && shouldRenderDetourMapOverlays && detourOverlays.map((overlay) => (
           <DetourOverlay
             key={`detour-stops-${overlay.routeId}`}
-            {...overlay}
+            {...getDetourGeometryOverlayProps({ overlay, isDetourView, hasDetourFocus })}
             renderMode="markers"
             currentZoom={currentZoom}
             labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
@@ -2093,18 +2080,6 @@ const HomeScreen = ({ route }) => {
               right: SPACING.md,
             } : undefined}
           />
-          <MapViewModeToggle
-            visible={canUseDetourView}
-            mode={mapViewMode}
-            onChange={handleMapViewModeChange}
-            detourCount={detourMapBadgeCount}
-            alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
-            style={isWideWeb ? {
-              top: mapChromeOffsets.mapViewTop,
-              left: desktopMapMainLeft,
-              right: 'auto',
-            } : undefined}
-          />
           <UpcomingDetourStrip
             notices={!isTripPlanningMode && isDetourView ? upcomingDetourNotices : []}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
@@ -2152,19 +2127,7 @@ const HomeScreen = ({ route }) => {
             )}
           </TouchableOpacity>
 
-          {/* Route Filter - Collapsible Left Side Panel */}
-          {!routePanelExpanded && (
-            <TouchableOpacity
-              style={[
-                styles.routePanelPill,
-                isWideWeb && { top: mapChromeOffsets.routeFilterTop, left: SPACING.md },
-              ]}
-              onPress={toggleRoutePanel}
-            >
-              <BusIcon size={14} color={COLORS.textSecondary} />
-              <Text style={styles.routePanelPillText}>Routes{hasSelection ? ` (${selectedRoutes.size})` : ''}</Text>
-            </TouchableOpacity>
-          )}
+          {/* Route Filter - opened from Map options */}
           <View
             style={[
               styles.filterPanel,
@@ -2283,37 +2246,24 @@ const HomeScreen = ({ route }) => {
         />
       )}
 
-      {/* Bottom Action Bar - unified frosted card */}
+      {/* Secondary map controls live in Map options to keep the map calm. */}
       {!isTripPlanningMode && !selectedStop && (
-        <View style={styles.bottomActionBar}>
-          <View style={styles.bottomActionCard}>
-            {/* Stops Toggle - Ghost style when inactive */}
-            <TouchableOpacity
-              style={[styles.bottomActionButton, showStops && styles.bottomActionButtonActive]}
-              onPress={() => setShowStops(!showStops)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={showStops ? 'Hide stops' : 'Show stops'}
-            >
-              {showStops
-                ? <StopIconFilled size={18} color={COLORS.white} />
-                : <StopIconOutline size={18} color={COLORS.grey600} />
-              }
-            </TouchableOpacity>
-
-            {/* Secondary manual planner. The top "Where to?" search is the primary trip entry. */}
-            <TouchableOpacity
-              style={styles.planTripButton}
-              onPress={enterTripPlanningMode}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel="Plan trip manually"
-            >
-              <DirectionsIcon size={20} color={COLORS.primaryDark} />
-              <Text style={styles.planTripButtonText}>Plan manually</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <MapOptionsControl
+          style={styles.mapOptionsControl}
+          isOpen={isMapOptionsOpen}
+          onToggleOpen={() => setIsMapOptionsOpen((open) => !open)}
+          showStops={showStops}
+          onToggleStops={() => setShowStops((visible) => !visible)}
+          showZones={showZones}
+          onToggleZones={() => setShowZones((visible) => !visible)}
+          zoneCount={Object.keys(onDemandZones || {}).length}
+          selectedRouteCount={selectedRoutes.size}
+          onOpenRouteFilter={openRoutePanelFromMapOptions}
+          canUseDetourView={canUseDetourView}
+          mapViewMode={mapViewMode}
+          onMapViewModeChange={handleMapViewModeChange}
+          detourCount={detourMapBadgeCount}
+        />
       )}
 
       {/* Trip Bottom Sheet - hide while a selected stop sheet is choosing endpoints */}
@@ -2868,60 +2818,10 @@ const styles = StyleSheet.create({
     right: SPACING.sm,
     zIndex: 999,
   },
-  // Bottom Action Bar - unified card
-  bottomActionBar: {
-    position: 'absolute',
+  mapOptionsControl: {
     bottom: SPACING.xl,
-    left: 80,
-    right: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
+    left: 64,
   },
-  bottomActionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    backdropFilter: 'blur(16px)',
-    borderRadius: BORDER_RADIUS.round,
-    padding: SPACING.xs,
-    boxShadow: '0 4px 18px rgba(23, 43, 77, 0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(235, 236, 240, 0.8)',
-    gap: SPACING.sm,
-  },
-  bottomActionButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: COLORS.grey300,
-  },
-  bottomActionButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  planTripButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: BORDER_RADIUS.round,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.lg,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(12, 140, 229, 0.20)',
-  },
-  planTripButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semibold,
-    color: COLORS.primaryDark,
-    letterSpacing: 0.2,
-  },
-
   // Trip Planning Header
   tripPlanHeader: {
     position: 'absolute',

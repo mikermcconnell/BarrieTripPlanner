@@ -39,6 +39,29 @@ describe('tripDetourImpacts', () => {
     });
   });
 
+  test('keeps boundary-only stop impacts at route-level severity', () => {
+    const impact = getLegDetourImpact({
+      leg: busLeg,
+      activeDetours,
+      detourStopDetailsByRouteId: {
+        10: {
+          segmentStopDetails: [{
+            skippedStops: [],
+            affectedStops: [
+              { stopId: 'S1', stopCode: '1001', name: 'Origin Stop', detourStopRole: 'boundary' },
+              { stopId: 'S3', stopCode: '1003', name: 'Destination Stop', detourStopRole: 'boundary' },
+            ],
+          }],
+        },
+      },
+    });
+
+    expect(impact.severity).toBe('route_detour');
+    expect(impact.impactScope).toBe('route');
+    expect(impact.affectedStops).toEqual([]);
+    expect(impact.message).toBe('Route 10 is currently on detour.');
+  });
+
   test('escalates when the boarding stop is skipped by the detour', () => {
     const impact = getLegDetourImpact({
       leg: busLeg,
@@ -79,14 +102,14 @@ describe('tripDetourImpacts', () => {
     expect(impact.guidance).toContain('Get off after the route rejoins');
   });
 
-  test('escalates when an intermediate stop is affected', () => {
+  test('escalates when an intermediate stop is skipped', () => {
     const impact = getLegDetourImpact({
       leg: busLeg,
       activeDetours,
       detourStopDetailsByRouteId: {
         10: {
           segmentStopDetails: [{
-            affectedStops: [{ stopId: 'S2', stopCode: '1002', name: 'Middle Stop' }],
+            skippedStops: [{ stopId: 'S2', stopCode: '1002', name: 'Middle Stop' }],
           }],
         },
       },

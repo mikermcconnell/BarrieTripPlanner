@@ -392,7 +392,7 @@ const buildOffsetDetourLinePaths = (path, directionArrowMode, detourLaneOffsetMe
   }))
 );
 
-const shouldShowSkippedStopCodeLabels = () => true;
+const shouldShowSkippedStopCodeLabels = ({ showSkippedStopCodes = true } = {}) => showSkippedStopCodes;
 
 const getRoundedStopKey = (stop) => (
   `${getStopNumber(stop) || stop?.id || 'stop'}:${Number(stop?.latitude).toFixed(4)},${Number(stop?.longitude).toFixed(4)}`
@@ -638,6 +638,7 @@ const DetourOverlay = ({
   showCallouts,
   showStopMarkers,
   showClosedStopMarkers = false,
+  showSkippedStopCodes = true,
   showClosedRouteMask = true,
   onPress,
   onStopPress,
@@ -674,7 +675,7 @@ const DetourOverlay = ({
     shouldRenderClosedStopMarkers,
     selectedSegmentIndex,
   });
-  const showSkippedStopCodes = shouldShowSkippedStopCodeLabels(currentZoom, selectedSegmentIndex);
+  const shouldShowSkippedStopCodes = shouldShowSkippedStopCodeLabels({ showSkippedStopCodes });
   const markerSegments = hasSelectedSegment(selectedSegmentIndex)
     ? normalizedSegments.filter((_segment, index) => index === selectedSegmentIndex)
     : normalizedSegments;
@@ -947,7 +948,8 @@ const DetourOverlay = ({
           <ClosedStopMarker
             key={`detour-skipped-stop-${routeId}-${stopMarkerKey}-${stopIndex}`}
             id={`detour-skipped-stop-${routeId}-${stopMarkerKey}-${stopIndex}`}
-            stop={showSkippedStopCodes ? displayStop : { ...displayStop, code: '' }}
+            stop={displayStop}
+            showStopCode={shouldShowSkippedStopCodes}
             color={skippedColor}
             opacity={opacity}
             labelSide={labelSide}

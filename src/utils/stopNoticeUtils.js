@@ -99,8 +99,13 @@ export const buildDetourStopNotice = ({ stop, routeId, detour, transitNewsImpact
     findStopClosureImpact(stop, transitNewsImpacts, routeId);
   const upcomingImpact = getApplicableImpact(stop.upcomingClosureImpact, routeId) ||
     findUpcomingStopClosureImpact(stop, transitNewsImpacts, routeId);
-  const closureImpact = activeImpact && !isRouteScopedImpact(activeImpact) ? activeImpact : null;
-  const routeScopedClosureImpact = activeImpact && isRouteScopedImpact(activeImpact) ? activeImpact : null;
+  const standaloneRouteScopedImpact = !routeId && stop.routeScopedClosureImpact
+    ? stop.routeScopedClosureImpact
+    : null;
+  const closureImpact = (activeImpact && !isRouteScopedImpact(activeImpact) ? activeImpact : null) ||
+    standaloneRouteScopedImpact;
+  const routeScopedClosureImpact = (activeImpact && isRouteScopedImpact(activeImpact) ? activeImpact : null) ||
+    standaloneRouteScopedImpact;
   const upcomingClosureImpact = upcomingImpact && !isRouteScopedImpact(upcomingImpact) ? upcomingImpact : null;
   const sourceImpact = closureImpact || routeScopedClosureImpact;
   const affectedRouteIds = uniqueRoutes(stop.affectedRouteIds, stop.routeIds, routeId ? [routeId] : []);

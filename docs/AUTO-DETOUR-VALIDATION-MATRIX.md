@@ -77,10 +77,38 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-044 | GTFS baseline changes while active detour exists | Keep backend records but suppress rider visibility or require approval when current public GTFS diverges meaningfully from the active baseline. | `api-proxy/__tests__/baselineDivergence.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 1, 13, 14 | Covered | Delayed approval suppressing real detours, or auto-accepting a bad baseline |
 | DET-045 | Firestore write fails after segment clear | Runtime should retain the partial-clear state and retry publishing without re-showing the cleared segment. | Needs publisher failure regression | QA sections 10, 13, 14 | Needs explicit scenario review | Firestore outage causing cleared segments to reappear or route docs to drift |
 | DET-046 | Worker restarts after partial segment clear | Hydration should preserve active versus cleared segments; only remaining active segments should publish after restart. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 10, 13, 14 | Covered | Restart rehydration reintroducing cleared segments |
-| DET-047 | Official notice conflicts with GPS | GPS remains source of truth for detection and clearing; official notices enrich rider messaging and stop impacts but do not publish or clear by themselves. | `api-proxy/__tests__/newsImpactParser.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 6, 9, 14 | Covered, needs live notice review | A notice map/text overriding stronger GPS evidence |
+| DET-047 | Official notice conflicts with GPS | GPS remains source of truth for detection, expansion, clearing, and keep-alive. Official notices may enrich only spatially overlapping GPS-confirmed detours; they do not publish, expand, clear, or keep alive detours by themselves. | `api-proxy/__tests__/newsImpactParser.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 6, 9, 14 | Covered, needs live notice review | A notice map/text overriding stronger GPS evidence |
 | DET-048 | Bus travels near detour path but still misses a stop | Do not reopen skipped stops unless the final trusted detour path actually serves them, with endpoint and parallel-street safeguards. | `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 6, 7, 9 | Covered, needs live stop-impact recheck | Over-pruning skipped stops near endpoints or parallel streets |
+| DET-049 | Short no-skipped-stop rider visibility | Keep confirmed short-span GPS detours public when geometry is safe, but show route/corridor-level messaging with no closed-stop marker, stop-specific trip warning, or affected-stop notification unless `skippedStops` is explicit. | `api-proxy/__tests__/riderVisibilityGuard.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/DetourTimeline.test.js`, `src/__tests__/tripDetourImpacts.test.js` | QA sections 2, 5, 6, 14 | Covered | Over-warning riders for boundary stops, or hiding real short GPS detours |
+| DET-050 | Short location-specific detour with no closed stops | A short Route 12B-style GPS detour must not expand to nearby downstream noise, must not inherit distant official-notice stop impacts, and must validate with zero skipped stops. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourGroundTruthValidator.test.js`, `docs/detour-ground-truth/route-12b-bayfield-sophia-2026-06-05.json` | QA sections 2, 5, 6, 9, 14 | Covered, needs live recheck after deploy | Candidate over-expansion or route-family notice contamination |
 
 ## Recorded issues
+
+### DET-050A — Route 12B Bayfield/Sophia short detour expanded and inherited distant notice stops
+
+- Date/time observed: 2026-06-05
+- Environment: live Firestore/history review of `activeDetourEventsV2`
+- Route(s): `12B`
+- What happened: a short Bayfield/Sophia GPS-confirmed detour was published as a much larger detour and showed unrelated Saunders/Welham official-notice stop impacts.
+- What should have happened: the short detour should remain public, with zero skipped stops and no boundary-stop notification; distant Route 12-family notice stops should not attach.
+- Root cause:
+  - candidate matching used the broad geometry cluster gap as an identity fallback, so downstream evidence could stretch a short provisional event
+  - official notice stop impacts were merged by route family without a spatial overlap gate
+  - some rider surfaces treated broad `affectedStops` as closure-like stop impacts
+- Fix:
+  - candidate expansion outside the confirmation window now requires same-signature sparse-trace continuity
+  - official notice stop impacts require spatial overlap with the GPS-confirmed segment
+  - boundary and served stops carry non-notifying roles; closed-stop UI is driven by `skippedStops`
+  - added a reusable Route 12B ground-truth fixture
+- Tests added/updated:
+  - `api-proxy/__tests__/detourV2Detector.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `api-proxy/__tests__/stopImpacts.test.js`
+  - `src/__tests__/useAffectedStops.test.js`
+  - `src/__tests__/tripDetourImpacts.test.js`
+  - `src/__tests__/DetourTimeline.test.js`
+  - `src/__tests__/detourGroundTruthValidator.test.js`
+- Remaining risk: needs live validation after deployment because the saved bad snapshot should continue to fail the new fixture.
 
 ### DET-026A — Route 11 bus GPS showed a different path than the currently published detour path
 
@@ -394,6 +422,21 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 - Tests added/updated:
   - `src/__tests__/detourRouteMasking.test.js`
 - Remaining risk: still needs a final native/web visual check because map renderer z-order and line offsets can create device-specific clutter.
+
+### DET-012C — regular map tab stopped showing lightweight active detours
+
+- Date/time observed: 2026-06-05
+- Environment: local app regression review after route layer ordering fix
+- Route(s): `12A`, `12B`
+- What happened: active Route 12 Hooper/Huber-style detour geometry was hidden on the regular map tab and only visible in the detour tab.
+- What should have happened: active detours should remain visible on the regular map as lightweight geometry, with stronger labels, stop markers, and callouts reserved for detour view.
+- Root cause: the regular-mode geometry gate was changed to render only in detour/focus mode, overriding the existing lightweight overlay behavior.
+- Fix:
+  - restored regular-mode detour geometry rendering
+  - kept regular-mode detail styling lightweight through `getDetourGeometryOverlayProps`
+- Tests added/updated:
+  - `src/__tests__/detourViewMode.test.js`
+- Remaining risk: native/web visual z-order still needs spot checks when route layer ordering changes.
 
 
 ### DET-009A — Mulcaster/Simcoe alternate paths zigzagged between repeated trips

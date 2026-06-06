@@ -1875,7 +1875,7 @@ describe('web trip planner regressions', () => {
       editButton.props.onPress();
     });
 
-    expect(root.findAll((node) => node.children?.includes('Plan Your Trip'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Plan your trip'))).toHaveLength(1);
 
     unmount();
   });
@@ -1895,7 +1895,7 @@ describe('web trip planner regressions', () => {
       editButton.props.onPress();
     });
 
-    expect(root.findAll((node) => node.children?.includes('Plan Your Trip'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Plan your trip'))).toHaveLength(1);
 
     unmount();
   });
@@ -2054,7 +2054,7 @@ describe('web trip planner regressions', () => {
       recentTrips: [{ fromText: 'Home', toText: 'Work' }],
     });
 
-    expect(root.findAll((node) => node.children?.includes('Quick trips'))).toHaveLength(1);
+    expect(root.findAll((node) => node.children?.includes('Your trips start here'))).toHaveLength(1);
     expect(root.findAll((node) => node.children?.includes('Saved routes'))).toHaveLength(1);
     expect(root.findAll((node) => node.children?.includes('Recent routes'))).toHaveLength(1);
 
