@@ -641,7 +641,10 @@ describe('detourPublisher storage config', () => {
       await publishDetours({}, {
         now: Date.parse('2026-06-08T14:00:00Z'),
         noticeStopImpacts: [],
-        shapes: new Map([['current-shape', [{ latitude: 44.39, longitude: -79.69 }]]]),
+        shapes: new Map([
+          ['old-shape', [{ latitude: 44.38, longitude: -79.70 }]],
+          ['current-shape', [{ latitude: 44.39, longitude: -79.69 }]],
+        ]),
         gtfsData: {
           shapes: new Map([['current-shape', [{ latitude: 44.39, longitude: -79.69 }]]]),
         },

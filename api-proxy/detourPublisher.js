@@ -1973,6 +1973,13 @@ function getKnownShapeCollections(options = {}) {
   ].filter(hasCollectionEntries);
 }
 
+function getLiveShapeCollections(options = {}) {
+  return [
+    options.gtfsData?.shapes,
+    options.liveShapes,
+  ].filter(hasCollectionEntries);
+}
+
 function collectSnapshotShapeIds(snapshot) {
   const ids = new Set();
   const add = (value) => {
@@ -2015,6 +2022,13 @@ function collectSnapshotShapeIds(snapshot) {
 function isObsoleteShapeSnapshot(snapshot, options = {}) {
   const shapeIds = collectSnapshotShapeIds(snapshot);
   if (shapeIds.size === 0) return false;
+
+  const liveShapeCollections = getLiveShapeCollections(options);
+  if (liveShapeCollections.length > 0) {
+    return [...shapeIds].every((shapeId) => (
+      liveShapeCollections.every((collection) => !collectionHasKey(collection, shapeId))
+    ));
+  }
 
   const knownShapeCollections = getKnownShapeCollections(options);
   if (knownShapeCollections.length === 0) return false;
