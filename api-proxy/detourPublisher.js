@@ -1939,6 +1939,91 @@ function hasNormalRouteClearProof(previousSnapshot) {
   );
 }
 
+function hasCollectionEntries(collection) {
+  if (!collection) return false;
+  if (collection instanceof Map || collection instanceof Set) return collection.size > 0;
+  if (typeof collection === 'object' && !Array.isArray(collection)) {
+    return Object.keys(collection).length > 0;
+  }
+  return false;
+}
+
+function collectionHasKey(collection, key) {
+  if (!collection || key == null) return false;
+  const rawKey = key;
+  const stringKey = String(key);
+  if (collection instanceof Map || collection instanceof Set) {
+    return collection.has(rawKey) || collection.has(stringKey);
+  }
+  if (typeof collection === 'object' && !Array.isArray(collection)) {
+    return (
+      Object.prototype.hasOwnProperty.call(collection, rawKey) ||
+      Object.prototype.hasOwnProperty.call(collection, stringKey)
+    );
+  }
+  return false;
+}
+
+function getKnownShapeCollections(options = {}) {
+  return [
+    options.shapes,
+    options.gtfsData?.shapes,
+    options.baselineShapes,
+    options.liveShapes,
+  ].filter(hasCollectionEntries);
+}
+
+function collectSnapshotShapeIds(snapshot) {
+  const ids = new Set();
+  const add = (value) => {
+    if (value == null || typeof value === 'object') return;
+    const id = String(value).trim();
+    if (id) ids.add(id);
+  };
+  const addFrom = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    add(value.shapeId);
+    add(value.tripShapeId);
+    add(value.routeShapeId);
+  };
+
+  addFrom(snapshot);
+  addFrom(snapshot?.geometry);
+  addFrom(snapshot?.eventWindow);
+  addFrom(snapshot?.detourZone);
+  addFrom(snapshot?.clearWindow);
+
+  [
+    snapshot?.segments,
+    snapshot?.geometry?.segments,
+    snapshot?.clearWindows,
+    snapshot?.clearedSegments,
+  ].forEach((entries) => {
+    if (Array.isArray(entries)) {
+      entries.forEach((entry) => {
+        addFrom(entry);
+        addFrom(entry?.eventWindow);
+        addFrom(entry?.detourZone);
+        addFrom(entry?.clearWindow);
+      });
+    }
+  });
+
+  return ids;
+}
+
+function isObsoleteShapeSnapshot(snapshot, options = {}) {
+  const shapeIds = collectSnapshotShapeIds(snapshot);
+  if (shapeIds.size === 0) return false;
+
+  const knownShapeCollections = getKnownShapeCollections(options);
+  if (knownShapeCollections.length === 0) return false;
+
+  return [...shapeIds].every((shapeId) => (
+    knownShapeCollections.every((collection) => !collectionHasKey(collection, shapeId))
+  ));
+}
+
 function hasUsableEventWindow(snapshot) {
   const eventWindow = snapshot?.eventWindow;
   return Boolean(
@@ -2088,6 +2173,9 @@ async function publishDetours(activeDetours, options = {}) {
     .map(([inputId, detour]) => normalizePublishEntry(inputId, detour));
   const stalePublishSuppressedIds = new Set();
   const publishableDetours = Object.fromEntries(activeEntries.filter(([publishId, detour]) => {
+    if (isObsoleteShapeSnapshot(detour, { shapes: options.shapes, gtfsData })) {
+      return false;
+    }
     const routeId = detourRouteId(publishId, detour);
     const staleDecision = shouldAutoClearStaleDetour({
       routeId,
@@ -2152,6 +2240,14 @@ async function publishDetours(activeDetours, options = {}) {
         clearReason: previous?.clearReason || 'hidden-detour-no-longer-confirmed',
       };
       await deletePublishedDetour(db, publishId, event, 'delete absent hidden detour', storageConfig);
+      continue;
+    }
+    if (isObsoleteShapeSnapshot(previous, { shapes: options.shapes, gtfsData })) {
+      const event = {
+        ...buildClearedEvent(routeId, previous, now),
+        clearReason: 'obsolete-shape-normal-route-observed',
+      };
+      await deletePublishedDetour(db, publishId, event, 'delete obsolete-shape detour', storageConfig);
       continue;
     }
     if (!hasNormalRouteClearProof(previous)) {
