@@ -272,7 +272,7 @@ describe('deriveAffectedStops', () => {
     expect(result.segmentStopDetails[0].exitStop.id).toBe('s4');
   });
 
-  it('falls back to deriving stop impacts when backend publishes empty explicit arrays', () => {
+  it('falls back to affected-stop context without publishing inferred skipped-stop closures', () => {
     const result = deriveAffectedStopDetailsForDetour({
       routeId: 'R1',
       segments: [
@@ -299,7 +299,8 @@ describe('deriveAffectedStops', () => {
     });
 
     expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
-    expect(result.segmentStopDetails[0].skippedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
+    expect(result.segmentStopDetails[0].notifyingAffectedStops).toEqual([]);
     expect(result.segmentStopDetails[0].entryStop.id).toBe('s2');
     expect(result.segmentStopDetails[0].exitStop.id).toBe('s4');
   });
@@ -455,7 +456,7 @@ describe('deriveAffectedStopDetailsForDetour', () => {
 
     expect(result.segmentStopDetails).toHaveLength(1);
     expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
-    expect(result.segmentStopDetails[0].skippedStops.map((stop) => stop.id)).toEqual(['s3']);
+    expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
   });
 
   it('keeps genuinely different detour sections', () => {

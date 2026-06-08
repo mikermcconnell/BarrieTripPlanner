@@ -261,6 +261,7 @@ export function deriveAffectedStops({
   stops,
   routeStopsMapping,
   routeStopSequencesMapping,
+  includeInferredSkippedStops = true,
 }) {
   const empty = {
     routeStops: [],
@@ -322,14 +323,15 @@ export function deriveAffectedStops({
       .map((_, relativeIndex) => startIdx + 1 + relativeIndex),
     ...pathSkippedIndexes,
   ]);
-  const skippedStops = routeStops.filter((_, index) => skippedStopIndexes.has(index));
+  const inferredSkippedStops = routeStops.filter((_, index) => skippedStopIndexes.has(index));
+  const skippedStops = includeInferredSkippedStops ? inferredSkippedStops : [];
   const unaffectedStops = routeStops.filter((_, index) => index < expandedStartIdx || index > expandedEndIdx);
 
   return {
     routeStops,
     affectedStops,
     skippedStops,
-    notifyingAffectedStops: skippedStops,
+    notifyingAffectedStops: includeInferredSkippedStops ? skippedStops : [],
     unaffectedStops,
     entryStop,
     exitStop,
@@ -384,6 +386,7 @@ export function deriveAffectedStopDetailsForDetour({
         stops,
         routeStopsMapping,
         routeStopSequencesMapping,
+        includeInferredSkippedStops: false,
       })),
   })));
 
