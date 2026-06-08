@@ -23,8 +23,10 @@ describe('newsImpactParser', () => {
 
   test('extractStopCodesFromText handles single and multiple stop references', () => {
     expect(extractStopCodesFromText('Stop 509 Closure')).toEqual(['509']);
+    expect(extractStopCodesFromText('Stop 30/22 Closure Notice')).toEqual(['30', '22']);
     expect(extractStopCodesFromText('stops 981 and 153 will also be placed out-of-service')).toEqual(['981', '153']);
     expect(extractStopCodesFromText('Stops 88 (Bayfield at Dunlop) and 89 (Bayfield at Chase McEachern) will be out of service.')).toEqual(['88', '89']);
+    expect(extractStopCodesFromText('Stop 934 (Dunlop at Sarjeant), serviced by Route 2B, will be out of service.')).toEqual(['934']);
   });
 
   test('buildRuleStopClosures only matches stop closure language', () => {
@@ -32,6 +34,25 @@ describe('newsImpactParser', () => {
       { stopCode: '509', confidence: 'high', parser: 'rules' },
     ]);
     expect(buildRuleStopClosures({ title: 'Route 2 detour', body: 'Route 2 is on detour.' })).toEqual([]);
+    expect(buildRuleStopClosures({
+      title: 'Downtown Paving Detour - Routes 6, 22, 30, 7, 114',
+      body: 'Routes 6, 22, 30, 7, and 114 will be on detour due to a road closure. Please use active or temporary stops during the detour.',
+    })).toEqual([]);
+  });
+
+  test('extractStopClosureImpacts does not create standalone stop closures from route detour notices', async () => {
+    const impacts = await extractStopClosureImpacts([
+      {
+        id: 'detour-routes',
+        title: 'Downtown Paving Detour - Routes 6, 22, 30, 7, 114',
+        body: 'Routes 6, 22, 30, 7, and 114 will be on detour due to a road closure. Please use active or temporary stops during the detour.',
+        affectedRoutes: ['6', '22', '30', '7', '114'],
+        url: 'https://example.test/news',
+        source: 'myridebarrie',
+      },
+    ], stopIndex, { now: '2026-06-08T12:00:00-04:00' });
+
+    expect(impacts).toEqual([]);
   });
 
   test('extractStopClosureImpacts validates stops against GTFS stop index', async () => {

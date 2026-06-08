@@ -4,22 +4,35 @@ function uniqueStrings(values) {
   return [...new Set((values || []).map((value) => String(value).trim()).filter(Boolean))];
 }
 
+function extractStopListCodes(value) {
+  const input = String(value || '').trim();
+  const codes = [];
+  const first = /^#?\s*(\d{1,5})\b/.exec(input);
+  if (!first) return [];
+
+  codes.push(first[1]);
+  const rest = input.slice(first[0].length);
+  const nextCodePattern = /(?:\s*\([^)]*\))?\s*(?:,|&|\/|\+|\band\b)\s*#?\s*(\d{1,5})\b/gi;
+  let match;
+  while ((match = nextCodePattern.exec(rest)) !== null) {
+    codes.push(match[1]);
+  }
+  return uniqueStrings(codes.map(normalizeStopCode));
+}
+
 function extractStopCodesFromText(text) {
   const input = String(text || '');
   const codes = [];
-  const patterns = [
-    /\bstops?\s+(.{0,220}?)(?=\b(?:will|are|is|to|also|closure|notice|out[- ]of[- ]service)\b|$)/gi,
-    /\bstops?\s*#?\s*(\d{1,5})\b/gi,
-    /\bstops?\s+((?:\d{1,5}\s*(?:,|and|&)?\s*){1,8})\s+(?:will|are|is|to|also)/gi,
-  ];
 
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(input)) !== null) {
-      const stopText = String(match[1] || '').replace(/\bRoutes?\s+\d+[A-Za-z]?\b/gi, '');
-      const matches = stopText.match(/\d{1,5}/g) || [];
-      codes.push(...matches);
-    }
+  const titleClosure = /^\s*stops?\s+(.{1,180}?)\s+(?:closure|closed|out[- ]of[- ]service)(?:\b|$)/i.exec(input);
+  if (titleClosure) {
+    codes.push(...extractStopListCodes(titleClosure[1]));
+  }
+
+  const closureSentencePattern = /\bstops?\s+(.{1,260}?)\s+(?:will|is|are)\s+(?:also\s+)?(?:be\s+)?(?:placed\s+)?(?:out[- ]of[- ]service|closed)\b/gi;
+  let sentenceMatch;
+  while ((sentenceMatch = closureSentencePattern.exec(input)) !== null) {
+    codes.push(...extractStopListCodes(sentenceMatch[1]));
   }
 
   return uniqueStrings(codes);
@@ -27,12 +40,8 @@ function extractStopCodesFromText(text) {
 
 function looksLikeStopClosure(text) {
   const input = String(text || '').toLowerCase();
-  return /\bstops?\b/.test(input) && (
-    /\bclosure\b/.test(input) ||
-    /\bclosed\b/.test(input) ||
-    /\bout[- ]of[- ]service\b/.test(input) ||
-    /\bplaced out of service\b/.test(input)
-  );
+  return /^\s*stops?\s+.{1,180}?\s+(?:closure|closed|out[- ]of[- ]service)(?:\b|$)/i.test(input) ||
+    /\bstops?\s+.{1,260}?\s+(?:will|is|are)\s+(?:also\s+)?(?:be\s+)?(?:placed\s+)?(?:out[- ]of[- ]service|closed)\b/i.test(input);
 }
 
 const MONTHS = {
@@ -202,6 +211,7 @@ function statusForDateWindow(window, now = new Date()) {
 
 function buildRuleStopClosures(newsItem) {
   const text = `${newsItem.title || ''}\n${newsItem.body || ''}`;
+  if (isLikelyRouteDetourNotice(newsItem)) return [];
   if (!looksLikeStopClosure(text)) return [];
 
   return extractStopCodesFromText(text).map((stopCode) => ({
@@ -541,8 +551,9 @@ async function extractStopClosureImpacts(newsItems, stopIndex = {}, options = {}
   const now = options.now ? new Date(options.now) : new Date();
 
   for (const newsItem of newsItems || []) {
-    const ruleClosures = buildRuleStopClosures(newsItem);
-    const aiClosures = ruleClosures.length > 0 ? [] : await buildAiStopClosures(newsItem);
+    const skipStandaloneStopClosures = isLikelyRouteDetourNotice(newsItem);
+    const ruleClosures = skipStandaloneStopClosures ? [] : buildRuleStopClosures(newsItem);
+    const aiClosures = skipStandaloneStopClosures || ruleClosures.length > 0 ? [] : await buildAiStopClosures(newsItem);
     const closuresByCode = new Map();
 
     for (const closure of [...ruleClosures, ...aiClosures]) {
