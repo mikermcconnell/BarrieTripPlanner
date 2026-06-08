@@ -208,6 +208,28 @@ describe('newsImpactParser', () => {
     ]);
   });
 
+  test('buildNoticeStopImpactsFromText captures slash-separated official PDF stop labels', () => {
+    const pdfText = [
+      'Detour Notice',
+      'Route 8',
+      'Out of Service Stops',
+      'Stop 30/22',
+      'Clapperton at McDonald',
+      'Temporary Stops',
+      'Temp Stop 3000/2200',
+      'Clapperton at Sophia',
+    ].join('\n');
+
+    const impacts = buildNoticeStopImpactsFromText(pdfText);
+
+    expect(impacts.stopClosureCandidates.map((stop) => stop.stopCode)).toEqual(['30', '22']);
+    expect(impacts.stopClosureCandidates.map((stop) => stop.name)).toEqual([
+      'Clapperton at McDonald',
+      'Clapperton at McDonald',
+    ]);
+    expect(impacts.temporaryStops.map((stop) => stop.stopCode)).toEqual(['3000', '2200']);
+  });
+
   test('buildNoticeStopImpactsFromText ignores active stops and map labels outside the out-of-service section', () => {
     const downtownPdfText = [
       'DETOUR NOTICE',

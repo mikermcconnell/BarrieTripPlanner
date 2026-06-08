@@ -216,6 +216,17 @@ function normalizeStopCode(value) {
   return String(value || '').trim();
 }
 
+function extractNoticeLineStopCodes(line, pattern) {
+  const match = pattern.exec(String(line || ''));
+  if (!match) return [];
+  const stopText = String(match[1] || '').trim();
+  if (!/^\d/.test(stopText)) return [];
+  const leadingCodes = stopText.match(
+    /^\d{1,5}(?:\s*(?:\/|,|&|\+|\band\b)\s*\d{1,5})*/i
+  );
+  return uniqueStrings((leadingCodes?.[0].match(/\d{1,5}/g) || []).map(normalizeStopCode));
+}
+
 function buildNoticeStopImpactsFromText(text) {
   const lines = String(text || '')
     .split(/\r?\n/)
@@ -287,34 +298,36 @@ function buildNoticeStopImpactsFromText(text) {
       continue;
     }
 
-    const tempMatch = /^temp(?:orary)?\s+stop\s+(\d{1,5})\b/i.exec(line);
-    if (tempMatch) {
+    const tempStopCodes = extractNoticeLineStopCodes(line, /^temp(?:orary)?\s+stop\s+(.+)$/i);
+    if (tempStopCodes.length > 0) {
       if (section !== 'temporary' && !shouldParseMapLabels) continue;
-      const stopCode = normalizeStopCode(tempMatch[1]);
-      if (!seenTemporary.has(stopCode)) {
-        seenTemporary.add(stopCode);
-        temporaryStops.push({
-          stopCode,
-          label: line,
-          name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
-          source: 'official-notice',
-        });
+      for (const stopCode of tempStopCodes) {
+        if (!seenTemporary.has(stopCode)) {
+          seenTemporary.add(stopCode);
+          temporaryStops.push({
+            stopCode,
+            label: line,
+            name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
+            source: 'official-notice',
+          });
+        }
       }
       continue;
     }
 
-    const stopMatch = /^stop\s+(\d{1,5})\b/i.exec(line);
-    if (stopMatch) {
+    const stopCodes = extractNoticeLineStopCodes(line, /^stop\s+(.+)$/i);
+    if (stopCodes.length > 0) {
       if (section !== 'closure') continue;
-      const stopCode = normalizeStopCode(stopMatch[1]);
-      if (!seenClosure.has(stopCode)) {
-        seenClosure.add(stopCode);
-        stopClosureCandidates.push({
-          stopCode,
-          label: line,
-          name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
-          source: 'official-notice',
-        });
+      for (const stopCode of stopCodes) {
+        if (!seenClosure.has(stopCode)) {
+          seenClosure.add(stopCode);
+          stopClosureCandidates.push({
+            stopCode,
+            label: line,
+            name: lines[index + 1] && !/^stop\b|^temp/i.test(lines[index + 1]) ? lines[index + 1] : '',
+            source: 'official-notice',
+          });
+        }
       }
     }
   }
