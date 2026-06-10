@@ -23,6 +23,7 @@ const { registerHealthRoutes } = require('./routes/healthRoutes');
 const { registerDetourRoutes } = require('./routes/detourRoutes');
 const { registerBaselineRoutes } = require('./routes/baselineRoutes');
 const { registerNewsRoutes } = require('./routes/newsRoutes');
+const { registerOfficialBaselineImpactRoutes } = require('./routes/officialBaselineImpactRoutes');
 const { registerAiRoutes } = require('./routes/aiRoutes');
 const { registerPlatformMapRoutes } = require('./routes/platformMapRoutes');
 const { buildLocalAiConfig } = require('./lib/ai/config');
@@ -39,6 +40,11 @@ function createApiProxyApp({
   config = buildProxyConfig(env),
   detourWorker = loadEnabledWorker(env, 'DETOUR_WORKER_ENABLED', './detourWorker'),
   newsWorker = loadEnabledWorker(env, 'NEWS_WORKER_ENABLED', './newsWorker'),
+  officialBaselineImpactWorker = loadEnabledWorker(
+    env,
+    'OFFICIAL_BASELINE_IMPACT_WORKER_ENABLED',
+    './officialBaselineImpactWorker'
+  ),
 } = {}) {
   validateProxyConfig(config, env);
 
@@ -99,6 +105,10 @@ function createApiProxyApp({
 
   registerBaselineRoutes(app, { isProd: config.isProd });
   registerNewsRoutes(app, { newsWorker, isProd: config.isProd });
+  registerOfficialBaselineImpactRoutes(app, {
+    officialBaselineImpactWorker,
+    isProd: config.isProd,
+  });
 
   return {
     app,
@@ -106,6 +116,7 @@ function createApiProxyApp({
     config,
     detourWorker,
     newsWorker,
+    officialBaselineImpactWorker,
   };
 }
 

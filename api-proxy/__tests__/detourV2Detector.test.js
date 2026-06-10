@@ -89,6 +89,83 @@ function detourForRoute(result, routeId) {
 
 describe('Auto Detour V2 detector', () => {
 
+  function buildRoute400SparseFixture() {
+    const shapeId = 'route-400-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.692 },
+    ];
+    return {
+      shapes: new Map([[shapeId, shape]]),
+      mapping: new Map([['400', [shapeId]]]),
+      offRouteAt: (longitude) => ({ latitude: 44.391, longitude }),
+    };
+  }
+
+  test('hides sparse multi-day Route 400 detour when no current vehicle confirms it', () => {
+    const fixture = buildRoute400SparseFixture();
+    const detector = createDetourV2Detector();
+    const oldMs = Date.parse('2026-06-05T12:00:00Z');
+    const freshMs = Date.parse('2026-06-09T16:00:00Z');
+
+    detector.processVehicles([
+      vehicle({ id: 'route-400-old', routeId: '400', tripId: 'route-400-old-trip', coordinate: fixture.offRouteAt(-79.698), timestampMs: oldMs }),
+      vehicle({ id: 'route-400-old', routeId: '400', tripId: 'route-400-old-trip', coordinate: fixture.offRouteAt(-79.697), timestampMs: oldMs + 60_000 }),
+    ], fixture.shapes, fixture.mapping);
+
+    const confirmed = detector.processVehicles([
+      vehicle({ id: 'route-400-fresh', routeId: '400', tripId: 'route-400-fresh-trip', coordinate: fixture.offRouteAt(-79.696), timestampMs: freshMs }),
+      vehicle({ id: 'route-400-fresh', routeId: '400', tripId: 'route-400-fresh-trip', coordinate: fixture.offRouteAt(-79.695), timestampMs: freshMs + 60_000 }),
+      vehicle({ id: 'route-400-fresh', routeId: '400', tripId: 'route-400-fresh-trip', coordinate: fixture.offRouteAt(-79.694), timestampMs: freshMs + 120_000 }),
+    ], fixture.shapes, fixture.mapping);
+    expect(detourForRoute(confirmed, '400')).toEqual(expect.objectContaining({
+      riderVisible: true,
+      currentVehicleCount: 1,
+    }));
+
+    const noCurrentVehicle = detector.processVehicles([], fixture.shapes, fixture.mapping);
+    const detour = detourForRoute(noCurrentVehicle, '400');
+
+    expect(detour).toEqual(expect.objectContaining({
+      state: 'active',
+      riderVisible: false,
+      riderVisibilityReason: 'stale-sparse-evidence',
+      staleForReview: true,
+      currentVehicleCount: 0,
+      canShowDetourPath: false,
+    }));
+    expect(detour.geometry.canShowDetourPath).toBe(true);
+  });
+
+  test('keeps same-day Route 400 detour visible after current vehicle leaves the snapshot', () => {
+    const fixture = buildRoute400SparseFixture();
+    const detector = createDetourV2Detector();
+    const firstMs = Date.parse('2026-06-09T12:00:00Z');
+    const secondMs = Date.parse('2026-06-09T16:00:00Z');
+
+    detector.processVehicles([
+      vehicle({ id: 'route-400-same-day-a', routeId: '400', tripId: 'route-400-same-day-a-trip', coordinate: fixture.offRouteAt(-79.698), timestampMs: firstMs }),
+      vehicle({ id: 'route-400-same-day-a', routeId: '400', tripId: 'route-400-same-day-a-trip', coordinate: fixture.offRouteAt(-79.697), timestampMs: firstMs + 60_000 }),
+    ], fixture.shapes, fixture.mapping);
+    detector.processVehicles([
+      vehicle({ id: 'route-400-same-day-b', routeId: '400', tripId: 'route-400-same-day-b-trip', coordinate: fixture.offRouteAt(-79.696), timestampMs: secondMs }),
+      vehicle({ id: 'route-400-same-day-b', routeId: '400', tripId: 'route-400-same-day-b-trip', coordinate: fixture.offRouteAt(-79.695), timestampMs: secondMs + 60_000 }),
+      vehicle({ id: 'route-400-same-day-b', routeId: '400', tripId: 'route-400-same-day-b-trip', coordinate: fixture.offRouteAt(-79.694), timestampMs: secondMs + 120_000 }),
+    ], fixture.shapes, fixture.mapping);
+
+    const noCurrentVehicle = detector.processVehicles([], fixture.shapes, fixture.mapping);
+
+    expect(detourForRoute(noCurrentVehicle, '400')).toEqual(expect.objectContaining({
+      riderVisible: true,
+      riderVisibilityReason: 'v2-confirmed',
+      currentVehicleCount: 0,
+      canShowDetourPath: true,
+    }));
+  });
+
   test('fast-clears tiny start-of-route detours from multi-vehicle normal samples through the source span', () => {
     const shapeId = 'tiny-start-shape';
     const shape = [
@@ -233,6 +310,116 @@ describe('Auto Detour V2 detector', () => {
 
     const secondTick = detector.processVehicles([], new Map([[shapeId, []]]), new Map([['8A', [shapeId]]]));
     expect(Object.keys(secondTick)).toEqual([]);
+  });
+
+  test('clears same-route detours when normal service uses an overlapping equivalent shape', () => {
+    const activeShapeId = '8b-active-clear-shape';
+    const equivalentShapeId = '8b-equivalent-trip-shape';
+    const activeShape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.692 },
+      { latitude: 44.390, longitude: -79.688 },
+      { latitude: 44.390, longitude: -79.684 },
+    ];
+    const equivalentShape = [
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.692 },
+      { latitude: 44.390, longitude: -79.688 },
+    ];
+    const testShapes = new Map([
+      [activeShapeId, activeShape],
+      [equivalentShapeId, equivalentShape],
+    ]);
+    const testMapping = new Map([['8B', [activeShapeId, equivalentShapeId]]]);
+    const activeProgress = (index) => projectOntoPolyline(activeShape[index], activeShape).progressMeters;
+    const sourceStartProgress = activeProgress(1) + 100;
+    const sourceEndProgress = activeProgress(3) - 100;
+    const clearWindow = {
+      startProgressMeters: activeProgress(1),
+      endProgressMeters: activeProgress(3),
+      sourceStartProgressMeters: sourceStartProgress,
+      sourceEndProgressMeters: sourceEndProgress,
+      minCoverageRatio: 0.75,
+      shapeId: activeShapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeEvents: {
+        '8B:8b-active-clear-shape:700-1500': {
+          eventId: '8B:8b-active-clear-shape:700-1500',
+          routeId: '8B',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          eventWindow: {
+            routeId: '8B',
+            shapeId: activeShapeId,
+            coreStartProgressMeters: sourceStartProgress,
+            coreEndProgressMeters: sourceEndProgress,
+            frozen: true,
+          },
+          detourZone: {
+            startProgressMeters: sourceStartProgress,
+            endProgressMeters: sourceEndProgress,
+            shapeId: activeShapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId: activeShapeId,
+            segments: [{
+              state: 'active',
+              shapeId: activeShapeId,
+              startProgressMeters: sourceStartProgress,
+              endProgressMeters: sourceEndProgress,
+              detourZone: {
+                startProgressMeters: sourceStartProgress,
+                endProgressMeters: sourceEndProgress,
+                shapeId: activeShapeId,
+              },
+              clearWindow,
+            }],
+          },
+        },
+      },
+    });
+
+    const firstTick = detector.processVehicles([
+      vehicle({
+        id: 'bus-normal-equivalent',
+        routeId: '8B',
+        tripId: 'trip-normal-equivalent',
+        tripShapeId: equivalentShapeId,
+        coordinate: activeShape[1],
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'bus-normal-equivalent',
+        routeId: '8B',
+        tripId: 'trip-normal-equivalent',
+        tripShapeId: equivalentShapeId,
+        coordinate: activeShape[2],
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'bus-normal-equivalent',
+        routeId: '8B',
+        tripId: 'trip-normal-equivalent',
+        tripShapeId: equivalentShapeId,
+        coordinate: activeShape[3],
+        timestampMs: 4000,
+      }),
+    ], testShapes, testMapping);
+
+    expect(firstTick['8B:8b-active-clear-shape:700-1500']).toEqual(expect.objectContaining({
+      state: 'clear-pending',
+      clearReason: 'normal-route-observed',
+    }));
   });
 
   test('fast-clears hidden tiny start-route detours from downstream normal service after GPS drift', () => {
@@ -2077,7 +2264,7 @@ describe('Auto Detour V2 detector', () => {
 
     expect(result['8A'].clearWindow).toEqual(expect.objectContaining({
       endProgressMeters: expect.any(Number),
-      minCoverageRatio: 0.95,
+      minCoverageRatio: 0.75,
     }));
     expect(result['8A'].clearWindow.endProgressMeters).toBeCloseTo(shapeLength, 1);
     expect(
@@ -2244,7 +2431,7 @@ describe('Auto Detour V2 detector', () => {
     expect(snapshot.activeDetours['8A'].clearWindow).toEqual(expect.objectContaining({
       startProgressMeters: expect.any(Number),
       endProgressMeters: expect.any(Number),
-      minCoverageRatio: 0.95,
+      minCoverageRatio: 0.75,
     }));
     expect(snapshot.clearTracks['8A']['trip-3']).toHaveLength(1);
 

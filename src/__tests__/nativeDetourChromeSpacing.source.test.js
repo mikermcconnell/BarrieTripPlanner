@@ -29,6 +29,15 @@ describe('native detour chrome spacing', () => {
     expect(source).not.toContain('{isDetourView && upcomingDetourNotices.length > 0 && (');
   });
 
+  test('shows official service impacts on the main map without treating them as auto detours', () => {
+    const source = readSource();
+
+    expect(source).toContain('OfficialImpactStrip');
+    expect(source).toContain('officialServiceImpacts');
+    expect(source).toContain('visibleOfficialServiceImpacts.length > 0');
+    expect(source).not.toContain('activeDetours={officialServiceImpacts');
+  });
+
   test('provides a regular map exit that clears detour focus and fits all routes once', () => {
     const source = readSource();
 

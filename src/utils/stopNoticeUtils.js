@@ -1,3 +1,8 @@
+import {
+  buildOfficialStopNotice,
+  findOfficialImpactsForStop,
+} from './officialServiceImpacts';
+
 const normalizeKey = (value) => (
   value == null ? null : String(value).trim().toLowerCase()
 );
@@ -91,9 +96,19 @@ export const findUpcomingStopClosureImpact = (stop, impacts = [], routeId = null
   findStopClosureImpactByStatus(stop, impacts, 'upcoming', routeId)
 );
 
-export const buildDetourStopNotice = ({ stop, routeId, detour, transitNewsImpacts = [] }) => {
+export const buildDetourStopNotice = ({
+  stop,
+  routeId,
+  detour,
+  transitNewsImpacts = [],
+  officialServiceImpacts = [],
+}) => {
   if (!stop) return null;
 
+  const officialImpact = findOfficialImpactsForStop(stop, officialServiceImpacts, routeId)[0] || null;
+  const officialDetourNotice = officialImpact
+    ? buildOfficialStopNotice({ stop, routeId, impact: officialImpact })
+    : null;
   const activeImpact = getApplicableImpact(stop.closureImpact, routeId) ||
     getApplicableImpact(stop.routeScopedClosureImpact, routeId) ||
     findStopClosureImpact(stop, transitNewsImpacts, routeId);
@@ -142,11 +157,11 @@ export const buildDetourStopNotice = ({ stop, routeId, detour, transitNewsImpact
     ...(closureImpact ? { closureImpact, isClosed: true } : {}),
     ...(routeScopedClosureImpact ? { routeScopedClosureImpact } : {}),
     ...(upcomingClosureImpact && !closureImpact ? { upcomingClosureImpact } : {}),
-    ...(detourNotice ? {
-      detourNotice,
+    ...((officialDetourNotice || detourNotice) ? {
+      detourNotice: officialDetourNotice || detourNotice,
       isDetourAffected: true,
-      detourAffectedRouteIds: affectedRouteIds,
-      detourServedRouteIds: servedRouteIds,
+      detourAffectedRouteIds: officialDetourNotice?.affectedRouteIds || affectedRouteIds,
+      detourServedRouteIds: officialDetourNotice?.servedRouteIds || servedRouteIds,
     } : {}),
   };
 };

@@ -1,4 +1,10 @@
 import { getMatchingDetourRouteIds, normalizeRouteId } from './routeDetourMatching';
+import {
+  buildOfficialImpactBody,
+  findOfficialImpactsForRoute,
+  findOfficialImpactsForStop,
+  PLANNED_DETOUR_NOTICE_LABEL,
+} from './officialServiceImpacts';
 
 const TRANSIT_MODES = new Set(['BUS', 'TRANSIT']);
 const STOP_IMPACT_SEVERITY = 'stop_affected';
@@ -191,6 +197,66 @@ const buildDetourGuidance = (impactScope) => {
   }
 };
 
+const buildOfficialGuidance = (impactScope) => {
+  switch (impactScope) {
+    case 'boarding_stop':
+      return 'Use the official replacement service or choose a different boarding stop before travelling.';
+    case 'exit_stop':
+      return 'Use the official replacement service or choose a different exit stop before travelling.';
+    case 'boarding_and_exit_stops':
+    case 'ride_stops':
+      return 'Check the linked MyRide notice before travelling and use the official replacement service if needed.';
+    default:
+      return 'Check the linked MyRide notice before travelling.';
+  }
+};
+
+const getLegOfficialServiceImpact = ({
+  leg,
+  officialServiceImpacts = [],
+}) => {
+  if (!TRANSIT_MODES.has(leg?.mode)) return null;
+
+  const routeId = getLegRouteId(leg);
+  const [officialImpact] = findOfficialImpactsForRoute(routeId, officialServiceImpacts);
+  if (!officialImpact) return null;
+
+  const impactedByKey = new Map();
+  getPlannedStops(leg).forEach(({ role, stop }) => {
+    const [matchedImpact] = findOfficialImpactsForStop(stop, [officialImpact], routeId);
+    if (!matchedImpact) return;
+    addRoleImpact(impactedByKey, stop, stop, role, 'official_removed');
+  });
+
+  const impactedStops = [...impactedByKey.values()];
+  const severity = impactedStops.length > 0 ? STOP_IMPACT_SEVERITY : ROUTE_IMPACT_SEVERITY;
+  const impactScope = getImpactScope(severity, impactedStops);
+  const routeLabel = getLegRouteLabel(leg, routeId);
+  const body = buildOfficialImpactBody(officialImpact) || `Route ${routeLabel} has an official service notice.`;
+
+  return {
+    routeId: routeId == null ? null : String(routeId),
+    detourRouteId: routeId == null ? null : String(routeId),
+    officialImpactId: officialImpact.id || null,
+    impactType: 'official_service_impact',
+    isOfficial: true,
+    sourceLabel: PLANNED_DETOUR_NOTICE_LABEL,
+    sourceTitle: officialImpact.title || null,
+    sourceUrl: officialImpact.sourceUrl || null,
+    replacementRoutes: officialImpact.replacementRoutes || [],
+    severity,
+    impactScope,
+    message: `${PLANNED_DETOUR_NOTICE_LABEL}: ${body}`,
+    guidance: buildOfficialGuidance(impactScope),
+    affectedStopRoles: [...new Set(impactedStops.flatMap((stop) => stop.roles || []))],
+    affectedStops: impactedStops,
+    affectedStopNames: impactedStops.map((stop) => stop.stopName).filter(Boolean),
+    skippedStopCount: impactedStops.length,
+    affectedStopCount: impactedStops.length,
+    detourState: 'official',
+  };
+};
+
 const hasTransitLeg = (itinerary) => (
   (itinerary?.legs || []).some((leg) => TRANSIT_MODES.has(leg?.mode))
 );
@@ -212,12 +278,15 @@ export const getLegDetourImpact = ({
   leg,
   activeDetours = {},
   detourStopDetailsByRouteId = {},
+  officialServiceImpacts = [],
 }) => {
   if (!TRANSIT_MODES.has(leg?.mode)) return null;
 
   const routeId = getLegRouteId(leg);
   const [detourRouteId, detour] = getMatchingDetourEntry(routeId, activeDetours);
-  if (!detourRouteId || !detour || detour.state === 'cleared') return null;
+  if (!detourRouteId || !detour || detour.state === 'cleared') {
+    return getLegOfficialServiceImpact({ leg, officialServiceImpacts });
+  }
 
   const details =
     detourStopDetailsByRouteId[detourRouteId] ||
@@ -269,7 +338,8 @@ export const getLegDetourImpact = ({
 export const annotateItinerariesWithDetours = (
   itineraries = [],
   activeDetours = {},
-  detourStopDetailsByRouteId = {}
+  detourStopDetailsByRouteId = {},
+  officialServiceImpacts = []
 ) => {
   const annotated = (itineraries || []).map((itinerary) => {
     const detourImpacts = [];
@@ -278,6 +348,7 @@ export const annotateItinerariesWithDetours = (
         leg,
         activeDetours,
         detourStopDetailsByRouteId,
+        officialServiceImpacts,
       });
 
       if (!detourImpact) return leg;
@@ -295,11 +366,13 @@ export const annotateItinerariesWithDetours = (
       legs,
       detourImpacts,
       hasDetour: detourImpacts.length > 0,
+      hasGpsDetour: detourImpacts.some((impact) => !impact.isOfficial),
+      hasOfficialServiceImpact: detourImpacts.some((impact) => impact.isOfficial),
       hasStopDetourImpact: detourImpacts.some((impact) => impact.severity === STOP_IMPACT_SEVERITY),
     };
   });
 
-  const hasAffectedTransitTrip = annotated.some((itinerary) => itinerary.hasDetour);
+  const hasAffectedTransitTrip = annotated.some((itinerary) => itinerary.hasGpsDetour);
   if (!hasAffectedTransitTrip) return annotated;
 
   return annotated.map((itinerary) => (

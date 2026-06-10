@@ -5,6 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import {
+    buildOfficialImpactBody,
+    findOfficialImpactsForRoute,
+    PLANNED_DETOUR_NOTICE_LABEL,
+} from '../utils/officialServiceImpacts';
 
 const RouteFilterSheet = ({
     sheetRef,
@@ -13,6 +18,7 @@ const RouteFilterSheet = ({
     onRouteSelect,
     getRouteColor,
     isRouteDetouring,
+    officialServiceImpacts = [],
     onSheetChange,
 }) => {
     const insets = useSafeAreaInsets();
@@ -32,6 +38,20 @@ const RouteFilterSheet = ({
     );
 
     const sortedRoutes = useMemo(() => sortRoutesByNumber(routes), [routes]);
+    const selectedOfficialImpacts = useMemo(() => {
+        const selectedRouteIds = selectedRoutes?.size > 0
+            ? [...selectedRoutes]
+            : [];
+        const seen = new Set();
+
+        return selectedRouteIds.flatMap((routeId) => findOfficialImpactsForRoute(routeId, officialServiceImpacts))
+            .filter((impact) => {
+                const key = impact?.id || `${impact?.title}-${impact?.sourceUrl}`;
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    }, [officialServiceImpacts, selectedRoutes]);
 
     return (
         <BottomSheet
@@ -53,6 +73,13 @@ const RouteFilterSheet = ({
                 <Text style={styles.eyebrow}>Map layers</Text>
                 <Text style={styles.title}>Choose routes to show</Text>
                 <Text style={styles.subtitle}>Keep the map calm by focusing on the routes you care about.</Text>
+                {selectedOfficialImpacts.map((impact) => (
+                    <View key={impact.id || impact.title} style={styles.officialNoticeCard}>
+                        <Text style={styles.officialNoticeLabel}>{PLANNED_DETOUR_NOTICE_LABEL}</Text>
+                        <Text style={styles.officialNoticeTitle}>{impact.title || 'Official service notice'}</Text>
+                        <Text style={styles.officialNoticeBody}>{buildOfficialImpactBody(impact)}</Text>
+                    </View>
+                ))}
                 <View style={styles.chipGrid}>
                     {/* All chip */}
                     <TouchableOpacity
@@ -76,6 +103,7 @@ const RouteFilterSheet = ({
                         const routeColor = getRouteColor(r.id);
                         const isActive = selectedRoutes.has(r.id);
                         const isDetouring = isRouteDetouring?.(r.id);
+                        const hasOfficialImpact = findOfficialImpactsForRoute(r.id, officialServiceImpacts).length > 0;
                         return (
                             <View key={r.id} style={styles.chipWrapper}>
                                 <TouchableOpacity
@@ -96,6 +124,7 @@ const RouteFilterSheet = ({
                                     </Text>
                                 </TouchableOpacity>
                                 {isDetouring && <View style={styles.detourDot} />}
+                                {hasOfficialImpact && !isDetouring && <View style={styles.officialDot} />}
                             </View>
                         );
                     })}
@@ -139,6 +168,33 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         marginBottom: SPACING.md,
     },
+    officialNoticeCard: {
+        backgroundColor: COLORS.infoSubtle,
+        borderWidth: 1,
+        borderColor: COLORS.info,
+        borderRadius: BORDER_RADIUS.lg,
+        padding: SPACING.sm,
+        marginBottom: SPACING.md,
+    },
+    officialNoticeLabel: {
+        fontSize: FONT_SIZES.xxs,
+        fontWeight: FONT_WEIGHTS.bold,
+        color: COLORS.info,
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+        marginBottom: 2,
+    },
+    officialNoticeTitle: {
+        fontSize: FONT_SIZES.sm,
+        fontFamily: FONT_FAMILIES.semibold,
+        color: COLORS.textPrimary,
+        marginBottom: 2,
+    },
+    officialNoticeBody: {
+        fontSize: FONT_SIZES.xs,
+        color: COLORS.textSecondary,
+        lineHeight: 18,
+    },
     chipGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -181,6 +237,17 @@ const styles = StyleSheet.create({
         height: 8,
         borderRadius: 4,
         backgroundColor: COLORS.warning,
+        borderWidth: 1,
+        borderColor: COLORS.white,
+    },
+    officialDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: COLORS.info,
         borderWidth: 1,
         borderColor: COLORS.white,
     },

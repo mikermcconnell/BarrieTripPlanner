@@ -1964,6 +1964,50 @@ function collectionHasKey(collection, key) {
   return false;
 }
 
+function collectionGetValue(collection, key) {
+  if (!collection || key == null) return undefined;
+  const rawKey = key;
+  const stringKey = String(key);
+  if (collection instanceof Map) {
+    return collection.has(rawKey) ? collection.get(rawKey) : collection.get(stringKey);
+  }
+  if (typeof collection === 'object' && !Array.isArray(collection)) {
+    if (Object.prototype.hasOwnProperty.call(collection, rawKey)) return collection[rawKey];
+    if (Object.prototype.hasOwnProperty.call(collection, stringKey)) return collection[stringKey];
+  }
+  return undefined;
+}
+
+function shapeCoordinateSignature(shape = []) {
+  if (!Array.isArray(shape) || shape.length === 0) return '';
+  return shape
+    .map((point) => {
+      const latitude = Number(point?.latitude);
+      const longitude = Number(point?.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return 'invalid';
+      return `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+    })
+    .join('|');
+}
+
+function collectionHasShapeSignature(collection, signature) {
+  if (!signature || !hasCollectionEntries(collection)) return false;
+  const values = collection instanceof Map
+    ? [...collection.values()]
+    : Object.values(collection);
+  return values.some((shape) => shapeCoordinateSignature(shape) === signature);
+}
+
+function shapeExistsInCollection(shapeId, collection, knownCollections = []) {
+  if (collectionHasKey(collection, shapeId)) return true;
+
+  const knownShape = knownCollections
+    .map((knownCollection) => collectionGetValue(knownCollection, shapeId))
+    .find((shape) => Array.isArray(shape) && shape.length > 0);
+  const signature = shapeCoordinateSignature(knownShape);
+  return collectionHasShapeSignature(collection, signature);
+}
+
 function getKnownShapeCollections(options = {}) {
   return [
     options.shapes,
@@ -2025,8 +2069,11 @@ function isObsoleteShapeSnapshot(snapshot, options = {}) {
 
   const liveShapeCollections = getLiveShapeCollections(options);
   if (liveShapeCollections.length > 0) {
+    const knownShapeCollections = getKnownShapeCollections(options);
     return [...shapeIds].every((shapeId) => (
-      liveShapeCollections.every((collection) => !collectionHasKey(collection, shapeId))
+      liveShapeCollections.every((collection) => (
+        !shapeExistsInCollection(shapeId, collection, knownShapeCollections)
+      ))
     ));
   }
 
@@ -2154,15 +2201,43 @@ function getBaselineDivergedRouteIds(options = {}) {
   return ids;
 }
 
-function applyBaselineDivergenceSuppression(doc, routeId, baselineDivergedRouteIds) {
-  if (!baselineDivergedRouteIds?.has(String(routeId))) {
+function getBaselinePendingRouteIds(options = {}) {
+  const ids = new Set();
+  (options.baselinePendingRouteIds || []).forEach((routeId) => {
+    if (routeId != null && String(routeId).trim()) {
+      ids.add(String(routeId).trim());
+    }
+  });
+  return ids;
+}
+
+function getBaselineAutoUpdatedRouteIds(options = {}) {
+  const ids = new Set();
+  (options.baselineAutoUpdatedRouteIds || []).forEach((routeId) => {
+    if (routeId != null && String(routeId).trim()) {
+      ids.add(String(routeId).trim());
+    }
+  });
+  return ids;
+}
+
+function applyBaselineSafetySuppression(doc, routeId, baselineRouteIds = {}) {
+  const normalizedRouteId = String(routeId);
+  if (baselineRouteIds.pending?.has(normalizedRouteId)) {
+    doc.riderVisible = false;
+    doc.riderVisibilityReason = 'baseline-update-pending';
+    doc.staleForReview = true;
+    doc.baselineUpdatePending = true;
+    doc.baselineDiverged = true;
     return doc;
   }
 
-  doc.riderVisible = false;
-  doc.riderVisibilityReason = 'baseline-diverged';
-  doc.staleForReview = true;
-  doc.baselineDiverged = true;
+  if (baselineRouteIds.diverged?.has(normalizedRouteId)) {
+    doc.riderVisible = false;
+    doc.riderVisibilityReason = 'baseline-diverged';
+    doc.staleForReview = true;
+    doc.baselineDiverged = true;
+  }
   return doc;
 }
 
@@ -2179,6 +2254,13 @@ async function publishDetours(activeDetours, options = {}) {
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
   const scheduleIndex = options.scheduleIndex || options.gtfsData?.scheduleIndex || null;
   const baselineDivergedRouteIds = getBaselineDivergedRouteIds(options);
+  const baselinePendingRouteIds = getBaselinePendingRouteIds(options);
+  const baselineAutoUpdatedRouteIds = getBaselineAutoUpdatedRouteIds(options);
+  const baselineRouteIds = {
+    diverged: baselineDivergedRouteIds,
+    pending: baselinePendingRouteIds,
+    autoUpdated: baselineAutoUpdatedRouteIds,
+  };
   const gtfsData = options.gtfsData || {};
   const noticeStopImpacts = Array.isArray(options.noticeStopImpacts)
     ? options.noticeStopImpacts
@@ -2237,6 +2319,14 @@ async function publishDetours(activeDetours, options = {}) {
   for (const publishId of removedIds) {
     const previous = lastPublishedState.get(publishId);
     const routeId = previous?.routeId || publishId;
+    if (baselineAutoUpdatedRouteIds.has(String(routeId))) {
+      const event = {
+        ...buildClearedEvent(routeId, previous, now),
+        clearReason: 'baseline-auto-updated',
+      };
+      await deletePublishedDetour(db, publishId, event, 'delete baseline auto-updated detour', storageConfig);
+      continue;
+    }
     if (
       isLegacyRouteScopedSnapshot(publishId, previous) &&
       hasEventWindowDetourForRoute(routeId, publishableDetours)
@@ -2266,7 +2356,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
     if (!hasNormalRouteClearProof(previous)) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
-      applyBaselineDivergenceSuppression(retainedDoc, routeId, baselineDivergedRouteIds);
+      applyBaselineSafetySuppression(retainedDoc, routeId, baselineRouteIds);
       try {
         await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
@@ -2458,7 +2548,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.staleForReview = true;
     }
     applyRiderVisibilityGuard(doc, geo);
-    applyBaselineDivergenceSuppression(doc, routeId, baselineDivergedRouteIds);
+    applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);
 
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;
@@ -2493,6 +2583,9 @@ async function publishDetours(activeDetours, options = {}) {
       doc.geometryLastEvidenceAt = detour.geometryLastEvidenceAt ?? geo.lastEvidenceAt ?? null;
       doc.latestGpsEvidenceAt = detour.latestGpsEvidenceAt ?? doc.lastEvidenceAt ?? null;
       applySharedDetourEventMetadata(doc, sharedAssignment);
+    }
+    if (doc.riderVisible === false) {
+      doc.canShowDetourPath = false;
     }
 
     try {

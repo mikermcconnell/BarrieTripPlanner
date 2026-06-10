@@ -32,6 +32,7 @@ import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
+import { useDismissedOfficialImpacts } from '../hooks/useDismissedOfficialImpacts';
 import TripBottomSheet from '../components/TripBottomSheet';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import logger from '../utils/logger';
@@ -79,6 +80,7 @@ import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import MapOptionsControl from '../components/MapOptionsControl';
 import DetourMapLegend from '../components/DetourMapLegend';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
+import OfficialImpactStrip from '../components/OfficialImpactStrip';
 import TripViewportControls from '../components/TripViewportControls';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { getSelectedDetourSegments, mergeFamilySegmentStopDetails } from '../utils/detourSheetSelection';
@@ -98,6 +100,12 @@ import {
   mergeStopClosuresForDetourMap,
 } from '../utils/stopClosureMapUtils';
 import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
+import {
+  buildOfficialImpactBody,
+  findOfficialImpactsForRoute,
+  getActiveOfficialServiceImpacts,
+  PLANNED_DETOUR_NOTICE_LABEL,
+} from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
 import { focusMapToDetour } from '../utils/detourViewport';
@@ -492,6 +500,7 @@ const HomeScreen = ({ route }) => {
     onDemandZones,
     transitNews,
     transitNewsImpacts,
+    officialServiceImpacts,
     getRouteDetour,
     isLoadingVehicles,
     loadVehiclePositions,
@@ -520,7 +529,7 @@ const HomeScreen = ({ route }) => {
   );
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute, selectRoutes, zoomToRoutes,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [activePlatformMap, setActivePlatformMap] = useState(null);
@@ -626,6 +635,21 @@ const HomeScreen = ({ route }) => {
     () => (detoursEnabled ? getUpcomingDetourNotices(transitNews) : []),
     [detoursEnabled, transitNews]
   );
+  const activeOfficialServiceImpacts = useMemo(
+    () => getActiveOfficialServiceImpacts(officialServiceImpacts)
+      .filter((impact) => impact.type === 'baseline_detour'),
+    [officialServiceImpacts]
+  );
+  const {
+    visibleImpacts: visibleOfficialServiceImpacts,
+    dismissImpact: dismissOfficialServiceImpact,
+  } = useDismissedOfficialImpacts(activeOfficialServiceImpacts);
+  const handleOfficialImpactPress = useCallback((_impact, routeIds = []) => {
+    const drawableRouteIds = routeIds.filter((routeId) => routeShapeMapping?.[routeId]?.length > 0);
+    if (!drawableRouteIds.length) return;
+    selectRoutes(drawableRouteIds);
+    zoomToRoutes(drawableRouteIds);
+  }, [routeShapeMapping, selectRoutes, zoomToRoutes]);
   const canUseDetourView = detoursEnabled && (activeDetourRouteIds.size > 0 || upcomingDetourNotices.length > 0);
   const isDetourView = canUseDetourView && mapViewMode === 'detour';
   const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
@@ -952,9 +976,13 @@ const HomeScreen = ({ route }) => {
     return serviceAlerts.filter(alert => alert.affectedRoutes?.includes(routeId));
   }, [serviceAlerts]);
 
+  const getRouteOfficialImpacts = useCallback((routeId) => (
+    findOfficialImpactsForRoute(routeId, visibleOfficialServiceImpacts)
+  ), [visibleOfficialServiceImpacts]);
+
   const hasRouteAlert = useCallback((routeId) => {
-    return getRouteAlerts(routeId).length > 0;
-  }, [getRouteAlerts]);
+    return getRouteAlerts(routeId).length > 0 || getRouteOfficialImpacts(routeId).length > 0;
+  }, [getRouteAlerts, getRouteOfficialImpacts]);
 
   const tripDelayOptions = useMemo(() => ({ vehicles }), [vehicles]);
 
@@ -968,6 +996,7 @@ const HomeScreen = ({ route }) => {
     onTripPlanned: addTripToHistory,
     activeDetours: detoursEnabled ? activeDetours : {},
     detourStopDetailsByRouteId,
+    officialServiceImpacts: visibleOfficialServiceImpacts,
   });
   const {
     state: tripState,
@@ -1348,8 +1377,9 @@ const HomeScreen = ({ route }) => {
     setSelectedStop(buildDetourStopNotice({
       stop,
       transitNewsImpacts,
+      officialServiceImpacts: visibleOfficialServiceImpacts,
     }));
-  }, [transitNewsImpacts]);
+  }, [transitNewsImpacts, visibleOfficialServiceImpacts]);
 
   const handleDetourStopPress = useCallback((stop, context = {}) => {
     if (!stop) return;
@@ -1358,9 +1388,10 @@ const HomeScreen = ({ route }) => {
       routeId: context.routeId,
       detour: context.routeId ? getRouteDetour(context.routeId) : null,
       transitNewsImpacts,
+      officialServiceImpacts: visibleOfficialServiceImpacts,
     }));
     setShowStops(true);
-  }, [getRouteDetour, transitNewsImpacts]);
+  }, [getRouteDetour, transitNewsImpacts, visibleOfficialServiceImpacts]);
 
   // Handle "Trip from here" from stop bottom sheet
   const handleStopDirectionsFrom = (stopInfo) => {
@@ -2095,6 +2126,20 @@ const HomeScreen = ({ route }) => {
               },
             ]}
           />
+          <OfficialImpactStrip
+            impacts={!isTripPlanningMode ? visibleOfficialServiceImpacts : []}
+            routeColorByRouteId={routeColorByRouteId}
+            onDismiss={dismissOfficialServiceImpact}
+            onPress={handleOfficialImpactPress}
+            style={[
+              styles.upcomingDetourStrip,
+              isWideWeb && {
+                top: mapChromeOffsets.mapViewTop + 106,
+                left: desktopMapMainLeft,
+                right: 'auto',
+              },
+            ]}
+          />
 
           <DetourMapLegend
             visible={!isTripPlanningMode && !detourSheetRouteId && isDetourView && detourOverlays.length > 0}
@@ -2183,17 +2228,20 @@ const HomeScreen = ({ route }) => {
                 const routeColor = getRouteColor(r.id);
                 const isActive = selectedRoutes.has(r.id);
                 const routeAlerts = getRouteAlerts(r.id);
+                const routeOfficialImpacts = getRouteOfficialImpacts(r.id);
                 const hasAlert = routeAlerts.length > 0;
+                const hasOfficialImpact = routeOfficialImpacts.length > 0;
+                const hasRouteNotice = hasAlert || hasOfficialImpact;
                 return (
                   <View key={r.id} style={styles.filterChipWrapper}>
                     <TouchableOpacity
                       style={[
                         styles.filterChip,
                         isActive && { backgroundColor: routeColor, borderColor: routeColor },
-                        hasAlert && !isActive && styles.filterChipWithAlert,
+                        hasRouteNotice && !isActive && styles.filterChipWithAlert,
                       ]}
                       onPress={() => handleRouteSelect(r.id)}
-                      onLongPress={() => hasAlert && setExpandedAlertRoute(expandedAlertRoute === r.id ? null : r.id)}
+                      onLongPress={() => hasRouteNotice && setExpandedAlertRoute(expandedAlertRoute === r.id ? null : r.id)}
                     >
                       <View style={[styles.filterDot, { backgroundColor: isActive ? COLORS.white : routeColor }]} />
                       <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
@@ -2202,23 +2250,29 @@ const HomeScreen = ({ route }) => {
                       {isRouteDetouring(r.id) && (
                         <View style={[styles.detourIndicator, isActive && styles.detourIndicatorActive]} />
                       )}
-                      {hasAlert && (
+                      {hasRouteNotice && (
                         <View style={[styles.alertIndicator, isActive && styles.alertIndicatorActive]}>
-                          <AlertIcon size={10} color={isActive ? COLORS.white : COLORS.warning} />
+                          <AlertIcon size={10} color={isActive ? COLORS.white : (hasOfficialImpact ? COLORS.info : COLORS.warning)} />
                         </View>
                       )}
                     </TouchableOpacity>
                     {/* Expandable Alert Details */}
-                    {expandedAlertRoute === r.id && hasAlert && (
+                    {expandedAlertRoute === r.id && hasRouteNotice && (
                       <TouchableOpacity
                         style={styles.routeAlertPopup}
-                        onPress={() => navigation.navigate('Alerts')}
+                        onPress={() => {
+                          if (hasAlert) navigation.navigate('Alerts');
+                        }}
                       >
                         <Text style={styles.routeAlertTitle} numberOfLines={2}>
-                          {routeAlerts[0].title}
+                          {hasAlert ? routeAlerts[0].title : routeOfficialImpacts[0].title}
                         </Text>
-                        <Text style={styles.routeAlertEffect}>{routeAlerts[0].effect}</Text>
-                        <Text style={styles.routeAlertTapHint}>Tap for details</Text>
+                        <Text style={styles.routeAlertEffect}>
+                          {hasAlert ? routeAlerts[0].effect : `${PLANNED_DETOUR_NOTICE_LABEL}: ${buildOfficialImpactBody(routeOfficialImpacts[0])}`}
+                        </Text>
+                        <Text style={styles.routeAlertTapHint}>
+                          {hasAlert ? 'Tap for details' : 'Planned detour notice'}
+                        </Text>
                       </TouchableOpacity>
                     )}
                   </View>

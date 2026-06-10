@@ -163,6 +163,240 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     expect(syncPersistentDetours).toHaveBeenCalled();
   });
 
+  test('keeps baseline-diverged detours pending until the GTFS change is stable', async () => {
+    const realDateNow = Date.now;
+    Date.now = jest.fn(() => Date.parse('2026-06-09T14:00:00Z'));
+    process.env.BASELINE_AUTO_UPDATE_STABILITY_MS = String(30 * 60 * 1000);
+
+    const detectorState = { detours: { '8A': { state: 'active' }, '10': { state: 'active' } }, detourStates: { '8A': 'active', '10': 'active' } };
+    const clearRouteDetour = jest.fn((routeId) => routeId === '8A');
+    const publishDetours = jest.fn().mockResolvedValue();
+    const saveDetourRuntimeState = jest.fn().mockResolvedValue();
+    const setBaselineRoutes = jest.fn().mockResolvedValue();
+
+    const baselineShapes = new Map([
+      ['baseline-8a', [{ latitude: 44.1, longitude: -79.1 }, { latitude: 44.2, longitude: -79.2 }]],
+      ['shape-10', [{ latitude: 44.3, longitude: -79.3 }, { latitude: 44.4, longitude: -79.4 }]],
+    ]);
+    const liveShapes = new Map([
+      ['live-8a', [{ latitude: 44.5, longitude: -79.5 }, { latitude: 44.6, longitude: -79.6 }]],
+      ['shape-10', [{ latitude: 44.3, longitude: -79.3 }, { latitude: 44.4, longitude: -79.4 }]],
+    ]);
+
+    jest.doMock('../gtfsLoader', () => ({
+      forceRefresh: jest.fn().mockResolvedValue(false),
+      getStaticData: jest.fn().mockResolvedValue({
+        lastRefresh: 1,
+        shapes: liveShapes,
+        routeShapeMapping: new Map([
+          ['8A', ['live-8a']],
+          ['10', ['shape-10']],
+        ]),
+        tripMapping: new Map(),
+        stopsById: {},
+        routeStopSequencesMapping: {},
+        scheduleIndex: {},
+      }),
+    }));
+
+    jest.doMock('../vehicleFetcher', () => ({
+      fetchVehicles: jest.fn().mockResolvedValue([
+        { id: 'bus-8a', routeId: '8A', coordinate: { latitude: 44.39, longitude: -79.69 } },
+        { id: 'bus-10', routeId: '10', coordinate: { latitude: 44.39, longitude: -79.69 } },
+      ]),
+      getVehicleFeedStatus: jest.fn(() => ({ freshness: { stale: false } })),
+      errors: { fetchFailures: 0 },
+    }));
+
+    jest.doMock('../baselineManager', () => ({
+      getBaselineData: jest.fn().mockResolvedValue({
+        shapes: baselineShapes,
+        routeShapeMapping: new Map([
+          ['8A', ['baseline-8a']],
+          ['10', ['shape-10']],
+        ]),
+      }),
+      getBaselineStatus: jest.fn(() => ({ readyForDetours: true })),
+      logShapeDivergence: jest.fn(),
+      setBaselineRoutes,
+    }));
+
+    jest.doMock('../detourDetector', () => ({
+      processVehicles: jest.fn(() => ({
+        '8A:baseline-8a:0-100': { routeId: '8A', state: 'active' },
+        '10:shape-10:0-100': { routeId: '10', state: 'active' },
+      })),
+      getState: jest.fn(() => detectorState),
+      hydratePersistentDetours: jest.fn(),
+      hydratePersistentDetourGeometries: jest.fn(),
+      getPersistentDetours: jest.fn(() => ({})),
+      getPersistentDetourGeometries: jest.fn(() => ({})),
+      clearRouteDetour,
+      serializeDetectorRuntimeState: jest.fn(() => ({ routes: [{ routeId: '10' }] })),
+      hydrateRuntimeState: jest.fn(),
+      hydrateActiveDetourSnapshots: jest.fn(() => 0),
+    }));
+
+    jest.doMock('../detourPublisher', () => ({ publishDetours }));
+
+    jest.doMock('../persistentDetourStore', () => ({
+      loadPersistentDetours: jest.fn().mockResolvedValue({}),
+      loadPersistentDetourGeometries: jest.fn().mockResolvedValue({}),
+      syncPersistentDetours: jest.fn().mockResolvedValue(),
+    }));
+
+    jest.doMock('../detourRuntimeStateStore', () => ({
+      loadDetourRuntimeState: jest.fn().mockResolvedValue({ routes: [{ routeId: '8A' }, { routeId: '10' }] }),
+      saveDetourRuntimeState,
+    }));
+
+    jest.doMock('../activeDetourSnapshotStore', () => ({
+      loadActiveDetourSnapshots: jest.fn().mockResolvedValue({}),
+    }));
+
+    try {
+      const worker = require('../detourWorker');
+      const result = await worker.runTick({ source: 'test' });
+
+      expect(result).toMatchObject({ ok: true, detourCount: 2 });
+      expect(setBaselineRoutes).not.toHaveBeenCalled();
+      expect(clearRouteDetour).not.toHaveBeenCalled();
+      expect(publishDetours.mock.calls[0][0]).toEqual({
+        '8A:baseline-8a:0-100': { routeId: '8A', state: 'active' },
+        '10:shape-10:0-100': { routeId: '10', state: 'active' },
+      });
+      expect(publishDetours.mock.calls[0][1]).toEqual(expect.objectContaining({
+        baselineDivergedRouteIds: ['8A'],
+        baselinePendingRouteIds: ['8A'],
+      }));
+      expect(saveDetourRuntimeState).toHaveBeenCalledWith(
+        { routes: [{ routeId: '8A' }, { routeId: '10' }] },
+        expect.any(Object)
+      );
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('auto-updates stable changed route baselines and clears old route detour state', async () => {
+    const realDateNow = Date.now;
+    Date.now = jest.fn(() => Date.parse('2026-06-09T14:00:00Z'));
+    process.env.BASELINE_AUTO_UPDATE_STABILITY_MS = '0';
+
+    const detectorState = { detours: { '8A': { state: 'active' }, '10': { state: 'active' } }, detourStates: { '8A': 'active', '10': 'active' } };
+    const clearRouteDetour = jest.fn((routeId) => routeId === '8A');
+    const publishDetours = jest.fn().mockResolvedValue();
+    const saveDetourRuntimeState = jest.fn().mockResolvedValue();
+    const setBaselineRoutes = jest.fn().mockResolvedValue();
+    const forceRefresh = jest.fn().mockResolvedValue(true);
+
+    const baselineShapes = new Map([
+      ['baseline-8a', [{ latitude: 44.1, longitude: -79.1 }, { latitude: 44.2, longitude: -79.2 }]],
+      ['shape-10', [{ latitude: 44.3, longitude: -79.3 }, { latitude: 44.4, longitude: -79.4 }]],
+    ]);
+    const liveShapes = new Map([
+      ['live-8a', [{ latitude: 44.5, longitude: -79.5 }, { latitude: 44.6, longitude: -79.6 }]],
+      ['shape-10', [{ latitude: 44.3, longitude: -79.3 }, { latitude: 44.4, longitude: -79.4 }]],
+    ]);
+    const liveData = {
+      lastRefresh: 1,
+      shapes: liveShapes,
+      routeShapeMapping: new Map([
+        ['8A', ['live-8a']],
+        ['10', ['shape-10']],
+      ]),
+      tripMapping: new Map(),
+      stopsById: {},
+      routeStopSequencesMapping: {},
+      scheduleIndex: {},
+    };
+
+    jest.doMock('../gtfsLoader', () => ({
+      forceRefresh,
+      getStaticData: jest.fn().mockResolvedValue(liveData),
+    }));
+
+    jest.doMock('../vehicleFetcher', () => ({
+      fetchVehicles: jest.fn().mockResolvedValue([
+        { id: 'bus-8a', routeId: '8A', coordinate: { latitude: 44.39, longitude: -79.69 } },
+        { id: 'bus-10', routeId: '10', coordinate: { latitude: 44.39, longitude: -79.69 } },
+      ]),
+      getVehicleFeedStatus: jest.fn(() => ({ freshness: { stale: false } })),
+      errors: { fetchFailures: 0 },
+    }));
+
+    jest.doMock('../baselineManager', () => ({
+      getBaselineData: jest.fn().mockResolvedValue({
+        shapes: baselineShapes,
+        routeShapeMapping: new Map([
+          ['8A', ['baseline-8a']],
+          ['10', ['shape-10']],
+        ]),
+      }),
+      getBaselineStatus: jest.fn(() => ({ readyForDetours: true })),
+      logShapeDivergence: jest.fn(),
+      setBaselineRoutes,
+    }));
+
+    jest.doMock('../detourDetector', () => ({
+      processVehicles: jest.fn(() => ({
+        '10:shape-10:0-100': { routeId: '10', state: 'active' },
+      })),
+      getState: jest.fn(() => detectorState),
+      hydratePersistentDetours: jest.fn(),
+      hydratePersistentDetourGeometries: jest.fn(),
+      getPersistentDetours: jest.fn(() => ({})),
+      getPersistentDetourGeometries: jest.fn(() => ({})),
+      clearRouteDetour,
+      serializeDetectorRuntimeState: jest.fn(() => ({ routes: [{ routeId: '10' }] })),
+      hydrateRuntimeState: jest.fn(),
+      hydrateActiveDetourSnapshots: jest.fn(() => 0),
+    }));
+
+    jest.doMock('../detourPublisher', () => ({ publishDetours }));
+
+    jest.doMock('../persistentDetourStore', () => ({
+      loadPersistentDetours: jest.fn().mockResolvedValue({}),
+      loadPersistentDetourGeometries: jest.fn().mockResolvedValue({}),
+      syncPersistentDetours: jest.fn().mockResolvedValue(),
+    }));
+
+    jest.doMock('../detourRuntimeStateStore', () => ({
+      loadDetourRuntimeState: jest.fn().mockResolvedValue({ routes: [{ routeId: '8A' }, { routeId: '10' }] }),
+      saveDetourRuntimeState,
+    }));
+
+    jest.doMock('../activeDetourSnapshotStore', () => ({
+      loadActiveDetourSnapshots: jest.fn().mockResolvedValue({}),
+    }));
+
+    try {
+      const worker = require('../detourWorker');
+      const result = await worker.runTick({ source: 'test' });
+
+      expect(result).toMatchObject({ ok: true, detourCount: 1 });
+      expect(forceRefresh).toHaveBeenCalledTimes(1);
+      expect(setBaselineRoutes).toHaveBeenCalledWith(
+        liveData,
+        ['8A'],
+        expect.objectContaining({ source: 'auto-gtfs-refresh' })
+      );
+      expect(clearRouteDetour).toHaveBeenCalledWith('8A');
+      expect(publishDetours.mock.calls[0][0]).toEqual({
+        '10:shape-10:0-100': { routeId: '10', state: 'active' },
+      });
+      expect(publishDetours.mock.calls[0][1]).toEqual(expect.objectContaining({
+        baselineAutoUpdatedRouteIds: ['8A'],
+      }));
+      expect(saveDetourRuntimeState).toHaveBeenCalledWith(
+        { routes: [{ routeId: '10' }] },
+        expect.any(Object)
+      );
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
   test('hydrates missing active snapshots even when runtime already has other routes', async () => {
     const detectorState = { detours: { '12B': { state: 'active' } }, detourStates: { '12B': 'active' } };
     const loadActiveDetourSnapshots = jest.fn().mockResolvedValue({

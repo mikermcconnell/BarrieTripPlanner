@@ -671,6 +671,85 @@ describe('detourPublisher storage config', () => {
     ))).toBe(true);
   });
 
+  test('publishDetours keeps baseline-shape detours when live GTFS changed only the shape id', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const eventId = '8A:old-shape:20500-20600';
+    const sameShape = [
+      { latitude: 44.38, longitude: -79.70 },
+      { latitude: 44.381, longitude: -79.701 },
+    ];
+    const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+    const collection = jest.fn((name) => ({
+      doc: (id = 'auto') => ({
+        set: async (data) => {
+          if (name === 'detourEventHistoryV2') historyWrites.push(data);
+          else writes[`${name}/${id}`] = data;
+        },
+        delete: async () => { deletes.push(`${name}/${id}`); },
+      }),
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => emptyQuery }),
+      where: () => ({ orderBy: () => ({ limit: () => emptyQuery }), limit: () => emptyQuery }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    await publishDetours({
+      [eventId]: {
+        eventId,
+        routeId: '8A',
+        state: 'active',
+        detectedAt: Date.parse('2026-06-07T14:30:00Z'),
+        lastSeenAt: Date.parse('2026-06-07T14:45:31Z'),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        eventWindow: { routeId: '8A', shapeId: 'old-shape' },
+        geometry: {
+          shapeId: 'old-shape',
+          canShowDetourPath: true,
+          skippedSegmentPolyline: sameShape,
+          inferredDetourPolyline: sameShape,
+          segments: [{
+            shapeId: 'old-shape',
+            canShowDetourPath: true,
+            skippedSegmentPolyline: sameShape,
+            inferredDetourPolyline: sameShape,
+          }],
+        },
+      },
+    }, {
+      now: Date.parse('2026-06-08T14:00:00Z'),
+      noticeStopImpacts: [],
+      shapes: new Map([['old-shape', sameShape]]),
+      gtfsData: {
+        shapes: new Map([['new-shape-id', sameShape]]),
+      },
+      storageConfig: {
+        detourVersion: 'v2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
+      },
+    });
+
+    expect(deletes).not.toContain(`activeDetourEventsV2/${eventId}`);
+    expect(writes[`activeDetourEventsV2/${eventId}`]).toEqual(expect.objectContaining({
+      eventId,
+      routeId: '8A',
+      state: 'active',
+    }));
+    expect(historyWrites.some((event) => (
+      event.eventId === eventId &&
+      event.eventType === 'DETOUR_DETECTED'
+    ))).toBe(true);
+  });
+
   test('publishDetours writes the detour clear window to active documents', async () => {
     jest.resetModules();
     const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
@@ -824,6 +903,110 @@ describe('detourPublisher storage config', () => {
       staleForReview: true,
       baselineDiverged: true,
     });
+  });
+
+  test('suppresses rider visibility while a route baseline auto-update is pending', async () => {
+    jest.resetModules();
+    const writes = {};
+    const set = jest.fn(async (data) => {
+      writes.active = data;
+    });
+    const collection = jest.fn(() => ({
+      doc: () => ({ set, delete: jest.fn(async () => {}) }),
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    await publishDetours({
+      12: {
+        routeId: '12',
+        detectedAt: new Date('2026-06-09T12:00:00Z'),
+        lastSeenAt: new Date('2026-06-09T12:05:00Z'),
+        triggerVehicleId: 'bus-12',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        vehiclesOffRoute: new Set(['bus-12']),
+        geometry: {},
+      },
+    }, {
+      now: Date.parse('2026-06-09T12:10:00Z'),
+      baselinePendingRouteIds: ['12'],
+      baselineDivergedRouteIds: ['12'],
+    });
+
+    expect(writes.active).toMatchObject({
+      routeId: '12',
+      riderVisible: false,
+      riderVisibilityReason: 'baseline-update-pending',
+      staleForReview: true,
+      baselineUpdatePending: true,
+      baselineDiverged: true,
+    });
+  });
+
+  test('clears absent active detours when their route baseline was auto-updated', async () => {
+    jest.resetModules();
+    const deletes = [];
+    const historyWrites = [];
+    const collection = jest.fn((name) => ({
+      doc: (id = 'auto') => ({
+        set: async (data) => {
+          if (name === 'detourHistory') historyWrites.push(data);
+        },
+        delete: async () => {
+          deletes.push(`${name}/${id}`);
+        },
+      }),
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const { publishDetours } = require('../detourPublisher');
+    await publishDetours({
+      '12B:old-shape:12000-12100': {
+        eventId: '12B:old-shape:12000-12100',
+        routeId: '12B',
+        state: 'active',
+        detectedAt: Date.parse('2026-06-09T10:00:00Z'),
+        lastSeenAt: Date.parse('2026-06-09T10:10:00Z'),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        geometry: {
+          shapeId: 'old-shape',
+          canShowDetourPath: true,
+          skippedSegmentPolyline: [{ latitude: 44.1, longitude: -79.1 }, { latitude: 44.2, longitude: -79.2 }],
+          inferredDetourPolyline: [{ latitude: 44.1, longitude: -79.1 }, { latitude: 44.2, longitude: -79.2 }],
+          segments: [],
+        },
+      },
+    }, {
+      now: Date.parse('2026-06-09T10:20:00Z'),
+      noticeStopImpacts: [],
+    });
+
+    await publishDetours({}, {
+      now: Date.parse('2026-06-09T10:30:00Z'),
+      noticeStopImpacts: [],
+      baselineAutoUpdatedRouteIds: ['12B'],
+    });
+
+    expect(deletes).toContain('activeDetours/12B:old-shape:12000-12100');
+    expect(historyWrites.some((event) => (
+      event.eventType === 'DETOUR_CLEARED' &&
+      event.eventId === '12B:old-shape:12000-12100' &&
+      event.clearReason === 'baseline-auto-updated'
+    ))).toBe(true);
   });
 });
 
@@ -1887,6 +2070,72 @@ describe('publishDetours event ids', () => {
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('insufficient-geometry');
     expect(written.staleForReview).toBe(true);
+  });
+
+  test('does not publish a drawable path flag for backend-suppressed stale sparse Route 400 detours', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-06-09T16:10:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '400:route-400-shape:5200-5600': {
+        routeId: '400',
+        riderVisible: false,
+        riderVisibilityReason: 'stale-sparse-evidence',
+        staleForReview: true,
+        detectedAt: new Date(now - 4 * 24 * 60 * 60 * 1000),
+        lastSeenAt: new Date(now - 10 * 60 * 1000),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        state: 'active',
+        geometry: {
+          confidence: 'high',
+          lastEvidenceAt: now - 10 * 60 * 1000,
+          canShowDetourPath: true,
+          skippedSegmentPolyline: [
+            { latitude: 44.390, longitude: -79.698 },
+            { latitude: 44.390, longitude: -79.694 },
+          ],
+          inferredDetourPolyline: [
+            { latitude: 44.391, longitude: -79.698 },
+            { latitude: 44.391, longitude: -79.694 },
+          ],
+          segments: [],
+        },
+      },
+    }, { now, storageConfig: { activeCollection: 'activeDetours' } });
+
+    const written = writes['activeDetours/400:route-400-shape:5200-5600'];
+    expect(written.riderVisible).toBe(false);
+    expect(written.riderVisibilityReason).toBe('stale-sparse-evidence');
+    expect(written.canShowDetourPath).toBe(false);
   });
 
   test('clears stale geometry fields when every current segment is invalid', async () => {

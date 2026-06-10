@@ -164,7 +164,7 @@ function buildClearWindowForEvent(eventWindow, { shapeLengthMeters, quality = 'n
     endProgressMeters: clamp(core.end + extraPadding, 0, shapeLength),
     sourceStartProgressMeters: core.start,
     sourceEndProgressMeters: core.end,
-    minCoverageRatio: weak ? 0.75 : 0.95,
+    minCoverageRatio: 0.75,
     shapeId: eventWindow.shapeId || null,
   };
 }

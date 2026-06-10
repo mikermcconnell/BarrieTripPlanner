@@ -123,4 +123,20 @@ describe('detour V2 event windows', () => {
     expect(clearWindow.endProgressMeters).toBeLessThanOrEqual(500);
     expect(clearWindow.minCoverageRatio).toBeLessThan(0.95);
   });
+
+  test('uses 75 percent clear-window coverage for normal detour clearing', () => {
+    const window = buildInitialEventWindow({
+      routeId: '8A',
+      shapeId: 'shape-1',
+      progressMeters: 1500,
+      coordinate: { latitude: 44.39, longitude: -79.69 },
+      shapeLengthMeters: 5000,
+    });
+
+    const clearWindow = buildClearWindowForEvent(window, {
+      shapeLengthMeters: 5000,
+    });
+
+    expect(clearWindow.minCoverageRatio).toBe(0.75);
+  });
 });

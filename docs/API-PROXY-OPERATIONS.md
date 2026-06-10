@@ -11,6 +11,7 @@ Owner: Codex
 - LocationIQ proxy routes
 - walking directions proxying
 - detour worker / detour publishing
+- official baseline-impact scanning for long-term GTFS-backed service changes
 - survey administration and survey digest endpoints
 - optional local AI enrichments such as survey comment summaries
 
@@ -62,6 +63,10 @@ These are not public rider endpoints:
 - `POST /api/news-run-once` requires either:
   - the trusted scheduler token on `x-scheduler-token`
   - or a Firebase `admin=true`, `detourAdmin=true`, or `surveyAdmin=true` claim
+- `POST /api/official-impact-run-once` requires either:
+  - the trusted scheduler token on `x-scheduler-token`
+  - or a Firebase `admin=true` or `detourAdmin=true` claim
+- `POST /api/official-impact-promote` requires a Firebase `admin=true` or `detourAdmin=true` claim
 - in production, survey admin access requires Firebase Bearer auth plus either:
   - a Firebase custom claim of `admin=true` or `surveyAdmin=true`
   - or a UID listed in `SURVEY_ADMIN_UIDS`
@@ -123,7 +128,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - Duplicate GTFS vehicle snapshots are skipped so repeated feed data does not count as fresh detector evidence.
 - Detour clearing policy:
   - Active detector-owned detours clear from same-bus normal-route GPS traversal through the affected area, not from elapsed time, bus absence, route-family activity, or official notice timing.
-  - Default clear proof uses a clear window around the affected segment: at least 1,000m where possible, clipped to the route shape ends. The same bus must cover about 95% of that window on the baseline route (`DETOUR_CLEAR_WINDOW_MIN_METERS`, `DETOUR_CLEAR_WINDOW_MIN_COVERAGE_RATIO`). This prevents a bus from clearing its own detour just because it rejoins the route after the off-route section.
+  - Default clear proof uses a clear window around the affected segment: at least 1,000m where possible, clipped to the route shape ends. The same bus must cover about 75% of that window on the baseline route (`DETOUR_CLEAR_WINDOW_MIN_METERS`, `DETOUR_CLEAR_WINDOW_MIN_COVERAGE_RATIO`). This prevents a bus from clearing its own detour just because it rejoins the route after the off-route section.
   - Collective clear fallback: if no single bus gives a clean traversal, two or more unique same-route trips/vehicles can collectively clear a geometry-backed detour only when their on-route sample intervals cover the same clear window and no newer off-route evidence has returned.
   - Clear-count gotcha: do not treat clearing as "4 pings anywhere on route". The configured consecutive-on-route value is a sampling guard/diagnostic; active geometry-backed detours clear only after same-bus normal-route traversal or the collective two-trip/vehicle fallback through the clear window. A single GPS point cannot prove traversal. In practice this means at least two useful on-route GPS samples far enough apart to show route progress, often more on long segments, followed by a later tick to finalize `clear-pending`.
   - The publisher delete path is also proof-gated: if a route disappears from the current detector output, the Firestore `activeDetours` document is retained unless the previous published snapshot has `clearReason: "normal-route-observed"`.
@@ -142,9 +147,35 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment
   - `DETOUR_ROAD_MATCHING_BACKTRACK_*` strips route-fallback out-and-back spurs caused by forced waypoints
   - `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS=275,600,1000,1500,1800` lets local dummy detours try wider synthetic GPS paths until the matcher finds a route that does not reuse the closed segment
-- `BASELINE_AUTO_INIT=false` — required for validation/production so current live GTFS is not silently accepted as the pre-detour baseline
+- `BASELINE_AUTO_INIT=false` — required for validation/production so an empty baseline is not silently created from live GTFS
+- `BASELINE_AUTO_UPDATE_ENABLED=true` — route geometry changes in GTFS are auto-accepted as the new baseline after a stability recheck
+- `BASELINE_AUTO_UPDATE_STABILITY_MS=1800000` — default 30-minute guard before a changed route baseline is replaced
 - `DETOUR_REQUIRE_SAFE_BASELINE=true` — blocks detector ticks when only live-fallback or auto-initialized baseline data is available
 - Firebase Admin credentials
+
+### Official baseline-impact scanner
+
+- `OFFICIAL_BASELINE_IMPACT_WORKER_ENABLED=true|false`
+- `OFFICIAL_BASELINE_IMPACT_PUBLISH_CANDIDATES=true|false`
+
+This scanner handles long-term detours or service changes that are already baked into static GTFS, such as a route losing a major stop or terminal. It:
+
+- stores the latest compact GTFS snapshot in `gtfsBaselineSnapshots/latest`
+- compares previous/current route stop sequences
+- flags major stop removals, terminal changes, and multi-stop removals
+- only creates candidates when the change matches an official MyRide news item
+- writes review-only records to `officialServiceImpactCandidates` when candidate publishing is enabled
+- promotes reviewed records to public `officialServiceImpacts` only through `POST /api/official-impact-promote`
+
+First run behavior: if no prior snapshot exists, `POST /api/official-impact-run-once` seeds the snapshot and returns `needs_initial_snapshot`.
+
+Guardrails:
+
+- this does not create `activeDetours`
+- this does not mutate the GPS-detector trusted baseline
+- candidate records are operational review data, not public rider notices
+- promoted `officialServiceImpacts` records are public rider notices
+- unmatched GTFS diffs must not be shown to riders
 
 ### Transit news worker
 
@@ -224,6 +255,9 @@ Operational detour endpoints:
 - `POST /api/detour-run-once`
 - `GET /api/news-status`
 - `POST /api/news-run-once`
+- `GET /api/official-impact-status`
+- `POST /api/official-impact-run-once`
+- `POST /api/official-impact-promote` with `{ "candidateIds": ["baseline-detour-12b-1652"] }`
 
 Baseline endpoints:
 
@@ -232,10 +266,10 @@ Baseline endpoints:
 - `POST /api/baseline/routes` with `{ "routeIds": ["12"] }` — replace only selected route baselines from current GTFS
 - `POST /api/baseline/clear`
 
-Only detour admins should run baseline mutation endpoints. Do not refresh the baseline during a known active detour unless you intentionally want that detour treated as normal service.
+Only detour admins should run manual baseline mutation endpoints. During worker ticks, meaningful GTFS route geometry changes are handled automatically: the changed route is hidden from riders while pending, force-rechecked after the stability window, then that route's baseline is replaced from live GTFS and old active detour state clears with `baseline-auto-updated`.
 
 `GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours. It also reports suspicious short-lived detours under 15 minutes, grouped by confidence, so operators can review likely false positives that lasted longer than the strict 5-minute threshold.
-Launch readiness also checks whether the stored baseline diverges from current live GTFS. Baseline divergence is a critical blocker because it can create false detours or wrong affected-stop output. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
+Launch readiness also checks whether the stored baseline diverges from current live GTFS. A route that is waiting for the auto-baseline stability recheck is hidden from riders until it is either accepted as the new baseline or stops diverging. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
 
 `GET /api/detour-debug` without `routeId` is the safe summary endpoint. Route-specific debug (`?routeId=...`) can expose vehicle-level evidence and is blocked in production unless the caller has an admin Firebase claim or `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true` is set intentionally.
 
@@ -249,6 +283,7 @@ Operational tasks are expected to be driven externally when possible:
 - preferred low-cost detour operation is `DETOUR_WORKER_MODE=scheduled` with an external scheduler calling `POST /api/detour-run-once`
 - `DETOUR_WORKER_MODE=manual` is preferred for ad hoc testing and debugging
 - preferred low-cost news operation is `NEWS_WORKER_MODE=scheduled` with an external scheduler calling `POST /api/news-run-once` every 6 hours
+- official baseline-impact scanning should run after GTFS/news refreshes by calling `POST /api/official-impact-run-once`
 - survey digest is triggered by `POST /api/survey/send-digest`
 - any recurring digest or refresh flow should be run by platform cron/scheduler, not hidden process-local timers
 
@@ -360,13 +395,15 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 - `DETOUR_HISTORY_ENABLED=true`
 - `NEWS_WORKER_ENABLED=true`
 - `NEWS_WORKER_MODE=scheduled`
+- `OFFICIAL_BASELINE_IMPACT_WORKER_ENABLED=true`
+- `OFFICIAL_BASELINE_IMPACT_PUBLISH_CANDIDATES=false` until operations review is ready
 - `REQUIRE_API_AUTH=true`
 - `ALLOW_SHARED_TOKEN_AUTH=true`
 - `API_PROXY_TOKEN=<long-random-secret>`
 - `REQUIRE_FIREBASE_AUTH=false` for testing
 - valid Firebase Admin credentials
 
-For public production, shared-token auth must be disabled and Firebase Bearer auth must be enabled. Use `SCHEDULER_API_TOKEN` only for server-to-server scheduler calls such as `POST /api/detour-run-once` and `POST /api/news-run-once`.
+For public production, shared-token auth must be disabled and Firebase Bearer auth must be enabled. Use `SCHEDULER_API_TOKEN` only for server-to-server scheduler calls such as `POST /api/detour-run-once`, `POST /api/news-run-once`, and `POST /api/official-impact-run-once`.
 
 ### Example deploy flow
 

@@ -17,7 +17,11 @@ import {
 } from '../utils/offlineCache';
 import { subscribeToActiveDetours } from '../services/firebase/detourService';
 import { getEnabledDevDetourFixtures } from '../services/devDetourFixtures';
-import { subscribeToTransitNews, subscribeToTransitNewsImpacts } from '../services/firebase/newsService';
+import {
+  subscribeToOfficialServiceImpacts,
+  subscribeToTransitNews,
+  subscribeToTransitNewsImpacts,
+} from '../services/firebase/newsService';
 import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
@@ -124,6 +128,7 @@ export const TransitProvider = ({ children }) => {
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
   const [transitNewsImpacts, setTransitNewsImpacts] = useState([]);
+  const [officialServiceImpacts, setOfficialServiceImpacts] = useState([]);
 
   // On-demand zones (server-side, via Firestore)
   const [onDemandZones, setOnDemandZones] = useState({});
@@ -174,6 +179,14 @@ export const TransitProvider = ({ children }) => {
     const unsubscribe = subscribeToTransitNewsImpacts(
       (impacts) => setTransitNewsImpacts(impacts),
       (error) => logger.error('News impacts subscription error:', error)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToOfficialServiceImpacts(
+      (impacts) => setOfficialServiceImpacts(impacts),
+      (error) => logger.error('Official service impacts subscription error:', error)
     );
     return () => unsubscribe();
   }, []);
@@ -992,6 +1005,7 @@ export const TransitProvider = ({ children }) => {
     getRouteDetour,
     transitNews,
     transitNewsImpacts,
+    officialServiceImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,
@@ -1017,6 +1031,7 @@ export const TransitProvider = ({ children }) => {
     getRouteDetour,
     transitNews,
     transitNewsImpacts,
+    officialServiceImpacts,
     onDemandZones,
     isLoadingVehicles,
     vehicleError,

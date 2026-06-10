@@ -16,6 +16,11 @@ import {
   looksLikeStopClosureNotice,
 } from '../utils/noticeTimingUtils';
 import { normalizeDetourNotice } from '../utils/upcomingDetourNotices';
+import {
+  buildOfficialImpactBody,
+  getActiveOfficialServiceImpacts,
+  PLANNED_DETOUR_NOTICE_LABEL,
+} from '../utils/officialServiceImpacts';
 
 const MONTHS = {
   january: 0, jan: 0,
@@ -121,7 +126,7 @@ function ImpactCard({ item, tone = 'info', onPress }) {
         <View style={styles.routesRowCompact}>
           {item.routes.map((route) => (
             <View key={route} style={styles.routeBadgeSubtle}>
-              <Text style={styles.routeTextSubtle}>Route {route}</Text>
+              <Text style={styles.routeTextSubtle}>{`Route ${route}`}</Text>
             </View>
           ))}
         </View>
@@ -146,7 +151,12 @@ function Section({ title, subtitle, children, emptyText }) {
 const NewsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { transitNews, transitNewsImpacts, activeDetours } = useTransitRealtime();
+  const {
+    transitNews,
+    transitNewsImpacts,
+    activeDetours,
+    officialServiceImpacts,
+  } = useTransitRealtime();
   const [expandedId, setExpandedId] = useState(null);
 
   const buckets = useMemo(() => {
@@ -154,6 +164,8 @@ const NewsScreen = ({ navigation }) => {
     const activeStopClosures = stopClosures.filter((impact) => impact.status === 'active');
     const upcomingStopClosures = stopClosures.filter((impact) => impact.status === 'upcoming');
     const activeDetourItems = Object.values(activeDetours || {}).filter((detour) => detour?.state !== 'archived');
+    const activeOfficialImpacts = getActiveOfficialServiceImpacts(officialServiceImpacts)
+      .filter((impact) => impact.type === 'baseline_detour');
     const detourNotices = (transitNews || [])
       .filter((item) => looksLikeDetourNotice(item) && !looksLikeStopClosureNotice(item))
       .map((item) => normalizeDetourNotice(item));
@@ -164,8 +176,8 @@ const NewsScreen = ({ navigation }) => {
       !looksLikeDetourNotice(item)
     ));
 
-    return { activeStopClosures, upcomingStopClosures, activeDetourItems, activeDetourNotices, upcomingDetours, otherNews };
-  }, [activeDetours, transitNews, transitNewsImpacts]);
+    return { activeStopClosures, upcomingStopClosures, activeDetourItems, activeOfficialImpacts, activeDetourNotices, upcomingDetours, otherNews };
+  }, [activeDetours, officialServiceImpacts, transitNews, transitNewsImpacts]);
 
   const renderNewsItem = (item) => {
     const isExpanded = expandedId === item.id;
@@ -191,7 +203,7 @@ const NewsScreen = ({ navigation }) => {
           <View style={styles.routesRow}>
             {item.affectedRoutes.map((route) => (
               <View key={route} style={styles.routeBadge}>
-                <Text style={styles.routeText}>Route {route}</Text>
+                <Text style={styles.routeText}>{`Route ${route}`}</Text>
               </View>
             ))}
           </View>
@@ -234,6 +246,20 @@ const NewsScreen = ({ navigation }) => {
         </View>
 
         <Section title="Active detours" subtitle="Route-level changes" emptyText="No active detected detours.">
+          {buckets.activeOfficialImpacts.map((impact) => (
+            <ImpactCard
+              key={`official-${impact.id}`}
+              tone="info"
+              item={{
+                title: impact.title,
+                subtitle: PLANNED_DETOUR_NOTICE_LABEL,
+                badge: 'Planned',
+                body: buildOfficialImpactBody(impact),
+                routes: impact.affectedRoutes,
+              }}
+              onPress={() => impact.sourceUrl && Linking.openURL(impact.sourceUrl)}
+            />
+          ))}
           {buckets.activeDetourNotices.map((item) => (
             <ImpactCard
               key={`notice-${item.id}`}

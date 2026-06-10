@@ -73,6 +73,16 @@ function evaluateStaleRiderVisibility({
     };
   }
 
+  if (detour?.riderVisible === false) {
+    return {
+      riderVisible: false,
+      staleForReview: true,
+      reason: detour.riderVisibilityReason || detour.visibilityReason || 'backend-suppressed',
+      currentVehicleCount,
+      confirmedVehicleCount: getConfirmedVehicleCount(detour, previousSnapshot),
+    };
+  }
+
   const confirmedVehicleCount = getConfirmedVehicleCount(detour, previousSnapshot);
   if (confirmedVehicleCount === 0) {
     return {

@@ -139,6 +139,39 @@ describe('detour rider visibility policy', () => {
     expect(decision.reason).toBe('gps-clear-required');
   });
 
+  test('keeps backend-suppressed detours hidden until fresh evidence reconfirms them', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '400',
+      detour: {
+        riderVisible: false,
+        riderVisibilityReason: 'stale-sparse-evidence',
+        staleForReview: true,
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: {
+          canShowDetourPath: true,
+          lastEvidenceAt: now - 24 * 60 * 60 * 1000,
+          inferredDetourPolyline: [
+            { latitude: 44.391, longitude: -79.698 },
+            { latitude: 44.391, longitude: -79.694 },
+          ],
+        },
+      },
+      previousSnapshot: {
+        riderVisible: true,
+        riderVisibilityReason: 'gps-clear-required',
+      },
+      vehicles: [],
+      now,
+    });
+
+    expect(decision.riderVisible).toBe(false);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('stale-sparse-evidence');
+  });
+
   test('keeps detours rider-visible when a vehicle is currently in the detour', () => {
     const decision = evaluateStaleRiderVisibility({
       routeId: '8A',

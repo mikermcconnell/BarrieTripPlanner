@@ -167,6 +167,12 @@ function makeSnapshot(doc, previousSnapshot = null) {
     staleForReview: hasOwn(doc, 'staleForReview')
       ? Boolean(doc.staleForReview)
       : Boolean(previousSnapshot?.staleForReview),
+    baselineDiverged: hasOwn(doc, 'baselineDiverged')
+      ? Boolean(doc.baselineDiverged)
+      : Boolean(previousSnapshot?.baselineDiverged),
+    baselineUpdatePending: hasOwn(doc, 'baselineUpdatePending')
+      ? Boolean(doc.baselineUpdatePending)
+      : Boolean(previousSnapshot?.baselineUpdatePending),
     shapeId,
     entryPoint,
     exitPoint,
@@ -236,6 +242,9 @@ function buildDetectedEvent(routeId, current, now) {
     vehicleCount: current.vehicleCount,
     uniqueVehicleCount: current.uniqueVehicleCount ?? current.vehicleCount,
     currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
+    riderVisible: current.riderVisible !== false,
+    riderVisibilityReason: current.riderVisibilityReason || null,
+    staleForReview: Boolean(current.staleForReview),
     confidence: current.confidence || null,
     evidencePointCount: current.evidencePointCount ?? null,
     lastEvidenceAt: current.lastEvidenceAt ?? null,
@@ -244,6 +253,8 @@ function buildDetectedEvent(routeId, current, now) {
     source: 'detour-worker-v2',
   };
   if (current.shapeId) event.shapeId = current.shapeId;
+  if (current.baselineDiverged) event.baselineDiverged = true;
+  if (current.baselineUpdatePending) event.baselineUpdatePending = true;
   if (current.entryPoint) event.entryPoint = cloneJson(current.entryPoint);
   if (current.exitPoint) event.exitPoint = cloneJson(current.exitPoint);
   if (current.skippedSegmentPolyline) event.skippedSegmentPolyline = cloneJson(current.skippedSegmentPolyline);
@@ -299,6 +310,8 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     riderVisible: current.riderVisible !== false,
     riderVisibilityReason: current.riderVisibilityReason || null,
     staleForReview: Boolean(current.staleForReview),
+    baselineDiverged: Boolean(current.baselineDiverged),
+    baselineUpdatePending: Boolean(current.baselineUpdatePending),
     source: 'detour-worker-v2',
   };
 }

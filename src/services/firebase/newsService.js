@@ -1,6 +1,7 @@
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import logger from '../../utils/logger';
+import { normalizeOfficialServiceImpact } from '../../utils/officialServiceImpacts';
 
 /**
  * Subscribe to active transit news from Firestore.
@@ -90,6 +91,33 @@ export function subscribeToTransitNewsImpacts(onUpdate, onError) {
         onUpdate([]);
       } else {
         logger.error('News impacts subscription error:', error);
+        onError?.(error);
+      }
+    }
+  );
+}
+
+export function subscribeToOfficialServiceImpacts(onUpdate, onError) {
+  const impactsRef = collection(db, 'officialServiceImpacts');
+
+  return onSnapshot(
+    impactsRef,
+    (snapshot) => {
+      const impacts = snapshot.docs
+        .map((doc) => normalizeOfficialServiceImpact(doc.id, doc.data()))
+        .filter((impact) => (
+          impact.archivedAt == null &&
+          impact.status !== 'archived' &&
+          impact.status !== 'expired'
+        ));
+      onUpdate(impacts);
+    },
+    (error) => {
+      if (error.code === 'permission-denied') {
+        logger.warn('Official service impacts subscription: permission denied, returning empty');
+        onUpdate([]);
+      } else {
+        logger.error('Official service impacts subscription error:', error);
         onError?.(error);
       }
     }

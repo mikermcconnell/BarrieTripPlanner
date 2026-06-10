@@ -219,6 +219,7 @@ function tripReducer(state, action) {
  * @param {Object} [options.delayOptions] - Optional live context passed into delay enrichment
  * @param {Object} [options.activeDetours] - Active detour feed keyed by route
  * @param {Object} [options.detourStopDetailsByRouteId] - Derived skipped/affected stop details keyed by route
+ * @param {Array} [options.officialServiceImpacts] - Reviewed official baseline-change notices
  */
 export const useTripPlanner = ({
   ensureRoutingData,
@@ -230,6 +231,7 @@ export const useTripPlanner = ({
   stops,
   activeDetours = {},
   detourStopDetailsByRouteId = {},
+  officialServiceImpacts = [],
 } = {}) => {
   const [state, dispatch] = useReducer(tripReducer, initialState);
   const fromDebounceRef = useRef(null);
@@ -311,7 +313,8 @@ export const useTripPlanner = ({
       finalItineraries = annotateItinerariesWithDetours(
         finalItineraries,
         activeDetours,
-        detourStopDetailsByRouteId
+        detourStopDetailsByRouteId,
+        officialServiceImpacts
       );
 
       dispatch({ type: SEARCH_SUCCESS, payload: finalItineraries });
@@ -384,7 +387,7 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
+  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {

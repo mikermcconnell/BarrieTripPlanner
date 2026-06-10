@@ -66,6 +66,18 @@ describe('NewsScreen service impact order', () => {
           affectedRoutes: ['8'],
         },
       ],
+      officialServiceImpacts: [
+        {
+          id: 'baseline-detour-12b-1652',
+          type: 'baseline_detour',
+          status: 'active',
+          title: 'Mapleview Detour and Shuttle',
+          message: 'Planned detour notice: Route 12 is following a long-term Mapleview detour.',
+          affectedRoutes: ['12B'],
+          replacementRoutes: ['15'],
+          sourceUrl: 'https://myridebarrie.ca/News/1652/mapleview-detour-and-shuttle/',
+        },
+      ],
       activeDetours: {},
     });
   });
@@ -75,5 +87,15 @@ describe('NewsScreen service impact order', () => {
 
     expect(texts.indexOf('Active detours')).toBeLessThan(texts.indexOf('Active stop closures'));
     expect(texts.indexOf('Upcoming detours')).toBeLessThan(texts.indexOf('Upcoming stop closures'));
+  });
+
+  test('shows official baseline detours as planned detour notices', () => {
+    const texts = renderTexts();
+    const joined = texts.join(' ');
+
+    expect(joined).toContain('Mapleview Detour and Shuttle');
+    expect(joined).toContain('Planned detour notice');
+    expect(joined).toContain('Route 12B');
+    expect(joined).toContain('Use Route 15 shuttle');
   });
 });

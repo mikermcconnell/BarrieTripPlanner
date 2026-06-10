@@ -1,4 +1,4 @@
-const { getStaticData } = require('./gtfsLoader');
+const { getStaticData, forceRefresh = async () => false } = require('./gtfsLoader');
 const {
   fetchVehicles,
   getVehicleFeedStatus,
@@ -15,8 +15,14 @@ const {
   loadDetourRuntimeState,
   saveDetourRuntimeState,
 } = require('./detourRuntimeStateStore');
-const { getBaselineData, logShapeDivergence, getBaselineStatus } = require('./baselineManager');
+const {
+  getBaselineData,
+  logShapeDivergence,
+  getBaselineStatus,
+  setBaselineRoutes = async () => {},
+} = require('./baselineManager');
 const { buildBaselineDivergence } = require('./baselineDivergence');
+const { evaluateBaselineAutoUpdate } = require('./baselineAutoUpdater');
 const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
 const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
@@ -36,6 +42,7 @@ const {
   serializeDetectorRuntimeState,
   hydrateRuntimeState,
   hydrateActiveDetourSnapshots,
+  clearRouteDetour = () => false,
 } = detector;
 
 let interval = null;
@@ -137,6 +144,39 @@ function recordStateTransitions(prevSnapshot, activeDetours) {
   }
 }
 
+function runtimeStateWithActiveRouteIds(runtimeState, activeDetours = {}) {
+  if (!runtimeState || !Array.isArray(runtimeState.routes)) return runtimeState;
+
+  const existingByRouteId = new Map();
+  for (const route of runtimeState.routes) {
+    const routeId = String(route?.routeId || '').trim();
+    if (routeId) existingByRouteId.set(routeId, route);
+  }
+
+  const orderedActiveRoutes = [];
+  const seenRouteIds = new Set();
+  for (const [entryKey, detour] of Object.entries(activeDetours || {})) {
+    const routeId = String(detour?.routeId || entryKey || '').trim();
+    if (routeId && !seenRouteIds.has(routeId)) {
+      seenRouteIds.add(routeId);
+      orderedActiveRoutes.push(existingByRouteId.get(routeId) || { routeId });
+    }
+  }
+
+  const inactiveRoutes = runtimeState.routes.filter((route) => {
+    const routeId = String(route?.routeId || '').trim();
+    return routeId && !seenRouteIds.has(routeId);
+  });
+  const routes = [...orderedActiveRoutes, ...inactiveRoutes];
+  if (routes.length === runtimeState.routes.length && routes.every((route, index) => route === runtimeState.routes[index])) {
+    return runtimeState;
+  }
+  return {
+    ...runtimeState,
+    routes,
+  };
+}
+
 async function runTick({ source = 'manual', forceReloadState = false } = {}) {
   if (tickInProgress) {
     return {
@@ -171,13 +211,13 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       };
     }
 
-    const data = await getStaticData();
+    let data = await getStaticData();
     if (data.lastRefresh !== lastGtfsRefresh) {
       if (lastGtfsRefresh !== null) logShapeDivergence(data);
       lastGtfsRefresh = data.lastRefresh;
     }
 
-    const baseline = await getBaselineData(data);
+    let baseline = await getBaselineData(data);
     const baselineStatus = getBaselineStatus();
     if (REQUIRE_SAFE_BASELINE && !baselineStatus.readyForDetours) {
       throw new Error(
@@ -185,12 +225,43 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         'Set a trusted baseline before running auto-detour detection, or set DETOUR_REQUIRE_SAFE_BASELINE=false for diagnostics only.'
       );
     }
-    const baselineDivergence = buildBaselineDivergence({
+    let baselineDivergence = buildBaselineDivergence({
       baselineShapes: baseline.shapes,
       baselineRouteShapeMapping: baseline.routeShapeMapping,
       liveShapes: data.shapes,
       liveRouteShapeMapping: data.routeShapeMapping,
     });
+
+    const baselineAutoUpdate = await evaluateBaselineAutoUpdate({
+      baselineDivergence,
+      baselineData: baseline,
+      liveData: data,
+      forceRefresh,
+      getStaticData,
+      setBaselineRoutes,
+      nowMs: Date.now(),
+    });
+    data = baselineAutoUpdate.liveData || data;
+    for (const routeId of baselineAutoUpdate.autoUpdatedRouteIds || []) {
+      clearRouteDetour(routeId);
+      addEvent(`Route ${routeId}: baseline auto-updated`);
+    }
+    if ((baselineAutoUpdate.autoUpdatedRouteIds || []).length > 0) {
+      baseline = await getBaselineData(data);
+      baselineDivergence = buildBaselineDivergence({
+        baselineShapes: baseline.shapes,
+        baselineRouteShapeMapping: baseline.routeShapeMapping,
+        liveShapes: data.shapes,
+        liveRouteShapeMapping: data.routeShapeMapping,
+      });
+      console.warn(
+        `[detourWorker] Auto-updated GTFS baseline for route(s): ` +
+        baselineAutoUpdate.autoUpdatedRouteIds.join(', ')
+      );
+    } else {
+      baselineDivergence = baselineAutoUpdate.baselineDivergence || baselineDivergence;
+    }
+
     const tripObj = Object.fromEntries(data.tripMapping);
     const fetchedVehicles = await fetchVehicles(tripObj);
     const vehicleFeedStatus = getVehicleFeedStatus();
@@ -207,7 +278,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     const vehicleSampleStats = vehicleSampleFreshness.getStats();
 
     const prevSnapshot = getState();
-    const activeDetours = processVehicles(
+    let activeDetours = processVehicles(
       vehicles,
       baseline.shapes,
       baseline.routeShapeMapping,
@@ -233,6 +304,8 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         gtfsData: data,
         storageConfig: detourStorageConfig,
         baselineDivergedRouteIds: baselineDivergence.changedRouteIds,
+        baselinePendingRouteIds: baselineAutoUpdate.pendingRouteIds,
+        baselineAutoUpdatedRouteIds: baselineAutoUpdate.autoUpdatedRouteIds,
         baselineDivergence,
         suppressDeletesWhenEmpty,
         suppressDeleteReason: suppressDeletesWhenEmpty
@@ -242,7 +315,10 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       if (detourStorageConfig.detourVersion !== 'v2') {
         await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
       }
-      await saveDetourRuntimeState(serializeDetectorRuntimeState(), {
+      await saveDetourRuntimeState(runtimeStateWithActiveRouteIds(
+        serializeDetectorRuntimeState(),
+        activeDetours
+      ), {
         storageConfig: detourStorageConfig,
       });
       if (Object.keys(activeDetours).length > 0) {

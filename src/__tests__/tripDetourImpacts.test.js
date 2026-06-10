@@ -191,4 +191,36 @@ describe('tripDetourImpacts', () => {
       detourRouteId: '8B',
     });
   });
+
+  test('adds official baseline impact warnings without active detours', () => {
+    const [annotated] = annotateItinerariesWithDetours(
+      [{ id: 'official-trip', legs: [{
+        ...busLeg,
+        route: { id: '12B', shortName: '12B' },
+        to: { stopId: 'bsgo', stopCode: '833', name: 'Barrie South GO' },
+      }] }],
+      {},
+      {},
+      [{
+        id: 'baseline-detour-12b-1652',
+        type: 'baseline_detour',
+        status: 'active',
+        title: 'Mapleview Detour and Shuttle',
+        message: 'Route 12B no longer directly serves Barrie South GO.',
+        affectedRoutes: ['12B'],
+        replacementRoutes: ['15'],
+        removedStops: [{ id: 'bsgo', code: '833', name: 'Barrie South GO' }],
+        sourceUrl: 'https://myridebarrie.ca/News/1652/mapleview-detour-and-shuttle/',
+      }]
+    );
+
+    expect(annotated.hasOfficialServiceImpact).toBe(true);
+    expect(annotated.legs[0].detourImpact).toMatchObject({
+      isOfficial: true,
+      impactType: 'official_service_impact',
+      sourceLabel: 'Planned detour notice',
+      severity: 'stop_affected',
+      message: 'Planned detour notice: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.',
+    });
+  });
 });

@@ -81,7 +81,7 @@ const CLEAR_WINDOW_MIN_METERS = positiveNumber(
 );
 const CLEAR_WINDOW_MIN_COVERAGE_RATIO = positiveNumber(
   process.env.DETOUR_CLEAR_WINDOW_MIN_COVERAGE_RATIO,
-  0.95
+  0.75
 );
 const CLEAR_WINDOW_MAX_PROGRESS_GAP_METERS = positiveNumber(
   process.env.DETOUR_CLEAR_WINDOW_MAX_PROGRESS_GAP_METERS,
@@ -106,6 +106,22 @@ const OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS = positiveNumber(
 const CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE = positiveInteger(
   process.env.DETOUR_V2_CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE,
   20
+);
+const ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS = positiveNumber(
+  process.env.DETOUR_ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS,
+  24 * 60 * 60 * 1000
+);
+const ROUTE_400_STALE_SPARSE_MAX_UNIQUE_SIGNATURES = positiveInteger(
+  process.env.DETOUR_ROUTE_400_STALE_SPARSE_MAX_UNIQUE_SIGNATURES,
+  2
+);
+const ROUTE_400_STALE_SPARSE_MIN_EVIDENCE_POINTS = positiveInteger(
+  process.env.DETOUR_ROUTE_400_STALE_SPARSE_MIN_EVIDENCE_POINTS,
+  6
+);
+const ROUTE_400_STALE_SPARSE_MAX_POINT_GAP_METERS = positiveNumber(
+  process.env.DETOUR_ROUTE_400_STALE_SPARSE_MAX_POINT_GAP_METERS,
+  400
 );
 
 function positiveNumber(value, fallback) {
@@ -320,6 +336,14 @@ function getClearWindowCoreBounds(clearWindow = {}) {
     };
   }
   return getWindowBounds(clearWindow);
+}
+
+function getClearWindowMinCoverageRatio(clearWindow = {}) {
+  const stored = Number(clearWindow.minCoverageRatio);
+  if (!Number.isFinite(stored) || stored <= 0) {
+    return CLEAR_WINDOW_MIN_COVERAGE_RATIO;
+  }
+  return Math.min(stored, CLEAR_WINDOW_MIN_COVERAGE_RATIO);
 }
 
 function isTinyRouteEdgeClearWindow(clearWindow = {}) {
@@ -993,10 +1017,41 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
   };
 }
 
+function getEvidenceAgeMs(candidate) {
+  const firstSeenAt = Number(candidate?.firstSeenAt);
+  const lastSeenAt = Number(candidate?.lastSeenAt);
+  if (!Number.isFinite(firstSeenAt) || !Number.isFinite(lastSeenAt)) return 0;
+  return Math.max(0, lastSeenAt - firstSeenAt);
+}
+
+function isRoute400StaleSparseEvidence(candidate, geometry, currentVehicleIds) {
+  if (normalizeRouteId(candidate?.routeId) !== '400') return false;
+  if (currentVehicleIds?.size > 0) return false;
+  if (getEvidenceAgeMs(candidate) <= ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS) return false;
+
+  const uniqueSignatures = candidate?.signatures?.size || 0;
+  if (uniqueSignatures > ROUTE_400_STALE_SPARSE_MAX_UNIQUE_SIGNATURES) return false;
+
+  const evidencePointCount = Number(geometry?.evidencePointCount || candidate?.points?.length || 0);
+  const maxGapMeters = Number(geometry?.inferredDetourPathStats?.maxGapMeters);
+  return evidencePointCount < ROUTE_400_STALE_SPARSE_MIN_EVIDENCE_POINTS ||
+    (Number.isFinite(maxGapMeters) && maxGapMeters > ROUTE_400_STALE_SPARSE_MAX_POINT_GAP_METERS);
+}
+
 function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehicleIds = new Set()) {
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
-  const riderVisible = geometry.canShowDetourPath === true;
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
+  const route400StaleSparseEvidence = isRoute400StaleSparseEvidence(
+    candidate,
+    geometry,
+    currentVehicleIds
+  );
+  const riderVisible = geometry.canShowDetourPath === true && !route400StaleSparseEvidence;
+  const riderVisibilityReason = riderVisible
+    ? 'v2-confirmed'
+    : route400StaleSparseEvidence
+      ? 'stale-sparse-evidence'
+      : 'insufficient-geometry';
   const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
   const eventClearWindow = buildClearWindowForEvent(candidate.eventWindow, {
     shapeLengthMeters,
@@ -1039,9 +1094,9 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     state: 'active',
     confidence: geometry.confidence,
     riderVisible,
-    riderVisibilityReason: riderVisible ? 'v2-confirmed' : 'insufficient-geometry',
+    riderVisibilityReason,
     staleForReview: !riderVisible,
-    canShowDetourPath: geometry.canShowDetourPath,
+    canShowDetourPath: riderVisible && geometry.canShowDetourPath === true,
     geometry,
     detourZone,
     clearWindow: riderVisible
@@ -1621,9 +1676,7 @@ function createDetourV2Detector(config = {}) {
     const observedEnd = Math.min(Math.max(...progresses), end);
     const overlapMeters = Math.max(0, observedEnd - observedStart);
     const movementMeters = Math.max(...progresses) - Math.min(...progresses);
-    const minCoverageRatio = Number.isFinite(Number(clearWindow.minCoverageRatio))
-      ? Number(clearWindow.minCoverageRatio)
-      : CLEAR_WINDOW_MIN_COVERAGE_RATIO;
+    const minCoverageRatio = getClearWindowMinCoverageRatio(clearWindow);
     const requiredMovement = Math.max(
       Math.min(CLEAR_MIN_TRAVERSAL_METERS, span * CLEAR_MIN_TRAVERSAL_RATIO),
       span * minCoverageRatio
@@ -1787,9 +1840,7 @@ function createDetourV2Detector(config = {}) {
     const overlapMeters = merged.reduce((sum, [intervalStart, intervalEnd]) => (
       sum + Math.max(0, intervalEnd - intervalStart)
     ), 0);
-    const minCoverageRatio = Number.isFinite(Number(clearWindow.minCoverageRatio))
-      ? Number(clearWindow.minCoverageRatio)
-      : CLEAR_WINDOW_MIN_COVERAGE_RATIO;
+    const minCoverageRatio = getClearWindowMinCoverageRatio(clearWindow);
 
     return overlapMeters / span >= minCoverageRatio;
   }
@@ -2001,16 +2052,56 @@ function createDetourV2Detector(config = {}) {
     return detour;
   }
 
-  function trackClearSampleForEvent(eventId, detour, signature, sample, currentTickId) {
+  function normalizeSampleForDetourClear(detour, sample, signature, shapes) {
+    const directSample = normalizeClearTrackSample({
+      ...sample,
+      signature,
+    });
+    if (directSample && sampleMatchesDetourZone(detour, directSample)) {
+      return directSample;
+    }
+
+    const coordinate = normalizeCoordinate(sample?.coordinate);
+    if (!coordinate || !shapes?.get) return null;
+
+    const sourceShapeId = sample?.shapeId ? String(sample.shapeId) : null;
+    for (const clearWindow of getDetourClearWindows(detour)) {
+      const clearShapeId = clearWindow?.shapeId ? String(clearWindow.shapeId) : null;
+      if (!clearShapeId || clearShapeId === sourceShapeId) continue;
+
+      const clearShape = shapes.get(clearShapeId);
+      if (!Array.isArray(clearShape) || clearShape.length < 2) continue;
+
+      const clearProjection = projectOntoPolyline(coordinate, clearShape);
+      if (
+        !clearProjection ||
+        !Number.isFinite(clearProjection.distanceMeters) ||
+        clearProjection.distanceMeters > onRouteClearThresholdMeters
+      ) {
+        continue;
+      }
+
+      const reprojectedSample = normalizeClearTrackSample({
+        ...sample,
+        signature,
+        progressMeters: clearProjection.progressMeters,
+        shapeId: clearShapeId,
+      });
+      if (reprojectedSample && sampleMatchesClearWindow(clearWindow, reprojectedSample)) {
+        return reprojectedSample;
+      }
+    }
+
+    return null;
+  }
+
+  function trackClearSampleForEvent(eventId, detour, signature, sample, currentTickId, shapes) {
     if (!eventId || !detour || detour.state === 'clear-pending') return;
     if (sample.timestampMs <= Number(detour.latestGpsEvidenceAt || 0)) return;
 
     const eventTracks = clearTracksByEvent.get(eventId) || new Map();
     const track = eventTracks.get(signature) || [];
-    const normalizedSample = normalizeClearTrackSample({
-      ...sample,
-      signature,
-    });
+    const normalizedSample = normalizeSampleForDetourClear(detour, sample, signature, shapes);
     if (!normalizedSample || !sampleMatchesDetourZone(detour, normalizedSample)) return;
     track.push(normalizedSample);
     eventTracks.set(signature, track.slice(-CLEAR_TRACK_MAX_SAMPLES_PER_SIGNATURE));
@@ -2077,9 +2168,9 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
-  function trackClearSample(routeId, signature, sample, currentTickId) {
+  function trackClearSample(routeId, signature, sample, currentTickId, shapes) {
     for (const detour of getActiveEventsForRoute(routeId)) {
-      trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId);
+      trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId, shapes);
     }
   }
 
@@ -2222,7 +2313,8 @@ function createDetourV2Detector(config = {}) {
           timestampMs,
           shapeId: projection.shapeId,
           vehicleId: id,
-        }, tickId);
+          coordinate,
+        }, tickId, shapes);
       }
     }
 

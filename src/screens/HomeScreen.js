@@ -37,6 +37,7 @@ import { useMapPulseAnimation } from '../hooks/useMapPulseAnimation';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
+import { useDismissedOfficialImpacts } from '../hooks/useDismissedOfficialImpacts';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { projectPointToPolyline } from '../utils/geometryUtils';
@@ -91,6 +92,7 @@ import HolidayServiceBanner from '../components/HolidayServiceBanner';
 import HolidayServiceDetailsSheet from '../components/HolidayServiceDetailsSheet';
 import DetourMapLegend from '../components/DetourMapLegend';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
+import OfficialImpactStrip from '../components/OfficialImpactStrip';
 import DevMapControlPad from '../components/DevMapControlPad';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { getSelectedDetourSegments, mergeFamilySegmentStopDetails } from '../utils/detourSheetSelection';
@@ -114,6 +116,7 @@ import {
   mergeStopClosuresForDetourMap,
 } from '../utils/stopClosureMapUtils';
 import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
+import { getActiveOfficialServiceImpacts } from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
 import { focusMapToDetour } from '../utils/detourViewport';
@@ -1430,6 +1433,7 @@ const HomeScreen = ({ route }) => {
     onDemandZones,
     transitNews,
     transitNewsImpacts,
+    officialServiceImpacts,
     getRouteDetour,
     isLoadingVehicles,
     loadVehiclePositions,
@@ -1484,7 +1488,7 @@ const HomeScreen = ({ route }) => {
   });
 
   const {
-    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute, selectRoutes,
+    selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute, selectRoutes, zoomToRoutes,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef: compatMapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
   const [activePlatformMap, setActivePlatformMap] = useState(null);
@@ -1618,6 +1622,21 @@ const HomeScreen = ({ route }) => {
   }, [activeDetours, detoursEnabled, routeStopSequencesMapping, routeStopsMapping, stops]);
 
   const tripDelayOptions = useMemo(() => ({ vehicles }), [vehicles]);
+  const activeOfficialServiceImpacts = useMemo(
+    () => getActiveOfficialServiceImpacts(officialServiceImpacts)
+      .filter((impact) => impact.type === 'baseline_detour'),
+    [officialServiceImpacts]
+  );
+  const {
+    visibleImpacts: visibleOfficialServiceImpacts,
+    dismissImpact: dismissOfficialServiceImpact,
+  } = useDismissedOfficialImpacts(activeOfficialServiceImpacts);
+  const handleOfficialImpactPress = useCallback((_impact, routeIds = []) => {
+    const drawableRouteIds = routeIds.filter((routeId) => routeShapeMapping?.[routeId]?.length > 0);
+    if (!drawableRouteIds.length) return;
+    selectRoutes(drawableRouteIds);
+    zoomToRoutes(drawableRouteIds);
+  }, [routeShapeMapping, selectRoutes, zoomToRoutes]);
 
   // Trip planning — shared hook (with native-specific delay enrichment)
   const trip = useTripPlanner({
@@ -1629,6 +1648,7 @@ const HomeScreen = ({ route }) => {
     stops,
     activeDetours: detoursEnabled ? activeDetours : {},
     detourStopDetailsByRouteId,
+    officialServiceImpacts: visibleOfficialServiceImpacts,
   });
   const {
     state: tripState,
@@ -2368,9 +2388,10 @@ const HomeScreen = ({ route }) => {
       routeId: context.routeId,
       detour: context.routeId ? getRouteDetour(context.routeId) : null,
       transitNewsImpacts,
+      officialServiceImpacts: visibleOfficialServiceImpacts,
     }));
     setShowStops(true);
-  }, [getRouteDetour, transitNewsImpacts]);
+  }, [getRouteDetour, transitNewsImpacts, visibleOfficialServiceImpacts]);
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
   const selectedDetourSegments = useMemo(() => getSelectedDetourSegments(
@@ -2432,7 +2453,10 @@ const HomeScreen = ({ route }) => {
     })
   ), [displayedStopsForMap, detourMapClosureStops]);
   const detourMapBadgeCount = getActiveDetourEventCount(statusDetours);
-  const shouldShowDetourChrome = !isTripPlanningMode && canUseDetourView;
+  const hasTopChromeServiceNotice = shouldShowDetourStatusRow ||
+    upcomingDetourNotices.length > 0 ||
+    visibleOfficialServiceImpacts.length > 0;
+  const shouldShowDetourChrome = !isTripPlanningMode && (canUseDetourView || visibleOfficialServiceImpacts.length > 0);
   const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;
   const hasClosedStopsForDisplay = useMemo(
     () => mapStopsForDisplay.some((stop) => Boolean(stop?.isClosed || stop?.isRouteScopedClosure)),
@@ -2478,9 +2502,10 @@ const HomeScreen = ({ route }) => {
       setSelectedStop(buildDetourStopNotice({
         stop,
         transitNewsImpacts,
+        officialServiceImpacts: visibleOfficialServiceImpacts,
       }));
     }
-  }, [displayedStopsById, transitNewsImpacts]);
+  }, [displayedStopsById, transitNewsImpacts, visibleOfficialServiceImpacts]);
 
   // Stable camera default settings — prevent re-centering on every re-render
   const cameraDefaultSettings = useMemo(() => ({
@@ -2933,7 +2958,7 @@ const HomeScreen = ({ route }) => {
           pointerEvents="none"
           style={[
             styles.topChromeBackdrop,
-            shouldShowDetourStatusRow
+            hasTopChromeServiceNotice
               ? styles.topChromeBackdropWithDetours
               : styles.topChromeBackdropCompact,
           ]}
@@ -3084,6 +3109,18 @@ const HomeScreen = ({ route }) => {
                 routeColorByRouteId={routeColorByRouteId}
                 collapsedByDefault
                 onCollapsedChange={setUpcomingDetoursCollapsed}
+                inline
+                style={styles.upcomingDetourInline}
+              />
+            </View>
+          )}
+          {visibleOfficialServiceImpacts.length > 0 && (
+            <View style={styles.upcomingDetourRow}>
+              <OfficialImpactStrip
+                impacts={visibleOfficialServiceImpacts}
+                routeColorByRouteId={routeColorByRouteId}
+                onDismiss={dismissOfficialServiceImpact}
+                onPress={handleOfficialImpactPress}
                 inline
                 style={styles.upcomingDetourInline}
               />
@@ -3350,6 +3387,7 @@ const HomeScreen = ({ route }) => {
         onRouteSelect={handleRouteSelect}
         getRouteColor={getRouteColor}
         isRouteDetouring={isRouteDetouring}
+        officialServiceImpacts={visibleOfficialServiceImpacts}
         onSheetChange={(index) => setIsRouteFilterSheetOpen(index >= 0)}
       />
 

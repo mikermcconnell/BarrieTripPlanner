@@ -195,6 +195,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Reviewed official service impacts, such as long-term GTFS-backed detours.
+    match /officialServiceImpacts/{impactId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ==================== ON-DEMAND ZONES ====================
 
     // Public rider-facing zone metadata. Backend/admin tooling writes via Admin SDK.
