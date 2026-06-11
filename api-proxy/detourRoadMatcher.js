@@ -6,6 +6,8 @@ const ROAD_ROUTE_SOURCE = 'osrm-route';
 const DETOUR_PATH_LABEL = 'Likely detour path';
 const ROAD_MATCH_FIELDS = [
   'likelyDetourPolyline',
+  'entryConnectorPolyline',
+  'exitConnectorPolyline',
   'likelyDetourRoadNames',
   'roadMatchConfidence',
   'roadMatchRawConfidence',
@@ -389,6 +391,32 @@ function getEndpointRouteOverlapRun(path, routeShapePolyline, env = process.env,
   };
 }
 
+function dedupeConsecutivePoints(points) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+
+  return points.reduce((deduped, point) => {
+    const normalized = normalizeCoordinate(point);
+    if (!normalized) return deduped;
+
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      previous.latitude === normalized.latitude &&
+      previous.longitude === normalized.longitude
+    ) {
+      return deduped;
+    }
+
+    deduped.push(normalized);
+    return deduped;
+  }, []);
+}
+
+function buildConnectorPolyline(points) {
+  const connector = dedupeConsecutivePoints(points);
+  return connector.length >= 2 ? connector : null;
+}
+
 function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.env) {
   const points = normalizePolyline(path);
   const route = normalizePolyline(routeShapePolyline);
@@ -409,12 +437,26 @@ function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.
   endIndex = Math.max(-1, Math.min(endIndex, points.length - 1));
 
   const trimmed = startIndex <= endIndex ? points.slice(startIndex, endIndex + 1) : [];
+  const entryConnectorPolyline = prefixRun && trimmed.length >= 1
+    ? buildConnectorPolyline([
+      ...points.slice(0, startIndex),
+      trimmed[0],
+    ])
+    : null;
+  const exitConnectorPolyline = suffixRun && trimmed.length >= 1
+    ? buildConnectorPolyline([
+      trimmed[trimmed.length - 1],
+      ...points.slice(endIndex + 1),
+    ])
+    : null;
   return {
     path: trimmed.length >= 2 ? trimmed : [],
     prefixTrimmed: Boolean(prefixRun),
     suffixTrimmed: Boolean(suffixRun),
     prefixOverlapMeters: prefixRun?.runLengthMeters || 0,
     suffixOverlapMeters: suffixRun?.runLengthMeters || 0,
+    entryConnectorPolyline,
+    exitConnectorPolyline,
   };
 }
 
@@ -639,6 +681,12 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
 
   return {
     likelyDetourPolyline: matchedPolyline,
+    ...(routeTrim.entryConnectorPolyline
+      ? { entryConnectorPolyline: routeTrim.entryConnectorPolyline }
+      : {}),
+    ...(routeTrim.exitConnectorPolyline
+      ? { exitConnectorPolyline: routeTrim.exitConnectorPolyline }
+      : {}),
     likelyDetourRoadNames: extractRoadNames(matchable),
     roadMatchConfidence: confidenceLabel(matchable.confidence),
     roadMatchRawConfidence: Number.isFinite(Number(matchable.confidence))
@@ -866,6 +914,8 @@ async function matchDetourGeometry(geometry, options = {}) {
 
   if (primaryMatch?.likelyDetourPolyline?.length >= 2) {
     next.likelyDetourPolyline = primaryMatch.likelyDetourPolyline;
+    next.entryConnectorPolyline = primaryMatch.entryConnectorPolyline || null;
+    next.exitConnectorPolyline = primaryMatch.exitConnectorPolyline || null;
     next.likelyDetourRoadNames = primaryMatch.likelyDetourRoadNames || [];
     next.roadMatchConfidence = primaryMatch.roadMatchConfidence || null;
     next.roadMatchRawConfidence = primaryMatch.roadMatchRawConfidence ?? null;

@@ -81,6 +81,14 @@ describe('detourService normalization helpers', () => {
           { latitude: 44.382, longitude: -79.692 },
           { lat: 44.388, lon: -79.682 },
         ],
+        entryConnectorPolyline: [
+          { lat: 44.38, lon: -79.69 },
+          { latitude: 44.382, longitude: -79.692 },
+        ],
+        exitConnectorPolyline: [
+          { latitude: 44.388, longitude: -79.682 },
+          { lat: 44.39, lon: -79.68 },
+        ],
         likelyDetourRoadNames: ['Yonge Street'],
         roadMatchConfidence: 'high',
         detourEventId: 'detour-event-8-yonge',
@@ -100,6 +108,14 @@ describe('detourService normalization helpers', () => {
       likelyDetourPolyline: [
         { latitude: 44.382, longitude: -79.692 },
         { latitude: 44.388, longitude: -79.682 },
+      ],
+      entryConnectorPolyline: [
+        { latitude: 44.38, longitude: -79.69 },
+        { latitude: 44.382, longitude: -79.692 },
+      ],
+      exitConnectorPolyline: [
+        { latitude: 44.388, longitude: -79.682 },
+        { latitude: 44.39, longitude: -79.68 },
       ],
       likelyDetourRoadNames: ['Yonge Street'],
       roadMatchConfidence: 'high',
@@ -191,6 +207,14 @@ describe('mapActiveDetourDoc', () => {
         { latitude: 44.382, longitude: -79.692 },
         { lat: 44.388, lon: -79.682 },
       ],
+      entryConnectorPolyline: [
+        { lat: 44.38, lon: -79.69 },
+        { latitude: 44.382, longitude: -79.692 },
+      ],
+      exitConnectorPolyline: [
+        { latitude: 44.388, longitude: -79.682 },
+        { lat: 44.39, lon: -79.68 },
+      ],
       likelyDetourRoadNames: ['Yonge Street', 'Big Bay Point Road'],
       roadMatchConfidence: 'high',
       detourEventId: 'detour-event-8-yonge',
@@ -223,6 +247,14 @@ describe('mapActiveDetourDoc', () => {
             { latitude: 44.382, longitude: -79.692 },
             { latitude: 44.388, longitude: -79.682 },
           ],
+          entryConnectorPolyline: [
+            { lat: 44.38, lon: -79.69 },
+            { latitude: 44.382, longitude: -79.692 },
+          ],
+          exitConnectorPolyline: [
+            { latitude: 44.388, longitude: -79.682 },
+            { lat: 44.39, lon: -79.68 },
+          ],
           likelyDetourRoadNames: ['Yonge Street'],
         },
       ],
@@ -246,6 +278,14 @@ describe('mapActiveDetourDoc', () => {
       { latitude: 44.382, longitude: -79.692 },
       { latitude: 44.388, longitude: -79.682 },
     ]);
+    expect(mapped.entryConnectorPolyline).toEqual([
+      { latitude: 44.38, longitude: -79.69 },
+      { latitude: 44.382, longitude: -79.692 },
+    ]);
+    expect(mapped.exitConnectorPolyline).toEqual([
+      { latitude: 44.388, longitude: -79.682 },
+      { latitude: 44.39, longitude: -79.68 },
+    ]);
     expect(mapped.likelyDetourRoadNames).toEqual(['Yonge Street', 'Big Bay Point Road']);
     expect(mapped.roadMatchConfidence).toBe('high');
     expect(mapped.detourPathLabel).toBe('Likely detour path');
@@ -263,6 +303,14 @@ describe('mapActiveDetourDoc', () => {
     expect(mapped.segments[0].likelyDetourPolyline).toEqual([
       { latitude: 44.382, longitude: -79.692 },
       { latitude: 44.388, longitude: -79.682 },
+    ]);
+    expect(mapped.segments[0].entryConnectorPolyline).toEqual([
+      { latitude: 44.38, longitude: -79.69 },
+      { latitude: 44.382, longitude: -79.692 },
+    ]);
+    expect(mapped.segments[0].exitConnectorPolyline).toEqual([
+      { latitude: 44.388, longitude: -79.682 },
+      { latitude: 44.39, longitude: -79.68 },
     ]);
     expect(mapped.segments[0].likelyDetourRoadNames).toEqual(['Yonge Street']);
   });

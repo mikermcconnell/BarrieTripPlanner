@@ -545,6 +545,28 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - this matrix
 - Remaining risk: if live evidence is still too sparse to identify the downstream rejoin, Route 101 may temporarily show the active detour without a likely path instead of showing the wrong path.
 
+### DET-022A — road-matched detour path showed gaps at entry and rejoin
+
+- Date/time observed: 2026-06-11
+- Environment: local app screenshot review
+- Route(s): `8B`
+- What happened: the regular route and rendered detour path had visible gaps near the detour entry and rejoin points. The likely cause was normal-route endpoint overlap being trimmed from the road-matched detour path after conservative off-route thresholds delayed the first/last trusted off-route points.
+- What should have happened: the rider-facing detour line should remain continuous from the regular-route entry anchor through the likely detour path and back to the regular-route exit anchor, without lowering off-route detection thresholds.
+- Initial classification:
+  - geometry confidence
+  - frontend rendering
+- Fix:
+  - backend road matching now publishes `entryConnectorPolyline` and `exitConnectorPolyline` when it trims normal-route endpoint overlap
+  - frontend detour overlay derivation stitches those connector polylines onto renderable likely/trusted detour paths
+  - Firestore mapping preserves connector fields at top level and within `segments[]`
+- Tests added/updated:
+  - `api-proxy/__tests__/detourRoadMatcher.test.js`
+  - `src/__tests__/detourOverlays.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: visual validation is still needed on a native/web map instance because line offsets and masking can make small connector joins look different by renderer.
+
 ## Status definitions
 
 - **Covered** — automated coverage exists and the manual checklist has a matching validation path.

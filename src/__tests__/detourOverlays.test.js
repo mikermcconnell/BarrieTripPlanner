@@ -134,6 +134,50 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].segmentStopDetails[0].skippedStops).toEqual([]);
   });
 
+  test('stitches backend connector polylines onto the rendered detour path', () => {
+    const entryConnectorPolyline = [
+      { latitude: 44.000, longitude: -79.700 },
+      { latitude: 44.000, longitude: -79.699 },
+      { latitude: 44.002, longitude: -79.698 },
+    ];
+    const likelyDetourPolyline = [
+      { latitude: 44.002, longitude: -79.698 },
+      { latitude: 44.002, longitude: -79.696 },
+    ];
+    const exitConnectorPolyline = [
+      { latitude: 44.002, longitude: -79.696 },
+      { latitude: 44.000, longitude: -79.695 },
+    ];
+
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['8B']),
+      activeDetours: {
+        '8B': {
+          state: 'active',
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: [{
+            skippedSegmentPolyline: SAMPLE_POLYLINE,
+            likelyDetourPolyline,
+            entryConnectorPolyline,
+            exitConnectorPolyline,
+            canShowDetourPath: true,
+          }],
+        },
+      },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].inferredDetourPolyline).toEqual([
+      { latitude: 44.000, longitude: -79.700 },
+      { latitude: 44.000, longitude: -79.699 },
+      { latitude: 44.002, longitude: -79.698 },
+      { latitude: 44.002, longitude: -79.696 },
+      { latitude: 44.000, longitude: -79.695 },
+    ]);
+  });
+
   test('does not render low-confidence detours', () => {
     const result = deriveDetourOverlays({
       enabled: true,

@@ -236,6 +236,8 @@ function hasGeometryPayload(source) {
     'inferredDetourPolyline',
     'canShowDetourPath',
     'likelyDetourPolyline',
+    'entryConnectorPolyline',
+    'exitConnectorPolyline',
     'likelyDetourRoadNames',
     'roadMatchConfidence',
     'detourPathLabel',
@@ -604,6 +606,8 @@ function hasConfirmedBoundaryAnchorPair(segment) {
 
 function clearRoadMatchedPath(target) {
   target.likelyDetourPolyline = null;
+  target.entryConnectorPolyline = null;
+  target.exitConnectorPolyline = null;
   target.likelyDetourRoadNames = [];
   target.roadMatchConfidence = null;
   target.roadMatchRawConfidence = null;
@@ -794,7 +798,13 @@ function collectGeometryAnchorPoints(source) {
     const point = normalizeCoordinate(source[key]);
     if (point) points.push(point);
   }
-  for (const key of ['skippedSegmentPolyline', 'inferredDetourPolyline', 'likelyDetourPolyline']) {
+  for (const key of [
+    'skippedSegmentPolyline',
+    'inferredDetourPolyline',
+    'likelyDetourPolyline',
+    'entryConnectorPolyline',
+    'exitConnectorPolyline',
+  ]) {
     addPolylineEndpoints(points, source[key]);
   }
   for (const segment of Array.isArray(source.segments) ? source.segments : []) {
@@ -1086,6 +1096,8 @@ function enforceGeometryTrustGate(geometry) {
 
     if (Array.isArray(primarySegment.likelyDetourPolyline) && primarySegment.likelyDetourPolyline.length >= 2) {
       next.likelyDetourPolyline = primarySegment.likelyDetourPolyline;
+      next.entryConnectorPolyline = primarySegment.entryConnectorPolyline || null;
+      next.exitConnectorPolyline = primarySegment.exitConnectorPolyline || null;
       next.likelyDetourRoadNames = Array.isArray(primarySegment.likelyDetourRoadNames)
         ? primarySegment.likelyDetourRoadNames
         : [];

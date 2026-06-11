@@ -1,15 +1,31 @@
 import { haversineDistance, pointToPolylineDistance, projectPointToPolyline } from './geometryUtils';
 
-const getLikelyDetourPath = (segment) => (
-  segment?.likelyDetourPolyline?.length >= 2
-    ? segment.likelyDetourPolyline
-    : null
-);
+const stitchConnectorPolylines = (basePath, segment) => {
+  const base = normalizePath(basePath);
+  if (base.length < 2) return null;
+
+  const entryConnector = normalizePath(segment?.entryConnectorPolyline);
+  const exitConnector = normalizePath(segment?.exitConnectorPolyline);
+  if (entryConnector.length === 0 && exitConnector.length === 0) {
+    return basePath;
+  }
+
+  return dedupeConsecutivePoints([
+    ...entryConnector,
+    ...base,
+    ...exitConnector,
+  ]);
+};
+
+const getLikelyDetourPath = (segment) => {
+  if (!segment?.likelyDetourPolyline || segment.likelyDetourPolyline.length < 2) return null;
+  return stitchConnectorPolylines(segment.likelyDetourPolyline, segment);
+};
 
 const getTrustedInferredDetourPath = (segment) => (
   segment?.canShowDetourPath === true &&
   segment?.inferredDetourPolyline?.length >= 2
-    ? segment.inferredDetourPolyline
+    ? stitchConnectorPolylines(segment.inferredDetourPolyline, segment)
     : null
 );
 
