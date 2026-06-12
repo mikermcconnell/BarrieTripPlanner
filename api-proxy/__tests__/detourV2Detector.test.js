@@ -1437,6 +1437,118 @@ describe('Auto Detour V2 detector', () => {
     expect(geometry.inferredDetourPolyline[2]).toEqual(corridorExitPoint);
   });
 
+  test('marks revised GPS path as superseding previous V2 detour geometry', () => {
+    const detector = createDetourV2Detector();
+    const shape = shapes.get('shape-1');
+    const progressAt = (coordinate) => projectOntoPolyline(coordinate, shape).progressMeters;
+    const oldPath = [
+      { latitude: 44.385, longitude: -79.698 },
+      { latitude: 44.385, longitude: -79.696 },
+      { latitude: 44.385, longitude: -79.694 },
+    ];
+    const oldStart = progressAt(oldPath[0]);
+    const oldEnd = progressAt(oldPath[oldPath.length - 1]);
+    const oldClearWindow = {
+      startProgressMeters: oldStart,
+      endProgressMeters: oldEnd,
+      sourceStartProgressMeters: oldStart,
+      sourceEndProgressMeters: oldEnd,
+      shapeId: 'shape-1',
+    };
+
+    detector.hydrateRuntimeState({
+      activeDetours: {
+        '8A-old-path': {
+          eventId: '8A-old-path',
+          routeId: '8A',
+          state: 'active',
+          riderVisible: true,
+          canShowDetourPath: true,
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          geometryLastEvidenceAt: 1000,
+          currentVehicleCount: 0,
+          matchedVehicleIds: ['old-bus-1', 'old-bus-2'],
+          eventWindow: {
+            routeId: '8A',
+            shapeId: 'shape-1',
+            coreStartProgressMeters: oldStart,
+            coreEndProgressMeters: oldEnd,
+            confirmStartProgressMeters: Math.max(0, oldStart - 250),
+            confirmEndProgressMeters: oldEnd + 250,
+            clearStartProgressMeters: Math.max(0, oldStart - 400),
+            clearEndProgressMeters: oldEnd + 400,
+            frozen: true,
+          },
+          detourZone: {
+            startProgressMeters: oldStart,
+            endProgressMeters: oldEnd,
+            shapeId: 'shape-1',
+          },
+          clearWindow: oldClearWindow,
+          clearWindows: [oldClearWindow],
+          geometry: {
+            shapeId: 'shape-1',
+            canShowDetourPath: true,
+            likelyDetourPolyline: oldPath,
+            inferredDetourPolyline: oldPath,
+            entryPoint: { latitude: 44.39, longitude: -79.698 },
+            exitPoint: { latitude: 44.39, longitude: -79.694 },
+            startProgressMeters: oldStart,
+            endProgressMeters: oldEnd,
+            segments: [{
+              shapeId: 'shape-1',
+              canShowDetourPath: true,
+              likelyDetourPolyline: oldPath,
+              inferredDetourPolyline: oldPath,
+              entryPoint: { latitude: 44.39, longitude: -79.698 },
+              exitPoint: { latitude: 44.39, longitude: -79.694 },
+              startProgressMeters: oldStart,
+              endProgressMeters: oldEnd,
+              detourZone: {
+                startProgressMeters: oldStart,
+                endProgressMeters: oldEnd,
+                shapeId: 'shape-1',
+              },
+              clearWindow: oldClearWindow,
+            }],
+          },
+        },
+      },
+    });
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'new-bus-1',
+        tripId: 'new-trip-1',
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'new-bus-2',
+        tripId: 'new-trip-2',
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'new-bus-3',
+        tripId: 'new-trip-3',
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const revisedDetour = detoursForRoute(result, '8A')
+      .find((detour) => detour.latestGpsEvidenceAt === 4000);
+
+    expect(revisedDetour).toBeTruthy();
+    expect(revisedDetour.geometry.canShowDetourPath).toBe(true);
+    expect(revisedDetour.geometry.gpsSupersedesPreviousPath).toBe(true);
+    expect(revisedDetour.geometry.segments[0].gpsSupersedesPreviousPath).toBe(true);
+    expect(detoursForRoute(result, '8A').some((detour) => detour.eventId === '8A-old-path')).toBe(false);
+  });
+
   test('clamps 12A and 12B geometry from route corridor config', () => {
     const detector = createDetourV2Detector(route12DetectorConfig);
 

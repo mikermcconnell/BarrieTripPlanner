@@ -36,6 +36,14 @@ const GEOMETRY_CLUSTER_GAP_METERS = positiveNumber(
   process.env.DETOUR_V2_GEOMETRY_CLUSTER_GAP_METERS,
   1000
 );
+const ALTERNATE_DETOUR_PATH_REPLACE_MIN_DISTANCE_METERS = positiveNumber(
+  process.env.DETOUR_V2_ALTERNATE_PATH_REPLACE_MIN_DISTANCE_METERS,
+  90
+);
+const ALTERNATE_DETOUR_PATH_REPLACE_MIN_FAR_POINTS = positiveInteger(
+  process.env.DETOUR_V2_ALTERNATE_PATH_REPLACE_MIN_FAR_POINTS,
+  2
+);
 const SPARSE_TRACE_MAX_TIME_GAP_MS = positiveNumber(
   process.env.DETOUR_V2_SPARSE_TRACE_MAX_TIME_GAP_MS,
   10 * 60 * 1000
@@ -1015,6 +1023,191 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     },
     segments,
   };
+}
+
+function normalizePolyline(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizeCoordinate).filter(Boolean);
+}
+
+function addDetourPathPolyline(polylines, value) {
+  const polyline = normalizePolyline(value);
+  if (polyline.length >= 2) polylines.push(polyline);
+}
+
+function getGeometryDetourPathPolylines(geometry = {}) {
+  if (!geometry || typeof geometry !== 'object') return [];
+  const polylines = [];
+  addDetourPathPolyline(polylines, geometry.likelyDetourPolyline);
+  if (geometry.canShowDetourPath === true) {
+    addDetourPathPolyline(polylines, geometry.inferredDetourPolyline);
+  }
+  for (const segment of Array.isArray(geometry.segments) ? geometry.segments : []) {
+    addDetourPathPolyline(polylines, segment?.likelyDetourPolyline);
+    if (segment?.canShowDetourPath === true) {
+      addDetourPathPolyline(polylines, segment?.inferredDetourPolyline);
+    }
+  }
+  return polylines;
+}
+
+function getGeometryEvidencePoints(geometry = {}) {
+  const points = [];
+  if (geometry?.canShowDetourPath === true) {
+    points.push(...normalizePolyline(geometry.inferredDetourPolyline));
+  }
+  for (const segment of Array.isArray(geometry?.segments) ? geometry.segments : []) {
+    if (segment?.canShowDetourPath === true) {
+      points.push(...normalizePolyline(segment.inferredDetourPolyline));
+    }
+  }
+  return points;
+}
+
+function getMinDistanceToPolylines(point, polylines = []) {
+  let bestDistance = Infinity;
+  for (const polyline of polylines) {
+    const distance = pointToPolylineDistance(point, polyline);
+    if (Number.isFinite(distance)) {
+      bestDistance = Math.min(bestDistance, distance);
+    }
+  }
+  return bestDistance;
+}
+
+function geometryDivergesFromPreviousPath(geometry, previousDetour) {
+  if (geometry?.canShowDetourPath !== true) return false;
+  const previousPaths = getGeometryDetourPathPolylines(previousDetour?.geometry);
+  if (previousPaths.length === 0) return false;
+
+  const points = getGeometryEvidencePoints(geometry);
+  if (points.length === 0) return false;
+
+  const distances = points
+    .map((point) => getMinDistanceToPolylines(point, previousPaths))
+    .filter(Number.isFinite);
+  if (distances.length === 0) return false;
+
+  const farPointCount = distances.filter(
+    (distance) => distance >= ALTERNATE_DETOUR_PATH_REPLACE_MIN_DISTANCE_METERS
+  ).length;
+  return farPointCount >= Math.min(ALTERNATE_DETOUR_PATH_REPLACE_MIN_FAR_POINTS, distances.length);
+}
+
+function getCurrentVehicleCount(detour = {}) {
+  const explicitCount = Number(detour.currentVehicleCount);
+  if (Number.isFinite(explicitCount)) return explicitCount;
+  if (detour.vehiclesOffRoute instanceof Set) return detour.vehiclesOffRoute.size;
+  if (Array.isArray(detour.vehiclesOffRoute)) return detour.vehiclesOffRoute.length;
+  return 0;
+}
+
+function getShapeIdFromDetour(detour = {}) {
+  return detour.detourZone?.shapeId ||
+    detour.geometry?.shapeId ||
+    detour.geometry?.segments?.[0]?.shapeId ||
+    null;
+}
+
+function getProgressBoundsFromValue(value = {}) {
+  const start = Number(
+    value.sourceStartProgressMeters ??
+    value.startProgressMeters ??
+    value.coreStartProgressMeters
+  );
+  const end = Number(
+    value.sourceEndProgressMeters ??
+    value.endProgressMeters ??
+    value.coreEndProgressMeters
+  );
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return {
+    start: Math.min(start, end),
+    end: Math.max(start, end),
+  };
+}
+
+function getDetourProgressBounds(detour = {}) {
+  const segment = Array.isArray(detour.geometry?.segments) ? detour.geometry.segments[0] : null;
+  const candidates = [
+    detour.detourZone,
+    detour.geometry,
+    segment?.detourZone,
+    segment,
+    detour.eventWindow,
+    detour.clearWindow,
+  ];
+  for (const candidate of candidates) {
+    const bounds = getProgressBoundsFromValue(candidate);
+    if (bounds) return bounds;
+  }
+  return null;
+}
+
+function getCandidateProgressBounds(candidate = {}) {
+  if (
+    Number.isFinite(candidate.minProgressMeters) &&
+    Number.isFinite(candidate.maxProgressMeters)
+  ) {
+    return {
+      start: Math.min(candidate.minProgressMeters, candidate.maxProgressMeters),
+      end: Math.max(candidate.minProgressMeters, candidate.maxProgressMeters),
+    };
+  }
+  return getProgressBoundsFromValue(candidate.eventWindow);
+}
+
+function progressBoundsGapMeters(left, right) {
+  if (!left || !right) return Infinity;
+  if (left.end < right.start) return right.start - left.end;
+  if (right.end < left.start) return left.start - right.end;
+  return 0;
+}
+
+function candidateMatchesPreviousDetourWindow(candidate, previousDetour) {
+  const candidateShapeId = candidate?.shapeId ? String(candidate.shapeId) : null;
+  const previousShapeId = getShapeIdFromDetour(previousDetour);
+  if (candidateShapeId && previousShapeId && candidateShapeId !== String(previousShapeId)) {
+    return false;
+  }
+  if (
+    candidate?.eventWindow &&
+    previousDetour?.eventWindow &&
+    windowsOverlapOrNear(candidate.eventWindow, previousDetour.eventWindow, GEOMETRY_CLUSTER_GAP_METERS)
+  ) {
+    return true;
+  }
+  return progressBoundsGapMeters(
+    getCandidateProgressBounds(candidate),
+    getDetourProgressBounds(previousDetour)
+  ) <= GEOMETRY_CLUSTER_GAP_METERS;
+}
+
+function canSupersedePreviousDetour(candidate, detour, previousDetour) {
+  if (!candidate || !detour || !previousDetour) return false;
+  if (normalizeRouteId(candidate.routeId) !== normalizeRouteId(previousDetour.routeId)) return false;
+  if (getCurrentVehicleCount(previousDetour) > 0) return false;
+  if (!candidateMatchesPreviousDetourWindow(candidate, previousDetour)) return false;
+  return geometryDivergesFromPreviousPath(detour.geometry, previousDetour);
+}
+
+function geometryHasGpsSupersedeFlag(geometry = {}) {
+  return geometry?.gpsSupersedesPreviousPath === true ||
+    (Array.isArray(geometry?.segments) &&
+      geometry.segments.some((segment) => segment?.gpsSupersedesPreviousPath === true));
+}
+
+function markGeometrySupersedesPreviousPath(geometry = {}) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+  geometry.gpsSupersedesPreviousPath = true;
+  if (Array.isArray(geometry.segments)) {
+    geometry.segments = geometry.segments.map((segment) => (
+      segment && typeof segment === 'object'
+        ? { ...segment, gpsSupersedesPreviousPath: true }
+        : segment
+    ));
+  }
+  return geometry;
 }
 
 function getEvidenceAgeMs(candidate) {
@@ -2040,6 +2233,9 @@ function createDetourV2Detector(config = {}) {
     if (!detour || !previousDetour) return detour;
     detour.detectedAt = previousDetour.detectedAt || detour.detectedAt;
     detour.triggerVehicleId = previousDetour.triggerVehicleId || detour.triggerVehicleId;
+    if (geometryHasGpsSupersedeFlag(previousDetour.geometry)) {
+      markGeometrySupersedesPreviousPath(detour.geometry);
+    }
     const activeWindows = Array.isArray(detour.geometry?.segments)
       ? detour.geometry.segments
         .map((segment) => segment?.clearWindow)
@@ -2050,6 +2246,35 @@ function createDetourV2Detector(config = {}) {
         windowsDescribeSameSegment(segment?.clearWindow, window)
       )));
     return detour;
+  }
+
+  function findSupersededActiveDetourForCandidate(candidate, detour) {
+    let best = null;
+    for (const [eventId, previousDetour] of activeDetours.entries()) {
+      if (!canSupersedePreviousDetour(candidate, detour, previousDetour)) continue;
+      const score = progressBoundsGapMeters(
+        getCandidateProgressBounds(candidate),
+        getDetourProgressBounds(previousDetour)
+      );
+      if (!best || score < best.score) {
+        best = { eventId, detour: previousDetour, score };
+      }
+    }
+    return best;
+  }
+
+  function applyGpsPathSupersede(candidate, detour) {
+    const superseded = findSupersededActiveDetourForCandidate(candidate, detour);
+    if (!superseded) return null;
+
+    markGeometrySupersedesPreviousPath(detour.geometry);
+    if (superseded.eventId !== detour.eventId) {
+      activeDetours.delete(superseded.eventId);
+      eventCandidates.delete(superseded.eventId);
+      clearTracksByEvent.delete(superseded.eventId);
+      pendingClearsByEvent.delete(superseded.eventId);
+    }
+    return superseded.detour;
   }
 
   function normalizeSampleForDetourClear(detour, sample, signature, shapes) {
@@ -2302,6 +2527,7 @@ function createDetourV2Detector(config = {}) {
             config,
             currentOffRouteVehicleIdsByEvent.get(candidate.eventId)
           );
+          applyGpsPathSupersede(candidate, detour);
           if (previousDetour) {
             carryForwardDetourMetadata(detour, previousDetour);
           }
@@ -2335,6 +2561,7 @@ function createDetourV2Detector(config = {}) {
         config,
         currentOffRouteVehicleIdsByEvent.get(eventId)
       );
+      applyGpsPathSupersede(candidate, detour);
       if (previousDetour) {
         carryForwardDetourMetadata(detour, previousDetour);
       }
