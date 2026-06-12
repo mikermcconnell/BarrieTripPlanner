@@ -3139,6 +3139,48 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.segments[0].likelyDetourPolyline).toBeNull();
   });
 
+  test('does not preserve an old path when current geometry is blocked by stale mixed evidence', () => {
+    const trustedPath = [
+      { latitude: 44.389156, longitude: -79.685426 },
+      { latitude: 44.391565, longitude: -79.685698 },
+      { latitude: 44.391565, longitude: -79.690132 },
+      { latitude: 44.388622, longitude: -79.686854 },
+    ];
+    const previous = {
+      canShowDetourPath: true,
+      likelyDetourPolyline: trustedPath,
+      roadMatchSource: 'osrm-route',
+      likelyDetourRoadNames: ['Simcoe Street', 'Mulcaster Street', 'Worsley Street'],
+      segments: [{
+        canShowDetourPath: true,
+        likelyDetourPolyline: trustedPath,
+        roadMatchSource: 'osrm-route',
+        likelyDetourRoadNames: ['Simcoe Street', 'Mulcaster Street', 'Worsley Street'],
+      }],
+    };
+    const staleMixedGeometry = {
+      canShowDetourPath: false,
+      geometryTrustBlockedReason: 'stale-mixed-evidence',
+      skippedSegmentPolyline: null,
+      inferredDetourPolyline: null,
+      likelyDetourPolyline: null,
+      likelyDetourRoadNames: [],
+      segments: [{
+        canShowDetourPath: false,
+        geometryTrustBlockedReason: 'stale-mixed-evidence',
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: null,
+        likelyDetourPolyline: null,
+      }],
+    };
+
+    const result = preserveTrustedDetourPath(staleMixedGeometry, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+
   test('does not preserve a trusted path when current weak geometry is in a different location', () => {
     const duckworthPath = [
       { latitude: 44.41042, longitude: -79.67381 },

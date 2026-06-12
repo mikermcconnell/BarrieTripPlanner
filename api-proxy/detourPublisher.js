@@ -906,10 +906,20 @@ function gpsSupersedesPreviousPath(geometry) {
       geometry.segments.some((segment) => segment?.gpsSupersedesPreviousPath === true));
 }
 
+function blocksTrustedPathPreservation(geometry) {
+  const blockedReasons = new Set([
+    'jumpy-inferred-path',
+    'stale-mixed-evidence',
+  ]);
+  if (blockedReasons.has(geometry?.geometryTrustBlockedReason)) return true;
+  return Array.isArray(geometry?.segments) &&
+    geometry.segments.some((segment) => blockedReasons.has(segment?.geometryTrustBlockedReason));
+}
+
 function preserveTrustedDetourPath(geometry, previousSnapshot, detour = {}) {
   if (!geometry || typeof geometry !== 'object') return geometry;
   if (detour?.state === 'clear-pending' || geometry?.state === 'clear-pending') return geometry;
-  if (geometry.geometryTrustBlockedReason === 'jumpy-inferred-path') return geometry;
+  if (blocksTrustedPathPreservation(geometry)) return geometry;
   if (gpsSupersedesPreviousPath(geometry)) return geometry;
   if (hasLikelyDetourPath(geometry)) return geometry;
 

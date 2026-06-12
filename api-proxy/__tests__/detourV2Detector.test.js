@@ -1385,6 +1385,64 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].detourZone.startProgressMeters).toBeGreaterThan(1000);
   });
 
+  test('keeps stale mixed Route 100 evidence active but hides the rider path', () => {
+    const route100Mapping = new Map(routeShapeMapping);
+    route100Mapping.set('100', ['shape-1']);
+    const detector = createDetourV2Detector();
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-old-1',
+        routeId: '100',
+        tripId: 'trip-old-1',
+        coordinate: { latitude: 44.392, longitude: -79.697 },
+        timestampMs: Date.parse('2026-06-11T23:15:00Z'),
+      }),
+      vehicle({
+        id: 'bus-old-2',
+        routeId: '100',
+        tripId: 'trip-old-2',
+        coordinate: { latitude: 44.392, longitude: -79.695 },
+        timestampMs: Date.parse('2026-06-11T23:16:00Z'),
+      }),
+      vehicle({
+        id: 'bus-current-1',
+        routeId: '100',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.388, longitude: -79.698 },
+        timestampMs: Date.parse('2026-06-12T12:00:00Z'),
+      }),
+      vehicle({
+        id: 'bus-current-2',
+        routeId: '100',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.388, longitude: -79.694 },
+        timestampMs: Date.parse('2026-06-12T12:01:00Z'),
+      }),
+    ], shapes, route100Mapping);
+
+    const result = detector.processVehicles([], shapes, route100Mapping);
+
+    expect(result['100']).toEqual(expect.objectContaining({
+      state: 'active',
+      riderVisible: false,
+      canShowDetourPath: false,
+      riderVisibilityReason: 'insufficient-geometry',
+      currentVehicleCount: 0,
+    }));
+    expect(result['100'].geometry).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      skippedSegmentPolyline: null,
+      inferredDetourPolyline: null,
+      likelyDetourPolyline: null,
+      geometryTrustBlockedReason: 'stale-mixed-evidence',
+    }));
+    expect(result['100'].geometry.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      geometryTrustBlockedReason: 'stale-mixed-evidence',
+    }));
+  });
+
   test('clamps any route with a configured corridor', () => {
     const corridorEntryPoint = { latitude: 44.39, longitude: -79.684 };
     const corridorExitPoint = { latitude: 44.39, longitude: -79.680 };

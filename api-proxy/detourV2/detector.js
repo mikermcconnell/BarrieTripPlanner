@@ -48,6 +48,10 @@ const SPARSE_TRACE_MAX_TIME_GAP_MS = positiveNumber(
   process.env.DETOUR_V2_SPARSE_TRACE_MAX_TIME_GAP_MS,
   10 * 60 * 1000
 );
+const GEOMETRY_EVIDENCE_MAX_AGE_MS = positiveNumber(
+  process.env.DETOUR_V2_GEOMETRY_EVIDENCE_MAX_AGE_MS,
+  6 * 60 * 60 * 1000
+);
 const TRACE_REVERSAL_TOLERANCE_METERS = positiveNumber(
   process.env.DETOUR_V2_TRACE_REVERSAL_TOLERANCE_METERS,
   75
@@ -564,6 +568,37 @@ function isPublishableGeometryStats(stats) {
     stats.spanMeters >= MIN_SAFE_SPAN_METERS;
 }
 
+function selectRecentCoherentEvidence(candidate, allStats) {
+  const points = (candidate.points || [])
+    .filter((point) => Number.isFinite(Number(point?.timestampMs)));
+  if (points.length < MIN_OFF_ROUTE_POINTS) return null;
+
+  const latestTimestampMs = Math.max(...points.map((point) => Number(point.timestampMs)));
+  if (!Number.isFinite(latestTimestampMs)) return null;
+
+  const cutoffMs = latestTimestampMs - GEOMETRY_EVIDENCE_MAX_AGE_MS;
+  const stalePoints = points.filter((point) => Number(point.timestampMs) < cutoffMs);
+  if (stalePoints.length === 0) return null;
+
+  const recentPoints = points.filter((point) => Number(point.timestampMs) >= cutoffMs);
+  const recentStats = getPointStats(recentPoints);
+  if (isPublishableGeometryStats(recentStats)) {
+    return {
+      ...recentStats,
+      staleMixedEvidence: true,
+    };
+  }
+
+  if (isPublishableGeometryStats(allStats)) {
+    return {
+      ...allStats,
+      staleMixedEvidence: true,
+    };
+  }
+
+  return null;
+}
+
 function getRouteKeyedConfigValue(values, routeId) {
   if (!values || typeof values !== 'object') return null;
   const normalizedRouteId = normalizeRouteId(routeId);
@@ -683,6 +718,9 @@ function selectGeometryEvidenceSegments(candidate, polyline, detectorConfig) {
   if (configuredCorridorStats) return [configuredCorridorStats];
 
   const allStats = getPointStats(candidate.points || []);
+  const recentCoherentStats = selectRecentCoherentEvidence(candidate, allStats);
+  if (recentCoherentStats) return [recentCoherentStats];
+
   const clusterStats = splitPointsByProgress(candidate.points || [])
     .map(getPointStats);
   const validClusters = clusterStats
@@ -942,7 +980,9 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
   const lastEvidenceAt = geometryEvidence.lastEvidenceAt || candidate.lastSeenAt;
   const inferredDetourPathSafety = getInferredDetourPathSafety(inferredDetourPolyline);
   const hasSafeInferredDetourPath = inferredDetourPathSafety.safe;
+  const geometryTrustBlockedReason = geometryEvidence.geometryTrustBlockedReason || null;
   const canShowDetourPath =
+    !geometryTrustBlockedReason &&
     spanMeters >= MIN_SAFE_SPAN_METERS &&
     skippedSegmentPolyline.length >= 2 &&
     hasSafeInferredDetourPath &&
@@ -972,8 +1012,9 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
     detourZone,
     clearWindow: buildClearWindow(detourZone, shapeLengthMeters),
     gpsSupersedesPreviousPath: geometryEvidence.gpsSupersedesPreviousPath === true,
+    staleMixedEvidence: geometryEvidence.staleMixedEvidence === true,
     configuredCorridorLabel: geometryEvidence.configuredCorridorLabel || null,
-    geometryTrustBlockedReason: canShowDetourPath ? null : inferredDetourPathSafety.reason,
+    geometryTrustBlockedReason: canShowDetourPath ? null : (geometryTrustBlockedReason || inferredDetourPathSafety.reason),
     inferredDetourPathStats: {
       maxGapMeters: Number.isFinite(inferredDetourPathSafety.maxGapMeters) ? inferredDetourPathSafety.maxGapMeters : null,
       averageGapMeters: Number.isFinite(inferredDetourPathSafety.averageGapMeters) ? inferredDetourPathSafety.averageGapMeters : null,
@@ -1015,6 +1056,7 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     startProgressMeters: primarySegment?.startProgressMeters ?? null,
     endProgressMeters: primarySegment?.endProgressMeters ?? null,
     gpsSupersedesPreviousPath: segments.some((segment) => segment.gpsSupersedesPreviousPath === true),
+    staleMixedEvidence: segments.some((segment) => segment.staleMixedEvidence === true),
     configuredCorridorLabel: primarySegment?.configuredCorridorLabel || null,
     geometryTrustBlockedReason: canShowDetourPath ? null : (primarySegment?.geometryTrustBlockedReason || null),
     inferredDetourPathStats: primarySegment?.inferredDetourPathStats || {
@@ -1231,6 +1273,29 @@ function isRoute400StaleSparseEvidence(candidate, geometry, currentVehicleIds) {
     (Number.isFinite(maxGapMeters) && maxGapMeters > ROUTE_400_STALE_SPARSE_MAX_POINT_GAP_METERS);
 }
 
+function suppressStaleMixedGeometry(geometry) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+  geometry.canShowDetourPath = false;
+  geometry.skippedSegmentPolyline = null;
+  geometry.inferredDetourPolyline = null;
+  geometry.likelyDetourPolyline = null;
+  geometry.geometryTrustBlockedReason = 'stale-mixed-evidence';
+  if (Array.isArray(geometry.segments)) {
+    geometry.segments = geometry.segments.map((segment) => {
+      if (!segment || typeof segment !== 'object') return segment;
+      return {
+        ...segment,
+        canShowDetourPath: false,
+        skippedSegmentPolyline: null,
+        inferredDetourPolyline: null,
+        likelyDetourPolyline: null,
+        geometryTrustBlockedReason: 'stale-mixed-evidence',
+      };
+    });
+  }
+  return geometry;
+}
+
 function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehicleIds = new Set()) {
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
@@ -1239,6 +1304,13 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     geometry,
     currentVehicleIds
   );
+  if (
+    geometry?.staleMixedEvidence === true &&
+    currentVehicleIds.size === 0 &&
+    !route400StaleSparseEvidence
+  ) {
+    suppressStaleMixedGeometry(geometry);
+  }
   const riderVisible = geometry.canShowDetourPath === true && !route400StaleSparseEvidence;
   const riderVisibilityReason = riderVisible
     ? 'v2-confirmed'
