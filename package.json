@@ -35,7 +35,8 @@
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",
     "prebuild:android:eas": "eas env:exec production \"node scripts/preflight-android-production-env.js --profile production\" --non-interactive",
     "validate:detour-ground-truth": "node scripts/validate-detour-ground-truth.js --active-detours-json docs/detour-ground-truth/snapshots/route-10-mulcaster-simcoe-2026-05-26-active-detours.json",
-    "check:detour-scheduler": "node scripts/check-detour-scheduler-health.js"
+    "check:detour-scheduler": "node scripts/check-detour-scheduler-health.js",
+    "replay:detour-v2:route10": "node scripts/replay-detour-v2-fixture.js api-proxy/__tests__/fixtures/detour-v2/route-10-stale-mixed-live-2026-06-13.json"
   },
   "dependencies": {
     "@expo-google-fonts/outfit": "^0.4.2",
