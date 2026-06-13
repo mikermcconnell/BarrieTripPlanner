@@ -916,6 +916,16 @@ function blocksTrustedPathPreservation(geometry) {
     geometry.segments.some((segment) => blockedReasons.has(segment?.geometryTrustBlockedReason));
 }
 
+function hasStaleMixedEvidenceReason(geometry) {
+  return geometry?.geometryTrustBlockedReason === 'stale-mixed-evidence' ||
+    geometry?.staleMixedEvidence === true ||
+    (Array.isArray(geometry?.segments) &&
+      geometry.segments.some((segment) =>
+        segment?.geometryTrustBlockedReason === 'stale-mixed-evidence' ||
+        segment?.staleMixedEvidence === true
+      ));
+}
+
 function preserveTrustedDetourPath(geometry, previousSnapshot, detour = {}) {
   if (!geometry || typeof geometry !== 'object') return geometry;
   if (detour?.state === 'clear-pending' || geometry?.state === 'clear-pending') return geometry;
@@ -2202,6 +2212,9 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId 
     doc.riderVisibilityReason = 'insufficient-geometry';
     doc.staleForReview = true;
   }
+  if (doc.riderVisible === false && hasStaleMixedEvidenceReason(previousSnapshot)) {
+    doc.riderVisibilityReason = 'stale-mixed-evidence';
+  }
   applyRiderVisibilityGuard(doc, previousSnapshot);
 
   return doc;
@@ -2568,6 +2581,12 @@ async function publishDetours(activeDetours, options = {}) {
       doc.riderVisible = false;
       doc.riderVisibilityReason = 'insufficient-geometry';
       doc.staleForReview = true;
+    }
+    if (
+      doc.riderVisible === false &&
+      (hasStaleMixedEvidenceReason(geo) || hasStaleMixedEvidenceReason(previousSnapshot))
+    ) {
+      doc.riderVisibilityReason = 'stale-mixed-evidence';
     }
     applyRiderVisibilityGuard(doc, geo);
     applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);

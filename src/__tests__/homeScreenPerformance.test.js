@@ -120,7 +120,8 @@ describe('HomeScreen map performance', () => {
     expect(nativeStopPressEnd).toBeGreaterThan(nativeStopPressStart);
     expect(nativeStopPressSource).toContain('setSelectedStop(buildDetourStopNotice({');
     expect(nativeStopPressSource).toContain('transitNewsImpacts,');
-    expect(nativeStopPressSource).toContain('}, [displayedStopsById, transitNewsImpacts]);');
+    expect(nativeStopPressSource).toContain('officialServiceImpacts: visibleOfficialServiceImpacts,');
+    expect(nativeStopPressSource).toContain('}, [displayedStopsById, transitNewsImpacts, visibleOfficialServiceImpacts]);');
   });
 
   test('detour map tab turns the regular stops toggle off by default', () => {

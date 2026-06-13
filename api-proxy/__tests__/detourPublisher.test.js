@@ -2072,6 +2072,73 @@ describe('publishDetours event ids', () => {
     expect(written.staleForReview).toBe(true);
   });
 
+  test('preserves stale mixed evidence reason for current hidden geometry', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const now = Date.parse('2026-06-13T14:00:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => { deletes.push(`${name}/${id}`); },
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({
+          delete: () => {},
+          commit: async () => {},
+        }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '10:shape:17600-17800': {
+        routeId: '10',
+        riderVisible: false,
+        riderVisibilityReason: 'stale-mixed-evidence',
+        detectedAt: new Date(now - 5 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        vehicleCount: 5,
+        uniqueVehicleCount: 5,
+        currentVehicleCount: 5,
+        state: 'active',
+        geometry: {
+          confidence: 'high',
+          lastEvidenceAt: now,
+          canShowDetourPath: false,
+          staleMixedEvidence: true,
+          geometryTrustBlockedReason: 'stale-mixed-evidence',
+          segments: [{
+            canShowDetourPath: false,
+            geometryTrustBlockedReason: 'stale-mixed-evidence',
+          }],
+          skippedSegmentPolyline: null,
+          inferredDetourPolyline: null,
+          likelyDetourPolyline: null,
+        },
+      },
+    }, { now });
+
+    const written = writes['activeDetours/10:shape:17600-17800'];
+    expect(deletes).toEqual([]);
+    expect(written.riderVisible).toBe(false);
+    expect(written.riderVisibilityReason).toBe('stale-mixed-evidence');
+    expect(written.staleForReview).toBe(true);
+  });
+
   test('does not publish a drawable path flag for backend-suppressed stale sparse Route 400 detours', async () => {
     jest.resetModules();
     const writes = {};

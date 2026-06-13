@@ -1,4 +1,4 @@
-const { createDetourV2Detector } = require('../detourV2/detector');
+const { createDetourV2Detector, _test } = require('../detourV2/detector');
 const { projectOntoPolyline } = require('../detour/projection');
 const { pointToPolylineDistance } = require('../geometry');
 
@@ -1427,7 +1427,7 @@ describe('Auto Detour V2 detector', () => {
       state: 'active',
       riderVisible: false,
       canShowDetourPath: false,
-      riderVisibilityReason: 'insufficient-geometry',
+      riderVisibilityReason: 'stale-mixed-evidence',
       currentVehicleCount: 0,
     }));
     expect(result['100'].geometry).toEqual(expect.objectContaining({
@@ -1441,6 +1441,19 @@ describe('Auto Detour V2 detector', () => {
       canShowDetourPath: false,
       geometryTrustBlockedReason: 'stale-mixed-evidence',
     }));
+  });
+
+  test('uses stale mixed reason when stale mixed geometry is hidden with current vehicles', () => {
+    expect(_test.getRiderVisibilityReason({
+      riderVisible: false,
+      route400StaleSparseEvidence: false,
+      geometry: {
+        canShowDetourPath: false,
+        segments: [
+          { geometryTrustBlockedReason: 'stale-mixed-evidence' },
+        ],
+      },
+    })).toBe('stale-mixed-evidence');
   });
 
   test('clamps any route with a configured corridor', () => {

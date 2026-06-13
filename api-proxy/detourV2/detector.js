@@ -1296,6 +1296,17 @@ function suppressStaleMixedGeometry(geometry) {
   return geometry;
 }
 
+function getRiderVisibilityReason({ geometry, riderVisible, route400StaleSparseEvidence }) {
+  if (riderVisible) return 'v2-confirmed';
+  if (route400StaleSparseEvidence) return 'stale-sparse-evidence';
+  const staleMixedEvidenceHidden =
+    geometry?.staleMixedEvidence === true ||
+    geometry?.geometryTrustBlockedReason === 'stale-mixed-evidence' ||
+    (Array.isArray(geometry?.segments) &&
+      geometry.segments.some((segment) => segment?.geometryTrustBlockedReason === 'stale-mixed-evidence'));
+  return staleMixedEvidenceHidden ? 'stale-mixed-evidence' : 'insufficient-geometry';
+}
+
 function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehicleIds = new Set()) {
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
@@ -1304,19 +1315,21 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     geometry,
     currentVehicleIds
   );
-  if (
+  const staleMixedEvidenceSuppressed =
     geometry?.staleMixedEvidence === true &&
     currentVehicleIds.size === 0 &&
-    !route400StaleSparseEvidence
+    !route400StaleSparseEvidence;
+  if (
+    staleMixedEvidenceSuppressed
   ) {
     suppressStaleMixedGeometry(geometry);
   }
   const riderVisible = geometry.canShowDetourPath === true && !route400StaleSparseEvidence;
-  const riderVisibilityReason = riderVisible
-    ? 'v2-confirmed'
-    : route400StaleSparseEvidence
-      ? 'stale-sparse-evidence'
-      : 'insufficient-geometry';
+  const riderVisibilityReason = getRiderVisibilityReason({
+    geometry,
+    riderVisible,
+    route400StaleSparseEvidence,
+  });
   const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
   const eventClearWindow = buildClearWindowForEvent(candidate.eventWindow, {
     shapeLengthMeters,
@@ -3001,4 +3014,7 @@ function createDetourV2Detector(config = {}) {
 
 module.exports = {
   createDetourV2Detector,
+  _test: {
+    getRiderVisibilityReason,
+  },
 };
