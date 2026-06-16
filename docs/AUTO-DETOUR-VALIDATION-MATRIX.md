@@ -1,6 +1,6 @@
 # Auto-Detour Validation Matrix
 
-Status: Current as of 2026-05-29
+Status: Current as of 2026-06-16
 
 Use this file to turn detour bugs, live observations, and product decisions into repeatable validation scenarios.
 
@@ -82,6 +82,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-049 | Short no-skipped-stop rider visibility | Keep confirmed short-span GPS detours public when geometry is safe, but show route/corridor-level messaging with no closed-stop marker, stop-specific trip warning, or affected-stop notification unless `skippedStops` is explicit. | `api-proxy/__tests__/riderVisibilityGuard.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/DetourTimeline.test.js`, `src/__tests__/tripDetourImpacts.test.js` | QA sections 2, 5, 6, 14 | Covered | Over-warning riders for boundary stops, or hiding real short GPS detours |
 | DET-050 | Short location-specific detour with no closed stops | A short Route 12B-style GPS detour must not expand to nearby downstream noise, must not inherit distant official-notice stop impacts, and must validate with zero skipped stops. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourGroundTruthValidator.test.js`, `docs/detour-ground-truth/route-12b-bayfield-sophia-2026-06-05.json` | QA sections 2, 5, 6, 9, 14 | Covered, needs live recheck after deploy | Candidate over-expansion or route-family notice contamination |
 | DET-051 | Route 400 sparse multi-day evidence | Route 400 detours built from only sparse multi-day evidence stay backend-active but are hidden from riders unless fresh same-day or current off-route vehicle evidence reconfirms the event. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 5, 14 | Covered, needs live Route 400 recheck after deploy | Hiding a real Route 400 detour if no current bus is available to reconfirm sparse evidence |
+| DET-052 | Public publish-gate explanations | Every active detour write includes backend-generated `riderPublishGates` explaining the public gates for detour evidence, rider alert visibility, likely path visibility, skipped-stop visibility, and normal-route GPS clear proof. These gates are explanatory metadata; they must not replace the existing backend-owned public fields. | `api-proxy/__tests__/riderPublishGates.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 2 | Covered | Operators misreading hidden detours without knowing whether the block is evidence, geometry, skipped-stop, or clear-proof related |
 
 ## Recorded issues
 

@@ -6,6 +6,7 @@ const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentV
 const { pruneDetourPathServedStopsFromGeometry } = require('./detour/stopImpacts');
 const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 const { applyRiderVisibilityGuard } = require('./detour/riderVisibilityGuard');
+const { attachRiderPublishGates } = require('./detour/riderPublishGates');
 const {
   buildClearedEvent,
   buildDetectedEvent,
@@ -2392,6 +2393,7 @@ async function publishDetours(activeDetours, options = {}) {
     if (!hasNormalRouteClearProof(previous)) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
       applyBaselineSafetySuppression(retainedDoc, routeId, baselineRouteIds);
+      attachRiderPublishGates(retainedDoc);
       try {
         await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
@@ -2628,6 +2630,7 @@ async function publishDetours(activeDetours, options = {}) {
     if (doc.riderVisible === false) {
       doc.canShowDetourPath = false;
     }
+    attachRiderPublishGates(doc);
 
     try {
       await db.collection(storageConfig.activeCollection).doc(publishId).set(doc, { merge: true });

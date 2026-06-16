@@ -465,6 +465,27 @@ describe('detourPublisher storage config', () => {
       riderVisible: true,
     }));
     expect(writes.active.riderVisibilityReason).not.toBe('short-no-rider-impact');
+    expect(writes.active.riderPublishGates).toMatchObject({
+      detour: {
+        passed: true,
+        reason: 'confirmed-multi-vehicle-evidence',
+      },
+      riderAlert: {
+        passed: true,
+      },
+      likelyPath: {
+        passed: true,
+        reason: 'trusted-renderable-path',
+      },
+      skippedStops: {
+        passed: false,
+        reason: 'no-explicit-skipped-stops',
+      },
+      clear: {
+        passed: false,
+        reason: 'awaiting-normal-route-gps-proof',
+      },
+    });
   });
 
   test('publishDetours deletes superseded legacy route-keyed docs when event-window docs exist', async () => {
@@ -2070,6 +2091,20 @@ describe('publishDetours event ids', () => {
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('insufficient-geometry');
     expect(written.staleForReview).toBe(true);
+    expect(written.riderPublishGates).toMatchObject({
+      riderAlert: {
+        passed: false,
+        reason: 'insufficient-geometry',
+      },
+      likelyPath: {
+        passed: false,
+        reason: 'rider-hidden',
+      },
+      skippedStops: {
+        passed: false,
+        reason: 'rider-hidden',
+      },
+    });
   });
 
   test('preserves stale mixed evidence reason for current hidden geometry', async () => {

@@ -45,6 +45,7 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
   - [ ] `currentVehicleCount`
   - [ ] `riderVisible`
   - [ ] `riderVisibilityReason`
+  - [ ] `riderPublishGates` for detour, rider alert, likely path, skipped stops, and clear proof reasons
   - [ ] `staleForReview`
   - [ ] `evidencePointCount`
   - [ ] `roadMatchSource`
