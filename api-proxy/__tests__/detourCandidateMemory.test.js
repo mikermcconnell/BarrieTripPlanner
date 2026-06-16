@@ -88,6 +88,64 @@ describe('normal detour candidate memory', () => {
     expect(hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: 2 })).toBe(true);
   });
 
+  test('does not count the same trip twice when the vehicle ID changes', () => {
+    const candidates = new Map();
+    const first = {
+      routeId: '8A',
+      shapeId: 'shape-8a',
+      progressMinMeters: 1000,
+      progressMaxMeters: 1250,
+      timestampMs: 1000,
+      vehicleId: 'bus-avl-before-reset',
+      tripId: 'trip-1',
+      evidencePoints: [],
+    };
+    const sameTripNewVehicleId = {
+      ...first,
+      vehicleId: 'bus-avl-after-reset',
+      timestampMs: 60 * 1000,
+    };
+
+    const candidate = upsertCandidateObservation(candidates, first, { maxGapMeters: 350 });
+    upsertCandidateObservation(candidates, sameTripNewVehicleId, { maxGapMeters: 350 });
+
+    expect(candidate.observations).toHaveLength(1);
+    expect(hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: 2 })).toBe(false);
+  });
+
+  test('does not promote unstable vehicle-only identities from one-point observations', () => {
+    const candidates = new Map();
+    const base = {
+      routeId: '8A',
+      shapeId: 'shape-8a',
+      progressMinMeters: 1000,
+      progressMaxMeters: 1000,
+      timestampMs: 1000,
+      tripId: null,
+      evidencePoints: [{ timestampMs: 1000 }],
+    };
+
+    const candidate = upsertCandidateObservation(candidates, {
+      ...base,
+      vehicleId: 'unstable-avl-1',
+    }, { maxGapMeters: 350 });
+    upsertCandidateObservation(candidates, {
+      ...base,
+      vehicleId: 'unstable-avl-2',
+      timestampMs: 2000,
+      evidencePoints: [{ timestampMs: 2000 }],
+    }, { maxGapMeters: 350 });
+    upsertCandidateObservation(candidates, {
+      ...base,
+      vehicleId: 'unstable-avl-3',
+      timestampMs: 3000,
+      evidencePoints: [{ timestampMs: 3000 }],
+    }, { maxGapMeters: 350 });
+
+    expect(candidate.observations).toHaveLength(3);
+    expect(hasEnoughUniqueEvidence(candidate, { minUniqueSignatures: 2 })).toBe(false);
+  });
+
   test('keeps repeated observations from the same signature compact', () => {
     const candidates = new Map();
     const first = {

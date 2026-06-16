@@ -78,6 +78,9 @@ When a suspected detour exists:
 - [ ] For short detours, confirm a first off-route point creates candidate evidence but does not create rider UI by itself.
 - [ ] Confirm the three required off-route pings can accumulate across two same-route trips/vehicles; they do not all need to be from one trip.
 - [ ] Confirm one trip with three off-route pings stays candidate-only when two unique trips/vehicles are required.
+- [ ] Confirm the same trip is not counted twice when the AVL/vehicle ID changes mid-trip.
+- [ ] If trip IDs are missing, confirm one-point unstable vehicle IDs stay backend candidate/diagnostic only.
+- [ ] Confirm explicit non-revenue/deadhead, cancelled, or deleted trip evidence does not create a rider-visible detour.
 - [ ] Confirm a second unique same-route trip/vehicle can confirm the same short candidate once the same corridor has at least three matching off-route pings.
 - [ ] For missed-detour reviews, check the latest per-vehicle projection diagnostic: distance from shape, classification, shape ID, and threshold used.
 - [ ] Confirm `DETOUR_DETECTED` is written to `detourHistory`.

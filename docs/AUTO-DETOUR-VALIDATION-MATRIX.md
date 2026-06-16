@@ -60,10 +60,10 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-027 | Detour path passes a skipped stop | If the final rider-facing detour path passes a regular stop, do not show that stop as skipped/closed for detour purposes. Keep only stops actually bypassed by the detour path in `skippedStops`. | `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 6, 7, 9 | Covered, needs live Route 11 recheck | Over-pruning stops near the path endpoints or on nearby parallel streets |
 | DET-028 | GTFS shape changed, baseline approval required | When public GTFS geometry meaningfully changes for a route, keep any active backend record but suppress rider visibility with `baseline-diverged` until a detour admin approves `POST /api/baseline/routes` for that route. Shape-ID-only churn with the same geometry should not suppress riders. | `api-proxy/__tests__/baselineDivergence.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourWorkerColdStart.test.js` | QA sections 1, 13, 14 | Covered | Over-suppressing real detours if agency publishes a permanent change but baseline approval is delayed |
 | DET-029 | Out-of-order old GPS ping arrives late | Ignore old samples as clear proof or fresh detour evidence when they are older than the latest known off-route evidence for the active detour. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 10, 13, 14 | Covered | Late feed delivery causing an active detour to clear from stale normal-route points |
-| DET-030 | Same bus changes vehicle ID mid-trip | Do not count the same passenger trip as two unique buses just because vehicle ID changes; trip ID should remain the stronger evidence key. | Needs targeted backend coverage | QA sections 4, 12, 14 | Needs explicit scenario review | Replacement buses, block swaps, or AVL ID resets inflating unique-vehicle evidence |
-| DET-031 | Missing trip IDs with unstable vehicle IDs | Avoid false confirmation if one physical bus appears under multiple changing vehicle IDs and no stable trip ID is available. | Needs feed-identity fixture | QA sections 4, 12, 14 | Needs explicit scenario review | Over-blocking legitimate no-trip-ID detections versus false positives from unstable IDs |
+| DET-030 | Same bus changes vehicle ID mid-trip | Do not count the same passenger trip as two unique buses just because vehicle ID changes; trip ID should remain the stronger evidence key. | `api-proxy/__tests__/detourCandidateMemory.test.js`, `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 12, 14 | Covered | Replacement buses, block swaps, or AVL ID resets without stable trip IDs still need live feed review |
+| DET-031 | Missing trip IDs with unstable vehicle IDs | Avoid false confirmation if one physical bus appears under multiple changing vehicle IDs and no stable trip ID is available. Vehicle-only evidence can be retained, but one-point unstable IDs do not count as confirming identities. | `api-proxy/__tests__/detourCandidateMemory.test.js`, `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 12, 14 | Covered, needs live feed validation | Over-blocking legitimate no-trip-ID detections versus false positives from unstable IDs |
 | DET-032 | GPS teleport / large jump | Keep the backend candidate/diagnostic evidence, but hide rider-facing geometry when the inferred path is too jumpy or sparse. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 5, 14 | Covered | A visually convincing but physically impossible alternate path |
-| DET-033 | Deadhead bus still has route ID | Do not publish a rider detour from non-revenue/deadhead movement unless there is passenger-trip confidence. | Needs GTFS-RT fixture with trip relationship/status | QA sections 4, 12, 14 | Needs explicit scenario review | Deadheads or pull-outs creating false rider detours |
+| DET-033 | Deadhead bus still has route ID | Do not publish a rider detour from explicit non-revenue/deadhead movement, or cancelled/deleted GTFS-RT trip descriptors, unless there is passenger-trip confidence. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 12, 14 | Covered, needs live feed validation | Deadheads or pull-outs that are not flagged by the feed can still look like weak vehicle-only evidence |
 | DET-034 | Parallel road within threshold | Do not treat normal service as a detour when GPS drift or nearby parallel lanes are within the configured on-route/off-route thresholds. | `api-proxy/__tests__/detourV2Detector.test.js` 40m boundary and inside-threshold parallel-road fixture | QA sections 4, 5, 14 | Covered | Still needs live calibration if real feed GPS drift consistently exceeds 40m |
 | DET-035 | Detour follows another route's normal path | Publish only for the route with confirmed off-route evidence; do not infer a detour on the route whose normal path matches the detour corridor. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 15 | Covered | Sibling route regular service being mislabeled as detoured |
 | DET-036 | Terminal pull-in / layover loop | Do not treat normal terminal pull-ins, layovers, or platform circulation as a rider detour. | Needs terminal fixture | QA sections 4, 5, 14 | Needs explicit scenario review | Terminal-only loops creating false short detours |
@@ -85,6 +85,25 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-052 | Public publish-gate explanations | Every active detour write includes backend-generated `riderPublishGates` explaining the public gates for detour evidence, rider alert visibility, likely path visibility, skipped-stop visibility, and normal-route GPS clear proof. These gates are explanatory metadata; they must not replace the existing backend-owned public fields. | `api-proxy/__tests__/riderPublishGates.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 2 | Covered | Operators misreading hidden detours without knowing whether the block is evidence, geometry, skipped-stop, or clear-proof related |
 
 ## Recorded issues
+
+### DET-030/031/033A — evidence identity could over-count AVL vehicle IDs
+
+- Date/time reviewed: 2026-06-16
+- Environment: backend regression review
+- Route(s): all auto-detour routes
+- What happened: candidate memory could count the same passenger trip twice when its vehicle ID changed, and V2 could confirm from one physical bus appearing as multiple one-point vehicle-only IDs.
+- What should have happened: trip ID is the strongest evidence key; vehicle-only evidence is candidate/diagnostic until the identity is stable and moving. Explicit non-revenue/deadhead and cancelled/deleted GTFS-RT trip evidence should not confirm rider detours.
+- Root cause: legacy candidate signatures combined vehicle ID with trip ID, and V2 counted every vehicle-only signature equally.
+- Fix:
+  - candidate memory now keys trip evidence by trip ID before vehicle ID
+  - V2 confirmation now counts confirming identities, not raw vehicle IDs
+  - vehicle-only evidence must be repeated and show route-progress movement before it counts
+  - explicit non-revenue/deadhead/cancelled/deleted evidence is skipped
+- Tests added/updated:
+  - `api-proxy/__tests__/detourCandidateMemory.test.js`
+  - `api-proxy/__tests__/detourV2Detector.test.js`
+  - `api-proxy/__tests__/detourDetector.test.js`
+- Remaining risk: if the live feed does not mark deadheads and omits trip IDs, stable vehicle-only false positives still require live validation and operator review.
 
 ### DET-050A — Route 12B Bayfield/Sophia short detour expanded and inherited distant notice stops
 

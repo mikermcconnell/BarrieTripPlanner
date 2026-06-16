@@ -1173,8 +1173,8 @@ describe('minimum unique vehicle threshold', () => {
   });
 
   test('publishes once two unique vehicles confirm the same route detour', () => {
-    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_COORD });
-    const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_COORD });
+    const bus1 = makeVehicle({ id: 'bus-1', tripId: 'trip-bus-1', coordinate: OFF_ROUTE_COORD });
+    const bus2 = makeVehicle({ id: 'bus-2', tripId: 'trip-bus-2', coordinate: OFF_ROUTE_COORD });
 
     expect(runTicks([bus1], CONSECUTIVE_READINGS_REQUIRED)).toEqual({});
 
@@ -1185,9 +1185,49 @@ describe('minimum unique vehicle threshold', () => {
     expect(getState().activeDetourCount).toBe(1);
   });
 
+  test('does not count the same trip twice when a vehicle ID reset reaches direct confirmation', () => {
+    const busBeforeReset = makeVehicle({
+      id: 'avl-before-reset',
+      tripId: 'same-passenger-trip',
+      coordinate: OFF_ROUTE_COORD,
+    });
+    const busAfterReset = makeVehicle({
+      id: 'avl-after-reset',
+      tripId: 'same-passenger-trip',
+      coordinate: OFF_ROUTE_COORD,
+    });
+
+    expect(runTicks([busBeforeReset], CONSECUTIVE_READINGS_REQUIRED)).toEqual({});
+
+    const result = runTicks([busAfterReset], CONSECUTIVE_READINGS_REQUIRED);
+
+    expect(result['route-1']).toBeUndefined();
+    expect(getState().activeDetourCount).toBe(0);
+  });
+
+  test('ignores non-passenger direct confirmation evidence', () => {
+    const deletedTripBus = makeVehicle({
+      id: 'deleted-trip-bus-1',
+      tripId: 'deleted-trip-1',
+      tripScheduleRelationship: 7,
+      coordinate: OFF_ROUTE_COORD,
+    });
+    const deadheadBus = makeVehicle({
+      id: 'deadhead-bus-2',
+      tripId: null,
+      nonRevenue: true,
+      coordinate: OFF_ROUTE_COORD,
+    });
+
+    const result = runTicks([deletedTripBus, deadheadBus], CONSECUTIVE_READINGS_REQUIRED + 1);
+
+    expect(result['route-1']).toBeUndefined();
+    expect(getState().activeDetourCount).toBe(0);
+  });
+
   test('second bus can confirm after short geometry window but inside candidate memory window', () => {
-    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST });
-    const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST });
+    const bus1 = makeVehicle({ id: 'bus-1', tripId: 'trip-bus-1', coordinate: OFF_ROUTE_WEST });
+    const bus2 = makeVehicle({ id: 'bus-2', tripId: 'trip-bus-2', coordinate: OFF_ROUTE_WEST });
     const realDateNow = Date.now;
     const baseTime = Date.parse('2026-05-20T14:00:00.000Z');
 
@@ -1209,8 +1249,8 @@ describe('minimum unique vehicle threshold', () => {
   });
 
   test('confirmed candidate stays published after older evidence leaves the short evidence window', () => {
-    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST });
-    const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST });
+    const bus1 = makeVehicle({ id: 'bus-1', tripId: 'trip-bus-1', coordinate: OFF_ROUTE_WEST });
+    const bus2 = makeVehicle({ id: 'bus-2', tripId: 'trip-bus-2', coordinate: OFF_ROUTE_WEST });
     const realDateNow = Date.now;
     const baseTime = Date.parse('2026-05-20T14:00:00.000Z');
 
@@ -1255,8 +1295,8 @@ describe('minimum unique vehicle threshold', () => {
   });
 
   test('retains stale zero-vehicle detours until normal-route traversal proof exists', () => {
-    const bus1 = makeVehicle({ id: 'bus-1', coordinate: OFF_ROUTE_WEST });
-    const bus2 = makeVehicle({ id: 'bus-2', coordinate: OFF_ROUTE_WEST });
+    const bus1 = makeVehicle({ id: 'bus-1', tripId: 'trip-bus-1', coordinate: OFF_ROUTE_WEST });
+    const bus2 = makeVehicle({ id: 'bus-2', tripId: 'trip-bus-2', coordinate: OFF_ROUTE_WEST });
     const healthyBus = makeVehicle({ id: 'bus-3', coordinate: ON_ROUTE_OUTSIDE_ZONE });
     const realDateNow = Date.now;
     const baseTime = Date.parse('2026-05-20T14:00:00.000Z');
@@ -1342,8 +1382,16 @@ describe('minimum unique vehicle env config', () => {
       detector.clearVehicleState();
 
       let result = {};
-      const bus1 = makeVehicle({ id: 'default-threshold-bus-1', coordinate: OFF_ROUTE_COORD });
-      const bus2 = makeVehicle({ id: 'default-threshold-bus-2', coordinate: OFF_ROUTE_COORD });
+      const bus1 = makeVehicle({
+        id: 'default-threshold-bus-1',
+        tripId: 'default-threshold-trip-1',
+        coordinate: OFF_ROUTE_COORD,
+      });
+      const bus2 = makeVehicle({
+        id: 'default-threshold-bus-2',
+        tripId: 'default-threshold-trip-2',
+        coordinate: OFF_ROUTE_COORD,
+      });
       for (let i = 0; i < detector.CONSECUTIVE_READINGS_REQUIRED + 2; i++) {
         result = detector.processVehicles([bus1], shapes, routeShapeMapping);
       }
@@ -1942,6 +1990,31 @@ describe('recurring short deviations', () => {
       expect(result['route-1'].vehicleCount).toBe(2);
       expect(result['route-1'].uniqueVehicleCount).toBe(2);
       expect(result['route-1'].currentVehicleCount).toBe(0);
+    } finally {
+      Date.now = realDateNow;
+    }
+  });
+
+  test('keeps one-point unstable vehicle-only short deviations candidate-only', () => {
+    const realDateNow = Date.now;
+    const BASE_TIME = realDateNow();
+
+    try {
+      let result = {};
+      for (let index = 1; index <= 3; index++) {
+        Date.now = () => BASE_TIME + (index - 1) * 20 * 60_000;
+        result = processVehicles([
+          makeVehicle({
+            id: `unstable-short-${index}`,
+            tripId: null,
+            coordinate: OFF_ROUTE_WEST,
+          }),
+        ], shapes, routeShapeMapping, new Map());
+      }
+
+      expect(result['route-1']).toBeUndefined();
+      expect(recurringShortDeviationCandidates.size).toBe(1);
+      expect([...recurringShortDeviationCandidates.values()][0].observations).toHaveLength(3);
     } finally {
       Date.now = realDateNow;
     }

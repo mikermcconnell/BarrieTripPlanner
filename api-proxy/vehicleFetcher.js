@@ -56,7 +56,14 @@ const decodePosition = (buffer) => {
 
 const decodeTripDescriptor = (buffer) => {
   let offset = 0;
-  const trip = { tripId: null, routeId: null };
+  const trip = {
+    tripId: null,
+    routeId: null,
+    startTime: null,
+    startDate: null,
+    directionId: null,
+    tripScheduleRelationship: null,
+  };
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
     offset += tagBytes;
@@ -66,11 +73,29 @@ const decodeTripDescriptor = (buffer) => {
       offset += lenBytes;
       trip.tripId = new TextDecoder().decode(buffer.slice(offset, offset + length));
       offset += length;
+    } else if (fieldNumber === 2 && wireType === 2) {
+      const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
+      offset += lenBytes;
+      trip.startTime = new TextDecoder().decode(buffer.slice(offset, offset + length));
+      offset += length;
+    } else if (fieldNumber === 3 && wireType === 2) {
+      const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
+      offset += lenBytes;
+      trip.startDate = new TextDecoder().decode(buffer.slice(offset, offset + length));
+      offset += length;
+    } else if (fieldNumber === 4 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      trip.tripScheduleRelationship = value;
+      offset += bytesRead;
     } else if (fieldNumber === 5 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
       offset += lenBytes;
       trip.routeId = new TextDecoder().decode(buffer.slice(offset, offset + length));
       offset += length;
+    } else if (fieldNumber === 6 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      trip.directionId = value;
+      offset += bytesRead;
     } else offset = skipField(buffer, offset, wireType);
   }
   return trip;
@@ -106,6 +131,10 @@ const decodeVehiclePosition = (buffer) => {
       const trip = decodeTripDescriptor(buffer.slice(offset, offset + length));
       vehicle.tripId = trip.tripId;
       vehicle.routeId = trip.routeId;
+      vehicle.startTime = trip.startTime;
+      vehicle.startDate = trip.startDate;
+      vehicle.directionId = trip.directionId;
+      vehicle.tripScheduleRelationship = trip.tripScheduleRelationship;
       offset += length;
     } else if (fieldNumber === 8 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
@@ -246,6 +275,10 @@ async function fetchVehicles(tripMapping = {}) {
         id: e.id,
         routeId,
         tripId: v.tripId,
+        startTime: v.startTime || null,
+        startDate: v.startDate || null,
+        directionId: v.directionId ?? null,
+        tripScheduleRelationship: v.tripScheduleRelationship ?? null,
         coordinate: { latitude: v.latitude, longitude: v.longitude },
         timestamp: v.timestamp,
       };
