@@ -20,6 +20,10 @@ const {
   windowsOverlapOrNear,
 } = require('./eventWindows');
 const { applyRiderVisibilityGuard } = require('../detour/riderVisibilityGuard');
+const {
+  countConfirmingEvidenceGroups,
+  makeEvidenceIdentity,
+} = require('../detour/evidenceIdentity');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -178,7 +182,11 @@ function normalizeRouteId(routeId) {
 }
 
 function evidenceSignature(vehicle = {}) {
-  return String(vehicle.tripId || vehicle.id || vehicle.vehicleId || '').trim();
+  return makeEvidenceIdentity(vehicle, { prefixed: false }).signature || '';
+}
+
+function evidenceIdentity(vehicle = {}) {
+  return makeEvidenceIdentity(vehicle, { prefixed: false });
 }
 
 function vehicleId(vehicle = {}) {
@@ -488,7 +496,19 @@ function getPointStats(points = []) {
   return {
     points,
     pointCount: points.length,
-    signatureCount: new Set(points.map((point) => point.signature).filter(Boolean)).size,
+    rawSignatureCount: new Set(points.map((point) => point.signature).filter(Boolean)).size,
+    signatureCount: countConfirmingEvidenceGroups(points, {
+      getSignature: (point) => point.signature,
+      getIdentitySource: (point) => point.identitySource || (
+        point.tripId && point.signature === point.tripId
+          ? 'trip'
+          : point.vehicleId && point.signature === point.vehicleId
+            ? 'vehicle'
+            : 'trip'
+      ),
+      getProgressMin: (point) => point.progressMeters,
+      getProgressMax: (point) => point.progressMeters,
+    }),
     minProgressMeters,
     maxProgressMeters,
     spanMeters: maxProgressMeters - minProgressMeters,
@@ -885,7 +905,7 @@ function addPointToCandidate(candidate, point) {
 
 function hasEnoughEvidence(candidate) {
   return candidate.points.length >= MIN_OFF_ROUTE_POINTS &&
-    candidate.signatures.size >= MIN_UNIQUE_SIGNATURES;
+    getPointStats(candidate.points || []).signatureCount >= MIN_UNIQUE_SIGNATURES;
 }
 
 function getEventWindowCoreBounds(eventWindow = {}) {
@@ -1025,6 +1045,7 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
 function buildGeometry(candidate, shapes, detectorConfig = {}) {
   const polyline = shapes.get(candidate.shapeId);
   const shapeLengthMeters = getPolylineLengthMeters(polyline);
+  const allPointStats = getPointStats(candidate.points || []);
   const evidenceSegments = selectGeometryEvidenceSegments(candidate, polyline, detectorConfig);
   const segments = evidenceSegments.map((geometryEvidence) => (
     buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLengthMeters)
@@ -1050,7 +1071,7 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     canShowDetourPath,
     entryPoint: primarySegment?.entryPoint || null,
     exitPoint: primarySegment?.exitPoint || null,
-    confidence: candidate.signatures.size >= 3 || candidate.points.length >= 5 ? 'high' : 'medium',
+    confidence: allPointStats.signatureCount >= 3 || candidate.points.length >= 5 ? 'high' : 'medium',
     evidencePointCount,
     lastEvidenceAt,
     startProgressMeters: primarySegment?.startProgressMeters ?? null,
@@ -1264,7 +1285,7 @@ function isRoute400StaleSparseEvidence(candidate, geometry, currentVehicleIds) {
   if (currentVehicleIds?.size > 0) return false;
   if (getEvidenceAgeMs(candidate) <= ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS) return false;
 
-  const uniqueSignatures = candidate?.signatures?.size || 0;
+  const uniqueSignatures = getPointStats(candidate?.points || []).signatureCount;
   if (uniqueSignatures > ROUTE_400_STALE_SPARSE_MAX_UNIQUE_SIGNATURES) return false;
 
   const evidencePointCount = Number(geometry?.evidencePointCount || candidate?.points?.length || 0);
@@ -1296,27 +1317,41 @@ function suppressStaleMixedGeometry(geometry) {
   return geometry;
 }
 
+function getRiderVisibilityReason({ geometry, riderVisible, route400StaleSparseEvidence }) {
+  if (riderVisible) return 'v2-confirmed';
+  if (route400StaleSparseEvidence) return 'stale-sparse-evidence';
+  const staleMixedEvidenceHidden =
+    geometry?.staleMixedEvidence === true ||
+    geometry?.geometryTrustBlockedReason === 'stale-mixed-evidence' ||
+    (Array.isArray(geometry?.segments) &&
+      geometry.segments.some((segment) => segment?.geometryTrustBlockedReason === 'stale-mixed-evidence'));
+  return staleMixedEvidenceHidden ? 'stale-mixed-evidence' : 'insufficient-geometry';
+}
+
 function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehicleIds = new Set()) {
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
+  const confirmingSignatureCount = getPointStats(candidate.points || []).signatureCount;
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
   const route400StaleSparseEvidence = isRoute400StaleSparseEvidence(
     candidate,
     geometry,
     currentVehicleIds
   );
-  if (
+  const staleMixedEvidenceSuppressed =
     geometry?.staleMixedEvidence === true &&
     currentVehicleIds.size === 0 &&
-    !route400StaleSparseEvidence
+    !route400StaleSparseEvidence;
+  if (
+    staleMixedEvidenceSuppressed
   ) {
     suppressStaleMixedGeometry(geometry);
   }
   const riderVisible = geometry.canShowDetourPath === true && !route400StaleSparseEvidence;
-  const riderVisibilityReason = riderVisible
-    ? 'v2-confirmed'
-    : route400StaleSparseEvidence
-      ? 'stale-sparse-evidence'
-      : 'insufficient-geometry';
+  const riderVisibilityReason = getRiderVisibilityReason({
+    geometry,
+    riderVisible,
+    route400StaleSparseEvidence,
+  });
   const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
   const eventClearWindow = buildClearWindowForEvent(candidate.eventWindow, {
     shapeLengthMeters,
@@ -1353,8 +1388,8 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     triggerVehicleId: candidate.triggerVehicleId,
     vehiclesOffRoute: currentVehicleIds,
     matchedVehicleIds: [...candidate.vehicleIds],
-    vehicleCount: candidate.signatures.size,
-    uniqueVehicleCount: candidate.signatures.size,
+    vehicleCount: confirmingSignatureCount,
+    uniqueVehicleCount: confirmingSignatureCount,
     currentVehicleCount: currentVehicleIds.size,
     state: 'active',
     confidence: geometry.confidence,
@@ -2488,7 +2523,8 @@ function createDetourV2Detector(config = {}) {
     for (const vehicle of vehicles) {
       const routeId = normalizeRouteId(vehicle.routeId);
       const coordinate = normalizeCoordinate(vehicle.coordinate);
-      const signature = evidenceSignature(vehicle);
+      const identity = evidenceIdentity(vehicle);
+      const signature = identity.signature;
       const id = vehicleId(vehicle);
       if (!routeId || !coordinate || !signature || !id) continue;
 
@@ -2550,7 +2586,9 @@ function createDetourV2Detector(config = {}) {
           timestampMs,
           shapeId: projection.shapeId,
           vehicleId: id,
+          tripId: vehicle.tripId || null,
           signature,
+          identitySource: identity.source,
         };
         offRoutePoints.push(offRoutePoint);
         offRoutePointsThisTickByRoute.set(routeId, offRoutePoints);
@@ -2566,6 +2604,8 @@ function createDetourV2Detector(config = {}) {
         addPointToCandidate(candidate, {
           vehicleId: id,
           signature,
+          identitySource: identity.source,
+          tripId: vehicle.tripId || null,
           coordinate,
           progressMeters: projection.progressMeters,
           projectedPoint: projection.projectedPoint,
@@ -2611,6 +2651,8 @@ function createDetourV2Detector(config = {}) {
           timestampMs,
           shapeId: projection.shapeId,
           vehicleId: id,
+          tripId: vehicle.tripId || null,
+          identitySource: identity.source,
           coordinate,
         }, tickId, shapes);
       }
@@ -2715,6 +2757,7 @@ function createDetourV2Detector(config = {}) {
         routeId: candidate.routeId,
         pointCount: candidate.points.length,
         uniqueSignatureCount: candidate.signatures.size,
+        confirmingSignatureCount: getPointStats(candidate.points || []).signatureCount,
         oldestMs: candidate.firstSeenAt,
         newestMs: candidate.lastSeenAt,
         shapeId: candidate.shapeId,
@@ -2726,6 +2769,7 @@ function createDetourV2Detector(config = {}) {
         routeId: candidate.routeId,
         pointCount: 0,
         uniqueSignatureCount: 0,
+        confirmingSignatureCount: 0,
         oldestMs: null,
         newestMs: null,
         shapeId: candidate.shapeId,
@@ -2734,6 +2778,7 @@ function createDetourV2Detector(config = {}) {
       const signatures = new Set([...(existing._signatures || []), ...candidate.signatures]);
       existing._signatures = signatures;
       existing.uniqueSignatureCount = signatures.size;
+      existing.confirmingSignatureCount += getPointStats(candidate.points || []).signatureCount;
       existing.oldestMs = existing.oldestMs == null ? candidate.firstSeenAt : Math.min(existing.oldestMs, candidate.firstSeenAt);
       existing.newestMs = existing.newestMs == null ? candidate.lastSeenAt : Math.max(existing.newestMs, candidate.lastSeenAt);
       evidenceByRoute.set(candidate.routeId, existing);
@@ -3001,4 +3046,7 @@ function createDetourV2Detector(config = {}) {
 
 module.exports = {
   createDetourV2Detector,
+  _test: {
+    getRiderVisibilityReason,
+  },
 };

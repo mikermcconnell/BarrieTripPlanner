@@ -398,11 +398,15 @@ export function deriveDetourOverlays({
     const hasSegmentTrustedRawOnlyDetourPath = normalizedSegments.some(
       (segment) => !getRenderableDetourPath(segment, renderOptions) && getTrustedInferredDetourPath(segment)
     );
+    const hasExplicitSegmentDetourPathSuppression = normalizedSegments.some(
+      (segment) => segment?.canShowDetourPath === false
+    );
     const shouldRenderTopLevelRoadMatchOnly =
       topLevelRenderableDetourPath &&
       normalizedSegments.length > 1 &&
       !hasSegmentRenderableDetourPath &&
-      !hasSegmentTrustedRawOnlyDetourPath;
+      !hasSegmentTrustedRawOnlyDetourPath &&
+      !hasExplicitSegmentDetourPathSuppression;
     const topLevelRenderSegment = {
       shapeId: detour.shapeId ?? normalizedSegments[0]?.shapeId ?? null,
       skippedSegmentPolyline: detour.skippedSegmentPolyline ?? normalizedSegments[0]?.skippedSegmentPolyline ?? null,
@@ -490,12 +494,12 @@ export function deriveDetourOverlays({
         // geometry. Do not put untrusted raw GPS/inferred paths back on the map.
         inferredDetourPolyline:
           getRenderableDetourPath(segment, renderOptions) ??
-          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && index === 0
+          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && !hasExplicitSegmentDetourPathSuppression && index === 0
             ? topLevelRenderableDetourPath
             : null),
         likelyDetourPolyline:
           segment?.likelyDetourPolyline ??
-          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && index === 0
+          (!hasResolvedSegmentRenderableDetourPath && !hasSegmentTrustedRawOnlyDetourPath && !hasExplicitSegmentDetourPathSuppression && index === 0
             ? topLevelLikelyDetourPath
             : null),
       }))
@@ -530,6 +534,7 @@ export function deriveDetourOverlays({
     const allowTopLevelDetourPathFallback =
       !hasSegmentRenderableDetourPath &&
       !hasSegmentTrustedRawOnlyDetourPath &&
+      !hasExplicitSegmentDetourPathSuppression &&
       !isSegmentScoped;
 
     overlays.push({

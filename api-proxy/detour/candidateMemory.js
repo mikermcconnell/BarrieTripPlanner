@@ -1,12 +1,13 @@
 'use strict';
 
+const {
+  countConfirmingEvidenceGroups,
+  makeEvidenceIdentity,
+} = require('./evidenceIdentity');
+
 function makeCandidateObservationSignature(observation) {
-  if (observation?.vehicleId && observation?.tripId) {
-    return `vehicle-trip:${observation.vehicleId}:${observation.tripId}`;
-  }
-  if (observation?.tripId) return `trip:${observation.tripId}`;
-  if (observation?.vehicleId) return `vehicle:${observation.vehicleId}`;
-  return 'unknown';
+  const identity = makeEvidenceIdentity(observation, { prefixed: true });
+  return identity.signature || 'unknown';
 }
 
 function createCandidateKey(observation, bucketMeters = 350) {
@@ -56,6 +57,7 @@ function findMatchingCandidate(candidates, observation, { maxGapMeters = 350 } =
 
 function normalizeObservation(observation = {}) {
   const signature = observation.signature || makeCandidateObservationSignature(observation);
+  const identity = makeEvidenceIdentity(observation, { prefixed: true });
   return {
     routeId: observation.routeId || null,
     shapeId: observation.shapeId || null,
@@ -66,6 +68,7 @@ function normalizeObservation(observation = {}) {
     tripId: observation.tripId || null,
     tripShapeId: observation.tripShapeId || null,
     signature,
+    identitySource: observation.identitySource || identity.source || null,
     entryObservation: observation.entryObservation || null,
     exitObservation: observation.exitObservation || null,
     evidencePoints: Array.isArray(observation.evidencePoints) ? observation.evidencePoints : [],
@@ -169,12 +172,13 @@ function pruneExpiredCandidates(candidates, { nowMs, windowMs, routeId = null } 
 }
 
 function hasEnoughUniqueEvidence(candidate, { minUniqueSignatures = 2 } = {}) {
-  const signatures = new Set(
-    (candidate?.observations || [])
-      .map((observation) => observation.signature || makeCandidateObservationSignature(observation))
-      .filter(Boolean)
-  );
-  return signatures.size >= minUniqueSignatures;
+  return countConfirmingEvidenceGroups(candidate?.observations || [], {
+    getSignature: (observation) => observation.signature || makeCandidateObservationSignature(observation),
+    getIdentitySource: (observation) => observation.identitySource,
+    getProgressMin: (observation) => observation.progressMinMeters,
+    getProgressMax: (observation) => observation.progressMaxMeters,
+    getPointCount: (observation) => Math.max(1, (observation.evidencePoints || []).length),
+  }) >= minUniqueSignatures;
 }
 
 module.exports = {

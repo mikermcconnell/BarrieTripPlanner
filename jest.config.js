@@ -1,3 +1,6 @@
+// Keep date-sensitive app tests stable across local machines and GitHub's UTC runners.
+process.env.TZ = 'America/Toronto';
+
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.js'],

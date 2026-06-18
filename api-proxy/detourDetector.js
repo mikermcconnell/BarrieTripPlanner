@@ -60,6 +60,11 @@ const {
   pruneExpiredCandidates,
   hasEnoughUniqueEvidence,
 } = require('./detour/candidateMemory');
+const {
+  countConfirmingEvidenceGroups,
+  isNonPassengerVehicleEvidence,
+  makeEvidenceIdentity,
+} = require('./detour/evidenceIdentity');
 const { cloneJson, createDetectorReadModel } = require('./detour/readModel');
 const { createRuntimeStatePersistence } = require('./detour/runtimeState');
 const {
@@ -1933,6 +1938,9 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
     segment.vehiclesOffRoute.add(vehicleId);
     segment.matchedVehicleIds.add(vehicleId);
   }
+  if (boundarySignals.confirmationId) {
+    segment.candidateConfirmationIds.add(boundarySignals.confirmationId);
+  }
   segment.normalRouteVehicleIds.clear();
   segment.normalRouteClearProofs.clear();
   segment.lastSeenAt = new Date(now || Date.now());
@@ -1994,6 +2002,11 @@ function addVehicleToDetour(vehicleId, routeId, coordinate, now, boundarySignals
 function makeRecurringObservationSignature(vehicleId, tripId) {
   if (tripId) return `trip:${tripId}`;
   return `vehicle:${vehicleId || 'unknown'}`;
+}
+
+function makeVehicleEvidenceConfirmationId(vehicle = {}) {
+  const identity = makeEvidenceIdentity(vehicle, { prefixed: true });
+  return identity.signature || null;
 }
 
 function coordinateFromEvidencePoint(point) {
@@ -2343,6 +2356,10 @@ function buildRecurringShortDeviationObservation(
   if (progressValues.length === 0) return null;
 
   const signature = makeRecurringObservationSignature(state.vehicleId || state.id, state.tripId);
+  const identity = makeEvidenceIdentity({
+    tripId: state.tripId || null,
+    vehicleId: state.vehicleId || state.id || null,
+  }, { prefixed: true });
   const evidencePoints = streakPoints.map((point) => ({
     ...point,
     vehicleId: point.vehicleId || state.vehicleId || state.id || null,
@@ -2362,6 +2379,7 @@ function buildRecurringShortDeviationObservation(
     tripId: state.tripId || null,
     tripShapeId: state.tripShapeId || null,
     signature,
+    identitySource: identity.source || null,
     entryObservation: state.lastOnRouteObservation || state.offRouteStreakStart || null,
     exitObservation: returnObservation || state.lastOnRouteObservation || null,
     evidencePoints,
@@ -2417,6 +2435,8 @@ function appendRecurringObservationToSegment(segment, observation, routeConfig) 
   segment.lastOffRouteEvidenceAt = observation.timestampMs;
   segment.recurringShortDeviation = true;
   segment.vehiclesOffRoute.delete(observation.vehicleId);
+  const confirmationId = getCandidateConfirmationId(observation);
+  if (confirmationId) segment.candidateConfirmationIds.add(confirmationId);
   if (observation.vehicleId) segment.matchedVehicleIds.add(observation.vehicleId);
   syncMatchedVehicleIdsToCurrentEvidence(segment);
   markDetourPublishedIfEligible(segment);
@@ -2465,6 +2485,8 @@ function publishRecurringShortDeviationCandidate(candidate, observation, shapes,
   if (segment) {
     ensureSegmentEvidenceSets(segment);
     for (const candidateObservation of candidate.observations || []) {
+      const confirmationId = getCandidateConfirmationId(candidateObservation);
+      if (confirmationId) segment.candidateConfirmationIds.add(confirmationId);
       if (candidateObservation.vehicleId) segment.matchedVehicleIds.add(candidateObservation.vehicleId);
     }
     for (const candidateObservation of candidate.observations || []) {
@@ -2674,10 +2696,16 @@ function recordRecurringShortDeviationObservation(observation, shapes, routeShap
   candidate.lastSeenAt = observation.timestampMs;
   recurringShortDeviationCandidates.set(key, candidate);
 
-  const signatures = new Set(candidate.observations.map((item) => item.signature).filter(Boolean));
+  const confirmingIdentityCount = countConfirmingEvidenceGroups(candidate.observations, {
+    getSignature: (item) => item.signature,
+    getIdentitySource: (item) => item.identitySource,
+    getProgressMin: (item) => item.progressMinMeters,
+    getProgressMax: (item) => item.progressMaxMeters,
+    getPointCount: (item) => Math.max(1, (item.evidencePoints || []).length),
+  });
   if (
     candidate.observations.length >= RECURRING_SHORT_DEVIATION_MIN_OBSERVATIONS &&
-    signatures.size >= RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES &&
+    confirmingIdentityCount >= RECURRING_SHORT_DEVIATION_MIN_UNIQUE_SIGNATURES &&
     countCandidateEvidencePoints(candidate) >= getRequiredCandidateEvidencePoints(observation.routeConfig)
   ) {
     const segment = publishRecurringShortDeviationCandidate(candidate, observation, shapes, routeShapeMapping);
@@ -3074,7 +3102,9 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
 
   for (const vehicle of vehicles) {
     const { id, routeId, coordinate } = vehicle;
+    if (isNonPassengerVehicleEvidence(vehicle)) continue;
     if (!routeId || !coordinate) continue;
+    const evidenceConfirmationId = makeVehicleEvidenceConfirmationId(vehicle);
     const routeConfig = resolveRouteDetectorConfig(routeId);
     const sampleTimeMs = getVehicleSampleTimeMs(vehicle, now);
 
@@ -3203,6 +3233,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
         state.detourSegmentId = addVehicleToDetour(id, routeId, coordinate, sampleTimeMs, {
           entryObservation: state.lastOnRouteObservation || state.offRouteStreakStart,
           offRouteStreakPoints: state.offRouteStreakPoints,
+          confirmationId: evidenceConfirmationId,
           tripShapeId,
           projection: routeProjection,
           preferredSegmentId: publishedKnownDetourSegment.segmentId,
@@ -3267,6 +3298,7 @@ function processVehicles(vehicles, shapes, routeShapeMapping, tripMapping, stopI
         state.detourSegmentId = normalCandidateSegmentId || addVehicleToDetour(id, routeId, coordinate, sampleTimeMs, {
           entryObservation: state.lastOnRouteObservation || state.offRouteStreakStart,
           offRouteStreakPoints: state.offRouteStreakPoints,
+          confirmationId: evidenceConfirmationId,
           tripShapeId,
           projection: routeProjection,
           preferredSegmentId: state.detourSegmentId,

@@ -172,6 +172,30 @@ describe('detour rider visibility policy', () => {
     expect(decision.reason).toBe('stale-sparse-evidence');
   });
 
+  test('keeps explicitly suppressed detours hidden even with current vehicles', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '10',
+      detour: {
+        riderVisible: false,
+        riderVisibilityReason: 'stale-mixed-evidence',
+        staleForReview: true,
+        confidence: 'high',
+        vehicleCount: 5,
+        uniqueVehicleCount: 5,
+        currentVehicleCount: 5,
+        geometry: {
+          canShowDetourPath: false,
+          segments: [{ geometryTrustBlockedReason: 'stale-mixed-evidence' }],
+        },
+      },
+      now,
+    });
+
+    expect(decision.riderVisible).toBe(false);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('stale-mixed-evidence');
+  });
+
   test('keeps detours rider-visible when a vehicle is currently in the detour', () => {
     const decision = evaluateStaleRiderVisibility({
       routeId: '8A',

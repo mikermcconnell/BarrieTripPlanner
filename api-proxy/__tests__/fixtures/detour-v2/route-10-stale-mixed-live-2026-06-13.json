@@ -1,0 +1,3878 @@
+{
+  "fixtureVersion": 1,
+  "capturedAt": "2026-06-13T15:05:19.3519329Z",
+  "purpose": "Replay/diagnose the live Route 10 V2 event hidden as stale mixed evidence.",
+  "source": {
+    "project": "barrie-transit-trip-plan-cc84e",
+    "activeCollection": "activeDetourEventsV2",
+    "runtimeDoc": "systemState/detourRuntimeV2",
+    "baselineDoc": "baselineShapes/10"
+  },
+  "expected": {
+    "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+    "routeId": "10",
+    "riderVisible": false,
+    "riderVisibilityReason": "stale-mixed-evidence",
+    "segmentReason": "stale-mixed-evidence"
+  },
+  "activeDetourEvent": {
+    "eventConfidence": "high",
+    "noticeActiveStops": [],
+    "clearWindows": [
+      {
+        "startProgressMeters": 18257.538589785647,
+        "minCoverageRatio": 0.75,
+        "sourceEndProgressMeters": 18407.538589785647,
+        "sourceStartProgressMeters": 18407.538589785647,
+        "endProgressMeters": 18527.717788659942,
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      }
+    ],
+    "noticeTemporaryStopIds": [],
+    "eventLocationLabel": null,
+    "currentVehicleCount": 0,
+    "triggerVehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+    "staleForReview": true,
+    "noticeActiveStopCodes": [],
+    "skippedSegmentPolyline": null,
+    "roadMatchSource": null,
+    "noticeStopImpactSourceNewsIds": [],
+    "updatedAt": 1781363108965,
+    "clearWindow": {
+      "startProgressMeters": 18257.538589785647,
+      "minCoverageRatio": 0.75,
+      "sourceEndProgressMeters": 18407.538589785647,
+      "sourceStartProgressMeters": 18407.538589785647,
+      "endProgressMeters": 18527.717788659942,
+      "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+    },
+    "eventPrimaryRouteId": "10",
+    "evidencePointCount": 7,
+    "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+    "exitPoint": {
+      "longitude": -79.68791047346406,
+      "latitude": 44.39047682971662
+    },
+    "detourVersion": "v2",
+    "noticeTemporaryStopCodes": [],
+    "isPersistent": false,
+    "likelyDetourRoadNames": [],
+    "detourZone": {
+      "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+      "endProgressMeters": 18407.538589785647,
+      "startProgressMeters": 18407.538589785647
+    },
+    "riderVisibilityReason": "stale-mixed-evidence",
+    "likelyDetourPolyline": null,
+    "noticeActiveStopIds": [],
+    "entryPoint": {
+      "latitude": 44.39158130167097,
+      "longitude": -79.68562820549747
+    },
+    "clearReason": null,
+    "roadMatchConfidence": null,
+    "inferredDetourPolyline": null,
+    "detectedAt": "2026-06-12T23:30:48Z",
+    "uniqueVehicleCount": 5,
+    "latestGpsEvidenceAt": 1781325133000,
+    "segments": [
+      {
+        "detourZone": {
+          "endProgressMeters": 17859.287640088733,
+          "startProgressMeters": 17559.54997874672,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+        },
+        "detourPathServedStops": [],
+        "lastServedBeforeDetourStopCode": null,
+        "likelyDetourRoadNames": [],
+        "skippedStopIds": [
+          "557"
+        ],
+        "exitPoint": {
+          "latitude": 44.39047682971662,
+          "longitude": -79.68791047346406
+        },
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "evidencePointCount": 4,
+        "exitConnectorPolyline": null,
+        "eventPrimaryRouteId": "10",
+        "segmentId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17560-17859",
+        "clearWindow": {
+          "endProgressMeters": 18209.418809417726,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "startProgressMeters": 17209.418809417726,
+          "minCoverageRatio": 0.75,
+          "sourceEndProgressMeters": 17859.287640088733,
+          "sourceStartProgressMeters": 17559.54997874672
+        },
+        "roadMatchSource": null,
+        "skippedStopCodes": [
+          "557"
+        ],
+        "gpsSupersedesPreviousPath": true,
+        "inferredDetourPathStats": {
+          "maxGapMeters": 97.57165274506268,
+          "averageGapMeters": 59.6404433956405
+        },
+        "entryConnectorPolyline": null,
+        "skippedSegmentPolyline": null,
+        "lastServedBeforeDetourStop": null,
+        "affectedStopCodes": [
+          "557",
+          "191"
+        ],
+        "affectedStopIds": [
+          "557",
+          "191"
+        ],
+        "eventLocationLabel": "Worsley Street & Owen Street",
+        "firstServedAfterDetourStop": {
+          "allServingRouteIds": [
+            "10",
+            "100",
+            "8B"
+          ],
+          "code": "191",
+          "longitude": -79.68769966,
+          "id": "191",
+          "routeIds": [
+            "10"
+          ],
+          "impactScope": "partial",
+          "servedRouteIds": [
+            "100",
+            "8B"
+          ],
+          "routeId": "10",
+          "affectedRouteIds": [
+            "10"
+          ],
+          "latitude": 44.39048003,
+          "name": "Owen Street"
+        },
+        "skippedStops": [
+          {
+            "routeId": "10",
+            "affectedRouteIds": [
+              "10"
+            ],
+            "servedRouteIds": [],
+            "detourStopRole": "skipped",
+            "latitude": 44.391061,
+            "name": "Mulcaster at Collier",
+            "longitude": -79.685633,
+            "allServingRouteIds": [
+              "10"
+            ],
+            "code": "557",
+            "routeIds": [
+              "10"
+            ],
+            "impactScope": "route",
+            "id": "557"
+          }
+        ],
+        "firstServedAfterDetourStopId": "191",
+        "detourPathServedStopCodes": [],
+        "firstServedAfterDetourStopCode": "191",
+        "firstSkippedStopCode": "557",
+        "eventConfidence": "high",
+        "staleMixedEvidence": true,
+        "configuredCorridorLabel": null,
+        "lastServedBeforeDetourStopId": null,
+        "sharedDetourEventId": "detour-event-3bj8xe",
+        "exitStopId": "191",
+        "boundaryStops": [
+          {
+            "id": "191",
+            "routeIds": [
+              "10"
+            ],
+            "impactScope": "partial",
+            "longitude": -79.68769966,
+            "code": "191",
+            "allServingRouteIds": [
+              "10",
+              "100",
+              "8B"
+            ],
+            "detourStopRole": "boundary",
+            "latitude": 44.39048003,
+            "name": "Owen Street",
+            "affectedRouteIds": [
+              "10"
+            ],
+            "routeId": "10",
+            "servedRouteIds": [
+              "100",
+              "8B"
+            ]
+          }
+        ],
+        "detourPathServedStopIds": [],
+        "eventRouteCount": 1,
+        "lastEvidenceAt": 1781355594000,
+        "sharedRouteIds": [
+          "10"
+        ],
+        "gpsServedStopCodes": [],
+        "gpsServedStopIds": [],
+        "boundaryStopIds": [
+          "191"
+        ],
+        "state": "active",
+        "affectedStops": [
+          {
+            "id": "557",
+            "impactScope": "route",
+            "routeIds": [
+              "10"
+            ],
+            "longitude": -79.685633,
+            "allServingRouteIds": [
+              "10"
+            ],
+            "code": "557",
+            "detourStopRole": "skipped",
+            "name": "Mulcaster at Collier",
+            "latitude": 44.391061,
+            "routeId": "10",
+            "affectedRouteIds": [
+              "10"
+            ],
+            "servedRouteIds": []
+          },
+          {
+            "affectedRouteIds": [
+              "10"
+            ],
+            "routeId": "10",
+            "servedRouteIds": [
+              "100",
+              "8B"
+            ],
+            "detourStopRole": "boundary",
+            "latitude": 44.39048003,
+            "name": "Owen Street",
+            "longitude": -79.68769966,
+            "code": "191",
+            "allServingRouteIds": [
+              "10",
+              "100",
+              "8B"
+            ],
+            "impactScope": "partial",
+            "id": "191",
+            "routeIds": [
+              "10"
+            ]
+          }
+        ],
+        "boundaryStopCodes": [
+          "191"
+        ],
+        "confidence": "high",
+        "endProgressMeters": 17859.287640088733,
+        "canShowDetourPath": false,
+        "roadMatchRawConfidence": null,
+        "geometryTrustBlockedReason": "stale-mixed-evidence",
+        "gpsServedStops": [],
+        "inferredDetourPolyline": null,
+        "roadMatchConfidence": null,
+        "entryPoint": {
+          "latitude": 44.39158130167097,
+          "longitude": -79.68562820549747
+        },
+        "startProgressMeters": 17559.54997874672,
+        "firstSkippedStop": {
+          "servedRouteIds": [],
+          "routeId": "10",
+          "affectedRouteIds": [
+            "10"
+          ],
+          "latitude": 44.391061,
+          "name": "Mulcaster at Collier",
+          "code": "557",
+          "allServingRouteIds": [
+            "10"
+          ],
+          "longitude": -79.685633,
+          "routeIds": [
+            "10"
+          ],
+          "impactScope": "route",
+          "id": "557"
+        },
+        "likelyDetourPolyline": null,
+        "firstSkippedStopId": "557",
+        "entryStopId": "557"
+      }
+    ],
+    "roadMatchRawConfidence": null,
+    "detourEventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+    "canShowDetourPath": false,
+    "routeId": "10",
+    "vehicleCount": 5,
+    "confidence": "high",
+    "state": "active",
+    "eventWindow": {
+      "geoCenter": {
+        "longitude": -79.6855239868164,
+        "latitude": 44.38957595825195
+      },
+      "geoBounds": {
+        "maxLongitude": -79.68401550485409,
+        "maxLatitude": 44.390653931661944,
+        "minLongitude": -79.68963409231388,
+        "minLatitude": 44.38716665549626
+      },
+      "routeId": "10",
+      "coreStartProgressMeters": 18407.538589785647,
+      "frozen": true,
+      "clearEndProgressMeters": 18807.538589785647,
+      "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+      "coreEndProgressMeters": 18407.538589785647,
+      "clearStartProgressMeters": 18007.538589785647,
+      "confirmStartProgressMeters": 18157.538589785647,
+      "confirmEndProgressMeters": 18657.538589785647
+    },
+    "riderVisible": false,
+    "lastSeenAt": "2026-06-13T04:32:13Z",
+    "geometryLastEvidenceAt": 1781325133000,
+    "clearedSegments": [],
+    "sharedRouteIds": [
+      "10"
+    ],
+    "noticeStopImpactSource": null,
+    "lastEvidenceAt": 1781325133000,
+    "eventRouteCount": 1,
+    "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+    "noticeTemporaryStops": [],
+    "sharedDetourEventId": "route-detour-awg7sk",
+    "handoffSourceRouteId": null,
+    "detourModel": "event-window",
+    "detourPathLabel": "Likely detour path"
+  },
+  "runtimeRoute10": {
+    "activeDetours": {
+      "10": {
+        "routeId": "10",
+        "geometry": {
+          "skippedSegmentPolyline": null,
+          "geometryTrustBlockedReason": null,
+          "segments": [
+            {
+              "geometryTrustBlockedReason": null,
+              "skippedSegmentPolyline": null,
+              "gpsSupersedesPreviousPath": true,
+              "detourZone": {
+                "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+                "endProgressMeters": 18407.538589785647,
+                "startProgressMeters": 18407.538589785647
+              },
+              "startProgressMeters": 18407.538589785647,
+              "staleMixedEvidence": false,
+              "inferredDetourPolyline": null,
+              "segmentId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:18408-18408",
+              "canShowDetourPath": false,
+              "endProgressMeters": 18407.538589785647,
+              "inferredDetourPathStats": {
+                "maxGapMeters": 72.99831079390357,
+                "averageGapMeters": 58.083860220774916
+              },
+              "confidence": "high",
+              "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+              "configuredCorridorLabel": null,
+              "clearWindow": {
+                "endProgressMeters": 18527.717788659942,
+                "sourceStartProgressMeters": 18407.538589785647,
+                "sourceEndProgressMeters": 18407.538589785647,
+                "startProgressMeters": 17527.717788659942,
+                "minCoverageRatio": 0.75,
+                "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+              },
+              "entryPoint": {
+                "latitude": 44.3879930167535,
+                "longitude": -79.6891916341963
+              },
+              "lastEvidenceAt": 1781325133000,
+              "evidencePointCount": 7,
+              "state": "active",
+              "likelyDetourPolyline": null,
+              "exitPoint": {
+                "latitude": 44.3879930167535,
+                "longitude": -79.6891916341963
+              }
+            }
+          ],
+          "gpsSupersedesPreviousPath": true,
+          "inferredDetourPolyline": null,
+          "staleMixedEvidence": false,
+          "startProgressMeters": 18407.538589785647,
+          "endProgressMeters": 18407.538589785647,
+          "canShowDetourPath": false,
+          "confidence": "high",
+          "inferredDetourPathStats": {
+            "maxGapMeters": 72.99831079390357,
+            "averageGapMeters": 58.083860220774916
+          },
+          "entryPoint": {
+            "longitude": -79.6891916341963,
+            "latitude": 44.3879930167535
+          },
+          "configuredCorridorLabel": null,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "evidencePointCount": 7,
+          "lastEvidenceAt": 1781325133000,
+          "likelyDetourPolyline": null,
+          "exitPoint": {
+            "longitude": -79.6891916341963,
+            "latitude": 44.3879930167535
+          }
+        },
+        "vehiclesOffRoute": [],
+        "clearWindows": [
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "endProgressMeters": 18527.717788659942,
+            "sourceEndProgressMeters": 18407.538589785647,
+            "startProgressMeters": 18257.538589785647,
+            "minCoverageRatio": 0.75,
+            "sourceStartProgressMeters": 18407.538589785647
+          }
+        ],
+        "detourModel": "event-window",
+        "confidence": "high",
+        "detectedAt": 1781307048000,
+        "clearedSegments": [],
+        "uniqueVehicleCount": 5,
+        "eventWindow": {
+          "clearEndProgressMeters": 18807.538589785647,
+          "coreStartProgressMeters": 18407.538589785647,
+          "frozen": true,
+          "geoCenter": {
+            "longitude": -79.6855239868164,
+            "latitude": 44.38957595825195
+          },
+          "routeId": "10",
+          "clearStartProgressMeters": 18007.538589785647,
+          "confirmStartProgressMeters": 18157.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 18657.538589785647,
+          "coreEndProgressMeters": 18407.538589785647,
+          "geoBounds": {
+            "minLongitude": -79.68963409231388,
+            "minLatitude": 44.38716665549626,
+            "maxLatitude": 44.390653931661944,
+            "maxLongitude": -79.68401550485409
+          }
+        },
+        "matchedVehicleIds": [
+          "a38dea84-c086-4a0c-acf4-298bd24935b8",
+          "e8ecf031-2670-4333-82b5-d2ca3a1ee244",
+          "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60"
+        ],
+        "lastSeenAt": 1781325133000,
+        "vehicleCount": 5,
+        "currentVehicleCount": 0,
+        "detourZone": {
+          "endProgressMeters": 18407.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "startProgressMeters": 18407.538589785647
+        },
+        "riderVisible": false,
+        "latestGpsEvidenceAt": 1781325133000,
+        "clearWindow": {
+          "endProgressMeters": 18527.717788659942,
+          "startProgressMeters": 18257.538589785647,
+          "minCoverageRatio": 0.75,
+          "sourceEndProgressMeters": 18407.538589785647,
+          "sourceStartProgressMeters": 18407.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+        },
+        "canShowDetourPath": false,
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+        "triggerVehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+        "state": "active",
+        "lastEvidenceAt": 1781325133000,
+        "riderVisibilityReason": "insufficient-geometry",
+        "detourVersion": "v2",
+        "staleForReview": true,
+        "geometryLastEvidenceAt": 1781325133000
+      }
+    },
+    "activeEvents": {
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800": {
+        "matchedVehicleIds": [
+          "a38dea84-c086-4a0c-acf4-298bd24935b8",
+          "e8ecf031-2670-4333-82b5-d2ca3a1ee244",
+          "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60"
+        ],
+        "eventWindow": {
+          "frozen": true,
+          "geoCenter": {
+            "latitude": 44.38957595825195,
+            "longitude": -79.6855239868164
+          },
+          "clearStartProgressMeters": 18007.538589785647,
+          "confirmStartProgressMeters": 18157.538589785647,
+          "routeId": "10",
+          "clearEndProgressMeters": 18807.538589785647,
+          "coreStartProgressMeters": 18407.538589785647,
+          "geoBounds": {
+            "maxLatitude": 44.390653931661944,
+            "maxLongitude": -79.68401550485409,
+            "minLongitude": -79.68963409231388,
+            "minLatitude": 44.38716665549626
+          },
+          "coreEndProgressMeters": 18407.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 18657.538589785647
+        },
+        "uniqueVehicleCount": 5,
+        "confidence": "high",
+        "clearWindows": [
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "minCoverageRatio": 0.75,
+            "sourceEndProgressMeters": 18407.538589785647,
+            "startProgressMeters": 18257.538589785647,
+            "sourceStartProgressMeters": 18407.538589785647,
+            "endProgressMeters": 18527.717788659942
+          }
+        ],
+        "detourModel": "event-window",
+        "detectedAt": 1781307048000,
+        "clearedSegments": [],
+        "geometry": {
+          "gpsSupersedesPreviousPath": true,
+          "skippedSegmentPolyline": null,
+          "segments": [
+            {
+              "evidencePointCount": 7,
+              "lastEvidenceAt": 1781325133000,
+              "likelyDetourPolyline": null,
+              "state": "active",
+              "exitPoint": {
+                "latitude": 44.3879930167535,
+                "longitude": -79.6891916341963
+              },
+              "skippedSegmentPolyline": null,
+              "geometryTrustBlockedReason": null,
+              "detourZone": {
+                "startProgressMeters": 18407.538589785647,
+                "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+                "endProgressMeters": 18407.538589785647
+              },
+              "gpsSupersedesPreviousPath": true,
+              "inferredDetourPolyline": null,
+              "startProgressMeters": 18407.538589785647,
+              "staleMixedEvidence": false,
+              "endProgressMeters": 18407.538589785647,
+              "canShowDetourPath": false,
+              "segmentId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:18408-18408",
+              "confidence": "high",
+              "inferredDetourPathStats": {
+                "maxGapMeters": 72.99831079390357,
+                "averageGapMeters": 58.083860220774916
+              },
+              "configuredCorridorLabel": null,
+              "clearWindow": {
+                "endProgressMeters": 18527.717788659942,
+                "sourceStartProgressMeters": 18407.538589785647,
+                "minCoverageRatio": 0.75,
+                "startProgressMeters": 17527.717788659942,
+                "sourceEndProgressMeters": 18407.538589785647,
+                "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+              },
+              "entryPoint": {
+                "longitude": -79.6891916341963,
+                "latitude": 44.3879930167535
+              },
+              "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+            }
+          ],
+          "geometryTrustBlockedReason": null,
+          "entryPoint": {
+            "longitude": -79.6891916341963,
+            "latitude": 44.3879930167535
+          },
+          "configuredCorridorLabel": null,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confidence": "high",
+          "inferredDetourPathStats": {
+            "maxGapMeters": 72.99831079390357,
+            "averageGapMeters": 58.083860220774916
+          },
+          "endProgressMeters": 18407.538589785647,
+          "canShowDetourPath": false,
+          "inferredDetourPolyline": null,
+          "staleMixedEvidence": false,
+          "startProgressMeters": 18407.538589785647,
+          "likelyDetourPolyline": null,
+          "evidencePointCount": 7,
+          "lastEvidenceAt": 1781325133000,
+          "exitPoint": {
+            "longitude": -79.6891916341963,
+            "latitude": 44.3879930167535
+          }
+        },
+        "vehiclesOffRoute": [],
+        "routeId": "10",
+        "staleForReview": true,
+        "geometryLastEvidenceAt": 1781325133000,
+        "state": "active",
+        "detourVersion": "v2",
+        "lastEvidenceAt": 1781325133000,
+        "riderVisibilityReason": "insufficient-geometry",
+        "clearWindow": {
+          "endProgressMeters": 18527.717788659942,
+          "sourceStartProgressMeters": 18407.538589785647,
+          "minCoverageRatio": 0.75,
+          "sourceEndProgressMeters": 18407.538589785647,
+          "startProgressMeters": 18257.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+        },
+        "canShowDetourPath": false,
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+        "triggerVehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+        "currentVehicleCount": 0,
+        "detourZone": {
+          "endProgressMeters": 18407.538589785647,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "startProgressMeters": 18407.538589785647
+        },
+        "vehicleCount": 5,
+        "lastSeenAt": 1781325133000,
+        "latestGpsEvidenceAt": 1781325133000,
+        "riderVisible": false
+      }
+    },
+    "eventCandidates": {
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:10400-11400": {
+        "routeId": "10",
+        "eventWindow": {
+          "coreStartProgressMeters": 10483.486647430342,
+          "clearEndProgressMeters": 11735.322334144625,
+          "clearStartProgressMeters": 10083.486647430342,
+          "confirmStartProgressMeters": 10233.486647430342,
+          "routeId": "10",
+          "geoCenter": {
+            "latitude": 44.41738510131836,
+            "longitude": -79.69408416748047
+          },
+          "frozen": false,
+          "confirmEndProgressMeters": 11585.322334144625,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "geoBounds": {
+            "maxLongitude": -79.6899962387027,
+            "maxLatitude": 44.41846307472835,
+            "minLatitude": 44.41452947898259,
+            "minLongitude": -79.69559336090667
+          },
+          "coreEndProgressMeters": 11335.322334144625
+        },
+        "points": [
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "timestampMs": 1781027812000
+          },
+          {
+            "timestampMs": 1781027822000,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "progressMeters": 10484.965739105099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "progressMeters": 10484.965739105099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "timestampMs": 1781027852000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "latitude": 44.41849358953837,
+              "longitude": -79.69513285805866
+            },
+            "distanceMeters": 148.7600941815618
+          },
+          {
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "latitude": 44.41849358953837,
+              "longitude": -79.69513285805866
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781027882000
+          },
+          {
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "timestampMs": 1781027912000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36"
+          },
+          {
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "timestampMs": 1781027942000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            }
+          },
+          {
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "progressMeters": 10484.965739105099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781027972000,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "timestampMs": 1781028002000
+          },
+          {
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "longitude": -79.69409942626953,
+              "latitude": 44.41737747192383
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10483.486647430342,
+            "timestampMs": 1781028053000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.6951482889917,
+              "latitude": 44.4184861421037
+            },
+            "distanceMeters": 148.78451936750685
+          },
+          {
+            "coordinate": {
+              "longitude": -79.69367218017578,
+              "latitude": 44.4169807434082
+            },
+            "progressMeters": 10486.903230992722,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781028062000,
+            "distanceMeters": 204.3347002863415,
+            "projectedPoint": {
+              "latitude": 44.418503345083586,
+              "longitude": -79.69511264476753
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 385.00707895889997,
+            "projectedPoint": {
+              "latitude": 44.41732374783244,
+              "longitude": -79.68729535008963
+            },
+            "timestampMs": 1781028092000,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "progressMeters": 11335.322334144625,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.41560745239258,
+              "longitude": -79.6915054321289
+            }
+          }
+        ],
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:10400-11400",
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      },
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:200-500": {
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:200-500",
+        "routeId": "10",
+        "eventWindow": {
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 646.144093887135,
+          "coreEndProgressMeters": 396.144093887135,
+          "geoBounds": {
+            "maxLongitude": -79.69011130146374,
+            "maxLatitude": 44.39346536354671,
+            "minLatitude": 44.39130941672673,
+            "minLongitude": -79.69312844463
+          },
+          "coreStartProgressMeters": 396.144093887135,
+          "clearEndProgressMeters": 796.144093887135,
+          "routeId": "10",
+          "clearStartProgressMeters": 0,
+          "confirmStartProgressMeters": 146.144093887135,
+          "geoCenter": {
+            "longitude": -79.69161987304688,
+            "latitude": 44.39238739013672
+          },
+          "frozen": false
+        },
+        "points": [
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 396.144093887135,
+            "coordinate": {
+              "longitude": -79.69161987304688,
+              "latitude": 44.39238739013672
+            },
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "timestampMs": 1781361847000,
+            "distanceMeters": 210.08356028826947,
+            "projectedPoint": {
+              "longitude": -79.6929266250478,
+              "latitude": 44.3907449457397
+            },
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          }
+        ],
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      },
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:8900-9000": {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:8900-9000",
+        "routeId": "10",
+        "eventWindow": {
+          "coreStartProgressMeters": 8990.885236364069,
+          "clearEndProgressMeters": 9397.682283816099,
+          "clearStartProgressMeters": 8590.885236364069,
+          "confirmStartProgressMeters": 8740.885236364069,
+          "routeId": "10",
+          "geoCenter": {
+            "latitude": 44.409366607666016,
+            "longitude": -79.7076187133789
+          },
+          "frozen": false,
+          "confirmEndProgressMeters": 9247.682283816099,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "geoBounds": {
+            "maxLongitude": -79.70029619175017,
+            "maxLatitude": 44.41044458107601,
+            "minLatitude": 44.40158621116032,
+            "minLongitude": -79.70912763637483
+          },
+          "coreEndProgressMeters": 8997.682283816099
+        },
+        "points": [
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.70799507150765,
+              "latitude": 44.409793677687986
+            },
+            "distanceMeters": 56.11445606739912,
+            "timestampMs": 1781031439000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "coordinate": {
+              "longitude": -79.7076187133789,
+              "latitude": 44.409366607666016
+            },
+            "progressMeters": 8997.682283816099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "progressMeters": 8992.638242145622,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.70686340332031,
+              "latitude": 44.408424377441406
+            },
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "timestampMs": 1781031455000,
+            "projectedPoint": {
+              "latitude": 44.40976951128447,
+              "longitude": -79.70804881093511
+            },
+            "distanceMeters": 176.74298603152812,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "timestampMs": 1781031504000,
+            "progressMeters": 8991.676439276886,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.70647430419922,
+              "latitude": 44.40796661376953
+            },
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "projectedPoint": {
+              "latitude": 44.409764903211496,
+              "longitude": -79.70805905802064
+            },
+            "distanceMeters": 236.28533615314674,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "timestampMs": 1781031564000,
+            "progressMeters": 8990.885236364069,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.7042236328125,
+              "latitude": 44.405399322509766
+            },
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "projectedPoint": {
+              "longitude": -79.7080674875271,
+              "latitude": 44.40976111249648
+            },
+            "distanceMeters": 573.1187750979977,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "distanceMeters": 585.93140272511,
+            "projectedPoint": {
+              "longitude": -79.70805423769276,
+              "latitude": 44.40976707089347
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 8992.128880630493,
+            "coordinate": {
+              "longitude": -79.7041244506836,
+              "latitude": 44.40530776977539
+            },
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "timestampMs": 1781031591000
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 608.2197526879697,
+            "projectedPoint": {
+              "latitude": 44.40976503572273,
+              "longitude": -79.70805876335214
+            },
+            "timestampMs": 1781031594000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "progressMeters": 8991.704097191074,
+            "coordinate": {
+              "latitude": 44.40513610839844,
+              "longitude": -79.7039794921875
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 8991.433806692432,
+            "coordinate": {
+              "longitude": -79.7018051147461,
+              "latitude": 44.40266418457031
+            },
+            "timestampMs": 1781031624000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 932.8546128684912,
+            "projectedPoint": {
+              "longitude": -79.70806164303762,
+              "latitude": 44.40976374073979
+            }
+          }
+        ]
+      },
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800": {
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800",
+        "points": [
+          {
+            "progressMeters": 18407.538589785647,
+            "coordinate": {
+              "longitude": -79.68805694580078,
+              "latitude": 44.38824462890625
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "cea41cf3-c3ff-4e47-83fb-825ee2605999",
+            "timestampMs": 1781314436000,
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "distanceMeters": 94.4054978466433,
+            "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8"
+          },
+          {
+            "vehicleId": "e8ecf031-2670-4333-82b5-d2ca3a1ee244",
+            "distanceMeters": 167.11715086641286,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            },
+            "timestampMs": 1781316110000,
+            "signature": "aa4d0099-b268-40cf-9dd1-dbc5ac8e5ff0",
+            "coordinate": {
+              "latitude": 44.388511657714844,
+              "longitude": -79.68721771240234
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "timestampMs": 1781316143000,
+            "coordinate": {
+              "longitude": -79.68801879882812,
+              "latitude": 44.388267517089844
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "aa4d0099-b268-40cf-9dd1-dbc5ac8e5ff0",
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "distanceMeters": 98.06676004919215,
+            "vehicleId": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+          },
+          {
+            "signature": "c988c8c9-7b8b-48f2-895d-4d9b08bbace7",
+            "coordinate": {
+              "longitude": -79.68802642822266,
+              "latitude": 44.38829803466797
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781318032000,
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60",
+            "distanceMeters": 98.60589471125856,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            }
+          },
+          {
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60",
+            "distanceMeters": 111.73378702105214,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            },
+            "signature": "afa0e282-87f1-42d7-9041-9a1e58b8687f",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.6878662109375,
+              "latitude": 44.388328552246094
+            },
+            "progressMeters": 18407.538589785647,
+            "timestampMs": 1781321423000
+          },
+          {
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "distanceMeters": 49.304873898124185,
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60",
+            "coordinate": {
+              "latitude": 44.38808059692383,
+              "longitude": -79.68858337402344
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "afa0e282-87f1-42d7-9041-9a1e58b8687f",
+            "timestampMs": 1781321454000
+          },
+          {
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60",
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "distanceMeters": 89.20905337475622,
+            "timestampMs": 1781325133000,
+            "signature": "88f7cfd1-8504-456a-9c97-f455d628b2e8",
+            "coordinate": {
+              "longitude": -79.68812561035156,
+              "latitude": 44.38824462890625
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18407.538589785647
+          }
+        ],
+        "eventWindow": {
+          "coreStartProgressMeters": 18407.538589785647,
+          "clearEndProgressMeters": 18807.538589785647,
+          "clearStartProgressMeters": 18007.538589785647,
+          "confirmStartProgressMeters": 18157.538589785647,
+          "routeId": "10",
+          "frozen": false,
+          "geoCenter": {
+            "latitude": 44.38957595825195,
+            "longitude": -79.6855239868164
+          },
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 18657.538589785647,
+          "geoBounds": {
+            "minLongitude": -79.68963409231388,
+            "minLatitude": 44.38716665549626,
+            "maxLatitude": 44.390653931661944,
+            "maxLongitude": -79.68401550485409
+          },
+          "coreEndProgressMeters": 18407.538589785647
+        },
+        "routeId": "10",
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      },
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:0-100": {
+        "eventWindow": {
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 280.7641438288563,
+          "geoBounds": {
+            "minLongitude": -79.69264004215243,
+            "minLatitude": 44.38659826560368,
+            "maxLatitude": 44.388769471212726,
+            "maxLongitude": -79.6893255950546
+          },
+          "coreEndProgressMeters": 30.764143828856277,
+          "clearEndProgressMeters": 430.7641438288563,
+          "coreStartProgressMeters": 19.394179104441136,
+          "geoCenter": {
+            "longitude": -79.69083404541016,
+            "latitude": 44.387691497802734
+          },
+          "frozen": false,
+          "clearStartProgressMeters": 0,
+          "confirmStartProgressMeters": 0,
+          "routeId": "10"
+        },
+        "points": [
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 43.75736186419788,
+            "projectedPoint": {
+              "longitude": -79.69036855788548,
+              "latitude": 44.387901743326886
+            },
+            "timestampMs": 1781352362000,
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 19.56627027540438,
+            "coordinate": {
+              "latitude": 44.387691497802734,
+              "longitude": -79.69083404541016
+            }
+          },
+          {
+            "projectedPoint": {
+              "longitude": -79.69037096874497,
+              "latitude": 44.38790446911759
+            },
+            "distanceMeters": 43.53073138614879,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "coordinate": {
+              "longitude": -79.69083404541016,
+              "latitude": 44.3876953125
+            },
+            "progressMeters": 19.924831154218612,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "timestampMs": 1781352392000
+          },
+          {
+            "timestampMs": 1781352452000,
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.3876953125,
+              "longitude": -79.69083404541016
+            },
+            "progressMeters": 19.924831154218612,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 43.53073138614879,
+            "projectedPoint": {
+              "latitude": 44.38790446911759,
+              "longitude": -79.69037096874497
+            }
+          },
+          {
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "coordinate": {
+              "latitude": 44.3876953125,
+              "longitude": -79.69083404541016
+            },
+            "progressMeters": 19.924831154218612,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781352482000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "projectedPoint": {
+              "longitude": -79.69037096874497,
+              "latitude": 44.38790446911759
+            },
+            "distanceMeters": 43.53073138614879
+          },
+          {
+            "distanceMeters": 69.68496289255988,
+            "projectedPoint": {
+              "longitude": -79.6903674007943,
+              "latitude": 44.38790043508458
+            },
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781352541000,
+            "coordinate": {
+              "latitude": 44.38756561279297,
+              "longitude": -79.69110870361328
+            },
+            "progressMeters": 19.394179104441136,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c"
+          },
+          {
+            "timestampMs": 1781352571000,
+            "coordinate": {
+              "latitude": 44.38756561279297,
+              "longitude": -79.69110870361328
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 19.394179104441136,
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "distanceMeters": 69.68496289255988,
+            "projectedPoint": {
+              "latitude": 44.38790043508458,
+              "longitude": -79.6903674007943
+            },
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 64.65004763022657,
+            "projectedPoint": {
+              "latitude": 44.387986869919374,
+              "longitude": -79.69044384915898
+            },
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "progressMeters": 30.764143828856277,
+            "coordinate": {
+              "longitude": -79.69113159179688,
+              "latitude": 44.38767623901367
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781352594000
+          }
+        ],
+        "routeId": "10",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:0-100",
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      },
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:700-1000": {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "eventWindow": {
+          "clearEndProgressMeters": 1372.2508768204736,
+          "coreStartProgressMeters": 766.211233021126,
+          "geoCenter": {
+            "latitude": 44.40054702758789,
+            "longitude": -79.6999740600586
+          },
+          "frozen": false,
+          "confirmStartProgressMeters": 516.211233021126,
+          "clearStartProgressMeters": 366.21123302112596,
+          "routeId": "10",
+          "confirmEndProgressMeters": 1222.2508768204736,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "geoBounds": {
+            "maxLongitude": -79.69559666682561,
+            "maxLatitude": 44.40162500099788,
+            "minLatitude": 44.3962837819611,
+            "minLongitude": -79.70148280094783
+          },
+          "coreEndProgressMeters": 972.2508768204736
+        },
+        "points": [
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.7000917645952,
+              "latitude": 44.3911844712756
+            },
+            "distanceMeters": 1041.1107644305896,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.6999740600586,
+              "latitude": 44.40054702758789
+            },
+            "progressMeters": 972.2508768204736,
+            "timestampMs": 1781031654000
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.69756778094423,
+              "latitude": 44.390878535014814
+            },
+            "distanceMeters": 721.8366744817382,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "coordinate": {
+              "longitude": -79.69710540771484,
+              "latitude": 44.397361755371094
+            },
+            "progressMeters": 766.211233021126,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781031699000
+          }
+        ],
+        "routeId": "10",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:700-1000"
+      }
+    },
+    "candidates": [
+      {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:10400-11400",
+        "points": [
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099,
+            "timestampMs": 1781027812000
+          },
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "progressMeters": 10484.965739105099,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781027822000,
+            "projectedPoint": {
+              "latitude": 44.41849358953837,
+              "longitude": -79.69513285805866
+            },
+            "distanceMeters": 148.7600941815618,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "timestampMs": 1781027852000,
+            "progressMeters": 10484.965739105099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.41738510131836,
+              "longitude": -79.69408416748047
+            },
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36"
+          },
+          {
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "progressMeters": 10484.965739105099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781027882000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "latitude": 44.41849358953837,
+              "longitude": -79.69513285805866
+            }
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 148.7600941815618,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "timestampMs": 1781027912000,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10484.965739105099
+          },
+          {
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781027942000
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "timestampMs": 1781027972000,
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "progressMeters": 10484.965739105099,
+            "coordinate": {
+              "longitude": -79.69408416748047,
+              "latitude": 44.41738510131836
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781028002000,
+            "projectedPoint": {
+              "longitude": -79.69513285805866,
+              "latitude": 44.41849358953837
+            },
+            "distanceMeters": 148.7600941815618,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 148.78451936750685,
+            "projectedPoint": {
+              "longitude": -79.6951482889917,
+              "latitude": 44.4184861421037
+            },
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 10483.486647430342,
+            "coordinate": {
+              "latitude": 44.41737747192383,
+              "longitude": -79.69409942626953
+            },
+            "timestampMs": 1781028053000
+          },
+          {
+            "distanceMeters": 204.3347002863415,
+            "projectedPoint": {
+              "latitude": 44.418503345083586,
+              "longitude": -79.69511264476753
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "progressMeters": 10486.903230992722,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.69367218017578,
+              "latitude": 44.4169807434082
+            },
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "timestampMs": 1781028062000
+          },
+          {
+            "signature": "890e52f6-ccf7-40d6-a6d0-1d09389bba36",
+            "coordinate": {
+              "longitude": -79.6915054321289,
+              "latitude": 44.41560745239258
+            },
+            "progressMeters": 11335.322334144625,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781028092000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 385.00707895889997,
+            "projectedPoint": {
+              "longitude": -79.68729535008963,
+              "latitude": 44.41732374783244
+            }
+          }
+        ],
+        "eventWindow": {
+          "routeId": "10",
+          "clearStartProgressMeters": 10083.486647430342,
+          "confirmStartProgressMeters": 10233.486647430342,
+          "geoCenter": {
+            "latitude": 44.41738510131836,
+            "longitude": -79.69408416748047
+          },
+          "frozen": false,
+          "coreStartProgressMeters": 10483.486647430342,
+          "clearEndProgressMeters": 11735.322334144625,
+          "coreEndProgressMeters": 11335.322334144625,
+          "geoBounds": {
+            "maxLatitude": 44.41846307472835,
+            "maxLongitude": -79.6899962387027,
+            "minLongitude": -79.69559336090667,
+            "minLatitude": 44.41452947898259
+          },
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 11585.322334144625
+        },
+        "routeId": "10"
+      },
+      {
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:8900-9000",
+        "points": [
+          {
+            "distanceMeters": 56.11445606739912,
+            "projectedPoint": {
+              "longitude": -79.70799507150765,
+              "latitude": 44.409793677687986
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "timestampMs": 1781031439000,
+            "coordinate": {
+              "latitude": 44.409366607666016,
+              "longitude": -79.7076187133789
+            },
+            "progressMeters": 8997.682283816099,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e"
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "latitude": 44.40976951128447,
+              "longitude": -79.70804881093511
+            },
+            "distanceMeters": 176.74298603152812,
+            "timestampMs": 1781031455000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "progressMeters": 8992.638242145622,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.408424377441406,
+              "longitude": -79.70686340332031
+            }
+          },
+          {
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.70647430419922,
+              "latitude": 44.40796661376953
+            },
+            "progressMeters": 8991.676439276886,
+            "timestampMs": 1781031504000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 236.28533615314674,
+            "projectedPoint": {
+              "longitude": -79.70805905802064,
+              "latitude": 44.409764903211496
+            }
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 573.1187750979977,
+            "projectedPoint": {
+              "longitude": -79.7080674875271,
+              "latitude": 44.40976111249648
+            },
+            "timestampMs": 1781031564000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 8990.885236364069,
+            "coordinate": {
+              "longitude": -79.7042236328125,
+              "latitude": 44.405399322509766
+            }
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "distanceMeters": 585.93140272511,
+            "projectedPoint": {
+              "latitude": 44.40976707089347,
+              "longitude": -79.70805423769276
+            },
+            "timestampMs": 1781031591000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.40530776977539,
+              "longitude": -79.7041244506836
+            },
+            "progressMeters": 8992.128880630493
+          },
+          {
+            "timestampMs": 1781031594000,
+            "progressMeters": 8991.704097191074,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.40513610839844,
+              "longitude": -79.7039794921875
+            },
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "distanceMeters": 608.2197526879697,
+            "projectedPoint": {
+              "latitude": 44.40976503572273,
+              "longitude": -79.70805876335214
+            },
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "progressMeters": 8991.433806692432,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.40266418457031,
+              "longitude": -79.7018051147461
+            },
+            "timestampMs": 1781031624000,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "longitude": -79.70806164303762,
+              "latitude": 44.40976374073979
+            },
+            "distanceMeters": 932.8546128684912
+          }
+        ],
+        "eventWindow": {
+          "coreEndProgressMeters": 8997.682283816099,
+          "geoBounds": {
+            "maxLatitude": 44.41044458107601,
+            "maxLongitude": -79.70029619175017,
+            "minLongitude": -79.70912763637483,
+            "minLatitude": 44.40158621116032
+          },
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 9247.682283816099,
+          "routeId": "10",
+          "clearStartProgressMeters": 8590.885236364069,
+          "confirmStartProgressMeters": 8740.885236364069,
+          "geoCenter": {
+            "latitude": 44.409366607666016,
+            "longitude": -79.7076187133789
+          },
+          "frozen": false,
+          "coreStartProgressMeters": 8990.885236364069,
+          "clearEndProgressMeters": 9397.682283816099
+        },
+        "routeId": "10",
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      },
+      {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:700-1000",
+        "points": [
+          {
+            "timestampMs": 1781031654000,
+            "coordinate": {
+              "latitude": 44.40054702758789,
+              "longitude": -79.6999740600586
+            },
+            "progressMeters": 972.2508768204736,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "projectedPoint": {
+              "latitude": 44.3911844712756,
+              "longitude": -79.7000917645952
+            },
+            "distanceMeters": 1041.1107644305896,
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b"
+          },
+          {
+            "vehicleId": "1a09ebe3-0086-4b86-adcd-eaf8485ce10b",
+            "projectedPoint": {
+              "latitude": 44.390878535014814,
+              "longitude": -79.69756778094423
+            },
+            "distanceMeters": 721.8366744817382,
+            "timestampMs": 1781031699000,
+            "signature": "e75c42c7-cf6f-4731-9ae4-17baa441296e",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 766.211233021126,
+            "coordinate": {
+              "latitude": 44.397361755371094,
+              "longitude": -79.69710540771484
+            }
+          }
+        ],
+        "eventWindow": {
+          "clearStartProgressMeters": 366.21123302112596,
+          "confirmStartProgressMeters": 516.211233021126,
+          "routeId": "10",
+          "frozen": false,
+          "geoCenter": {
+            "longitude": -79.6999740600586,
+            "latitude": 44.40054702758789
+          },
+          "coreStartProgressMeters": 766.211233021126,
+          "clearEndProgressMeters": 1372.2508768204736,
+          "geoBounds": {
+            "maxLatitude": 44.40162500099788,
+            "maxLongitude": -79.69559666682561,
+            "minLongitude": -79.70148280094783,
+            "minLatitude": 44.3962837819611
+          },
+          "coreEndProgressMeters": 972.2508768204736,
+          "confirmEndProgressMeters": 1222.2508768204736,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+        },
+        "routeId": "10"
+      },
+      {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "points": [
+          {
+            "vehicleId": "a38dea84-c086-4a0c-acf4-298bd24935b8",
+            "distanceMeters": 94.4054978466433,
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "signature": "cea41cf3-c3ff-4e47-83fb-825ee2605999",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18407.538589785647,
+            "coordinate": {
+              "latitude": 44.38824462890625,
+              "longitude": -79.68805694580078
+            },
+            "timestampMs": 1781314436000
+          },
+          {
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.68721771240234,
+              "latitude": 44.388511657714844
+            },
+            "signature": "aa4d0099-b268-40cf-9dd1-dbc5ac8e5ff0",
+            "timestampMs": 1781316110000,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            },
+            "distanceMeters": 167.11715086641286,
+            "vehicleId": "e8ecf031-2670-4333-82b5-d2ca3a1ee244"
+          },
+          {
+            "signature": "aa4d0099-b268-40cf-9dd1-dbc5ac8e5ff0",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18407.538589785647,
+            "coordinate": {
+              "latitude": 44.388267517089844,
+              "longitude": -79.68801879882812
+            },
+            "timestampMs": 1781316143000,
+            "vehicleId": "e8ecf031-2670-4333-82b5-d2ca3a1ee244",
+            "distanceMeters": 98.06676004919215,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            }
+          },
+          {
+            "coordinate": {
+              "latitude": 44.38829803466797,
+              "longitude": -79.68802642822266
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "c988c8c9-7b8b-48f2-895d-4d9b08bbace7",
+            "timestampMs": 1781318032000,
+            "distanceMeters": 98.60589471125856,
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60"
+          },
+          {
+            "distanceMeters": 111.73378702105214,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            },
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60",
+            "timestampMs": 1781321423000,
+            "coordinate": {
+              "latitude": 44.388328552246094,
+              "longitude": -79.6878662109375
+            },
+            "progressMeters": 18407.538589785647,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "afa0e282-87f1-42d7-9041-9a1e58b8687f"
+          },
+          {
+            "timestampMs": 1781321454000,
+            "progressMeters": 18407.538589785647,
+            "coordinate": {
+              "longitude": -79.68858337402344,
+              "latitude": 44.38808059692383
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "afa0e282-87f1-42d7-9041-9a1e58b8687f",
+            "distanceMeters": 49.304873898124185,
+            "projectedPoint": {
+              "longitude": -79.6891916341963,
+              "latitude": 44.3879930167535
+            },
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60"
+          },
+          {
+            "timestampMs": 1781325133000,
+            "coordinate": {
+              "latitude": 44.38824462890625,
+              "longitude": -79.68812561035156
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18407.538589785647,
+            "signature": "88f7cfd1-8504-456a-9c97-f455d628b2e8",
+            "projectedPoint": {
+              "latitude": 44.3879930167535,
+              "longitude": -79.6891916341963
+            },
+            "distanceMeters": 89.20905337475622,
+            "vehicleId": "2cb6aa70-ece7-4d62-9d60-dbf2bbe93f60"
+          }
+        ],
+        "eventWindow": {
+          "clearEndProgressMeters": 18807.538589785647,
+          "coreStartProgressMeters": 18407.538589785647,
+          "frozen": false,
+          "geoCenter": {
+            "latitude": 44.38957595825195,
+            "longitude": -79.6855239868164
+          },
+          "clearStartProgressMeters": 18007.538589785647,
+          "confirmStartProgressMeters": 18157.538589785647,
+          "routeId": "10",
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 18657.538589785647,
+          "geoBounds": {
+            "maxLatitude": 44.390653931661944,
+            "maxLongitude": -79.68401550485409,
+            "minLongitude": -79.68963409231388,
+            "minLatitude": 44.38716665549626
+          },
+          "coreEndProgressMeters": 18407.538589785647
+        },
+        "routeId": "10",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800"
+      },
+      {
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+        "eventWindow": {
+          "confirmEndProgressMeters": 280.7641438288563,
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "coreEndProgressMeters": 30.764143828856277,
+          "geoBounds": {
+            "maxLatitude": 44.388769471212726,
+            "maxLongitude": -79.6893255950546,
+            "minLongitude": -79.69264004215243,
+            "minLatitude": 44.38659826560368
+          },
+          "clearEndProgressMeters": 430.7641438288563,
+          "coreStartProgressMeters": 19.394179104441136,
+          "geoCenter": {
+            "latitude": 44.387691497802734,
+            "longitude": -79.69083404541016
+          },
+          "frozen": false,
+          "routeId": "10",
+          "confirmStartProgressMeters": 0,
+          "clearStartProgressMeters": 0
+        },
+        "points": [
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 43.75736186419788,
+            "projectedPoint": {
+              "longitude": -79.69036855788548,
+              "latitude": 44.387901743326886
+            },
+            "timestampMs": 1781352362000,
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "progressMeters": 19.56627027540438,
+            "coordinate": {
+              "latitude": 44.387691497802734,
+              "longitude": -79.69083404541016
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "coordinate": {
+              "longitude": -79.69083404541016,
+              "latitude": 44.3876953125
+            },
+            "progressMeters": 19.924831154218612,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781352392000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 43.53073138614879,
+            "projectedPoint": {
+              "latitude": 44.38790446911759,
+              "longitude": -79.69037096874497
+            }
+          },
+          {
+            "projectedPoint": {
+              "latitude": 44.38790446911759,
+              "longitude": -79.69037096874497
+            },
+            "distanceMeters": 43.53073138614879,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781352452000,
+            "coordinate": {
+              "latitude": 44.3876953125,
+              "longitude": -79.69083404541016
+            },
+            "progressMeters": 19.924831154218612,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c"
+          },
+          {
+            "progressMeters": 19.924831154218612,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "longitude": -79.69083404541016,
+              "latitude": 44.3876953125
+            },
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "timestampMs": 1781352482000,
+            "projectedPoint": {
+              "longitude": -79.69037096874497,
+              "latitude": 44.38790446911759
+            },
+            "distanceMeters": 43.53073138614879,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "projectedPoint": {
+              "latitude": 44.38790043508458,
+              "longitude": -79.6903674007943
+            },
+            "distanceMeters": 69.68496289255988,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781352541000,
+            "coordinate": {
+              "latitude": 44.38756561279297,
+              "longitude": -79.69110870361328
+            },
+            "progressMeters": 19.394179104441136,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c"
+          },
+          {
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "progressMeters": 19.394179104441136,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "coordinate": {
+              "latitude": 44.38756561279297,
+              "longitude": -79.69110870361328
+            },
+            "timestampMs": 1781352571000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "distanceMeters": 69.68496289255988,
+            "projectedPoint": {
+              "longitude": -79.6903674007943,
+              "latitude": 44.38790043508458
+            }
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "projectedPoint": {
+              "longitude": -79.69044384915898,
+              "latitude": 44.387986869919374
+            },
+            "distanceMeters": 64.65004763022657,
+            "signature": "9f6e2f80-65fd-486c-9620-489eebebdb1c",
+            "coordinate": {
+              "latitude": 44.38767623901367,
+              "longitude": -79.69113159179688
+            },
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 30.764143828856277,
+            "timestampMs": 1781352594000
+          }
+        ],
+        "routeId": "10",
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:0-100"
+      },
+      {
+        "eventWindow": {
+          "coreEndProgressMeters": 396.144093887135,
+          "geoBounds": {
+            "maxLongitude": -79.69011130146374,
+            "maxLatitude": 44.39346536354671,
+            "minLatitude": 44.39130941672673,
+            "minLongitude": -79.69312844463
+          },
+          "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+          "confirmEndProgressMeters": 646.144093887135,
+          "frozen": false,
+          "geoCenter": {
+            "longitude": -79.69161987304688,
+            "latitude": 44.39238739013672
+          },
+          "routeId": "10",
+          "clearStartProgressMeters": 0,
+          "confirmStartProgressMeters": 146.144093887135,
+          "clearEndProgressMeters": 796.144093887135,
+          "coreStartProgressMeters": 396.144093887135
+        },
+        "routeId": "10",
+        "points": [
+          {
+            "coordinate": {
+              "latitude": 44.39238739013672,
+              "longitude": -79.69161987304688
+            },
+            "progressMeters": 396.144093887135,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "timestampMs": 1781361847000,
+            "projectedPoint": {
+              "latitude": 44.3907449457397,
+              "longitude": -79.6929266250478
+            },
+            "distanceMeters": 210.08356028826947,
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          }
+        ],
+        "eventId": "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:200-500",
+        "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+      }
+    ],
+    "clearTracks": {
+      "10": {
+        "af755ec3-05a6-435d-ac79-eb4b629333a8": [
+          {
+            "timestampMs": 1781359232000,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 17860.413963198887,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781359259000,
+            "progressMeters": 17861.489241241434,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781359292000,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 17992.25912260272
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18018.84508023021,
+            "timestampMs": 1781359320000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781359350000,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18103.475024582294,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18177.714586756254,
+            "timestampMs": 1781359381000
+          },
+          {
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18368.591152429253,
+            "timestampMs": 1781359410000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18448.095094358585,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "timestampMs": 1781359440000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          }
+        ],
+        "34106381-a160-4b70-b209-f24680c07cf3": [
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781363098000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18522.32727821785,
+            "signature": "34106381-a160-4b70-b209-f24680c07cf3"
+          }
+        ],
+        "d352316e-5386-479a-a905-fb11c6f6a069": [
+          {
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18108.558661717918,
+            "timestampMs": 1781361901000,
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781361932000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18146.714198234153,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781361963000,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "progressMeters": 18146.714198234153,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "timestampMs": 1781361993000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18155.962942026934,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781362053000,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18232.810970161052
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781362113000,
+            "progressMeters": 18308.576775052657,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069"
+          }
+        ],
+        "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50": [
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781362147000,
+            "progressMeters": 18520.223485388637,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50"
+          },
+          {
+            "timestampMs": 1781362173000,
+            "signature": "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.96917834295,
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          }
+        ],
+        "95bd9f2c-6516-472b-baff-7dfce5b95ff3": [
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781359500000
+          },
+          {
+            "timestampMs": 1781359530000,
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "timestampMs": 1781359620000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "timestampMs": 1781359740000,
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "timestampMs": 1781359770000
+          },
+          {
+            "timestampMs": 1781359800000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781359830000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781362804000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 17867.86743463608
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781362834000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 17916.96929532235,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3"
+          },
+          {
+            "timestampMs": 1781362852000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "progressMeters": 18025.90311892557,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "progressMeters": 18096.46200990666,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781362888000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18128.20743248089,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781362913000
+          },
+          {
+            "timestampMs": 1781362941000,
+            "progressMeters": 18210.915106664754,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18210.915106664754,
+            "timestampMs": 1781362985000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781363041000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18271.281341590977
+          }
+        ]
+      }
+    },
+    "clearTracksByEvent": {
+      "10:fa1e05c5-3591-4d1c-8123-f3427bb2b7a9:17600-17800": {
+        "d352316e-5386-479a-a905-fb11c6f6a069": [
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781361901000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18108.558661717918,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069"
+          },
+          {
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "progressMeters": 18146.714198234153,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781361932000,
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "timestampMs": 1781361963000,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "progressMeters": 18146.714198234153,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "progressMeters": 18155.962942026934,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781361993000
+          },
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18232.810970161052,
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "timestampMs": 1781362053000,
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          },
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "signature": "d352316e-5386-479a-a905-fb11c6f6a069",
+            "progressMeters": 18308.576775052657,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781362113000
+          }
+        ],
+        "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50": [
+          {
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01",
+            "progressMeters": 18520.223485388637,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50",
+            "timestampMs": 1781362147000
+          },
+          {
+            "timestampMs": 1781362173000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.96917834295,
+            "signature": "c33e6271-4e10-4eea-80b2-b7a5f9aaaa50",
+            "vehicleId": "880bbc47-382f-46f1-9133-b31d26a5ac01"
+          }
+        ],
+        "95bd9f2c-6516-472b-baff-7dfce5b95ff3": [
+          {
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781359500000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "timestampMs": 1781359530000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "timestampMs": 1781359620000
+          },
+          {
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781359740000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359770000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "progressMeters": 18526.597071242515,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781359800000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781359830000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18526.597071242515,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "progressMeters": 17867.86743463608,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781362804000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "progressMeters": 17916.96929532235,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781362834000
+          },
+          {
+            "timestampMs": 1781362852000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18025.90311892557,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781362888000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18096.46200990666,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3"
+          },
+          {
+            "progressMeters": 18128.20743248089,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "timestampMs": 1781362913000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "timestampMs": 1781362941000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18210.915106664754,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "timestampMs": 1781362985000,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3",
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18210.915106664754,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781363041000,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "progressMeters": 18271.281341590977,
+            "signature": "95bd9f2c-6516-472b-baff-7dfce5b95ff3"
+          }
+        ],
+        "af755ec3-05a6-435d-ac79-eb4b629333a8": [
+          {
+            "progressMeters": 17860.413963198887,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "timestampMs": 1781359232000,
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 17861.489241241434,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359259000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "timestampMs": 1781359292000,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 17992.25912260272,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+          },
+          {
+            "timestampMs": 1781359320000,
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18018.84508023021,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18103.475024582294,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359350000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18177.714586756254,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359381000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18368.591152429253,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359410000
+          },
+          {
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091",
+            "signature": "af755ec3-05a6-435d-ac79-eb4b629333a8",
+            "progressMeters": 18448.095094358585,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "timestampMs": 1781359440000
+          }
+        ],
+        "34106381-a160-4b70-b209-f24680c07cf3": [
+          {
+            "timestampMs": 1781363098000,
+            "progressMeters": 18522.32727821785,
+            "shapeId": "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9",
+            "signature": "34106381-a160-4b70-b209-f24680c07cf3",
+            "vehicleId": "947a5ce5-20bd-45b8-bf32-7e482d159091"
+          }
+        ]
+      }
+    }
+  },
+  "baselineRoute10": {
+    "shapeIds": [
+      "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9"
+    ],
+    "shapes": {
+      "fa1e05c5-3591-4d1c-8123-f3427bb2b7a9": [
+        {
+          "lat": 44.387753,
+          "seq": 0,
+          "lon": -79.690237
+        },
+        {
+          "lon": -79.6918710702807,
+          "lat": 44.389600529314,
+          "seq": 1
+        },
+        {
+          "lon": -79.69250726,
+          "seq": 2,
+          "lat": 44.39039984
+        },
+        {
+          "lon": -79.6928133208833,
+          "seq": 3,
+          "lat": 44.3906639801493
+        },
+        {
+          "lon": -79.6929266250478,
+          "seq": 4,
+          "lat": 44.3907449457397
+        },
+        {
+          "seq": 5,
+          "lat": 44.3907950672394,
+          "lon": -79.6930938835764
+        },
+        {
+          "lon": -79.6962286321284,
+          "seq": 6,
+          "lat": 44.3908297667142
+        },
+        {
+          "lat": 44.39089524,
+          "seq": 7,
+          "lon": -79.69802649
+        },
+        {
+          "lat": 44.3908798881413,
+          "seq": 8,
+          "lon": -79.6986619739476
+        },
+        {
+          "lon": -79.6991529586605,
+          "lat": 44.3909377205039,
+          "seq": 9
+        },
+        {
+          "lat": 44.3911343501093,
+          "seq": 10,
+          "lon": -79.6998975288846
+        },
+        {
+          "lat": 44.3911844712756,
+          "seq": 11,
+          "lon": -79.7000917645952
+        },
+        {
+          "lon": -79.7002806048694,
+          "seq": 12,
+          "lat": 44.3911574829606
+        },
+        {
+          "seq": 13,
+          "lat": 44.3908683216619,
+          "lon": -79.7006636808543
+        },
+        {
+          "lon": -79.7013704830234,
+          "lat": 44.3905290372498,
+          "seq": 14
+        },
+        {
+          "seq": 15,
+          "lat": 44.3894948472056,
+          "lon": -79.703612145914
+        },
+        {
+          "lon": -79.7050393797796,
+          "lat": 44.3887978850281,
+          "seq": 16
+        },
+        {
+          "seq": 17,
+          "lat": 44.3881925480043,
+          "lon": -79.706107676188
+        },
+        {
+          "lon": -79.7062101894798,
+          "lat": 44.3880961561807,
+          "seq": 18
+        },
+        {
+          "seq": 19,
+          "lat": 44.3878995163682,
+          "lon": -79.7063558662627
+        },
+        {
+          "lon": -79.70698462,
+          "seq": 20,
+          "lat": 44.38667327
+        },
+        {
+          "lon": -79.7070421950121,
+          "lat": 44.3864477948431,
+          "seq": 21
+        },
+        {
+          "lon": -79.7069925277589,
+          "seq": 22,
+          "lat": 44.386118160911
+        },
+        {
+          "seq": 23,
+          "lat": 44.3858983795329,
+          "lon": -79.7068576418488
+        },
+        {
+          "lon": -79.7065824745921,
+          "lat": 44.3856670298224,
+          "seq": 24
+        },
+        {
+          "lat": 44.3854819493956,
+          "seq": 25,
+          "lon": -79.7062587484077
+        },
+        {
+          "lat": 44.3853122918237,
+          "seq": 26,
+          "lon": -79.7060914898791
+        },
+        {
+          "seq": 27,
+          "lat": 44.3851619131103,
+          "lon": -79.7060537218243
+        },
+        {
+          "lon": -79.7060645126971,
+          "seq": 28,
+          "lat": 44.3850269575257
+        },
+        {
+          "lat": 44.3849267046044,
+          "seq": 29,
+          "lon": -79.7061022807519
+        },
+        {
+          "seq": 30,
+          "lat": 44.3847763249004,
+          "lon": -79.706183212298
+        },
+        {
+          "lon": -79.706328889081,
+          "lat": 44.3846606479422,
+          "seq": 31
+        },
+        {
+          "seq": 32,
+          "lat": 44.384555,
+          "lon": -79.706561
+        },
+        {
+          "lat": 44.384568106211,
+          "seq": 33,
+          "lon": -79.7068252692304
+        },
+        {
+          "lat": 44.3869702879258,
+          "seq": 34,
+          "lon": -79.7089942346656
+        },
+        {
+          "lon": -79.7091830749398,
+          "seq": 35,
+          "lat": 44.3870165569108
+        },
+        {
+          "lat": 44.3869857109248,
+          "seq": 36,
+          "lon": -79.7093341471592
+        },
+        {
+          "lon": -79.7094952886996,
+          "seq": 37,
+          "lat": 44.3868188194525
+        },
+        {
+          "lat": 44.3861567189624,
+          "seq": 38,
+          "lon": -79.7095014056878
+        },
+        {
+          "lat": 44.3860449005433,
+          "seq": 39,
+          "lon": -79.7095607554882
+        },
+        {
+          "lat": 44.3859253702729,
+          "seq": 40,
+          "lon": -79.7096524779071
+        },
+        {
+          "lat": 44.38493693,
+          "seq": 41,
+          "lon": -79.71186572
+        },
+        {
+          "seq": 42,
+          "lat": 44.38339257,
+          "lon": -79.71534062
+        },
+        {
+          "seq": 43,
+          "lat": 44.3832018603803,
+          "lon": -79.715932590719
+        },
+        {
+          "lat": 44.3828174975716,
+          "seq": 44,
+          "lon": -79.7183715031394
+        },
+        {
+          "lat": 44.3828560577971,
+          "seq": 45,
+          "lon": -79.718484807304
+        },
+        {
+          "lon": -79.7185927160321,
+          "seq": 46,
+          "lat": 44.3830758505974
+        },
+        {
+          "lon": -79.7187491836878,
+          "lat": 44.3832223786726,
+          "seq": 47
+        },
+        {
+          "lat": 44.3833573384173,
+          "seq": 48,
+          "lon": -79.7190351418174
+        },
+        {
+          "lat": 44.38342827,
+          "seq": 49,
+          "lon": -79.71933538
+        },
+        {
+          "lon": -79.7201250199714,
+          "seq": 50,
+          "lat": 44.3834421700976
+        },
+        {
+          "seq": 51,
+          "lat": 44.3834513058335,
+          "lon": -79.7203180027198
+        },
+        {
+          "seq": 52,
+          "lat": 44.3834928800758,
+          "lon": -79.7206277978794
+        },
+        {
+          "lon": -79.7209774989236,
+          "seq": 53,
+          "lat": 44.3836272569734
+        },
+        {
+          "lat": 44.3838277670952,
+          "seq": 54,
+          "lon": -79.7212580616167
+        },
+        {
+          "seq": 55,
+          "lat": 44.3840899716028,
+          "lon": -79.7215440197462
+        },
+        {
+          "lon": -79.7216519284744,
+          "lat": 44.3842480649296,
+          "seq": 56
+        },
+        {
+          "lon": -79.7217220691476,
+          "seq": 57,
+          "lat": 44.3844755643335
+        },
+        {
+          "seq": 58,
+          "lat": 44.3847377659396,
+          "lon": -79.7218030006937
+        },
+        {
+          "seq": 59,
+          "lat": 44.3849267046043,
+          "lon": -79.721819187003
+        },
+        {
+          "lon": -79.7217922098209,
+          "seq": 60,
+          "lat": 44.3851156426591
+        },
+        {
+          "lon": -79.7217220691476,
+          "lat": 44.385308435964,
+          "seq": 61
+        },
+        {
+          "lon": -79.7215709969283,
+          "seq": 62,
+          "lat": 44.3854935169393
+        },
+        {
+          "lon": -79.7212418753075,
+          "lat": 44.3859330819104,
+          "seq": 63
+        },
+        {
+          "lon": -79.72106688,
+          "lat": 44.38611843,
+          "seq": 64
+        },
+        {
+          "lon": -79.7205620503203,
+          "lat": 44.3867389424515,
+          "seq": 65
+        },
+        {
+          "seq": 66,
+          "lat": 44.3869432976674,
+          "lon": -79.7203354419912
+        },
+        {
+          "lon": -79.7200171112433,
+          "lat": 44.3871476521699,
+          "seq": 67
+        },
+        {
+          "lon": -79.7196124535128,
+          "seq": 68,
+          "lat": 44.3873674288575
+        },
+        {
+          "lon": -79.71917122,
+          "lat": 44.38753486,
+          "seq": 69
+        },
+        {
+          "lon": -79.7190459326903,
+          "seq": 70,
+          "lat": 44.3876604631573
+        },
+        {
+          "seq": 71,
+          "lat": 44.3877722784902,
+          "lon": -79.7190675144359
+        },
+        {
+          "lon": -79.7196259927527,
+          "seq": 72,
+          "lat": 44.3884214394344
+        },
+        {
+          "lon": -79.7200900149399,
+          "lat": 44.3889565401647,
+          "seq": 73
+        },
+        {
+          "lon": -79.72088082,
+          "seq": 74,
+          "lat": 44.38991961
+        },
+        {
+          "lat": 44.3910205001247,
+          "seq": 75,
+          "lon": -79.7220547331604
+        },
+        {
+          "seq": 76,
+          "lat": 44.3916736180588,
+          "lon": -79.7224463356999
+        },
+        {
+          "lat": 44.391839897961,
+          "seq": 77,
+          "lon": -79.7225259891724
+        },
+        {
+          "seq": 78,
+          "lat": 44.3922292950455,
+          "lon": -79.722601525282
+        },
+        {
+          "lon": -79.7226158,
+          "lat": 44.39255316,
+          "seq": 79
+        },
+        {
+          "lat": 44.3944229787225,
+          "seq": 80,
+          "lon": -79.7227148294466
+        },
+        {
+          "lon": -79.7227633074942,
+          "seq": 81,
+          "lat": 44.3947344814514
+        },
+        {
+          "lon": -79.7228550299131,
+          "lat": 44.3951007279926,
+          "seq": 82
+        },
+        {
+          "lat": 44.3954284203234,
+          "seq": 83,
+          "lon": -79.7229899158232
+        },
+        {
+          "lon": -79.7231571743518,
+          "lat": 44.3956712969846,
+          "seq": 84
+        },
+        {
+          "lon": -79.72350518,
+          "seq": 85,
+          "lat": 44.39616283
+        },
+        {
+          "lat": 44.3965232849206,
+          "seq": 86,
+          "lon": -79.7238747673938
+        },
+        {
+          "lon": -79.7240905848501,
+          "lat": 44.3965926770568,
+          "seq": 87
+        },
+        {
+          "seq": 88,
+          "lat": 44.3965734014717,
+          "lon": -79.7243010068699
+        },
+        {
+          "lat": 44.3964153414339,
+          "seq": 89,
+          "lon": -79.7246678965455
+        },
+        {
+          "lon": -79.7250024136027,
+          "seq": 90,
+          "lat": 44.3962996874773
+        },
+        {
+          "lat": 44.3962457155526,
+          "seq": 91,
+          "lon": -79.7253693032783
+        },
+        {
+          "lon": -79.7256498659714,
+          "seq": 92,
+          "lat": 44.3962264398532
+        },
+        {
+          "lon": -79.725985510706,
+          "seq": 93,
+          "lat": 44.3962293503421
+        },
+        {
+          "lon": -79.72676632,
+          "seq": 94,
+          "lat": 44.39635486
+        },
+        {
+          "lon": -79.7273802594769,
+          "seq": 95,
+          "lat": 44.3967000780523
+        },
+        {
+          "lat": 44.3969508646101,
+          "seq": 96,
+          "lon": -79.7277222411467
+        },
+        {
+          "lon": -79.7280400442993,
+          "seq": 97,
+          "lat": 44.3972056373532
+        },
+        {
+          "seq": 98,
+          "lat": 44.3973174344507,
+          "lon": -79.7282828389376
+        },
+        {
+          "lon": -79.729385210835,
+          "lat": 44.397494011968,
+          "seq": 99
+        },
+        {
+          "seq": 100,
+          "lat": 44.3975448830588,
+          "lon": -79.7297827702585
+        },
+        {
+          "lon": -79.73016723,
+          "seq": 101,
+          "lat": 44.39752466
+        },
+        {
+          "seq": 102,
+          "lat": 44.3974138110874,
+          "lon": -79.7305705039739
+        },
+        {
+          "lon": -79.73277125,
+          "lat": 44.39649,
+          "seq": 103
+        },
+        {
+          "lon": -79.7334581454669,
+          "seq": 104,
+          "lat": 44.396203869355
+        },
+        {
+          "lon": -79.7338054915551,
+          "seq": 105,
+          "lat": 44.3960925576742
+        },
+        {
+          "lat": 44.3960657355825,
+          "seq": 106,
+          "lon": -79.73404957259
+        },
+        {
+          "lon": -79.7343352278671,
+          "lat": 44.3960871932558,
+          "seq": 107
+        },
+        {
+          "lat": 44.3961448607531,
+          "seq": 108,
+          "lon": -79.7345122536726
+        },
+        {
+          "lat": 44.3962385794028,
+          "seq": 109,
+          "lon": -79.7347590576957
+        },
+        {
+          "lat": 44.3964786000092,
+          "seq": 110,
+          "lon": -79.7350141667598
+        },
+        {
+          "lon": -79.7354055452619,
+          "lat": 44.3969642990734,
+          "seq": 111
+        },
+        {
+          "lat": 44.3970621197016,
+          "seq": 112,
+          "lon": -79.7354807745592
+        },
+        {
+          "lat": 44.3971873317756,
+          "seq": 113,
+          "lon": -79.7354748668057
+        },
+        {
+          "lat": 44.3979298709589,
+          "seq": 114,
+          "lon": -79.733688815456
+        },
+        {
+          "seq": 115,
+          "lat": 44.39850887,
+          "lon": -79.73220591
+        },
+        {
+          "lon": -79.7297182546338,
+          "lat": 44.3995290124495,
+          "seq": 116
+        },
+        {
+          "lat": 44.3996989387472,
+          "seq": 117,
+          "lon": -79.7294163040388
+        },
+        {
+          "lat": 44.3998184408891,
+          "seq": 118,
+          "lon": -79.7293299770565
+        },
+        {
+          "lon": -79.7291735094007,
+          "seq": 119,
+          "lat": 44.4000073308738
+        },
+        {
+          "lon": -79.7291249504731,
+          "seq": 120,
+          "lat": 44.4001576714462
+        },
+        {
+          "lat": 44.4008014331181,
+          "seq": 121,
+          "lon": -79.7290763915454
+        },
+        {
+          "lon": -79.72902032,
+          "lat": 44.40124971,
+          "seq": 122
+        },
+        {
+          "lat": 44.4017420062987,
+          "seq": 123,
+          "lon": -79.7290278326178
+        },
+        {
+          "lon": -79.7289415056353,
+          "seq": 124,
+          "lat": 44.4020041305564
+        },
+        {
+          "seq": 125,
+          "lat": 44.4022084324723,
+          "lon": -79.7288174105979
+        },
+        {
+          "lon": -79.7285044752864,
+          "lat": 44.4024589904517,
+          "seq": 126
+        },
+        {
+          "lon": -79.7281375856109,
+          "seq": 127,
+          "lat": 44.4026632907792
+        },
+        {
+          "lon": -79.7277599050624,
+          "lat": 44.4028406074662,
+          "seq": 128
+        },
+        {
+          "lon": -79.7273660382048,
+          "lat": 44.4029369750054,
+          "seq": 129
+        },
+        {
+          "seq": 130,
+          "lat": 44.4029716672807,
+          "lon": -79.7268696580554
+        },
+        {
+          "lon": -79.72606062,
+          "lat": 44.40302252,
+          "seq": 131
+        },
+        {
+          "lat": 44.4031875298647,
+          "seq": 132,
+          "lon": -79.725402099353
+        },
+        {
+          "seq": 133,
+          "lat": 44.40378993,
+          "lon": -79.72389526
+        },
+        {
+          "lon": -79.71952208,
+          "lat": 44.40570289,
+          "seq": 134
+        },
+        {
+          "lat": 44.407265641151,
+          "seq": 135,
+          "lon": -79.7161597167895
+        },
+        {
+          "lon": -79.7157955248321,
+          "lat": 44.407362001401,
+          "seq": 136
+        },
+        {
+          "lat": 44.4074467982896,
+          "seq": 137,
+          "lon": -79.7155122644208
+        },
+        {
+          "lon": -79.7153072378374,
+          "lat": 44.4074699246924,
+          "seq": 138
+        },
+        {
+          "lon": -79.7147029489599,
+          "lat": 44.4074467982896,
+          "seq": 139
+        },
+        {
+          "lat": 44.407473779092,
+          "seq": 140,
+          "lon": -79.714292895793
+        },
+        {
+          "lat": 44.4075470126358,
+          "seq": 141,
+          "lon": -79.7139853559179
+        },
+        {
+          "seq": 142,
+          "lat": 44.4077050426022,
+          "lon": -79.7135806981874
+        },
+        {
+          "lat": 44.40809146,
+          "seq": 143,
+          "lon": -79.71265922
+        },
+        {
+          "seq": 144,
+          "lat": 44.4084173088322,
+          "lon": -79.7120299763697
+        },
+        {
+          "lon": -79.711320532043,
+          "seq": 145,
+          "lat": 44.4087029641094
+        },
+        {
+          "lon": -79.7110718202586,
+          "lat": 44.4087495713987,
+          "seq": 146
+        },
+        {
+          "lat": 44.4088343662758,
+          "seq": 147,
+          "lon": -79.7104837176904
+        },
+        {
+          "lat": 44.40887955,
+          "seq": 148,
+          "lon": -79.71010882
+        },
+        {
+          "lat": 44.4090193728536,
+          "seq": 149,
+          "lon": -79.7097121702843
+        },
+        {
+          "seq": 150,
+          "lat": 44.40971361,
+          "lon": -79.70817312
+        },
+        {
+          "lon": -79.7051031711759,
+          "lat": 44.4110941535887,
+          "seq": 151
+        },
+        {
+          "lon": -79.7040577529308,
+          "lat": 44.4115747163462,
+          "seq": 152
+        },
+        {
+          "seq": 153,
+          "lat": 44.4117789848379,
+          "lon": -79.7037394221828
+        },
+        {
+          "lat": 44.4119755444111,
+          "seq": 154,
+          "lon": -79.703502022981
+        },
+        {
+          "seq": 155,
+          "lat": 44.4122222064703,
+          "lon": -79.7032646237791
+        },
+        {
+          "lon": -79.7031076075499,
+          "seq": 156,
+          "lat": 44.4124889023595
+        },
+        {
+          "lon": -79.70290207,
+          "lat": 44.41288804,
+          "seq": 157
+        },
+        {
+          "lon": -79.702811407121,
+          "lat": 44.4135287272156,
+          "seq": 158
+        },
+        {
+          "lon": -79.7025740079191,
+          "seq": 159,
+          "lat": 44.4145538823486
+        },
+        {
+          "lat": 44.4148699039913,
+          "seq": 160,
+          "lon": -79.7024822855003
+        },
+        {
+          "lat": 44.4150780148722,
+          "seq": 161,
+          "lon": -79.702358190463
+        },
+        {
+          "lon": -79.7021261866975,
+          "seq": 162,
+          "lat": 44.415328517728
+        },
+        {
+          "seq": 163,
+          "lat": 44.415494234412,
+          "lon": -79.7019643236053
+        },
+        {
+          "lat": 44.4156123349435,
+          "seq": 164,
+          "lon": -79.7017544330212
+        },
+        {
+          "lon": -79.7010938,
+          "seq": 165,
+          "lat": 44.41588126
+        },
+        {
+          "lon": -79.6999086623346,
+          "seq": 166,
+          "lat": 44.4164654018175
+        },
+        {
+          "lat": 44.41804245,
+          "seq": 167,
+          "lon": -79.69606761
+        },
+        {
+          "lon": -79.6946481118388,
+          "lat": 44.4187275427148,
+          "seq": 168
+        },
+        {
+          "lon": -79.6915580148434,
+          "lat": 44.4200956475792,
+          "seq": 169
+        },
+        {
+          "seq": 170,
+          "lat": 44.4202766926351,
+          "lon": -79.6911087055566
+        },
+        {
+          "lon": -79.6907849793722,
+          "lat": 44.4203152281795,
+          "seq": 171
+        },
+        {
+          "lon": -79.6904666486242,
+          "lat": 44.4202998139648,
+          "seq": 172
+        },
+        {
+          "seq": 173,
+          "lat": 44.42020676,
+          "lon": -79.6902143
+        },
+        {
+          "lon": -79.6897555702779,
+          "seq": 174,
+          "lat": 44.4200205457223
+        },
+        {
+          "lat": 44.4198566535533,
+          "seq": 175,
+          "lon": -79.6895548198716
+        },
+        {
+          "seq": 176,
+          "lat": 44.4187371768585,
+          "lon": -79.6885701527276
+        },
+        {
+          "lon": -79.6877054808349,
+          "seq": 177,
+          "lat": 44.4178370064037
+        },
+        {
+          "lon": -79.686737,
+          "seq": 178,
+          "lat": 44.416625
+        },
+        {
+          "lat": 44.4138019965871,
+          "seq": 179,
+          "lon": -79.6842107696973
+        },
+        {
+          "seq": 180,
+          "lat": 44.4137017929578,
+          "lon": -79.6840435111688
+        },
+        {
+          "seq": 181,
+          "lat": 44.4137133549238,
+          "lon": -79.6837953210941
+        },
+        {
+          "lon": -79.6832638706081,
+          "seq": 182,
+          "lat": 44.4138944920924
+        },
+        {
+          "lon": -79.6825597661571,
+          "lat": 44.4142490568409,
+          "seq": 183
+        },
+        {
+          "seq": 184,
+          "lat": 44.415659586618,
+          "lon": -79.6791957115579
+        },
+        {
+          "lon": -79.6786049112715,
+          "lat": 44.4159601869266,
+          "seq": 185
+        },
+        {
+          "lon": -79.6780599721944,
+          "seq": 186,
+          "lat": 44.4162106860034
+        },
+        {
+          "lon": -79.6777740140649,
+          "lat": 44.4162954700632,
+          "seq": 187
+        },
+        {
+          "seq": 188,
+          "lat": 44.416364838748,
+          "lon": -79.6774448924442
+        },
+        {
+          "lon": -79.6771481434418,
+          "lat": 44.4164033768707,
+          "seq": 189
+        },
+        {
+          "lat": 44.4164089510685,
+          "seq": 190,
+          "lon": -79.6768957183895
+        },
+        {
+          "lat": 44.41633987,
+          "seq": 191,
+          "lon": -79.67620116
+        },
+        {
+          "lon": -79.6754647672831,
+          "lat": 44.4163301544159,
+          "seq": 192
+        },
+        {
+          "lon": -79.674971084852,
+          "seq": 193,
+          "lat": 44.4162973969721
+        },
+        {
+          "lon": -79.6745772179944,
+          "seq": 194,
+          "lat": 44.4162203205617
+        },
+        {
+          "lon": -79.6742858644285,
+          "seq": 195,
+          "lat": 44.4161201210763
+        },
+        {
+          "lat": 44.4159890907209,
+          "seq": 196,
+          "lon": -79.6739945108625
+        },
+        {
+          "seq": 197,
+          "lat": 44.4158619139187,
+          "lon": -79.6737840888427
+        },
+        {
+          "lon": -79.6734873398404,
+          "seq": 198,
+          "lat": 44.4156538058276
+        },
+        {
+          "seq": 199,
+          "lat": 44.4153705464025,
+          "lon": -79.6732418474839
+        },
+        {
+          "lon": -79.6731069615738,
+          "lat": 44.4150622352646,
+          "seq": 200
+        },
+        {
+          "lon": -79.6730637980825,
+          "lat": 44.4148348547589,
+          "seq": 201
+        },
+        {
+          "lon": -79.6730422163369,
+          "lat": 44.4144918553742,
+          "seq": 202
+        },
+        {
+          "lon": -79.6731526954861,
+          "lat": 44.4139332720002,
+          "seq": 203
+        },
+        {
+          "seq": 204,
+          "lat": 44.4129984357282,
+          "lon": -79.6733254767482
+        },
+        {
+          "lon": -79.6735619989137,
+          "lat": 44.4118370796295,
+          "seq": 205
+        },
+        {
+          "seq": 206,
+          "lat": 44.411070106327,
+          "lon": -79.6736375350234
+        },
+        {
+          "lon": -79.6735781852229,
+          "lat": 44.4108889604104,
+          "seq": 207
+        },
+        {
+          "seq": 208,
+          "lat": 44.4107579183337,
+          "lon": -79.673313808839
+        },
+        {
+          "seq": 209,
+          "lat": 44.410695880263,
+          "lon": -79.6728429783532
+        },
+        {
+          "lon": -79.6720135086652,
+          "seq": 210,
+          "lat": 44.4107116681189
+        },
+        {
+          "seq": 211,
+          "lat": 44.410379812508,
+          "lon": -79.668890868154
+        },
+        {
+          "lon": -79.6681287944529,
+          "lat": 44.4103185398164,
+          "seq": 212
+        },
+        {
+          "lat": 44.410256872392,
+          "seq": 213,
+          "lon": -79.6680424674704
+        },
+        {
+          "lon": -79.6687156396909,
+          "seq": 214,
+          "lat": 44.406709047914
+        },
+        {
+          "lon": -79.6686886625088,
+          "seq": 215,
+          "lat": 44.4065934143043
+        },
+        {
+          "lon": -79.6685753583443,
+          "lat": 44.4065278884906,
+          "seq": 216
+        },
+        {
+          "lat": 44.4064604353705,
+          "seq": 217,
+          "lon": -79.6682759116238
+        },
+        {
+          "seq": 218,
+          "lat": 44.4063968366431,
+          "lon": -79.6671671494424
+        },
+        {
+          "seq": 219,
+          "lat": 44.4061925493541,
+          "lon": -79.6651708379721
+        },
+        {
+          "lon": -79.6637060769042,
+          "lat": 44.4060150245197,
+          "seq": 220
+        },
+        {
+          "lat": 44.4059090257952,
+          "seq": 221,
+          "lon": -79.6634713754206
+        },
+        {
+          "lon": -79.6642157487105,
+          "seq": 222,
+          "lat": 44.4020750699446
+        },
+        {
+          "seq": 223,
+          "lat": 44.400654575414,
+          "lon": -79.6644504501942
+        },
+        {
+          "seq": 224,
+          "lat": 44.3997921779873,
+          "lon": -79.6646203163162
+        },
+        {
+          "lon": -79.6647983657176,
+          "lat": 44.3988400085566,
+          "seq": 225
+        },
+        {
+          "lat": 44.3987305395077,
+          "seq": 226,
+          "lon": -79.6648657110533
+        },
+        {
+          "lon": -79.6650788307913,
+          "lat": 44.3986553674363,
+          "seq": 227
+        },
+        {
+          "lon": -79.6697958242746,
+          "lat": 44.3990724144417,
+          "seq": 228
+        },
+        {
+          "seq": 229,
+          "lat": 44.3994329416309,
+          "lon": -79.6733497858264
+        },
+        {
+          "lon": -79.6754848975686,
+          "seq": 230,
+          "lat": 44.399589872197
+        },
+        {
+          "seq": 231,
+          "lat": 44.3995281934616,
+          "lon": -79.6759003461719
+        },
+        {
+          "lon": -79.6779991709339,
+          "lat": 44.3989692269578,
+          "seq": 232
+        },
+        {
+          "lon": -79.678689,
+          "seq": 233,
+          "lat": 44.398664
+        },
+        {
+          "lat": 44.3967215357257,
+          "seq": 234,
+          "lon": -79.6817894090289
+        },
+        {
+          "lon": -79.6845837078696,
+          "seq": 235,
+          "lat": 44.3949811934619
+        },
+        {
+          "lon": -79.6854990358858,
+          "lat": 44.3943756108229,
+          "seq": 236
+        },
+        {
+          "lat": 44.3942560975647,
+          "seq": 237,
+          "lon": -79.6856393172324
+        },
+        {
+          "seq": 238,
+          "lat": 44.3941498717195,
+          "lon": -79.685722468219
+        },
+        {
+          "lon": -79.685739,
+          "seq": 239,
+          "lat": 44.393088
+        },
+        {
+          "lat": 44.3924766574395,
+          "seq": 240,
+          "lon": -79.6856199549272
+        },
+        {
+          "lon": -79.685633,
+          "lat": 44.391061,
+          "seq": 241
+        },
+        {
+          "seq": 242,
+          "lat": 44.3906014837012,
+          "lon": -79.6855657618468
+        },
+        {
+          "lat": 44.3905243734287,
+          "seq": 243,
+          "lon": -79.6856520888293
+        },
+        {
+          "seq": 244,
+          "lat": 44.390480034976,
+          "lon": -79.6876996569454
+        },
+        {
+          "lon": -79.6898551337897,
+          "lat": 44.3904472630546,
+          "seq": 245
+        },
+        {
+          "lon": -79.6908371032156,
+          "lat": 44.3903932857322,
+          "seq": 246
+        },
+        {
+          "seq": 247,
+          "lat": 44.3903131279636,
+          "lon": -79.6910112451236
+        },
+        {
+          "lon": -79.6910274314328,
+          "seq": 248,
+          "lat": 44.3901666176371
+        },
+        {
+          "seq": 249,
+          "lat": 44.3894998733594,
+          "lon": -79.6905018781608
+        },
+        {
+          "lon": -79.6899915076429,
+          "seq": 250,
+          "lat": 44.3889983774394
+        },
+        {
+          "seq": 251,
+          "lat": 44.3879930167535,
+          "lon": -79.6891916341963
+        },
+        {
+          "lon": -79.6891997273509,
+          "seq": 252,
+          "lat": 44.387865779079
+        },
+        {
+          "seq": 253,
+          "lat": 44.3875303329751,
+          "lon": -79.6899308089839
+        },
+        {
+          "seq": 254,
+          "lat": 44.3875739776403,
+          "lon": -79.6900999181486
+        },
+        {
+          "lon": -79.690237,
+          "lat": 44.387753,
+          "seq": 255
+        }
+      ]
+    },
+    "routeId": "10"
+  }
+}

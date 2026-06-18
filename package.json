@@ -34,8 +34,9 @@
     "eas:build:android": "npm run prebuild:android:eas && eas build --platform android --profile production --clear-cache",
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",
     "prebuild:android:eas": "eas env:exec production \"node scripts/preflight-android-production-env.js --profile production\" --non-interactive",
-    "validate:detour-ground-truth": "node scripts/validate-detour-ground-truth.js",
-    "check:detour-scheduler": "node scripts/check-detour-scheduler-health.js"
+    "validate:detour-ground-truth": "node scripts/validate-detour-ground-truth.js --active-detours-json docs/detour-ground-truth/snapshots/route-10-mulcaster-simcoe-2026-05-26-active-detours.json",
+    "check:detour-scheduler": "node scripts/check-detour-scheduler-health.js",
+    "replay:detour-v2:route10": "node scripts/replay-detour-v2-fixture.js api-proxy/__tests__/fixtures/detour-v2/route-10-stale-mixed-live-2026-06-13.json"
   },
   "dependencies": {
     "@expo-google-fonts/outfit": "^0.4.2",
@@ -49,14 +50,14 @@
     "@react-navigation/native-stack": "^7.13.0",
     "@sentry/react-native": "~7.2.0",
     "babel-preset-expo": "~54.0.10",
-    "expo": "~54.0.34",
+    "expo": "~54.0.35",
     "expo-asset": "~12.0.13",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
     "expo-device": "~8.0.10",
-    "expo-file-system": "~19.0.22",
-    "expo-font": "^14.0.11",
+    "expo-file-system": "~19.0.23",
+    "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
     "expo-linear-gradient": "^15.0.8",
     "expo-location": "~19.0.8",
@@ -65,7 +66,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-store-review": "~9.0.9",
-    "expo-updates": "~29.0.17",
+    "expo-updates": "~29.0.18",
     "firebase": "^12.9.0",
     "jszip": "^3.10.1",
     "maplibre-gl": "^5.19.0",
@@ -81,7 +82,7 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^7.29.7",
     "@types/jest": "29.5.14",
     "@types/react": "~19.1.10",
     "babel-jest": "^29.7.0",
@@ -94,11 +95,14 @@
   "overrides": {
     "fast-xml-parser": "^5.7.0",
     "minimatch": "^10.2.3",
-    "protobufjs": "^7.5.5",
+    "protobufjs": "^7.6.4",
     "node-forge": "^1.4.0",
     "undici": "^6.24.0",
     "@xmldom/xmldom": "^0.8.13",
-    "picomatch": "^4.0.4"
+    "picomatch": "^4.0.4",
+    "shell-quote": "^1.8.4",
+    "@grpc/grpc-js": "^1.9.16",
+    "fast-uri": "^3.1.2"
   },
   "private": true
 }

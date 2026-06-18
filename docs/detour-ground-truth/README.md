@@ -15,7 +15,15 @@ These files are **not** route-specific hardcoded detours. They are ground-truth 
    - expected skipped stop codes, if any
    - disallowed distant notice source IDs or stop codes, if any
    - source and capture time
-3. Run the validator against live `activeDetours`:
+3. Run the deterministic saved-snapshot check:
+
+```powershell
+npm run validate:detour-ground-truth
+```
+
+The npm shortcut validates the Route 10 ground-truth case against a saved active-detour snapshot so it can be used as a stable regression check.
+
+To validate against live `activeDetours`, pass `--source live` directly:
 
 ```powershell
 node scripts\validate-detour-ground-truth.js --fixture docs\detour-ground-truth\route-10-mulcaster-simcoe-2026-05-26.json

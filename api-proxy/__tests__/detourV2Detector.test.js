@@ -1,4 +1,4 @@
-const { createDetourV2Detector } = require('../detourV2/detector');
+const { createDetourV2Detector, _test } = require('../detourV2/detector');
 const { projectOntoPolyline } = require('../detour/projection');
 const { pointToPolylineDistance } = require('../geometry');
 
@@ -163,6 +163,174 @@ describe('Auto Detour V2 detector', () => {
       riderVisibilityReason: 'v2-confirmed',
       currentVehicleCount: 0,
       canShowDetourPath: true,
+    }));
+  });
+
+  test('does not confirm a detour when the same trip changes vehicle ID mid-trip', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'avl-before-reset',
+        tripId: 'same-passenger-trip',
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'avl-during-reset',
+        tripId: 'same-passenger-trip',
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'avl-after-reset',
+        tripId: 'same-passenger-trip',
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 3000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(detourForRoute(result, '8A')).toBeNull();
+  });
+
+  test('keeps unstable vehicle-only evidence candidate-only when trip IDs are missing', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'unstable-avl-1',
+        tripId: null,
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'unstable-avl-2',
+        tripId: null,
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'unstable-avl-3',
+        tripId: null,
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 3000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(detourForRoute(result, '8A')).toBeNull();
+  });
+
+  test('ignores explicit non-revenue/deadhead route-position evidence', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'deadhead-1',
+        tripId: null,
+        nonRevenue: true,
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'deadhead-1',
+        tripId: null,
+        nonRevenue: true,
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'deadhead-2',
+        tripId: null,
+        nonRevenue: true,
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'deadhead-2',
+        tripId: null,
+        nonRevenue: true,
+        coordinate: { latitude: 44.395, longitude: -79.692 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(detourForRoute(result, '8A')).toBeNull();
+  });
+
+  test('ignores deleted GTFS-RT trip descriptor evidence', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'deleted-trip-bus-1',
+        tripId: 'deleted-trip-1',
+        tripScheduleRelationship: 7,
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'deleted-trip-bus-1',
+        tripId: 'deleted-trip-1',
+        tripScheduleRelationship: 7,
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'deleted-trip-bus-2',
+        tripId: 'deleted-trip-2',
+        tripScheduleRelationship: 7,
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'deleted-trip-bus-2',
+        tripId: 'deleted-trip-2',
+        tripScheduleRelationship: 7,
+        coordinate: { latitude: 44.395, longitude: -79.692 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(detourForRoute(result, '8A')).toBeNull();
+  });
+
+  test('allows new GTFS-RT trip descriptor passenger evidence', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'new-trip-bus-1',
+        tripId: 'new-trip-1',
+        tripScheduleRelationship: 8,
+        coordinate: { latitude: 44.395, longitude: -79.698 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'new-trip-bus-1',
+        tripId: 'new-trip-1',
+        tripScheduleRelationship: 8,
+        coordinate: { latitude: 44.395, longitude: -79.696 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'new-trip-bus-2',
+        tripId: 'new-trip-2',
+        tripScheduleRelationship: 8,
+        coordinate: { latitude: 44.395, longitude: -79.694 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'new-trip-bus-2',
+        tripId: 'new-trip-2',
+        tripScheduleRelationship: 8,
+        coordinate: { latitude: 44.395, longitude: -79.692 },
+        timestampMs: 4000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(detourForRoute(result, '8A')).toEqual(expect.objectContaining({
+      routeId: '8A',
+      vehicleCount: 2,
     }));
   });
 
@@ -1427,7 +1595,7 @@ describe('Auto Detour V2 detector', () => {
       state: 'active',
       riderVisible: false,
       canShowDetourPath: false,
-      riderVisibilityReason: 'insufficient-geometry',
+      riderVisibilityReason: 'stale-mixed-evidence',
       currentVehicleCount: 0,
     }));
     expect(result['100'].geometry).toEqual(expect.objectContaining({
@@ -1441,6 +1609,19 @@ describe('Auto Detour V2 detector', () => {
       canShowDetourPath: false,
       geometryTrustBlockedReason: 'stale-mixed-evidence',
     }));
+  });
+
+  test('uses stale mixed reason when stale mixed geometry is hidden with current vehicles', () => {
+    expect(_test.getRiderVisibilityReason({
+      riderVisible: false,
+      route400StaleSparseEvidence: false,
+      geometry: {
+        canShowDetourPath: false,
+        segments: [
+          { geometryTrustBlockedReason: 'stale-mixed-evidence' },
+        ],
+      },
+    })).toBe('stale-mixed-evidence');
   });
 
   test('clamps any route with a configured corridor', () => {

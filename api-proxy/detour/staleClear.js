@@ -64,15 +64,6 @@ function evaluateStaleRiderVisibility({
   previousSnapshot = null,
 } = {}) {
   const currentVehicleCount = getCurrentVehicleCount(detour) ?? getCurrentVehicleCount(previousSnapshot) ?? 0;
-  if (currentVehicleCount > 0) {
-    return {
-      riderVisible: true,
-      staleForReview: false,
-      reason: 'current-detour-vehicle',
-      currentVehicleCount,
-    };
-  }
-
   if (detour?.riderVisible === false) {
     return {
       riderVisible: false,
@@ -80,6 +71,15 @@ function evaluateStaleRiderVisibility({
       reason: detour.riderVisibilityReason || detour.visibilityReason || 'backend-suppressed',
       currentVehicleCount,
       confirmedVehicleCount: getConfirmedVehicleCount(detour, previousSnapshot),
+    };
+  }
+
+  if (currentVehicleCount > 0) {
+    return {
+      riderVisible: true,
+      staleForReview: false,
+      reason: 'current-detour-vehicle',
+      currentVehicleCount,
     };
   }
 

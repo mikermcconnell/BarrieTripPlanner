@@ -108,7 +108,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - route-family handoff treats a confirmed closure segment as one physical detour event and can project it onto sibling route variants/directions when the source segment has confirmed boundaries
   - point-only short deviations are not projected because there is no reliable closed segment to map to the sibling route
 - `DETOUR_MIN_UNIQUE_VEHICLES=2`
-  - values below 2 are ignored; rider-facing detours require two unique vehicles on the same route
+  - values below 2 are ignored; rider-facing detours require two unique same-route confirming identities. Trip IDs are preferred over vehicle IDs, and weak one-point vehicle-only identities do not count.
 - `DETOUR_HISTORY_ENABLED=true`
 - `DETOUR_HISTORY_RETENTION_DAYS=30`
 - Recommended low-cost production shape:
@@ -135,7 +135,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - Zero-current detours are not cleared automatically. They stay active until another bus adds off-route detour evidence or proves normal routing with GPS traversal through the affected segment.
   - If an active snapshot has no usable closure geometry or clear window, the automated detector must not infer a clear from elapsed time, same-route reporting, or two generic same-route normal pings. Keep the record for operations review and hide it from riders only for safety reasons such as insufficient or invalid geometry; automatic clearing still requires GPS evidence that can be tied to the affected segment, or an explicit operator/admin clear.
   - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
-  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until the same corridor has the required three off-route pings and a second unique same-route trip/vehicle corroborates the same segment.
+  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until the same corridor has the required three off-route pings and a second unique same-route confirming identity corroborates the same segment.
   - Runtime state stores the latest per-vehicle projection diagnostic (`lastRouteProjection`) with distance from route, thresholds, shape ID, classification, and sample time. Use this to explain missed detections before changing thresholds.
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
@@ -144,7 +144,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - `DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED=true` to fall back from OSRM match to OSRM route when trace matching cannot produce usable road geometry
   - `DETOUR_ROAD_MATCHING_RADIUS_METERS=75` to control GPS snap tolerance for OSRM match
   - `DETOUR_MIN_SAME_VEHICLE_PATH_POINTS=2` sets the default minimum off-route points from that same vehicle before the likely path can be shown
-  - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment
+  - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment. New road-matched paths are published as one continuous rider line; safe entry/rejoin handoffs are stitched into `likelyDetourPolyline`, while blocked-overlap suppressions publish `detourPathSuppressedReason=road-match-closed-overlap`.
   - `DETOUR_ROAD_MATCHING_BACKTRACK_*` strips route-fallback out-and-back spurs caused by forced waypoints
   - `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS=275,600,1000,1500,1800` lets local dummy detours try wider synthetic GPS paths until the matcher finds a route that does not reuse the closed segment
 - `BASELINE_AUTO_INIT=false` — required for validation/production so an empty baseline is not silently created from live GTFS
@@ -204,7 +204,7 @@ Persistence is split into:
 - `persistentDetoursAuto` — route-specific persistent records and clear state.
 - `persistentDetourGeometriesAuto` — global learned physical geometry keyed by `sharedGeometryFingerprint`.
 
-Global learned geometry does not publish a detour by itself. A route still needs the normal confirmation rule first: three matching off-route pings and two unique same-route trip/vehicle signatures. After that, the route can reuse trusted global geometry for display or restart recovery.
+Global learned geometry does not publish a detour by itself. A route still needs the normal confirmation rule first: three matching off-route pings and two unique same-route confirming identities. After that, the route can reuse trusted global geometry for display or restart recovery.
 
 For operations, prefer the explicit timestamp fields:
 
