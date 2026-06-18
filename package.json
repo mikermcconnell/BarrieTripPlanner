@@ -82,7 +82,7 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^7.29.7",
     "@types/jest": "29.5.14",
     "@types/react": "~19.1.10",
     "babel-jest": "^29.7.0",
@@ -95,11 +95,14 @@
   "overrides": {
     "fast-xml-parser": "^5.7.0",
     "minimatch": "^10.2.3",
-    "protobufjs": "^7.5.5",
+    "protobufjs": "^7.6.4",
     "node-forge": "^1.4.0",
     "undici": "^6.24.0",
     "@xmldom/xmldom": "^0.8.13",
-    "picomatch": "^4.0.4"
+    "picomatch": "^4.0.4",
+    "shell-quote": "^1.8.4",
+    "@grpc/grpc-js": "^1.9.16",
+    "fast-uri": "^3.1.2"
   },
   "private": true
 }
