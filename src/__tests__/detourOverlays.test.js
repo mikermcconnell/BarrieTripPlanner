@@ -1082,6 +1082,53 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].segmentStopDetails[1].inferredDetourPolyline).toBeNull();
   });
 
+  test('does not fall back to a stale top-level detour path when the only segment suppresses its path', () => {
+    const staleTopLevelPath = [
+      { latitude: 44.35104, longitude: -79.616055 },
+      { latitude: 44.350744, longitude: -79.615891 },
+      { latitude: 44.349648, longitude: -79.615383 },
+      { latitude: 44.349031, longitude: -79.614955 },
+    ];
+    const skippedSegmentPolyline = [
+      { latitude: 44.35015, longitude: -79.615745 },
+      { latitude: 44.348353, longitude: -79.614675 },
+      { latitude: 44.3475292511835, longitude: -79.614012632186 },
+      { latitude: 44.34775282446762, longitude: -79.61311112654813 },
+    ];
+
+    const result = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['12A']),
+      activeDetours: {
+        '12A': {
+          state: 'active',
+          confidence: 'medium',
+          skippedSegmentPolyline,
+          inferredDetourPolyline: staleTopLevelPath,
+          canShowDetourPath: true,
+          likelyDetourPolyline: null,
+          segments: [{
+            shapeId: 'shape-12a',
+            skippedSegmentPolyline,
+            inferredDetourPolyline: null,
+            likelyDetourPolyline: null,
+            canShowDetourPath: false,
+            detourPathSuppressedReason: 'road-match-closed-overlap',
+          }],
+        },
+      },
+      detourStopDetailsByRouteId: {},
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].skippedSegmentPolyline).toBe(skippedSegmentPolyline);
+    expect(result[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].likelyDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails).toHaveLength(1);
+    expect(result[0].segmentStopDetails[0].inferredDetourPolyline).toBeNull();
+    expect(result[0].segmentStopDetails[0].likelyDetourPolyline).toBeNull();
+  });
+
   test('collapses noisy backend sub-segments when a clean top-level road-matched path exists', () => {
     const roadMatchedPolyline = [
       { latitude: 44.407, longitude: -79.685 },

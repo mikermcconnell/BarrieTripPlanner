@@ -390,6 +390,7 @@ const getPrimaryRenderablePath = (detour, options = {}) => {
   const segments = Array.isArray(detour?.segments) ? detour.segments : [];
   const segment = segments.find((candidate) => getRenderableDetourPath(candidate, options));
   if (segment) return getRenderableDetourPath(segment, options);
+  if (segments.some((candidate) => candidate?.canShowDetourPath === false)) return null;
 
   return getRenderableDetourPath(detour, options);
 };

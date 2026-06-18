@@ -50,6 +50,7 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
   - [ ] `evidencePointCount`
   - [ ] `roadMatchSource`
   - [ ] `likelyDetourPolyline` point count
+  - [ ] `detourPathSuppressedReason`, if present
 - [ ] Query `persistentDetoursAuto` and `persistentDetourGeometriesAuto` for long-running detours.
 - [ ] Confirm global learned geometry is only used after the route has a published/persistent route record; it must not publish a one-vehicle candidate by itself.
   - [ ] `skippedSegmentPolyline` point count
@@ -108,6 +109,8 @@ For each active detour:
 - [ ] Multiple independent detour sections are separate, not merged into one giant section.
 - [ ] If road matching fails, untrusted raw off-road GPS lines are not shown to riders.
 - [ ] If `canShowDetourPath=true` and road matching has not produced a `likelyDetourPolyline`, the trusted `inferredDetourPolyline` can still appear as the alternate path.
+- [ ] If a segment has `canShowDetourPath=false` with `detourPathSuppressedReason=road-match-closed-overlap`, the app does not draw a stale top-level `likelyDetourPolyline` or `inferredDetourPolyline` for that segment.
+- [ ] A newly road-matched `likelyDetourPolyline` is continuous through the safe entry/rejoin handoff, with no visible gap and no material interior overlap on the closed route segment.
 - [ ] If there is no trustworthy skipped segment or detour path, the backend keeps the record but publishes `riderVisible=false`, and the rider UI does not show the detour.
 
 ## 6. Map Rendering Check — Regular Tab

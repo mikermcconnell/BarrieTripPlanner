@@ -144,7 +144,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - `DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED=true` to fall back from OSRM match to OSRM route when trace matching cannot produce usable road geometry
   - `DETOUR_ROAD_MATCHING_RADIUS_METERS=75` to control GPS snap tolerance for OSRM match
   - `DETOUR_MIN_SAME_VEHICLE_PATH_POINTS=2` sets the default minimum off-route points from that same vehicle before the likely path can be shown
-  - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment
+  - `DETOUR_ROAD_MATCHING_BLOCKED_*` rejects likely detour paths that visibly reuse the closed regular route segment. New road-matched paths are published as one continuous rider line; safe entry/rejoin handoffs are stitched into `likelyDetourPolyline`, while blocked-overlap suppressions publish `detourPathSuppressedReason=road-match-closed-overlap`.
   - `DETOUR_ROAD_MATCHING_BACKTRACK_*` strips route-fallback out-and-back spurs caused by forced waypoints
   - `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS=275,600,1000,1500,1800` lets local dummy detours try wider synthetic GPS paths until the matcher finds a route that does not reuse the closed segment
 - `BASELINE_AUTO_INIT=false` — required for validation/production so an empty baseline is not silently created from live GTFS

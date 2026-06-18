@@ -39,6 +39,10 @@ const SHARED_EVENT_PATH_SECONDARY_OVERLAP_RATIO = 0.5;
 const SHARED_EVENT_ENDPOINT_THRESHOLD_METERS = 225;
 const SHARED_EVENT_CENTROID_THRESHOLD_METERS = 450;
 const NOTICE_STOP_IMPACT_SPATIAL_TOLERANCE_METERS = 250;
+const ROAD_MATCH_CLOSED_OVERLAP_PROXIMITY_METERS = 35;
+const ROAD_MATCH_CLOSED_OVERLAP_ENDPOINT_RATIO = 0.2;
+const ROAD_MATCH_CLOSED_OVERLAP_MIN_POINTS = 3;
+const ROAD_MATCH_CLOSED_OVERLAP_MIN_RATIO = 0.05;
 
 const lastPublishedIds = new Set();
 const lastPublishedState = new Map();
@@ -651,6 +655,7 @@ function hasTrustedLikelyDetourPath(source) {
   const roadMatchSource = String(source.roadMatchSource || '').toLowerCase();
   const endpointMismatchMeters = Number(source.debug?.untrustedPathEndpointMismatchMeters);
   if (Number.isFinite(endpointMismatchMeters) && endpointMismatchMeters > 45) return false;
+  if (hasLikelyPathClosedSegmentOverlap(source)) return false;
   if (confidenceLabel === 'low') return false;
   if (Number.isFinite(rawConfidence) && rawConfidence < 0.45) return false;
   if (
@@ -660,6 +665,30 @@ function hasTrustedLikelyDetourPath(source) {
     return false;
   }
   return true;
+}
+
+function hasLikelyPathClosedSegmentOverlap(source) {
+  const likelyPath = normalizePolyline(source?.likelyDetourPolyline);
+  const skippedPath = normalizePolyline(source?.skippedSegmentPolyline);
+  if (likelyPath.length < 3 || skippedPath.length < 2) return false;
+
+  const endpointPointCount = Math.min(
+    Math.ceil(likelyPath.length * ROAD_MATCH_CLOSED_OVERLAP_ENDPOINT_RATIO),
+    Math.max(0, Math.floor((likelyPath.length - ROAD_MATCH_CLOSED_OVERLAP_MIN_POINTS) / 2))
+  );
+  const startIndex = endpointPointCount;
+  const endIndex = likelyPath.length - endpointPointCount - 1;
+  const interior = likelyPath.slice(startIndex, endIndex + 1);
+  if (interior.length === 0) return false;
+
+  const nearClosedCount = interior.filter((point) =>
+    distancePointToPolylineMeters(point, skippedPath) <= ROAD_MATCH_CLOSED_OVERLAP_PROXIMITY_METERS
+  ).length;
+
+  return (
+    nearClosedCount >= ROAD_MATCH_CLOSED_OVERLAP_MIN_POINTS &&
+    nearClosedCount / interior.length >= ROAD_MATCH_CLOSED_OVERLAP_MIN_RATIO
+  );
 }
 
 function getTrustedDetourPathSnapshot(source) {
@@ -675,16 +704,29 @@ function getTrustedDetourPathSnapshot(source) {
     Array.isArray(segment?.inferredDetourPolyline) &&
     segment.inferredDetourPolyline.length >= 2
   ));
+  const hasExplicitSegmentPathSuppression = Boolean(rawSegments?.some((segment) =>
+    segment?.canShowDetourPath === false
+  ));
 
   const canUseTopLevelLikelyPath =
     hasTrustedLikelyDetourPath(source) &&
     (!rawSegments || rawSegments.length === 0 || Boolean(trustedLikelySegment));
+  const canUseTopLevelInferredPath =
+    source.canShowDetourPath !== false &&
+    Array.isArray(source.inferredDetourPolyline) &&
+    source.inferredDetourPolyline.length >= 2 &&
+    (
+      !rawSegments ||
+      rawSegments.length === 0 ||
+      Boolean(trustedSegment) ||
+      !hasExplicitSegmentPathSuppression
+    );
   const likelyDetourPolyline =
     canUseTopLevelLikelyPath
       ? source.likelyDetourPolyline
       : trustedLikelySegment?.likelyDetourPolyline;
   const inferredDetourPolyline =
-    Array.isArray(source.inferredDetourPolyline) && source.inferredDetourPolyline.length >= 2
+    canUseTopLevelInferredPath
       ? source.inferredDetourPolyline
       : trustedSegment?.inferredDetourPolyline;
   const path = likelyDetourPolyline || inferredDetourPolyline;
@@ -746,6 +788,18 @@ function clearUntrustedLikelyDetourPath(target) {
   ) {
     clearRoadMatchedPath(target);
   }
+}
+
+function suppressClosedOverlapDetourPath(target) {
+  if (!target || typeof target !== 'object' || !hasLikelyPathClosedSegmentOverlap(target)) {
+    return false;
+  }
+
+  target.canShowDetourPath = false;
+  target.inferredDetourPolyline = null;
+  target.detourPathSuppressedReason = 'road-match-closed-overlap';
+  clearRoadMatchedPath(target);
+  return true;
 }
 
 const TRUSTED_PATH_PRESERVE_MAX_ANCHOR_DISTANCE_METERS = 1000;
@@ -1094,7 +1148,9 @@ function enforceGeometryTrustGate(geometry) {
             : normalized.canShowDetourPath;
       }
 
-      if (normalized.canShowDetourPath === false) {
+      if (suppressClosedOverlapDetourPath(normalized)) {
+        // Path was suppressed because the matched likely line reuses the closed segment.
+      } else if (normalized.canShowDetourPath === false) {
         clearRoadMatchedPath(normalized);
       } else {
         clearUntrustedLikelyDetourPath(normalized);
@@ -1133,7 +1189,9 @@ function enforceGeometryTrustGate(geometry) {
       next.canShowDetourPath = primarySegment.canShowDetourPath === true;
     }
 
-    if (primarySegment.canShowDetourPath === false) {
+    if (suppressClosedOverlapDetourPath(next)) {
+      // Path was suppressed because the matched likely line reuses the closed segment.
+    } else if (primarySegment.canShowDetourPath === false) {
       clearRoadMatchedPath(next);
     } else {
       clearUntrustedLikelyDetourPath(next);
@@ -1149,7 +1207,9 @@ function enforceGeometryTrustGate(geometry) {
   } else if (next.canShowDetourPath === false) {
     clearRoadMatchedPath(next);
   } else {
-    clearUntrustedLikelyDetourPath(next);
+    if (!suppressClosedOverlapDetourPath(next)) {
+      clearUntrustedLikelyDetourPath(next);
+    }
   }
 
   if (
@@ -1708,9 +1768,15 @@ function applyGeometryMetadata(doc, geo) {
   if (hasOwn(geo, 'lastEvidenceAt')) {
     doc.lastEvidenceAt = geo.lastEvidenceAt ?? null;
   }
+  if (hasOwn(geo, 'detourPathSuppressedReason')) {
+    doc.detourPathSuppressedReason = geo.detourPathSuppressedReason || null;
+  }
 
   if (geo.canShowDetourPath === false) {
+    doc.inferredDetourPolyline = null;
     doc.likelyDetourPolyline = null;
+    doc.entryConnectorPolyline = null;
+    doc.exitConnectorPolyline = null;
     doc.likelyDetourRoadNames = [];
     doc.roadMatchConfidence = null;
     doc.roadMatchRawConfidence = null;
@@ -2607,6 +2673,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.roadMatchRawConfidence = geo.roadMatchRawConfidence ?? null;
       doc.roadMatchSource = geo.roadMatchSource || null;
       doc.detourPathLabel = geo.detourPathLabel || DETOUR_PATH_LABEL;
+      doc.detourPathSuppressedReason = geo.detourPathSuppressedReason || null;
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;

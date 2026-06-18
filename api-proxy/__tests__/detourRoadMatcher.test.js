@@ -852,7 +852,141 @@ describe('detourRoadMatcher', () => {
     expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
   });
 
-  test('trims normal-route approach before publishing likely detour geometry', async () => {
+  test('rejects short 12A road-matched paths that materially overlap the closed segment', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const skippedSegmentPolyline = [
+      { latitude: 44.35015, longitude: -79.615745 },
+      { latitude: 44.348353, longitude: -79.614675 },
+      { latitude: 44.3475292511835, longitude: -79.614012632186 },
+      { latitude: 44.34775282446762, longitude: -79.61311112654813 },
+    ];
+    const suspiciousLikelyPath = [
+      { latitude: 44.35104, longitude: -79.616055 },
+      { latitude: 44.349648, longitude: -79.615383 },
+      { latitude: 44.349031, longitude: -79.614955 },
+      { latitude: 44.348194, longitude: -79.614333 },
+      { latitude: 44.348485, longitude: -79.613472 },
+    ];
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [{
+          confidence: 0.84,
+          geometry: {
+            coordinates: suspiciousLikelyPath.map((point) => [point.longitude, point.latitude]),
+          },
+          legs: [{ steps: [{ name: 'Mapleview Drive East' }, { name: 'Lally Terrace' }] }],
+        }],
+      }),
+    }));
+
+    const result = await matchDetourGeometry({
+      shapeId: '12A',
+      inferredDetourPolyline: suspiciousLikelyPath,
+      segments: [
+        {
+          segmentId: '12A:1c872f32-f2a7-4aed-9eaa-72386e4d576e:0-400',
+          shapeId: '12A',
+          skippedSegmentPolyline,
+          inferredDetourPolyline: suspiciousLikelyPath,
+          canShowDetourPath: true,
+        },
+      ],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED: 'false',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.roadMatchSource).toBeUndefined();
+    expect(result.segments[0].canShowDetourPath).toBe(false);
+    expect(result.segments[0].inferredDetourPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].roadMatchSource).toBeUndefined();
+    warnSpy.mockRestore();
+  });
+
+  test('rejects 12A route-fallback paths that materially overlap the closed segment', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const skippedSegmentPolyline = [
+      { latitude: 44.35015, longitude: -79.615745 },
+      { latitude: 44.348353, longitude: -79.614675 },
+      { latitude: 44.3475292511835, longitude: -79.614012632186 },
+      { latitude: 44.34775282446762, longitude: -79.61311112654813 },
+    ];
+    const inferredDetourPolyline = [
+      { latitude: 44.35103225708008, longitude: -79.61605072021484 },
+      { latitude: 44.35165786743164, longitude: -79.61360931396484 },
+      { latitude: 44.35073471069336, longitude: -79.61592864990234 },
+      { latitude: 44.34844970703125, longitude: -79.61344909667969 },
+    ];
+    const overlappingRouteFallbackPath = [
+      { latitude: 44.35104, longitude: -79.616055 },
+      { latitude: 44.350744, longitude: -79.615891 },
+      { latitude: 44.349648, longitude: -79.615383 },
+      { latitude: 44.349031, longitude: -79.614955 },
+      { latitude: 44.348194, longitude: -79.614333 },
+      { latitude: 44.348485, longitude: -79.613472 },
+    ];
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 'Ok', matchings: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 'Ok',
+          routes: [{
+            geometry: {
+              coordinates: overlappingRouteFallbackPath.map((point) => [point.longitude, point.latitude]),
+            },
+            legs: [{ steps: [{ name: 'Mapleview Drive East' }, { name: 'Lally Terrace' }] }],
+          }],
+        }),
+      });
+
+    const result = await matchDetourGeometry({
+      shapeId: '12A',
+      inferredDetourPolyline,
+      segments: [
+        {
+          segmentId: '12A:1c872f32-f2a7-4aed-9eaa-72386e4d576e:0-400',
+          shapeId: '12A',
+          skippedSegmentPolyline,
+          inferredDetourPolyline,
+          canShowDetourPath: true,
+        },
+      ],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO: '0.2',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.inferredDetourPolyline).toBeNull();
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.roadMatchSource).toBeUndefined();
+    expect(result.segments[0].canShowDetourPath).toBe(false);
+    expect(result.segments[0].inferredDetourPolyline).toBeNull();
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].roadMatchSource).toBeUndefined();
+    warnSpy.mockRestore();
+  });
+
+  test('keeps normal-route approach in the published rider detour geometry', async () => {
     const routeShapePolyline = [
       { latitude: 44.0, longitude: -79.700 },
       { latitude: 44.0, longitude: -79.699 },
@@ -906,13 +1040,18 @@ describe('detourRoadMatcher', () => {
     });
 
     expect(result.segments[0].likelyDetourPolyline).toEqual([
+      { latitude: 44.0, longitude: -79.7 },
+      { latitude: 44.0, longitude: -79.699 },
+      { latitude: 44.0, longitude: -79.698 },
       { latitude: 44.002, longitude: -79.697 },
       { latitude: 44.002, longitude: -79.695 },
     ]);
     expect(result.likelyDetourPolyline).toEqual(result.segments[0].likelyDetourPolyline);
+    expect(result.segments[0].entryConnectorPolyline).toBeNull();
+    expect(result.segments[0].exitConnectorPolyline).toBeNull();
   });
 
-  test('keeps connector polylines for trimmed normal-route approaches', async () => {
+  test('publishes road-matched detour path with normal-route approaches already stitched in', async () => {
     const routeShapePolyline = [
       { latitude: 44.0, longitude: -79.700 },
       { latitude: 44.0, longitude: -79.699 },
@@ -967,21 +1106,18 @@ describe('detourRoadMatcher', () => {
     });
 
     expect(result.segments[0].likelyDetourPolyline).toEqual([
-      { latitude: 44.002, longitude: -79.697 },
-      { latitude: 44.002, longitude: -79.695 },
-    ]);
-    expect(result.segments[0].entryConnectorPolyline).toEqual([
       { latitude: 44.0, longitude: -79.7 },
       { latitude: 44.0, longitude: -79.699 },
       { latitude: 44.0, longitude: -79.698 },
       { latitude: 44.002, longitude: -79.697 },
-    ]);
-    expect(result.segments[0].exitConnectorPolyline).toEqual([
       { latitude: 44.002, longitude: -79.695 },
       { latitude: 44.0, longitude: -79.694 },
       { latitude: 44.0, longitude: -79.693 },
     ]);
-    expect(result.entryConnectorPolyline).toEqual(result.segments[0].entryConnectorPolyline);
-    expect(result.exitConnectorPolyline).toEqual(result.segments[0].exitConnectorPolyline);
+    expect(result.likelyDetourPolyline).toEqual(result.segments[0].likelyDetourPolyline);
+    expect(result.segments[0].entryConnectorPolyline).toBeNull();
+    expect(result.segments[0].exitConnectorPolyline).toBeNull();
+    expect(result.entryConnectorPolyline).toBeNull();
+    expect(result.exitConnectorPolyline).toBeNull();
   });
 });

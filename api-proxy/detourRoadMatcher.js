@@ -14,7 +14,7 @@ const ROAD_MATCH_FIELDS = [
   'roadMatchSource',
 ];
 const EARTH_RADIUS_METERS = 6371000;
-const DEFAULT_BLOCKED_PROXIMITY_METERS = 15;
+const DEFAULT_BLOCKED_PROXIMITY_METERS = 35;
 const DEFAULT_BLOCKED_OVERLAP_RATIO = 0.05;
 const DEFAULT_BLOCKED_ENDPOINT_RATIO = 0.12;
 const DEFAULT_BLOCKED_MIN_POINTS = 3;
@@ -314,11 +314,6 @@ function doesPathUseBlockedSegment(path, blockedPolyline, env = process.env) {
     0,
     0.45
   );
-  const startIndex = Math.min(points.length - 1, Math.floor(points.length * endpointRatio));
-  const endIndex = Math.max(startIndex + 1, Math.ceil(points.length * (1 - endpointRatio)) - 1);
-  const interior = points.slice(startIndex, endIndex + 1);
-  if (interior.length === 0) return false;
-
   const proximityMeters = parsePositiveInt(
     env.DETOUR_ROAD_MATCHING_BLOCKED_PROXIMITY_METERS,
     DEFAULT_BLOCKED_PROXIMITY_METERS,
@@ -337,6 +332,14 @@ function doesPathUseBlockedSegment(path, blockedPolyline, env = process.env) {
     1,
     50
   );
+  const endpointPointCount = Math.min(
+    Math.ceil(points.length * endpointRatio),
+    Math.max(0, Math.floor((points.length - minPoints) / 2))
+  );
+  const startIndex = endpointPointCount;
+  const endIndex = points.length - endpointPointCount - 1;
+  const interior = points.slice(startIndex, endIndex + 1);
+  if (interior.length === 0) return false;
 
   const nearBlockedCount = interior.filter((point) =>
     pointToPolylineDistance(point, blocked) <= proximityMeters
@@ -415,6 +418,15 @@ function dedupeConsecutivePoints(points) {
 function buildConnectorPolyline(points) {
   const connector = dedupeConsecutivePoints(points);
   return connector.length >= 2 ? connector : null;
+}
+
+function stitchRenderableDetourPolyline(path, entryConnectorPolyline, exitConnectorPolyline) {
+  const stitched = dedupeConsecutivePoints([
+    ...(Array.isArray(entryConnectorPolyline) ? entryConnectorPolyline : []),
+    ...(Array.isArray(path) ? path : []),
+    ...(Array.isArray(exitConnectorPolyline) ? exitConnectorPolyline : []),
+  ]);
+  return stitched.length >= 2 ? stitched : [];
 }
 
 function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.env) {
@@ -679,14 +691,21 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
     return null;
   }
 
+  const renderablePolyline = stitchRenderableDetourPolyline(
+    matchedPolyline,
+    routeTrim.entryConnectorPolyline,
+    routeTrim.exitConnectorPolyline
+  );
+  if (renderablePolyline.length < 2) return null;
+  if (doesPathUseBlockedSegment(renderablePolyline, options.blockedPolyline, options.env)) {
+    addRejectionReason(options, 'published-blocked-overlap');
+    return null;
+  }
+
   return {
-    likelyDetourPolyline: matchedPolyline,
-    ...(routeTrim.entryConnectorPolyline
-      ? { entryConnectorPolyline: routeTrim.entryConnectorPolyline }
-      : {}),
-    ...(routeTrim.exitConnectorPolyline
-      ? { exitConnectorPolyline: routeTrim.exitConnectorPolyline }
-      : {}),
+    likelyDetourPolyline: renderablePolyline,
+    entryConnectorPolyline: null,
+    exitConnectorPolyline: null,
     likelyDetourRoadNames: extractRoadNames(matchable),
     roadMatchConfidence: confidenceLabel(matchable.confidence),
     roadMatchRawConfidence: Number.isFinite(Number(matchable.confidence))
@@ -730,6 +749,14 @@ async function matchPolylineToRoads(polyline, options = {}) {
   );
   let matchError = null;
   let rejectedForTrust = false;
+  const externalRejectionReasons = Array.isArray(options.rejectionReasons)
+    ? options.rejectionReasons
+    : null;
+  const recordRejectionReasons = (reasons) => {
+    if (externalRejectionReasons && Array.isArray(reasons) && reasons.length > 0) {
+      externalRejectionReasons.push(...reasons);
+    }
+  };
   for (const radiusMeters of getAdaptiveMatchRadii(env)) {
     try {
       const payload = await fetchOsrmJsonWithTimeout(
@@ -751,6 +778,7 @@ async function matchPolylineToRoads(polyline, options = {}) {
         : null;
       if (matchResult) return matchResult;
       if (matching) {
+        recordRejectionReasons(rejectionReasons);
         if (rejectionReasons.some(({ reason }) => reason === 'endpoint-mismatch')) {
           rejectedForTrust = true;
         }
@@ -790,12 +818,16 @@ async function matchPolylineToRoads(polyline, options = {}) {
     timeoutMs
   );
   const route = Array.isArray(routePayload?.routes) ? routePayload.routes[0] : null;
-  return route
-    ? buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, {
+  if (!route) return null;
+
+  const routeRejectionReasons = [];
+  const routeResult = buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, {
       ...options,
       candidatePolyline: points,
-    })
-    : null;
+      rejectionReasons: routeRejectionReasons,
+    });
+  if (!routeResult) recordRejectionReasons(routeRejectionReasons);
+  return routeResult;
 }
 
 function clearRoadMatchedFields(value) {
@@ -844,12 +876,28 @@ async function matchSegment(segment, options) {
   }
 
   try {
+    const rejectionReasons = [];
     const match = await matchPolylineToRoads(candidate, {
       ...options,
       blockedPolyline: segment?.skippedSegmentPolyline,
       routeShapePolyline: getRouteShapePolylineForSegment(segment, options),
+      rejectionReasons,
     });
-    if (!match) return clearRoadMatchedFields(segment);
+    if (!match) {
+      const cleared = clearRoadMatchedFields(segment);
+      if (rejectionReasons.some(({ reason }) => (
+        reason === 'blocked-overlap' ||
+        reason === 'published-blocked-overlap'
+      ))) {
+        return {
+          ...cleared,
+          canShowDetourPath: false,
+          inferredDetourPolyline: null,
+          detourPathSuppressedReason: 'road-match-closed-overlap',
+        };
+      }
+      return cleared;
+    }
     return {
       ...segment,
       ...match,
@@ -892,6 +940,22 @@ async function matchDetourGeometry(geometry, options = {}) {
   }
 
   next.segments = segments;
+
+  const hasSuppressedDetourPathSegment = segments.some((segment) =>
+    segment?.detourPathSuppressedReason === 'road-match-closed-overlap'
+  );
+  const hasRenderableDetourPathSegment = segments.some((segment) => (
+    segment?.canShowDetourPath === true &&
+    (
+      (Array.isArray(segment?.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2) ||
+      (Array.isArray(segment?.inferredDetourPolyline) && segment.inferredDetourPolyline.length >= 2)
+    )
+  ));
+  if (hasSuppressedDetourPathSegment && !hasRenderableDetourPathSegment) {
+    next.canShowDetourPath = false;
+    next.inferredDetourPolyline = null;
+    next.detourPathSuppressedReason = 'road-match-closed-overlap';
+  }
 
   primaryMatch = segments.find((segment) => (
       Array.isArray(segment?.likelyDetourPolyline) &&

@@ -300,7 +300,7 @@ describe('detector → publisher: full pipeline', () => {
     expect(doc).toHaveProperty('evidencePointCount');
     expect(doc.canShowDetourPath).toBe(false);
     expect(doc.skippedSegmentPolyline).toBeUndefined();
-    expect(doc.inferredDetourPolyline).toBeUndefined();
+    expect(doc.inferredDetourPolyline).toBeNull();
   });
 
   test('multi-vehicle detour reports correct vehicleCount in Firestore', async () => {

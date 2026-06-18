@@ -1,6 +1,6 @@
 # Auto-Detour Validation Matrix
 
-Status: Current as of 2026-06-16
+Status: Current as of 2026-06-17
 
 Use this file to turn detour bugs, live observations, and product decisions into repeatable validation scenarios.
 
@@ -83,8 +83,35 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-050 | Short location-specific detour with no closed stops | A short Route 12B-style GPS detour must not expand to nearby downstream noise, must not inherit distant official-notice stop impacts, and must validate with zero skipped stops. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/stopImpacts.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourGroundTruthValidator.test.js`, `docs/detour-ground-truth/route-12b-bayfield-sophia-2026-06-05.json` | QA sections 2, 5, 6, 9, 14 | Covered, needs live recheck after deploy | Candidate over-expansion or route-family notice contamination |
 | DET-051 | Route 400 sparse multi-day evidence | Route 400 detours built from only sparse multi-day evidence stay backend-active but are hidden from riders unless fresh same-day or current off-route vehicle evidence reconfirms the event. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 5, 14 | Covered, needs live Route 400 recheck after deploy | Hiding a real Route 400 detour if no current bus is available to reconfirm sparse evidence |
 | DET-052 | Public publish-gate explanations | Every active detour write includes backend-generated `riderPublishGates` explaining the public gates for detour evidence, rider alert visibility, likely path visibility, skipped-stop visibility, and normal-route GPS clear proof. These gates are explanatory metadata; they must not replace the existing backend-owned public fields. | `api-proxy/__tests__/riderPublishGates.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 2 | Covered | Operators misreading hidden detours without knowing whether the block is evidence, geometry, skipped-stop, or clear-proof related |
+| DET-053 | Detour path overlaps closed route segment | If the road-matched or preserved alternate path materially overlaps the skipped/closed segment, suppress that alternate path at both segment and top-level fields. The client must honor segment-level `canShowDetourPath=false` and must not fall back to stale top-level path geometry. | `api-proxy/__tests__/detourRoadMatcher.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 9, 14 | Covered, needs live Route 12A recheck after deploy | Hiding a valid very-short shared-road handoff versus showing riders a path over the closed road |
 
 ## Recorded issues
+
+### DET-053A — Route 12A detour path overlapped its closed segment
+
+- Date/time observed: 2026-06-17
+- Environment: live production Firestore review
+- Route(s): `12A`
+- What happened: the active Route 12A document had a segment suppressed with `canShowDetourPath: false`, but stale top-level route geometry could still preserve or render an alternate path in the same area as the closed segment.
+- What should have happened: once a segment path is suppressed because it overlaps the closed route segment, the publisher should clear stale top-level alternate path fields and the client should not fall back to those fields for that segment.
+- Evidence:
+  - active event: `12A:1c872f32-f2a7-4aed-9eaa-72386e4d576e:0-400`
+  - suspicious likely path had interior points within roughly 5-16m of the skipped route segment
+  - segment reason: `road-match-closed-overlap`
+- Initial classification:
+  - geometry confidence
+  - publishing/history
+  - frontend rendering
+- Root cause: road-match suppression was segment-aware, but older top-level trusted inferred/likely fields could still be preserved or used as a frontend fallback when every segment path was explicitly suppressed.
+- Fix:
+  - road matcher rejects final stitched paths that materially overlap the skipped segment
+  - publisher refuses to preserve stale top-level inferred/likely paths over a segment-suppressed record and clears top-level path fields when `canShowDetourPath=false`
+  - frontend overlay derivation treats segment-level `canShowDetourPath=false` as authoritative and blocks stale top-level fallback
+- Tests added/updated:
+  - `api-proxy/__tests__/detourRoadMatcher.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `src/__tests__/detourOverlays.test.js`
+- Remaining risk: very short legitimate detours may briefly show only the closed/skipped segment until enough GPS evidence creates a non-overlapping alternate path.
 
 ### DET-030/031/033A — evidence identity could over-count AVL vehicle IDs
 
@@ -576,9 +603,9 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - geometry confidence
   - frontend rendering
 - Fix:
-  - backend road matching now publishes `entryConnectorPolyline` and `exitConnectorPolyline` when it trims normal-route endpoint overlap
-  - frontend detour overlay derivation stitches those connector polylines onto renderable likely/trusted detour paths
-  - Firestore mapping preserves connector fields at top level and within `segments[]`
+  - original fix: backend road matching published `entryConnectorPolyline` and `exitConnectorPolyline` when it trimmed normal-route endpoint overlap, and the frontend stitched those connector polylines onto renderable likely/trusted detour paths
+  - updated 2026-06-17: new road-matched records now publish one continuous `likelyDetourPolyline` with safe entry/rejoin handoffs already stitched in, and connector fields are cleared to avoid double stitching
+  - Firestore mapping still preserves legacy connector fields at top level and within `segments[]` so older active records render safely
 - Tests added/updated:
   - `api-proxy/__tests__/detourRoadMatcher.test.js`
   - `src/__tests__/detourOverlays.test.js`
