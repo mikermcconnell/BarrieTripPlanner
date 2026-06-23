@@ -4,7 +4,7 @@ const path = require('path');
 describe('route line polish source wiring', () => {
   test('native and web route lines use white halos and muted context styling', () => {
     const nativeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.js'), 'utf8');
-    const webSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.js'), 'utf8');
+    const webSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.impl.js'), 'utf8');
 
     expect(nativeSource).toContain('outlineColor={routeVisual.outlineColor}');
     expect(nativeSource).toContain('routeColor: isSelected ? shape.color : ROUTE_LINE_MUTED_COLOR');

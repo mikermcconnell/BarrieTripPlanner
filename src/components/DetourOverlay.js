@@ -585,8 +585,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   detourMapLabel: {
-    minHeight: 30,
-    maxWidth: 176,
+    minHeight: 34,
+    maxWidth: 236,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 16,
@@ -611,6 +611,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.15,
     lineHeight: 14,
+    maxWidth: 208,
   },
 });
 
@@ -995,7 +996,7 @@ const DetourOverlay = ({
                   ]}
                 >
                   <View style={[styles.detourMapLabelDot, { backgroundColor: label.dotColor }]} />
-                  <Text style={[styles.detourMapLabelText, { color: label.textColor }]} numberOfLines={1}>
+                  <Text style={[styles.detourMapLabelText, { color: label.textColor }]} numberOfLines={2}>
                     {label.label}
                   </Text>
                 </View>

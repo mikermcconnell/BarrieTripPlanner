@@ -65,7 +65,7 @@ describe('HomeScreen map performance', () => {
       'utf8'
     );
     const webSource = fs.readFileSync(
-      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.impl.js'),
       'utf8'
     );
 
@@ -93,7 +93,7 @@ describe('HomeScreen map performance', () => {
       'utf8'
     );
     const webSource = fs.readFileSync(
-      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.impl.js'),
       'utf8'
     );
 
@@ -130,7 +130,7 @@ describe('HomeScreen map performance', () => {
       'utf8'
     );
     const webSource = fs.readFileSync(
-      path.join(__dirname, '..', 'screens', 'HomeScreen.web.js'),
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.impl.js'),
       'utf8'
     );
 

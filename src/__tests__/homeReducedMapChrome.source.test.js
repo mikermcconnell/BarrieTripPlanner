@@ -25,7 +25,7 @@ describe('home reduced map chrome', () => {
   });
 
   test('web home screen uses one map options entry instead of separate view and stops chrome', () => {
-    const source = readSource('screens/HomeScreen.web.js');
+    const source = readSource('screens/HomeScreen.web.impl.js');
 
     expect(source).toContain('MapOptionsControl');
     expect(source).not.toContain('<MapViewModeToggle');

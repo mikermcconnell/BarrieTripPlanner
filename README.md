@@ -91,6 +91,11 @@ Supporting features:
    npm run web:dev
    ```
 
+   Optimized static web export:
+   ```bash
+   npm run web:export
+   ```
+
    General Expo server only:
    ```bash
    npm start

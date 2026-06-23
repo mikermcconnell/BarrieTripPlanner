@@ -5,7 +5,7 @@ describe('profile account navigation', () => {
   test('registers a Manage account destination in the Profile stack', () => {
     const navigatorSource = fs.readFileSync(path.join(__dirname, '../navigation/TabNavigator.js'), 'utf8');
 
-    expect(navigatorSource).toContain("import AccountScreen from '../screens/AccountScreen'");
-    expect(navigatorSource).toContain('name="Account" component={AccountScreen}');
+    expect(navigatorSource).toContain("const getAccountScreen = () => require('../screens/AccountScreen').default");
+    expect(navigatorSource).toContain('name="Account" getComponent={getAccountScreen}');
   });
 });

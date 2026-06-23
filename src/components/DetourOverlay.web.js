@@ -525,8 +525,8 @@ const makeEntryStopHtml = (eyebrow, label, fillColor, borderColor, textColor, do
 
 const makeDetourMapLabelHtml = (label, fillColor, borderColor, textColor, dotColor) => `
   <div title="${escapeHtml(label)}" style="
-    min-height:30px;
-    max-width:176px;
+    min-height:34px;
+    max-width:236px;
     padding:5px 10px;
     border-radius:16px;
     background:${fillColor};
@@ -550,9 +550,9 @@ const makeDetourMapLabelHtml = (label, fillColor, borderColor, textColor, dotCol
     <span style="
       font:800 11px/14px Avenir, Arial, sans-serif;
       letter-spacing:0.15px;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
+      max-width:208px;
+      white-space:normal;
+      overflow-wrap:break-word;
     ">${escapeHtml(label)}</span>
   </div>
 `;

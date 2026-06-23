@@ -9,22 +9,22 @@ import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS, SHADOWS } fro
 import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { getDesktopTabBarStyle, isWideWebViewport } from '../utils/webLayout';
 
-// Import screens
 import HomeScreen from '../screens/HomeScreen';
-import SearchScreen from '../screens/SearchScreen';
-import TripDetailsScreen from '../screens/TripDetailsScreen';
-import NavigationScreen from '../screens/NavigationScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import SignInScreen from '../screens/SignInScreen';
-import SignUpScreen from '../screens/SignUpScreen';
-import AccountScreen from '../screens/AccountScreen';
-import FavoritesScreen from '../screens/FavoritesScreen';
-import TripHistoryScreen from '../screens/TripHistoryScreen';
-import AlertsScreen from '../screens/AlertsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import NewsScreen from '../screens/NewsScreen';
-import SurveyScreen from '../screens/SurveyScreen';
-import SurveyResultsScreen from '../screens/SurveyResultsScreen';
+
+const getSearchScreen = () => require('../screens/SearchScreen').default;
+const getTripDetailsScreen = () => require('../screens/TripDetailsScreen').default;
+const getNavigationScreen = () => require('../screens/NavigationScreen').default;
+const getProfileScreen = () => require('../screens/ProfileScreen').default;
+const getSignInScreen = () => require('../screens/SignInScreen').default;
+const getSignUpScreen = () => require('../screens/SignUpScreen').default;
+const getAccountScreen = () => require('../screens/AccountScreen').default;
+const getFavoritesScreen = () => require('../screens/FavoritesScreen').default;
+const getTripHistoryScreen = () => require('../screens/TripHistoryScreen').default;
+const getAlertsScreen = () => require('../screens/AlertsScreen').default;
+const getSettingsScreen = () => require('../screens/SettingsScreen').default;
+const getNewsScreen = () => require('../screens/NewsScreen').default;
+const getSurveyScreen = () => require('../screens/SurveyScreen').default;
+const getSurveyResultsScreen = () => require('../screens/SurveyResultsScreen').default;
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -54,11 +54,11 @@ const TabIcon = ({ name, focused, color }) => {
 const MapStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
     <Stack.Screen name="MapMain" component={HomeScreen} />
-    <Stack.Screen name="Alerts" component={AlertsScreen} options={{ animation: 'slide_from_bottom' }} />
-    <Stack.Screen name="TripDetails" component={TripDetailsScreen} />
+    <Stack.Screen name="Alerts" getComponent={getAlertsScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="TripDetails" getComponent={getTripDetailsScreen} />
     <Stack.Screen
       name="Navigation"
-      component={NavigationScreen}
+      getComponent={getNavigationScreen}
       options={{
         presentation: 'fullScreenModal',
         gestureEnabled: false,
@@ -71,16 +71,16 @@ const MapStack = () => (
 // Profile Stack Navigator
 const ProfileStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-    <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-    <Stack.Screen name="SignIn" component={SignInScreen} options={{ animation: 'slide_from_bottom' }} />
-    <Stack.Screen name="SignUp" component={SignUpScreen} options={{ animation: 'slide_from_bottom' }} />
-    <Stack.Screen name="Account" component={AccountScreen} />
-    <Stack.Screen name="Favorites" component={FavoritesScreen} />
-    <Stack.Screen name="TripHistory" component={TripHistoryScreen} />
-    <Stack.Screen name="Settings" component={SettingsScreen} />
-    <Stack.Screen name="News" component={NewsScreen} />
-    <Stack.Screen name="Survey" component={SurveyScreen} />
-    <Stack.Screen name="SurveyResults" component={SurveyResultsScreen} />
+    <Stack.Screen name="ProfileMain" getComponent={getProfileScreen} />
+    <Stack.Screen name="SignIn" getComponent={getSignInScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="SignUp" getComponent={getSignUpScreen} options={{ animation: 'slide_from_bottom' }} />
+    <Stack.Screen name="Account" getComponent={getAccountScreen} />
+    <Stack.Screen name="Favorites" getComponent={getFavoritesScreen} />
+    <Stack.Screen name="TripHistory" getComponent={getTripHistoryScreen} />
+    <Stack.Screen name="Settings" getComponent={getSettingsScreen} />
+    <Stack.Screen name="News" getComponent={getNewsScreen} />
+    <Stack.Screen name="Survey" getComponent={getSurveyScreen} />
+    <Stack.Screen name="SurveyResults" getComponent={getSurveyResultsScreen} />
   </Stack.Navigator>
 );
 
@@ -138,7 +138,7 @@ const MainTabs = () => {
       />
       <Tab.Screen
         name="Search"
-        component={SearchScreen}
+        getComponent={getSearchScreen}
         options={{
           tabBarLabel: 'Search',
         }}

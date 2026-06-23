@@ -109,10 +109,10 @@ describe('startup loading preview', () => {
   });
 
   test('App.js exposes the web-only preview query flag without replacing normal startup', () => {
-    const appSource = fs.readFileSync(path.join(__dirname, '../../App.js'), 'utf8');
+    const appSource = fs.readFileSync(path.join(__dirname, '../../App.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, '../../AppRuntime.js'), 'utf8');
     const componentSource = fs.readFileSync(path.join(__dirname, '../components/StartupLoadingScreen.js'), 'utf8');
     const nativeHomeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.js'), 'utf8');
-    const webHomeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.js'), 'utf8');
+    const webHomeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.impl.js'), 'utf8');
 
     expect(appSource).toContain("get('preview') === 'startup-loading'");
     expect(appSource).toContain('<StartupLoadingScreen');

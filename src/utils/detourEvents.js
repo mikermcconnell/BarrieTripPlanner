@@ -324,14 +324,26 @@ export const buildDetourEventTitle = ({ routeId, detour = {}, segment = null }) 
   return stopCodeTitle || (familyId ? `Route ${familyId} detour` : 'Active detour');
 };
 
+const hasEventWindow = (detour = {}) => Boolean(
+  detour?.eventWindow &&
+  typeof detour.eventWindow === 'object' &&
+  detour.eventWindow.routeId &&
+  detour.eventWindow.shapeId
+);
+
 const buildCandidateGroupKey = ({ routeId, detour, segment, segmentIndex }) => {
   const hasMultipleRouteSegments = hasMultipleSegments(detour);
+  const shouldTrustTopLevelEvent = hasEventWindow(detour);
   const sharedEventId =
+    (shouldTrustTopLevelEvent ? detour?.sharedDetourEventId : null) ||
     segment?.sharedDetourEventId ||
     (!hasMultipleRouteSegments ? detour?.sharedDetourEventId : null);
   if (sharedEventId) return `event:${sharedEventId}`;
 
-  const backendEventId = segment?.detourEventId || (!hasMultipleRouteSegments ? detour?.detourEventId : null);
+  const backendEventId =
+    (shouldTrustTopLevelEvent ? detour?.detourEventId : null) ||
+    segment?.detourEventId ||
+    (!hasMultipleRouteSegments ? detour?.detourEventId : null);
   if (backendEventId) return `event:${backendEventId}`;
 
   const explicitSources = [

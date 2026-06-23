@@ -7,7 +7,7 @@ const readSource = (relativePath) => (
 
 describe('notification wiring source checks', () => {
   test('notification taps route detour alerts to the Alerts screen', () => {
-    const source = fs.readFileSync(path.join(__dirname, '../../App.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '../../AppRuntime.js'), 'utf8');
 
     expect(source).toContain("case 'detour_alert':");
     expect(source).toContain("navigationRef.current.navigate('Map', { screen: 'Alerts' })");

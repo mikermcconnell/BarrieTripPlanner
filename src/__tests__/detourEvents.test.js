@@ -202,6 +202,44 @@ describe('detourEvents', () => {
     expect(events[0].candidates).toHaveLength(4);
   });
 
+  test('uses the top-level event window shared ID when one Route 400 event has multiple segment IDs', () => {
+    const events = buildActiveDetourEvents({
+      '400': {
+        routeId: '400',
+        state: 'active',
+        confidence: 'high',
+        riderVisible: true,
+        detourEventId: '400:shape-1:5200-8500',
+        sharedDetourEventId: 'detour-event-8blwvc',
+        eventWindow: {
+          routeId: '400',
+          shapeId: 'shape-1',
+          coreStartProgressMeters: 5286,
+          coreEndProgressMeters: 8484,
+        },
+        segments: [
+          {
+            detourEventId: 'detour-event-8blwvc',
+            sharedDetourEventId: 'detour-event-8blwvc',
+            likelyDetourRoadNames: ['Essa Road', 'Anne Street South', 'Tiffin Street'],
+          },
+          {
+            detourEventId: 'detour-event-2i6njv',
+            sharedDetourEventId: 'detour-event-2i6njv',
+            likelyDetourRoadNames: ['Anne Street South', 'Henry Street', 'Dunlop Street West'],
+          },
+        ],
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      eventId: 'event:detour-event-8blwvc',
+      routeIds: ['400'],
+    });
+    expect(events[0].candidates).toHaveLength(2);
+  });
+
   test('keeps unrelated detour events separate', () => {
     const events = buildActiveDetourEvents({
       '12A': {

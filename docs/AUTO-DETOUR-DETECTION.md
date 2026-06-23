@@ -136,9 +136,12 @@ If a route has multiple independent detour sections at the same time, they are p
 | `roadMatchConfidence` | String \| null | `"low"`, `"medium"`, or `"high"` from the road matcher |
 | `roadMatchRawConfidence` | Number \| null | Raw matcher confidence when available |
 | `roadMatchSource` | String \| null | Source such as `osrm-match` or `osrm-route` |
+| `endpointMismatchMeters` | Number \| null | Debug distance between the road-matched endpoint and the candidate path endpoint. |
+| `endpointMismatchAcceptedReason` | String \| null | Present when the matcher accepted a modest endpoint mismatch because the bus had already rejoined, or started from, the regular-route corridor. |
 | `detourPathLabel` | String | Rider-facing label, currently `"Likely detour path"` |
 | `entryPoint` | `{ lat, lon }` \| null | Where vehicles leave the published route |
 | `exitPoint` | `{ lat, lon }` \| null | Where vehicles rejoin the published route |
+| `serviceRejoinPoint` | `{ lat, lon }` \| null | Optional point where the bus naturally resumes regular service when that differs from the artificial closure endpoint. |
 | `entryStopId` / `exitStopId` | String \| null | Stop anchors for the primary segment when known |
 | `skippedStopIds` / `skippedStopCodes` / `skippedStops` | Array | Stops not served by this detoured route for the primary segment |
 | `boundaryStopIds` / `boundaryStopCodes` / `boundaryStops` | Array | Entry/exit or last-served/first-served stops that remain in service. These are context only and must not create closed-stop markers or stop-impact notifications. |
@@ -168,6 +171,8 @@ Shared detour event fields are also written onto individual `segments[]` when ge
 When a newer GPS-confirmed alternate corridor supersedes a previously published path, the replacement geometry may carry `gpsSupersedesPreviousPath: true` internally through the detector/publisher pipeline. This flag is an operations/debug guard that prevents preservation of the previous road-matched path. It does not lower the publish threshold: the alternate still needs the normal same-route two-vehicle/three-ping proof.
 
 Self-loop segments are not valid closures when they enter and exit at the same stop and only that stop is affected. Segments with no entry stop, no exit stop, no skipped route segment, and explicit empty stop-impact fields are also not valid rider-facing closures. Long alternate paths anchored to a tiny closed span with no skipped segment are also suppressed because they usually indicate the wrong rejoin point. The backend filters these cases before publishing and before preserving a previously trusted likely path.
+
+Entry and exit points are service-boundary anchors, not always mandatory bus-driving waypoints. The skipped segment can describe the closed regular-route section while the likely detour path stops where the bus naturally resumes regular service. When that service rejoin differs from the artificial closure endpoint, records may include `serviceRejoinPoint`. Road matching may accept a modest endpoint mismatch when the unmatched endpoint is still on the route's regular-service corridor, so the system does not force an unrealistic turn just to touch the artificial closure endpoint.
 
 For loop routes or routes that pass near the same downtown area more than once, exit-anchor selection is route-agnostic and progress-aware. When multiple return-to-route GPS candidates exist, geometry prefers the downstream rejoin that creates a plausible closed route span instead of a later candidate near the original entry point. If multiple exit candidates still only produce a long likely path with a tiny/no closed span, that geometry is suppressed until a credible rejoin is available.
 
@@ -287,6 +292,7 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Updated 2026-06-17: road-matched detour paths publish as one continuous rider line** — When road matching trims normal-route overlap at the start or end of a likely path for safety checks, the backend now stitches the safe approach/rejoin transition back into `likelyDetourPolyline` before publishing and clears connector fields. This closes visual gaps caused by conservative off-route thresholds without lowering detection thresholds or requiring client-side stitching for new records.
 - **Updated 2026-06-17: road-matched paths are rejected if the final rider line materially overlaps the closed segment** — The road matcher now checks both the core matched path and the final stitched rider-facing line against the skipped segment. Endpoint handoff points are tolerated, but interior overlap near the closed road is not published.
 - **Updated 2026-06-17: segment-level path suppression also clears stale route-level fallbacks** — When a likely path is suppressed because it overlaps the closed segment, the publisher does not preserve older trusted top-level inferred/likely paths over the suppressed segment. The app also treats segment-level `canShowDetourPath=false` as authoritative, so a stale route-level `inferredDetourPolyline` cannot draw an alternate path for that segment.
+- **Updated 2026-06-23: service rejoin corridors do not need forced endpoint turns** — Road matching now allows a modest endpoint mismatch when the path has already rejoined the route's regular-service corridor. This keeps the rider-facing likely path operationally realistic instead of adding a turn solely to hit an artificial detour endpoint.
 - **Still in validation: affected-stop accuracy on route variants and opposite directions** — Geometry and rendering are segment-aware and sibling projection is now supported, but the public-launch validation pass still needs to confirm the skipped-stop derivation is correct across route families such as 8A/8B, 12A/12B, and both directions of travel.
 
 ### What's missing to go public
@@ -420,6 +426,10 @@ Key env vars for the detour system, set in the backend environment or `.env` loc
 | `DETOUR_ROAD_MATCHING_BLOCKED_OVERLAP_RATIO` | `0.05` | Max interior overlap allowed before a likely detour path is rejected as still using the closed route |
 | `DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO` | `0.12` | Entry/exit portion ignored because detours must rejoin the regular route |
 | `DETOUR_ROAD_MATCHING_BLOCKED_MIN_POINTS` | `3` | Minimum overlapping points needed before rejecting a likely detour path |
+| `DETOUR_ROAD_MATCHING_PREFER_ROUTE` | `false` | Prefer OSRM route snapping before OSRM trace matching. This is useful for sparse hand-authored waypoint presets; live GPS traces should normally keep match-first behavior. |
+| `DETOUR_ROAD_MATCHING_ENDPOINT_MAX_MISMATCH_METERS` | `45` | Normal maximum endpoint drift allowed between the candidate path and road-matched path |
+| `DETOUR_ROAD_MATCHING_REJOIN_CORRIDOR_MAX_MISMATCH_METERS` | `125` | Larger endpoint drift allowed only when the unmatched endpoint is on the regular-route corridor |
+| `DETOUR_ROAD_MATCHING_REJOIN_CORRIDOR_PROXIMITY_METERS` | `45` | Distance from the regular route used to decide whether a mismatched endpoint is still a valid service rejoin/start point |
 | `DETOUR_ROAD_MATCHING_BACKTRACK_PROXIMITY_METERS` | `12` | How close the return leg must be to the outbound leg before a route-fallback spur is stripped |
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_SEGMENT_METERS` | `20` | Minimum out-and-back segment size to strip as an avoidable detour spur |
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_TURN_DEGREES` | `150` | Minimum turn angle used to identify route-fallback U-turn spurs |

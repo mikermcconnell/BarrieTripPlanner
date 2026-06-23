@@ -12,6 +12,8 @@ const ROAD_MATCH_FIELDS = [
   'roadMatchConfidence',
   'roadMatchRawConfidence',
   'roadMatchSource',
+  'endpointMismatchMeters',
+  'endpointMismatchAcceptedReason',
 ];
 const EARTH_RADIUS_METERS = 6371000;
 const DEFAULT_BLOCKED_PROXIMITY_METERS = 35;
@@ -26,6 +28,8 @@ const DEFAULT_BACKTRACK_MIN_TURN_DEGREES = 150;
 const DEFAULT_BACKTRACK_MAX_WINDOW_POINTS = 30;
 const DEFAULT_MIN_MATCH_CONFIDENCE = 0.45;
 const DEFAULT_ENDPOINT_MAX_MISMATCH_METERS = 45;
+const DEFAULT_REJOIN_CORRIDOR_MAX_MISMATCH_METERS = 125;
+const DEFAULT_REJOIN_CORRIDOR_PROXIMITY_METERS = 45;
 
 function isTruthy(value) {
   return ['true', '1', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -521,7 +525,25 @@ function getEndpointMaxMismatchMeters(env = process.env) {
   );
 }
 
-function endpointMismatchMeters(path, referencePath) {
+function getRejoinCorridorMaxMismatchMeters(env = process.env) {
+  return parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_REJOIN_CORRIDOR_MAX_MISMATCH_METERS,
+    DEFAULT_REJOIN_CORRIDOR_MAX_MISMATCH_METERS,
+    5,
+    500
+  );
+}
+
+function getRejoinCorridorProximityMeters(env = process.env) {
+  return parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_REJOIN_CORRIDOR_PROXIMITY_METERS,
+    DEFAULT_REJOIN_CORRIDOR_PROXIMITY_METERS,
+    5,
+    200
+  );
+}
+
+function buildEndpointMismatchAssessment(path, referencePath) {
   const matched = normalizePolyline(path);
   const reference = normalizePolyline(referencePath);
   if (matched.length < 2 || reference.length < 2) return null;
@@ -538,7 +560,110 @@ function endpointMismatchMeters(path, referencePath) {
     haversineDistance(matchedStart, referenceEnd),
     haversineDistance(matchedEnd, referenceStart)
   );
-  return Math.min(direct, reversed);
+  const directAssessment = {
+    orientation: 'direct',
+    startMismatchMeters: haversineDistance(matchedStart, referenceStart),
+    endMismatchMeters: haversineDistance(matchedEnd, referenceEnd),
+    mismatchMeters: direct,
+    matchedStart,
+    matchedEnd,
+    referenceStart,
+    referenceEnd,
+  };
+  const reversedAssessment = {
+    orientation: 'reversed',
+    startMismatchMeters: haversineDistance(matchedStart, referenceEnd),
+    endMismatchMeters: haversineDistance(matchedEnd, referenceStart),
+    mismatchMeters: reversed,
+    matchedStart,
+    matchedEnd,
+    referenceStart: referenceEnd,
+    referenceEnd: referenceStart,
+  };
+
+  return direct <= reversed ? directAssessment : reversedAssessment;
+}
+
+function endpointMismatchMeters(path, referencePath) {
+  return buildEndpointMismatchAssessment(path, referencePath)?.mismatchMeters ?? null;
+}
+
+function getEndpointRejoinAcceptance(assessment, options = {}) {
+  if (!assessment) return { accepted: true, mismatchMeters: null };
+
+  const strictMaxMeters = getEndpointMaxMismatchMeters(options.env);
+  if (assessment.mismatchMeters <= strictMaxMeters) {
+    return {
+      accepted: true,
+      mismatchMeters: assessment.mismatchMeters,
+      endpointMismatchAcceptedReason: null,
+    };
+  }
+
+  const routeShapePolyline = normalizePolyline(options.routeShapePolyline);
+  if (routeShapePolyline.length < 2) {
+    return {
+      accepted: false,
+      mismatchMeters: assessment.mismatchMeters,
+      endpointMismatchAcceptedReason: null,
+    };
+  }
+  if (assessment.orientation !== 'direct') {
+    return {
+      accepted: false,
+      mismatchMeters: assessment.mismatchMeters,
+      endpointMismatchAcceptedReason: null,
+    };
+  }
+
+  const corridorMaxMeters = Math.max(
+    strictMaxMeters,
+    getRejoinCorridorMaxMismatchMeters(options.env)
+  );
+  const corridorProximityMeters = getRejoinCorridorProximityMeters(options.env);
+  const startStrict = assessment.startMismatchMeters <= strictMaxMeters;
+  const endStrict = assessment.endMismatchMeters <= strictMaxMeters;
+  const matchedStartCorridor =
+    assessment.startMismatchMeters <= corridorMaxMeters &&
+    pointToPolylineDistance(assessment.matchedStart, routeShapePolyline) <= corridorProximityMeters;
+  const matchedEndCorridor =
+    assessment.endMismatchMeters <= corridorMaxMeters &&
+    pointToPolylineDistance(assessment.matchedEnd, routeShapePolyline) <= corridorProximityMeters;
+  const anchoredStartCorridor =
+    assessment.startMismatchMeters <= corridorMaxMeters &&
+    pointToPolylineDistance(assessment.referenceStart, routeShapePolyline) <= corridorProximityMeters;
+  const anchoredEndCorridor =
+    assessment.endMismatchMeters <= corridorMaxMeters &&
+    pointToPolylineDistance(assessment.referenceEnd, routeShapePolyline) <= corridorProximityMeters;
+  const serviceRejoinPoint = normalizeCoordinate(options.serviceRejoinPoint);
+  const anchoredEndServiceRejoin =
+    serviceRejoinPoint &&
+    assessment.endMismatchMeters <= corridorMaxMeters &&
+    haversineDistance(assessment.referenceEnd, serviceRejoinPoint) <= strictMaxMeters;
+
+  const startsAtServiceCorridor = (matchedStartCorridor || anchoredStartCorridor) && endStrict;
+  const rejoinsServiceCorridor = (matchedEndCorridor || anchoredEndCorridor || anchoredEndServiceRejoin) && startStrict;
+  const matchesServiceCorridorAnchors = anchoredStartCorridor && (anchoredEndCorridor || anchoredEndServiceRejoin);
+
+  if (startsAtServiceCorridor || rejoinsServiceCorridor || matchesServiceCorridorAnchors) {
+    return {
+      accepted: true,
+      mismatchMeters: assessment.mismatchMeters,
+      endpointMismatchAcceptedReason: anchoredEndServiceRejoin
+        ? 'matched-explicit-service-rejoin'
+        : matchesServiceCorridorAnchors
+        ? 'matched-regular-route-corridor-anchors'
+        : startsAtServiceCorridor
+          ? 'started-on-regular-route-corridor'
+          : 'rejoined-regular-route-corridor',
+    };
+  }
+
+  return {
+    accepted: false,
+    mismatchMeters: assessment.mismatchMeters,
+    endpointMismatchAcceptedReason: null,
+  };
 }
 
 function addRejectionReason(options, reason, details = {}) {
@@ -661,12 +786,14 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
   );
   if (matchedPolyline.length < 2) return null;
 
-  const mismatchMeters = endpointMismatchMeters(matchedPolyline, options.candidatePolyline);
-  if (
-    mismatchMeters != null &&
-    mismatchMeters > getEndpointMaxMismatchMeters(options.env)
-  ) {
-    addRejectionReason(options, 'endpoint-mismatch', { mismatchMeters });
+  const endpointAssessment = getEndpointRejoinAcceptance(
+    buildEndpointMismatchAssessment(matchedPolyline, options.candidatePolyline),
+    options
+  );
+  if (!endpointAssessment.accepted) {
+    addRejectionReason(options, 'endpoint-mismatch', {
+      mismatchMeters: endpointAssessment.mismatchMeters,
+    });
     return null;
   }
 
@@ -712,6 +839,10 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
       ? Number(matchable.confidence)
       : null,
     roadMatchSource: source,
+    endpointMismatchMeters: endpointAssessment.mismatchMeters != null
+      ? Math.round(endpointAssessment.mismatchMeters)
+      : null,
+    endpointMismatchAcceptedReason: endpointAssessment.endpointMismatchAcceptedReason,
     detourPathLabel: DETOUR_PATH_LABEL,
   };
 }
@@ -720,6 +851,35 @@ function isRouteFallbackEnabled(env = process.env) {
   return env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED == null
     ? true
     : isTruthy(env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED);
+}
+
+function prefersRouteMatching(options = {}, env = process.env) {
+  return options.preferRouteMatching === true || isTruthy(env.DETOUR_ROAD_MATCHING_PREFER_ROUTE);
+}
+
+async function routePolylineToRoads(points, {
+  baseUrl,
+  fetchImpl,
+  timeoutMs,
+  options = {},
+  recordRejectionReasons = () => {},
+} = {}) {
+  const routePayload = await fetchOsrmJsonWithTimeout(
+    buildOsrmRouteUrl(baseUrl, points),
+    fetchImpl,
+    timeoutMs
+  );
+  const route = Array.isArray(routePayload?.routes) ? routePayload.routes[0] : null;
+  if (!route) return null;
+
+  const routeRejectionReasons = [];
+  const routeResult = buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, {
+      ...options,
+      candidatePolyline: points,
+      rejectionReasons: routeRejectionReasons,
+    });
+  if (!routeResult) recordRejectionReasons(routeRejectionReasons);
+  return routeResult;
 }
 
 async function matchPolylineToRoads(polyline, options = {}) {
@@ -757,6 +917,29 @@ async function matchPolylineToRoads(polyline, options = {}) {
       externalRejectionReasons.push(...reasons);
     }
   };
+
+  if (prefersRouteMatching(options, env)) {
+    try {
+      const routeFirstResult = await routePolylineToRoads(points, {
+        baseUrl,
+        fetchImpl,
+        timeoutMs,
+        options,
+        recordRejectionReasons,
+      });
+      if (routeFirstResult) return routeFirstResult;
+      return null;
+    } catch (err) {
+      matchError = err;
+      if (err?.name === 'AbortError') {
+        return null;
+      }
+      console.warn('[detourRoadMatcher] OSRM route attempt failed', {
+        reason: err?.message || String(err),
+      });
+    }
+  }
+
   for (const radiusMeters of getAdaptiveMatchRadii(env)) {
     try {
       const payload = await fetchOsrmJsonWithTimeout(
@@ -812,22 +995,13 @@ async function matchPolylineToRoads(polyline, options = {}) {
     return null;
   }
 
-  const routePayload = await fetchOsrmJsonWithTimeout(
-    buildOsrmRouteUrl(baseUrl, points),
+  return routePolylineToRoads(points, {
+    baseUrl,
     fetchImpl,
-    timeoutMs
-  );
-  const route = Array.isArray(routePayload?.routes) ? routePayload.routes[0] : null;
-  if (!route) return null;
-
-  const routeRejectionReasons = [];
-  const routeResult = buildRoadMatchedResult(route, ROAD_ROUTE_SOURCE, {
-      ...options,
-      candidatePolyline: points,
-      rejectionReasons: routeRejectionReasons,
-    });
-  if (!routeResult) recordRejectionReasons(routeRejectionReasons);
-  return routeResult;
+    timeoutMs,
+    options,
+    recordRejectionReasons,
+  });
 }
 
 function clearRoadMatchedFields(value) {
@@ -881,6 +1055,7 @@ async function matchSegment(segment, options) {
       ...options,
       blockedPolyline: segment?.skippedSegmentPolyline,
       routeShapePolyline: getRouteShapePolylineForSegment(segment, options),
+      serviceRejoinPoint: segment?.serviceRejoinPoint,
       rejectionReasons,
     });
     if (!match) {
@@ -984,6 +1159,8 @@ async function matchDetourGeometry(geometry, options = {}) {
     next.roadMatchConfidence = primaryMatch.roadMatchConfidence || null;
     next.roadMatchRawConfidence = primaryMatch.roadMatchRawConfidence ?? null;
     next.roadMatchSource = primaryMatch.roadMatchSource || ROAD_MATCH_SOURCE;
+    next.endpointMismatchMeters = primaryMatch.endpointMismatchMeters ?? null;
+    next.endpointMismatchAcceptedReason = primaryMatch.endpointMismatchAcceptedReason ?? null;
     next.detourPathLabel = DETOUR_PATH_LABEL;
   } else {
     ROAD_MATCH_FIELDS.forEach((field) => {

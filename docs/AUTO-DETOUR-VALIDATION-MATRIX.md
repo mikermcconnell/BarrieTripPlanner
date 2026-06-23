@@ -614,6 +614,30 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - this matrix
 - Remaining risk: visual validation is still needed on a native/web map instance because line offsets and masking can make small connector joins look different by renderer.
 
+### DET-023A — likely path forced an endpoint turn after service had rejoined
+
+- Date/time observed: 2026-06-23 during Route 2 simulated detour review
+- Environment: local simulated-detour validation
+- Route(s): `2B` example
+- What happened: the road-matched likely path could be rejected, or hand-authored geometry could be pressured into adding an unrealistic final turn, because the path did not touch the artificial detour endpoint exactly.
+- What should have happened: the bus path should stop or continue where the route naturally resumes regular service. The closed/skipped segment can still show the affected regular-route section, but the likely detour path should not add a turn only to touch the closure endpoint.
+- Initial classification:
+  - geometry confidence
+  - road matching
+- Fix:
+  - treat entry/exit points as service-boundary anchors, not always mandatory driving waypoints
+  - allow road matching to accept a modest endpoint mismatch when the mismatched endpoint is on the route's regular-service corridor
+  - make sparse simulated presets prefer OSRM route snapping before trace matching, while keeping live GPS trace matching as match-first
+  - record `endpointMismatchAcceptedReason` for debug/validation
+  - calibrate the Route 2 simulated fixture with a `serviceRejoinPoint` so 2B continues on Anne instead of turning onto Dunlop only to touch the endpoint
+- Tests added/updated:
+  - `api-proxy/__tests__/detourRoadMatcher.test.js`
+  - `api-proxy/__tests__/detourSimulation.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: visual validation is still needed on actual Barrie examples to confirm the likely path, closed segment, stop impacts, and base-route masking all remain aligned.
+
 ## Status definitions
 
 - **Covered** — automated coverage exists and the manual checklist has a matching validation path.

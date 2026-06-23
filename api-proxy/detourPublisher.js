@@ -1690,6 +1690,25 @@ function applySharedDetourEventAssignmentsToGeometry(routeId, geo, assignments) 
   return next;
 }
 
+function hasEventWindowSegmentSharedMetadataMismatch(geo, assignment, detour = {}) {
+  if (!hasUsableEventWindow(detour) || !assignment?.sharedDetourEventId) return false;
+  const segments = Array.isArray(geo?.segments) ? geo.segments : [];
+  return segments.some((segment) => (
+    segment?.sharedDetourEventId !== assignment.sharedDetourEventId ||
+    segment?.eventPrimaryRouteId !== assignment.eventPrimaryRouteId
+  ));
+}
+
+function alignEventWindowSegmentSharedMetadata(geo, assignment, detour = {}) {
+  if (!hasUsableEventWindow(detour) || !assignment || !geo || typeof geo !== 'object') return geo;
+  if (!Array.isArray(geo.segments) || geo.segments.length === 0) return geo;
+
+  const next = cloneJson(geo);
+  next.segments = next.segments.map((segment) => applySharedDetourEventMetadata({ ...segment }, assignment));
+  applySharedDetourEventMetadata(next, assignment);
+  return next;
+}
+
 function hasSharedDetourMetadataChanged(previousSnapshot, assignment) {
   if (!assignment) return false;
   const previousRoutes = Array.isArray(previousSnapshot?.sharedRouteIds)
@@ -2592,17 +2611,20 @@ async function publishDetours(activeDetours, options = {}) {
       }
     }
 
-    if (geo) {
-      geo = applySharedDetourEventAssignmentsToGeometry(routeId, geo, sharedEventAssignments);
-      detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
-      noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
-      if (noticeStopImpactWriteDelta) {
-        writeGeo = true;
-      }
-    }
     const sharedAssignment = getPrimarySharedAssignment(routeId, geo, sharedEventAssignments) ||
       sharedEventAssignments.byRoute.get(normalizeRouteId(routeId)) ||
       null;
+    if (geo) {
+      geo = applySharedDetourEventAssignmentsToGeometry(routeId, geo, sharedEventAssignments);
+      const eventWindowSegmentMetadataNeedsWrite =
+        hasEventWindowSegmentSharedMetadataMismatch(geo, sharedAssignment, detour);
+      geo = alignEventWindowSegmentSharedMetadata(geo, sharedAssignment, detour);
+      detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
+      noticeStopImpactWriteDelta = hasNoticeStopImpactWriteDelta(previousSnapshot, geo);
+      if (noticeStopImpactWriteDelta || eventWindowSegmentMetadataNeedsWrite) {
+        writeGeo = true;
+      }
+    }
     applySharedDetourEventMetadata(doc, sharedAssignment);
     const detourZone = deriveDetourZoneForWrite(detour, geo);
     if (detourZone) {
@@ -2834,6 +2856,8 @@ module.exports = {
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
   deriveSharedDetourEventAssignments,
+  alignEventWindowSegmentSharedMetadata,
+  hasEventWindowSegmentSharedMetadataMismatch,
   makeSnapshot,
   buildUpdatedEvent,
   buildDetectedEvent,

@@ -5,7 +5,7 @@ const readSource = (relativePath) => fs.readFileSync(path.join(__dirname, '..', 
 
 describe('home trip planning hero workflow', () => {
   test('web keeps the Where to search as the only primary trip-planning entry', () => {
-    const source = readSource('screens/HomeScreen.web.js');
+    const source = readSource('screens/HomeScreen.web.impl.js');
 
     expect(source).toContain('placeholder="Where to?"');
     expect(source).not.toContain('Plan manually');

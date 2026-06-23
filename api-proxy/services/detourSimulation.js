@@ -11,10 +11,35 @@ const FARMERS_MARKET_PRESET = 'farmers-market';
 const FARMERS_MARKET_ROUTE_IDS = ['11'];
 const SAUNDERS_WELHAM_PRESET = 'saunders-welham';
 const SAUNDERS_WELHAM_ROUTE_IDS = ['12A', '12B'];
+const DUNLOP_FERNDALE_ANNE_PRESET = 'dunlop-ferndale-anne';
+const DUNLOP_FERNDALE_ANNE_ROUTE_IDS = ['2A', '2B'];
+const YONGE_BIG_BAY_LITTLE_PRESET = 'yonge-bigbay-little';
+const YONGE_BIG_BAY_LITTLE_ROUTE_IDS = ['8A'];
+const WELLINGTON_OWEN_GROVE_PRESET = 'wellington-owen-grove';
+const WELLINGTON_OWEN_GROVE_ROUTE_IDS = ['7A', '7B'];
 const SAUNDERS_WELHAM_ALIASES = new Set([
   SAUNDERS_WELHAM_PRESET,
   'saunders-welham-detour',
   'route-12-saunders-welham',
+]);
+const DUNLOP_FERNDALE_ANNE_ALIASES = new Set([
+  DUNLOP_FERNDALE_ANNE_PRESET,
+  'dunlop-ferndale-anne-detour',
+  'route-2-dunlop-ferndale-anne',
+]);
+const YONGE_BIG_BAY_LITTLE_ALIASES = new Set([
+  YONGE_BIG_BAY_LITTLE_PRESET,
+  'yonge-big-bay-little',
+  'route-8a-yonge-bigbay-little',
+]);
+const WELLINGTON_OWEN_GROVE_ALIASES = new Set([
+  WELLINGTON_OWEN_GROVE_PRESET,
+  'wellington-owen-grove-detour',
+  'route-7-wellington-owen-grove',
+  // Legacy Route 7 preset names now resolve to the replacement local workaround.
+  'grove-stvincent-duckworth',
+  'grove-st-vincent-duckworth',
+  'route-7-grove-stvincent-duckworth',
 ]);
 
 const FARMERS_MARKET_POINTS = {
@@ -24,6 +49,76 @@ const FARMERS_MARKET_POINTS = {
   mcdonaldMulcaster: { latitude: 44.39267, longitude: -79.68558 },
   worsleyMulcaster: { latitude: 44.39157, longitude: -79.68552 },
 };
+
+const DUNLOP_FERNDALE_ANNE_POINTS = {
+  ferndaleDunlop: { latitude: 44.37657, longitude: -79.71875 },
+  anneDunlop: { latitude: 44.38237, longitude: -79.70522 },
+  tiffinFerndale: { latitude: 44.36922, longitude: -79.71495 },
+  tiffinAnne: { latitude: 44.37307, longitude: -79.69797 },
+  anneRegularServiceNorth: { latitude: 44.3833, longitude: -79.7059 },
+};
+
+const YONGE_BIG_BAY_LITTLE_POINTS = {
+  yongeLittle: { latitude: 44.36632, longitude: -79.66255 },
+  yongeBigBayPoint: { latitude: 44.35652, longitude: -79.64698 },
+  littleHuronia: { latitude: 44.3648, longitude: -79.6712 },
+  bigBayPointHuronia: { latitude: 44.35334, longitude: -79.66451 },
+};
+
+const YONGE_BIG_BAY_LITTLE_CLOSED_SEGMENT = [
+  { latitude: 44.36632, longitude: -79.66255 },
+  { latitude: 44.36600, longitude: -79.66212 },
+  { latitude: 44.36532, longitude: -79.66131 },
+  { latitude: 44.36507, longitude: -79.66098 },
+  { latitude: 44.36465, longitude: -79.66044 },
+  { latitude: 44.36391, longitude: -79.65958 },
+  { latitude: 44.36248, longitude: -79.65774 },
+  { latitude: 44.36218, longitude: -79.65737 },
+  { latitude: 44.36154, longitude: -79.65660 },
+  { latitude: 44.36106, longitude: -79.65601 },
+  { latitude: 44.36055, longitude: -79.65528 },
+  { latitude: 44.35997, longitude: -79.65433 },
+  { latitude: 44.35951, longitude: -79.65348 },
+  { latitude: 44.35925, longitude: -79.65305 },
+  { latitude: 44.35896, longitude: -79.65244 },
+  { latitude: 44.35815, longitude: -79.65065 },
+  { latitude: 44.35786, longitude: -79.65008 },
+  { latitude: 44.35758, longitude: -79.64942 },
+  { latitude: 44.35711, longitude: -79.64843 },
+  { latitude: 44.35696, longitude: -79.64802 },
+  { latitude: 44.35652, longitude: -79.64698 },
+];
+
+const WELLINGTON_OWEN_GROVE_POINTS = {
+  bayfieldWellingtonEastbound: { latitude: 44.394131, longitude: -79.69412 },
+  groveBayfieldEastbound: { latitude: 44.39659223, longitude: -79.69624255 },
+  groveOwenEastbound: { latitude: 44.3984896, longitude: -79.69232901 },
+  groveOwenWestbound: { latitude: 44.39829531, longitude: -79.6930308 },
+  groveBayfieldWestbound: { latitude: 44.39644259, longitude: -79.6963538 },
+  bayfieldWellingtonWestbound: { latitude: 44.39395278, longitude: -79.6942707 },
+};
+
+const WELLINGTON_OWEN_GROVE_DETOUR_EASTBOUND = [
+  { latitude: 44.394178, longitude: -79.694003 },
+  { latitude: 44.394036, longitude: -79.69389 },
+  { latitude: 44.394002, longitude: -79.693716 },
+  { latitude: 44.393876, longitude: -79.693586 },
+  { latitude: 44.393899, longitude: -79.693535 },
+  { latitude: 44.394183, longitude: -79.692896 },
+  { latitude: 44.394628, longitude: -79.691862 },
+  { latitude: 44.395355, longitude: -79.690233 },
+  { latitude: 44.395391, longitude: -79.690151 },
+  { latitude: 44.395459, longitude: -79.690206 },
+  { latitude: 44.396475, longitude: -79.691047 },
+  { latitude: 44.397266, longitude: -79.691716 },
+  { latitude: 44.397762, longitude: -79.692137 },
+  { latitude: 44.398317, longitude: -79.692599 },
+  { latitude: 44.398408, longitude: -79.692668 },
+];
+
+const WELLINGTON_OWEN_GROVE_DETOUR_WESTBOUND = [
+  ...WELLINGTON_OWEN_GROVE_DETOUR_EASTBOUND,
+].reverse();
 
 function isFiniteCoordinate(point) {
   return (
@@ -149,6 +244,18 @@ function isSaundersWelhamPreset(options = {}) {
   return SAUNDERS_WELHAM_ALIASES.has(normalizePreset(options.preset));
 }
 
+function isDunlopFerndaleAnnePreset(options = {}) {
+  return DUNLOP_FERNDALE_ANNE_ALIASES.has(normalizePreset(options.preset));
+}
+
+function isYongeBigBayLittlePreset(options = {}) {
+  return YONGE_BIG_BAY_LITTLE_ALIASES.has(normalizePreset(options.preset));
+}
+
+function isWellingtonOwenGrovePreset(options = {}) {
+  return WELLINGTON_OWEN_GROVE_ALIASES.has(normalizePreset(options.preset));
+}
+
 function getFarmersMarketRouteIds(options = {}) {
   if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
     return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
@@ -163,6 +270,30 @@ function getSaundersWelhamRouteIds(options = {}) {
   }
   if (options.routeId) return [String(options.routeId).trim()];
   return SAUNDERS_WELHAM_ROUTE_IDS;
+}
+
+function getDunlopFerndaleAnneRouteIds(options = {}) {
+  if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
+    return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
+  }
+  if (options.routeId) return [String(options.routeId).trim()];
+  return DUNLOP_FERNDALE_ANNE_ROUTE_IDS;
+}
+
+function getYongeBigBayLittleRouteIds(options = {}) {
+  if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
+    return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
+  }
+  if (options.routeId) return [String(options.routeId).trim()];
+  return YONGE_BIG_BAY_LITTLE_ROUTE_IDS;
+}
+
+function getWellingtonOwenGroveRouteIds(options = {}) {
+  if (Array.isArray(options.routeIds) && options.routeIds.length > 0) {
+    return options.routeIds.map((routeId) => String(routeId).trim()).filter(Boolean);
+  }
+  if (options.routeId) return [String(options.routeId).trim()];
+  return WELLINGTON_OWEN_GROVE_ROUTE_IDS;
 }
 
 function selectExactRouteAndShape(staticData, routeId) {
@@ -293,6 +424,185 @@ function buildSaundersWelhamGeometry(routeId, shapeId) {
   };
 }
 
+function buildDunlopFerndaleAnneGeometry(routeId, shapeId) {
+  const normalizedRouteId = String(routeId).toUpperCase();
+  const isRoute2A = normalizedRouteId === '2A';
+  const isRoute2B = normalizedRouteId === '2B';
+  const {
+    ferndaleDunlop,
+    anneDunlop,
+    tiffinFerndale,
+    tiffinAnne,
+    anneRegularServiceNorth,
+  } = DUNLOP_FERNDALE_ANNE_POINTS;
+  const skippedSegmentPolyline = isRoute2A || isRoute2B
+    ? [ferndaleDunlop, anneDunlop]
+    : [anneDunlop, ferndaleDunlop];
+  const inferredDetourPolyline = isRoute2A
+    ? [ferndaleDunlop, tiffinFerndale, tiffinAnne, anneDunlop]
+    : isRoute2B
+      ? [ferndaleDunlop, tiffinFerndale, tiffinAnne, anneRegularServiceNorth]
+      : [anneDunlop, tiffinAnne, tiffinFerndale, ferndaleDunlop];
+  const likelyDetourPolyline = inferredDetourPolyline;
+  const likelyDetourRoadNames = isRoute2A || isRoute2B
+    ? ['Ferndale Drive', 'Tiffin Street', 'Anne Street']
+    : ['Anne Street', 'Tiffin Street', 'Ferndale Drive'];
+  const entryPoint = skippedSegmentPolyline[0];
+  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const serviceRejoinPoint = isRoute2B ? anneRegularServiceNorth : null;
+  const lastEvidenceAt = new Date();
+
+  return {
+    shapeId,
+    entryPoint,
+    exitPoint,
+    serviceRejoinPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    likelyDetourPolyline,
+    likelyDetourRoadNames,
+    roadMatchConfidence: 'high',
+    roadMatchSource: 'dunlop-ferndale-anne-preset',
+    detourPathLabel: 'Dunlop/Ferndale/Anne test detour',
+    confidence: 'high',
+    evidencePointCount: inferredDetourPolyline.length,
+    lastEvidenceAt,
+    segments: [
+      {
+        segmentId: `dunlop-ferndale-anne-${String(routeId).toLowerCase()}-simulated-1`,
+        shapeId,
+        entryPoint,
+        exitPoint,
+        serviceRejoinPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline,
+        likelyDetourPolyline,
+        likelyDetourRoadNames,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'dunlop-ferndale-anne-preset',
+        detourPathLabel: 'Dunlop/Ferndale/Anne test detour',
+        confidence: 'high',
+        evidencePointCount: inferredDetourPolyline.length,
+        lastEvidenceAt,
+      },
+    ],
+  };
+}
+
+function buildYongeBigBayLittleGeometry(routeId, shapeId) {
+  const {
+    yongeLittle,
+    yongeBigBayPoint,
+    littleHuronia,
+    bigBayPointHuronia,
+  } = YONGE_BIG_BAY_LITTLE_POINTS;
+  const skippedSegmentPolyline = YONGE_BIG_BAY_LITTLE_CLOSED_SEGMENT;
+  const inferredDetourPolyline = [
+    yongeLittle,
+    littleHuronia,
+    bigBayPointHuronia,
+    yongeBigBayPoint,
+  ];
+  const likelyDetourPolyline = inferredDetourPolyline;
+  const likelyDetourRoadNames = ['Little Avenue', 'Huronia Road', 'Big Bay Point Road'];
+  const entryPoint = skippedSegmentPolyline[0];
+  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const lastEvidenceAt = new Date();
+
+  return {
+    shapeId,
+    entryPoint,
+    exitPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    likelyDetourPolyline,
+    likelyDetourRoadNames,
+    roadMatchConfidence: 'high',
+    roadMatchSource: 'yonge-bigbay-little-preset',
+    detourPathLabel: 'Yonge/Big Bay/Little test detour',
+    confidence: 'high',
+    evidencePointCount: inferredDetourPolyline.length,
+    lastEvidenceAt,
+    segments: [
+      {
+        segmentId: `yonge-bigbay-little-${String(routeId).toLowerCase()}-simulated-1`,
+        shapeId,
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline,
+        likelyDetourPolyline,
+        likelyDetourRoadNames,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'yonge-bigbay-little-preset',
+        detourPathLabel: 'Yonge/Big Bay/Little test detour',
+        confidence: 'high',
+        evidencePointCount: inferredDetourPolyline.length,
+        lastEvidenceAt,
+      },
+    ],
+  };
+}
+
+function buildWellingtonOwenGroveGeometry(routeId, shapeId) {
+  const isRoute7A = String(routeId).toUpperCase() === '7A';
+  const {
+    bayfieldWellingtonEastbound,
+    groveBayfieldEastbound,
+    groveOwenEastbound,
+    groveOwenWestbound,
+    groveBayfieldWestbound,
+    bayfieldWellingtonWestbound,
+  } = WELLINGTON_OWEN_GROVE_POINTS;
+  const skippedSegmentPolyline = isRoute7A
+    ? [bayfieldWellingtonEastbound, groveBayfieldEastbound, groveOwenEastbound]
+    : [groveOwenWestbound, groveBayfieldWestbound, bayfieldWellingtonWestbound];
+  const inferredDetourPolyline = isRoute7A
+    ? WELLINGTON_OWEN_GROVE_DETOUR_EASTBOUND
+    : WELLINGTON_OWEN_GROVE_DETOUR_WESTBOUND;
+  const likelyDetourPolyline = inferredDetourPolyline;
+  const likelyDetourRoadNames = isRoute7A
+    ? ['Bayfield Street', 'Wellington Street East', 'Owen Street', 'Grove Street East']
+    : ['Grove Street East', 'Owen Street', 'Wellington Street East', 'Bayfield Street'];
+  const entryPoint = skippedSegmentPolyline[0];
+  const exitPoint = skippedSegmentPolyline[skippedSegmentPolyline.length - 1];
+  const lastEvidenceAt = new Date();
+
+  return {
+    shapeId,
+    entryPoint,
+    exitPoint,
+    skippedSegmentPolyline,
+    inferredDetourPolyline,
+    likelyDetourPolyline,
+    likelyDetourRoadNames,
+    roadMatchConfidence: 'high',
+    roadMatchSource: 'wellington-owen-grove-preset',
+    detourPathLabel: 'Wellington/Owen/Grove test detour',
+    confidence: 'high',
+    evidencePointCount: inferredDetourPolyline.length,
+    lastEvidenceAt,
+    segments: [
+      {
+        segmentId: `wellington-owen-grove-${String(routeId).toLowerCase()}-simulated-1`,
+        shapeId,
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline,
+        likelyDetourPolyline,
+        likelyDetourRoadNames,
+        roadMatchConfidence: 'high',
+        roadMatchSource: 'wellington-owen-grove-preset',
+        detourPathLabel: 'Wellington/Owen/Grove test detour',
+        confidence: 'high',
+        evidencePointCount: inferredDetourPolyline.length,
+        lastEvidenceAt,
+      },
+    ],
+  };
+}
+
 function createSimulatedDetourDocument({ routeId, shapeId, geometry, durationMinutes = 30 }) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + Math.max(1, Number(durationMinutes) || 30) * 60_000);
@@ -372,6 +682,33 @@ function isRoadMatchedGeometry(geometry) {
   return Array.isArray(geometry.segments) && geometry.segments.some((segment) => (
     segment?.roadMatchSource && segment.roadMatchSource !== 'dev-simulation'
   ));
+}
+
+function hasRoadMatchedPresetGeometry(originalGeometry, matchedGeometry) {
+  if (!matchedGeometry || typeof matchedGeometry !== 'object') return false;
+  if (matchedGeometry.roadMatchSource && matchedGeometry.roadMatchSource !== originalGeometry?.roadMatchSource) {
+    return true;
+  }
+  return Array.isArray(matchedGeometry.segments) && matchedGeometry.segments.some((segment, index) => (
+    segment?.roadMatchSource &&
+    segment.roadMatchSource !== originalGeometry?.segments?.[index]?.roadMatchSource
+  ));
+}
+
+async function maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline }) {
+  if (!canTryRoadMatchCandidates(env)) return geometry;
+
+  try {
+    const matched = await matchGeometry(geometry, {
+      env,
+      routeShapePolyline,
+      preferRouteMatching: true,
+    });
+    return hasRoadMatchedPresetGeometry(geometry, matched) ? matched : geometry;
+  } catch (err) {
+    console.warn('[detourSimulation] Preset road matching skipped:', err.message);
+    return geometry;
+  }
 }
 
 function getPrimarySimulationSegment(geometry) {
@@ -516,8 +853,9 @@ function createDetourSimulationOps({
       const writes = [];
 
       for (const requestedRouteId of requestedRouteIds) {
-        const { routeId, shapeId } = selectExactRouteAndShape(staticData, requestedRouteId);
-        const geometry = buildFarmersMarketGeometry(routeId, shapeId);
+        const { routeId, shapeId, shape } = selectExactRouteAndShape(staticData, requestedRouteId);
+        let geometry = buildFarmersMarketGeometry(routeId, shapeId);
+        geometry = await maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline: shape });
         const doc = {
           ...createSimulatedDetourDocument({
             routeId,
@@ -566,8 +904,9 @@ function createDetourSimulationOps({
       const writes = [];
 
       for (const requestedRouteId of requestedRouteIds) {
-        const { routeId, shapeId } = selectExactRouteAndShape(staticData, requestedRouteId);
-        const geometry = buildSaundersWelhamGeometry(routeId, shapeId);
+        const { routeId, shapeId, shape } = selectExactRouteAndShape(staticData, requestedRouteId);
+        let geometry = buildSaundersWelhamGeometry(routeId, shapeId);
+        geometry = await maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline: shape });
         const doc = {
           ...createSimulatedDetourDocument({
             routeId,
@@ -606,6 +945,159 @@ function createDetourSimulationOps({
           expiresAt: writes[0]?.expiresAt || null,
           availableRouteIds,
           message: 'Simulated Saunders/Welham detours published for routes 12A and 12B.',
+        },
+      };
+    }
+
+    if (isDunlopFerndaleAnnePreset(options)) {
+      const requestedRouteIds = getDunlopFerndaleAnneRouteIds(options);
+      const availableRouteIds = Array.from(staticData.routeShapeMapping.keys()).sort();
+      const writes = [];
+
+      for (const requestedRouteId of requestedRouteIds) {
+        const { routeId, shapeId, shape } = selectExactRouteAndShape(staticData, requestedRouteId);
+        let geometry = buildDunlopFerndaleAnneGeometry(routeId, shapeId);
+        geometry = await maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline: shape });
+        const doc = {
+          ...createSimulatedDetourDocument({
+            routeId,
+            shapeId,
+            geometry,
+            durationMinutes: options.durationMinutes,
+          }),
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: Array.isArray(geometry.segments)
+            ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
+            : geometry.segments,
+          testPreset: DUNLOP_FERNDALE_ANNE_PRESET,
+          title: 'Dunlop/Ferndale/Anne Detour - Route 2',
+          description: 'Test detour around a Dunlop Street West closure between Ferndale Drive and Anne Street.',
+          affectedStops: ['271', '893', '277', '934', '266', '265', '276', '269', '268'],
+        };
+
+        const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+        await db.collection(storageConfig.activeCollection)
+          .doc(docId)
+          .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
+        writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          enabled: true,
+          simulated: true,
+          preset: DUNLOP_FERNDALE_ANNE_PRESET,
+          routeIds: writes.map((write) => write.routeId),
+          shapeIds: writes.map((write) => write.shapeId),
+          segmentCount: writes.length,
+          expiresAt: writes[0]?.expiresAt || null,
+          availableRouteIds,
+          message: 'Simulated Dunlop/Ferndale/Anne detours published for routes 2A and 2B.',
+        },
+      };
+    }
+
+    if (isYongeBigBayLittlePreset(options)) {
+      const requestedRouteIds = getYongeBigBayLittleRouteIds(options);
+      const availableRouteIds = Array.from(staticData.routeShapeMapping.keys()).sort();
+      const writes = [];
+
+      for (const requestedRouteId of requestedRouteIds) {
+        const { routeId, shapeId, shape } = selectExactRouteAndShape(staticData, requestedRouteId);
+        let geometry = buildYongeBigBayLittleGeometry(routeId, shapeId);
+        geometry = await maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline: shape });
+        const doc = {
+          ...createSimulatedDetourDocument({
+            routeId,
+            shapeId,
+            geometry,
+            durationMinutes: options.durationMinutes,
+          }),
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: Array.isArray(geometry.segments)
+            ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
+            : geometry.segments,
+          testPreset: YONGE_BIG_BAY_LITTLE_PRESET,
+          title: 'Yonge/Big Bay/Little Detour - Route 8A',
+          description: 'Test detour around a Yonge Street closure between Little Avenue and Big Bay Point Road.',
+          affectedStops: ['718', '717', '705', '704', '765', '774'],
+        };
+
+        const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+        await db.collection(storageConfig.activeCollection)
+          .doc(docId)
+          .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
+        writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          enabled: true,
+          simulated: true,
+          preset: YONGE_BIG_BAY_LITTLE_PRESET,
+          routeIds: writes.map((write) => write.routeId),
+          shapeIds: writes.map((write) => write.shapeId),
+          segmentCount: writes.length,
+          expiresAt: writes[0]?.expiresAt || null,
+          availableRouteIds,
+          message: 'Simulated Yonge/Big Bay/Little detour published for route 8A.',
+        },
+      };
+    }
+
+    if (isWellingtonOwenGrovePreset(options)) {
+      const requestedRouteIds = getWellingtonOwenGroveRouteIds(options);
+      const availableRouteIds = Array.from(staticData.routeShapeMapping.keys()).sort();
+      const writes = [];
+
+      for (const requestedRouteId of requestedRouteIds) {
+        const { routeId, shapeId, shape } = selectExactRouteAndShape(staticData, requestedRouteId);
+        let geometry = buildWellingtonOwenGroveGeometry(routeId, shapeId);
+        geometry = await maybeRoadMatchPresetGeometry(geometry, { env, matchGeometry, routeShapePolyline: shape });
+        const doc = {
+          ...createSimulatedDetourDocument({
+            routeId,
+            shapeId,
+            geometry,
+            durationMinutes: options.durationMinutes,
+          }),
+          confidence: 'high',
+          vehicleCount: 2,
+          segments: Array.isArray(geometry.segments)
+            ? geometry.segments.map((segment) => ({ ...segment, confidence: 'high' }))
+            : geometry.segments,
+          testPreset: WELLINGTON_OWEN_GROVE_PRESET,
+          title: 'Wellington/Owen/Grove Detour - Route 7',
+          description: 'Test detour around a Grove Street East closure between Bayfield Street and Owen Street.',
+          affectedStops: ['67', '68'],
+        };
+
+        const docId = getSimulatedDetourDocumentId(routeId, storageConfig);
+        await db.collection(storageConfig.activeCollection)
+          .doc(docId)
+          .set(prepareSimulatedDetourDocument(doc, docId, storageConfig), { merge: true });
+        writes.push({ routeId, shapeId, expiresAt: doc.expiresAt.toISOString() });
+      }
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          enabled: true,
+          simulated: true,
+          preset: WELLINGTON_OWEN_GROVE_PRESET,
+          routeIds: writes.map((write) => write.routeId),
+          shapeIds: writes.map((write) => write.shapeId),
+          segmentCount: writes.length,
+          expiresAt: writes[0]?.expiresAt || null,
+          availableRouteIds,
+          message: 'Simulated Wellington/Owen/Grove detours published for routes 7A and 7B.',
         },
       };
     }
@@ -696,11 +1188,15 @@ function createDetourSimulationOps({
 }
 
 module.exports = {
+  buildDunlopFerndaleAnneGeometry,
   buildFarmersMarketGeometry,
+  buildWellingtonOwenGroveGeometry,
   buildMatchedSimulationGeometry,
   buildSaundersWelhamGeometry,
   buildSyntheticGeometry,
+  buildYongeBigBayLittleGeometry,
   createDetourSimulationOps,
   getSimulationOffsetCandidates,
   selectRouteAndShape,
 };
+

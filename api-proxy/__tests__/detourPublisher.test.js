@@ -13,6 +13,8 @@ const {
   hasNormalRouteClearProof,
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
+  alignEventWindowSegmentSharedMetadata,
+  hasEventWindowSegmentSharedMetadataMismatch,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
 
@@ -224,6 +226,55 @@ describe('event-window legacy migration helpers', () => {
         eventWindow: { routeId: '8A', shapeId: 'shape-1' },
       },
     })).toBe(true);
+  });
+});
+
+describe('event-window shared detour metadata', () => {
+  test('aligns segment shared IDs to the top-level event-window assignment', () => {
+    const geo = {
+      shapeId: 'shape-400',
+      segments: [
+        {
+          detourEventId: 'detour-event-8blwvc',
+          sharedDetourEventId: 'detour-event-8blwvc',
+        },
+        {
+          detourEventId: 'detour-event-2i6njv',
+          sharedDetourEventId: 'detour-event-2i6njv',
+        },
+      ],
+    };
+    const assignment = {
+      sharedDetourEventId: 'detour-event-8blwvc',
+      sharedRouteIds: ['400'],
+      eventPrimaryRouteId: '400',
+      eventRouteCount: 1,
+      eventLocationLabel: 'Essa Road & Anne Street South',
+      eventConfidence: 'high',
+    };
+    const detour = {
+      routeId: '400',
+      eventWindow: {
+        routeId: '400',
+        shapeId: 'shape-400',
+        coreStartProgressMeters: 5286,
+        coreEndProgressMeters: 8484,
+      },
+    };
+
+    expect(hasEventWindowSegmentSharedMetadataMismatch(geo, assignment, detour)).toBe(true);
+
+    const aligned = alignEventWindowSegmentSharedMetadata(geo, assignment, detour);
+
+    expect(aligned.sharedDetourEventId).toBe('detour-event-8blwvc');
+    expect(aligned.segments.map((segment) => segment.sharedDetourEventId)).toEqual([
+      'detour-event-8blwvc',
+      'detour-event-8blwvc',
+    ]);
+    expect(aligned.segments.map((segment) => segment.detourEventId)).toEqual([
+      'detour-event-8blwvc',
+      'detour-event-2i6njv',
+    ]);
   });
 });
 
