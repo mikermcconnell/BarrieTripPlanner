@@ -78,6 +78,7 @@ keystore.properties
 
 # Service account keys (Google Play, Firebase, etc.)
 *service-account*.json
+*firebase-adminsdk*.json
 google-play-service-account.json
 google-services.json
 GoogleService-Info.plist

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "jest __tests__ --runInBand"
+    "test": "jest __tests__ --runInBand",
+    "detour:email-monitor": "node scripts/detour-email-monitor.js"
   },
   "engines": {
     "node": "22"

@@ -1,0 +1,112 @@
+# Detour Email Alert Setup Status
+
+Date: 2026-06-24
+
+## Goal
+
+Send an email to Michael when BTTP detects a new transit detour.
+
+Recipient:
+
+- michaelryanmcconnell@gmail.com
+
+## Current Status
+
+Implemented in the repo:
+
+- A detour email monitor script:
+  - `api-proxy/scripts/detour-email-monitor.js`
+- Email monitor logic:
+  - `api-proxy/services/detourEmailMonitor.js`
+- Tests:
+  - `api-proxy/__tests__/detourEmailMonitor.test.js`
+- GitHub Actions workflow:
+  - `.github/workflows/detour-email-monitor.yml`
+- Package script:
+  - `npm --prefix api-proxy run detour:email-monitor`
+- Documentation updates:
+  - `README.md`
+  - `docs/API-PROXY-OPERATIONS.md`
+  - `.env.example`
+
+## How It Works
+
+1. The detour worker writes detour events to Firestore history.
+2. The GitHub Actions workflow runs every 5 minutes.
+3. The monitor checks recent detour history events.
+4. It sends an email for first-time `DETOUR_DETECTED` events.
+5. It records sent alerts in Firestore collection `detourEmailNotifications` so the same detour is not emailed repeatedly.
+
+## Verification Already Completed
+
+Passed:
+
+- Full API test suite: 58 test suites, 672 tests
+- New detour email monitor tests: 6 tests
+- Safe disabled-mode CLI run
+- JavaScript syntax checks
+
+## Continued Setup Completed On 2026-06-24
+
+- Confirmed GitHub CLI is authenticated for `mikermcconnell/BarrieTripPlanner`.
+- Added GitHub Actions secret:
+  - `DETOUR_ALERT_RECIPIENTS`
+- Confirmed no local `RESEND_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`, or `GOOGLE_APPLICATION_CREDENTIALS` value is available in the shell or `.env`.
+- Added GitHub Actions secret:
+  - `RESEND_API_KEY`
+- Added GitHub Actions secret:
+  - `FIREBASE_SERVICE_ACCOUNT_JSON`
+- Confirmed the Firebase service account JSON is valid for project `barrie-transit-trip-plan-cc84e`.
+- Added a `.gitignore` guard for `*firebase-adminsdk*.json` so the local private key file is not accidentally committed.
+- Re-ran verification:
+  - `npm --prefix api-proxy test` passed: 58 test suites, 672 tests.
+  - `npx jest --runInBand --runTestsByPath __tests__/detourEmailMonitor.test.js` passed from `api-proxy/`.
+  - `node --check` passed for the monitor service and CLI script.
+  - Disabled-mode CLI run skipped safely.
+
+Remaining blocker: GitHub Actions cannot run the new `detour-email-monitor.yml` workflow until the PR is merged because GitHub only exposes workflow dispatch for workflows present on the default branch.
+
+## What We Need To Do Next
+
+### 1. Rotate the Resend API key
+
+A Resend API key was pasted into chat. For safety, create a fresh key in Resend and revoke the old one.
+
+Do not commit the key to the repo.
+
+### 2. Add GitHub Actions secrets
+
+Required secrets:
+
+- `RESEND_API_KEY` - Resend API key. Added on 2026-06-24.
+- `DETOUR_ALERT_RECIPIENTS` - `michaelryanmcconnell@gmail.com`. Added on 2026-06-24.
+- `FIREBASE_SERVICE_ACCOUNT_JSON` - Firebase Admin service account JSON. Added on 2026-06-24.
+
+Optional secrets:
+
+- `DETOUR_ALERT_FROM` - sender address, for example `Barrie Transit Detours <detours@updates.barrietransit.ca>`
+- `DETOUR_ALERT_APP_URL` - app or dashboard link to include in emails
+
+### 3. Run a manual workflow test
+
+After the PR is merged:
+
+1. Go to GitHub Actions.
+2. Open **Detour Email Monitor**.
+3. Click **Run workflow**.
+4. Confirm it completes successfully.
+5. Confirm no duplicate email is sent for the same detour event.
+
+### 4. Confirm Firestore access
+
+The GitHub workflow needs Firebase Admin credentials that can:
+
+- Read detour history collection, usually `detourEventHistoryV2`
+- Write dedupe records to `detourEmailNotifications`
+
+## Notes
+
+- Default alert event type is `DETOUR_DETECTED` only.
+- `DETOUR_CLEARED` emails are not enabled by default.
+- The monitor uses Firestore dedupe, not GitHub cache, so retries should not duplicate alerts.
+- No API keys or service account JSON should be stored in Markdown, source code, or committed files.
