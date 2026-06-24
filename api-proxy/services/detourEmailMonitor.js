@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { createCanvas } = require('@napi-rs/canvas');
 const { getDb } = require('../firebaseAdmin');
 const { getDetourHistory } = require('../detourPublisher');
 const { buildDetourStorageConfig } = require('../detour/storageConfig');
@@ -9,6 +10,7 @@ const DEFAULT_ALERT_FROM = 'Barrie Transit Detours <detours@updates.barrietransi
 const DEFAULT_NOTIFICATION_COLLECTION = 'detourEmailNotifications';
 const DEFAULT_LOOKBACK_MINUTES = 30;
 const DEFAULT_MAX_EVENTS = 50;
+const SCHEMATIC_CONTENT_ID = 'detour-schematic';
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === '') return fallback;
@@ -114,6 +116,249 @@ function collectLikelyRoadNames(event) {
   return [...names];
 }
 
+function collectRoadNamesFromFields(event, fieldNames = []) {
+  const names = new Set();
+  const addNames = (source) => {
+    if (!source) return;
+    fieldNames.forEach((fieldName) => {
+      if (Array.isArray(source[fieldName])) {
+        source[fieldName].forEach((name) => {
+          const clean = String(name || '').trim();
+          if (clean) names.add(clean);
+        });
+      }
+    });
+  };
+
+  addNames(event);
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach(addNames);
+  }
+  return [...names];
+}
+
+function stopLabel(stop) {
+  if (!stop) return '';
+  const code = String(stop.stopCode || stop.code || stop.id || stop.stopId || '').trim();
+  const name = String(stop.name || stop.stopName || stop.label || '').trim();
+  if (code && name) return `#${code} ${name}`;
+  if (code) return `#${code}`;
+  return name;
+}
+
+function collectSkippedStops(event) {
+  const labels = new Set();
+  const addStops = (source) => {
+    if (!source || !Array.isArray(source.skippedStops)) return;
+    source.skippedStops.forEach((stop) => {
+      const label = stopLabel(stop);
+      if (label) labels.add(label);
+    });
+  };
+
+  addStops(event);
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach(addStops);
+  }
+  return [...labels];
+}
+
+function buildDetourEmailInsights(event) {
+  const location = String(event?.eventLocationLabel || event?.detourZone?.label || event?.locationText || '').trim();
+  const closedRoads = collectRoadNamesFromFields(event, [
+    'closedSegmentRoadNames',
+    'skippedSegmentRoadNames',
+    'closedRoadNames',
+  ]);
+  const likelyRoads = collectLikelyRoadNames(event);
+  const skippedStops = collectSkippedStops(event);
+
+  const closedBase = closedRoads.length > 0
+    ? closedRoads.join(', ')
+    : (location || 'unknown road section');
+  const closedSectionText = location && closedRoads.length > 0
+    ? `Likely closed section: ${closedBase} near ${location}`
+    : `Likely closed section: ${closedBase}`;
+  const detourPathText = likelyRoads.length > 0
+    ? `Likely detour path: ${likelyRoads.join(' -> ')}`
+    : 'Likely detour path: not enough road-name evidence yet';
+  const skippedStopsText = skippedStops.length > 0
+    ? `Stops likely not served by this route: ${skippedStops.join('; ')}`
+    : 'Stops likely not served by this route: none listed yet';
+
+  return {
+    location,
+    closedRoads,
+    likelyRoads,
+    skippedStops,
+    closedSectionText,
+    detourPathText,
+    skippedStopsText,
+  };
+}
+
+function normalizePoint(point) {
+  if (!point) return null;
+  const latitude = Number(point.latitude ?? point.lat);
+  const longitude = Number(point.longitude ?? point.lon ?? point.lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
+function normalizePolyline(polyline) {
+  if (!Array.isArray(polyline)) return [];
+  return polyline.map(normalizePoint).filter(Boolean);
+}
+
+function chooseDetourPath(event) {
+  const candidates = [];
+  const addCandidate = (source) => {
+    if (!source) return;
+    if (source.canShowDetourPath === false) return;
+    candidates.push(source.likelyDetourPolyline);
+    candidates.push(source.inferredDetourPolyline);
+  };
+
+  addCandidate(event);
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach(addCandidate);
+  }
+
+  for (const candidate of candidates) {
+    const polyline = normalizePolyline(candidate);
+    if (polyline.length >= 2) return polyline;
+  }
+  return [];
+}
+
+function chooseClosedPath(event) {
+  const candidates = [event?.skippedSegmentPolyline];
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach((segment) => candidates.push(segment?.skippedSegmentPolyline));
+  }
+
+  for (const candidate of candidates) {
+    const polyline = normalizePolyline(candidate);
+    if (polyline.length >= 2) return polyline;
+  }
+  return [];
+}
+
+function pathBounds(paths) {
+  const points = paths.flat();
+  if (points.length === 0) return null;
+  const lats = points.map((point) => point.latitude);
+  const lons = points.map((point) => point.longitude);
+  return {
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+    minLon: Math.min(...lons),
+    maxLon: Math.max(...lons),
+  };
+}
+
+function drawPolyline(ctx, points, project, options = {}) {
+  if (!Array.isArray(points) || points.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = options.strokeStyle || '#5B2C83';
+  ctx.lineWidth = options.lineWidth || 6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (Array.isArray(options.dash)) ctx.setLineDash(options.dash);
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const projected = project(point);
+    if (index === 0) ctx.moveTo(projected.x, projected.y);
+    else ctx.lineTo(projected.x, projected.y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function buildDetourSchematicAttachment(event) {
+  const closedPath = chooseClosedPath(event);
+  const detourPath = chooseDetourPath(event);
+  if (closedPath.length < 2 && detourPath.length < 2) return null;
+
+  const width = 640;
+  const height = 360;
+  const margin = 46;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  const bounds = pathBounds([closedPath, detourPath].filter((path) => path.length >= 2));
+  if (!bounds) return null;
+
+  const latRange = Math.max(bounds.maxLat - bounds.minLat, 0.0005);
+  const lonRange = Math.max(bounds.maxLon - bounds.minLon, 0.0005);
+  const project = (point) => ({
+    x: margin + ((point.longitude - bounds.minLon) / lonRange) * (width - margin * 2),
+    y: height - margin - ((point.latitude - bounds.minLat) / latRange) * (height - margin * 2),
+  });
+
+  ctx.fillStyle = '#F8F7FB';
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = '#E7E1EF';
+  ctx.lineWidth = 1;
+  for (let x = margin; x <= width - margin; x += 58) {
+    ctx.beginPath();
+    ctx.moveTo(x, margin);
+    ctx.lineTo(x, height - margin);
+    ctx.stroke();
+  }
+  for (let y = margin; y <= height - margin; y += 46) {
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(width - margin, y);
+    ctx.stroke();
+  }
+
+  drawPolyline(ctx, closedPath, project, {
+    strokeStyle: '#D64545',
+    lineWidth: 10,
+    dash: [12, 10],
+  });
+  drawPolyline(ctx, detourPath, project, {
+    strokeStyle: '#5B2C83',
+    lineWidth: 8,
+  });
+
+  const start = detourPath[0] || closedPath[0];
+  const end = detourPath[detourPath.length - 1] || closedPath[closedPath.length - 1];
+  [start, end].filter(Boolean).forEach((point, index) => {
+    const { x, y } = project(point);
+    ctx.fillStyle = index === 0 ? '#0B7A75' : '#2F5597';
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = '#2B2430';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText(`Route ${routeLabel(event)} detour schematic`, 22, 28);
+  ctx.font = '13px Arial';
+  ctx.fillText('Not to scale - GPS-derived approximate path', 22, height - 18);
+
+  ctx.fillStyle = '#D64545';
+  ctx.fillRect(width - 226, 18, 28, 6);
+  ctx.fillStyle = '#2B2430';
+  ctx.fillText('likely closed route section', width - 190, 25);
+  ctx.fillStyle = '#5B2C83';
+  ctx.fillRect(width - 226, 42, 28, 6);
+  ctx.fillStyle = '#2B2430';
+  ctx.fillText('likely detour path', width - 190, 49);
+
+  return {
+    content: canvas.toBuffer('image/png').toString('base64'),
+    filename: 'detour-schematic.png',
+    content_type: 'image/png',
+    content_id: SCHEMATIC_CONTENT_ID,
+    contentId: SCHEMATIC_CONTENT_ID,
+  };
+}
+
 function makeNotificationId(event) {
   const stableParts = [
     event.eventType || '',
@@ -135,6 +380,8 @@ function buildSubject(event) {
 function buildEmailMessage(event, { appUrl = '' } = {}) {
   const subject = buildSubject(event);
   const roads = collectLikelyRoadNames(event);
+  const insights = buildDetourEmailInsights(event);
+  const schematicAttachment = buildDetourSchematicAttachment(event);
   const location = event.eventLocationLabel || event.detourZone?.label || '';
   const rows = [
     ['Event', eventLabel(event.eventType)],
@@ -146,7 +393,10 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     ['Confidence', event.eventConfidence || event.confidence || 'unknown'],
     ['Vehicles', event.uniqueVehicleCount ?? event.vehicleCount ?? 'unknown'],
     ['Location', location || '—'],
+    ['Likely closed section', insights.closedSectionText.replace(/^Likely closed section:\s*/, '')],
     ['Likely detour roads', roads.length > 0 ? roads.join(', ') : '—'],
+    ['Likely path summary', insights.detourPathText.replace(/^Likely detour path:\s*/, '')],
+    ['Skipped stops', insights.skippedStops.length > 0 ? insights.skippedStops.join('; ') : '—'],
     ['Event ID', event.detourEventId || event.eventId || event.id || '—'],
   ];
 
@@ -160,6 +410,13 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
 
   const appLink = appUrl
     ? `<p style="margin:16px 0 0"><a href="${escapeHtml(appUrl)}">Open BTTP</a></p>`
+    : '';
+  const schematic = schematicAttachment
+    ? `
+        <div style="margin:18px 0">
+          <p style="margin:0 0 8px;font-weight:bold">Approximate detour schematic</p>
+          <img src="cid:${SCHEMATIC_CONTENT_ID}" alt="Approximate detour schematic" width="640" style="width:100%;max-width:640px;border:1px solid #ddd;border-radius:8px">
+        </div>`
     : '';
 
   const html = `
@@ -176,6 +433,8 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     <tr>
       <td style="padding:20px">
         <p style="font-size:16px;margin:0 0 12px"><strong>${escapeHtml(eventLabel(event.eventType))}</strong> for route ${escapeHtml(routeLabel(event))}.</p>
+        <p style="margin:0 0 12px">${escapeHtml(insights.closedSectionText)}<br>${escapeHtml(insights.detourPathText)}<br>${escapeHtml(insights.skippedStopsText)}</p>
+        ${schematic}
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}</table>
         ${appLink}
       </td>
@@ -187,11 +446,20 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
   const text = [
     subject,
     '',
+    insights.closedSectionText,
+    insights.detourPathText,
+    insights.skippedStopsText,
+    '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
     appUrl ? `Open BTTP: ${appUrl}` : null,
   ].filter(Boolean).join('\n');
 
-  return { subject, html, text };
+  return {
+    subject,
+    html,
+    text,
+    attachments: schematicAttachment ? [schematicAttachment] : [],
+  };
 }
 
 async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = globalThis.fetch }) {
@@ -211,6 +479,9 @@ async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = gl
       subject: message.subject,
       html: message.html,
       text: message.text,
+      attachments: Array.isArray(message.attachments) && message.attachments.length > 0
+        ? message.attachments
+        : undefined,
     }),
   });
 
@@ -337,6 +608,8 @@ async function runDetourEmailMonitor({
 }
 
 module.exports = {
+  buildDetourEmailInsights,
+  buildDetourSchematicAttachment,
   collectLikelyRoadNames,
   buildEmailMessage,
   buildSubject,

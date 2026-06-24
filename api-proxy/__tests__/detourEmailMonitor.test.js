@@ -1,4 +1,6 @@
 const {
+  buildDetourEmailInsights,
+  buildDetourSchematicAttachment,
   buildEmailMessage,
   collectLikelyRoadNames,
   getAlertEventTypes,
@@ -87,6 +89,65 @@ describe('detour email monitor', () => {
     expect(message.subject).toContain('Route 11');
     expect(message.text).toContain('Owen Street, McDonald Street');
     expect(message.html).toContain('Open BTTP');
+  });
+
+  test('summarizes likely closed section, detour path, and skipped stops', () => {
+    const insights = buildDetourEmailInsights({
+      eventType: 'DETOUR_DETECTED',
+      routeId: '8A',
+      eventLocationLabel: 'Bayfield Street & Sophia Street West',
+      closedSegmentRoadNames: ['Bayfield Street'],
+      likelyDetourRoadNames: ['Sophia Street West', 'Maple Avenue', 'Ross Street'],
+      segments: [{
+        skippedStops: [
+          { stopCode: '101', name: 'Bayfield at Sophia' },
+          { code: '102', stopName: 'Bayfield at Ross' },
+        ],
+      }],
+    });
+
+    expect(insights.closedSectionText)
+      .toBe('Likely closed section: Bayfield Street near Bayfield Street & Sophia Street West');
+    expect(insights.detourPathText)
+      .toBe('Likely detour path: Sophia Street West -> Maple Avenue -> Ross Street');
+    expect(insights.skippedStopsText)
+      .toBe('Stops likely not served by this route: #101 Bayfield at Sophia; #102 Bayfield at Ross');
+  });
+
+  test('embeds a simple schematic map image and attaches it inline', () => {
+    const event = {
+      eventType: 'DETOUR_DETECTED',
+      routeId: '8A',
+      eventLocationLabel: 'Bayfield Street & Sophia Street West',
+      closedSegmentRoadNames: ['Bayfield Street'],
+      likelyDetourRoadNames: ['Sophia Street West', 'Maple Avenue', 'Ross Street'],
+      skippedSegmentPolyline: [
+        { latitude: 44.3900, longitude: -79.7000 },
+        { latitude: 44.3910, longitude: -79.7000 },
+      ],
+      likelyDetourPolyline: [
+        { latitude: 44.3900, longitude: -79.7000 },
+        { latitude: 44.3900, longitude: -79.7020 },
+        { latitude: 44.3910, longitude: -79.7020 },
+        { latitude: 44.3910, longitude: -79.7000 },
+      ],
+      canShowDetourPath: true,
+    };
+
+    const attachment = buildDetourSchematicAttachment(event);
+    expect(attachment).toEqual(expect.objectContaining({
+      filename: 'detour-schematic.png',
+      content_type: 'image/png',
+      content_id: 'detour-schematic',
+    }));
+    expect(Buffer.from(attachment.content, 'base64').toString('hex', 0, 4)).toBe('89504e47');
+
+    const message = buildEmailMessage(event);
+    expect(message.html).toContain('cid:detour-schematic');
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments[0]).toEqual(attachment);
+    expect(message.text).toContain('Likely closed section: Bayfield Street near Bayfield Street & Sophia Street West');
+    expect(message.text).toContain('Likely detour path: Sophia Street West -> Maple Avenue -> Ross Street');
   });
 
   test('sends first-time detour alerts and records notification dedupe', async () => {

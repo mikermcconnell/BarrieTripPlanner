@@ -90,7 +90,20 @@ jobs:
             confidence: 'test',
             vehicleCount: 0,
             eventLocationLabel: 'Synthetic test - no real detour',
+            closedSegmentRoadNames: ['Test Route Street'],
             likelyDetourRoadNames: ['Test Street'],
+            skippedStops: [{ stopCode: '000', name: 'Synthetic Test Stop' }],
+            skippedSegmentPolyline: [
+              { latitude: 44.3900, longitude: -79.7000 },
+              { latitude: 44.3910, longitude: -79.7000 },
+            ],
+            likelyDetourPolyline: [
+              { latitude: 44.3900, longitude: -79.7000 },
+              { latitude: 44.3900, longitude: -79.7020 },
+              { latitude: 44.3910, longitude: -79.7020 },
+              { latitude: 44.3910, longitude: -79.7000 },
+            ],
+            canShowDetourPath: true,
           }, { appUrl: '' });
 
           message.subject = `[TEST] ${message.subject}`;

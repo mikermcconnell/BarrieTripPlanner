@@ -37,6 +37,18 @@ Implemented in the repo:
 4. It sends an email for first-time `DETOUR_DETECTED` events.
 5. It records sent alerts in Firestore collection `detourEmailNotifications` so the same detour is not emailed repeatedly.
 
+Email content now includes:
+
+- approximate likely closed section text
+- approximate likely detour path text from road-matched road names
+- route-scoped skipped-stop text when available
+- an inline PNG schematic showing:
+  - likely closed route section in red
+  - likely detour path in purple
+  - entry/exit markers
+
+The schematic is not a full app map and is not to scale. It is generated from the same GPS-derived geometry used by the detour email event.
+
 ## Verification Already Completed
 
 Passed:
@@ -76,6 +88,11 @@ Passed:
   - Result: success.
   - Recipient count: `1`.
   - Resend provider message ID: `c933af71-822c-4a5c-8320-ec1b65dc50d0`.
+- Added richer text and inline schematic support:
+  - likely closed section
+  - likely detour path
+  - skipped stops
+  - PNG schematic attached inline with CID
 - Re-ran verification:
   - `npm --prefix api-proxy test` passed: 58 test suites, 672 tests.
   - `npx jest --runInBand --runTestsByPath __tests__/detourEmailMonitor.test.js` passed from `api-proxy/`.
