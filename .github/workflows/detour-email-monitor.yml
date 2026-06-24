@@ -1,0 +1,39 @@
+name: Detour Email Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: detour-email-monitor
+  cancel-in-progress: false
+
+jobs:
+  detour-email-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api-proxy/package-lock.json
+
+      - name: Install api-proxy dependencies
+        run: npm --prefix api-proxy ci --omit=dev
+
+      - name: Send new detour email alerts
+        env:
+          DETOUR_DETECTOR_VERSION: v2
+          DETOUR_ALERT_LOOKBACK_MIN: 30
+          DETOUR_ALERT_MAX_EVENTS: 50
+          DETOUR_ALERT_RECIPIENTS: ${{ secrets.DETOUR_ALERT_RECIPIENTS }}
+          DETOUR_ALERT_FROM: ${{ secrets.DETOUR_ALERT_FROM }}
+          DETOUR_ALERT_APP_URL: ${{ secrets.DETOUR_ALERT_APP_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: npm --prefix api-proxy run detour:email-monitor

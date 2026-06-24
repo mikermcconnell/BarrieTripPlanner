@@ -153,6 +153,28 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 - `DETOUR_REQUIRE_SAFE_BASELINE=true` — blocks detector ticks when only live-fallback or auto-initialized baseline data is available
 - Firebase Admin credentials
 
+### Detour email monitor
+
+The GitHub Actions workflow `.github/workflows/detour-email-monitor.yml` runs `npm --prefix api-proxy run detour:email-monitor` every 5 minutes.
+
+It reads Firestore detour history, sends first-time detour emails through Resend, then records sent events in `detourEmailNotifications` so later runs do not resend the same event.
+
+Required GitHub secrets:
+
+- `DETOUR_ALERT_RECIPIENTS` — comma-separated recipients; use Michael's email for operations alerts
+- `RESEND_API_KEY`
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+
+Optional environment:
+
+- `DETOUR_ALERT_FROM` — defaults to `Barrie Transit Detours <detours@updates.barrietransit.ca>`
+- `DETOUR_ALERT_APP_URL`
+- `DETOUR_ALERT_LOOKBACK_MIN=30`
+- `DETOUR_ALERT_MAX_EVENTS=50`
+- `DETOUR_ALERT_INCLUDE_CLEARED=false`
+- `DETOUR_ALERT_EVENT_TYPES=DETOUR_DETECTED` to override the default event type list
+- `DETOUR_ALERT_NOTIFICATION_COLLECTION=detourEmailNotifications`
+
 ### Official baseline-impact scanner
 
 - `OFFICIAL_BASELINE_IMPACT_WORKER_ENABLED=true|false`

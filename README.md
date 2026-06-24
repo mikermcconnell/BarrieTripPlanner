@@ -305,6 +305,27 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
      - Optional filters: `routeId`, `eventType` (comma-separated), `start`, `end`
      - Log event types: `DETOUR_DETECTED`, `DETOUR_UPDATED`, `DETOUR_CLEARED`
 
+### Detour email alerts
+
+Newly detected detours can trigger email alerts through the scheduled **Detour Email Monitor** GitHub Actions workflow.
+
+- Workflow: `.github/workflows/detour-email-monitor.yml`
+- Script: `npm --prefix api-proxy run detour:email-monitor`
+- Default trigger: every 5 minutes
+- Default alert type: first-time `DETOUR_DETECTED` events only
+- Dedupe store: Firestore `detourEmailNotifications`
+
+Required GitHub secrets:
+
+- `DETOUR_ALERT_RECIPIENTS` — set to `michaelryanmcconnell@gmail.com`
+- `RESEND_API_KEY`
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+
+Optional GitHub secrets:
+
+- `DETOUR_ALERT_FROM`
+- `DETOUR_ALERT_APP_URL`
+
 ### Firestore rules
 
 Deploy updated rules so clients can read:
