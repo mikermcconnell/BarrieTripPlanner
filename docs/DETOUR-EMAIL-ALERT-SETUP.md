@@ -46,6 +46,7 @@ Email content now includes:
   - likely closed route section in red
   - likely detour path in purple
   - entry/exit markers
+- an attached `detour-schematic.png` fallback for Outlook or other clients that block inline CID images
 
 The schematic is not a full app map and is not to scale. It is generated from the same GPS-derived geometry used by the detour email event.
 
@@ -101,15 +102,17 @@ Passed:
 
 There are no remaining setup blockers. The workflow is installed, secrets are configured, and a manual run has completed successfully.
 
+## Outlook Image Fallback
+
+Outlook may show the inline schematic as a broken image even when the email was sent correctly. The monitor now:
+
+- sends the inline schematic using Resend's REST attachment field names (`content_id` and `content_type`)
+- includes a normal attached copy named `detour-schematic.png`
+- adds fallback text telling the recipient to open the attachment if the inline image does not display
+
 ## What We Need To Do Next
 
-### 1. Rotate the Resend API key
-
-A Resend API key was pasted into chat. For safety, create a fresh key in Resend and revoke the old one.
-
-Do not commit the key to the repo.
-
-### 2. Add GitHub Actions secrets
+### 1. Add GitHub Actions secrets
 
 Required secrets:
 
@@ -128,7 +131,7 @@ Current sender:
 
 Before using `detours@updates.barrietransit.ca`, verify `updates.barrietransit.ca` in Resend, then update the `DETOUR_ALERT_FROM` GitHub secret.
 
-### 3. Run a manual workflow test
+### 2. Run a manual workflow test
 
 After the PR is merged:
 
@@ -138,7 +141,7 @@ After the PR is merged:
 4. Confirm it completes successfully.
 5. Confirm no duplicate email is sent for the same detour event.
 
-### 4. Confirm Firestore access
+### 3. Confirm Firestore access
 
 The GitHub workflow needs Firebase Admin credentials that can:
 

@@ -10,7 +10,7 @@ const DEFAULT_ALERT_FROM = 'Barrie Transit Detours <detours@updates.barrietransi
 const DEFAULT_NOTIFICATION_COLLECTION = 'detourEmailNotifications';
 const DEFAULT_LOOKBACK_MINUTES = 30;
 const DEFAULT_MAX_EVENTS = 50;
-const SCHEMATIC_CONTENT_ID = 'detour-schematic';
+const SCHEMATIC_CONTENT_ID = 'detour-schematic@bttp.local';
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === '') return fallback;
@@ -352,10 +352,18 @@ function buildDetourSchematicAttachment(event) {
 
   return {
     content: canvas.toBuffer('image/png').toString('base64'),
-    filename: 'detour-schematic.png',
+    filename: 'detour-schematic-inline.png',
     content_type: 'image/png',
     content_id: SCHEMATIC_CONTENT_ID,
-    contentId: SCHEMATIC_CONTENT_ID,
+  };
+}
+
+function buildDetourSchematicFallbackAttachment(inlineAttachment) {
+  if (!inlineAttachment?.content) return null;
+  return {
+    content: inlineAttachment.content,
+    filename: 'detour-schematic.png',
+    content_type: 'image/png',
   };
 }
 
@@ -382,6 +390,7 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
   const roads = collectLikelyRoadNames(event);
   const insights = buildDetourEmailInsights(event);
   const schematicAttachment = buildDetourSchematicAttachment(event);
+  const schematicFallbackAttachment = buildDetourSchematicFallbackAttachment(schematicAttachment);
   const location = event.eventLocationLabel || event.detourZone?.label || '';
   const rows = [
     ['Event', eventLabel(event.eventType)],
@@ -416,6 +425,7 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
         <div style="margin:18px 0">
           <p style="margin:0 0 8px;font-weight:bold">Approximate detour schematic</p>
           <img src="cid:${SCHEMATIC_CONTENT_ID}" alt="Approximate detour schematic" width="640" style="width:100%;max-width:640px;border:1px solid #ddd;border-radius:8px">
+          <p style="margin:8px 0 0;color:#555;font-size:12px">If this image does not display in Outlook, open the attached detour-schematic.png.</p>
         </div>`
     : '';
 
@@ -449,6 +459,9 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     insights.closedSectionText,
     insights.detourPathText,
     insights.skippedStopsText,
+    schematicFallbackAttachment
+      ? 'If the schematic image does not display, open the attached detour-schematic.png.'
+      : null,
     '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
     appUrl ? `Open BTTP: ${appUrl}` : null,
@@ -458,8 +471,34 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     subject,
     html,
     text,
-    attachments: schematicAttachment ? [schematicAttachment] : [],
+    attachments: [
+      schematicAttachment,
+      schematicFallbackAttachment,
+    ].filter(Boolean),
   };
+}
+
+function normalizeResendAttachment(attachment) {
+  const normalized = {};
+  const copyStringField = (fieldName) => {
+    if (attachment[fieldName] != null) {
+      normalized[fieldName] = attachment[fieldName];
+    }
+  };
+
+  copyStringField('content');
+  copyStringField('filename');
+  copyStringField('path');
+  normalized.content_type = attachment.content_type || attachment.contentType;
+  normalized.content_id = attachment.content_id || attachment.contentId;
+
+  Object.keys(normalized).forEach((fieldName) => {
+    if (normalized[fieldName] == null || normalized[fieldName] === '') {
+      delete normalized[fieldName];
+    }
+  });
+
+  return normalized;
 }
 
 async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = globalThis.fetch }) {
@@ -480,7 +519,7 @@ async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = gl
       html: message.html,
       text: message.text,
       attachments: Array.isArray(message.attachments) && message.attachments.length > 0
-        ? message.attachments
+        ? message.attachments.map(normalizeResendAttachment)
         : undefined,
     }),
   });

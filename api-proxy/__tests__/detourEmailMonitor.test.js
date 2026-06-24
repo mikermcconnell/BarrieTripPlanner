@@ -6,6 +6,7 @@ const {
   getAlertEventTypes,
   makeNotificationId,
   runDetourEmailMonitor,
+  sendViaResend,
 } = require('../services/detourEmailMonitor');
 
 function createFakeDb(initial = {}) {
@@ -114,7 +115,7 @@ describe('detour email monitor', () => {
       .toBe('Stops likely not served by this route: #101 Bayfield at Sophia; #102 Bayfield at Ross');
   });
 
-  test('embeds a simple schematic map image and attaches it inline', () => {
+  test('embeds a simple schematic map image and adds an Outlook-safe attachment fallback', () => {
     const event = {
       eventType: 'DETOUR_DETECTED',
       routeId: '8A',
@@ -136,18 +137,62 @@ describe('detour email monitor', () => {
 
     const attachment = buildDetourSchematicAttachment(event);
     expect(attachment).toEqual(expect.objectContaining({
-      filename: 'detour-schematic.png',
+      filename: 'detour-schematic-inline.png',
       content_type: 'image/png',
-      content_id: 'detour-schematic',
+      content_id: 'detour-schematic@bttp.local',
     }));
+    expect(attachment).not.toHaveProperty('contentId');
+    expect(attachment).not.toHaveProperty('contentType');
     expect(Buffer.from(attachment.content, 'base64').toString('hex', 0, 4)).toBe('89504e47');
 
     const message = buildEmailMessage(event);
-    expect(message.html).toContain('cid:detour-schematic');
-    expect(message.attachments).toHaveLength(1);
+    expect(message.html).toContain('cid:detour-schematic@bttp.local');
+    expect(message.html).toContain('open the attached detour-schematic.png');
+    expect(message.attachments).toHaveLength(2);
     expect(message.attachments[0]).toEqual(attachment);
+    expect(message.attachments[1]).toEqual({
+      content: attachment.content,
+      filename: 'detour-schematic.png',
+      content_type: 'image/png',
+    });
     expect(message.text).toContain('Likely closed section: Bayfield Street near Bayfield Street & Sophia Street West');
     expect(message.text).toContain('Likely detour path: Sophia Street West -> Maple Avenue -> Ross Street');
+    expect(message.text).toContain('If the schematic image does not display, open the attached detour-schematic.png.');
+  });
+
+  test('sends Resend REST attachment fields in snake_case without SDK-only aliases', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ id: 'email-123' }),
+    });
+
+    await sendViaResend({
+      apiKey: 're_test',
+      from: 'BTTP Detour Alerts <onboarding@resend.dev>',
+      recipients: ['michaelryanmcconnell@gmail.com'],
+      message: {
+        subject: 'Test',
+        html: '<img src="cid:detour-schematic@bttp.local">',
+        text: 'Test',
+        attachments: [{
+          content: 'abc',
+          filename: 'detour-schematic-inline.png',
+          content_type: 'image/png',
+          content_id: 'detour-schematic@bttp.local',
+          contentId: 'detour-schematic@bttp.local',
+          contentType: 'image/png',
+        }],
+      },
+      fetchImpl,
+    });
+
+    const payload = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(payload.attachments).toEqual([{
+      content: 'abc',
+      filename: 'detour-schematic-inline.png',
+      content_type: 'image/png',
+      content_id: 'detour-schematic@bttp.local',
+    }]);
   });
 
   test('sends first-time detour alerts and records notification dedupe', async () => {
