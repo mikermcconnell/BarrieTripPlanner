@@ -34,7 +34,7 @@ Implemented in the repo:
 1. The detour worker writes detour events to Firestore history.
 2. The GitHub Actions workflow runs every 5 minutes.
 3. The monitor checks recent detour history events.
-4. It sends an email for first-time `DETOUR_DETECTED` events.
+4. It sends an email only for first-time `DETOUR_DETECTED` events that are public/rider-visible (`riderVisible: true`).
 5. It records sent alerts in Firestore collection `detourEmailNotifications` so the same detour is not emailed repeatedly.
 
 Email content now includes:
@@ -151,6 +151,7 @@ The GitHub workflow needs Firebase Admin credentials that can:
 ## Notes
 
 - Default alert event type is `DETOUR_DETECTED` only.
+- Backend-only candidates, hidden geometry warnings, and events with `riderVisible: false` or missing `riderVisible` are not emailed.
 - `DETOUR_CLEARED` emails are not enabled by default.
 - The monitor uses Firestore dedupe, not GitHub cache, so retries should not duplicate alerts.
 - No API keys or service account JSON should be stored in Markdown, source code, or committed files.

@@ -385,6 +385,10 @@ function buildSubject(event) {
   return `Barrie Transit Detour Alert | ${eventLabel(event.eventType)} | Route ${routeLabel(event)}`;
 }
 
+function shouldSendDetourEmailEvent(event) {
+  return event?.riderVisible === true;
+}
+
 function buildEmailMessage(event, { appUrl = '' } = {}) {
   const subject = buildSubject(event);
   const roads = collectLikelyRoadNames(event);
@@ -609,6 +613,16 @@ async function runDetourEmailMonitor({
   const skipped = [];
 
   for (const event of events) {
+    if (!shouldSendDetourEmailEvent(event)) {
+      skipped.push({
+        id: event.id || event.eventId || null,
+        reason: 'not-rider-visible',
+        riderVisible: event.riderVisible ?? null,
+        riderVisibilityReason: event.riderVisibilityReason || null,
+      });
+      continue;
+    }
+
     const notificationId = makeNotificationId(event);
     if (await hasNotification(db, notificationCollection, notificationId)) {
       skipped.push({ id: event.id || event.eventId || null, reason: 'already-notified' });
@@ -655,5 +669,6 @@ module.exports = {
   getAlertEventTypes,
   makeNotificationId,
   runDetourEmailMonitor,
+  shouldSendDetourEmailEvent,
   sendViaResend,
 };

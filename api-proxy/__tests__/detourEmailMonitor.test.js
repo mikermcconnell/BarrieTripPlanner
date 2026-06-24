@@ -6,6 +6,7 @@ const {
   getAlertEventTypes,
   makeNotificationId,
   runDetourEmailMonitor,
+  shouldSendDetourEmailEvent,
   sendViaResend,
 } = require('../services/detourEmailMonitor');
 
@@ -193,6 +194,64 @@ describe('detour email monitor', () => {
       content_type: 'image/png',
       content_id: 'detour-schematic@bttp.local',
     }]);
+  });
+
+  test('only emails detour events that are public/rider-visible', async () => {
+    expect(shouldSendDetourEmailEvent({ riderVisible: true })).toBe(true);
+    expect(shouldSendDetourEmailEvent({ riderVisible: false })).toBe(false);
+    expect(shouldSendDetourEmailEvent({})).toBe(false);
+
+    const db = createFakeDb();
+    const hiddenEvent = {
+      id: 'history-doc-hidden',
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'detour-event-hidden',
+      routeId: '8A',
+      occurredAt: Date.parse('2026-06-24T14:00:00.000Z'),
+      riderVisible: false,
+      riderVisibilityReason: 'insufficient-geometry',
+    };
+    const missingVisibilityEvent = {
+      id: 'history-doc-missing-visibility',
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'detour-event-missing-visibility',
+      routeId: '8B',
+      occurredAt: Date.parse('2026-06-24T14:01:00.000Z'),
+    };
+    const visibleEvent = {
+      id: 'history-doc-visible',
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'detour-event-visible',
+      routeId: '9',
+      occurredAt: Date.parse('2026-06-24T14:02:00.000Z'),
+      riderVisible: true,
+      riderVisibilityReason: 'gps-clear-required',
+    };
+    const sendEmail = jest.fn().mockResolvedValue({ id: 'email-visible' });
+
+    const result = await runDetourEmailMonitor({
+      env: BASE_ENV,
+      db,
+      queryDetourHistory: jest.fn().mockResolvedValue([
+        hiddenEvent,
+        missingVisibilityEvent,
+        visibleEvent,
+      ]),
+      sendEmail,
+      now: () => Date.parse('2026-06-24T14:05:00.000Z'),
+    });
+
+    expect(result.sentCount).toBe(1);
+    expect(result.sent[0]).toEqual(expect.objectContaining({
+      id: 'history-doc-visible',
+      routeId: '9',
+    }));
+    expect(result.skipped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'history-doc-hidden', reason: 'not-rider-visible' }),
+      expect.objectContaining({ id: 'history-doc-missing-visibility', reason: 'not-rider-visible' }),
+    ]));
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail.mock.calls[0][0].message.subject).toContain('Route 9');
   });
 
   test('sends first-time detour alerts and records notification dedupe', async () => {
