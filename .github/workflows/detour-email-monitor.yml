@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      send_test_email:
+        description: "Send a synthetic test detour email"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 concurrency:
   group: detour-email-monitor
@@ -27,6 +36,7 @@ jobs:
         run: npm --prefix api-proxy ci --omit=dev --ignore-scripts
 
       - name: Send new detour email alerts
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.send_test_email != 'true' }}
         env:
           DETOUR_DETECTOR_VERSION: v2
           DETOUR_ALERT_LOOKBACK_MIN: 30
@@ -37,4 +47,66 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: npm --prefix api-proxy run detour:email-monitor
+
+      - name: Send synthetic test detour email
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.send_test_email == 'true' }}
+        env:
+          DETOUR_ALERT_RECIPIENTS: ${{ secrets.DETOUR_ALERT_RECIPIENTS }}
+          DETOUR_ALERT_FROM: ${{ secrets.DETOUR_ALERT_FROM }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          node <<'NODE'
+          const {
+            buildEmailMessage,
+            sendViaResend,
+          } = require('./api-proxy/services/detourEmailMonitor');
+
+          const recipients = String(process.env.DETOUR_ALERT_RECIPIENTS || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+          const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+          const from = String(
+            process.env.DETOUR_ALERT_FROM ||
+              'Barrie Transit Detours <detours@updates.barrietransit.ca>'
+          ).trim();
+
+          if (recipients.length === 0) {
+            throw new Error('DETOUR_ALERT_RECIPIENTS is not configured');
+          }
+          if (!apiKey) {
+            throw new Error('RESEND_API_KEY is not configured');
+          }
+
+          const message = buildEmailMessage({
+            eventType: 'DETOUR_DETECTED',
+            routeId: 'TEST',
+            eventId: `test-detour-email-${Date.now()}`,
+            detourEventId: `test-detour-email-${Date.now()}`,
+            occurredAt: Date.now(),
+            detectedAt: Date.now(),
+            riderVisible: false,
+            riderVisibilityReason: 'Synthetic email delivery test only',
+            confidence: 'test',
+            vehicleCount: 0,
+            eventLocationLabel: 'Synthetic test - no real detour',
+            likelyDetourRoadNames: ['Test Street'],
+          }, { appUrl: '' });
+
+          message.subject = `[TEST] ${message.subject}`;
+          message.text = `This is a synthetic BTTP detour email test. No real detour was detected.\n\n${message.text}`;
+          message.html = message.html.replace(
+            '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333">',
+            '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333"><p style="max-width:680px;margin:16px auto;padding:12px;background:#fff3cd;border:1px solid #ffe08a"><strong>TEST ONLY:</strong> This is a synthetic BTTP detour email test. No real detour was detected.</p>'
+          );
+
+          sendViaResend({ apiKey, from, recipients, message })
+            .then((result) => {
+              console.log('[detour-email-test]', JSON.stringify({
+                ok: true,
+                recipientCount: recipients.length,
+                providerMessageId: result.id || result.messageId || null,
+              }, null, 2));
+            });
+          NODE
 
