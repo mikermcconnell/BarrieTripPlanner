@@ -58,13 +58,22 @@ Passed:
   - `FIREBASE_SERVICE_ACCOUNT_JSON`
 - Confirmed the Firebase service account JSON is valid for project `barrie-transit-trip-plan-cc84e`.
 - Added a `.gitignore` guard for `*firebase-adminsdk*.json` so the local private key file is not accidentally committed.
+- Merged the detour email monitor workflow into `master`.
+- Fixed the workflow install step to use `npm --prefix api-proxy ci --omit=dev --ignore-scripts`, because the production-only install does not include the root `patch-package` dev dependency.
+- Ran the workflow manually:
+  - Run: `28105751772`
+  - Result: success.
+  - Firestore history collection checked: `detourEventHistoryV2`.
+  - Dedupe collection: `detourEmailNotifications`.
+  - Recent events checked: `0`.
+  - Emails sent: `0`.
 - Re-ran verification:
   - `npm --prefix api-proxy test` passed: 58 test suites, 672 tests.
   - `npx jest --runInBand --runTestsByPath __tests__/detourEmailMonitor.test.js` passed from `api-proxy/`.
   - `node --check` passed for the monitor service and CLI script.
   - Disabled-mode CLI run skipped safely.
 
-Remaining blocker: GitHub Actions cannot run the new `detour-email-monitor.yml` workflow until the PR is merged because GitHub only exposes workflow dispatch for workflows present on the default branch.
+There are no remaining setup blockers. The workflow is installed, secrets are configured, and a manual run has completed successfully.
 
 ## What We Need To Do Next
 
