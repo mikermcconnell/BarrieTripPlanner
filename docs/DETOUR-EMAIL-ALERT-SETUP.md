@@ -67,6 +67,15 @@ Passed:
   - Dedupe collection: `detourEmailNotifications`.
   - Recent events checked: `0`.
   - Emails sent: `0`.
+- Added a manual workflow input, `send_test_email=true`, for synthetic delivery checks.
+- The first synthetic test failed because the default `updates.barrietransit.ca` sender domain is not verified in Resend.
+- Added GitHub Actions secret:
+  - `DETOUR_ALERT_FROM=BTTP Detour Alerts <onboarding@resend.dev>`
+- Ran a synthetic test detour email:
+  - Run: `28106138011`
+  - Result: success.
+  - Recipient count: `1`.
+  - Resend provider message ID: `c933af71-822c-4a5c-8320-ec1b65dc50d0`.
 - Re-ran verification:
   - `npm --prefix api-proxy test` passed: 58 test suites, 672 tests.
   - `npx jest --runInBand --runTestsByPath __tests__/detourEmailMonitor.test.js` passed from `api-proxy/`.
@@ -95,6 +104,12 @@ Optional secrets:
 
 - `DETOUR_ALERT_FROM` - sender address, for example `Barrie Transit Detours <detours@updates.barrietransit.ca>`
 - `DETOUR_ALERT_APP_URL` - app or dashboard link to include in emails
+
+Current sender:
+
+- `BTTP Detour Alerts <onboarding@resend.dev>`
+
+Before using `detours@updates.barrietransit.ca`, verify `updates.barrietransit.ca` in Resend, then update the `DETOUR_ALERT_FROM` GitHub secret.
 
 ### 3. Run a manual workflow test
 
