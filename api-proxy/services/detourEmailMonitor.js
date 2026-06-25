@@ -139,20 +139,31 @@ function collectRoadNamesFromFields(event, fieldNames = []) {
 
 function stopLabel(stop) {
   if (!stop) return '';
-  const code = String(stop.stopCode || stop.code || stop.id || stop.stopId || '').trim();
+  const code = String(
+    stop.stopCode ||
+    stop.stop_code ||
+    stop.code ||
+    stop.id ||
+    stop.stopId ||
+    stop.stop_id ||
+    ''
+  ).replace(/^#/, '').trim();
   const name = String(stop.name || stop.stopName || stop.label || '').trim();
   if (code && name) return `#${code} ${name}`;
   if (code) return `#${code}`;
   return name;
 }
 
-function collectSkippedStops(event) {
+function collectStopsFromFields(event, fields = []) {
   const labels = new Set();
   const addStops = (source) => {
-    if (!source || !Array.isArray(source.skippedStops)) return;
-    source.skippedStops.forEach((stop) => {
-      const label = stopLabel(stop);
-      if (label) labels.add(label);
+    if (!source) return;
+    fields.forEach((fieldName) => {
+      if (!Array.isArray(source[fieldName])) return;
+      source[fieldName].forEach((stop) => {
+        const label = stopLabel(stop);
+        if (label) labels.add(label);
+      });
     });
   };
 
@@ -161,6 +172,80 @@ function collectSkippedStops(event) {
     event.segments.forEach(addStops);
   }
   return [...labels];
+}
+
+function collectSkippedStops(event) {
+  return collectStopsFromFields(event, [
+    'skippedStops',
+    'skippedStopCodes',
+    'skippedStopIds',
+  ]);
+}
+
+function collectAffectedStops(event) {
+  return collectStopsFromFields(event, [
+    'affectedStops',
+    'affectedStopCodes',
+    'affectedStopIds',
+  ]);
+}
+
+function cleanLabel(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.:-]+$/g, '')
+    .trim();
+}
+
+function cleanRoadName(value) {
+  return cleanLabel(value)
+    .replace(/\b(Road|Rd\.?|Street|St\.?|Avenue|Ave\.?|Drive|Dr\.?|Boulevard|Blvd\.?|Lane|Ln\.?|Crescent|Cres\.?)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatCompactList(items = []) {
+  const cleaned = [...new Set(items.map(cleanLabel).filter(Boolean))];
+  if (cleaned.length === 0) return '';
+  if (cleaned.length === 1) return cleaned[0];
+  if (cleaned.length === 2) return `${cleaned[0]} & ${cleaned[1]}`;
+  return `${cleaned.slice(0, -1).join(', ')} & ${cleaned[cleaned.length - 1]}`;
+}
+
+function collectLabelFields(event, fields = []) {
+  const labels = [];
+  const addLabels = (source) => {
+    if (!source) return;
+    fields.forEach((fieldName) => {
+      const label = cleanLabel(source[fieldName]);
+      if (label) labels.push(label);
+    });
+  };
+  addLabels(event);
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach(addLabels);
+  }
+  return [...new Set(labels)];
+}
+
+function buildBestLocationTitle(event, { closedRoads = [], skippedStops = [], affectedStops = [] } = {}) {
+  const explicitLabels = collectLabelFields(event, [
+    'configuredCorridorLabel',
+    'closedSegmentLabel',
+    'eventLocationLabel',
+    'locationText',
+    'title',
+    'description',
+  ]).filter((label) => !/^route\s+\w+\s+detour$/i.test(label));
+
+  const roadTitle = formatCompactList(closedRoads.map(cleanRoadName).filter(Boolean));
+  const stopTitle = formatCompactList(skippedStops.length > 0 ? skippedStops : affectedStops);
+
+  const locationTitle = explicitLabels[0] || roadTitle;
+  if (locationTitle && stopTitle && !stopTitle.split(/\s*&\s*|\s*,\s*/).some((part) => locationTitle.includes(part))) {
+    return `${locationTitle} · ${stopTitle.startsWith('#') ? `Stops ${stopTitle}` : stopTitle}`;
+  }
+  return locationTitle || stopTitle || '';
 }
 
 function buildDetourEmailInsights(event) {
@@ -172,25 +257,35 @@ function buildDetourEmailInsights(event) {
   ]);
   const likelyRoads = collectLikelyRoadNames(event);
   const skippedStops = collectSkippedStops(event);
+  const affectedStops = collectAffectedStops(event);
+  const bestLocationTitle = buildBestLocationTitle(event, {
+    closedRoads,
+    skippedStops,
+    affectedStops,
+  });
 
   const closedBase = closedRoads.length > 0
     ? closedRoads.join(', ')
-    : (location || 'unknown road section');
+    : (bestLocationTitle || location || '');
   const closedSectionText = location && closedRoads.length > 0
     ? `Likely closed section: ${closedBase} near ${location}`
-    : `Likely closed section: ${closedBase}`;
+    : (closedBase ? `Likely closed section: ${closedBase}` : 'Likely closed section: not enough detail yet');
   const detourPathText = likelyRoads.length > 0
     ? `Likely detour path: ${likelyRoads.join(' -> ')}`
-    : 'Likely detour path: not enough road-name evidence yet';
+    : 'Likely detour path: open BTTP to view the map';
   const skippedStopsText = skippedStops.length > 0
     ? `Stops likely not served by this route: ${skippedStops.join('; ')}`
-    : 'Stops likely not served by this route: none listed yet';
+    : (affectedStops.length > 0
+      ? `Stops affected: ${affectedStops.join('; ')}`
+      : 'Stops affected: not listed yet');
 
   return {
     location,
+    bestLocationTitle,
     closedRoads,
     likelyRoads,
     skippedStops,
+    affectedStops,
     closedSectionText,
     detourPathText,
     skippedStopsText,
@@ -278,7 +373,7 @@ function drawPolyline(ctx, points, project, options = {}) {
 function buildDetourSchematicAttachment(event) {
   const closedPath = chooseClosedPath(event);
   const detourPath = chooseDetourPath(event);
-  if (closedPath.length < 2 && detourPath.length < 2) return null;
+  if (closedPath.length < 2 || detourPath.length < 2) return null;
 
   const width = 640;
   const height = 360;
@@ -389,6 +484,96 @@ function shouldSendDetourEmailEvent(event) {
   return event?.riderVisible === true;
 }
 
+function eventIdentifierValues(event = {}) {
+  return [
+    event.detourEventId,
+    event.eventId,
+    event.sharedDetourEventId,
+    event.id,
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+}
+
+function activeDocMatchesEvent(active = {}, event = {}) {
+  const eventIds = new Set(eventIdentifierValues(event));
+  const activeIds = eventIdentifierValues(active);
+  if (eventIds.size > 0 && activeIds.some((id) => eventIds.has(id))) return true;
+  const eventRouteId = String(event.routeId || '').trim();
+  return eventRouteId && String(active.routeId || '').trim() === eventRouteId;
+}
+
+function rankActiveDetourCandidate(active = {}, event = {}) {
+  let score = 0;
+  if (active.riderVisible === true) score += 100;
+  if (activeDocMatchesEvent(active, event)) score += 50;
+  if (String(active.detourEventId || '') && String(active.detourEventId || '') === String(event.detourEventId || event.eventId || '')) score += 30;
+  if (String(active.routeId || '') && String(active.routeId || '') === String(event.routeId || '')) score += 10;
+  if (buildDetourEmailInsights(active).bestLocationTitle) score += 6;
+  if (collectSkippedStops(active).length > 0) score += 5;
+  if (collectLikelyRoadNames(active).length > 0) score += 4;
+  if (chooseClosedPath(active).length >= 2 && chooseDetourPath(active).length >= 2) score += 4;
+  return score;
+}
+
+async function queryActiveDetourCandidates(db, collectionName, event) {
+  const collection = db.collection(collectionName);
+  const candidates = [];
+  const addSnapshot = (snapshot, id = '') => {
+    if (!snapshot?.exists) return;
+    candidates.push({
+      id: id || snapshot.id || null,
+      ...(typeof snapshot.data === 'function' ? snapshot.data() : {}),
+    });
+  };
+  const addQuerySnapshot = (snapshot) => {
+    if (!snapshot?.docs) return;
+    snapshot.docs.forEach((doc) => addSnapshot(doc, doc.id));
+  };
+
+  const routeId = String(event?.routeId || '').trim();
+  if (routeId && typeof collection.doc === 'function') {
+    try {
+      addSnapshot(await collection.doc(routeId).get(), routeId);
+    } catch (_err) {
+      // Non-fatal. V2 active detour docs are not keyed only by routeId.
+    }
+  }
+
+  if (routeId && typeof collection.where === 'function') {
+    try {
+      addQuerySnapshot(await collection.where('routeId', '==', routeId).limit(10).get());
+    } catch (_err) {
+      // Non-fatal. Some test doubles or deployments may not support this query.
+    }
+  }
+
+  const deduped = new Map();
+  candidates.forEach((candidate, index) => {
+    const key = candidate.id || `${candidate.routeId || 'candidate'}:${candidate.detourEventId || index}`;
+    deduped.set(key, candidate);
+  });
+  return [...deduped.values()];
+}
+
+async function enrichEventFromActiveDetour(db, storageConfig, event) {
+  if (!db || !storageConfig?.activeCollection || !event?.routeId) return event;
+  const candidates = await queryActiveDetourCandidates(db, storageConfig.activeCollection, event);
+  const best = candidates
+    .filter((candidate) => candidate.riderVisible === true && activeDocMatchesEvent(candidate, event))
+    .sort((a, b) => rankActiveDetourCandidate(b, event) - rankActiveDetourCandidate(a, event))[0];
+
+  if (!best) return event;
+  return {
+    ...event,
+    ...best,
+    id: event.id || best.id || null,
+    eventType: event.eventType,
+    eventId: event.eventId || best.eventId || best.detourEventId || null,
+    detourEventId: event.detourEventId || best.detourEventId || best.eventId || null,
+    occurredAt: event.occurredAt || best.occurredAt || best.updatedAt || null,
+    detectedAt: event.detectedAt || best.detectedAt || null,
+  };
+}
+
 function buildEmailMessage(event, { appUrl = '' } = {}) {
   const subject = buildSubject(event);
   const roads = collectLikelyRoadNames(event);
@@ -405,11 +590,13 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     ['Visibility reason', event.riderVisibilityReason || '—'],
     ['Confidence', event.eventConfidence || event.confidence || 'unknown'],
     ['Vehicles', event.uniqueVehicleCount ?? event.vehicleCount ?? 'unknown'],
-    ['Location', location || '—'],
+    ['Location', insights.bestLocationTitle || location || '—'],
     ['Likely closed section', insights.closedSectionText.replace(/^Likely closed section:\s*/, '')],
     ['Likely detour roads', roads.length > 0 ? roads.join(', ') : '—'],
     ['Likely path summary', insights.detourPathText.replace(/^Likely detour path:\s*/, '')],
-    ['Skipped stops', insights.skippedStops.length > 0 ? insights.skippedStops.join('; ') : '—'],
+    ['Skipped/affected stops', insights.skippedStops.length > 0
+      ? insights.skippedStops.join('; ')
+      : (insights.affectedStops.length > 0 ? insights.affectedStops.join('; ') : '—')],
     ['Event ID', event.detourEventId || event.eventId || event.id || '—'],
   ];
 
@@ -446,7 +633,8 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     </tr>
     <tr>
       <td style="padding:20px">
-        <p style="font-size:16px;margin:0 0 12px"><strong>${escapeHtml(eventLabel(event.eventType))}</strong> for route ${escapeHtml(routeLabel(event))}.</p>
+        <p style="font-size:16px;margin:0 0 12px"><strong>Confirmed public detour</strong> for route ${escapeHtml(routeLabel(event))}.</p>
+        ${insights.bestLocationTitle ? `<p style="font-size:18px;margin:0 0 12px"><strong>${escapeHtml(insights.bestLocationTitle)}</strong></p>` : ''}
         <p style="margin:0 0 12px">${escapeHtml(insights.closedSectionText)}<br>${escapeHtml(insights.detourPathText)}<br>${escapeHtml(insights.skippedStopsText)}</p>
         ${schematic}
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}</table>
@@ -460,6 +648,7 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
   const text = [
     subject,
     '',
+    insights.bestLocationTitle ? `Area: ${insights.bestLocationTitle}` : null,
     insights.closedSectionText,
     insights.detourPathText,
     insights.skippedStopsText,
@@ -613,34 +802,36 @@ async function runDetourEmailMonitor({
   const skipped = [];
 
   for (const event of events) {
-    if (!shouldSendDetourEmailEvent(event)) {
+    const emailEvent = await enrichEventFromActiveDetour(db, storageConfig, event);
+
+    if (!shouldSendDetourEmailEvent(emailEvent)) {
       skipped.push({
         id: event.id || event.eventId || null,
         reason: 'not-rider-visible',
-        riderVisible: event.riderVisible ?? null,
-        riderVisibilityReason: event.riderVisibilityReason || null,
+        riderVisible: emailEvent.riderVisible ?? null,
+        riderVisibilityReason: emailEvent.riderVisibilityReason || null,
       });
       continue;
     }
 
-    const notificationId = makeNotificationId(event);
+    const notificationId = makeNotificationId(emailEvent);
     if (await hasNotification(db, notificationCollection, notificationId)) {
       skipped.push({ id: event.id || event.eventId || null, reason: 'already-notified' });
       continue;
     }
 
-    const message = buildEmailMessage(event, { appUrl });
+    const message = buildEmailMessage(emailEvent, { appUrl });
     const providerResult = await sendEmail({
       apiKey,
       from,
       recipients,
       message,
     });
-    await recordNotification(db, notificationCollection, notificationId, event, providerResult || {});
+    await recordNotification(db, notificationCollection, notificationId, emailEvent, providerResult || {});
     sent.push({
       id: event.id || event.eventId || null,
-      eventType: event.eventType,
-      routeId: event.routeId,
+      eventType: emailEvent.eventType,
+      routeId: emailEvent.routeId,
       notificationId,
     });
   }
@@ -664,6 +855,7 @@ module.exports = {
   buildDetourEmailInsights,
   buildDetourSchematicAttachment,
   collectLikelyRoadNames,
+  enrichEventFromActiveDetour,
   buildEmailMessage,
   buildSubject,
   getAlertEventTypes,

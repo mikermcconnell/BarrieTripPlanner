@@ -3,6 +3,7 @@ const {
   buildDetourSchematicAttachment,
   buildEmailMessage,
   collectLikelyRoadNames,
+  enrichEventFromActiveDetour,
   getAlertEventTypes,
   makeNotificationId,
   runDetourEmailMonitor,
@@ -28,11 +29,40 @@ function createFakeDb(initial = {}) {
     _collections: collections,
     collection(collectionName) {
       const collection = getCollection(collectionName);
+      const makeQuery = (filters = [], max = null) => ({
+        where(fieldName, operator, expectedValue) {
+          return makeQuery([...filters, { fieldName, operator, expectedValue }], max);
+        },
+        limit(limitValue) {
+          return makeQuery(filters, limitValue);
+        },
+        async get() {
+          let entries = [...collection.entries()].filter(([, data]) => (
+            filters.every(({ fieldName, operator, expectedValue }) => {
+              if (operator !== '==') return false;
+              return data?.[fieldName] === expectedValue;
+            })
+          ));
+          if (max != null) entries = entries.slice(0, max);
+          return {
+            docs: entries.map(([id, data]) => ({
+              id,
+              exists: true,
+              data: () => data,
+            })),
+          };
+        },
+      });
+
       return {
+        where: makeQuery().where,
+        limit: makeQuery().limit,
         doc(docId) {
           return {
+            id: docId,
             async get() {
               return {
+                id: docId,
                 exists: collection.has(docId),
                 data: () => collection.get(docId),
               };
@@ -161,6 +191,22 @@ describe('detour email monitor', () => {
     expect(message.text).toContain('If the schematic image does not display, open the attached detour-schematic.png.');
   });
 
+  test('does not attach a schematic when only the closed segment line is available', () => {
+    const message = buildEmailMessage({
+      eventType: 'DETOUR_DETECTED',
+      routeId: '11',
+      riderVisible: true,
+      skippedSegmentPolyline: [
+        { latitude: 44.3900, longitude: -79.7000 },
+        { latitude: 44.3910, longitude: -79.7000 },
+      ],
+    });
+
+    expect(message.attachments).toHaveLength(0);
+    expect(message.html).not.toContain('Approximate detour schematic');
+    expect(message.text).toContain('Likely detour path: open BTTP to view the map');
+  });
+
   test('sends Resend REST attachment fields in snake_case without SDK-only aliases', async () => {
     const fetchImpl = jest.fn().mockResolvedValue({
       ok: true,
@@ -252,6 +298,62 @@ describe('detour email monitor', () => {
     ]));
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail.mock.calls[0][0].message.subject).toContain('Route 9');
+  });
+
+  test('enriches public detour emails from the active detour document', async () => {
+    const db = createFakeDb({
+      activeDetourEventsV2: {
+        '11:event-123:100-200': {
+          routeId: '11',
+          detourEventId: 'event-123',
+          riderVisible: true,
+          riderVisibilityReason: 'current-detour-vehicle',
+          eventLocationLabel: 'Duckworth & Grove East',
+          closedSegmentRoadNames: ['Grove Street East'],
+          likelyDetourRoadNames: ['Duckworth Street', 'Bernick Drive', 'Cook Street'],
+          skippedStops: [
+            { stopCode: '335' },
+            { stopCode: '328' },
+          ],
+          skippedSegmentPolyline: [
+            { latitude: 44.4100, longitude: -79.6600 },
+            { latitude: 44.4100, longitude: -79.6500 },
+          ],
+          likelyDetourPolyline: [
+            { latitude: 44.4100, longitude: -79.6600 },
+            { latitude: 44.4050, longitude: -79.6600 },
+            { latitude: 44.4050, longitude: -79.6500 },
+            { latitude: 44.4100, longitude: -79.6500 },
+          ],
+          canShowDetourPath: true,
+        },
+      },
+    });
+    const event = {
+      id: 'history-doc-poor',
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'event-123',
+      detourEventId: 'event-123',
+      routeId: '11',
+      occurredAt: Date.parse('2026-06-25T14:00:00.000Z'),
+      riderVisible: true,
+      skippedSegmentPolyline: [
+        { latitude: 44.4100, longitude: -79.6600 },
+        { latitude: 44.4100, longitude: -79.6500 },
+      ],
+    };
+
+    const enriched = await enrichEventFromActiveDetour(db, {
+      activeCollection: 'activeDetourEventsV2',
+    }, event);
+    const message = buildEmailMessage(enriched);
+
+    expect(enriched.eventLocationLabel).toBe('Duckworth & Grove East');
+    expect(message.text).toContain('Area: Duckworth & Grove East');
+    expect(message.text).toContain('#335; #328');
+    expect(message.text).toContain('Duckworth Street -> Bernick Drive -> Cook Street');
+    expect(message.text).not.toContain('unknown road section');
+    expect(message.attachments).toHaveLength(2);
   });
 
   test('sends first-time detour alerts and records notification dedupe', async () => {
