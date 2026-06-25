@@ -53,6 +53,7 @@ jobs:
         env:
           DETOUR_ALERT_RECIPIENTS: ${{ secrets.DETOUR_ALERT_RECIPIENTS }}
           DETOUR_ALERT_FROM: ${{ secrets.DETOUR_ALERT_FROM }}
+          DETOUR_ALERT_APP_URL: ${{ secrets.DETOUR_ALERT_APP_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           node <<'NODE'
@@ -68,8 +69,9 @@ jobs:
           const apiKey = String(process.env.RESEND_API_KEY || '').trim();
           const from = String(
             process.env.DETOUR_ALERT_FROM ||
-              'Barrie Transit Detours <detours@updates.barrietransit.ca>'
+              'BTTP Detour Alerts <onboarding@resend.dev>'
           ).trim();
+          const appUrl = String(process.env.DETOUR_ALERT_APP_URL || '').trim();
 
           if (recipients.length === 0) {
             throw new Error('DETOUR_ALERT_RECIPIENTS is not configured');
@@ -80,31 +82,36 @@ jobs:
 
           const message = buildEmailMessage({
             eventType: 'DETOUR_DETECTED',
-            routeId: 'TEST',
-            eventId: `test-detour-email-${Date.now()}`,
-            detourEventId: `test-detour-email-${Date.now()}`,
+            routeId: '11',
+            sharedRouteIds: ['11'],
+            eventId: `test-route-11-duckworth-grove-${Date.now()}`,
+            detourEventId: `test-route-11-duckworth-grove-${Date.now()}`,
             occurredAt: Date.now(),
             detectedAt: Date.now(),
-            riderVisible: false,
-            riderVisibilityReason: 'Synthetic email delivery test only',
-            confidence: 'test',
-            vehicleCount: 0,
-            eventLocationLabel: 'Synthetic test - no real detour',
-            closedSegmentRoadNames: ['Test Route Street'],
-            likelyDetourRoadNames: ['Test Street'],
-            skippedStops: [{ stopCode: '000', name: 'Synthetic Test Stop' }],
+            riderVisible: true,
+            riderVisibilityReason: 'Synthetic public-detour email preview',
+            confidence: 'high',
+            eventConfidence: 'high',
+            uniqueVehicleCount: 2,
+            eventLocationLabel: 'Duckworth & Grove East',
+            closedSegmentRoadNames: ['Grove Street East'],
+            likelyDetourRoadNames: ['Duckworth Street', 'Bernick Drive', 'Cook Street'],
+            skippedStops: [
+              { stopCode: '335' },
+              { stopCode: '328' },
+            ],
             skippedSegmentPolyline: [
-              { latitude: 44.3900, longitude: -79.7000 },
-              { latitude: 44.3910, longitude: -79.7000 },
+              { latitude: 44.4100, longitude: -79.6600 },
+              { latitude: 44.4100, longitude: -79.6500 },
             ],
             likelyDetourPolyline: [
-              { latitude: 44.3900, longitude: -79.7000 },
-              { latitude: 44.3900, longitude: -79.7020 },
-              { latitude: 44.3910, longitude: -79.7020 },
-              { latitude: 44.3910, longitude: -79.7000 },
+              { latitude: 44.4100, longitude: -79.6600 },
+              { latitude: 44.4050, longitude: -79.6600 },
+              { latitude: 44.4050, longitude: -79.6500 },
+              { latitude: 44.4100, longitude: -79.6500 },
             ],
             canShowDetourPath: true,
-          }, { appUrl: '' });
+          }, { appUrl });
 
           message.subject = `[TEST] ${message.subject}`;
           message.text = `This is a synthetic BTTP detour email test. No real detour was detected.\n\n${message.text}`;

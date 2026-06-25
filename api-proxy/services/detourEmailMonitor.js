@@ -6,7 +6,7 @@ const { getDb } = require('../firebaseAdmin');
 const { getDetourHistory } = require('../detourPublisher');
 const { buildDetourStorageConfig } = require('../detour/storageConfig');
 
-const DEFAULT_ALERT_FROM = 'Barrie Transit Detours <detours@updates.barrietransit.ca>';
+const DEFAULT_ALERT_FROM = 'BTTP Detour Alerts <onboarding@resend.dev>';
 const DEFAULT_NOTIFICATION_COLLECTION = 'detourEmailNotifications';
 const DEFAULT_LOOKBACK_MINUTES = 30;
 const DEFAULT_MAX_EVENTS = 50;

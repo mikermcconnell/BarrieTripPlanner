@@ -131,7 +131,7 @@ Required secrets:
 
 Optional secrets:
 
-- `DETOUR_ALERT_FROM` - sender address, for example `Barrie Transit Detours <detours@updates.barrietransit.ca>`
+- `DETOUR_ALERT_FROM` - sender address. Keep `BTTP Detour Alerts <onboarding@resend.dev>` until the custom sending domain is verified.
 - `DETOUR_ALERT_APP_URL` - app or dashboard link to include in emails
 
 Current sender:
