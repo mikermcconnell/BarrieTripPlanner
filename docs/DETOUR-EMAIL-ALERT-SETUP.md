@@ -42,14 +42,9 @@ Email content now includes:
 - public/rider-visible detour context enriched from the active detour record when available
 - approximate likely closed section text
 - approximate likely detour path text from road-matched road names
-- route-scoped skipped-stop text when available
-- an inline PNG road-map snapshot showing:
-  - likely closed route section in red
-  - likely detour path in purple
-  - entry/exit markers
-- an attached `detour-map.png` fallback for Outlook or other clients that block inline CID images
+- route-scoped skipped-stop text with stop code and stop name when available
 
-The map snapshot uses OpenStreetMap raster tiles and is generated only when the monitor has both a closed section and a trustworthy likely detour path. If map generation fails, the monitor sends text-only email instead of showing a misleading image.
+The monitor no longer attaches map images. It sends text-only detour context because the generated map/schematic images were not reliable enough in Outlook.
 
 ## Verification Already Completed
 
@@ -90,11 +85,10 @@ Passed:
   - Result: success.
   - Recipient count: `1`.
   - Resend provider message ID: `c933af71-822c-4a5c-8320-ec1b65dc50d0`.
-- Added richer text and inline map support:
+- Added richer text support:
   - likely closed section
   - likely detour path
-  - skipped stops
-  - PNG image attached inline with CID
+  - skipped stops with names when available
 - Re-ran verification:
   - `npm --prefix api-proxy test` passed: 58 test suites, 672 tests.
   - `npx jest --runInBand --runTestsByPath __tests__/detourEmailMonitor.test.js` passed from `api-proxy/`.
@@ -103,20 +97,16 @@ Passed:
 
 There are no remaining setup blockers. The workflow is installed, secrets are configured, and a manual run has completed successfully.
 
-## Outlook Image Fallback
+## Outlook Image Policy
 
-Outlook may show the inline map as a broken image even when the email was sent correctly. The monitor now:
-
-- sends the inline map using Resend's REST attachment field names (`content_id` and `content_type`)
-- includes a normal attached copy named `detour-map.png`
-- adds fallback text telling the recipient to open the attachment if the inline image does not display
+The monitor does not attach detour maps or schematics. Outlook image rendering was unreliable, and schematic images were not clear enough for operations review.
 
 ## Email Quality Guard
 
 The monitor now enriches a history event from the current active public detour document before composing the email. This lets the email use the same richer rider-facing fields that power the app, such as location labels, skipped/affected stops, road names, and trustworthy detour geometry.
 
 If the active detour record is not public/rider-visible, the monitor skips the email.
-If the active detour record has no trustworthy likely-detour path, the monitor sends text only and does not attach a map image.
+If the active detour record has no trustworthy likely-detour path, the monitor still sends text-only context and points the operator to BTTP for map review.
 
 ## What We Need To Do Next
 

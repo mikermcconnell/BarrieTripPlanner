@@ -1,8 +1,8 @@
 const {
   buildDetourEmailInsights,
-  buildDetourStaticMapAttachment,
   buildEmailMessage,
   collectLikelyRoadNames,
+  enrichEventStopNames,
   enrichEventFromActiveDetour,
   getAlertEventTypes,
   makeNotificationId,
@@ -146,81 +146,7 @@ describe('detour email monitor', () => {
       .toBe('Stops likely not served by this route: #101 Bayfield at Sophia; #102 Bayfield at Ross');
   });
 
-  test('renders a real static road map image from detour geometry', async () => {
-    const { createCanvas } = require('@napi-rs/canvas');
-    const tileCanvas = createCanvas(256, 256);
-    const tileCtx = tileCanvas.getContext('2d');
-    tileCtx.fillStyle = '#eef2f3';
-    tileCtx.fillRect(0, 0, 256, 256);
-    tileCtx.strokeStyle = '#c8d0d6';
-    tileCtx.lineWidth = 4;
-    tileCtx.beginPath();
-    tileCtx.moveTo(0, 128);
-    tileCtx.lineTo(256, 128);
-    tileCtx.stroke();
-
-    const fetchImpl = jest.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => tileCanvas.toBuffer('image/png'),
-    });
-
-    const event = {
-      eventType: 'DETOUR_DETECTED',
-      routeId: '8A',
-      eventLocationLabel: 'Bayfield Street & Sophia Street West',
-      closedSegmentRoadNames: ['Bayfield Street'],
-      likelyDetourRoadNames: ['Sophia Street West', 'Maple Avenue', 'Ross Street'],
-      skippedSegmentPolyline: [
-        { latitude: 44.3900, longitude: -79.7000 },
-        { latitude: 44.3910, longitude: -79.7000 },
-      ],
-      likelyDetourPolyline: [
-        { latitude: 44.3900, longitude: -79.7000 },
-        { latitude: 44.3900, longitude: -79.7020 },
-        { latitude: 44.3910, longitude: -79.7020 },
-        { latitude: 44.3910, longitude: -79.7000 },
-      ],
-      canShowDetourPath: true,
-    };
-
-    const attachment = await buildDetourStaticMapAttachment(event, { fetchImpl });
-    expect(attachment).toEqual(expect.objectContaining({
-      filename: 'detour-map-inline.png',
-      content_type: 'image/png',
-      content_id: 'detour-map@bttp.local',
-    }));
-    expect(attachment).not.toHaveProperty('contentId');
-    expect(attachment).not.toHaveProperty('contentType');
-    expect(Buffer.from(attachment.content, 'base64').toString('hex', 0, 4)).toBe('89504e47');
-    expect(fetchImpl).toHaveBeenCalled();
-
-    const message = buildEmailMessage(event, { mapAttachment: attachment });
-    expect(message.html).toContain('cid:detour-map@bttp.local');
-    expect(message.html).toContain('open the attached detour-map.png');
-    expect(message.attachments).toHaveLength(2);
-    expect(message.attachments[0]).toEqual(attachment);
-    expect(message.attachments[1]).toEqual({
-      content: attachment.content,
-      filename: 'detour-map.png',
-      content_type: 'image/png',
-    });
-    expect(message.text).toContain('Likely closed section: Bayfield Street near Bayfield Street & Sophia Street West');
-    expect(message.text).toContain('Likely detour path: Sophia Street West -> Maple Avenue -> Ross Street');
-    expect(message.text).toContain('If the map image does not display, open the attached detour-map.png.');
-  });
-
-  test('does not attach a map when only the closed segment line is available', async () => {
-    const attachment = await buildDetourStaticMapAttachment({
-      eventType: 'DETOUR_DETECTED',
-      routeId: '11',
-      riderVisible: true,
-      skippedSegmentPolyline: [
-        { latitude: 44.3900, longitude: -79.7000 },
-        { latitude: 44.3910, longitude: -79.7000 },
-      ],
-    }, { fetchImpl: jest.fn() });
-    expect(attachment).toBeNull();
-
+  test('does not attach map images to detour emails', () => {
     const message = buildEmailMessage({
       eventType: 'DETOUR_DETECTED',
       routeId: '11',
@@ -232,8 +158,29 @@ describe('detour email monitor', () => {
     });
 
     expect(message.attachments).toHaveLength(0);
-    expect(message.html).not.toContain('Approximate detour map');
+    expect(message.html).not.toContain('<img');
     expect(message.text).toContain('Likely detour path: open BTTP to view the map');
+  });
+
+  test('enriches code-only stop text with GTFS stop names', () => {
+    const gtfsData = {
+      stopsByCode: new Map([
+        ['335', { id: '335', code: '335', name: 'Georgian College' }],
+        ['328', { id: '328', code: '328', name: 'Grizzlies Way at Duckworth' }],
+      ]),
+      stopsById: new Map(),
+    };
+    const enriched = enrichEventStopNames({
+      routeId: '11',
+      skippedStops: [{ stopCode: '335' }],
+      segments: [{
+        skippedStopCodes: ['328'],
+      }],
+    }, gtfsData);
+    const message = buildEmailMessage(enriched);
+
+    expect(message.text).toContain('#335 Georgian College');
+    expect(message.text).toContain('#328 Grizzlies Way at Duckworth');
   });
 
   test('sends Resend REST attachment fields in snake_case without SDK-only aliases', async () => {
@@ -248,14 +195,14 @@ describe('detour email monitor', () => {
       recipients: ['michaelryanmcconnell@gmail.com'],
       message: {
         subject: 'Test',
-        html: '<img src="cid:detour-map@bttp.local">',
+        html: '<p>Attachment test</p>',
         text: 'Test',
         attachments: [{
           content: 'abc',
-          filename: 'detour-map-inline.png',
+          filename: 'detour-details.txt',
           content_type: 'image/png',
-          content_id: 'detour-map@bttp.local',
-          contentId: 'detour-map@bttp.local',
+          content_id: 'detour-details@bttp.local',
+          contentId: 'detour-details@bttp.local',
           contentType: 'image/png',
         }],
       },
@@ -265,9 +212,9 @@ describe('detour email monitor', () => {
     const payload = JSON.parse(fetchImpl.mock.calls[0][1].body);
     expect(payload.attachments).toEqual([{
       content: 'abc',
-      filename: 'detour-map-inline.png',
+      filename: 'detour-details.txt',
       content_type: 'image/png',
-      content_id: 'detour-map@bttp.local',
+      content_id: 'detour-details@bttp.local',
     }]);
   });
 
@@ -312,6 +259,7 @@ describe('detour email monitor', () => {
         missingVisibilityEvent,
         visibleEvent,
       ]),
+      getGtfsData: jest.fn().mockResolvedValue(null),
       sendEmail,
       now: () => Date.parse('2026-06-24T14:05:00.000Z'),
     });
@@ -375,11 +323,18 @@ describe('detour email monitor', () => {
     const enriched = await enrichEventFromActiveDetour(db, {
       activeCollection: 'activeDetourEventsV2',
     }, event);
-    const message = buildEmailMessage(enriched);
+    const named = enrichEventStopNames(enriched, {
+      stopsByCode: new Map([
+        ['335', { id: '335', code: '335', name: 'Georgian College' }],
+        ['328', { id: '328', code: '328', name: 'Grizzlies Way at Duckworth' }],
+      ]),
+      stopsById: new Map(),
+    });
+    const message = buildEmailMessage(named);
 
     expect(enriched.eventLocationLabel).toBe('Duckworth & Grove East');
     expect(message.text).toContain('Area: Duckworth & Grove East');
-    expect(message.text).toContain('#335; #328');
+    expect(message.text).toContain('#335 Georgian College; #328 Grizzlies Way at Duckworth');
     expect(message.text).toContain('Duckworth Street -> Bernick Drive -> Cook Street');
     expect(message.text).not.toContain('unknown road section');
     expect(message.attachments).toHaveLength(0);
@@ -405,6 +360,7 @@ describe('detour email monitor', () => {
       env: BASE_ENV,
       db,
       queryDetourHistory,
+      getGtfsData: jest.fn().mockResolvedValue(null),
       sendEmail,
       now: () => Date.parse('2026-06-24T14:05:00.000Z'),
     });
