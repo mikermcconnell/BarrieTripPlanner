@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { getDb } = require('../firebaseAdmin');
 const { getDetourHistory } = require('../detourPublisher');
 const { buildDetourStorageConfig } = require('../detour/storageConfig');
@@ -10,7 +10,8 @@ const DEFAULT_ALERT_FROM = 'BTTP Detour Alerts <onboarding@resend.dev>';
 const DEFAULT_NOTIFICATION_COLLECTION = 'detourEmailNotifications';
 const DEFAULT_LOOKBACK_MINUTES = 30;
 const DEFAULT_MAX_EVENTS = 50;
-const SCHEMATIC_CONTENT_ID = 'detour-schematic@bttp.local';
+const MAP_CONTENT_ID = 'detour-map@bttp.local';
+const OSM_TILE_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === '') return fallback;
@@ -370,94 +371,293 @@ function drawPolyline(ctx, points, project, options = {}) {
   ctx.restore();
 }
 
-function buildDetourSchematicAttachment(event) {
-  const closedPath = chooseClosedPath(event);
-  const detourPath = chooseDetourPath(event);
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function mercatorWorldPixel(point, zoom) {
+  const scale = 256 * (2 ** zoom);
+  const lat = clamp(point.latitude, -85.05112878, 85.05112878);
+  const latRad = lat * Math.PI / 180;
+  return {
+    x: ((point.longitude + 180) / 360) * scale,
+    y: ((1 - Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI) / 2) * scale,
+  };
+}
+
+function chooseStaticMapZoom(bounds, width, height, padding = 70) {
+  const northWest = { latitude: bounds.maxLat, longitude: bounds.minLon };
+  const southEast = { latitude: bounds.minLat, longitude: bounds.maxLon };
+  for (let zoom = 17; zoom >= 10; zoom -= 1) {
+    const a = mercatorWorldPixel(northWest, zoom);
+    const b = mercatorWorldPixel(southEast, zoom);
+    if (
+      Math.abs(b.x - a.x) <= width - padding * 2 &&
+      Math.abs(b.y - a.y) <= height - padding * 2
+    ) {
+      return zoom;
+    }
+  }
+  return 10;
+}
+
+function samplePath(points, maxPoints = 40) {
+  if (!Array.isArray(points) || points.length <= maxPoints) return points || [];
+  const sampled = [];
+  const lastIndex = points.length - 1;
+  for (let index = 0; index < maxPoints; index += 1) {
+    sampled.push(points[Math.round((index / (maxPoints - 1)) * lastIndex)]);
+  }
+  return sampled;
+}
+
+function collectMapStopPoints(event) {
+  const stops = [];
+  const addStops = (source) => {
+    if (!source) return;
+    [
+      'skippedStops',
+      'affectedStops',
+    ].forEach((fieldName) => {
+      if (!Array.isArray(source[fieldName])) return;
+      source[fieldName].forEach((stop) => {
+        const point = normalizePoint(stop);
+        if (point) stops.push({
+          ...point,
+          label: stopLabel(stop),
+        });
+      });
+    });
+  };
+
+  addStops(event);
+  if (Array.isArray(event?.segments)) {
+    event.segments.forEach(addStops);
+  }
+
+  const deduped = new Map();
+  stops.forEach((stop) => {
+    deduped.set(`${stop.latitude.toFixed(6)},${stop.longitude.toFixed(6)}`, stop);
+  });
+  return [...deduped.values()].slice(0, 8);
+}
+
+function drawMapLegend(ctx, event, insights, width) {
+  const title = insights.bestLocationTitle || `Route ${routeLabel(event)} detour`;
+  const boxWidth = Math.min(width - 28, 430);
+  const boxHeight = 72;
+  const x = 14;
+  const y = 14;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  ctx.strokeStyle = 'rgba(40,35,45,0.18)';
+  ctx.lineWidth = 1;
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+  ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+  ctx.fillStyle = '#2B2430';
+  ctx.font = 'bold 17px Arial';
+  ctx.fillText(`Route ${routeLabel(event)} detour`, x + 12, y + 24);
+  ctx.font = '13px Arial';
+  ctx.fillText(title.slice(0, 54), x + 12, y + 44);
+
+  ctx.strokeStyle = '#D64545';
+  ctx.lineWidth = 5;
+  ctx.setLineDash([10, 7]);
+  ctx.beginPath();
+  ctx.moveTo(x + 14, y + 61);
+  ctx.lineTo(x + 58, y + 61);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#2B2430';
+  ctx.fillText('closed section', x + 66, y + 65);
+
+  ctx.strokeStyle = '#5B2C83';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(x + 190, y + 61);
+  ctx.lineTo(x + 234, y + 61);
+  ctx.stroke();
+  ctx.fillStyle = '#2B2430';
+  ctx.fillText('detour path', x + 242, y + 65);
+  ctx.restore();
+}
+
+function drawAttribution(ctx, width, height) {
+  const text = 'Map data © OpenStreetMap contributors';
+  ctx.save();
+  ctx.font = '11px Arial';
+  const metrics = ctx.measureText(text);
+  const x = width - metrics.width - 12;
+  const y = height - 10;
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.fillRect(x - 5, y - 13, metrics.width + 10, 17);
+  ctx.fillStyle = '#4A4450';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawMapMarker(ctx, point, label, options = {}) {
+  ctx.save();
+  const radius = options.radius || 8;
+  ctx.fillStyle = options.fillStyle || '#0B7A75';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  if (label) {
+    ctx.font = 'bold 12px Arial';
+    const text = String(label).slice(0, 16);
+    const metrics = ctx.measureText(text);
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.fillRect(point.x + 10, point.y - 16, metrics.width + 8, 18);
+    ctx.strokeStyle = 'rgba(40,35,45,0.16)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(point.x + 10, point.y - 16, metrics.width + 8, 18);
+    ctx.fillStyle = '#2B2430';
+    ctx.fillText(text, point.x + 14, point.y - 3);
+  }
+  ctx.restore();
+}
+
+async function fetchTileImage(url, fetchImpl) {
+  const response = await fetchImpl(url, {
+    headers: {
+      'User-Agent': 'BTTP detour email map renderer',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`tile ${response.status}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return loadImage(Buffer.from(arrayBuffer));
+}
+
+async function buildDetourStaticMapAttachment(event, {
+  fetchImpl = globalThis.fetch,
+  env = process.env,
+} = {}) {
+  if (parseBoolean(env.DETOUR_ALERT_STATIC_MAP_ENABLED, true) === false) return null;
+  if (typeof fetchImpl !== 'function') return null;
+
+  const closedPath = samplePath(chooseClosedPath(event));
+  const detourPath = samplePath(chooseDetourPath(event));
   if (closedPath.length < 2 || detourPath.length < 2) return null;
 
   const width = 640;
   const height = 360;
-  const margin = 46;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-  const bounds = pathBounds([closedPath, detourPath].filter((path) => path.length >= 2));
+  ctx.fillStyle = '#F4F1F7';
+  ctx.fillRect(0, 0, width, height);
+
+  const stopPoints = collectMapStopPoints(event);
+  const allPaths = [closedPath, detourPath, stopPoints].filter((path) => path.length > 0);
+  const bounds = pathBounds(allPaths);
   if (!bounds) return null;
 
-  const latRange = Math.max(bounds.maxLat - bounds.minLat, 0.0005);
-  const lonRange = Math.max(bounds.maxLon - bounds.minLon, 0.0005);
-  const project = (point) => ({
-    x: margin + ((point.longitude - bounds.minLon) / lonRange) * (width - margin * 2),
-    y: height - margin - ((point.latitude - bounds.minLat) / latRange) * (height - margin * 2),
+  const center = {
+    latitude: (bounds.minLat + bounds.maxLat) / 2,
+    longitude: (bounds.minLon + bounds.maxLon) / 2,
+  };
+  const zoom = chooseStaticMapZoom(bounds, width, height);
+  const centerPixel = mercatorWorldPixel(center, zoom);
+  const project = (point) => {
+    const pixel = mercatorWorldPixel(point, zoom);
+    return {
+      x: width / 2 + (pixel.x - centerPixel.x),
+      y: height / 2 + (pixel.y - centerPixel.y),
+    };
+  };
+
+  const topLeft = {
+    x: centerPixel.x - width / 2,
+    y: centerPixel.y - height / 2,
+  };
+  const minTileX = Math.floor(topLeft.x / 256);
+  const minTileY = Math.floor(topLeft.y / 256);
+  const maxTileX = Math.floor((topLeft.x + width) / 256);
+  const maxTileY = Math.floor((topLeft.y + height) / 256);
+  const tileCount = 2 ** zoom;
+  let drawnTiles = 0;
+  const tileTemplate = String(env.DETOUR_ALERT_OSM_TILE_TEMPLATE || OSM_TILE_TEMPLATE);
+
+  for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+    for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+      if (tileY < 0 || tileY >= tileCount) continue;
+      const wrappedTileX = ((tileX % tileCount) + tileCount) % tileCount;
+      const url = tileTemplate
+        .replace('{z}', String(zoom))
+        .replace('{x}', String(wrappedTileX))
+        .replace('{y}', String(tileY));
+      try {
+        const image = await fetchTileImage(url, fetchImpl);
+        ctx.drawImage(
+          image,
+          Math.round(tileX * 256 - topLeft.x),
+          Math.round(tileY * 256 - topLeft.y),
+          256,
+          256
+        );
+        drawnTiles += 1;
+      } catch (_err) {
+        // Keep rendering with any tiles that load; if none load, skip the map.
+      }
+    }
+  }
+
+  if (drawnTiles === 0) return null;
+
+  // White halo under rider-facing geometry keeps the detour visible on busy roads.
+  drawPolyline(ctx, closedPath, project, {
+    strokeStyle: '#FFFFFF',
+    lineWidth: 14,
+    dash: [12, 10],
   });
-
-  ctx.fillStyle = '#F8F7FB';
-  ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = '#E7E1EF';
-  ctx.lineWidth = 1;
-  for (let x = margin; x <= width - margin; x += 58) {
-    ctx.beginPath();
-    ctx.moveTo(x, margin);
-    ctx.lineTo(x, height - margin);
-    ctx.stroke();
-  }
-  for (let y = margin; y <= height - margin; y += 46) {
-    ctx.beginPath();
-    ctx.moveTo(margin, y);
-    ctx.lineTo(width - margin, y);
-    ctx.stroke();
-  }
-
   drawPolyline(ctx, closedPath, project, {
     strokeStyle: '#D64545',
-    lineWidth: 10,
+    lineWidth: 8,
     dash: [12, 10],
   });
   drawPolyline(ctx, detourPath, project, {
+    strokeStyle: '#FFFFFF',
+    lineWidth: 13,
+  });
+  drawPolyline(ctx, detourPath, project, {
     strokeStyle: '#5B2C83',
-    lineWidth: 8,
+    lineWidth: 7,
   });
 
-  const start = detourPath[0] || closedPath[0];
-  const end = detourPath[detourPath.length - 1] || closedPath[closedPath.length - 1];
-  [start, end].filter(Boolean).forEach((point, index) => {
-    const { x, y } = project(point);
-    ctx.fillStyle = index === 0 ? '#0B7A75' : '#2F5597';
-    ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  const start = detourPath[0];
+  const end = detourPath[detourPath.length - 1];
+  if (start) drawMapMarker(ctx, project(start), 'entry', { fillStyle: '#0B7A75' });
+  if (end) drawMapMarker(ctx, project(end), 'rejoin', { fillStyle: '#2F5597' });
+  stopPoints.forEach((stop) => {
+    drawMapMarker(ctx, project(stop), stop.label || 'stop', {
+      fillStyle: '#F59E0B',
+      radius: 7,
+    });
   });
 
-  ctx.fillStyle = '#2B2430';
-  ctx.font = 'bold 18px Arial';
-  ctx.fillText(`Route ${routeLabel(event)} detour schematic`, 22, 28);
-  ctx.font = '13px Arial';
-  ctx.fillText('Not to scale - GPS-derived approximate path', 22, height - 18);
-
-  ctx.fillStyle = '#D64545';
-  ctx.fillRect(width - 226, 18, 28, 6);
-  ctx.fillStyle = '#2B2430';
-  ctx.fillText('likely closed route section', width - 190, 25);
-  ctx.fillStyle = '#5B2C83';
-  ctx.fillRect(width - 226, 42, 28, 6);
-  ctx.fillStyle = '#2B2430';
-  ctx.fillText('likely detour path', width - 190, 49);
+  drawMapLegend(ctx, event, buildDetourEmailInsights(event), width);
+  drawAttribution(ctx, width, height);
 
   return {
     content: canvas.toBuffer('image/png').toString('base64'),
-    filename: 'detour-schematic-inline.png',
+    filename: 'detour-map-inline.png',
     content_type: 'image/png',
-    content_id: SCHEMATIC_CONTENT_ID,
+    content_id: MAP_CONTENT_ID,
   };
 }
 
-function buildDetourSchematicFallbackAttachment(inlineAttachment) {
+function buildDetourMapFallbackAttachment(inlineAttachment) {
   if (!inlineAttachment?.content) return null;
   return {
     content: inlineAttachment.content,
-    filename: 'detour-schematic.png',
+    filename: 'detour-map.png',
     content_type: 'image/png',
   };
 }
@@ -574,12 +774,11 @@ async function enrichEventFromActiveDetour(db, storageConfig, event) {
   };
 }
 
-function buildEmailMessage(event, { appUrl = '' } = {}) {
+function buildEmailMessage(event, { appUrl = '', mapAttachment = null } = {}) {
   const subject = buildSubject(event);
   const roads = collectLikelyRoadNames(event);
   const insights = buildDetourEmailInsights(event);
-  const schematicAttachment = buildDetourSchematicAttachment(event);
-  const schematicFallbackAttachment = buildDetourSchematicFallbackAttachment(schematicAttachment);
+  const mapFallbackAttachment = buildDetourMapFallbackAttachment(mapAttachment);
   const location = event.eventLocationLabel || event.detourZone?.label || '';
   const rows = [
     ['Event', eventLabel(event.eventType)],
@@ -611,12 +810,12 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
   const appLink = appUrl
     ? `<p style="margin:16px 0 0"><a href="${escapeHtml(appUrl)}">Open BTTP</a></p>`
     : '';
-  const schematic = schematicAttachment
+  const mapPreview = mapAttachment
     ? `
         <div style="margin:18px 0">
-          <p style="margin:0 0 8px;font-weight:bold">Approximate detour schematic</p>
-          <img src="cid:${SCHEMATIC_CONTENT_ID}" alt="Approximate detour schematic" width="640" style="width:100%;max-width:640px;border:1px solid #ddd;border-radius:8px">
-          <p style="margin:8px 0 0;color:#555;font-size:12px">If this image does not display in Outlook, open the attached detour-schematic.png.</p>
+          <p style="margin:0 0 8px;font-weight:bold">Approximate detour map</p>
+          <img src="cid:${MAP_CONTENT_ID}" alt="Approximate detour map" width="640" style="width:100%;max-width:640px;border:1px solid #ddd;border-radius:8px">
+          <p style="margin:8px 0 0;color:#555;font-size:12px">If this image does not display in Outlook, open the attached detour-map.png.</p>
         </div>`
     : '';
 
@@ -636,7 +835,7 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
         <p style="font-size:16px;margin:0 0 12px"><strong>Confirmed public detour</strong> for route ${escapeHtml(routeLabel(event))}.</p>
         ${insights.bestLocationTitle ? `<p style="font-size:18px;margin:0 0 12px"><strong>${escapeHtml(insights.bestLocationTitle)}</strong></p>` : ''}
         <p style="margin:0 0 12px">${escapeHtml(insights.closedSectionText)}<br>${escapeHtml(insights.detourPathText)}<br>${escapeHtml(insights.skippedStopsText)}</p>
-        ${schematic}
+        ${mapPreview}
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}</table>
         ${appLink}
       </td>
@@ -652,8 +851,8 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     insights.closedSectionText,
     insights.detourPathText,
     insights.skippedStopsText,
-    schematicFallbackAttachment
-      ? 'If the schematic image does not display, open the attached detour-schematic.png.'
+    mapFallbackAttachment
+      ? 'If the map image does not display, open the attached detour-map.png.'
       : null,
     '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
@@ -665,8 +864,8 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     html,
     text,
     attachments: [
-      schematicAttachment,
-      schematicFallbackAttachment,
+      mapAttachment,
+      mapFallbackAttachment,
     ].filter(Boolean),
   };
 }
@@ -820,7 +1019,8 @@ async function runDetourEmailMonitor({
       continue;
     }
 
-    const message = buildEmailMessage(emailEvent, { appUrl });
+    const mapAttachment = await buildDetourStaticMapAttachment(emailEvent, { env });
+    const message = buildEmailMessage(emailEvent, { appUrl, mapAttachment });
     const providerResult = await sendEmail({
       apiKey,
       from,
@@ -853,7 +1053,7 @@ async function runDetourEmailMonitor({
 
 module.exports = {
   buildDetourEmailInsights,
-  buildDetourSchematicAttachment,
+  buildDetourStaticMapAttachment,
   collectLikelyRoadNames,
   enrichEventFromActiveDetour,
   buildEmailMessage,

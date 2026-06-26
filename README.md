@@ -326,6 +326,8 @@ Optional GitHub secrets:
 - `DETOUR_ALERT_FROM`
 - `DETOUR_ALERT_APP_URL`
 
+When a confirmed detour has trustworthy closed-section and detour-path geometry, the email monitor also attaches a static road-map PNG. If map rendering fails, the alert still sends text-only.
+
 ### Firestore rules
 
 Deploy updated rules so clients can read:

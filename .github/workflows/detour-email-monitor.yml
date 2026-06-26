@@ -59,6 +59,7 @@ jobs:
           node <<'NODE'
           const {
             buildEmailMessage,
+            buildDetourStaticMapAttachment,
             sendViaResend,
           } = require('./api-proxy/services/detourEmailMonitor');
 
@@ -80,7 +81,8 @@ jobs:
             throw new Error('RESEND_API_KEY is not configured');
           }
 
-          const message = buildEmailMessage({
+          async function main() {
+            const event = {
             eventType: 'DETOUR_DETECTED',
             routeId: '11',
             sharedRouteIds: ['11'],
@@ -111,22 +113,30 @@ jobs:
               { latitude: 44.4100, longitude: -79.6500 },
             ],
             canShowDetourPath: true,
-          }, { appUrl });
+            };
 
-          message.subject = `[TEST] ${message.subject}`;
-          message.text = `This is a synthetic BTTP detour email test. No real detour was detected.\n\n${message.text}`;
-          message.html = message.html.replace(
-            '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333">',
-            '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333"><p style="max-width:680px;margin:16px auto;padding:12px;background:#fff3cd;border:1px solid #ffe08a"><strong>TEST ONLY:</strong> This is a synthetic BTTP detour email test. No real detour was detected.</p>'
-          );
+            const mapAttachment = await buildDetourStaticMapAttachment(event);
+            const message = buildEmailMessage(event, { appUrl, mapAttachment });
 
-          sendViaResend({ apiKey, from, recipients, message })
-            .then((result) => {
-              console.log('[detour-email-test]', JSON.stringify({
+            message.subject = `[TEST] ${message.subject}`;
+            message.text = `This is a synthetic BTTP detour email test. No real detour was detected.\n\n${message.text}`;
+            message.html = message.html.replace(
+              '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333">',
+              '<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333"><p style="max-width:680px;margin:16px auto;padding:12px;background:#fff3cd;border:1px solid #ffe08a"><strong>TEST ONLY:</strong> This is a synthetic BTTP detour email test. No real detour was detected.</p>'
+            );
+
+            const result = await sendViaResend({ apiKey, from, recipients, message });
+            console.log('[detour-email-test]', JSON.stringify({
                 ok: true,
                 recipientCount: recipients.length,
+                mapAttached: Boolean(mapAttachment),
                 providerMessageId: result.id || result.messageId || null,
-              }, null, 2));
-            });
+            }, null, 2));
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 

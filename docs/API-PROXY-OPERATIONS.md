@@ -167,13 +167,17 @@ Required GitHub secrets:
 
 Optional environment:
 
-- `DETOUR_ALERT_FROM` — defaults to `Barrie Transit Detours <detours@updates.barrietransit.ca>`
+- `DETOUR_ALERT_FROM` — defaults to `BTTP Detour Alerts <onboarding@resend.dev>` until a custom sender domain is verified
 - `DETOUR_ALERT_APP_URL`
 - `DETOUR_ALERT_LOOKBACK_MIN=30`
 - `DETOUR_ALERT_MAX_EVENTS=50`
 - `DETOUR_ALERT_INCLUDE_CLEARED=false`
 - `DETOUR_ALERT_EVENT_TYPES=DETOUR_DETECTED` to override the default event type list
 - `DETOUR_ALERT_NOTIFICATION_COLLECTION=detourEmailNotifications`
+- `DETOUR_ALERT_STATIC_MAP_ENABLED=true` to attach a road-map PNG when trusted closed-section and detour-path geometry are available
+- `DETOUR_ALERT_OSM_TILE_TEMPLATE=https://tile.openstreetmap.org/{z}/{x}/{y}.png` to override the default static map tile source
+
+Email maps are generated only when an alert is actually sent. They use OpenStreetMap raster tiles, include attribution in the image, and fall back to text-only if tile loading fails.
 
 ### Official baseline-impact scanner
 
