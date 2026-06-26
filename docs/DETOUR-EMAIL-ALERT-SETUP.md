@@ -76,15 +76,9 @@ Passed:
   - Dedupe collection: `detourEmailNotifications`.
   - Recent events checked: `0`.
   - Emails sent: `0`.
-- Added a manual workflow input, `send_test_email=true`, for synthetic delivery checks.
-- The first synthetic test failed because the default `updates.barrietransit.ca` sender domain is not verified in Resend.
 - Added GitHub Actions secret:
   - `DETOUR_ALERT_FROM=BTTP Detour Alerts <onboarding@resend.dev>`
-- Ran a synthetic test detour email:
-  - Run: `28106138011`
-  - Result: success.
-  - Recipient count: `1`.
-  - Resend provider message ID: `c933af71-822c-4a5c-8320-ec1b65dc50d0`.
+- Removed the synthetic test email workflow path. The workflow now sends emails only for actual observed public detours from Firestore history.
 - Added richer text support:
   - likely closed section
   - likely detour path
@@ -95,7 +89,7 @@ Passed:
   - `node --check` passed for the monitor service and CLI script.
   - Disabled-mode CLI run skipped safely.
 
-There are no remaining setup blockers. The workflow is installed, secrets are configured, and a manual run has completed successfully.
+There are no remaining setup blockers. The workflow is installed and secrets are configured.
 
 ## Outlook Image Policy
 
@@ -129,15 +123,15 @@ Current sender:
 
 Before using `detours@updates.barrietransit.ca`, verify `updates.barrietransit.ca` in Resend, then update the `DETOUR_ALERT_FROM` GitHub secret.
 
-### 2. Run a manual workflow test
+### 2. Optional manual monitor run
 
-After the PR is merged:
+Only use this to run the real monitor against Firestore history. It must not send a synthetic/test email.
 
 1. Go to GitHub Actions.
 2. Open **Detour Email Monitor**.
 3. Click **Run workflow**.
 4. Confirm it completes successfully.
-5. Confirm no duplicate email is sent for the same detour event.
+5. Confirm any email sent corresponds to an actual observed public detour and is deduped in Firestore.
 
 ### 3. Confirm Firestore access
 
