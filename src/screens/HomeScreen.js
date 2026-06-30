@@ -1533,11 +1533,13 @@ const HomeScreen = ({ route }) => {
   const [mapViewMode, setMapViewMode] = useState('regular');
   const [detourLegendAutoCollapseSignal, setDetourLegendAutoCollapseSignal] = useState(0);
   const [upcomingDetoursCollapsed, setUpcomingDetoursCollapsed] = useState(false);
+  const [dismissedUpcomingDetourSignature, setDismissedUpcomingDetourSignature] = useState(null);
   const [secondaryChromeReady, setSecondaryChromeReady] = useState(false);
   const [mapReadyToMount, setMapReadyToMount] = useState(false);
   const [savedPlacePicker, setSavedPlacePicker] = useState(null);
   const [holidayDetailsVisible, setHolidayDetailsVisible] = useState(false);
   const [holidayDetailsDate, setHolidayDetailsDate] = useState(null);
+  const [dismissedHomeHolidayDateKey, setDismissedHomeHolidayDateKey] = useState(null);
   const [isLoadingHolidayDetails, setIsLoadingHolidayDetails] = useState(false);
   const savedPlacePickerOptions = useMemo(() => getSavedPlacePickerOptions(), []);
   const rankedSavedPlaces = useMemo(() => getRankedSavedPlaces(savedPlaces), [savedPlaces]);
@@ -1708,6 +1710,15 @@ const HomeScreen = ({ route }) => {
     routes,
     daysAhead: 1,
   }), [calendar, calendarDates, routes, trips]);
+  const homeHolidayDateKey = homeHolidayServiceInfo?.dateKey || null;
+  const visibleHomeHolidayServiceInfo = homeHolidayServiceInfo && homeHolidayDateKey !== dismissedHomeHolidayDateKey
+    ? homeHolidayServiceInfo
+    : null;
+  const dismissHomeHolidayServiceNotice = useCallback(() => {
+    if (homeHolidayDateKey) {
+      setDismissedHomeHolidayDateKey(homeHolidayDateKey);
+    }
+  }, [homeHolidayDateKey]);
 
   const selectedHolidayDetailsInfo = useMemo(() => getHolidayServiceInfo({
     date: holidayDetailsDate || homeHolidayServiceInfo?.date || tripPlannerDate,
@@ -1836,7 +1847,22 @@ const HomeScreen = ({ route }) => {
     () => (detoursEnabled ? getUpcomingDetourNotices(transitNews) : []),
     [detoursEnabled, transitNews]
   );
-  const canUseDetourView = detoursEnabled && (activeDetourRouteIds.size > 0 || upcomingDetourNotices.length > 0);
+  const upcomingDetourNoticeSignature = useMemo(() => (
+    upcomingDetourNotices
+      .map((notice) => `${notice?.id || notice?.title || ''}:${notice?.startsText || ''}:${notice?.endsText || ''}`)
+      .join('|')
+  ), [upcomingDetourNotices]);
+  const visibleUpcomingDetourNotices = upcomingDetourNoticeSignature &&
+    upcomingDetourNoticeSignature === dismissedUpcomingDetourSignature
+    ? []
+    : upcomingDetourNotices;
+  const dismissUpcomingDetourNotices = useCallback(() => {
+    if (upcomingDetourNoticeSignature) {
+      setDismissedUpcomingDetourSignature(upcomingDetourNoticeSignature);
+      setUpcomingDetoursCollapsed(true);
+    }
+  }, [upcomingDetourNoticeSignature]);
+  const canUseDetourView = detoursEnabled && (activeDetourRouteIds.size > 0 || visibleUpcomingDetourNotices.length > 0);
   const isDetourView = canUseDetourView && mapViewMode === 'detour';
   const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
 
@@ -2454,7 +2480,7 @@ const HomeScreen = ({ route }) => {
   ), [displayedStopsForMap, detourMapClosureStops]);
   const detourMapBadgeCount = getActiveDetourEventCount(statusDetours);
   const hasTopChromeServiceNotice = shouldShowDetourStatusRow ||
-    upcomingDetourNotices.length > 0 ||
+    visibleUpcomingDetourNotices.length > 0 ||
     visibleOfficialServiceImpacts.length > 0;
   const shouldShowDetourChrome = !isTripPlanningMode && (canUseDetourView || visibleOfficialServiceImpacts.length > 0);
   const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;
@@ -3043,14 +3069,12 @@ const HomeScreen = ({ route }) => {
         </View>
       )}
 
-      {!isTripPlanningMode && homeHolidayServiceInfo && (
+      {!isTripPlanningMode && visibleHomeHolidayServiceInfo && !shouldShowDetourChrome && (
         <HolidayServiceBanner
-          holidayServiceInfo={homeHolidayServiceInfo}
-          onPress={() => openHolidayDetails(homeHolidayServiceInfo.date)}
-          style={[
-            styles.holidayServiceBanner,
-            shouldShowDetourChrome && styles.holidayServiceBannerWithDetours,
-          ]}
+          holidayServiceInfo={visibleHomeHolidayServiceInfo}
+          onPress={() => openHolidayDetails(visibleHomeHolidayServiceInfo.date)}
+          onDismiss={dismissHomeHolidayServiceNotice}
+          style={styles.holidayServiceBanner}
         />
       )}
 
@@ -3102,13 +3126,14 @@ const HomeScreen = ({ route }) => {
               </TouchableOpacity>
             </View>
           )}
-          {upcomingDetourNotices.length > 0 && (
+          {visibleUpcomingDetourNotices.length > 0 && (
             <View style={styles.upcomingDetourRow}>
               <UpcomingDetourStrip
-                notices={upcomingDetourNotices}
+                notices={visibleUpcomingDetourNotices}
                 routeColorByRouteId={routeColorByRouteId}
                 collapsedByDefault
                 onCollapsedChange={setUpcomingDetoursCollapsed}
+                onDismiss={dismissUpcomingDetourNotices}
                 inline
                 style={styles.upcomingDetourInline}
               />
@@ -3126,6 +3151,17 @@ const HomeScreen = ({ route }) => {
               />
             </View>
           )}
+          {visibleHomeHolidayServiceInfo && (
+            <View style={styles.upcomingDetourRow}>
+              <HolidayServiceBanner
+                holidayServiceInfo={visibleHomeHolidayServiceInfo}
+                onPress={() => openHolidayDetails(visibleHomeHolidayServiceInfo.date)}
+                onDismiss={dismissHomeHolidayServiceNotice}
+                inline
+                style={styles.upcomingDetourInline}
+              />
+            </View>
+          )}
         </View>
       )}
 
@@ -3136,7 +3172,7 @@ const HomeScreen = ({ route }) => {
         collapsedByDefault
         style={[
           styles.detourLegend,
-          upcomingDetourNotices.length > 0 && (
+          visibleUpcomingDetourNotices.length > 0 && (
             upcomingDetoursCollapsed
               ? styles.detourLegendWithCollapsedUpcoming
               : styles.detourLegendWithUpcoming
@@ -3683,9 +3719,6 @@ const styles = StyleSheet.create({
     left: SPACING.sm,
     right: SPACING.sm,
     zIndex: 998,
-  },
-  holidayServiceBannerWithDetours: {
-    top: 144 + STATUS_BAR_OFFSET,
   },
   detourStatusStack: {
     position: 'absolute',

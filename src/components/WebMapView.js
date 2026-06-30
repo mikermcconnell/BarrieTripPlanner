@@ -23,6 +23,7 @@ import { escapeHtml } from '../utils/htmlUtils';
 const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css';
 const MAPLIBRE_JS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js';
 const BUS_HUB_ICON_CENTER_OFFSET = [0, 0];
+const DEFAULT_MARKER_OFFSET = Object.freeze([0, 0]);
 const WEB_BUS_MARKER_IMAGE_SIZE = 46;
 const WEB_BUS_MARKER_FALLBACK_SIZE = 44;
 const WEB_BUS_MARKER_HEADING_SVG_SIZE = 104;
@@ -50,6 +51,17 @@ let mapElementCounter = 0;
 const getNextMapElementId = (prefix) => {
   mapElementCounter += 1;
   return `${prefix}-${mapElementCounter}`;
+};
+
+const MAPLIBRE_MARKER_CLASS_PREFIX = 'maplibregl-marker';
+
+const mergeMarkerClassNames = (className = '', existingClassName = '') => {
+  const customClasses = String(className || '').split(/\s+/).filter(Boolean);
+  const mapLibreClasses = String(existingClassName || '')
+    .split(/\s+/)
+    .filter((name) => name.startsWith(MAPLIBRE_MARKER_CLASS_PREFIX));
+
+  return [...new Set([...customClasses, ...mapLibreClasses])].join(' ');
 };
 
 const getZoomFromDelta = (latDelta) => Math.round(Math.log(360 / latDelta) / Math.LN2);
@@ -245,6 +257,21 @@ const useStableMapId = (prefix) => {
   return idRef.current;
 };
 
+const normalizeMarkerOffset = (offset) => {
+  if (!Array.isArray(offset)) {
+    return DEFAULT_MARKER_OFFSET;
+  }
+
+  const x = Number(offset[0]);
+  const y = Number(offset[1]);
+  const resolvedX = Number.isFinite(x) ? x : 0;
+  const resolvedY = Number.isFinite(y) ? y : 0;
+
+  return resolvedX === 0 && resolvedY === 0
+    ? DEFAULT_MARKER_OFFSET
+    : [resolvedX, resolvedY];
+};
+
 const safeGetLayer = (map, layerId) => {
   try {
     return map?.getLayer?.(layerId) ?? null;
@@ -273,7 +300,7 @@ const resetCursorIfNeeded = (map) => {
 
 const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 0, accessibilityLabel, pointerEvents }) => {
   const element = document.createElement('div');
-  element.className = className;
+  element.className = mergeMarkerClassNames(className);
   element.style.pointerEvents = pointerEvents || 'auto';
   element.style.cursor = onClickRef?.current ? 'pointer' : 'default';
   element.style.zIndex = String(zIndexOffset);
@@ -294,7 +321,7 @@ const createMarkerElement = ({ html, className = '', onClickRef, zIndexOffset = 
 
 const updateMarkerElement = (element, { html, className = '', zIndexOffset = 0, accessibilityLabel, pointerEvents }) => {
   if (!element) return;
-  element.className = className;
+  element.className = mergeMarkerClassNames(className, element.className);
   element.style.zIndex = String(zIndexOffset);
   element.style.pointerEvents = pointerEvents || 'auto';
   if (accessibilityLabel) {
@@ -527,7 +554,7 @@ const WebHtmlMarkerComponent = ({
   html,
   className = '',
   anchor = 'center',
-  offset = [0, 0],
+  offset,
   zIndexOffset = 0,
   onPress,
   popupHtml,
@@ -538,6 +565,12 @@ const WebHtmlMarkerComponent = ({
   const markerRef = useRef(null);
   const elementRef = useRef(null);
   const onPressRef = useRef(onPress);
+  const offsetX = Array.isArray(offset) && Number.isFinite(Number(offset[0])) ? Number(offset[0]) : 0;
+  const offsetY = Array.isArray(offset) && Number.isFinite(Number(offset[1])) ? Number(offset[1]) : 0;
+  const markerOffset = useMemo(
+    () => normalizeMarkerOffset([offsetX, offsetY]),
+    [offsetX, offsetY]
+  );
   const hasValidCoordinate =
     Number.isFinite(coordinate?.latitude) &&
     Number.isFinite(coordinate?.longitude);
@@ -560,7 +593,7 @@ const WebHtmlMarkerComponent = ({
     const marker = new context.maplibre.Marker({
       element,
       anchor,
-      offset,
+      offset: markerOffset,
     })
       .setLngLat([coordinate.longitude, coordinate.latitude])
       .addTo(context.map);
@@ -578,7 +611,7 @@ const WebHtmlMarkerComponent = ({
       markerRef.current = null;
       elementRef.current = null;
     };
-  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, offset, pointerEvents]);
+  }, [accessibilityLabel, anchor, context?.map, context?.maplibre, hasValidCoordinate, markerOffset, pointerEvents]);
 
   useEffect(() => {
     if (!markerRef.current || !hasValidCoordinate) return;
@@ -731,6 +764,81 @@ const registerOrderedMapLayers = ({ map, registryKey, layerOrder, layerIds }) =>
   };
 };
 
+const buildLineGeoJson = (coordinates) => ({
+  type: 'Feature',
+  geometry: {
+    type: 'LineString',
+    coordinates: coordinates.map((coord) => [coord.longitude, coord.latitude]),
+  },
+});
+
+const setPaintPropertyIfLayerExists = (map, layerId, property, value) => {
+  if (!safeGetLayer(map, layerId) || typeof map?.setPaintProperty !== 'function') return;
+  map.setPaintProperty(layerId, property, value);
+};
+
+const setLayoutPropertyIfLayerExists = (map, layerId, property, value) => {
+  if (!safeGetLayer(map, layerId) || typeof map?.setLayoutProperty !== 'function') return;
+  map.setLayoutProperty(layerId, property, value);
+};
+
+const updateLineLayerStyles = ({
+  map,
+  outlineId,
+  fillId,
+  labelId,
+  arrowId,
+  color,
+  strokeWidth,
+  opacity,
+  outlineWidth,
+  outlineColor,
+  dashArray,
+  offset,
+  routeLabel,
+  labelStyle,
+  showArrows,
+}) => {
+  const lineDasharray = parseDashArray(dashArray, strokeWidth);
+  const outlineStrokeWidth = outlineWidth > 0 ? strokeWidth + outlineWidth * 2 : 0;
+  const outlineDasharray = parseDashArray(dashArray, outlineStrokeWidth || strokeWidth);
+
+  setPaintPropertyIfLayerExists(map, outlineId, 'line-color', outlineColor || darkenColorHex(color, 0.4));
+  setPaintPropertyIfLayerExists(map, outlineId, 'line-width', outlineStrokeWidth);
+  setPaintPropertyIfLayerExists(map, outlineId, 'line-opacity', outlineWidth > 0 ? opacity : 0);
+  setPaintPropertyIfLayerExists(map, fillId, 'line-color', color);
+  setPaintPropertyIfLayerExists(map, fillId, 'line-width', strokeWidth);
+  setPaintPropertyIfLayerExists(map, fillId, 'line-opacity', opacity);
+
+  if (lineDasharray) {
+    setPaintPropertyIfLayerExists(map, fillId, 'line-dasharray', lineDasharray);
+  }
+  if (outlineDasharray) {
+    setPaintPropertyIfLayerExists(map, outlineId, 'line-dasharray', outlineDasharray);
+  }
+
+  setPaintPropertyIfLayerExists(map, fillId, 'line-offset', offset || 0);
+  setPaintPropertyIfLayerExists(map, outlineId, 'line-offset', offset || 0);
+
+  setPaintPropertyIfLayerExists(map, arrowId, 'text-color', color);
+  setPaintPropertyIfLayerExists(map, arrowId, 'text-opacity', showArrows ? opacity : 0);
+
+  const resolvedLabelStyle = {
+    ...ROUTE_LINE_LABEL_STYLE,
+    ...(labelStyle || {}),
+  };
+  setLayoutPropertyIfLayerExists(map, labelId, 'text-field', routeLabel || '');
+  setLayoutPropertyIfLayerExists(map, labelId, 'symbol-spacing', resolvedLabelStyle.spacing);
+  setLayoutPropertyIfLayerExists(map, labelId, 'text-size', resolvedLabelStyle.size);
+  setLayoutPropertyIfLayerExists(map, labelId, 'text-offset', resolvedLabelStyle.textOffset || resolvedLabelStyle.offset);
+  setLayoutPropertyIfLayerExists(map, labelId, 'text-allow-overlap', resolvedLabelStyle.textAllowOverlap ?? false);
+  setLayoutPropertyIfLayerExists(map, labelId, 'text-ignore-placement', resolvedLabelStyle.textIgnorePlacement ?? false);
+  setPaintPropertyIfLayerExists(map, labelId, 'text-color', resolvedLabelStyle.color);
+  setPaintPropertyIfLayerExists(map, labelId, 'text-halo-color', resolvedLabelStyle.haloColor);
+  setPaintPropertyIfLayerExists(map, labelId, 'text-halo-width', resolvedLabelStyle.haloWidth);
+  setPaintPropertyIfLayerExists(map, labelId, 'text-opacity', routeLabel ? resolvedLabelStyle.opacity : 0);
+};
+
 const addLineLayers = ({
   map,
   sourceId,
@@ -760,26 +868,22 @@ const addLineLayers = ({
 
   const lineDasharray = parseDashArray(dashArray, strokeWidth);
 
-  if (outlineWidth > 0) {
-    const outlineStrokeWidth = strokeWidth + outlineWidth * 2;
-    const outlineDasharray = parseDashArray(dashArray, outlineStrokeWidth);
-    map.addLayer({
-      id: outlineId,
-      type: 'line',
-      source: sourceId,
-      layout: {
-        'line-cap': lineCap,
-        'line-join': lineJoin,
-      },
-      paint: {
-        'line-color': outlineColor || darkenColorHex(color, 0.4),
-        'line-width': outlineStrokeWidth,
-        'line-opacity': opacity,
-        ...(outlineDasharray ? { 'line-dasharray': outlineDasharray } : {}),
-        ...(offset ? { 'line-offset': offset } : {}),
-      },
-    });
-  }
+  map.addLayer({
+    id: outlineId,
+    type: 'line',
+    source: sourceId,
+    layout: {
+      'line-cap': lineCap,
+      'line-join': lineJoin,
+    },
+    paint: {
+      'line-color': outlineColor || darkenColorHex(color, 0.4),
+      'line-width': outlineWidth > 0 ? strokeWidth + outlineWidth * 2 : 0,
+      'line-opacity': outlineWidth > 0 ? opacity : 0,
+      ...(lineDasharray ? { 'line-dasharray': lineDasharray } : {}),
+      ...(offset ? { 'line-offset': offset } : {}),
+    },
+  });
 
   map.addLayer({
     id: fillId,
@@ -798,55 +902,51 @@ const addLineLayers = ({
     },
   });
 
-  if (showArrows) {
-    map.addLayer({
-      id: arrowId,
-      type: 'symbol',
-      source: sourceId,
-      layout: {
-        'symbol-placement': 'line',
-        'symbol-spacing': 150,
-        'text-field': '▶',
-        'text-size': 10,
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-        'text-rotation-alignment': 'map',
-      },
-      paint: {
-        'text-color': color,
-        'text-opacity': opacity,
-      },
-    });
-  }
+  map.addLayer({
+    id: arrowId,
+    type: 'symbol',
+    source: sourceId,
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 150,
+      'text-field': '▶',
+      'text-size': 10,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+      'text-rotation-alignment': 'map',
+    },
+    paint: {
+      'text-color': color,
+      'text-opacity': showArrows ? opacity : 0,
+    },
+  });
 
-  if (routeLabel) {
-    const resolvedLabelStyle = {
-      ...ROUTE_LINE_LABEL_STYLE,
-      ...(labelStyle || {}),
-    };
+  const resolvedLabelStyle = {
+    ...ROUTE_LINE_LABEL_STYLE,
+    ...(labelStyle || {}),
+  };
 
-    map.addLayer({
-      id: labelId,
-      type: 'symbol',
-      source: sourceId,
-      layout: {
-        'symbol-placement': 'line',
-        'symbol-spacing': resolvedLabelStyle.spacing,
-        'text-field': routeLabel,
-        'text-size': resolvedLabelStyle.size,
-        'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
-        'text-rotation-alignment': 'map',
-        'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
-        'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
-      },
-      paint: {
-        'text-color': resolvedLabelStyle.color,
-        'text-halo-color': resolvedLabelStyle.haloColor,
-        'text-halo-width': resolvedLabelStyle.haloWidth,
-        'text-opacity': resolvedLabelStyle.opacity,
-      },
-    });
-  }
+  map.addLayer({
+    id: labelId,
+    type: 'symbol',
+    source: sourceId,
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': resolvedLabelStyle.spacing,
+      'text-field': routeLabel || '',
+      'text-size': resolvedLabelStyle.size,
+      'text-offset': resolvedLabelStyle.textOffset || resolvedLabelStyle.offset,
+      'text-rotation-alignment': 'map',
+      'text-allow-overlap': resolvedLabelStyle.textAllowOverlap ?? false,
+      'text-ignore-placement': resolvedLabelStyle.textIgnorePlacement ?? false,
+    },
+    paint: {
+      'text-color': resolvedLabelStyle.color,
+      'text-halo-color': resolvedLabelStyle.haloColor,
+      'text-halo-width': resolvedLabelStyle.haloWidth,
+      'text-opacity': routeLabel ? resolvedLabelStyle.opacity : 0,
+    },
+  });
 };
 
 const WebRoutePolylineComponent = ({
@@ -872,6 +972,11 @@ const WebRoutePolylineComponent = ({
   const context = useMapContext();
   const baseId = useStableMapId('web-route');
   const callbacksRef = useRef({ onClick: onPress, onMouseOver, onMouseOut });
+  const sourceId = `${baseId}-source`;
+  const outlineId = `${baseId}-outline`;
+  const fillId = `${baseId}-fill`;
+  const labelId = `${baseId}-label`;
+  const arrowId = `${baseId}-arrow`;
 
   callbacksRef.current = { onClick: onPress, onMouseOver, onMouseOut };
 
@@ -880,20 +985,6 @@ const WebRoutePolylineComponent = ({
       return undefined;
     }
 
-    const sourceId = `${baseId}-source`;
-    const outlineId = `${baseId}-outline`;
-    const fillId = `${baseId}-fill`;
-    const labelId = `${baseId}-label`;
-    const arrowId = `${baseId}-arrow`;
-
-    const geoJson = {
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: coordinates.map((coord) => [coord.longitude, coord.latitude]),
-      },
-    };
-
     addLineLayers({
       map: context.map,
       sourceId,
@@ -901,7 +992,7 @@ const WebRoutePolylineComponent = ({
       fillId,
       labelId,
       arrowId,
-      geoJson,
+      geoJson: buildLineGeoJson(coordinates),
       color,
       strokeWidth,
       opacity,
@@ -914,18 +1005,6 @@ const WebRoutePolylineComponent = ({
       routeLabel,
       labelStyle,
       showArrows,
-    });
-
-    const unregisterLayerOrder = registerOrderedMapLayers({
-      map: context.map,
-      registryKey: baseId,
-      layerOrder,
-      layerIds: [
-        outlineWidth > 0 ? outlineId : null,
-        fillId,
-        showArrows ? arrowId : null,
-        routeLabel ? labelId : null,
-      ].filter(Boolean),
     });
 
     const cleanupEvents = applyLayerEvents({
@@ -942,26 +1021,89 @@ const WebRoutePolylineComponent = ({
       removeLayerIfExists(context.map, fillId);
       removeLayerIfExists(context.map, outlineId);
       removeSourceIfExists(context.map, sourceId);
-      unregisterLayerOrder();
     };
   }, [
     baseId,
+    context?.isReady,
+    context?.map,
+    sourceId,
+    outlineId,
+    fillId,
+    labelId,
+    arrowId,
+    dashArray,
+    interactive,
+    lineCap,
+    lineJoin,
+  ]);
+
+  useEffect(() => {
+    if (!context?.map || !context.isReady) {
+      return undefined;
+    }
+
+    return registerOrderedMapLayers({
+      map: context.map,
+      registryKey: baseId,
+      layerOrder,
+      layerIds: [outlineId, fillId, arrowId, labelId],
+    });
+  }, [
+    arrowId,
+    baseId,
+    context?.isReady,
+    context?.map,
+    fillId,
+    labelId,
+    layerOrder,
+    outlineId,
+  ]);
+
+  useEffect(() => {
+    if (!context?.map || !context.isReady || !Array.isArray(coordinates) || coordinates.length < 2) {
+      return;
+    }
+
+    const source = safeGetSource(context.map, sourceId);
+    if (source && typeof source.setData === 'function') {
+      source.setData(buildLineGeoJson(coordinates));
+    }
+
+    updateLineLayerStyles({
+      map: context.map,
+      outlineId,
+      fillId,
+      labelId,
+      arrowId,
+      color,
+      strokeWidth,
+      opacity,
+      outlineWidth,
+      outlineColor,
+      dashArray,
+      offset,
+      routeLabel,
+      labelStyle,
+      showArrows,
+    });
+  }, [
+    arrowId,
     color,
     context?.isReady,
     context?.map,
     coordinates,
     dashArray,
-    interactive,
-    layerOrder,
-    lineCap,
-    lineJoin,
+    fillId,
+    labelId,
     offset,
     opacity,
     outlineColor,
+    outlineId,
     outlineWidth,
     routeLabel,
     labelStyle,
     showArrows,
+    sourceId,
     strokeWidth,
   ]);
 
@@ -1229,11 +1371,15 @@ export const __TEST_ONLY__ = {
   applyLayerEvents,
   createBusHubHtml,
   createBusHtml,
+  buildLineGeoJson,
   handleWebMapKeyboardPan,
   isEditableKeyboardTarget,
+  mergeMarkerClassNames,
+  normalizeMarkerOffset,
   registerOrderedMapLayers,
   reorderRegisteredMapLayers,
   resolveLayerCallbacks,
+  updateLineLayerStyles,
 };
 
 export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, routeDirectionLabel = null, snapPath = null, dimmed = false }) => {
@@ -1320,6 +1466,19 @@ const WebMapView = forwardRef(({
 
     let isCancelled = false;
     let map = null;
+    let resizeObserver = null;
+    let resizeFallbackCleanup = null;
+    let resizeFrame = null;
+
+    const scheduleMapResize = () => {
+      if (resizeFrame !== null || !map) return;
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = null;
+        if (!isCancelled && mapRef.current === map) {
+          map.resize();
+        }
+      });
+    };
 
     const initMap = async () => {
       const maplibre = await ensureMapLibreGlobal();
@@ -1341,7 +1500,16 @@ const WebMapView = forwardRef(({
 
       mapRef.current = map;
 
+      if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(scheduleMapResize);
+        resizeObserver.observe(containerRef.current);
+      } else if (typeof window !== 'undefined') {
+        window.addEventListener('resize', scheduleMapResize);
+        resizeFallbackCleanup = () => window.removeEventListener('resize', scheduleMapResize);
+      }
+
       const handleLoad = () => {
+        scheduleMapResize();
         setIsReady(true);
         callbacksRef.current.onMapReady?.(map);
       };
@@ -1406,6 +1574,12 @@ const WebMapView = forwardRef(({
       setIsReady(false);
       eventCleanupRef.current?.();
       eventCleanupRef.current = () => {};
+      resizeObserver?.disconnect();
+      resizeFallbackCleanup?.();
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
       map?.remove();
       mapRef.current = null;
       maplibreRef.current = null;

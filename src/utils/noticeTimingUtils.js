@@ -50,6 +50,7 @@ export const getNoticeStartText = (notice, fallback = 'Start date not listed') =
 };
 
 const normalizeRoute = (value) => String(value || '').trim().toLowerCase();
+const normalizeId = (value) => String(value || '').trim();
 
 export const looksLikeDetourNotice = (item) => {
   const text = `${item?.title || ''} ${item?.body || ''}`.toLowerCase();
@@ -113,23 +114,65 @@ export const noticeWindowStatus = (window, now = Date.now()) => {
   return 'active';
 };
 
-export const findRouteDetourNotice = (routeId, transitNews = [], now = Date.now()) => {
+
+const collectNoticeSourceIds = (target, ids = new Set()) => {
+  if (!target || typeof target !== 'object') return ids;
+
+  [
+    target.noticeStopImpactSourceNewsIds,
+    target.sourceNewsIds,
+    target.matchedNoticeIds,
+  ].forEach((values) => {
+    if (Array.isArray(values)) {
+      values.map(normalizeId).filter(Boolean).forEach((id) => ids.add(id));
+    }
+  });
+
+  [
+    target.noticeStopImpactSourceNewsId,
+    target.sourceNewsId,
+    target.matchedNoticeId,
+  ].map(normalizeId).filter(Boolean).forEach((id) => ids.add(id));
+
+  return ids;
+};
+
+export const getDetourMatchedNoticeIds = (detour) => {
+  const ids = collectNoticeSourceIds(detour);
+  (detour?.segments || []).forEach((segment) => collectNoticeSourceIds(segment, ids));
+  return ids;
+};
+
+const noticeIdentityMatches = (notice, ids) => (
+  [notice?.id, notice?.newsId, notice?.sourceNewsId]
+    .map(normalizeId)
+    .filter(Boolean)
+    .some((id) => ids.has(id))
+);
+
+export const findRouteDetourNotice = (routeId, transitNews = [], now = Date.now(), options = {}) => {
   const routeKey = normalizeRoute(routeId);
   if (!routeKey) return null;
+  const matchedNoticeIds = getDetourMatchedNoticeIds(options?.detour);
+  const requireDetectedDetourMatch = Boolean(options?.detour) || options?.requireDetectedDetourMatch === true;
 
   return (transitNews || [])
     .map((item) => {
+      const parsedWindow = parseNoticeDateWindow(item);
       const window = {
-        ...parseNoticeDateWindow(item),
-        startsAt: toNoticeTimestamp(item?.startsAt) ?? parseNoticeDateWindow(item).startsAt,
-        endsAt: toNoticeTimestamp(item?.endsAt) ?? parseNoticeDateWindow(item).endsAt,
+        ...parsedWindow,
+        startsAt: toNoticeTimestamp(item?.startsAt) ?? parsedWindow.startsAt,
+        endsAt: toNoticeTimestamp(item?.endsAt) ?? parsedWindow.endsAt,
       };
       return { ...item, window, status: noticeWindowStatus(window, now) };
     })
     .find((item) => {
-      if (item.archivedAt != null || item.status === 'expired' || !looksLikeDetourNotice(item)) return false;
+      if (item.archivedAt != null || item.status !== 'active' || !looksLikeDetourNotice(item)) return false;
       const routeMatch = (item.affectedRoutes || []).some((route) => normalizeRoute(route) === routeKey);
       const text = `${item.title || ''} ${item.body || ''}`.toLowerCase();
-      return routeMatch || new RegExp(`\\broute\\s+${routeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text);
+      const matchesRoute = routeMatch || new RegExp(`\\broute\\s+${routeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text);
+      if (!matchesRoute) return false;
+      if (!requireDetectedDetourMatch) return true;
+      return matchedNoticeIds.size > 0 && noticeIdentityMatches(item, matchedNoticeIds);
     }) || null;
 };

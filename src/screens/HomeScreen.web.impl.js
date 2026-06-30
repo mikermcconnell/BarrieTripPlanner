@@ -570,6 +570,7 @@ const HomeScreen = ({ route }) => {
   const [mapViewMode, setMapViewMode] = useState('regular');
   const [detourLegendAutoCollapseSignal, setDetourLegendAutoCollapseSignal] = useState(0);
   const [upcomingDetoursCollapsed, setUpcomingDetoursCollapsed] = useState(false);
+  const [dismissedUpcomingDetourSignature, setDismissedUpcomingDetourSignature] = useState(null);
   const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
   const pulseAnim = useMapPulseAnimation();
   const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, expand: expandRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel({ defaultExpanded: false });
@@ -635,6 +636,21 @@ const HomeScreen = ({ route }) => {
     () => (detoursEnabled ? getUpcomingDetourNotices(transitNews) : []),
     [detoursEnabled, transitNews]
   );
+  const upcomingDetourNoticeSignature = useMemo(() => (
+    upcomingDetourNotices
+      .map((notice) => `${notice?.id || notice?.title || ''}:${notice?.startsText || ''}:${notice?.endsText || ''}`)
+      .join('|')
+  ), [upcomingDetourNotices]);
+  const visibleUpcomingDetourNotices = upcomingDetourNoticeSignature &&
+    upcomingDetourNoticeSignature === dismissedUpcomingDetourSignature
+    ? []
+    : upcomingDetourNotices;
+  const dismissUpcomingDetourNotices = useCallback(() => {
+    if (upcomingDetourNoticeSignature) {
+      setDismissedUpcomingDetourSignature(upcomingDetourNoticeSignature);
+      setUpcomingDetoursCollapsed(true);
+    }
+  }, [upcomingDetourNoticeSignature]);
   const activeOfficialServiceImpacts = useMemo(
     () => getActiveOfficialServiceImpacts(officialServiceImpacts)
       .filter((impact) => impact.type === 'baseline_detour'),
@@ -650,7 +666,7 @@ const HomeScreen = ({ route }) => {
     selectRoutes(drawableRouteIds);
     zoomToRoutes(drawableRouteIds);
   }, [routeShapeMapping, selectRoutes, zoomToRoutes]);
-  const canUseDetourView = detoursEnabled && (activeDetourRouteIds.size > 0 || upcomingDetourNotices.length > 0);
+  const canUseDetourView = detoursEnabled && (activeDetourRouteIds.size > 0 || visibleUpcomingDetourNotices.length > 0);
   const isDetourView = canUseDetourView && mapViewMode === 'detour';
   const hasDetourFocus = isDetourView && Boolean(focusedDetourRouteId) && activeDetourRouteIds.has(focusedDetourRouteId);
 
@@ -2112,11 +2128,12 @@ const HomeScreen = ({ route }) => {
             } : undefined}
           />
           <UpcomingDetourStrip
-            notices={!isTripPlanningMode && isDetourView ? upcomingDetourNotices : []}
+            notices={!isTripPlanningMode && isDetourView ? visibleUpcomingDetourNotices : []}
             alertBannerVisible={serviceAlerts && serviceAlerts.length > 0}
             routeColorByRouteId={routeColorByRouteId}
             collapsedByDefault
             onCollapsedChange={setUpcomingDetoursCollapsed}
+            onDismiss={dismissUpcomingDetourNotices}
             style={[
               styles.upcomingDetourStrip,
               isWideWeb && {
@@ -2148,7 +2165,7 @@ const HomeScreen = ({ route }) => {
             collapsedByDefault
             style={[
               styles.detourLegend,
-              upcomingDetourNotices.length > 0 && (
+              visibleUpcomingDetourNotices.length > 0 && (
                 upcomingDetoursCollapsed
                   ? styles.detourLegendWithCollapsedUpcoming
                   : styles.detourLegendWithUpcoming

@@ -31,6 +31,7 @@ const DetourDetailsSheet = ({
   onShowAllDetours,
 }) => {
   const [slideAnim] = useState(new Animated.Value(100));
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   // Keep a ref to onClose so the Escape key handler never captures a stale value
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -76,7 +77,7 @@ const DetourDetailsSheet = ({
   const timeLabel = formatDetourTime(detour?.detectedAt);
   const startedAtLabel = formatDetourStartedAt(detour?.detectedAt);
   const confidenceChip = detour?.confidence ? getConfidenceChip(detour.confidence) : null;
-  const myRideNotice = findRouteDetourNotice(routeId, transitNews);
+  const myRideNotice = findRouteDetourNotice(routeId, transitNews, Date.now(), { detour });
   const timingTitle = myRideNotice ? 'MyRide timing' : 'Unplanned detour';
   const myRideEndText = myRideNotice
     ? getNoticeEndText({ endsAt: myRideNotice.window?.endsAt ?? myRideNotice.endsAt }, 'Detour end date is not listed.')
@@ -88,6 +89,9 @@ const DetourDetailsSheet = ({
   const handleEventRoutePress = (eventRouteId) => {
     if (canSelectEventRoute) onSelectEventRoute(eventRouteId);
   };
+  const toggleDetailsExpanded = useCallback(() => {
+    setDetailsExpanded((current) => !current);
+  }, []);
 
   return (
     <>
@@ -98,6 +102,7 @@ const DetourDetailsSheet = ({
       <Animated.View
         style={[
           styles.sheet,
+          detailsExpanded ? styles.sheetExpanded : styles.sheetCompact,
           {
             transform: [
               {
@@ -166,6 +171,16 @@ const DetourDetailsSheet = ({
             <Icon name="X" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={toggleDetailsExpanded}
+          accessibilityRole="button"
+          accessibilityLabel={detailsExpanded ? 'Collapse detour details' : 'Expand detour details'}
+        >
+          <Text style={styles.expandButtonText}>{detailsExpanded ? 'Show less' : 'More details'}</Text>
+          <Text style={styles.expandButtonIcon}>{detailsExpanded ? '⌄' : '⌃'}</Text>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -260,13 +275,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: '78%',
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: BORDER_RADIUS.lg,
     borderTopRightRadius: BORDER_RADIUS.lg,
     boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
     zIndex: 1000,
     paddingBottom: SPACING.xl,
+  },
+  sheetCompact: {
+    maxHeight: '39%',
+  },
+  sheetExpanded: {
+    maxHeight: '78%',
   },
   handleBar: {
     width: 40,
@@ -349,6 +369,32 @@ const styles = StyleSheet.create({
     padding: SPACING.sm,
     cursor: 'pointer',
   },
+  expandButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey50,
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+    cursor: 'pointer',
+  },
+  expandButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+  },
+  expandButtonIcon: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+    lineHeight: FONT_SIZES.sm,
+  },
   explorerControls: {
     marginBottom: SPACING.lg,
     padding: SPACING.md,
@@ -425,6 +471,7 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     paddingHorizontal: SPACING.lg,
+    flexShrink: 1,
   },
   scrollContent: {
     paddingBottom: SPACING.lg,

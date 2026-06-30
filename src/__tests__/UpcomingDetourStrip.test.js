@@ -149,6 +149,34 @@ describe('UpcomingDetourStrip', () => {
     expect(text).toContain('Downtown Paving Detour');
   });
 
+  test('can be dismissed while collapsed', () => {
+    const onDismiss = jest.fn();
+    let inst;
+    act(() => {
+      inst = create(React.createElement(UpcomingDetourStrip, {
+        inline: true,
+        autoHideMs: 0,
+        collapsedByDefault: true,
+        onDismiss,
+        notices: [{
+          id: '1646',
+          title: 'Downtown Paving Detour',
+          routes: ['10'],
+          startsText: 'May 19, 2026',
+        }],
+      }));
+    });
+
+    const dismiss = inst.root.findAllByType('TouchableOpacity').find((node) =>
+      node.props.accessibilityLabel === 'Hide upcoming detour notice'
+    );
+    act(() => {
+      dismiss.props.onPress();
+    });
+
+    expect(onDismiss).toHaveBeenCalledWith([expect.objectContaining({ id: '1646' })]);
+  });
+
   test('auto-collapses after the configured delay', () => {
     jest.useFakeTimers();
     let inst;

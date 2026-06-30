@@ -638,6 +638,28 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - this matrix
 - Remaining risk: visual validation is still needed on actual Barrie examples to confirm the likely path, closed segment, stop impacts, and base-route masking all remain aligned.
 
+### DET-024A — upcoming same-route notice attached to active unplanned detour
+
+- Date/time observed: 2026-06-30
+- Environment: reported active Route 8 unplanned detour with a separate upcoming Route 8 planned notice
+- Route(s): `8`
+- What happened: the detour details sheet could attach the upcoming same-route notice to the active unplanned detour because the client matched by route and non-expired timing.
+- What should have happened: upcoming and route-only notices should remain separate unless the backend has spatially matched the active notice to the GPS-confirmed detour.
+- Classification:
+  - frontend rendering
+  - publishing/history
+- Root cause: client-side notice lookup accepted route-only matches for active detour timing instead of requiring the detected detour's `noticeStopImpactSourceNewsIds`.
+- Fix:
+  - detour details now use only active notices that match the active detour's official-notice source IDs
+  - upcoming same-route notices remain in upcoming-notice UI instead of becoming MyRide timing for the active detour
+- Tests added/updated:
+  - `src/__tests__/noticeTimingUtils.test.js`
+  - `src/__tests__/DetourDetailsSheet.timing.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - this matrix
+- Remaining risk: active official notices without parsed/spatially merged stop impacts will show as unplanned until the backend can associate them safely.
+
 ## Status definitions
 
 - **Covered** — automated coverage exists and the manual checklist has a matching validation path.

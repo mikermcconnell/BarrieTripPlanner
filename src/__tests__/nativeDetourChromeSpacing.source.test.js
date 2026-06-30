@@ -25,8 +25,8 @@ describe('native detour chrome spacing', () => {
   test('shows upcoming detours on the main map outside detour mode', () => {
     const source = readSource();
 
-    expect(source).toContain('{upcomingDetourNotices.length > 0 && (');
-    expect(source).not.toContain('{isDetourView && upcomingDetourNotices.length > 0 && (');
+    expect(source).toContain('{visibleUpcomingDetourNotices.length > 0 && (');
+    expect(source).not.toContain('{isDetourView && visibleUpcomingDetourNotices.length > 0 && (');
   });
 
   test('shows official service impacts on the main map without treating them as auto detours', () => {

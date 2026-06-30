@@ -38,7 +38,7 @@ The system detects detours automatically by watching real-time GPS positions —
 
 Published detour paths are also corrected by GPS, not by public notices. If an already-published path has no current bus on it and a different same-route corridor inside the same affected regular-route window meets the normal publish rule — at least three off-route pings and two unique same-route confirming identities — the detector promotes the newer GPS-proven path and marks the old runtime segment as superseded. The publisher then skips trusted-path preservation so the stale likely path is not reintroduced over the newer GPS evidence.
 
-Official MyRide notices can enrich stop impacts only after GPS has confirmed a detour. They never detect, expand, clear, or keep alive an auto-detour. Route family alone is not enough: notice stop impacts are merged only when their stops spatially overlap the GPS-confirmed segment.
+Official MyRide notices can enrich stop impacts only after GPS has confirmed a detour. They never detect, expand, clear, or keep alive an auto-detour. Route family alone is not enough: notice stop impacts are merged only when their stops spatially overlap the GPS-confirmed segment. The rider details sheet treats a detected detour as "MyRide timing" only when the notice is active now and matches the detour's `noticeStopImpactSourceNewsIds`; upcoming or route-only notices stay separate from the active auto-detour.
 
 ---
 

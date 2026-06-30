@@ -93,6 +93,7 @@ const UpcomingDetourStrip = ({
   autoHideMs = 10000,
   collapsedByDefault = false,
   onCollapsedChange,
+  onDismiss,
   inline = false,
   style,
 }) => {
@@ -124,6 +125,11 @@ const UpcomingDetourStrip = ({
 
   const topOffset = (alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP) + 92;
   const countText = `${notices.length} upcoming detour${notices.length === 1 ? '' : 's'}`;
+  const dismissLabel = `Hide upcoming detour notice${notices.length === 1 ? '' : 's'}`;
+  const handleDismiss = (event) => {
+    event?.stopPropagation?.();
+    onDismiss?.(notices);
+  };
 
   return (
     <View
@@ -136,17 +142,31 @@ const UpcomingDetourStrip = ({
       pointerEvents="box-none"
     >
       {collapsed ? (
-        <TouchableOpacity
-          style={[styles.collapsedCard, inline && styles.collapsedCardInline]}
-          activeOpacity={0.85}
-          onPress={() => setCollapsed(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Expand upcoming detours"
-        >
-          <Text style={styles.iconSmall}>📅</Text>
-          <Text style={styles.collapsedTitle}>{countText}</Text>
-          <Text style={styles.expandText}>Expand</Text>
-        </TouchableOpacity>
+        <View style={[styles.collapsedCard, inline && styles.collapsedCardInline]}>
+          <TouchableOpacity
+            style={styles.collapsedExpandButton}
+            activeOpacity={0.85}
+            onPress={() => setCollapsed(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Expand upcoming detours"
+          >
+            <Text style={styles.iconSmall}>📅</Text>
+            <Text style={styles.collapsedTitle}>{countText}</Text>
+            <Text style={styles.expandText}>Expand</Text>
+          </TouchableOpacity>
+          {onDismiss ? (
+            <TouchableOpacity
+              style={styles.collapsedDismissButton}
+              activeOpacity={0.75}
+              onPress={handleDismiss}
+              accessibilityRole="button"
+              accessibilityLabel={dismissLabel}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.collapsedDismissText}>×</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : (
       <View
         style={[styles.headerCard, inline && styles.headerCardInline]}
@@ -235,7 +255,6 @@ const styles = StyleSheet.create({
     minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: BORDER_RADIUS.round,
@@ -246,6 +265,12 @@ const styles = StyleSheet.create({
   },
   collapsedCardInline: {
     alignSelf: 'stretch',
+  },
+  collapsedExpandButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
   },
   icon: {
     fontSize: FONT_SIZES.lg,
@@ -261,6 +286,21 @@ const styles = StyleSheet.create({
   expandText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+  },
+  collapsedDismissButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: SPACING.xs,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  collapsedDismissText: {
+    fontSize: FONT_SIZES.sm,
+    lineHeight: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.bold,
   },
   headerCopy: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ const getDetourTitle = (routeId, state) => {
 };
 
 const MAP_INTERACTION_HINT = 'Tap or click a highlighted route line on the map to open that route’s detour details.';
+const COMPACT_SNAP_POINT = '22.5%';
+const EXPANDED_SNAP_POINT = '78%';
 
 const DetourDetailsSheet = ({
   routeId,
@@ -36,14 +38,22 @@ const DetourDetailsSheet = ({
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
   const bottomSheetRef = useRef(null);
-  const snapPoints = useMemo(() => ['45%', '78%'], []);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const snapPoints = useMemo(() => [COMPACT_SNAP_POINT, EXPANDED_SNAP_POINT], []);
 
   const handleSheetChanges = useCallback(
     (index) => {
       if (index === -1) onClose?.();
+      else setSheetExpanded(index >= 1);
     },
     [onClose]
   );
+
+  const toggleSheetExpanded = useCallback(() => {
+    const nextIndex = sheetExpanded ? 0 : 1;
+    bottomSheetRef.current?.snapToIndex?.(nextIndex);
+    setSheetExpanded(!sheetExpanded);
+  }, [sheetExpanded]);
 
   const routeColor = routeColorOverride || ROUTE_COLORS[routeId] || ROUTE_COLORS.DEFAULT;
   const getRouteColor = (id) => routeColorByRouteId[id] || ROUTE_COLORS[id] || routeColor;
@@ -56,7 +66,7 @@ const DetourDetailsSheet = ({
   const timeLabel = formatDetourTime(detour?.detectedAt);
   const startedAtLabel = formatDetourStartedAt(detour?.detectedAt);
   const confidenceChip = detour?.confidence ? getConfidenceChip(detour.confidence) : null;
-  const myRideNotice = findRouteDetourNotice(routeId, transitNews);
+  const myRideNotice = findRouteDetourNotice(routeId, transitNews, Date.now(), { detour });
   const timingTitle = myRideNotice ? 'MyRide timing' : 'Unplanned detour';
   const myRideEndText = myRideNotice
     ? getNoticeEndText({ endsAt: myRideNotice.window?.endsAt ?? myRideNotice.endsAt }, 'Detour end date is not listed.')
@@ -139,6 +149,16 @@ const DetourDetailsSheet = ({
             <Icon name="X" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={toggleSheetExpanded}
+          accessibilityRole="button"
+          accessibilityLabel={sheetExpanded ? 'Collapse detour details' : 'Expand detour details'}
+        >
+          <Text style={styles.expandButtonText}>{sheetExpanded ? 'Show less' : 'More details'}</Text>
+          <Text style={styles.expandButtonIcon}>{sheetExpanded ? '⌄' : '⌃'}</Text>
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -252,6 +272,30 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: SPACING.sm,
+  },
+  expandButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.grey50,
+    borderWidth: 1,
+    borderColor: COLORS.grey200,
+  },
+  expandButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+  },
+  expandButtonIcon: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+    lineHeight: FONT_SIZES.sm,
   },
   title: {
     fontSize: FONT_SIZES.lg,

@@ -253,9 +253,14 @@ function createDetourOps({
     return { enabled: true, ...status };
   }
 
-  async function runSingleTick() {
+  function buildRunTickSource(triggerSource) {
+    const source = String(triggerSource || '').trim();
+    return source || 'manual';
+  }
+
+  async function runSingleTick(triggerSource) {
     const result = await detourWorker.runTick({
-      source: 'api-run-once',
+      source: buildRunTickSource(triggerSource),
       forceReloadState: true,
     });
 
@@ -411,7 +416,7 @@ function createDetourOps({
       const burstConfig = parseBurstSamplingConfig(env, status);
       const result = await (burstConfig.enabled
         ? runBurstSamples(burstConfig)
-        : runSingleTick());
+        : runSingleTick(options.triggerSource));
       result.body = await maybeEnqueueOffsetSample(result.body, options);
       return result;
     } finally {

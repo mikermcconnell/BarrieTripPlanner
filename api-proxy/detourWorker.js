@@ -26,9 +26,12 @@ const { evaluateBaselineAutoUpdate } = require('./baselineAutoUpdater');
 const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleFreshness');
 const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
+const { getRoadMatcherStats } = require('./detourRoadMatcher');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
+const MAX_RECENT_TICK_SAMPLES = 120;
+const SAMPLING_HEALTH_WINDOW_MS = 5 * 60 * 1000;
 const REQUIRE_SAFE_BASELINE = process.env.DETOUR_REQUIRE_SAFE_BASELINE !== 'false';
 const detourStorageConfig = buildDetourStorageConfig(process.env);
 const detector = getDetectorForStorageConfig(detourStorageConfig);
@@ -61,6 +64,7 @@ let lastTickFinishedAt = null;
 let lastTickSource = null;
 const vehicleSampleFreshness = createVehicleSampleFreshnessTracker();
 const recentEvents = [];
+const recentTickSamples = [];
 
 function getWorkerMode() {
   return String(process.env.DETOUR_WORKER_MODE || 'interval').trim().toLowerCase();
@@ -74,6 +78,79 @@ function addEvent(msg) {
 
 function detourKeys(detours) {
   return new Set(Object.keys(detours));
+}
+
+function recordTickSample(sample) {
+  recentTickSamples.push({
+    finishedAt: new Date().toISOString(),
+    ...sample,
+  });
+  while (recentTickSamples.length > MAX_RECENT_TICK_SAMPLES) {
+    recentTickSamples.shift();
+  }
+}
+
+function summarizeSamplingHealth(nowMs = Date.now()) {
+  const windowStartMs = nowMs - SAMPLING_HEALTH_WINDOW_MS;
+  const samples = recentTickSamples.filter((sample) =>
+    Date.parse(sample.finishedAt) >= windowStartMs
+  );
+  const bySource = {};
+
+  for (const sample of samples) {
+    const source = sample.source || 'unknown';
+    const current = bySource[source] || {
+      tickCount: 0,
+      freshTickCount: 0,
+      zeroFreshTickCount: 0,
+      vehiclesFetched: 0,
+      vehiclesProcessed: 0,
+      duplicateVehicleSamplesSkipped: 0,
+      failureCount: 0,
+    };
+    current.tickCount += 1;
+    current.vehiclesFetched += sample.vehiclesFetched || 0;
+    current.vehiclesProcessed += sample.vehiclesProcessed || 0;
+    current.duplicateVehicleSamplesSkipped += sample.duplicateVehicleSamplesSkipped || 0;
+    if (sample.ok === false) current.failureCount += 1;
+    if ((sample.vehiclesProcessed || 0) > 0) current.freshTickCount += 1;
+    if ((sample.vehiclesFetched || 0) > 0 && (sample.vehiclesProcessed || 0) === 0) {
+      current.zeroFreshTickCount += 1;
+    }
+    bySource[source] = current;
+  }
+
+  const finishedTimes = samples
+    .map((sample) => Date.parse(sample.finishedAt))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const intervalsMs = [];
+  for (let i = 1; i < finishedTimes.length; i += 1) {
+    intervalsMs.push(finishedTimes[i] - finishedTimes[i - 1]);
+  }
+  const vehiclesFetched = samples.reduce((sum, sample) => sum + (sample.vehiclesFetched || 0), 0);
+  const duplicateVehicleSamplesSkipped = samples.reduce(
+    (sum, sample) => sum + (sample.duplicateVehicleSamplesSkipped || 0),
+    0
+  );
+
+  return {
+    windowMs: SAMPLING_HEALTH_WINDOW_MS,
+    tickCount: samples.length,
+    freshTickCount: samples.filter((sample) => (sample.vehiclesProcessed || 0) > 0).length,
+    zeroFreshTickCount: samples.filter((sample) =>
+      (sample.vehiclesFetched || 0) > 0 && (sample.vehiclesProcessed || 0) === 0
+    ).length,
+    duplicateVehicleSamplesSkipped,
+    duplicateVehicleSampleRate: vehiclesFetched > 0
+      ? duplicateVehicleSamplesSkipped / vehiclesFetched
+      : null,
+    averageTickIntervalMs: intervalsMs.length > 0
+      ? Math.round(intervalsMs.reduce((sum, value) => sum + value, 0) / intervalsMs.length)
+      : null,
+    bySource,
+    recentTicks: samples.slice(-12),
+  };
 }
 
 async function ensurePersistentDetoursHydrated({ force = false } = {}) {
@@ -190,6 +267,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
   tickInProgress = true;
   lastTickSource = source;
   lastTickStartedAt = new Date().toISOString();
+  const tickStartedAtMs = Date.now();
 
   try {
     await ensurePersistentDetoursHydrated({ force: forceReloadState });
@@ -333,9 +411,28 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     lastSuccessfulTick = new Date().toISOString();
     consecutiveFailureCount = 0;
     const detourCount = Object.keys(activeDetours).length;
+    const tickDurationMs = Date.now() - tickStartedAtMs;
+    recordTickSample({
+      ok: true,
+      source,
+      startedAt: lastTickStartedAt,
+      durationMs: tickDurationMs,
+      vehiclesFetched: fetchedVehicles.length,
+      vehiclesProcessed: vehicles.length,
+      duplicateVehicleSamplesSkipped: vehicleSampleStats.duplicateCount,
+      detourCount,
+    });
     console.log(
-      `[detourWorker] tick #${tickCount} (${source}): ` +
-      `${vehicles.length}/${fetchedVehicles.length} fresh vehicles, ${detourCount} detours`
+      JSON.stringify({
+        event: 'detour_worker_tick',
+        tickCount,
+        source,
+        vehiclesProcessed: vehicles.length,
+        vehiclesFetched: fetchedVehicles.length,
+        duplicateVehicleSamplesSkipped: vehicleSampleStats.duplicateCount,
+        detourCount,
+        durationMs: tickDurationMs,
+      })
     );
 
     return {
@@ -351,6 +448,13 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     };
   } catch (err) {
     consecutiveFailureCount++;
+    recordTickSample({
+      ok: false,
+      source,
+      startedAt: lastTickStartedAt,
+      durationMs: Date.now() - tickStartedAtMs,
+      error: err.message,
+    });
     console.error(`[detourWorker] tick failed (${consecutiveFailureCount} consecutive):`, err.message);
     return {
       ok: false,
@@ -415,7 +519,9 @@ function getStatus() {
     activeDetours: detourSummary,
     baseline: getBaselineStatus(),
     vehicleSamples: vehicleSampleFreshness.getStats(),
+    samplingHealth: summarizeSamplingHealth(),
     vehicleFeed: getVehicleFeedStatus(),
+    roadMatching: getRoadMatcherStats(),
     recentEvents: [...recentEvents],
     errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures },
   };

@@ -39,6 +39,10 @@ import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
 import { useAuth } from './AuthContext';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
+import {
+  filterRouteMappingToVisibleRoutes,
+  getVisibleRoutesForDate,
+} from '../utils/routeVisibility';
 
 const TransitContext = createContext(null);
 const TransitStaticContext = createContext(null);
@@ -596,9 +600,30 @@ export const TransitProvider = ({ children }) => {
     }
   }, []);
 
+  const routeVisibilityDate = useMemo(() => new Date(), [lastStaticRefreshAt]);
+  const visibleRoutes = useMemo(() => getVisibleRoutesForDate({
+    routes,
+    trips,
+    calendar,
+    calendarDates,
+    date: routeVisibilityDate,
+  }), [calendar, calendarDates, routeVisibilityDate, routes, trips]);
+  const visibleRouteShapeMapping = useMemo(() => filterRouteMappingToVisibleRoutes({
+    mapping: routeShapeMapping,
+    visibleRoutes,
+  }), [routeShapeMapping, visibleRoutes]);
+  const visibleRouteStopsMapping = useMemo(() => filterRouteMappingToVisibleRoutes({
+    mapping: routeStopsMapping,
+    visibleRoutes,
+  }), [routeStopsMapping, visibleRoutes]);
+  const visibleRouteStopSequencesMapping = useMemo(() => filterRouteMappingToVisibleRoutes({
+    mapping: routeStopSequencesMapping,
+    visibleRoutes,
+  }), [routeStopSequencesMapping, visibleRoutes]);
+
   const getRouteById = useCallback(
-    (routeId) => routes.find((route) => route.id === routeId),
-    [routes]
+    (routeId) => visibleRoutes.find((route) => route.id === routeId),
+    [visibleRoutes]
   );
 
   const getStopById = useCallback(
@@ -608,13 +633,13 @@ export const TransitProvider = ({ children }) => {
 
   const getShapesForRoute = useCallback(
     (routeId) => {
-      const shapeIds = routeShapeMapping[routeId] || [];
+      const shapeIds = visibleRouteShapeMapping[routeId] || [];
       return shapeIds.map((shapeId) => ({
         id: shapeId,
         coordinates: shapes[shapeId] || [],
       }));
     },
-    [routeShapeMapping, shapes]
+    [visibleRouteShapeMapping, shapes]
   );
 
   const getVehiclesForRoute = useCallback(
@@ -811,7 +836,7 @@ export const TransitProvider = ({ children }) => {
       isLoading: isLoadingStatic,
       isRefreshing: isRefreshingStatic,
       isOffline,
-      isAvailable: routes.length > 0 && stops.length > 0,
+      isAvailable: visibleRoutes.length > 0 && stops.length > 0,
       usingCachedData,
       lastSuccessAt: lastStaticRefreshAt,
       lastFailureAt: lastStaticFailureAt,
@@ -844,7 +869,7 @@ export const TransitProvider = ({ children }) => {
       error: proxyHealthError,
     },
     counts: {
-      routes: routes.length,
+      routes: visibleRoutes.length,
       stops: stops.length,
       vehicles: vehicles.length,
       alerts: serviceAlerts.length,
@@ -853,7 +878,7 @@ export const TransitProvider = ({ children }) => {
     isOffline,
     isLoadingStatic,
     isRefreshingStatic,
-    routes.length,
+    visibleRoutes.length,
     stops.length,
     usingCachedData,
     lastStaticRefreshAt,
@@ -933,7 +958,8 @@ export const TransitProvider = ({ children }) => {
   }, [diagnostics]);
 
   const staticValue = useMemo(() => ({
-    routes,
+    routes: visibleRoutes,
+    allRoutes: routes,
     stops,
     shapes,
     processedShapes,
@@ -942,9 +968,12 @@ export const TransitProvider = ({ children }) => {
     calendar,
     calendarDates,
     tripMapping,
-    routeShapeMapping,
-    routeStopsMapping,
-    routeStopSequencesMapping,
+    routeShapeMapping: visibleRouteShapeMapping,
+    allRouteShapeMapping: routeShapeMapping,
+    routeStopsMapping: visibleRouteStopsMapping,
+    allRouteStopsMapping: routeStopsMapping,
+    routeStopSequencesMapping: visibleRouteStopSequencesMapping,
+    allRouteStopSequencesMapping: routeStopSequencesMapping,
     routingData,
     isRoutingReady,
     ensureRoutingData,
@@ -962,6 +991,7 @@ export const TransitProvider = ({ children }) => {
     getStopById,
     getShapesForRoute,
   }), [
+    visibleRoutes,
     routes,
     stops,
     shapes,
@@ -971,8 +1001,11 @@ export const TransitProvider = ({ children }) => {
     calendar,
     calendarDates,
     tripMapping,
+    visibleRouteShapeMapping,
     routeShapeMapping,
+    visibleRouteStopsMapping,
     routeStopsMapping,
+    visibleRouteStopSequencesMapping,
     routeStopSequencesMapping,
     routingData,
     isRoutingReady,

@@ -124,6 +124,77 @@ describe('WebMapView ordered line layers', () => {
   });
 });
 
+describe('WebMapView route line updates', () => {
+  test('updates route line style in place instead of requiring layer teardown', () => {
+    const map = {
+      getLayer: jest.fn(() => ({ id: 'layer' })),
+      setPaintProperty: jest.fn(),
+      setLayoutProperty: jest.fn(),
+    };
+
+    __TEST_ONLY__.updateLineLayerStyles({
+      map,
+      outlineId: 'route-outline',
+      fillId: 'route-fill',
+      labelId: 'route-label',
+      arrowId: 'route-arrow',
+      color: '#123456',
+      strokeWidth: 6,
+      opacity: 0.9,
+      outlineWidth: 2,
+      outlineColor: '#ffffff',
+      dashArray: null,
+      offset: 0,
+      routeLabel: null,
+      labelStyle: null,
+      showArrows: false,
+    });
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith('route-fill', 'line-color', '#123456');
+    expect(map.setPaintProperty).toHaveBeenCalledWith('route-fill', 'line-width', 6);
+    expect(map.setPaintProperty).toHaveBeenCalledWith('route-outline', 'line-width', 10);
+    expect(map.setPaintProperty).toHaveBeenCalledWith('route-arrow', 'text-opacity', 0);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('route-label', 'text-field', '');
+  });
+});
+
+describe('WebMapView marker offset stability', () => {
+  test('reuses one default offset for missing and zero offsets', () => {
+    const missingOffset = __TEST_ONLY__.normalizeMarkerOffset(undefined);
+    const zeroOffset = __TEST_ONLY__.normalizeMarkerOffset([0, 0]);
+    const stringZeroOffset = __TEST_ONLY__.normalizeMarkerOffset(['0', '0']);
+
+    expect(zeroOffset).toBe(missingOffset);
+    expect(stringZeroOffset).toBe(missingOffset);
+    expect(missingOffset).toEqual([0, 0]);
+  });
+
+  test('normalizes explicit numeric offsets', () => {
+    expect(__TEST_ONLY__.normalizeMarkerOffset(['4', -3])).toEqual([4, -3]);
+    expect(__TEST_ONLY__.normalizeMarkerOffset([Number.NaN, 2])).toEqual([0, 2]);
+  });
+});
+
+describe('WebMapView marker class stability', () => {
+  test('preserves MapLibre marker classes when marker content updates', () => {
+    const className = __TEST_ONLY__.mergeMarkerClassNames(
+      'bus-icon dimmed',
+      'old-class maplibregl-marker maplibregl-marker-anchor-center'
+    );
+
+    expect(className).toBe('bus-icon dimmed maplibregl-marker maplibregl-marker-anchor-center');
+  });
+
+  test('removes stale app classes while keeping MapLibre classes', () => {
+    const className = __TEST_ONLY__.mergeMarkerClassNames(
+      'bus-hub-marker',
+      'bus-icon maplibregl-marker maplibregl-marker-anchor-center'
+    );
+
+    expect(className).toBe('bus-hub-marker maplibregl-marker maplibregl-marker-anchor-center');
+  });
+});
+
 
 describe('WebMapView keyboard controls', () => {
   const createKeyboardEvent = (key, target = { tagName: 'div' }) => ({

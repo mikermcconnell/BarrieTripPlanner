@@ -25,8 +25,11 @@ jest.mock('@gorhom/bottom-sheet', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ children }) => React.createElement('BottomSheet', null, children),
-    BottomSheetScrollView: ({ children }) => React.createElement('BottomSheetScrollView', null, children),
+    default: React.forwardRef(({ children, ...props }, ref) => {
+      React.useImperativeHandle(ref, () => ({ snapToIndex: jest.fn() }));
+      return React.createElement('BottomSheet', props, children);
+    }),
+    BottomSheetScrollView: ({ children, ...props }) => React.createElement('BottomSheetScrollView', props, children),
   };
 });
 
@@ -42,6 +45,11 @@ const collectText = (node) => {
   if (typeof node === 'string' || typeof node === 'number') return [String(node)];
   if (Array.isArray(node)) return node.flatMap(collectText);
   return collectText(node.props?.children);
+};
+
+const flattenStyles = (style) => {
+  if (!Array.isArray(style)) return style ? [style] : [];
+  return style.flatMap(flattenStyles);
 };
 
 describe('DetourDetailsSheet MyRide timing', () => {
@@ -61,7 +69,12 @@ describe('DetourDetailsSheet MyRide timing', () => {
     act(() => {
       inst = create(React.createElement(DetourDetailsSheet, {
         routeId: '12',
-        detour: { routeId: '12', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detour: {
+          routeId: '12',
+          state: 'active',
+          detectedAt: Date.parse('2026-05-14T12:00:00Z'),
+          noticeStopImpactSourceNewsIds: ['route-12-detour'],
+        },
         transitNews: [{
           id: 'route-12-detour',
           title: 'Route 12 detour',
@@ -87,7 +100,12 @@ describe('DetourDetailsSheet MyRide timing', () => {
     act(() => {
       inst = create(React.createElement(DetourDetailsSheet, {
         routeId: '8',
-        detour: { routeId: '8', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detour: {
+          routeId: '8',
+          state: 'active',
+          detectedAt: Date.parse('2026-05-14T12:00:00Z'),
+          noticeStopImpactSourceNewsIds: ['route-8-detour'],
+        },
         transitNews: [{
           id: 'route-8-detour',
           title: 'Route 8 detour',
@@ -121,6 +139,79 @@ describe('DetourDetailsSheet MyRide timing', () => {
     expect(texts).toContain('Started: ');
     expect(texts).toContain('End time unknown.');
     expect(texts).not.toContain('MyRide timing');
+  });
+
+  test('keeps upcoming same-route notices separate from an active unplanned detour', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '8',
+        detour: { routeId: '8', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [{
+          id: 'route-8-upcoming',
+          title: 'Route 8 planned detour',
+          body: 'Route 8 will be on detour on May 27, 2026.',
+          affectedRoutes: ['8'],
+          publishedAt: Date.parse('2026-05-01T12:00:00Z'),
+        }],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Unplanned detour');
+    expect(texts).toContain('End time unknown.');
+    expect(texts).not.toContain('MyRide timing');
+    expect(texts).not.toContain('Route 8 planned detour');
+  });
+
+  test('native detour details open at half height with an expand affordance', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheet, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    const sheet = inst.root.findByType('BottomSheet');
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+
+    expect(sheet.props.index).toBe(0);
+    expect(sheet.props.snapPoints).toEqual(['22.5%', '78%']);
+    expect(texts).toContain('More details');
+    expect(inst.root.findByProps({ accessibilityLabel: 'Expand detour details' })).toBeDefined();
+  });
+
+  test('web detour details start half-height and can expand for more details', () => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourDetailsSheetWeb, {
+        routeId: '11',
+        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        transitNews: [],
+        onClose: jest.fn(),
+      }));
+    });
+
+    let sheet = inst.root.findByType('Animated.View');
+    let styles = flattenStyles(sheet.props.style);
+
+    expect(styles).toEqual(expect.arrayContaining([expect.objectContaining({ maxHeight: '39%' })]));
+    expect(inst.root.findAllByType('Text').flatMap((node) => collectText(node))).toContain('More details');
+
+    const expand = inst.root.findByProps({ accessibilityLabel: 'Expand detour details' });
+    act(() => expand.props.onPress());
+
+    sheet = inst.root.findByType('Animated.View');
+    styles = flattenStyles(sheet.props.style);
+    expect(styles).toEqual(expect.arrayContaining([expect.objectContaining({ maxHeight: '78%' })]));
+    expect(inst.root.findAllByType('Text').flatMap((node) => collectText(node))).toContain('Show less');
   });
 
   test('uses the supplied route color for branch route badges', () => {
