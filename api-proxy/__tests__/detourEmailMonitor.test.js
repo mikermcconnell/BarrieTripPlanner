@@ -71,6 +71,17 @@ function createFakeDb(initial = {}) {
               const previous = collection.get(docId) || {};
               collection.set(docId, options.merge ? { ...previous, ...data } : data);
             },
+            async create(data) {
+              if (collection.has(docId)) {
+                const error = new Error('Document already exists');
+                error.code = 6;
+                throw error;
+              }
+              collection.set(docId, data);
+            },
+            async delete() {
+              collection.delete(docId);
+            },
           };
         },
       };
@@ -398,8 +409,10 @@ describe('detour email monitor', () => {
       id: 'history-doc-1',
       eventType: 'DETOUR_DETECTED',
       eventId: 'detour-event-abc',
+      detourEventId: 'detour-event-abc',
       routeId: '8A',
       occurredAt: Date.parse('2026-06-24T14:00:00.000Z'),
+      riderVisible: true,
     };
     const notificationId = makeNotificationId(event);
     const db = createFakeDb({
@@ -418,6 +431,141 @@ describe('detour email monitor', () => {
 
     expect(result.sentCount).toBe(0);
     expect(result.skippedCount).toBe(1);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  test('dedupes repeated history records for the same detour event', async () => {
+    const db = createFakeDb();
+    const baseEvent = {
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'detour-event-repeat',
+      detourEventId: 'detour-event-repeat',
+      routeId: '8A',
+      detectedAt: Date.parse('2026-06-24T13:55:00.000Z'),
+      riderVisible: true,
+    };
+    const sendEmail = jest.fn().mockResolvedValue({ id: 'email-repeat' });
+
+    const result = await runDetourEmailMonitor({
+      env: BASE_ENV,
+      db,
+      queryDetourHistory: jest.fn().mockResolvedValue([
+        {
+          ...baseEvent,
+          id: 'history-doc-repeat-2',
+          occurredAt: Date.parse('2026-06-24T14:05:00.000Z'),
+        },
+        {
+          ...baseEvent,
+          id: 'history-doc-repeat-1',
+          occurredAt: Date.parse('2026-06-24T14:00:00.000Z'),
+        },
+      ]),
+      getGtfsData: jest.fn().mockResolvedValue(null),
+      sendEmail,
+      now: () => Date.parse('2026-06-24T14:10:00.000Z'),
+    });
+
+    expect(result.sentCount).toBe(1);
+    expect(result.skipped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'already-notified' }),
+    ]));
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(new Set(result.sent.map((entry) => entry.notificationId)).size).toBe(1);
+  });
+
+  test('dedupes route-level events that share a physical detour id', async () => {
+    const db = createFakeDb();
+    const sendEmail = jest.fn().mockResolvedValue({ id: 'email-shared' });
+
+    const result = await runDetourEmailMonitor({
+      env: BASE_ENV,
+      db,
+      queryDetourHistory: jest.fn().mockResolvedValue([
+        {
+          id: 'history-doc-shared-8a',
+          eventType: 'DETOUR_DETECTED',
+          eventId: 'detour-event-8a',
+          detourEventId: 'detour-event-8a',
+          sharedDetourEventId: 'shared-detour-main',
+          routeId: '8A',
+          sharedRouteIds: ['8A', '8B'],
+          occurredAt: Date.parse('2026-06-24T14:00:00.000Z'),
+          riderVisible: true,
+        },
+        {
+          id: 'history-doc-shared-8b',
+          eventType: 'DETOUR_DETECTED',
+          eventId: 'detour-event-8b',
+          detourEventId: 'detour-event-8b',
+          sharedDetourEventId: 'shared-detour-main',
+          routeId: '8B',
+          sharedRouteIds: ['8A', '8B'],
+          occurredAt: Date.parse('2026-06-24T14:01:00.000Z'),
+          riderVisible: true,
+        },
+      ]),
+      getGtfsData: jest.fn().mockResolvedValue(null),
+      sendEmail,
+      now: () => Date.parse('2026-06-24T14:10:00.000Z'),
+    });
+
+    expect(result.sentCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(makeNotificationId({
+      eventType: 'DETOUR_DETECTED',
+      sharedDetourEventId: 'shared-detour-main',
+      detourEventId: 'detour-event-8a',
+      routeId: '8A',
+      occurredAt: Date.parse('2026-06-24T14:00:00.000Z'),
+    })).toBe(makeNotificationId({
+      eventType: 'DETOUR_DETECTED',
+      sharedDetourEventId: 'shared-detour-main',
+      detourEventId: 'detour-event-8b',
+      routeId: '8B',
+      occurredAt: Date.parse('2026-06-24T14:01:00.000Z'),
+    }));
+  });
+
+  test('recognizes older notification records by detour event id', async () => {
+    const event = {
+      id: 'history-doc-new',
+      eventType: 'DETOUR_DETECTED',
+      eventId: 'detour-event-legacy',
+      detourEventId: 'detour-event-legacy',
+      routeId: '8A',
+      occurredAt: Date.parse('2026-06-24T14:05:00.000Z'),
+      detectedAt: Date.parse('2026-06-24T13:55:00.000Z'),
+      riderVisible: true,
+    };
+    const oldNotificationId = 'old-timestamp-based-id';
+    const db = createFakeDb({
+      detourEmailNotifications: {
+        [oldNotificationId]: {
+          notificationId: oldNotificationId,
+          eventType: 'DETOUR_DETECTED',
+          detourEventId: 'detour-event-legacy',
+          routeId: '8A',
+          sentAt: Date.parse('2026-06-24T14:00:00.000Z'),
+        },
+      },
+    });
+    const sendEmail = jest.fn();
+
+    const result = await runDetourEmailMonitor({
+      env: BASE_ENV,
+      db,
+      queryDetourHistory: jest.fn().mockResolvedValue([event]),
+      getGtfsData: jest.fn().mockResolvedValue(null),
+      sendEmail,
+      now: () => Date.parse('2026-06-24T14:10:00.000Z'),
+    });
+
+    expect(result.sentCount).toBe(0);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ id: 'history-doc-new', reason: 'already-notified' }),
+    ]);
     expect(sendEmail).not.toHaveBeenCalled();
   });
 

@@ -430,14 +430,45 @@ function drawPolyline(ctx, points, project, options = {}) {
 }
 
 
+function normalizeIdentityValue(value) {
+  return String(value == null ? '' : value).trim();
+}
+
+function normalizeIdentityList(values = []) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map(normalizeIdentityValue).filter(Boolean))].sort();
+}
+
+function makeNotificationIdentityKey(event = {}) {
+  const eventType = normalizeIdentityValue(event.eventType || 'DETOUR_EVENT').toUpperCase();
+  const sharedDetourEventId = normalizeIdentityValue(event.sharedDetourEventId);
+  if (sharedDetourEventId) return `${eventType}|shared:${sharedDetourEventId}`;
+
+  const detourEventId = normalizeIdentityValue(event.detourEventId || event.eventId);
+  if (detourEventId) return `${eventType}|detour:${detourEventId}`;
+
+  const signatureParts = [
+    `routes:${normalizeIdentityList(event.sharedRouteIds).join(',') || normalizeIdentityValue(event.routeId)}`,
+    `location:${cleanLabel(event.eventLocationLabel || event.detourZone?.label || event.locationText || event.title || '')}`,
+    `closed:${normalizeIdentityList(collectRoadNamesFromFields(event, [
+      'closedSegmentRoadNames',
+      'skippedSegmentRoadNames',
+      'closedRoadNames',
+    ])).join(',')}`,
+    `detour:${normalizeIdentityList(collectLikelyRoadNames(event)).join(',')}`,
+    `stops:${normalizeIdentityList([...collectSkippedStops(event), ...collectAffectedStops(event)]).join(',')}`,
+  ].filter((part) => !part.endsWith(':'));
+
+  if (signatureParts.length > 0) return `${eventType}|${signatureParts.join('|')}`;
+
+  const routeId = normalizeIdentityValue(event.routeId);
+  if (routeId) return `${eventType}|route:${routeId}`;
+
+  return `${eventType}|history:${normalizeIdentityValue(event.id) || 'unknown'}`;
+}
+
 function makeNotificationId(event) {
-  const stableParts = [
-    event.eventType || '',
-    event.eventId || event.detourEventId || event.id || '',
-    event.routeId || '',
-    event.detectedAt || '',
-    event.occurredAt || '',
-  ];
+  const stableParts = [makeNotificationIdentityKey(event)];
   return crypto
     .createHash('sha256')
     .update(stableParts.join('|'))
@@ -685,12 +716,128 @@ async function hasNotification(db, collectionName, notificationId) {
   return snapshot.exists;
 }
 
-async function recordNotification(db, collectionName, notificationId, event, details = {}) {
-  await db.collection(collectionName).doc(notificationId).set({
+function isAlreadyExistsError(err) {
+  return err?.code === 6 ||
+    err?.code === 'already-exists' ||
+    err?.code === 'ALREADY_EXISTS' ||
+    /already exists/i.test(String(err?.message || ''));
+}
+
+function notificationRecordMatchesEvent(record = {}, event = {}) {
+  if (!record || typeof record !== 'object') return false;
+  const recordType = normalizeIdentityValue(record.eventType).toUpperCase();
+  const eventType = normalizeIdentityValue(event.eventType).toUpperCase();
+  if (recordType && eventType && recordType !== eventType) return false;
+
+  const identityKey = makeNotificationIdentityKey(event);
+  if (normalizeIdentityValue(record.notificationIdentityKey) === identityKey) return true;
+
+  const sharedDetourEventId = normalizeIdentityValue(event.sharedDetourEventId);
+  if (sharedDetourEventId && normalizeIdentityValue(record.sharedDetourEventId) === sharedDetourEventId) {
+    return true;
+  }
+
+  const detourEventId = normalizeIdentityValue(event.detourEventId || event.eventId);
+  if (detourEventId && (
+    normalizeIdentityValue(record.detourEventId) === detourEventId ||
+    normalizeIdentityValue(record.eventId) === detourEventId
+  )) {
+    return true;
+  }
+
+  return false;
+}
+
+async function findExistingNotificationForEvent(db, collectionName, event) {
+  const collection = db.collection(collectionName);
+  if (typeof collection.where !== 'function') return false;
+
+  const probes = [
+    ['notificationIdentityKey', makeNotificationIdentityKey(event)],
+    ['sharedDetourEventId', event.sharedDetourEventId],
+    ['detourEventId', event.detourEventId || event.eventId],
+    ['eventId', event.eventId || event.detourEventId],
+  ];
+  const seen = new Set();
+
+  for (const [fieldName, rawValue] of probes) {
+    const value = normalizeIdentityValue(rawValue);
+    const probeKey = `${fieldName}:${value}`;
+    if (!value || seen.has(probeKey)) continue;
+    seen.add(probeKey);
+    try {
+      const snapshot = await collection.where(fieldName, '==', value).limit(10).get();
+      const docs = Array.isArray(snapshot?.docs) ? snapshot.docs : [];
+      if (docs.some((doc) => notificationRecordMatchesEvent(
+        typeof doc.data === 'function' ? doc.data() : {},
+        event
+      ))) {
+        return true;
+      }
+    } catch (_err) {
+      // Non-fatal. Some test doubles/deployments may not support this query.
+    }
+  }
+
+  return false;
+}
+
+async function reserveNotification(db, collectionName, notificationId, event) {
+  const ref = db.collection(collectionName).doc(notificationId);
+  const reservation = {
     notificationId,
+    notificationIdentityKey: makeNotificationIdentityKey(event),
+    status: 'pending',
     eventType: event.eventType || null,
     eventId: event.eventId || event.detourEventId || null,
     detourEventId: event.detourEventId || event.eventId || null,
+    sharedDetourEventId: event.sharedDetourEventId || null,
+    historyDocId: event.id || null,
+    routeId: event.routeId || null,
+    sharedRouteIds: Array.isArray(event.sharedRouteIds) ? event.sharedRouteIds : [],
+    reservedAt: Date.now(),
+  };
+
+  if (typeof ref.create === 'function') {
+    try {
+      await ref.create(reservation);
+      return true;
+    } catch (err) {
+      if (isAlreadyExistsError(err)) return false;
+      throw err;
+    }
+  }
+
+  const snapshot = typeof ref.get === 'function' ? await ref.get() : null;
+  if (snapshot?.exists) return false;
+  await ref.set(reservation, { merge: false });
+  return true;
+}
+
+async function releaseNotificationReservation(db, collectionName, notificationId, err) {
+  const ref = db.collection(collectionName).doc(notificationId);
+  if (typeof ref.delete === 'function') {
+    await ref.delete();
+    return;
+  }
+  if (typeof ref.set === 'function') {
+    await ref.set({
+      status: 'failed',
+      failedAt: Date.now(),
+      failureMessage: String(err?.message || err || 'email-send-failed').slice(0, 500),
+    }, { merge: true });
+  }
+}
+
+async function recordNotification(db, collectionName, notificationId, event, details = {}) {
+  await db.collection(collectionName).doc(notificationId).set({
+    notificationId,
+    notificationIdentityKey: makeNotificationIdentityKey(event),
+    status: 'sent',
+    eventType: event.eventType || null,
+    eventId: event.eventId || event.detourEventId || null,
+    detourEventId: event.detourEventId || event.eventId || null,
+    sharedDetourEventId: event.sharedDetourEventId || null,
     historyDocId: event.id || null,
     routeId: event.routeId || null,
     sharedRouteIds: Array.isArray(event.sharedRouteIds) ? event.sharedRouteIds : [],
@@ -779,19 +926,33 @@ async function runDetourEmailMonitor({
     }
 
     const notificationId = makeNotificationId(activeEvent);
-    if (await hasNotification(db, notificationCollection, notificationId)) {
+    if (
+      await hasNotification(db, notificationCollection, notificationId) ||
+      await findExistingNotificationForEvent(db, notificationCollection, activeEvent)
+    ) {
+      skipped.push({ id: event.id || event.eventId || null, reason: 'already-notified' });
+      continue;
+    }
+
+    if (!await reserveNotification(db, notificationCollection, notificationId, activeEvent)) {
       skipped.push({ id: event.id || event.eventId || null, reason: 'already-notified' });
       continue;
     }
 
     const emailEvent = enrichEventStopNames(activeEvent, await getGtfsDataOnce());
     const message = buildEmailMessage(emailEvent, { appUrl });
-    const providerResult = await sendEmail({
-      apiKey,
-      from,
-      recipients,
-      message,
-    });
+    let providerResult;
+    try {
+      providerResult = await sendEmail({
+        apiKey,
+        from,
+        recipients,
+        message,
+      });
+    } catch (err) {
+      await releaseNotificationReservation(db, notificationCollection, notificationId, err);
+      throw err;
+    }
     await recordNotification(db, notificationCollection, notificationId, emailEvent, providerResult || {});
     sent.push({
       id: event.id || event.eventId || null,
