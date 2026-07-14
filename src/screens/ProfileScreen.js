@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   formatSavedTransitSummary,
 } from '../utils/profileViewModel';
 import { getDesktopContentFrameStyle, isWideWebViewport } from '../utils/webLayout';
+import { detourReviewService } from '../services/detourReviewService';
 
 const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -41,6 +42,19 @@ const ProfileScreen = ({ navigation }) => {
   const favoriteStops = favorites?.stops || [];
   const favoriteRoutes = favorites?.routes || [];
   const accountView = buildProfileAccountViewModel({ isAuthenticated, user });
+  const [canReviewDetours, setCanReviewDetours] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAuthenticated) {
+      setCanReviewDetours(false);
+      return undefined;
+    }
+    detourReviewService.getAccess()
+      .then((result) => !cancelled && setCanReviewDetours(result.canReview === true))
+      .catch(() => !cancelled && setCanReviewDetours(false));
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.uid]);
   const statsView = buildProfileStatsViewModel({
     isAuthenticated,
     favorites,
@@ -86,6 +100,13 @@ const ProfileScreen = ({ navigation }) => {
       id: 'your-transit',
       title: 'Your transit',
       items: [
+        ...(canReviewDetours ? [{
+          id: 'detour-review',
+          icon: 'Map',
+          title: 'Detour Review',
+          subtitle: 'Label detector evidence and rollout quality',
+          onPress: () => navigation.navigate('DetourReview'),
+        }] : []),
         {
           id: 'favorites',
           icon: 'Star',

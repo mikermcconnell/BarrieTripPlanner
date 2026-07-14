@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "normal-service-2026-07-14-route-8a-downtown-hub-egress",
+  "routeId": "8A",
+  "status": "inactive",
+  "observedAt": "2026-07-14T09:23:00-04:00",
+  "source": "operator-confirmed normal Downtown Hub terminal egress plus live Firestore/runtime and GTFS review",
+  "notes": "Buses normally leave Stop 2 through Simcoe, Mary, and Dunlop before joining the scheduled Route 8A shape on Maple."
+}

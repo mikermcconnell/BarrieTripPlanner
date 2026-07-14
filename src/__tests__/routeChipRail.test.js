@@ -84,4 +84,18 @@ describe('RouteChipRail', () => {
       expect.objectContaining({ paddingRight: 28 })
     );
   });
+
+  test('uses accessible chip sizing and selected state', () => {
+    const inst = render(React.createElement(RouteChipRail, {
+      routes: [{ id: '400', shortName: '400' }],
+      selectedRoutes: new Set(['400']),
+      getRouteColor: () => '#00BCD4',
+    }));
+
+    const selected = inst.root.findByProps({ accessibilityLabel: 'Hide route family 400 on map' });
+    expect(selected.props.accessibilityState).toEqual({ selected: true });
+    expect(selected.props.style).toEqual(expect.arrayContaining([
+      expect.objectContaining({ height: 44, minWidth: 48 }),
+    ]));
+  });
 });

@@ -14,6 +14,18 @@ const QUICK_OFFSETS = [
   { label: '+1h', minutes: 60 },
 ];
 
+const FUTURE_TIME_BUFFER_MS = 5 * 60 * 1000;
+
+const clampFutureTripTime = (date) => {
+  const candidate = new Date(date);
+  if (!Number.isFinite(candidate.getTime())) {
+    return new Date(Date.now() + FUTURE_TIME_BUFFER_MS);
+  }
+  return candidate.getTime() < Date.now()
+    ? new Date(Date.now() + FUTURE_TIME_BUFFER_MS)
+    : candidate;
+};
+
 const formatTime = (date) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
@@ -75,14 +87,14 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
     if (newMode === 'now') {
       onChange(new Date(), 'now');
     } else {
-      onChange(value, newMode);
+      onChange(clampFutureTripTime(value), newMode);
     }
   };
 
   const handleQuickSelect = (minutes) => {
     const baseTime = value instanceof Date ? value : new Date(value);
     const baseTimestamp = Number.isFinite(baseTime.getTime()) ? baseTime.getTime() : Date.now();
-    const newTime = new Date(baseTimestamp + minutes * 60 * 1000);
+    const newTime = clampFutureTripTime(new Date(baseTimestamp + minutes * 60 * 1000));
     onChange(newTime, mode);
   };
 
@@ -96,7 +108,7 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
       tomorrow.setDate(tomorrow.getDate() + 1);
       newDate.setFullYear(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
     }
-    onChange(newDate, mode);
+    onChange(clampFutureTripTime(newDate), mode);
   };
 
   const openCustomPicker = () => {
@@ -113,7 +125,7 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
   const handleCustomDone = () => {
     const newDate = new Date(value);
     newDate.setHours(customHour, customMinute, 0, 0);
-    onChange(newDate, mode);
+    onChange(clampFutureTripTime(newDate), mode);
     setShowCustomPicker(false);
   };
 
@@ -149,7 +161,7 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
   const selectCalendarDate = (date) => {
     const newDate = new Date(value);
     newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-    onChange(newDate, mode);
+    onChange(clampFutureTripTime(newDate), mode);
     setShowCalendarPicker(false);
   };
 

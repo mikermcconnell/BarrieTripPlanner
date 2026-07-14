@@ -4,6 +4,7 @@ const { createDetourRunLock } = require('./detourRunLock');
 const { createOffsetSampleScheduler } = require('./detourOffsetTasks');
 const { buildDetourStorageConfig } = require('../detour/storageConfig');
 const { getDetectorForStorageConfig } = require('../detour/detectorSelector');
+const { getEligibleDetourReviewSummary } = require('./detourReviewOps');
 
 const DEFAULT_ROLLOUT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FALSE_POSITIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,6 +12,7 @@ const DEFAULT_STALE_TICK_MS = 5 * 60 * 1000;
 const FALSE_POSITIVE_DURATION_MS = 5 * 60 * 1000;
 const SUSPICIOUS_SHORT_LIVED_DURATION_MS = 15 * 60 * 1000;
 const MAX_FALSE_POSITIVE_RATE = 0.10;
+const DEFAULT_MIN_LABELLED_DETECTIONS = 20;
 const MAX_PUBLISH_FAILURE_RATE = 0.05;
 const MAX_CONSECUTIVE_FAILURES = 2;
 const DEFAULT_BURST_DURATION_MS = 50 * 1000;
@@ -91,7 +93,7 @@ function buildLaunchReadinessChecks({
   currentTime,
   publishFailureRate,
   flapping,
-  falsePositiveRate,
+  labelledDetectionQuality,
   baselineDivergence,
   staleAutoClears,
   staleTickMs,
@@ -157,11 +159,11 @@ function buildLaunchReadinessChecks({
       detail: flapping.flappingRoutes,
     },
     {
-      id: 'false_positive_rate_under_target',
-      ok: falsePositiveRate.rate == null || falsePositiveRate.rate < MAX_FALSE_POSITIVE_RATE,
+      id: 'labelled_detection_precision',
+      ok: labelledDetectionQuality.ready === true,
       severity: 'warning',
-      message: `False positive rate is below ${Math.round(MAX_FALSE_POSITIVE_RATE * 100)}%`,
-      detail: falsePositiveRate,
+      message: 'Operator-labelled detections meet the minimum sample and precision target',
+      detail: labelledDetectionQuality,
     },
     {
       id: 'no_recent_stale_auto_clears',
@@ -191,6 +193,53 @@ function buildLaunchReadinessChecks({
 function normalizeConfidence(value) {
   const confidence = value == null ? 'unknown' : String(value).trim().toLowerCase();
   return confidence || 'unknown';
+}
+
+function normalizeQualityLabel(event = {}) {
+  const value = String(
+    event.qualityLabel || event.validationLabel || event.operatorLabel || ''
+  ).trim().toLowerCase();
+  if (['true-positive', 'true_positive', 'tp', 'confirmed'].includes(value)) return 'true-positive';
+  if (['false-positive', 'false_positive', 'fp', 'rejected'].includes(value)) return 'false-positive';
+  return null;
+}
+
+function summarizeLabelledDetections(events, minReviewedCount = DEFAULT_MIN_LABELLED_DETECTIONS) {
+  const labels = (Array.isArray(events) ? events : []).map(normalizeQualityLabel).filter(Boolean);
+  const truePositiveCount = labels.filter((label) => label === 'true-positive').length;
+  const falsePositiveCount = labels.filter((label) => label === 'false-positive').length;
+  const reviewedCount = labels.length;
+  const precision = reviewedCount > 0 ? truePositiveCount / reviewedCount : null;
+  const targetPrecision = 1 - MAX_FALSE_POSITIVE_RATE;
+  const enoughReviews = reviewedCount >= minReviewedCount;
+  const meetsPrecision = precision != null && precision >= targetPrecision;
+  return {
+    reviewedCount,
+    truePositiveCount,
+    falsePositiveCount,
+    precision,
+    targetPrecision,
+    minReviewedCount,
+    enoughReviews,
+    meetsPrecision,
+    ready: enoughReviews && meetsPrecision,
+    reason: !enoughReviews
+      ? 'insufficient-labelled-sample'
+      : meetsPrecision
+        ? 'target-met'
+        : 'precision-below-target',
+  };
+}
+
+function isTechnicalSupersedeClear(event = {}) {
+  const reason = String(event.clearReason || '').trim().toLowerCase();
+  return reason.startsWith('superseded-by-') || reason === 'baseline-auto-updated';
+}
+
+function getFlappingIdentity(event = {}) {
+  const routeId = event.routeId || null;
+  const eventId = event.sharedDetourEventId || event.detourEventId || event.eventId || routeId;
+  return routeId && eventId ? { routeId, eventId: String(eventId) } : null;
 }
 
 function summarizeShortLivedDetours(events, maxDurationMs) {
@@ -230,6 +279,7 @@ function createDetourOps({
   offsetSampleScheduler = null,
   runLock = null,
   env = process.env,
+  queryReviewedDetectionQuality = getEligibleDetourReviewSummary,
 } = {}) {
   let runOnceInProgress = false;
   const activeRunLock = runLock || createConfiguredRunLock(env);
@@ -524,7 +574,14 @@ function createDetourOps({
       detectedCount: 0,
       windowMs: falsePositiveWindowMs,
       note: 'No detections in window',
+      measurement: 'short-lived-clear-proxy',
+      readinessEligible: false,
     };
+    const minLabelledDetections = parsePositiveInt(
+      env.DETOUR_MIN_LABELLED_DETECTIONS,
+      DEFAULT_MIN_LABELLED_DETECTIONS
+    );
+    let labelledDetectionQuality = summarizeLabelledDetections([], minLabelledDetections);
     let baselineDivergence = null;
 
     try {
@@ -543,15 +600,24 @@ function createDetourOps({
         limit: 200,
       });
 
-      const routeClearCounts = {};
+      const clearCounts = new Map();
       for (const event of clearedEvents) {
-        const route = event.routeId;
-        if (route) routeClearCounts[route] = (routeClearCounts[route] || 0) + 1;
+        if (isTechnicalSupersedeClear(event)) continue;
+        const identity = getFlappingIdentity(event);
+        if (!identity) continue;
+        const key = `${identity.routeId}\u0000${identity.eventId}`;
+        const current = clearCounts.get(key) || { ...identity, clearCount: 0 };
+        current.clearCount += 1;
+        clearCounts.set(key, current);
       }
 
-      const flappingRoutes = Object.entries(routeClearCounts)
-        .filter(([, count]) => count >= 2)
-        .map(([routeId, count]) => ({ routeId, clearCount: count }))
+      const flappingRoutes = [...clearCounts.values()]
+        .filter(({ clearCount }) => clearCount >= 2)
+        .map(({ routeId, eventId, clearCount }) => ({
+          routeId,
+          ...(eventId !== routeId ? { eventId } : {}),
+          clearCount,
+        }))
         .sort((a, b) => b.clearCount - a.clearCount);
 
       flapping = {
@@ -636,7 +702,16 @@ function createDetourOps({
         windowMs: falsePositiveWindowMs,
         maxFalsePositiveDurationMs: FALSE_POSITIVE_DURATION_MS,
         targetRate: MAX_FALSE_POSITIVE_RATE,
+        measurement: 'short-lived-clear-proxy',
+        readinessEligible: false,
       };
+      const auditedReviewSummary = await queryReviewedDetectionQuality({
+        minReviewedCount: minLabelledDetections,
+      });
+      labelledDetectionQuality = auditedReviewSummary || summarizeLabelledDetections(
+        detectedEvents,
+        minLabelledDetections
+      );
       if (detectedCount === 0) {
         falsePositiveRate.note = 'No detections in window';
       }
@@ -649,7 +724,7 @@ function createDetourOps({
       currentTime,
       publishFailureRate,
       flapping,
-      falsePositiveRate,
+      labelledDetectionQuality,
       baselineDivergence,
       staleAutoClears,
       staleTickMs,
@@ -673,6 +748,9 @@ function createDetourOps({
       activeDetourCount: Object.keys(status.activeDetours || {}).length,
       baseline: status.baseline || null,
       baselineDivergence,
+      samplingHealth: status.samplingHealth || null,
+      roadMatching: status.roadMatching || null,
+      detectorDecisionJournal: status.detectorDecisionJournal || null,
       publishFailureRate,
       flapping,
       durationStats,
@@ -680,6 +758,7 @@ function createDetourOps({
       staleAutoClears,
       suspiciousShortLivedDetours,
       falsePositiveRate,
+      labelledDetectionQuality,
       launchReadiness,
       featureFlags: {
         geometryUiEnabled: env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI === 'true',

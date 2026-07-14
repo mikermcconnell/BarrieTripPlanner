@@ -88,6 +88,7 @@ export function mapActiveDetourDoc(docId, data = {}) {
     riderVisible: data.riderVisible ?? true,
     riderVisibilityReason: data.riderVisibilityReason ?? null,
     staleForReview: Boolean(data.staleForReview),
+    canShowDetourPath: data.canShowDetourPath ?? null,
     segments: Array.isArray(data.segments)
       ? data.segments.map((segment) => normalizeDetourSegment(segment, eventId)).filter(Boolean)
       : [],
@@ -152,44 +153,49 @@ const mergeUniqueScalars = (...arrays) => {
 export function groupActiveDetourEventsByRoute(eventMap = {}) {
   const grouped = {};
 
-  Object.values(eventMap || {}).forEach((event) => {
-    if (!event?.routeId) return;
-    const routeId = event.routeId;
-    const existing = grouped[routeId];
-    if (!existing) {
-      grouped[routeId] = {
-        ...event,
-        eventCount: 1,
-        detourEvents: [event],
-        eventWindows: event.eventWindow ? [event.eventWindow] : [],
-        segments: Array.isArray(event.segments) ? [...event.segments] : [],
-      };
-      return;
-    }
+  // Hidden records are backend monitoring state. Mixing their suppressed
+  // segments into a visible same-route event can veto otherwise trusted map
+  // geometry, so only rider-visible records belong in the client read model.
+  Object.values(eventMap || {})
+    .filter((event) => event?.riderVisible !== false)
+    .forEach((event) => {
+      if (!event?.routeId) return;
+      const routeId = event.routeId;
+      const existing = grouped[routeId];
+      if (!existing) {
+        grouped[routeId] = {
+          ...event,
+          eventCount: 1,
+          detourEvents: [event],
+          eventWindows: event.eventWindow ? [event.eventWindow] : [],
+          segments: Array.isArray(event.segments) ? [...event.segments] : [],
+        };
+        return;
+      }
 
-    existing.eventCount += 1;
-    existing.detourEvents.push(event);
-    if (event.eventWindow) {
-      existing.eventWindows = [
-        ...(Array.isArray(existing.eventWindows) ? existing.eventWindows : []),
-        event.eventWindow,
-      ];
-    }
-    existing.vehicleCount = Math.max(existing.vehicleCount || 0, event.vehicleCount || 0);
-    existing.uniqueVehicleCount = Math.max(existing.uniqueVehicleCount || 0, event.uniqueVehicleCount || 0);
-    existing.currentVehicleCount = Math.max(existing.currentVehicleCount || 0, event.currentVehicleCount || 0);
-    existing.riderVisible = existing.riderVisible || event.riderVisible;
-    existing.staleForReview = Boolean(existing.staleForReview || event.staleForReview);
-    existing.confidence = betterConfidence(existing.confidence, event.confidence);
-    existing.state = existing.state === 'active' || event.state === 'active' ? 'active' : (existing.state || event.state || 'active');
-    existing.segments = mergeArrays(existing.segments, event.segments);
-    existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
-    existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
-    existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
-    existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
-    existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
-    existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
-  });
+      existing.eventCount += 1;
+      existing.detourEvents.push(event);
+      if (event.eventWindow) {
+        existing.eventWindows = [
+          ...(Array.isArray(existing.eventWindows) ? existing.eventWindows : []),
+          event.eventWindow,
+        ];
+      }
+      existing.vehicleCount = Math.max(existing.vehicleCount || 0, event.vehicleCount || 0);
+      existing.uniqueVehicleCount = Math.max(existing.uniqueVehicleCount || 0, event.uniqueVehicleCount || 0);
+      existing.currentVehicleCount = Math.max(existing.currentVehicleCount || 0, event.currentVehicleCount || 0);
+      existing.riderVisible = existing.riderVisible || event.riderVisible;
+      existing.staleForReview = Boolean(existing.staleForReview || event.staleForReview);
+      existing.confidence = betterConfidence(existing.confidence, event.confidence);
+      existing.state = existing.state === 'active' || event.state === 'active' ? 'active' : (existing.state || event.state || 'active');
+      existing.segments = mergeArrays(existing.segments, event.segments);
+      existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
+      existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
+      existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
+      existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
+      existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
+      existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
+    });
 
   return grouped;
 }

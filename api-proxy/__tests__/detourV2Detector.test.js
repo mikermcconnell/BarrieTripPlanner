@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const { createDetourV2Detector, _test } = require('../detourV2/detector');
 const { projectOntoPolyline } = require('../detour/projection');
 const { pointToPolylineDistance } = require('../geometry');
@@ -79,6 +82,58 @@ function route12CandidatePoint({
   };
 }
 
+function shape1Vehicle({
+  id,
+  routeId = '8A',
+  tripId,
+  longitude,
+  timestampMs,
+}) {
+  return vehicle({
+    id,
+    routeId,
+    tripId,
+    coordinate: { latitude: 44.393, longitude },
+    timestampMs,
+  });
+}
+
+function shape1CandidatePoint({
+  id,
+  tripId,
+  longitude,
+  timestampMs,
+}) {
+  const coordinate = { latitude: 44.393, longitude };
+  const projection = projectOntoPolyline(coordinate, shapes.get('shape-1'));
+  return {
+    vehicleId: id,
+    signature: tripId,
+    coordinate,
+    progressMeters: projection.progressMeters,
+    projectedPoint: projection.projectedPoint,
+    distanceMeters: projection.distanceMeters,
+    shapeId: 'shape-1',
+    timestampMs,
+  };
+}
+
+function shape1EventWindow(routeId, startPoint, endPoint) {
+  const start = Math.min(startPoint.progressMeters, endPoint.progressMeters);
+  const end = Math.max(startPoint.progressMeters, endPoint.progressMeters);
+  return {
+    routeId,
+    shapeId: 'shape-1',
+    coreStartProgressMeters: start,
+    coreEndProgressMeters: end,
+    confirmStartProgressMeters: Math.max(0, start - 250),
+    confirmEndProgressMeters: end + 250,
+    clearStartProgressMeters: Math.max(0, start - 400),
+    clearEndProgressMeters: end + 400,
+    frozen: false,
+  };
+}
+
 function detoursForRoute(result, routeId) {
   return Object.values(result || {}).filter((detour) => detour.routeId === routeId);
 }
@@ -88,6 +143,87 @@ function detourForRoute(result, routeId) {
 }
 
 describe('Auto Detour V2 detector', () => {
+
+  test('fills small inferred-path handoff gaps at the regular-route boundaries', () => {
+    const entryPoint = { latitude: 44.3900, longitude: -79.7000 };
+    const exitPoint = { latitude: 44.3900, longitude: -79.6960 };
+    const inferredPath = [
+      { latitude: 44.3905, longitude: -79.6995 },
+      { latitude: 44.3910, longitude: -79.6980 },
+      { latitude: 44.3905, longitude: -79.6965 },
+    ];
+
+    const result = _test.stitchSafeInferredPathHandoffs(
+      inferredPath,
+      entryPoint,
+      exitPoint,
+      { maxGapMeters: 150 }
+    );
+
+    expect(result.entryHandoffAdded).toBe(true);
+    expect(result.exitHandoffAdded).toBe(true);
+    expect(result.polyline[0]).toEqual(entryPoint);
+    expect(result.polyline[result.polyline.length - 1]).toEqual(exitPoint);
+  });
+
+  test('does not duplicate already-continuous inferred-path endpoints', () => {
+    const entryPoint = { latitude: 44.3900, longitude: -79.7000 };
+    const exitPoint = { latitude: 44.3900, longitude: -79.6960 };
+    const inferredPath = [
+      entryPoint,
+      { latitude: 44.3910, longitude: -79.6980 },
+      exitPoint,
+    ];
+
+    const result = _test.stitchSafeInferredPathHandoffs(
+      inferredPath,
+      entryPoint,
+      exitPoint,
+      { maxGapMeters: 150 }
+    );
+
+    expect(result.entryHandoffAdded).toBe(false);
+    expect(result.exitHandoffAdded).toBe(false);
+    expect(result.polyline).toEqual(inferredPath);
+  });
+
+  test('does not draw misleading straight handoffs across large gaps', () => {
+    const inferredPath = [
+      { latitude: 44.3950, longitude: -79.7000 },
+      { latitude: 44.3950, longitude: -79.6960 },
+    ];
+
+    const result = _test.stitchSafeInferredPathHandoffs(
+      inferredPath,
+      { latitude: 44.3900, longitude: -79.7000 },
+      { latitude: 44.3900, longitude: -79.6960 },
+      { maxGapMeters: 150 }
+    );
+
+    expect(result.entryHandoffAdded).toBe(false);
+    expect(result.exitHandoffAdded).toBe(false);
+    expect(result.polyline).toEqual(inferredPath);
+  });
+
+  test('can fill one safe handoff without inventing the unsafe side', () => {
+    const entryPoint = { latitude: 44.3900, longitude: -79.7000 };
+    const inferredPath = [
+      { latitude: 44.3905, longitude: -79.6995 },
+      { latitude: 44.3950, longitude: -79.6960 },
+    ];
+
+    const result = _test.stitchSafeInferredPathHandoffs(
+      inferredPath,
+      entryPoint,
+      { latitude: 44.3900, longitude: -79.6960 },
+      { maxGapMeters: 150 }
+    );
+
+    expect(result.entryHandoffAdded).toBe(true);
+    expect(result.exitHandoffAdded).toBe(false);
+    expect(result.polyline[0]).toEqual(entryPoint);
+    expect(result.polyline[result.polyline.length - 1]).toEqual(inferredPath[1]);
+  });
 
   function buildRoute400SparseFixture() {
     const shapeId = 'route-400-shape';
@@ -105,7 +241,7 @@ describe('Auto Detour V2 detector', () => {
     };
   }
 
-  test('hides sparse multi-day Route 400 detour when no current vehicle confirms it', () => {
+  test('does not confirm sparse multi-day Route 400 evidence', () => {
     const fixture = buildRoute400SparseFixture();
     const detector = createDetourV2Detector();
     const oldMs = Date.parse('2026-06-05T12:00:00Z');
@@ -121,30 +257,21 @@ describe('Auto Detour V2 detector', () => {
       vehicle({ id: 'route-400-fresh', routeId: '400', tripId: 'route-400-fresh-trip', coordinate: fixture.offRouteAt(-79.695), timestampMs: freshMs + 60_000 }),
       vehicle({ id: 'route-400-fresh', routeId: '400', tripId: 'route-400-fresh-trip', coordinate: fixture.offRouteAt(-79.694), timestampMs: freshMs + 120_000 }),
     ], fixture.shapes, fixture.mapping);
-    expect(detourForRoute(confirmed, '400')).toEqual(expect.objectContaining({
-      riderVisible: true,
-      currentVehicleCount: 1,
-    }));
+    expect(detourForRoute(confirmed, '400')).toBeNull();
 
     const noCurrentVehicle = detector.processVehicles([], fixture.shapes, fixture.mapping);
-    const detour = detourForRoute(noCurrentVehicle, '400');
-
-    expect(detour).toEqual(expect.objectContaining({
-      state: 'active',
-      riderVisible: false,
-      riderVisibilityReason: 'stale-sparse-evidence',
-      staleForReview: true,
-      currentVehicleCount: 0,
-      canShowDetourPath: false,
+    expect(detourForRoute(noCurrentVehicle, '400')).toBeNull();
+    expect(detector.getState().candidateEvidence['400']).toEqual(expect.objectContaining({
+      pointCount: 3,
+      confirmingSignatureCount: 1,
     }));
-    expect(detour.geometry.canShowDetourPath).toBe(true);
   });
 
-  test('keeps same-day Route 400 detour visible after current vehicle leaves the snapshot', () => {
+  test('does not confirm Route 400 from same-day trips two hours apart', () => {
     const fixture = buildRoute400SparseFixture();
     const detector = createDetourV2Detector();
     const firstMs = Date.parse('2026-06-09T12:00:00Z');
-    const secondMs = Date.parse('2026-06-09T16:00:00Z');
+    const secondMs = Date.parse('2026-06-09T14:00:00Z');
 
     detector.processVehicles([
       vehicle({ id: 'route-400-same-day-a', routeId: '400', tripId: 'route-400-same-day-a-trip', coordinate: fixture.offRouteAt(-79.698), timestampMs: firstMs }),
@@ -158,11 +285,10 @@ describe('Auto Detour V2 detector', () => {
 
     const noCurrentVehicle = detector.processVehicles([], fixture.shapes, fixture.mapping);
 
-    expect(detourForRoute(noCurrentVehicle, '400')).toEqual(expect.objectContaining({
-      riderVisible: true,
-      riderVisibilityReason: 'v2-confirmed',
-      currentVehicleCount: 0,
-      canShowDetourPath: true,
+    expect(detourForRoute(noCurrentVehicle, '400')).toBeNull();
+    expect(detector.getState().candidateEvidence['400']).toEqual(expect.objectContaining({
+      pointCount: 3,
+      confirmingSignatureCount: 1,
     }));
   });
 
@@ -797,6 +923,107 @@ describe('Auto Detour V2 detector', () => {
     ]);
   });
 
+  test('does not activate the normal Route 8A Downtown Hub terminal egress as a detour', () => {
+    const shapeId = 'route-8a-downtown-hub-start';
+    const shape = [
+      { latitude: 44.387753, longitude: -79.690237 },
+      { latitude: 44.3885539060152, longitude: -79.6909967464172 },
+      { latitude: 44.3893881068196, longitude: -79.6917524554937 },
+      { latitude: 44.3896175720523, longitude: -79.6919156711313 },
+      { latitude: 44.39039984, longitude: -79.69250726 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['8A', [shapeId]]]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'route-8a-terminal-bus-a',
+        tripId: 'route-8a-terminal-trip-a',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.3876953125, longitude: -79.69105529785156 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'route-8a-terminal-bus-a',
+        tripId: 'route-8a-terminal-trip-a',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.387611389160156, longitude: -79.6914291381836 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'route-8a-terminal-bus-a',
+        tripId: 'route-8a-terminal-trip-a',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.3879508972168, longitude: -79.69196319580078 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'route-8a-terminal-bus-b',
+        tripId: 'route-8a-terminal-trip-b',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.38863754272461, longitude: -79.69181060791016 },
+        timestampMs: 4000,
+      }),
+    ], testShapes, testMapping);
+
+    expect(detoursForRoute(result, '8A')).toEqual([]);
+    expect(detector.getState().routeProjectionSummaries['8A']).toEqual(expect.objectContaining({
+      ignoredRouteEdge: 4,
+      offRoute: 0,
+    }));
+    expect(detector.getRouteDebug('8A').projectionDiagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ classification: 'ignored-route-edge' }),
+      ])
+    );
+  });
+
+  test('still activates a materially off-route detour at the start of a route', () => {
+    const shapeId = 'strong-start-shape';
+    const shape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.694 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['12A', [shapeId]]]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'strong-start-bus-a',
+        routeId: '12A',
+        tripId: 'strong-start-trip-a',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.392, longitude: -79.700 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'strong-start-bus-a',
+        routeId: '12A',
+        tripId: 'strong-start-trip-a',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.392, longitude: -79.699 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'strong-start-bus-b',
+        routeId: '12A',
+        tripId: 'strong-start-trip-b',
+        tripShapeId: shapeId,
+        coordinate: { latitude: 44.392, longitude: -79.698 },
+        timestampMs: 3000,
+      }),
+    ], testShapes, testMapping);
+
+    expect(detourForRoute(result, '12A')).toEqual(expect.objectContaining({
+      routeId: '12A',
+      vehicleCount: 2,
+    }));
+  });
+
   test('keeps short no-skipped-stop GPS detours rider-visible when geometry is safe', () => {
     const shapeId = 'short-no-impact-shape';
     const shape = [
@@ -1246,6 +1473,109 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].geometry.inferredDetourPolyline).toHaveLength(3);
   });
 
+  test('does not confirm a detour by combining candidate evidence from different service days', () => {
+    const detector = createDetourV2Detector();
+    const oldMs = Date.parse('2026-07-01T12:00:00Z');
+    const currentMs = Date.parse('2026-07-14T12:00:00Z');
+
+    expect(detector.processVehicles([
+      vehicle({ id: 'old-bus-1', tripId: 'old-trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: oldMs }),
+      vehicle({ id: 'old-bus-2', tripId: 'old-trip-2', coordinate: { latitude: 44.395, longitude: -79.696 }, timestampMs: oldMs + 60_000 }),
+    ], shapes, routeShapeMapping)).toEqual({});
+
+    const result = detector.processVehicles([
+      vehicle({ id: 'current-bus', tripId: 'current-trip', coordinate: { latitude: 44.395, longitude: -79.694 }, timestampMs: currentMs }),
+    ], shapes, routeShapeMapping);
+
+    expect(result).toEqual({});
+    expect(detector.getState().candidateEvidence['8A']).toEqual(expect.objectContaining({
+      pointCount: 1,
+      confirmingSignatureCount: 1,
+    }));
+  });
+
+  test('uses one scheduled headway plus a buffer for candidate confirmation', () => {
+    const referenceMs = Date.parse('2026-07-14T16:00:00Z');
+    const scheduleIndex = {
+      timeZone: 'America/Toronto',
+      tripsByRouteId: new Map([['8A', [
+        { startTimeSeconds: 11.5 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 12 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 12.5 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 13 * 60 * 60, directionId: '0' },
+      ]]]),
+    };
+
+    expect(_test.getCandidateConfirmationTiming('8A', scheduleIndex, referenceMs)).toEqual({
+      windowMs: 47.5 * 60 * 1000,
+      headwayMs: 30 * 60 * 1000,
+      source: 'exact-route',
+      serviceDate: '20260714',
+    });
+  });
+
+  test('does not combine non-consecutive same-day trips but still confirms the next trip', () => {
+    const firstTripMs = Date.parse('2026-07-14T16:00:00Z');
+    const scheduleIndex = {
+      timeZone: 'America/Toronto',
+      tripsByRouteId: new Map([['8A', [
+        { startTimeSeconds: 11.5 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 12 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 12.5 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 13 * 60 * 60, directionId: '0' },
+        { startTimeSeconds: 13.5 * 60 * 60, directionId: '0' },
+      ]]]),
+    };
+    const firstTripEvidence = [
+      shape1Vehicle({ id: 'bus-1', tripId: 'trip-1', longitude: -79.698, timestampMs: firstTripMs }),
+      shape1Vehicle({ id: 'bus-1', tripId: 'trip-1', longitude: -79.696, timestampMs: firstTripMs + 30_000 }),
+      shape1Vehicle({ id: 'bus-1', tripId: 'trip-1', longitude: -79.694, timestampMs: firstTripMs + 60_000 }),
+    ];
+
+    const nonConsecutiveDetector = createDetourV2Detector();
+    expect(nonConsecutiveDetector.processVehicles(
+      firstTripEvidence,
+      shapes,
+      routeShapeMapping,
+      null,
+      { scheduleIndex }
+    )).toEqual({});
+    expect(nonConsecutiveDetector.processVehicles([
+      shape1Vehicle({
+        id: 'bus-2',
+        tripId: 'trip-2',
+        longitude: -79.692,
+        timestampMs: firstTripMs + 75 * 60 * 1000,
+      }),
+    ], shapes, routeShapeMapping, null, { scheduleIndex })).toEqual({});
+    expect(nonConsecutiveDetector.getState().candidateEvidence['8A']).toEqual(expect.objectContaining({
+      pointCount: 1,
+      confirmingSignatureCount: 1,
+    }));
+
+    const consecutiveDetector = createDetourV2Detector();
+    consecutiveDetector.processVehicles(
+      firstTripEvidence,
+      shapes,
+      routeShapeMapping,
+      null,
+      { scheduleIndex }
+    );
+    const confirmed = consecutiveDetector.processVehicles([
+      shape1Vehicle({
+        id: 'bus-2',
+        tripId: 'trip-2',
+        longitude: -79.692,
+        timestampMs: firstTripMs + 40 * 60 * 1000,
+      }),
+    ], shapes, routeShapeMapping, null, { scheduleIndex });
+
+    expect(confirmed['8A']).toEqual(expect.objectContaining({
+      state: 'active',
+      vehicleCount: 2,
+    }));
+  });
+
   test('uses 40m as the default off-route distance threshold', () => {
     const detector = createDetourV2Detector();
     const offsetCoordinate = (longitude) => ({
@@ -1284,6 +1614,15 @@ describe('Auto Detour V2 detector', () => {
       routeId: '8A',
       vehicleCount: 2,
       uniqueVehicleCount: 2,
+    }));
+    const geometry = result['8A'].geometry;
+    expect(geometry.inferredDetourPolyline[0]).toEqual(geometry.entryPoint);
+    expect(geometry.inferredDetourPolyline[geometry.inferredDetourPolyline.length - 1])
+      .toEqual(geometry.exitPoint);
+    expect(geometry.segments[0].inferredPathHandoff).toEqual(expect.objectContaining({
+      entryAdded: true,
+      exitAdded: true,
+      maxGapMeters: 150,
     }));
   });
 
@@ -1553,7 +1892,148 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].detourZone.startProgressMeters).toBeGreaterThan(1000);
   });
 
-  test('keeps stale mixed Route 100 evidence active but hides the rider path', () => {
+  test('keeps trusted rider geometry visible between buses instead of flapping to stale mixed', () => {
+    const detector = createDetourV2Detector();
+    const freshMs = 8 * 60 * 60 * 1000;
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-old',
+        tripId: 'trip-old',
+        coordinate: { latitude: 44.395, longitude: -79.683 },
+        timestampMs: 1000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const visible = detector.processVehicles([
+      vehicle({
+        id: 'bus-current-1',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.395, longitude: -79.684 },
+        timestampMs: freshMs,
+      }),
+      vehicle({
+        id: 'bus-current-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.682 },
+        timestampMs: freshMs + 1000,
+      }),
+      vehicle({
+        id: 'bus-current-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.680 },
+        timestampMs: freshMs + 2000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(visible['8A']).toEqual(expect.objectContaining({
+      riderVisible: true,
+      canShowDetourPath: true,
+    }));
+
+    const betweenBuses = detector.processVehicles([], shapes, routeShapeMapping);
+
+    expect(betweenBuses['8A']).toEqual(expect.objectContaining({
+      state: 'active',
+      riderVisible: true,
+      canShowDetourPath: true,
+      riderVisibilityReason: 'gps-clear-required',
+      currentVehicleCount: 0,
+    }));
+    expect(betweenBuses['8A'].geometry.inferredDetourPolyline).toEqual(
+      visible['8A'].geometry.inferredDetourPolyline
+    );
+  });
+
+  test('keeps trusted published geometry visible after scheduled state rehydration', () => {
+    const detector = createDetourV2Detector();
+    const freshMs = 8 * 60 * 60 * 1000;
+
+    detector.processVehicles([
+      vehicle({
+        id: 'bus-old',
+        tripId: 'trip-old',
+        coordinate: { latitude: 44.395, longitude: -79.683 },
+        timestampMs: 1000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    const visible = detector.processVehicles([
+      vehicle({
+        id: 'bus-current-1',
+        tripId: 'trip-current-1',
+        coordinate: { latitude: 44.395, longitude: -79.684 },
+        timestampMs: freshMs,
+      }),
+      vehicle({
+        id: 'bus-current-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.682 },
+        timestampMs: freshMs + 1000,
+      }),
+      vehicle({
+        id: 'bus-current-2',
+        tripId: 'trip-current-2',
+        coordinate: { latitude: 44.395, longitude: -79.680 },
+        timestampMs: freshMs + 2000,
+      }),
+    ], shapes, routeShapeMapping);
+    const eventId = visible['8A'].eventId;
+    const runtimeState = detector.serializeDetectorRuntimeState();
+    const runtimeDetour = runtimeState.activeEvents[eventId];
+
+    // The detector state is saved before publisher road matching enriches the
+    // active Firestore record. Its inferred geometry can be valid for the
+    // current bus but too sparse to trust across a scheduled reload.
+    runtimeDetour.geometry.likelyDetourPolyline = null;
+    runtimeDetour.geometry.inferredDetourPathStats = {
+      maxGapMeters: 500,
+      averageGapMeters: 400,
+    };
+
+    const sharedPublishedEventId = 'detour-event-route-8a';
+    const publishedSnapshot = {
+      ...runtimeDetour,
+      eventId,
+      detourEventId: sharedPublishedEventId,
+      detourVersion: 'v2',
+      detourModel: 'event-window',
+      sharedDetourEventId: sharedPublishedEventId,
+      riderVisible: true,
+      canShowDetourPath: true,
+      riderVisibilityReason: 'current-detour-vehicle',
+      geometry: {
+        ...runtimeDetour.geometry,
+        canShowDetourPath: true,
+        likelyDetourPolyline: [
+          { latitude: 44.395, longitude: -79.684 },
+          { latitude: 44.395, longitude: -79.682 },
+          { latitude: 44.395, longitude: -79.680 },
+        ],
+      },
+    };
+    const restored = createDetourV2Detector();
+    restored.hydrateRuntimeState(runtimeState);
+    restored.hydrateActiveDetourSnapshots({
+      [eventId]: publishedSnapshot,
+    });
+
+    const betweenBuses = restored.processVehicles([], shapes, routeShapeMapping);
+
+    expect(betweenBuses[eventId]).toEqual(expect.objectContaining({
+      state: 'active',
+      riderVisible: true,
+      canShowDetourPath: true,
+      riderVisibilityReason: 'gps-clear-required',
+      currentVehicleCount: 0,
+    }));
+    expect(betweenBuses[eventId].geometry.likelyDetourPolyline).toEqual(
+      publishedSnapshot.geometry.likelyDetourPolyline
+    );
+    expect(betweenBuses[sharedPublishedEventId]).toBeUndefined();
+  });
+
+  test('does not create stale mixed Route 100 evidence from widely separated trips', () => {
     const route100Mapping = new Map(routeShapeMapping);
     route100Mapping.set('100', ['shape-1']);
     const detector = createDetourV2Detector();
@@ -1591,23 +2071,10 @@ describe('Auto Detour V2 detector', () => {
 
     const result = detector.processVehicles([], shapes, route100Mapping);
 
-    expect(result['100']).toEqual(expect.objectContaining({
-      state: 'active',
-      riderVisible: false,
-      canShowDetourPath: false,
-      riderVisibilityReason: 'stale-mixed-evidence',
-      currentVehicleCount: 0,
-    }));
-    expect(result['100'].geometry).toEqual(expect.objectContaining({
-      canShowDetourPath: false,
-      skippedSegmentPolyline: null,
-      inferredDetourPolyline: null,
-      likelyDetourPolyline: null,
-      geometryTrustBlockedReason: 'stale-mixed-evidence',
-    }));
-    expect(result['100'].geometry.segments[0]).toEqual(expect.objectContaining({
-      canShowDetourPath: false,
-      geometryTrustBlockedReason: 'stale-mixed-evidence',
+    expect(result['100']).toBeUndefined();
+    expect(detector.getState().candidateEvidence['100']).toEqual(expect.objectContaining({
+      pointCount: 2,
+      confirmingSignatureCount: 2,
     }));
   });
 
@@ -1624,14 +2091,52 @@ describe('Auto Detour V2 detector', () => {
     })).toBe('stale-mixed-evidence');
   });
 
+  test('preserves stale-mixed safety suppression when a hydrated replay has no fresh samples', () => {
+    const fixture = JSON.parse(fs.readFileSync(path.join(
+      __dirname,
+      'fixtures',
+      'detour-v2',
+      'route-10-stale-mixed-live-2026-06-13.json'
+    ), 'utf8'));
+    const baseline = fixture.baselineRoute10;
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState(fixture.runtimeRoute10);
+    detector.hydrateActiveDetourSnapshots({
+      [fixture.expected.eventId]: fixture.activeDetourEvent,
+    });
+
+    const result = detector.processVehicles(
+      [],
+      new Map(Object.entries(baseline.shapes)),
+      new Map([[baseline.routeId, baseline.shapeIds]])
+    );
+    const replayed = result[fixture.expected.eventId];
+
+    expect(replayed).toEqual(expect.objectContaining({
+      riderVisible: false,
+      canShowDetourPath: false,
+      riderVisibilityReason: 'stale-mixed-evidence',
+    }));
+    expect(replayed.geometry.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      geometryTrustBlockedReason: 'stale-mixed-evidence',
+    }));
+  });
+
   test('clamps any route with a configured corridor', () => {
     const corridorEntryPoint = { latitude: 44.39, longitude: -79.684 };
     const corridorExitPoint = { latitude: 44.39, longitude: -79.680 };
+    const corridorPath = [
+      corridorEntryPoint,
+      { latitude: 44.392, longitude: -79.682 },
+      corridorExitPoint,
+    ];
     const detector = createDetourV2Detector({
       detourCorridors: {
         '8A': {
           entryPoint: corridorEntryPoint,
           exitPoint: corridorExitPoint,
+          detourPathPolyline: corridorPath,
           label: 'generic-test-corridor',
         },
       },
@@ -1672,8 +2177,119 @@ describe('Auto Detour V2 detector', () => {
     expect(geometry.exitPoint).toEqual(corridorExitPoint);
     expect(geometry.configuredCorridorLabel).toBe('generic-test-corridor');
     expect(geometry.gpsSupersedesPreviousPath).toBe(true);
-    expect(geometry.inferredDetourPolyline[0]).toEqual(corridorEntryPoint);
-    expect(geometry.inferredDetourPolyline[2]).toEqual(corridorExitPoint);
+    expect(geometry.configuredDetourPathSource).toBe('operator-configured');
+    expect(geometry.inferredDetourPolyline).toEqual(corridorPath);
+  });
+
+  test('publishes paired configured corridor geometry for opposite 8A and 8B directions', () => {
+    const route8AEntryPoint = { latitude: 44.39, longitude: -79.698 };
+    const route8AExitPoint = { latitude: 44.39, longitude: -79.682 };
+    const route8APath = [
+      route8AEntryPoint,
+      { latitude: 44.392, longitude: -79.690 },
+      route8AExitPoint,
+    ];
+    const route8BPath = [...route8APath].reverse();
+    const detector = createDetourV2Detector({
+      detourCorridors: {
+        '8A': {
+          entryPoint: route8AEntryPoint,
+          exitPoint: route8AExitPoint,
+          outlierDistanceMeters: 425,
+          detourPathPolyline: route8APath,
+          label: 'Livingstone-Anne',
+        },
+        '8B': {
+          entryPoint: route8AExitPoint,
+          exitPoint: route8AEntryPoint,
+          outlierDistanceMeters: 425,
+          detourPathPolyline: route8BPath,
+          label: 'Livingstone-Anne',
+        },
+      },
+    });
+
+    const result = detector.processVehicles([
+      shape1Vehicle({ id: '8a-bus-1', tripId: '8a-trip-1', longitude: -79.698, timestampMs: 1000 }),
+      shape1Vehicle({ id: '8a-bus-2', tripId: '8a-trip-2', longitude: -79.690, timestampMs: 2000 }),
+      shape1Vehicle({ id: '8a-bus-2', tripId: '8a-trip-2', longitude: -79.682, timestampMs: 3000 }),
+      shape1Vehicle({ id: '8b-bus-1', routeId: '8B', tripId: '8b-trip-1', longitude: -79.682, timestampMs: 1000 }),
+      shape1Vehicle({ id: '8b-bus-2', routeId: '8B', tripId: '8b-trip-2', longitude: -79.690, timestampMs: 2000 }),
+      shape1Vehicle({ id: '8b-bus-2', routeId: '8B', tripId: '8b-trip-2', longitude: -79.698, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+
+    const route8ADetours = detoursForRoute(result, '8A');
+    const route8BDetours = detoursForRoute(result, '8B');
+    expect(route8ADetours).toHaveLength(1);
+    expect(route8BDetours).toHaveLength(1);
+
+    expect(route8ADetours[0].geometry).toEqual(expect.objectContaining({
+      configuredCorridor: true,
+      configuredCorridorLabel: 'Livingstone-Anne',
+      entryPoint: route8AEntryPoint,
+      exitPoint: route8AExitPoint,
+      canShowDetourPath: true,
+    }));
+    expect(route8BDetours[0].geometry).toEqual(expect.objectContaining({
+      configuredCorridor: true,
+      configuredCorridorLabel: 'Livingstone-Anne',
+      entryPoint: route8AExitPoint,
+      exitPoint: route8AEntryPoint,
+      canShowDetourPath: true,
+    }));
+    expect(route8ADetours[0].geometry.inferredDetourPolyline).toEqual(route8APath);
+    expect(route8BDetours[0].geometry.inferredDetourPolyline).toEqual(route8BPath);
+  });
+
+  test('coalesces hydrated fragmented candidates inside a configured corridor', () => {
+    const route8AEntryPoint = { latitude: 44.39, longitude: -79.698 };
+    const route8AExitPoint = { latitude: 44.39, longitude: -79.682 };
+    const detector = createDetourV2Detector({
+      detourCorridors: {
+        '8A': {
+          entryPoint: route8AEntryPoint,
+          exitPoint: route8AExitPoint,
+          outlierDistanceMeters: 425,
+          label: 'Livingstone-Anne',
+        },
+      },
+    });
+    const pointA = shape1CandidatePoint({ id: 'bus-1', tripId: 'trip-1', longitude: -79.698, timestampMs: 1000 });
+    const pointB = shape1CandidatePoint({ id: 'bus-2', tripId: 'trip-2', longitude: -79.696, timestampMs: 2000 });
+    const pointC = shape1CandidatePoint({ id: 'bus-2', tripId: 'trip-2', longitude: -79.684, timestampMs: 3000 });
+    const pointD = shape1CandidatePoint({ id: 'bus-3', tripId: 'trip-3', longitude: -79.682, timestampMs: 4000 });
+
+    detector.hydrateRuntimeState({
+      eventCandidates: {
+        left: {
+          eventId: '8A:shape-1:0-200',
+          routeId: '8A',
+          shapeId: 'shape-1',
+          points: [pointA, pointB],
+          eventWindow: shape1EventWindow('8A', pointA, pointB),
+        },
+        right: {
+          eventId: '8A:shape-1:800-1000',
+          routeId: '8A',
+          shapeId: 'shape-1',
+          points: [pointC, pointD],
+          eventWindow: shape1EventWindow('8A', pointC, pointD),
+        },
+      },
+    });
+
+    const result = detector.processVehicles([], shapes, routeShapeMapping);
+    const detours = detoursForRoute(result, '8A');
+
+    expect(detours).toHaveLength(1);
+    expect(detours[0].geometry).toEqual(expect.objectContaining({
+      configuredCorridor: true,
+      configuredCorridorLabel: 'Livingstone-Anne',
+      entryPoint: route8AEntryPoint,
+      exitPoint: route8AExitPoint,
+      evidencePointCount: 4,
+      canShowDetourPath: true,
+    }));
   });
 
   test('marks revised GPS path as superseding previous V2 detour geometry', () => {
@@ -2275,6 +2891,76 @@ describe('Auto Detour V2 detector', () => {
     expect(result['12B']).not.toHaveProperty('clearReason');
   });
 
+  test('does not clear from a bus travelling backward through a direction-specific clear window', () => {
+    const clearShapeId = 'clear-shape';
+    const clearShape = [
+      { latitude: 44.390, longitude: -79.700 },
+      { latitude: 44.390, longitude: -79.696 },
+      { latitude: 44.390, longitude: -79.694 },
+      { latitude: 44.390, longitude: -79.692 },
+      { latitude: 44.390, longitude: -79.690 },
+      { latitude: 44.390, longitude: -79.686 },
+    ];
+    const clearShapes = new Map([[clearShapeId, clearShape]]);
+    const clearMapping = new Map([['12B', [clearShapeId]]]);
+    const progress = (index) => projectOntoPolyline(clearShape[index], clearShape).progressMeters;
+    const clearWindow = {
+      startProgressMeters: progress(0),
+      endProgressMeters: progress(5),
+      sourceStartProgressMeters: progress(2),
+      sourceEndProgressMeters: progress(3),
+      minCoverageRatio: 0.95,
+      shapeId: clearShapeId,
+    };
+    const detector = createDetourV2Detector();
+    detector.hydrateRuntimeState({
+      activeDetours: {
+        '12B': {
+          routeId: '12B',
+          state: 'active',
+          detectedAt: 1000,
+          lastSeenAt: 1000,
+          latestGpsEvidenceAt: 1000,
+          lastEvidenceAt: 1000,
+          vehicleCount: 2,
+          uniqueVehicleCount: 2,
+          detourZone: {
+            startProgressMeters: progress(2),
+            endProgressMeters: progress(3),
+            shapeId: clearShapeId,
+          },
+          clearWindow,
+          clearWindows: [clearWindow],
+          geometry: {
+            shapeId: clearShapeId,
+            segments: [{
+              state: 'active',
+              clearWindow,
+              detourZone: {
+                startProgressMeters: progress(2),
+                endProgressMeters: progress(3),
+                shapeId: clearShapeId,
+              },
+            }],
+          },
+        },
+      },
+    });
+
+    const result = detector.processVehicles([...clearShape].reverse().map((coordinate, index) => (
+      vehicle({
+        id: 'bus-reverse',
+        routeId: '12B',
+        tripId: 'trip-reverse',
+        coordinate,
+        timestampMs: 2000 + index * 1000,
+      })
+    )), clearShapes, clearMapping);
+
+    expect(result['12B']).toEqual(expect.objectContaining({ state: 'active' }));
+    expect(result['12B']).not.toHaveProperty('clearReason');
+  });
+
   test('clears when on-route samples cover the clear window including the skipped core segment', () => {
     const clearShapeId = 'clear-shape';
     const clearShape = [
@@ -2577,13 +3263,13 @@ describe('Auto Detour V2 detector', () => {
     ], shapes, routeShapeMapping);
 
     let result = detector.processVehicles([
-      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 4000 }),
+      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.698 }, timestampMs: 4000 }),
     ], shapes, routeShapeMapping);
 
     expect(result['8A'].state).toBe('active');
 
     result = detector.processVehicles([
-      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.698 }, timestampMs: 5000 }),
+      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 5000 }),
     ], shapes, routeShapeMapping);
     result = detector.processVehicles([
       vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.682 }, timestampMs: 6000 }),
@@ -2998,20 +3684,42 @@ describe('Auto Detour V2 detector', () => {
 
     let result = detector.processVehicles([
       vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.698 }, timestampMs: 4000 }),
-      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.682 }, timestampMs: 5000 }),
+      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 5000 }),
     ], shapes, routeShapeMapping);
 
     expect(result['8A']).toEqual(expect.objectContaining({ state: 'active' }));
 
     result = detector.processVehicles([
       vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 6000 }),
-      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 7000 }),
+      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.682 }, timestampMs: 7000 }),
     ], shapes, routeShapeMapping);
 
     expect(result['8A']).toEqual(expect.objectContaining({
       state: 'clear-pending',
       clearReason: 'normal-route-observed',
     }));
+  });
+
+  test('does not collectively clear by combining an opposite-direction backtrack', () => {
+    const detector = createDetourV2Detector();
+
+    detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 1000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.690 }, timestampMs: 2000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.682 }, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+
+    detector.processVehicles([
+      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.698 }, timestampMs: 4000 }),
+      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.682 }, timestampMs: 5000 }),
+    ], shapes, routeShapeMapping);
+    const result = detector.processVehicles([
+      vehicle({ id: 'bus-3', tripId: 'trip-3', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 6000 }),
+      vehicle({ id: 'bus-4', tripId: 'trip-4', coordinate: { latitude: 44.39, longitude: -79.690 }, timestampMs: 7000 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({ state: 'active' }));
+    expect(result['8A']).not.toHaveProperty('clearReason');
   });
 
   test('clears obsolete-shape detours after 45 minutes when all live route vehicles are back on route', () => {
@@ -3186,6 +3894,90 @@ describe('Auto Detour V2 detector', () => {
 
     expect(result['8A']).toEqual(expect.objectContaining({ state: 'active' }));
     expect(result['8A']).not.toHaveProperty('clearReason');
+  });
+
+  test('does not combine same-trip clear samples from different service days', () => {
+    const detector = createDetourV2Detector();
+    const detectedAt = Date.parse('2026-07-01T12:00:00Z');
+
+    detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'detour-trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: detectedAt }),
+      vehicle({ id: 'bus-2', tripId: 'detour-trip-2', coordinate: { latitude: 44.395, longitude: -79.696 }, timestampMs: detectedAt + 30_000 }),
+      vehicle({ id: 'bus-2', tripId: 'detour-trip-2', coordinate: { latitude: 44.395, longitude: -79.694 }, timestampMs: detectedAt + 60_000 }),
+    ], shapes, routeShapeMapping);
+
+    const dailyClearSamples = [
+      vehicle({ id: 'clear-bus', tripId: 'reused-daily-trip', coordinate: { latitude: 44.39, longitude: -79.700 }, timestampMs: detectedAt + 24 * 60 * 60 * 1000 }),
+      vehicle({ id: 'clear-bus', tripId: 'reused-daily-trip', coordinate: { latitude: 44.39, longitude: -79.694 }, timestampMs: detectedAt + 2 * 24 * 60 * 60 * 1000 }),
+      vehicle({ id: 'clear-bus', tripId: 'reused-daily-trip', coordinate: { latitude: 44.39, longitude: -79.688 }, timestampMs: detectedAt + 3 * 24 * 60 * 60 * 1000 }),
+    ];
+
+    let result = null;
+    for (const sample of dailyClearSamples) {
+      result = detector.processVehicles([sample], shapes, routeShapeMapping);
+    }
+
+    expect(result['8A']).toEqual(expect.objectContaining({ state: 'active' }));
+    expect(result['8A']).not.toHaveProperty('clearReason');
+    expect(detector.processVehicles([], shapes, routeShapeMapping)['8A']).toEqual(
+      expect.objectContaining({ state: 'active' })
+    );
+  });
+
+  test('exposes candidate counts and route projection summaries for auto-detector diagnostics', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({ id: 'candidate-bus-1', tripId: 'candidate-trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 1000 }),
+      vehicle({ id: 'candidate-bus-2', tripId: 'candidate-trip-2', coordinate: { latitude: 44.395, longitude: -79.696 }, timestampMs: 2000 }),
+      vehicle({ id: 'clear-bus-1', routeId: '8B', tripId: 'clear-trip-1', coordinate: { latitude: 44.39, longitude: -79.696 }, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result).toEqual({});
+    const state = detector.getState();
+    expect(state.candidateEvidence['8A']).toEqual(expect.objectContaining({
+      pointCount: 2,
+      requiredPointCount: 3,
+      confirmingSignatureCount: 2,
+      requiredConfirmingSignatureCount: 2,
+      currentOffRouteVehicleCount: 2,
+    }));
+    expect(state.routeProjectionSummaries['8A']).toEqual(expect.objectContaining({
+      total: 2,
+      offRoute: 2,
+      onRouteClear: 0,
+      deadband: 0,
+      noProjection: 0,
+      newestSampleMs: 2000,
+    }));
+    expect(detector.getRouteDebug('8B').projectionSummary).toEqual(expect.objectContaining({
+      total: 1,
+      onRouteClear: 1,
+    }));
+  });
+
+  test('records the geometry gate reason when confirmed evidence is hidden by a short span', () => {
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({ id: 'short-span-bus-1', tripId: 'short-span-trip-1', coordinate: { latitude: 44.395, longitude: -79.69000 }, timestampMs: 1000 }),
+      vehicle({ id: 'short-span-bus-2', tripId: 'short-span-trip-2', coordinate: { latitude: 44.395, longitude: -79.68995 }, timestampMs: 2000 }),
+      vehicle({ id: 'short-span-bus-3', tripId: 'short-span-trip-3', coordinate: { latitude: 44.395, longitude: -79.68990 }, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: false,
+      canShowDetourPath: false,
+      riderVisibilityReason: 'insufficient-geometry',
+    }));
+    expect(result['8A'].geometry.geometryGate).toEqual(expect.objectContaining({
+      passed: false,
+      reason: 'span-too-short',
+      minSafeSpanMeters: 100,
+      hasEntryPoint: true,
+      hasExitPoint: true,
+    }));
+    expect(result['8A'].geometry.segments[0].geometryGate.reason).toBe('span-too-short');
   });
 });
 

@@ -27,6 +27,7 @@ const { createVehicleSampleFreshnessTracker } = require('./detour/vehicleSampleF
 const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
 const { getRoadMatcherStats } = require('./detourRoadMatcher');
+const { getDetourDecisionJournalStats } = require('./detourDecisionJournal');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
@@ -522,6 +523,7 @@ function getStatus() {
     samplingHealth: summarizeSamplingHealth(),
     vehicleFeed: getVehicleFeedStatus(),
     roadMatching: getRoadMatcherStats(),
+    detectorDecisionJournal: getDetourDecisionJournalStats(),
     recentEvents: [...recentEvents],
     errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures },
   };

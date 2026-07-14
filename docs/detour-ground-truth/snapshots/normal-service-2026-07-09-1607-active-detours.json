@@ -1,0 +1,18 @@
+{
+  "100": {"eventId":"100","routeId":"100","riderVisible":false,"riderVisibilityReason":"insufficient-geometry"},
+  "10:0-300": {"eventId":"10:0-300","routeId":"10","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "10:17500-17600": {"eventId":"10:17500-17600","routeId":"10","riderVisible":false,"riderVisibilityReason":"insufficient-geometry"},
+  "12A:0-100": {"eventId":"12A:0-100","routeId":"12A","riderVisible":false,"riderVisibilityReason":"insufficient-geometry"},
+  "12A:1000-1200": {"eventId":"12A:1000-1200","routeId":"12A","riderVisible":false,"riderVisibilityReason":"suppressed-invalid-geometry"},
+  "12A:17300-17600": {"eventId":"12A:17300-17600","routeId":"12A","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "12A:17400-17600": {"eventId":"12A:17400-17600","routeId":"12A","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "12A:300-600": {"eventId":"12A:300-600","routeId":"12A","riderVisible":false,"riderVisibilityReason":"stale-mixed-evidence"},
+  "12B": {"eventId":"12B","routeId":"12B","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "15B:6700-7100": {"eventId":"15B:6700-7100","routeId":"15B","riderVisible":false,"riderVisibilityReason":"stale-mixed-evidence"},
+  "400": {"eventId":"400","routeId":"400","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "7A": {"eventId":"7A","routeId":"7A","riderVisible":false,"riderVisibilityReason":"insufficient-geometry"},
+  "8A": {"eventId":"8A","routeId":"8A","riderVisible":true,"riderVisibilityReason":"gps-clear-required"},
+  "8B:5200-5300": {"eventId":"8B:5200-5300","routeId":"8B","riderVisible":false,"riderVisibilityReason":"suppressed-invalid-geometry"},
+  "8B:5100-5400": {"eventId":"8B:5100-5400","routeId":"8B","riderVisible":false,"riderVisibilityReason":"stale-mixed-evidence"},
+  "8B:4600-4800": {"eventId":"8B:4600-4800","routeId":"8B","riderVisible":false,"riderVisibilityReason":"stale-mixed-evidence"}
+}

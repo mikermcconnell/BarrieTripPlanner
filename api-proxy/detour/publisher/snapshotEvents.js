@@ -120,6 +120,8 @@ function makeSnapshot(doc, previousSnapshot = null) {
   const clearWindow = pickGeometryValue(doc, previousSnapshot, 'clearWindow', null);
   const clearWindows = pickGeometryValue(doc, previousSnapshot, 'clearWindows', []);
   const clearedSegments = pickGeometryValue(doc, previousSnapshot, 'clearedSegments', []);
+  const skippedStops = pickGeometryValue(doc, previousSnapshot, 'skippedStops', null);
+  const riderPublishGates = pickGeometryValue(doc, previousSnapshot, 'riderPublishGates', null);
   const confidence = hasOwn(doc, 'confidence')
     ? doc.confidence || null
     : (previousSnapshot?.confidence || null);
@@ -189,6 +191,8 @@ function makeSnapshot(doc, previousSnapshot = null) {
     clearWindow,
     clearWindows,
     clearedSegments,
+    skippedStops,
+    riderPublishGates,
     eventWindow,
     detourVersion: hasOwn(doc, 'detourVersion')
       ? doc.detourVersion || null
@@ -227,6 +231,31 @@ function makeSnapshot(doc, previousSnapshot = null) {
   };
 }
 
+function compactReviewSegment(segment = {}) {
+  const compactPolyline = (value) => Array.isArray(value) ? cloneJson(value.slice(0, 1000)) : null;
+  return {
+    segmentId: segment.segmentId || null,
+    shapeId: segment.shapeId || null,
+    entryPoint: cloneJson(segment.entryPoint) || null,
+    exitPoint: cloneJson(segment.exitPoint) || null,
+    skippedSegmentPolyline: compactPolyline(segment.skippedSegmentPolyline),
+    inferredDetourPolyline: compactPolyline(segment.inferredDetourPolyline),
+    likelyDetourPolyline: compactPolyline(segment.likelyDetourPolyline),
+    likelyDetourRoadNames: cloneJson(segment.likelyDetourRoadNames) || [],
+    canShowDetourPath: segment.canShowDetourPath ?? null,
+    skippedStops: Array.isArray(segment.skippedStops) ? cloneJson(segment.skippedStops.slice(0, 200)) : [],
+  };
+}
+
+function buildReviewSnapshot(current = {}) {
+  return {
+    canShowDetourPath: current.canShowDetourPath ?? null,
+    skippedStops: Array.isArray(current.skippedStops) ? cloneJson(current.skippedStops.slice(0, 200)) : null,
+    riderPublishGates: cloneJson(current.riderPublishGates) || null,
+    segments: Array.isArray(current.segments) ? current.segments.slice(0, 12).map(compactReviewSegment) : [],
+  };
+}
+
 function buildDetectedEvent(routeId, current, now) {
   const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? now;
   const event = {
@@ -251,6 +280,7 @@ function buildDetectedEvent(routeId, current, now) {
     latestGpsEvidenceAt: current.latestGpsEvidenceAt ?? current.lastEvidenceAt ?? null,
     geometryLastEvidenceAt: current.geometryLastEvidenceAt ?? current.lastEvidenceAt ?? null,
     source: 'detour-worker-v2',
+    reviewSnapshot: buildReviewSnapshot(current),
   };
   if (current.shapeId) event.shapeId = current.shapeId;
   if (current.baselineDiverged) event.baselineDiverged = true;

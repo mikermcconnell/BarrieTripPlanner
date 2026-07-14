@@ -16,12 +16,7 @@ describe('HomeScreen map performance', () => {
     const routeLabelsEnd = homeSource.indexOf('const HomeMapStopsLayer = React.memo', routeLabelsStart);
     const routeLabelsSource = homeSource.slice(routeLabelsStart, routeLabelsEnd);
 
-    const androidBusStart = homeSource.indexOf('const AndroidLiveBusMarker = React.memo');
-    const androidBusEnd = homeSource.indexOf('const HomeMapVehiclesLayer = React.memo', androidBusStart);
-    const androidBusSource = homeSource.slice(androidBusStart, androidBusEnd);
-
     expect(routeLabelsSource).toContain('pointerEvents="none"');
-    expect(androidBusSource).toContain('pointerEvents="none"');
     expect(busHubSource).toContain('pointerEvents="none"');
   });
 
@@ -31,7 +26,7 @@ describe('HomeScreen map performance', () => {
       'utf8'
     );
 
-    expect(source).toContain('key={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}');
+    expect(source).not.toContain('key={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}');
     expect(source).toContain('key={`detour-route-stop-${routeId}-${stop.id ??');
     expect(source).toContain('key={`detour-closed-stop-${routeId}-${point.id ??');
     expect(source).toContain('key={`detour-skipped-stop-${routeId}-${stopMarkerKey}-${stopIndex}`}');
@@ -51,6 +46,9 @@ describe('HomeScreen map performance', () => {
 
     expect(layerSource).toContain(
       'const shouldRenderDetourMapOverlays = shouldShowDetourGeometryOverlay({ isDetourView, hasDetourFocus });'
+    );
+    expect(layerSource).toContain(
+      'showArrows={false}'
     );
     expect(layerSource).toContain(
       'const routeMaskingDetourOverlays = shouldRenderDetourMapOverlays ? detourOverlays : [];'
@@ -146,39 +144,51 @@ describe('HomeScreen map performance', () => {
     });
   });
 
-  test('Android home-fleet bus markers use lightweight animation without route snapping', () => {
+  test('Android home fleet uses one batched MapLibre source', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'home-map', 'HomeMapVehicleLayer.js'),
+      'utf8'
+    );
+
+    expect(source).toContain('<MapLibreGL.Animated.ShapeSource');
+    expect(source).toContain('useAnimatedHomeVehicleShape');
+    expect(source).toContain('clusterMaxZoomLevel={HOME_MAP_THEME.vehicleClusterMaxZoom}');
+    expect(source).toContain("textFont: ['Noto Sans Bold']");
+    expect(source).toContain('id="home-live-vehicle-direction"');
+    expect(source).toContain('aboveLayerID="home-live-vehicle-labels"');
+    expect(source).not.toContain('layerIndex={727}');
+    expect(source).toContain('textOffset: [0, -1.45]');
+    expect(source).toContain('const isVehicleFullyOpaque = useCallback');
+    expect(source).toContain('hasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, vehicle.routeId)');
+    expect(source).toContain('isVehicleFullyOpaque,');
+    expect(source).not.toContain('<MapLibreGL.MarkerView');
+  });
+
+  test('Android pauses live vehicle paints while the rider manipulates the map', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
       'utf8'
     );
 
-    const componentStart = source.indexOf('const AndroidLiveBusMarker = React.memo');
-    const componentEnd = source.indexOf('const HomeMapVehiclesLayer = React.memo');
-    const componentSource = source.slice(componentStart, componentEnd);
-
-    expect(componentStart).toBeGreaterThanOrEqual(0);
-    expect(componentEnd).toBeGreaterThan(componentStart);
-    expect(componentSource).toContain('useAnimatedBusPosition(vehicle');
-    expect(componentSource).toContain('snapPath: null');
+    expect(source).toContain('setMapGestureActivity(true);');
+    expect(source).toContain('setMapGestureActivity(false);');
+    expect(source).toContain('animationActive={isFocused && !isMapGestureActive}');
+    expect(source).toContain('prev.animationActive === next.animationActive');
   });
 
-  test('Android home-fleet bus markers do not resolve route snap paths for every vehicle', () => {
+  test('Android home-fleet path does not resolve a route snap path for every vehicle', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
       'utf8'
     );
 
     const androidBranchStart = source.indexOf("if (Platform.OS === 'android')", source.indexOf('const HomeMapVehiclesLayer = React.memo'));
-    const androidBranchMatch = source.slice(androidBranchStart).match(
-      /if \(Platform\.OS === 'android'\) \{[\s\S]*?\n\s{2}\}\r?\n\r?\n\s{2}return displayedVehicles\.map\(\(vehicle\) => \{/
-    );
-    const androidBranchEnd = androidBranchMatch
-      ? androidBranchStart + androidBranchMatch[0].length
-      : -1;
+    const androidBranchEnd = source.indexOf('\n  return displayedVehicles.map((vehicle) => {', androidBranchStart);
     const androidBranchSource = source.slice(androidBranchStart, androidBranchEnd);
 
     expect(androidBranchStart).toBeGreaterThanOrEqual(0);
     expect(androidBranchEnd).toBeGreaterThan(androidBranchStart);
+    expect(androidBranchSource).toContain('<HomeMapVehicleLayer');
     expect(androidBranchSource).not.toContain('getVehicleSnapPath');
   });
 });

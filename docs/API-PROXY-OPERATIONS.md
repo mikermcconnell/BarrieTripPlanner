@@ -90,6 +90,7 @@ These are not public rider endpoints:
 - `ALLOWED_ORIGINS=<comma-separated production web origins>`
 - `FIREBASE_SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`
 - `SURVEY_ADMIN_UIDS=uid1,uid2` only if admin custom claims are not available
+- `DETOUR_REVIEWER_UIDS=<Mike Firebase UID>` for the operator review tool; production requires this allowlist plus an `admin=true` or `detourAdmin=true` claim
 - Firebase Functions only: `API_PROXY_FUNCTION_INVOKER=private` for production platform auth hardening
 
 Do not ship `API_PROXY_TOKEN`, `API_PROXY_TOKENS`, `EXPO_PUBLIC_API_PROXY_TOKEN`, or `EXPO_PUBLIC_LOCATIONIQ_API_KEY` in public production.
@@ -135,7 +136,7 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - Zero-current detours are not cleared automatically. They stay active until another bus adds off-route detour evidence or proves normal routing with GPS traversal through the affected segment.
   - If an active snapshot has no usable closure geometry or clear window, the automated detector must not infer a clear from elapsed time, same-route reporting, or two generic same-route normal pings. Keep the record for operations review and hide it from riders only for safety reasons such as insufficient or invalid geometry; automatic clearing still requires GPS evidence that can be tied to the affected segment, or an explicit operator/admin clear.
   - End-of-service freezes detection and drops current vehicle associations, but it does not clear active detours by itself.
-  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until the same corridor has the required three off-route pings and a second unique same-route confirming identity corroborates the same segment.
+  - Short-detour candidate evidence is captured from the first off-route GPS point, but remains backend-only until the same corridor has the required three off-route pings and a second unique same-route confirming identity corroborates the same segment within the schedule-aware confirmation window. V2 uses about one scheduled headway plus a 10-minute buffer, capped at 90 minutes, so non-consecutive trips cannot combine into a detour.
   - Runtime state stores the latest per-vehicle projection diagnostic (`lastRouteProjection`) with distance from route, thresholds, shape ID, classification, and sample time. Use this to explain missed detections before changing thresholds.
 - Optional likely-path road matching:
   - `DETOUR_ROAD_MATCHING_ENABLED=false`
@@ -292,8 +293,33 @@ Baseline endpoints:
 
 Only detour admins should run manual baseline mutation endpoints. During worker ticks, meaningful GTFS route geometry changes are handled automatically: the changed route is hidden from riders while pending, force-rechecked after the stability window, then that route's baseline is replaced from live GTFS and old active detour state clears with `baseline-auto-updated`.
 
-`GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and false-positive rate. The false-positive rate uses a 7-day window by default and counts cleared detours under 5 minutes against detected detours. It also reports suspicious short-lived detours under 15 minutes, grouped by confidence, so operators can review likely false positives that lasted longer than the strict 5-minute threshold.
+`GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and operator-labelled detection precision. By default, readiness stays at `pilot_ready_with_cautions` until at least 20 unique, rider-visible real-world cases have an audited `true-positive` or `false-positive` operator review and precision is at least 90%. Hidden, uncertain, simulated, and short clear/re-detect flap duplicates do not count. Configure the sample floor with `DETOUR_MIN_LABELLED_DETECTIONS`.
+
+### Operator detour reviews
+
+The app exposes a hidden mobile/web **Detour Review** screen only after `GET /api/detour-reviews/access` confirms the signed-in user is authorized. Production authorization requires Firebase Bearer auth, an `admin` or `detourAdmin` custom claim, and a UID in `DETOUR_REVIEWER_UIDS`.
+
+- `GET /api/detour-reviews/cases` lists prioritized review cases; rider-visible cases are the default.
+- `GET /api/detour-reviews/cases/:caseId` returns the evidence timeline, map geometry, stop evidence, and matching notices.
+- `PUT /api/detour-reviews/cases/:caseId/review` saves a revision-checked audited review.
+- `GET /api/detour-reviews/cases/:caseId/export` exports a reviewed case for deterministic corpus follow-up.
+
+Reviews live in `detourOperatorReviews`; every edit is copied to a `revisions` subcollection. Clients cannot access either collection directly. Final true/false labels require an evidence source and operator note. Only final rider-visible reviews contribute to rollout precision.
+
+The response retains `falsePositiveRate` for backward compatibility, but marks it `measurement: "short-lived-clear-proxy"` and `readinessEligible: false`. It counts cleared detours under five minutes only as a review signal. The ten-minute clear grace means this proxy cannot establish real false-positive accuracy. `suspiciousShortLivedDetours` similarly identifies cases for human review rather than labelling them automatically.
+
+Flapping is counted by physical/event identity when one is available, not by route alone. Technical cleanup events such as `superseded-by-equivalent-event`, other `superseded-by-*` migrations, and `baseline-auto-updated` are excluded so migrations and separate same-route closures do not look like rider-visible flapping.
 Launch readiness also checks whether the stored baseline diverges from current live GTFS. A route that is waiting for the auto-baseline stability recheck is hidden from riders until it is either accepted as the new baseline or stops diverging. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
+
+`GET /api/detour-status` and `GET /api/detour-rollout-health` also include operational sampling diagnostics:
+
+- `samplingHealth` — recent tick count, fresh vs zero-fresh ticks, duplicate vehicle samples skipped, tick interval, and per-source counts such as `scheduler-primary` and `offset-30s`.
+- `roadMatching` — process-local OSRM/road-matching counters, including requests, match/route attempts, successes, failures, rejections, and recent road-matching events.
+- `detectorDecisionJournal` — recent route/event publish decisions, including rider visibility, suppression reason, evidence age, clear state, geometry/path counts, and geometry gate details such as `span-too-short`, `missing-entry-or-exit`, `missing-skipped-segment`, `unsafe-inferred-path-gap`, and `stale-mixed-evidence`. This is intentionally compact and logs only when the decision signature changes.
+- `labelledDetectionQuality` — reviewed true/false-positive counts, precision, minimum sample, target, and whether labelled evidence is sufficient for readiness.
+
+Worker tick logs are structured JSON with `event: "detour_worker_tick"` and include `source`, `vehiclesProcessed`, `vehiclesFetched`, duplicate sample count, detour count, and duration. Use the `source` field to distinguish primary scheduler ticks from `offset-30s` Cloud Task ticks.
+Detector decision logs are structured JSON with `event: "detour_detector_decision"`. Use them to answer why a detected event is rider-visible, hidden, clear-pending, or geometry-suppressed without reading Firestore documents by hand. V2 detector state also exposes candidate evidence counts and per-route projection summaries so an operator can see off-route, on-route-clear, deadband, no-projection, and newest-sample counts from the latest tick.
 
 `GET /api/detour-debug` without `routeId` is the safe summary endpoint. Route-specific debug (`?routeId=...`) can expose vehicle-level evidence and is blocked in production unless the caller has an admin Firebase claim or `DETOUR_DEBUG_ROUTE_DETAILS_ENABLED=true` is set intentionally.
 
@@ -333,6 +359,8 @@ Supported hub IDs:
 The endpoint is public because it serves fixed public City of Barrie content and must be loadable by app image components. It does not accept arbitrary source URLs or page numbers.
 
 ### Detour runtime state
+
+V2 runtime persistence stores only the canonical event-keyed fields (`eventCandidates`, `activeEvents`, and `clearTracksByEvent`) inside a gzip-compressed JSON blob. The loader remains backward-compatible with older flat documents. The compressed payload has an explicit 900 KiB safety ceiling below Firestore's 1 MiB document limit. Writing duplicate aliases or unbounded flat state can prevent normal-route clear evidence from surviving scheduled reloads; treat any `detourRuntimeStateStore` size error as a lifecycle incident, not a harmless persistence warning.
 
 Single-tick detour execution persists detector runtime state to Firestore so the next invocation can resume:
 
@@ -412,10 +440,10 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 - `DETOUR_OFFSET_TASK_LOCATION=us-central1`
 - `DETOUR_OFFSET_TASK_TARGET_URL=https://YOUR_CLOUD_RUN_URL/api/detour-run-once`
 - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`
-- `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000`
-- `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=2`
+- `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=2700000`
+- `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=1.25`
 - `DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS=600000`
-- `DETOUR_CANDIDATE_CONFIRMATION_MAX_MS=10800000`
+- `DETOUR_CANDIDATE_CONFIRMATION_MAX_MS=5400000`
 - `DETOUR_HISTORY_ENABLED=true`
 - `NEWS_WORKER_ENABLED=true`
 - `NEWS_WORKER_MODE=scheduled`

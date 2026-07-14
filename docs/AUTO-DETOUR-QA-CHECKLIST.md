@@ -111,7 +111,9 @@ For each active detour:
 - [ ] If `canShowDetourPath=true` and road matching has not produced a `likelyDetourPolyline`, the trusted `inferredDetourPolyline` can still appear as the alternate path.
 - [ ] If a segment has `canShowDetourPath=false` with `detourPathSuppressedReason=road-match-closed-overlap`, the app does not draw a stale top-level `likelyDetourPolyline` or `inferredDetourPolyline` for that segment.
 - [ ] A newly road-matched `likelyDetourPolyline` is continuous through the safe entry/rejoin handoff, with no visible gap and no material interior overlap on the closed route segment.
+- [ ] A trusted V2 inferred path with a short boundary gap is continuous at entry and rejoin; a gap over 150m is not bridged with a straight line and is flagged for better geometry or road matching.
 - [ ] If there is no trustworthy skipped segment or detour path, the backend keeps the record but publishes `riderVisible=false`, and the rider UI does not show the detour.
+- [ ] After a trustworthy path becomes rider-visible, it remains visible on between-bus ticks with `currentVehicleCount=0`; it does not alternate to `stale-mixed-evidence` unless newer evidence proves the geometry unsafe.
 
 ## 6. Map Rendering Check — Regular Tab
 
@@ -135,6 +137,9 @@ For each active detour:
 - [ ] Open/closed stops are visually understandable.
 - [ ] Legend appears only when helpful and does not block critical map content.
 - [ ] No auto-zoom happens when simply entering detour view.
+- [ ] Focused camera padding keeps the full closed and detour paths clear of the search bar, alert strip, focus controls, and bottom navigation.
+- [ ] Vehicle markers do not cover the detour-path label; labels suppress or move when there is not enough room.
+- [ ] The collapsed alert uses a readable location and affected-stop count; raw stop codes remain available in details.
 
 ## 8. Tab Switching Regression Check
 
@@ -233,6 +238,12 @@ Use this to avoid false clears on hourly service:
 - [ ] Check for repeated detect/clear flapping.
 - [ ] Check `/api/detour-rollout-health`.
 - [ ] Confirm launch readiness is acceptable for the test stage.
+- [ ] Confirm `labelledDetectionQuality` has enough operator-reviewed detections and meets the precision target before calling the feature fully production-ready.
+- [ ] Open **Profile → Detour Review** with the allowlisted reviewer account, confirm rider-visible pending cases rank first, and verify a saved review updates the audited readiness count.
+- [ ] Confirm a final true/false review requires an evidence source and note, while uncertain and hidden cases do not increase readiness.
+- [ ] Treat `falsePositiveRate.measurement=short-lived-clear-proxy` as triage evidence only, not measured false-positive accuracy.
+- [ ] Run `npm run score:detour-quality` and confirm the deterministic corpus passes with zero duplicate publications.
+- [ ] Run `npm run score:detour-synthetic-lab` and confirm all 15 test-only 30-second traces pass; verify the report says `countsTowardProductionReadiness: false`.
 - [ ] Record any false positives, stale warnings, or unexpected clears for follow-up.
 
 ## 15. Final Acceptance Criteria

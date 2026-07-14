@@ -25,6 +25,8 @@ import {
   getEffectiveTransferCount,
   isSameBusContinuation,
 } from '../utils/routeContinuity';
+import { getItineraryNavigationBlock } from '../utils/tripNavigationSafety';
+import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
 
 const isRideLeg = (leg) => (
   leg?.isOnDemand ||
@@ -127,6 +129,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const bottomInset = useSafeBottomInset(insets.bottom);
   const { user, updateNotificationSettings, updatePushToken } = useAuth();
   const [reminderSet, setReminderSet] = useState(false);
+  const [isPreparingNavigation, setIsPreparingNavigation] = useState(false);
   const { itinerary } = route.params;
 
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
@@ -134,6 +137,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
   const duration = formatDuration(itinerary.duration);
   const walkDistance = formatDistance(itinerary.walkDistance);
   const walkTime = formatDuration(itinerary.walkTime);
+  const navigationBlock = getItineraryNavigationBlock(itinerary);
   const effectiveTransfers = getEffectiveTransferCount(itinerary);
   const transferSteps = new Map();
   let transferStepCount = 0;
@@ -149,14 +153,23 @@ const TripDetailsScreen = ({ route, navigation }) => {
   });
 
   // Start in-app navigation
-  const startNavigation = () => {
-    if (!itinerary.legs || itinerary.legs.length === 0) {
-      Alert.alert('Navigation Unavailable', 'No route data available for navigation.');
+  const startNavigation = async () => {
+    if (navigationBlock) {
+      Alert.alert(navigationBlock.title, navigationBlock.message);
       return;
     }
 
-    // Navigate to the in-app navigation screen
-    navigation.navigate('Navigation', { itinerary });
+    setIsPreparingNavigation(true);
+    const preparedItinerary = await prepareItineraryForNavigation(itinerary);
+    const preparedNavigationBlock = getItineraryNavigationBlock(preparedItinerary);
+    if (preparedNavigationBlock) {
+      setIsPreparingNavigation(false);
+      Alert.alert(preparedNavigationBlock.title, preparedNavigationBlock.message);
+      return;
+    }
+
+    setIsPreparingNavigation(false);
+    navigation.navigate('Navigation', { itinerary: preparedItinerary });
   };
 
   const scheduleReminder = async ({ forceEnable = false } = {}) => {
@@ -268,6 +281,16 @@ const TripDetailsScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        {navigationBlock && (
+          <View style={styles.navigationBlockNotice} accessibilityRole="alert">
+            <Icon name="Warning" size={18} color={COLORS.error} />
+            <View style={styles.navigationBlockCopy}>
+              <Text style={styles.navigationBlockTitle}>{navigationBlock.title}</Text>
+              <Text style={styles.navigationBlockText}>{navigationBlock.message}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Step-by-Step Directions */}
         <View style={styles.stepsContainer}>
           <Text style={styles.stepsTitle}>Step-by-Step Directions</Text>
@@ -307,8 +330,23 @@ const TripDetailsScreen = ({ route, navigation }) => {
             {reminderSet ? 'Reminder set' : 'Remind me'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.startButton} onPress={startNavigation}>
-          <Text style={styles.startButtonText}>Start Navigation</Text>
+        <TouchableOpacity
+          style={[
+            styles.startButton,
+            (navigationBlock || isPreparingNavigation) && styles.startButtonDisabled,
+          ]}
+          onPress={startNavigation}
+          disabled={Boolean(navigationBlock) || isPreparingNavigation}
+          accessibilityState={{ disabled: Boolean(navigationBlock) || isPreparingNavigation }}
+        >
+          <Text style={[
+            styles.startButtonText,
+            (navigationBlock || isPreparingNavigation) && styles.startButtonTextDisabled,
+          ]}>
+            {navigationBlock
+              ? 'Re-plan required'
+              : isPreparingNavigation ? 'Preparing…' : 'Start Navigation'}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -402,6 +440,31 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     ...SHADOWS.small,
+  },
+  navigationBlockNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    backgroundColor: '#FDECEC',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  navigationBlockCopy: {
+    flex: 1,
+  },
+  navigationBlockTitle: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  navigationBlockText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 2,
   },
   stepsTitle: {
     fontSize: FONT_SIZES.lg,
@@ -511,10 +574,16 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     alignItems: 'center',
   },
+  startButtonDisabled: {
+    backgroundColor: COLORS.grey300,
+  },
   startButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: '600',
+  },
+  startButtonTextDisabled: {
+    color: COLORS.textSecondary,
   },
 });
 

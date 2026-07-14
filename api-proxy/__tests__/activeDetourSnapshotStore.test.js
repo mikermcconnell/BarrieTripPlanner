@@ -36,6 +36,121 @@ test('loads active detour snapshots from Firestore', async () => {
   expect(snapshots['8A'].geometry.shapeId).toBe('shape-8a');
 });
 
+test('keeps separate V2 event snapshots for the same route', async () => {
+  jest.resetModules();
+  const get = jest.fn().mockResolvedValue({
+    forEach(callback) {
+      callback({
+        id: '11:shape-11:9600-11500',
+        data: () => ({
+          detourEventId: '11:shape-11:9600-11500',
+          routeId: '11',
+          detourVersion: 'v2',
+          detourModel: 'event-window',
+          riderVisible: true,
+          canShowDetourPath: true,
+          latestGpsEvidenceAt: 1779620300000,
+          likelyDetourPolyline: [
+            { latitude: 44.40, longitude: -79.72 },
+            { latitude: 44.41, longitude: -79.71 },
+          ],
+          eventWindow: {
+            routeId: '11',
+            shapeId: 'shape-11',
+            coreStartProgressMeters: 9600,
+            coreEndProgressMeters: 11500,
+          },
+        }),
+      });
+      callback({
+        id: '11:shape-11:13300-13400',
+        data: () => ({
+          detourEventId: '11:shape-11:13300-13400',
+          routeId: '11',
+          detourVersion: 'v2',
+          detourModel: 'event-window',
+          riderVisible: false,
+          canShowDetourPath: false,
+          latestGpsEvidenceAt: 1779620310000,
+        }),
+      });
+    },
+  });
+
+  jest.doMock('../firebaseAdmin', () => ({
+    getDb: () => ({ collection: () => ({ get }) }),
+  }));
+
+  const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
+  const snapshots = await loadActiveDetourSnapshots({
+    force: true,
+    storageConfig: { activeCollection: 'activeDetourEventsV2' },
+  });
+
+  expect(Object.keys(snapshots)).toEqual([
+    '11:shape-11:9600-11500',
+    '11:shape-11:13300-13400',
+  ]);
+  expect(snapshots['11:shape-11:9600-11500']).toEqual(expect.objectContaining({
+    eventId: '11:shape-11:9600-11500',
+    routeId: '11',
+    detourModel: 'event-window',
+    riderVisible: true,
+    eventWindow: expect.objectContaining({ shapeId: 'shape-11' }),
+  }));
+  expect(snapshots['11:shape-11:13300-13400']).toEqual(expect.objectContaining({
+    eventId: '11:shape-11:13300-13400',
+    routeId: '11',
+    riderVisible: false,
+  }));
+});
+
+test('uses Firestore document IDs as canonical V2 event identities', async () => {
+  jest.resetModules();
+  const sharedPhysicalEventId = 'detour-event-shared-physical-geometry';
+  const get = jest.fn().mockResolvedValue({
+    forEach(callback) {
+      for (const documentId of ['11:shape-11:9600-11500', '11:shape-11:13300-13400']) {
+        callback({
+          id: documentId,
+          data: () => ({
+            eventId: documentId,
+            detourEventId: sharedPhysicalEventId,
+            routeId: '11',
+            detourVersion: 'v2',
+            detourModel: 'event-window',
+            eventWindow: {
+              routeId: '11',
+              shapeId: 'shape-11',
+              coreStartProgressMeters: documentId.includes('9600') ? 9600 : 13300,
+              coreEndProgressMeters: documentId.includes('9600') ? 11500 : 13400,
+            },
+          }),
+        });
+      }
+    },
+  });
+
+  jest.doMock('../firebaseAdmin', () => ({
+    getDb: () => ({ collection: () => ({ get }) }),
+  }));
+
+  const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
+  const snapshots = await loadActiveDetourSnapshots({
+    force: true,
+    storageConfig: { activeCollection: 'activeDetourEventsV2' },
+  });
+
+  expect(Object.keys(snapshots)).toEqual([
+    '11:shape-11:9600-11500',
+    '11:shape-11:13300-13400',
+  ]);
+  expect(snapshots['11:shape-11:9600-11500']).toEqual(expect.objectContaining({
+    eventId: '11:shape-11:9600-11500',
+    detourEventId: sharedPhysicalEventId,
+  }));
+});
+
 test('returns an empty snapshot set when Firestore is unavailable', async () => {
   jest.resetModules();
   jest.doMock('../firebaseAdmin', () => ({
@@ -44,6 +159,25 @@ test('returns an empty snapshot set when Firestore is unavailable', async () => 
 
   const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
   await expect(loadActiveDetourSnapshots({ force: true })).resolves.toEqual({});
+});
+
+test('surfaces Firestore read failures and retries instead of caching an empty snapshot set', async () => {
+  jest.resetModules();
+  const get = jest.fn()
+    .mockRejectedValueOnce(new Error('active snapshot read failed'))
+    .mockResolvedValueOnce({
+      size: 0,
+      docs: [],
+      forEach: () => {},
+    });
+  jest.doMock('../firebaseAdmin', () => ({
+    getDb: () => ({ collection: () => ({ get }) }),
+  }));
+
+  const { loadActiveDetourSnapshots } = require('../activeDetourSnapshotStore');
+  await expect(loadActiveDetourSnapshots({ force: true })).rejects.toThrow('active snapshot read failed');
+  await expect(loadActiveDetourSnapshots()).resolves.toEqual({});
+  expect(get).toHaveBeenCalledTimes(2);
 });
 
 test('normalizes active snapshots with clear state and a recoverable clear window', () => {

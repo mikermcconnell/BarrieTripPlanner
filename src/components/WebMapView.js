@@ -346,7 +346,9 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
   const numericBearing = Number(bearing);
   const hasValidBearing = Number.isFinite(numericBearing);
   const resolvedScale = scale * (dimmed ? 0.84 : 1);
-  const resolvedOpacity = dimmed ? 0.42 : 1;
+  // Bus artwork always stays fully opaque. A dimmed state may reduce its size,
+  // but route lines must never show through the icon.
+  const resolvedOpacity = 1;
 
   if (assetUri) {
     const arrowHtml = hasValidBearing
@@ -1411,6 +1413,7 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
       coordinate={{ latitude, longitude }}
       html={createBusHtml(color, label, bearing, scale, dimmed, routeDirectionLabel)}
       className="bus-icon"
+      zIndexOffset={800}
       popupHtml={`<strong>Route ${escapeHtml(label)}</strong>${vehicle.label ? `<br />Bus ${escapeHtml(vehicle.label)}` : ''}`}
       accessibilityLabel={`Route ${label} bus${vehicle.label ? ` ${vehicle.label}` : ''}`}
     />

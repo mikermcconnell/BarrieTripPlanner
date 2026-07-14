@@ -11,7 +11,7 @@
 import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { planTripAuto, TripPlanningError, TRIP_ERROR_CODES } from '../services/tripService';
 import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../services/locationIQService';
-import { validateTripInputs } from '../utils/tripValidation';
+import { validateTripDateTime, validateTripInputs } from '../utils/tripValidation';
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
 import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
@@ -261,6 +261,22 @@ export const useTripPlanner = ({
       dispatch({
         type: SET_ERROR,
         payload: new TripPlanningError(errorCode, validation.errorMessage),
+      });
+      return;
+    }
+
+    const timeValidation = validateTripDateTime({
+      timeMode: state.timeMode,
+      selectedTime: state.selectedTime,
+    });
+    if (!timeValidation.valid) {
+      invalidateTripSearches();
+      dispatch({
+        type: SET_ERROR,
+        payload: new TripPlanningError(
+          TRIP_ERROR_CODES.VALIDATION_ERROR,
+          timeValidation.errorMessage
+        ),
       });
       return;
     }

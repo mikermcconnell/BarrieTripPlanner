@@ -10,7 +10,10 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
-import StartupLoadingScreen, { STARTUP_IMAGE_ASSETS } from './src/components/StartupLoadingScreen';
+import StartupLoadingScreen, {
+  STARTUP_BACKGROUND_COLOR,
+  STARTUP_IMAGE_ASSETS,
+} from './src/components/StartupLoadingScreen';
 import { COLORS } from './src/config/theme';
 import { userFirestoreService } from './src/services/firebase/userFirestoreService';
 import logger from './src/utils/logger';
@@ -206,6 +209,11 @@ const linking = {
       Map: {
         screens: {
           MapMain: '',
+        },
+      },
+      Profile: {
+        screens: {
+          DetourReview: 'operator/detour-review',
         },
       },
     },
@@ -416,7 +424,7 @@ function AppStartupGate({
             { opacity: overlayOpacityRef.current },
           ]}
         >
-          <StatusBar style="dark" backgroundColor={COLORS.surface} />
+          <StatusBar style="dark" backgroundColor={STARTUP_BACKGROUND_COLOR} />
           <StartupLoadingScreen
             percent={startupState.percent}
             title={startupState.title}
@@ -511,7 +519,7 @@ export default function App() {
   if (shouldShowStartupLoadingPreview()) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" backgroundColor={COLORS.surface} />
+        <StatusBar style="dark" backgroundColor={STARTUP_BACKGROUND_COLOR} />
         <StartupLoadingScreen useBrandFonts={fontsLoaded} />
       </SafeAreaProvider>
     );

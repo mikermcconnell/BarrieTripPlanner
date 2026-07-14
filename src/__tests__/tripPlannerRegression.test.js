@@ -1860,6 +1860,65 @@ describe('web trip planner regressions', () => {
     unmount();
   });
 
+  test('web keyboard selection includes saved places in the same ordered suggestion list', () => {
+    const onToSelect = jest.fn();
+    const { root, act, unmount } = loadTripSearchHeaderWeb({
+      toText: 'work',
+      savedPlaces: [
+        { id: 'work', name: 'Work', addressText: '70 Collier St', lat: 44.389, lon: -79.69 },
+      ],
+      showToSuggestions: true,
+      toSuggestions: [
+        { id: 'remote-work', shortName: 'Workplace Plaza', lat: 44.4, lon: -79.68 },
+      ],
+      onToSelect,
+    });
+    const destinationInput = root.find((node) => node.props['aria-label'] === 'Destination');
+
+    act(() => destinationInput.props.onFocus());
+    act(() => destinationInput.props.onKeyDown({ key: 'Enter', preventDefault: jest.fn() }));
+
+    expect(onToSelect).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'saved_place',
+      shortName: 'Work',
+    }));
+
+    unmount();
+  });
+
+  test('web keyboard navigation is limited to the five rendered suggestions', () => {
+    const onFromSelect = jest.fn();
+    const { root, act, unmount } = loadTripSearchHeaderWeb({
+      fromText: 'a',
+      savedPlaces: [
+        { id: 'a', name: 'A', addressText: '1 A St', lat: 44.381, lon: -79.691 },
+        { id: 'b', name: 'A B', addressText: '2 A St', lat: 44.382, lon: -79.692 },
+        { id: 'c', name: 'A C', addressText: '3 A St', lat: 44.383, lon: -79.693 },
+        { id: 'd', name: 'A D', addressText: '4 A St', lat: 44.384, lon: -79.694 },
+      ],
+      showFromSuggestions: true,
+      fromSuggestions: [
+        { id: 'remote-1', shortName: 'Remote 1', lat: 44.4, lon: -79.68 },
+        { id: 'remote-2', shortName: 'Remote 2', lat: 44.41, lon: -79.67 },
+      ],
+      onFromSelect,
+    });
+
+    const fromInput = root.find((node) => node.props['aria-label'] === 'Starting location');
+    const renderedOptions = root.findAll((node) => node.props.role === 'option');
+    expect(renderedOptions).toHaveLength(5);
+
+    act(() => fromInput.props.onFocus());
+    for (let index = 0; index < 5; index += 1) {
+      act(() => fromInput.props.onKeyDown({ key: 'ArrowDown', preventDefault: jest.fn() }));
+    }
+    act(() => fromInput.props.onKeyDown({ key: 'Enter', preventDefault: jest.fn() }));
+
+    expect(onFromSelect).toHaveBeenCalledWith(expect.objectContaining({ shortName: 'Remote 1' }));
+    expect(onFromSelect).not.toHaveBeenCalledWith(expect.objectContaining({ shortName: 'Remote 2' }));
+    unmount();
+  });
+
   test('native search header compacts after trip results and can be edited', () => {
     const { root, act, unmount } = loadTripSearchHeaderNative({
       compact: true,

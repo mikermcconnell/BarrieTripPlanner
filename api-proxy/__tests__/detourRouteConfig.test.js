@@ -6,6 +6,18 @@ describe('detour route config', () => {
     jest.resetModules();
   });
 
+  test('includes the confirmed Route 8A Downtown Hub terminal egress area', () => {
+    const { getRouteDetectorConfig } = require('../detourRouteConfig');
+
+    expect(getRouteDetectorConfig('8A', {}).ignoredRouteEdgeAreas).toEqual([{
+      label: 'Downtown Hub terminal egress',
+      edge: 'start',
+      center: { latitude: 44.387753, longitude: -79.690237 },
+      radiusMeters: 200,
+      maxProgressMeters: 250,
+    }]);
+  });
+
   test('parses configured detour corridors from route overrides', () => {
     process.env.DETOUR_ROUTE_OVERRIDES_JSON = JSON.stringify({
       '12A': {
@@ -13,6 +25,12 @@ describe('detour route config', () => {
           entryPoint: { lat: 44.33658333333333, lon: -79.66955555555555 },
           exitPoint: { latitude: 44.33325, longitude: -79.67405555555556 },
           paddingMeters: 250,
+          outlierDistanceMeters: 425,
+          detourPathPolyline: [
+            { lat: 44.33658333333333, lon: -79.66955555555555 },
+            { latitude: 44.335, longitude: -79.671 },
+            { latitude: 44.33325, longitude: -79.67405555555556 },
+          ],
           label: 'Saunders-Welham',
         },
       },
@@ -27,6 +45,12 @@ describe('detour route config', () => {
       entryPoint: { latitude: 44.33658333333333, longitude: -79.66955555555555 },
       exitPoint: { latitude: 44.33325, longitude: -79.67405555555556 },
       paddingMeters: 250,
+      outlierDistanceMeters: 425,
+      detourPathPolyline: [
+        { latitude: 44.33658333333333, longitude: -79.66955555555555 },
+        { latitude: 44.335, longitude: -79.671 },
+        { latitude: 44.33325, longitude: -79.67405555555556 },
+      ],
       label: 'Saunders-Welham',
     });
   });

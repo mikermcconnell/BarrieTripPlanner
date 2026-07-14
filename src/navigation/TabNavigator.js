@@ -5,9 +5,11 @@ import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
+import PrimaryIcon from '../components/PrimaryIcon';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS, SHADOWS } from '../config/theme';
-import { useAndroidBottomChromeLift, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { useSafeBottomInset } from '../utils/androidNavigationBar';
 import { getDesktopTabBarStyle, isWideWebViewport } from '../utils/webLayout';
+import { HOME_MAP_THEME } from '../config/homeMapTheme';
 
 import HomeScreen from '../screens/HomeScreen';
 
@@ -25,6 +27,7 @@ const getSettingsScreen = () => require('../screens/SettingsScreen').default;
 const getNewsScreen = () => require('../screens/NewsScreen').default;
 const getSurveyScreen = () => require('../screens/SurveyScreen').default;
 const getSurveyResultsScreen = () => require('../screens/SurveyResultsScreen').default;
+const getDetourReviewScreen = () => require('../screens/DetourReviewScreen').default;
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -33,11 +36,12 @@ const RootStack = createNativeStackNavigator();
 // Tab Icon Component with indicator
 const TabIcon = ({ name, focused, color }) => {
   const iconProps = { size: 26, color, strokeWidth: focused ? 2.5 : 1.5 };
+  const IconComponent = Platform.OS === 'android' ? PrimaryIcon : Icon;
 
   const icons = {
-    Map: <Icon name="Map" {...iconProps} />,
-    Search: <Icon name="Search" {...iconProps} />,
-    Profile: <Icon name="User" {...iconProps} />,
+    Map: <IconComponent name="Map" {...iconProps} />,
+    Search: <IconComponent name="Search" {...iconProps} />,
+    Profile: <IconComponent name="User" {...iconProps} />,
   };
 
   return (
@@ -81,6 +85,7 @@ const ProfileStack = () => (
     <Stack.Screen name="News" getComponent={getNewsScreen} />
     <Stack.Screen name="Survey" getComponent={getSurveyScreen} />
     <Stack.Screen name="SurveyResults" getComponent={getSurveyResultsScreen} />
+    <Stack.Screen name="DetourReview" getComponent={getDetourReviewScreen} />
   </Stack.Navigator>
 );
 
@@ -90,8 +95,6 @@ const MainTabs = () => {
   const { width } = useWindowDimensions();
   const isWideWeb = isWideWebViewport({ platform: Platform.OS, width });
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const bottomChromeLift = useAndroidBottomChromeLift();
-  const tabBarPaddingBottom = Math.max(bottomInset, 10);
   const visibleTabBarStyle = {
     ...styles.tabBar,
     ...(isWideWeb
@@ -100,9 +103,9 @@ const MainTabs = () => {
           ...getDesktopTabBarStyle({ isWideWeb }),
         }
       : {
-          height: 72 + bottomInset,
-          marginBottom: bottomChromeLift,
-          paddingBottom: tabBarPaddingBottom,
+          height: HOME_MAP_THEME.tabContentHeight + bottomInset,
+          marginBottom: 0,
+          paddingBottom: bottomInset,
         }),
   };
 
@@ -163,7 +166,7 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: COLORS.surface,
     borderTopWidth: 0,
-    paddingTop: 10,
+    paddingTop: 6,
     paddingHorizontal: SPACING.xxl,
     ...SHADOWS.medium,
     // Web-specific premium shadow
@@ -182,7 +185,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
     marginTop: 4,
-    marginBottom: 6,
+    marginBottom: 2,
     letterSpacing: 0.1,
   },
   tabBarLabelDesktop: {
@@ -203,11 +206,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     width: 60,
-    height: 38,
+    height: 34,
   },
   activeIndicator: {
     position: 'absolute',
-    top: -8,
+    top: -5,
     width: 24,
     height: 3,
     backgroundColor: COLORS.primary,
@@ -221,7 +224,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: 48,
-    height: 38,
+    height: 34,
     borderRadius: BORDER_RADIUS.lg,
   },
   iconWrapperFocused: {

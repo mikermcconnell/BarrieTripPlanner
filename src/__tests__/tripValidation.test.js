@@ -1,4 +1,4 @@
-const { validateTripInputs } = require('../utils/tripValidation');
+const { validateTripDateTime, validateTripInputs } = require('../utils/tripValidation');
 const { getErrorConfig } = require('../config/errorMessages');
 
 describe('trip validation messaging', () => {
@@ -34,5 +34,33 @@ describe('trip validation messaging', () => {
         'Try using a nearby stop or major intersection',
       ]),
     }));
+  });
+});
+
+describe('trip date and time validation', () => {
+  const nowMs = new Date('2026-07-14T12:00:00-04:00').getTime();
+
+  test('rejects depart-at searches in the past', () => {
+    expect(validateTripDateTime({
+      timeMode: 'departAt',
+      selectedTime: new Date('2026-07-14T11:00:00-04:00'),
+      nowMs,
+    })).toEqual(expect.objectContaining({
+      valid: false,
+      errorMessage: 'Departure time must be in the future.',
+    }));
+  });
+
+  test('rejects arrive-by searches in the past and accepts future searches', () => {
+    expect(validateTripDateTime({
+      timeMode: 'arriveBy',
+      selectedTime: new Date('2026-07-14T11:55:00-04:00'),
+      nowMs,
+    }).valid).toBe(false);
+    expect(validateTripDateTime({
+      timeMode: 'arriveBy',
+      selectedTime: new Date('2026-07-14T12:30:00-04:00'),
+      nowMs,
+    }).valid).toBe(true);
   });
 });

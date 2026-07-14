@@ -105,7 +105,7 @@ describe('detourRoutes', () => {
     const response = await request(app).post('/api/detour-run-once');
     expect(response.status).toBe(200);
     expect(runTick).toHaveBeenCalledWith({
-      source: 'api-run-once',
+      source: 'scheduler-primary',
       forceReloadState: true,
     });
     expect(response.body).toEqual(expect.objectContaining({

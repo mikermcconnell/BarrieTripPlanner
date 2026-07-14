@@ -13,7 +13,6 @@
 import React from 'react';
 import { WebHtmlMarker, WebLineLabelLayer, WebRoutePolyline } from './WebMapView';
 import { haversineDistance, offsetPath, simplifyPath } from '../utils/geometryUtils';
-import { getDirectionalArrowPoints } from '../utils/detourDirectionArrows';
 import { COLORS } from '../config/theme';
 import { formatDetourMapLabel } from '../utils/detourLabeling';
 import {
@@ -27,7 +26,6 @@ const DETOUR_LINE_STYLE = {
   outlineColor: COLORS.ctaGreen,
 };
 const BIDIRECTIONAL_DETOUR_LINE_OFFSETS = [-12, 12];
-const DETOUR_DIRECTION_ARROW_COUNT = 2;
 
 const SKIPPED_ROUTE_STYLE = {
   strokeWidth: 3,
@@ -59,7 +57,6 @@ const scaleLineMetric = (value, scale = 1) => {
 
 const MARKER_Z_INDEX = {
   ROUTE_STOP: 660,
-  DETOUR_DIRECTION_ARROW: 1180,
   CLOSURE_POINT: 690,
   SKIPPED_STOP: 700,
   ENTRY_EXIT_CALLOUT: 1320,
@@ -557,47 +554,6 @@ const makeDetourMapLabelHtml = (label, fillColor, borderColor, textColor, dotCol
   </div>
 `;
 
-const makeDirectionArrowHtml = (color, bearing, opacity = 1) => `
-  <div title="Detour direction" style="
-    width:30px;
-    height:30px;
-    border-radius:50%;
-    background:${color};
-    border:2.5px solid #ffffff;
-    box-sizing:border-box;
-    box-shadow:0 3px 10px rgba(15,23,42,0.28);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    opacity:${opacity};
-    transform:rotate(${bearing}deg);
-  ">
-    <div style="
-      width:16px;
-      height:19px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:flex-start;
-    ">
-      <div style="
-        width:0;
-        height:0;
-        border-left:7px solid transparent;
-        border-right:7px solid transparent;
-        border-bottom:11px solid #ffffff;
-      "></div>
-      <div style="
-        width:5px;
-        height:8px;
-        margin-top:-1px;
-        border-radius:3px;
-        background:#ffffff;
-      "></div>
-    </div>
-  </div>
-`;
-
 const DetourOverlay = ({
   routeId,
   skippedSegmentPolyline,
@@ -631,7 +587,6 @@ const DetourOverlay = ({
   labelDensity = 'full',
   directionArrowMode = 'forward',
   detourLaneOffsetMeters = 0,
-  detourArrowPositionOffsetRatio = 0,
   selectedSegmentIndex = null,
   lineStyleScale = 1,
 }) => {
@@ -809,24 +764,8 @@ const DetourOverlay = ({
                     outlineColor={DETOUR_LINE_STYLE.outlineColor}
                     interactive={Boolean(onPress)}
                     onPress={handleSegmentPress}
-                    showArrows={lineOffsetIndex === 0}
+                    showArrows={false}
                     layerOrder={DETOUR_LAYER_ORDER.DETOUR_LINE + lineOffsetIndex}
-                  />
-                ))}
-                {getDirectionalArrowPoints(inferredDetourPath, {
-                  mode: directionArrowMode,
-                  arrowCount: DETOUR_DIRECTION_ARROW_COUNT,
-                  pathOffsetMeters: detourLaneOffsetMeters,
-                  bidirectionalOffsetMeters: Math.abs(BIDIRECTIONAL_DETOUR_LINE_OFFSETS[0]),
-                  positionOffsetRatio: detourArrowPositionOffsetRatio,
-                }).map((arrow, arrowIndex) => (
-                  <WebHtmlMarker
-                    key={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}
-                    coordinate={{ latitude: arrow.point.latitude, longitude: arrow.point.longitude }}
-                    anchor="center"
-                    offset={[0, 0]}
-                    html={makeDirectionArrowHtml(detourColor, arrow.bearing, segmentOpacity)}
-                    zIndexOffset={MARKER_Z_INDEX.DETOUR_DIRECTION_ARROW}
                   />
                 ))}
               </>

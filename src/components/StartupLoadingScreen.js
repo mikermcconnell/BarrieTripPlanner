@@ -1,17 +1,26 @@
-import React from 'react';
-import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useRef } from 'react';
+import { Animated, Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Asset } from 'expo-asset';
-import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, FONT_WEIGHTS, SPACING, SHADOWS } from '../config/theme';
+import {
+  BORDER_RADIUS,
+  COLORS,
+  FONT_FAMILIES,
+  FONT_WEIGHTS,
+  SPACING,
+  SHADOWS,
+} from '../config/theme';
 import { useSafeBottomInset } from '../utils/androidNavigationBar';
+import StartupDetourAnimation from './StartupDetourAnimation';
 
 const APP_ICON = require('../../assets/splash-icon.png');
-const HERO_IMAGE = require('../../assets/startup-home-scene.png');
-const DETOUR_CARD_IMAGE = require('../../assets/startup-detour-card.png');
-const STARTUP_IMAGE_ASSETS = [APP_ICON, HERO_IMAGE, DETOUR_CARD_IMAGE];
+const AUTO_DETOUR_MAP_BASE = require('../../assets/startup-auto-detour-map-base.png');
+const STARTUP_IMAGE_ASSETS = [APP_ICON, AUTO_DETOUR_MAP_BASE];
 
-const DEFAULT_STATUS = 'Checking service alerts and detours...';
+const DEFAULT_STATUS = 'Checking live routes and service alerts...';
 const DEFAULT_PERCENT = 65;
-const STARTUP_LOADING_TEXT = 'Loading routes, stops, and live updates';
+const STARTUP_HEADLINE = 'See likely detours. Avoid skipped stops.';
+const STARTUP_SUPPORTING_TEXT = 'Powered by live bus movement.';
+const STARTUP_BACKGROUND_COLOR = '#F7FBFF';
 
 function getStartupImageSource(moduleId, preferPreloadedImages = false) {
   if (!preferPreloadedImages || Platform.OS === 'web') {
@@ -26,89 +35,56 @@ function getStartupImageSource(moduleId, preferPreloadedImages = false) {
   }
 }
 
-function HeroScene({ width, height, compact = false, preferPreloadedImages = false }) {
-  return (
-    <View
-      style={[
-        styles.heroWrap,
-        { width, height },
-        compact && styles.heroWrapCompact,
-      ]}
-      pointerEvents="none"
-      accessible={false}
-    >
-      <Image
-        source={getStartupImageSource(HERO_IMAGE, preferPreloadedImages)}
-        style={styles.heroImage}
-        resizeMode="contain"
-        fadeDuration={0}
-      />
-    </View>
-  );
-}
+function DetectionHero({ width, compact = false, preferPreloadedImages = false }) {
+  const timeline = useRef(new Animated.Value(0)).current;
+  const imageHeight = Math.round(width * (520 / 900));
+  const alertAnimation = {
+    opacity: timeline.interpolate({
+      inputRange: [0, 0.16, 0.22, 0.94, 1],
+      outputRange: [0, 0, 1, 1, 0],
+    }),
+    transform: [{
+      translateY: timeline.interpolate({
+        inputRange: [0, 0.16, 0.22, 0.94, 1],
+        outputRange: [8, 8, 0, 0, 8],
+      }),
+    }],
+  };
 
-function FeatureCard({
-  cardWidth,
-  deckHeight,
-  miniMapHeight,
-  compact = false,
-  useBrandFonts = true,
-  preferPreloadedImages = false,
-}) {
   return (
-    <View
-      style={[
-        styles.featureDeck,
-        { width: cardWidth + 92, height: deckHeight },
-        compact && styles.featureDeckCompact,
-      ]}
-    >
-      <View style={[styles.sideCard, styles.sideCardLeft]}>
-        <View style={styles.clockGlyph}>
-          <View style={styles.clockHandVertical} />
-          <View style={styles.clockHandHorizontal} />
-        </View>
-      </View>
-      <View style={[styles.sideCard, styles.sideCardRight]}>
-        <View style={styles.walkerGlyph}>
-          <View style={styles.walkerHead} />
-          <View style={styles.walkerBody} />
-          <View style={[styles.walkerLeg, styles.walkerLegLeft]} />
-          <View style={[styles.walkerLeg, styles.walkerLegRight]} />
-        </View>
+    <View style={[styles.heroArea, compact && styles.heroAreaCompact]}>
+      <View
+        style={[styles.heroFrame, { width, height: imageHeight }]}
+        pointerEvents="none"
+        accessible={false}
+      >
+        <StartupDetourAnimation
+          imageSource={getStartupImageSource(AUTO_DETOUR_MAP_BASE, preferPreloadedImages)}
+          width={width}
+          height={imageHeight}
+          timeline={timeline}
+        />
       </View>
 
-      <View style={[
-        styles.featureCard,
-        { width: cardWidth },
-        compact && styles.featureCardCompact,
-      ]}>
-        <View style={[styles.miniMap, { height: miniMapHeight }]}>
-          <Image
-            source={getStartupImageSource(DETOUR_CARD_IMAGE, preferPreloadedImages)}
-            style={styles.miniMapImage}
-            resizeMode="contain"
-            fadeDuration={0}
-          />
+      <Animated.View
+        style={[styles.detourAlert, compact && styles.detourAlertCompact, alertAnimation]}
+        accessibilityRole="summary"
+        accessibilityLabel="Likely detour detected. Route change identified from live bus movement."
+      >
+        <View style={styles.alertIcon}>
+          <Text style={styles.alertIconText}>!</Text>
         </View>
-        <Text style={[
-          styles.featureTitle,
-          useBrandFonts && styles.featureTitleFont,
-          compact && styles.featureTitleCompact,
-        ]}>
-          Live Detour Awareness
-        </Text>
-        <Text style={[
-          styles.featureText,
-          useBrandFonts && styles.featureTextFont,
-          compact && styles.featureTextCompact,
-        ]}>
-          We check live bus movement to inform you of possible detours.
-        </Text>
-        <View style={styles.shield}>
-          <Text style={styles.shieldText}>✓</Text>
+        <View style={styles.alertCopy}>
+          <Text style={styles.alertTitle} numberOfLines={2}>Likely detour detected</Text>
+          <Text style={styles.alertDescription} numberOfLines={2}>
+            Route change identified from live bus movement
+          </Text>
         </View>
-      </View>
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>LIVE</Text>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -123,29 +99,27 @@ export default function StartupLoadingScreen({
 }) {
   const { height, width } = useWindowDimensions();
   const safeBottomInset = useSafeBottomInset(0);
-  const compact = height <= 780 || width <= 360;
-  const veryCompact = height < 700;
+  const compact = height <= 760 || width <= 360;
+  const veryCompact = height < 690;
   const shellWidth = Math.min(width || 390, 430);
   const horizontalPadding = compact ? 18 : 24;
-  const heroWidth = Math.min(482, Math.max(320, shellWidth + (compact ? 2 : 22)));
-  const heroHeight = Math.round(Math.min(
-    compact ? 150 : 196,
-    heroWidth * (213 / 482)
-  ));
-  const featureCardWidth = Math.round(Math.min(
-    compact ? 292 : 318,
-    Math.max(270, shellWidth * (compact ? 0.8 : 0.76))
-  ));
-  const featureDeckHeight = compact ? 246 : 278;
-  const miniMapHeight = Math.round(Math.min(
-    compact ? 88 : 106,
-    (featureCardWidth - (compact ? 24 : 28)) * (129 / 304)
-  ));
-  const safePercent = Math.max(0, Math.min(100, Number.isFinite(Number(percent)) ? Number(percent) : DEFAULT_PERCENT));
-  const baseBottomPadding = veryCompact ? 12 : 18;
+  const heroWidth = Math.min(
+    382,
+    shellWidth - (horizontalPadding * 2),
+    veryCompact ? 272 : 382
+  );
+  const safePercent = Math.max(
+    0,
+    Math.min(100, Number.isFinite(Number(percent)) ? Number(percent) : DEFAULT_PERCENT)
+  );
+  const baseBottomPadding = veryCompact ? 10 : 18;
   const progressBottomPadding = Platform.OS === 'android'
     ? safeBottomInset + SPACING.lg
     : baseBottomPadding;
+
+  const brandFont = useBrandFonts && styles.brandTextFont;
+  const boldFont = useBrandFonts && styles.boldFont;
+  const regularFont = useBrandFonts && styles.regularFont;
 
   return (
     <View
@@ -165,52 +139,65 @@ export default function StartupLoadingScreen({
           <Image
             source={getStartupImageSource(APP_ICON, preferPreloadedImages)}
             style={[styles.appIcon, compact && styles.appIconCompact]}
+            fadeDuration={0}
+            accessible={false}
           />
-          <Text style={[
-            styles.brandText,
-            useBrandFonts && styles.brandTextFont,
-            compact && styles.brandTextCompact,
-          ]}>MyBarrie Transit</Text>
-        </View>
-
-        <HeroScene
-          width={heroWidth}
-          height={heroHeight}
-          compact={compact}
-          preferPreloadedImages={preferPreloadedImages}
-        />
-
-        <View style={[styles.copyWrap, compact && styles.copyWrapCompact]}>
-          <Text style={[
-            styles.title,
-            styles.loadingLine,
-            useBrandFonts && styles.titleFont,
-            compact && styles.titleCompact,
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.82}
+          <Text
+            style={[styles.brandText, brandFont, compact && styles.brandTextCompact]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
           >
-            {STARTUP_LOADING_TEXT}
+            MyBarrie Transit
           </Text>
         </View>
 
-        <FeatureCard
-          cardWidth={featureCardWidth}
-          deckHeight={featureDeckHeight}
-          miniMapHeight={miniMapHeight}
+        <View style={[styles.featureLabel, compact && styles.featureLabelCompact]}>
+          <View style={styles.featureLabelDot} />
+          <Text
+            style={[styles.featureLabelText, boldFont]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            AUTOMATIC DETOUR DETECTION
+          </Text>
+        </View>
+
+        <Text
+          style={[styles.title, boldFont, compact && styles.titleCompact]}
+          numberOfLines={3}
+          adjustsFontSizeToFit
+          minimumFontScale={0.84}
+          accessibilityRole="header"
+        >
+          See <Text style={styles.detourTitleAccent}>likely detours.</Text>{'\n'}
+          Avoid <Text style={styles.stopTitleAccent}>skipped stops.</Text>
+        </Text>
+        <View style={styles.poweredRow}>
+          <View style={styles.poweredDot} />
+          <Text
+            style={[styles.poweredText, regularFont]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {STARTUP_SUPPORTING_TEXT}
+          </Text>
+        </View>
+        <DetectionHero
+          width={heroWidth}
           compact={compact}
-          useBrandFonts={useBrandFonts}
           preferPreloadedImages={preferPreloadedImages}
         />
 
-        <View style={styles.progressArea}>
-          <View style={styles.dots} accessible={false}>
-            {[0, 1, 2, 3, 4].map((dot) => (
-              <View key={dot} style={[styles.dot, dot === 1 && styles.dotActive]} />
-            ))}
-          </View>
-          <Text style={[styles.statusText, useBrandFonts && styles.statusTextFont]}>
+        <View style={[styles.progressArea, veryCompact && styles.progressAreaVeryCompact]}>
+          <Text
+            style={[styles.statusText, regularFont]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             {statusText}
           </Text>
           {showProgress ? (
@@ -223,9 +210,7 @@ export default function StartupLoadingScreen({
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${safePercent}%` }]} />
               </View>
-              <Text style={[styles.progressPercent, useBrandFonts && styles.progressPercentFont]}>
-                {safePercent}%
-              </Text>
+              <Text style={[styles.progressPercent, boldFont]}>{safePercent}%</Text>
             </View>
           ) : null}
         </View>
@@ -237,14 +222,17 @@ export default function StartupLoadingScreen({
 export {
   DEFAULT_PERCENT,
   DEFAULT_STATUS,
+  STARTUP_HEADLINE,
+  STARTUP_BACKGROUND_COLOR,
   STARTUP_IMAGE_ASSETS,
+  STARTUP_SUPPORTING_TEXT,
   getStartupImageSource,
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: STARTUP_BACKGROUND_COLOR,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -254,328 +242,248 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
     flex: 1,
-    paddingTop: 30,
-    paddingBottom: 18,
+    paddingTop: 26,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    backgroundColor: STARTUP_BACKGROUND_COLOR,
   },
   contentCompact: {
-    paddingTop: 20,
-    paddingBottom: 18,
+    paddingTop: 16,
   },
   contentVeryCompact: {
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 10,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 2,
-    marginBottom: 4,
+    gap: 10,
+    marginBottom: 20,
   },
   brandRowCompact: {
-    marginBottom: 2,
+    marginBottom: 12,
   },
   appIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 50,
+    height: 50,
+    borderRadius: 14,
   },
   appIconCompact: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
   },
   brandText: {
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 25,
+    lineHeight: 31,
     color: '#061A3B',
     fontWeight: FONT_WEIGHTS.bold,
-    letterSpacing: -0.6,
+    letterSpacing: -0.5,
   },
   brandTextFont: {
     fontFamily: FONT_FAMILIES.bold,
   },
   brandTextCompact: {
-    fontSize: 23,
-  },
-  heroWrap: {
-    position: 'relative',
-    overflow: 'hidden',
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  heroWrapCompact: {
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  heroImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  copyWrap: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  copyWrapCompact: {
-    marginBottom: 6,
-  },
-  title: {
-    fontSize: 27,
-    lineHeight: 33,
-    color: '#061A3B',
-    textAlign: 'center',
-    fontWeight: FONT_WEIGHTS.bold,
-    letterSpacing: -1,
-  },
-  titleFont: {
-    fontFamily: FONT_FAMILIES.bold,
-  },
-  loadingLine: {
     fontSize: 22,
     lineHeight: 28,
-    letterSpacing: -0.4,
+  },
+  featureLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: '#EEE7FC',
+    marginBottom: 13,
+  },
+  featureLabelCompact: {
+    marginBottom: 9,
+    paddingVertical: 6,
+  },
+  featureLabelDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#8539D6',
+  },
+  featureLabelText: {
+    color: '#6421A8',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: FONT_WEIGHTS.bold,
+    letterSpacing: 0.7,
+  },
+  title: {
+    maxWidth: 370,
+    color: '#061A3B',
+    fontSize: 29,
+    lineHeight: 34,
+    fontWeight: FONT_WEIGHTS.bold,
+    letterSpacing: -1,
+    textAlign: 'center',
   },
   titleCompact: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 26,
+    lineHeight: 31,
   },
-  featureDeck: {
+  detourTitleAccent: {
+    color: '#6F2DBD',
+  },
+  stopTitleAccent: {
+    color: '#C94B23',
+  },
+  poweredRow: {
+    marginTop: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 0,
-    marginBottom: 12,
+    gap: 7,
   },
-  featureDeckCompact: {
-    marginTop: 2,
-    marginBottom: 8,
+  poweredDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#159C63',
   },
-  sideCard: {
-    position: 'absolute',
-    width: 148,
-    height: 194,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.86)',
+  poweredText: {
+    color: '#50647A',
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  heroArea: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  heroAreaCompact: {
+    marginTop: 12,
+  },
+  heroFrame: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    backgroundColor: '#EAF6FF',
     borderWidth: 1,
-    borderColor: 'rgba(223,225,230,0.78)',
-    opacity: 0.82,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: '#D8EAF7',
     ...SHADOWS.medium,
   },
-  sideCardLeft: {
-    left: -6,
-    transform: [{ rotate: '-5deg' }],
-  },
-  sideCardRight: {
-    right: -6,
-    transform: [{ rotate: '5deg' }],
-  },
-  clockGlyph: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 5,
-    borderColor: '#0A315D',
-    opacity: 0.9,
-  },
-  clockHandVertical: {
-    position: 'absolute',
-    left: 29,
-    top: 16,
-    width: 5,
-    height: 22,
-    borderRadius: 3,
-    backgroundColor: '#0A315D',
-  },
-  clockHandHorizontal: {
-    position: 'absolute',
-    left: 31,
-    top: 34,
-    width: 17,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#0A315D',
-  },
-  walkerGlyph: {
-    width: 60,
-    height: 86,
+  detourAlert: {
+    width: '88%',
+    minHeight: 74,
+    marginTop: -28,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    opacity: 0.9,
-  },
-  walkerHead: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#0A315D',
-    marginBottom: 4,
-  },
-  walkerBody: {
-    width: 8,
-    height: 38,
-    borderRadius: 5,
-    backgroundColor: '#0A315D',
-  },
-  walkerLeg: {
-    position: 'absolute',
-    top: 52,
-    width: 7,
-    height: 36,
-    borderRadius: 4,
-    backgroundColor: '#0A315D',
-  },
-  walkerLegLeft: {
-    left: 18,
-    transform: [{ rotate: '20deg' }],
-  },
-  walkerLegRight: {
-    right: 18,
-    transform: [{ rotate: '-20deg' }],
-  },
-  featureCard: {
-    minHeight: 258,
-    borderRadius: 22,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: 'rgba(223,225,230,0.92)',
-    alignItems: 'center',
-    padding: 12,
-    ...SHADOWS.large,
-  },
-  featureCardCompact: {
-    minHeight: 222,
-    padding: 12,
-  },
-  miniMap: {
-    position: 'relative',
-    width: '100%',
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: COLORS.primarySubtle,
-    borderWidth: 1,
-    borderColor: 'rgba(209,232,255,0.9)',
-  },
-  miniMapImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  featureTitle: {
-    marginTop: 14,
-    fontSize: 22,
-    lineHeight: 27,
-    color: '#061A3B',
-    textAlign: 'center',
-    fontWeight: FONT_WEIGHTS.bold,
-    letterSpacing: -0.5,
-  },
-  featureTitleFont: {
-    fontFamily: FONT_FAMILIES.bold,
-  },
-  featureTitleCompact: {
-    marginTop: 14,
-    fontSize: 21,
-    lineHeight: 26,
-  },
-  featureText: {
-    marginTop: 8,
-    maxWidth: 238,
-    fontSize: 15,
-    lineHeight: 20,
-    color: COLORS.grey800,
-    textAlign: 'center',
-  },
-  featureTextFont: {
-    fontFamily: FONT_FAMILIES.regular,
-  },
-  featureTextCompact: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  shield: {
-    marginTop: 12,
-    width: 40,
-    height: 40,
+    gap: 10,
     borderRadius: 20,
     backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: COLORS.grey200,
+    borderColor: '#E3EAF0',
+    ...SHADOWS.large,
+  },
+  detourAlertCompact: {
+    width: '91%',
+    minHeight: 68,
+    marginTop: -22,
+    paddingVertical: 9,
+  },
+  alertIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    ...SHADOWS.small,
+    backgroundColor: '#FFF3DD',
   },
-  shieldText: {
-    fontSize: 24,
+  alertIconText: {
+    color: '#D94B2B',
+    fontSize: 25,
     lineHeight: 28,
-    color: '#159C2E',
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  alertCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  alertTitle: {
+    color: '#061A3B',
+    fontFamily: FONT_FAMILIES.bold,
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  alertDescription: {
+    marginTop: 2,
+    color: '#5F7387',
+    fontFamily: FONT_FAMILIES.regular,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: '#E5F8EF',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#159C63',
+  },
+  liveText: {
+    color: '#087747',
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: FONT_WEIGHTS.bold,
   },
   progressArea: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 'auto',
+    marginTop: 28,
   },
-  dots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 12,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.grey300,
-  },
-  dotActive: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: '#0969F5',
+  progressAreaVeryCompact: {
+    marginTop: 18,
   },
   statusText: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: COLORS.grey800,
+    marginBottom: 9,
+    color: '#5F7387',
+    fontSize: 14,
+    lineHeight: 19,
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  statusTextFont: {
-    fontFamily: FONT_FAMILIES.regular,
   },
   progressRow: {
-    width: '86%',
+    width: '88%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   progressTrack: {
     flex: 1,
     height: 7,
     borderRadius: BORDER_RADIUS.round,
-    backgroundColor: COLORS.grey200,
+    backgroundColor: '#DCE7EF',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: BORDER_RADIUS.round,
-    backgroundColor: '#0969F5',
+    backgroundColor: '#1174E7',
   },
   progressPercent: {
-    minWidth: 42,
-    fontSize: 15,
-    lineHeight: 20,
-    color: '#0969F5',
+    minWidth: 40,
+    color: '#005EA8',
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: FONT_WEIGHTS.bold,
   },
-  progressPercentFont: {
+  boldFont: {
     fontFamily: FONT_FAMILIES.bold,
+  },
+  regularFont: {
+    fontFamily: FONT_FAMILIES.regular,
   },
 });

@@ -23,6 +23,7 @@ import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 
 const SECONDS_PER_DAY = 24 * 3600;
 const SERVICE_DAY_ROLLOVER_WINDOW_SECONDS = 6 * 3600;
+const ARRIVE_BY_SEARCH_STEP_SECONDS = 10 * 60;
 
 const getCandidatePoolSize = () => Math.max(
   ROUTING_CONFIG.MAX_ITINERARIES,
@@ -111,6 +112,17 @@ const collectForwardResultsForContext = (
   }
 
   return results;
+};
+
+const getResultDepartureTime = (result) => {
+  const path = Array.isArray(result?.path) ? result.path : [];
+  const firstTransit = path.find((segment) => segment.type === 'TRANSIT');
+  if (!firstTransit || !Number.isFinite(firstTransit.boardingTime)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const originWalk = path.find((segment) => segment.type === 'ORIGIN_WALK');
+  return firstTransit.boardingTime - (Number(originWalk?.walkSeconds) || 0);
 };
 
 /**
@@ -257,6 +269,12 @@ export const planTripLocal = async ({
   // Keep a larger arrival-time candidate pool, then rank the built
   // itineraries by rider cost so transfer penalties can beat early arrivals.
   raptorResults.sort((a, b) => {
+    if (arriveBy) {
+      return getResultDepartureTime(b) - getResultDepartureTime(a) ||
+        b.arrivalTime - a.arrivalTime ||
+        a.walkToDestSeconds - b.walkToDestSeconds;
+    }
+
     const timeDiff = a.arrivalTime - b.arrivalTime;
     if (Math.abs(timeDiff) > 120) return timeDiff;
     return a.walkToDestSeconds - b.walkToDestSeconds;
@@ -272,15 +290,24 @@ export const planTripLocal = async ({
   }
 
   // Build itineraries from RAPTOR results
-  const itineraries = rankItinerariesForRider(raptorResults.map((result, index) =>
+  let itineraries = rankItinerariesForRider(raptorResults.map((result, index) =>
     buildItinerary(result, routingData, {
       fromLat,
       fromLon,
       toLat,
       toLon,
       date,
+      arriveBy,
     })
-  )).slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
+  ));
+
+  if (arriveBy) {
+    itineraries = itineraries.sort((a, b) => (
+      (b.startTime || 0) - (a.startTime || 0) ||
+      (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
+    ));
+  }
+  itineraries = itineraries.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
 
   return {
     from: { name: 'Origin', lat: fromLat, lon: fromLon },
@@ -707,18 +734,22 @@ const raptorReverse = (
   targetArrivalTime,
   activeServices
 ) => {
-  // For now, run forward RAPTOR with earlier departure times
-  // and pick the one that arrives closest to target time
-  // Full reverse RAPTOR is more complex and can be added later
+  // Search the full supported trip-duration window. Forward RAPTOR finds the
+  // next departure after each sampled time; regular samples therefore cover
+  // sparse schedules without limiting arrive-by trips to one hour.
+  const lookbackSeconds = ROUTING_CONFIG.MAX_TRIP_DURATION || 2 * 3600;
+  const firstSearchTime = Math.max(0, targetArrivalTime - lookbackSeconds);
+  const searchTimes = [];
+  for (
+    let departureTime = firstSearchTime;
+    departureTime < targetArrivalTime;
+    departureTime += ARRIVE_BY_SEARCH_STEP_SECONDS
+  ) {
+    searchTimes.push(departureTime);
+  }
+  searchTimes.push(Math.max(0, targetArrivalTime - 1));
 
-  const searchTimes = [
-    targetArrivalTime - 3600, // 1 hour before
-    targetArrivalTime - 2400, // 40 min before
-    targetArrivalTime - 1800, // 30 min before
-    targetArrivalTime - 1200, // 20 min before
-  ];
-
-  let bestResult = null;
+  const candidates = [];
 
   for (const departureTime of searchTimes) {
     if (departureTime < 0) continue;
@@ -734,9 +765,7 @@ const raptorReverse = (
 
       for (const result of results) {
         if (result.arrivalTime <= targetArrivalTime) {
-          if (!bestResult || result.arrivalTime > bestResult.arrivalTime) {
-            bestResult = result;
-          }
+          candidates.push(result);
         }
       }
     } catch (e) {
@@ -744,5 +773,11 @@ const raptorReverse = (
     }
   }
 
-  return bestResult ? [bestResult] : [];
+  return deduplicateResults(candidates)
+    .sort((a, b) => (
+      getResultDepartureTime(b) - getResultDepartureTime(a) ||
+      b.arrivalTime - a.arrivalTime ||
+      a.walkToDestSeconds - b.walkToDestSeconds
+    ))
+    .slice(0, getCandidatePoolSize());
 };

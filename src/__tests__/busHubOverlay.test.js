@@ -7,11 +7,15 @@ jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
   Image: 'Image',
+  Platform: { OS: 'android' },
   StyleSheet: { create: (styles) => styles },
 }));
 
 jest.mock('@maplibre/maplibre-react-native', () => ({
   MarkerView: 'MarkerView',
+  ShapeSource: 'ShapeSource',
+  CircleLayer: 'CircleLayer',
+  SymbolLayer: 'SymbolLayer',
 }));
 
 jest.mock('react-native-svg', () => ({
@@ -31,67 +35,30 @@ const {
   BUS_HUBS,
   BUS_HUB_MAJOR_IDS,
   BUS_HUB_MINOR_IDS,
+  BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM,
   BUS_HUB_MINOR_LABEL_MIN_ZOOM,
 } = require('../config/busHubs');
 
 describe('BusHubOverlay', () => {
-  test('native renders cartoon hub marker views above route lines but below priority marker callouts', () => {
+  test('Android renders bus hubs as passive style layers instead of touch-blocking native views', () => {
     let inst;
     act(() => {
       inst = create(React.createElement(BusHubOverlay, {
-        currentZoom: BUS_HUB_MINOR_LABEL_MIN_ZOOM - 0.5,
+        currentZoom: BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM - 0.5,
       }));
     });
 
-    const markers = inst.root.findAllByType('MarkerView');
-    const text = inst.root.findAllByType('Text');
-    const images = inst.root.findAllByType('Image');
-    const frames = inst.root.findAll((node) => node.props.testID === 'bus-hub-marker-frame');
-    const labelPills = inst.root.findAll((node) => node.props.testID === 'bus-hub-label-pill');
-    const iconWraps = inst.root.findAll((node) => node.props.testID === 'bus-hub-icon-wrap');
+    const source = inst.root.findByType('ShapeSource');
+    const dots = inst.root.findByType('CircleLayer');
+    const labels = inst.root.findByType('SymbolLayer');
 
-    expect(markers).toHaveLength(BUS_HUBS.length);
-    expect(markers[0].props.id).toBe('bus-hub-allandale-terminal');
-    expect(markers[0].props.anchor).toEqual({ x: 0.5, y: 0.09375 });
-    expect(markers.every((marker) => marker.props.pointerEvents === 'none')).toBe(true);
-    expect(images).toHaveLength(0);
-    expect(iconWraps[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        width: 21,
-        height: 21,
-        borderRadius: 10.5,
-        backgroundColor: '#0C8CE5',
-        borderColor: '#FFFFFF',
-        borderWidth: 2,
-      }),
-    ]));
-    expect(iconWraps[BUS_HUB_MAJOR_IDS.length].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        width: 15.75,
-        height: 15.75,
-        borderRadius: 7.875,
-        backgroundColor: '#0C8CE5',
-        borderColor: '#FFFFFF',
-        borderWidth: 2,
-      }),
-    ]));
-    expect(frames[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ width: 220, height: 112 }),
-    ]));
-    expect(text.some((node) => node.children.includes('Barrie Allandale Hub'))).toBe(true);
-    expect(text.some((node) => node.children.includes('Barrie Allandale Transit Terminal'))).toBe(false);
-    expect(text.some((node) => node.children.includes('Georgian Mall'))).toBe(true);
-    expect(frames.every((frame) => frame.props.style.some((style) => style?.zIndex === 65))).toBe(true);
-    const majorLabelText = text.find((node) => node.children.includes('Barrie Allandale Hub'));
-    expect(majorLabelText.props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ fontSize: 11 }),
-    ]));
-    expect(labelPills[0].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ position: 'absolute', top: 22 }),
-    ]));
-    expect(labelPills[BUS_HUB_MAJOR_IDS.length].props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ position: 'absolute', top: 17 }),
-    ]));
+    expect(inst.root.findAllByType('MarkerView')).toHaveLength(0);
+    expect(source.props.shape.features).toHaveLength(BUS_HUBS.length);
+    expect(source.props.shape.features[0].properties.label).toBe('Barrie Allandale Hub');
+    expect(source.props.shape.features.find((feature) => feature.id === 'georgian-mall').properties.label).toBe('');
+    expect(dots.props.layerIndex).toBe(650);
+    expect(labels.props.layerIndex).toBe(651);
+    expect(labels.props.style.textFont).toEqual(['Noto Sans Bold']);
   });
 
   test('web forwards the same feature collection to the MapLibre layer renderer', () => {

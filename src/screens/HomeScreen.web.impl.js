@@ -50,6 +50,7 @@ import {
 import { routeIsDetouring } from '../utils/routeDetourMatching';
 import { getDisplayedVehiclesForDetourView, isRouteInSameDetourFamily } from '../utils/detourVehicleFiltering';
 import { getRouteShapeVisibleSegments } from '../utils/detourRouteMasking';
+import { getCartographicRouteCoordinates } from '../utils/cartographicRouteGeometry';
 import {
   getDetourLabelDensity,
   getDetourGeometryOverlayProps,
@@ -93,6 +94,8 @@ import { getTransitStartupProgress } from '../utils/systemHealthUI';
 import { startTripToDestination } from '../features/trip-planning/startTripToDestination';
 import { selectStopTripDestination } from '../features/trip-planning/selectStopTripDestination';
 import { annotateItinerariesWithStopClosures } from '../utils/stopClosureTripWarnings';
+import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
+import { getItineraryNavigationBlock } from '../utils/tripNavigationSafety';
 import { buildDetourStopNotice } from '../utils/stopNoticeUtils';
 import {
   annotateStopsWithClosures,
@@ -883,10 +886,6 @@ const HomeScreen = ({ route }) => {
       : null;
     const sharedRouteLabel = overlay?.routeLineLabel || sharedRouteIds?.join('/');
     const sharedStatusLabel = overlay?.state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
-    const overlayRouteIds = Array.isArray(overlay?.routeIds) && overlay.routeIds.length > 0
-      ? overlay.routeIds
-      : sharedRouteIds;
-
     setFocusedDetourRouteId(routeId);
     setDetourSheetRouteId(routeId);
     setDetourSheetSegmentIndex(Number.isInteger(segmentIndex) ? segmentIndex : null);
@@ -912,11 +911,9 @@ const HomeScreen = ({ route }) => {
       routeId,
     }));
     handleMapViewModeChange('detour');
-    focusMapOnDetour(routeId, {
-      routeIds: overlayRouteIds,
-      primarySegmentIndex: Number.isInteger(segmentIndex) ? segmentIndex : null,
-    });
-  }, [focusMapOnDetour, handleMapViewModeChange]);
+    // The initial detour selection owns the one-time camera fit. A press on
+    // map geometry must not pull the camera back after the rider pans away.
+  }, [handleMapViewModeChange]);
 
   const selectedDetour = detourSheetRouteId ? getRouteDetour(detourSheetRouteId) : null;
   const selectedDetourSegments = useMemo(() => getSelectedDetourSegments(
@@ -1074,10 +1071,22 @@ const HomeScreen = ({ route }) => {
     busApproachLines.flatMap((line) => (Array.isArray(line?.coordinates) ? line.coordinates : []))
   ), [busApproachLines]);
 
-  const itinerariesWithStopClosureNotices = useMemo(
-    () => annotateItinerariesWithStopClosures(itineraries, transitNewsImpacts),
-    [itineraries, transitNewsImpacts]
-  );
+  const itinerariesWithStopClosureNotices = useMemo(() => {
+    const detourAwareItineraries = annotateItinerariesWithDetours(
+      itineraries,
+      detoursEnabled ? activeDetours : {},
+      detourStopDetailsByRouteId,
+      visibleOfficialServiceImpacts
+    );
+    return annotateItinerariesWithStopClosures(detourAwareItineraries, transitNewsImpacts);
+  }, [
+    activeDetours,
+    detourStopDetailsByRouteId,
+    detoursEnabled,
+    itineraries,
+    transitNewsImpacts,
+    visibleOfficialServiceImpacts,
+  ]);
   const selectedItinerary = isTripPlanningMode
     ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
@@ -1576,11 +1585,23 @@ const HomeScreen = ({ route }) => {
 
   // Start navigation directly from preview (skip details screen)
   const startNavigationDirect = async (itinerary) => {
-    if (!itinerary || !itinerary.legs || itinerary.legs.length === 0) {
-      logger.warn('Cannot start navigation: No route data available');
+    const navigationBlock = getItineraryNavigationBlock(itinerary);
+    if (navigationBlock) {
+      logger.warn('Cannot start navigation', { code: navigationBlock.code });
+      if (typeof window !== 'undefined') {
+        window.alert?.(`${navigationBlock.title}\n\n${navigationBlock.message}`);
+      }
       return;
     }
     const preparedItinerary = await prepareItineraryForNavigation(itinerary);
+    const preparedNavigationBlock = getItineraryNavigationBlock(preparedItinerary);
+    if (preparedNavigationBlock) {
+      logger.warn('Cannot start prepared navigation', { code: preparedNavigationBlock.code });
+      if (typeof window !== 'undefined') {
+        window.alert?.(`${preparedNavigationBlock.title}\n\n${preparedNavigationBlock.message}`);
+      }
+      return;
+    }
     navigation.navigate('Navigation', { itinerary: preparedItinerary });
   };
 
@@ -1731,6 +1752,9 @@ const HomeScreen = ({ route }) => {
           }
 
           return visibleRouteSegments.map((coordinates, segmentIndex) => {
+            const displayCoordinates = getCartographicRouteCoordinates(coordinates, {
+              zoom: currentZoom,
+            });
             const segmentId = visibleRouteSegments.length === 1
               ? shape.id
               : `${shape.id}-visible-${segmentIndex}`;
@@ -1738,7 +1762,7 @@ const HomeScreen = ({ route }) => {
             return (
               <WebRoutePolyline
                 key={segmentId}
-                coordinates={coordinates}
+                coordinates={displayCoordinates}
                 color={routeColor}
                 strokeWidth={getPolylineWeight(shape.routeId)}
                 opacity={opacity}
@@ -1749,7 +1773,7 @@ const HomeScreen = ({ route }) => {
                 onMouseOut={() => setHoveredRouteId(null)}
                 className={isNewlySelected ? 'polyline-draw-on' : ''}
                 routeLabel={routeLabel}
-                showArrows={showOneWayArrows}
+                showArrows={false}
                 layerOrder={routeLayerOrder}
               />
             );
@@ -1813,7 +1837,18 @@ const HomeScreen = ({ route }) => {
             onStopPress={handleDetourStopPress}
           />
         ))}
-        {/* Live bus markers - hide when in trip preview mode */}
+        {!isTripPreviewMode && shouldShowDetailedDetourOverlay({ isDetourView, hasDetourFocus }) && detourOverlays.map((overlay) => (
+          <DetourOverlay
+            key={`detour-callouts-${overlay.routeId}`}
+            {...overlay}
+            renderMode="callouts"
+            currentZoom={currentZoom}
+            labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
+            selectedSegmentIndex={overlay.routeId === focusedDetourRouteId ? detourSheetSegmentIndex : null}
+            onPress={(segment, segmentIndex) => handleDetourOverlayPress(overlay.routeId, segment, segmentIndex, overlay)}
+          />
+        ))}
+        {/* Live buses render after detour geometry/callouts so they stay on top. */}
         {!isTripPreviewMode && mapDisplayedVehicles.map((vehicle) => {
           const isDetouring = routeIsDetouring(vehicle.routeId, mapDetourRouteIds);
           const isFocusedDetour = mapHasDetourFocus && isRouteInSameDetourFamily(focusedDetourRouteId, vehicle.routeId);
@@ -1832,21 +1867,10 @@ const HomeScreen = ({ route }) => {
               routeLabel={getRouteLabel(vehicle)}
               routeDirectionLabel={getVehicleRouteDirectionLabel(vehicle, getRouteLabel(vehicle))}
               snapPath={getVehicleSnapPath(vehicle)}
-              dimmed={dimmed}
+              dimmed={false}
             />
           );
         })}
-        {!isTripPreviewMode && shouldShowDetailedDetourOverlay({ isDetourView, hasDetourFocus }) && detourOverlays.map((overlay) => (
-          <DetourOverlay
-            key={`detour-callouts-${overlay.routeId}`}
-            {...overlay}
-            renderMode="callouts"
-            currentZoom={currentZoom}
-            labelDensity={getDetourLabelDensity({ isDetourView, hasDetourFocus })}
-            selectedSegmentIndex={overlay.routeId === focusedDetourRouteId ? detourSheetSegmentIndex : null}
-            onPress={(segment, segmentIndex) => handleDetourOverlayPress(overlay.routeId, segment, segmentIndex, overlay)}
-          />
-        ))}
         {/* Trip planning route overlay */}
         {tripRouteCoordinates.map((route) => (
           <React.Fragment key={route.id}>

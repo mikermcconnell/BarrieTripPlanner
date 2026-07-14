@@ -26,6 +26,7 @@ import {
   getTransitRideLegsWithIndexes,
   isTransitRideLeg,
 } from '../utils/routeContinuity';
+import { getItineraryNavigationBlock } from '../utils/tripNavigationSafety';
 
 const getTripLegKey = (leg, index) => {
   const routeKey = leg.route?.id || leg.route?.shortName || 'route';
@@ -465,6 +466,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
     hasRealtimeInfo,
   });
   const hasChoiceWarning = itinerary.hasMissedDeparture || itinerary.hasMissedTransfer;
+  const navigationBlock = getItineraryNavigationBlock(itinerary);
 
   // Format "leaves in" text
   const getLeavesInText = () => {
@@ -603,12 +605,17 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               <Text style={styles.detailsButtonText}>Details</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.goButton}
+              style={[styles.goButton, navigationBlock && styles.goButtonDisabled]}
               onPress={() => onStartNavigation(itinerary)}
+              disabled={Boolean(navigationBlock)}
               accessibilityRole="button"
-              accessibilityLabel="Start navigation"
+              accessibilityLabel={navigationBlock ? navigationBlock.title : 'Start navigation'}
+              accessibilityHint={navigationBlock?.message}
+              accessibilityState={{ disabled: Boolean(navigationBlock) }}
             >
-              <Text style={styles.goButtonText}>Go</Text>
+              <Text style={[styles.goButtonText, navigationBlock && styles.goButtonTextDisabled]}>
+                {navigationBlock ? 'Re-plan needed' : 'Go'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1027,10 +1034,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     borderRadius: BORDER_RADIUS.round,
   },
+  goButtonDisabled: {
+    backgroundColor: COLORS.grey300,
+  },
   goButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
+  },
+  goButtonTextDisabled: {
+    color: COLORS.textSecondary,
   },
   onDemandNote: {
     backgroundColor: COLORS.primarySubtle,

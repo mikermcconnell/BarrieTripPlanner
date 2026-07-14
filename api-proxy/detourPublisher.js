@@ -1,5 +1,6 @@
 const { getDb } = require('./firebaseAdmin');
 const { DETOUR_PATH_LABEL, matchDetourGeometry } = require('./detourRoadMatcher');
+const { recordDetourDecision } = require('./detourDecisionJournal');
 const { shouldAutoClearStaleDetour, evaluateStaleRiderVisibility } = require('./detour/staleClear');
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
@@ -1950,8 +1951,16 @@ async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
   const snapshot = await db.collection(storageConfig.activeCollection).get();
   snapshot.forEach((doc) => {
     const data = doc.data() || {};
-    const publishId = detourPublishId(doc.id, data);
-    rememberPublishedDetour(publishId, data);
+    const publishId = String(doc.id || '').trim();
+    rememberPublishedDetour(publishId, {
+      ...data,
+      // Firestore document identity is authoritative during cleanup. Older
+      // migration records can carry route-keyed event fields even though the
+      // document itself is event-window keyed; trusting those fields collapses
+      // both records in memory and leaves the duplicate impossible to delete.
+      eventId: publishId,
+      detourEventId: publishId,
+    });
   });
   return snapshot.size;
 }
@@ -2046,7 +2055,7 @@ async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete',
     return true;
   } catch (err) {
     console.error(`[detourPublisher] Failed to ${logPrefix} ${publishId}:`, err.message);
-    return false;
+    throw err;
   }
 }
 
@@ -2230,8 +2239,134 @@ function hasEventWindowDetourForRoute(routeId, publishableDetours = {}) {
   });
 }
 
-function isHiddenSnapshot(snapshot) {
-  return snapshot?.riderVisible === false || snapshot?.staleForReview === true;
+function getProgressBoundsForSupersede(source = {}) {
+  if (!source || typeof source !== 'object') return null;
+  const candidates = [
+    source.eventWindow,
+    source.detourZone,
+    source.geometry,
+    source.clearWindow,
+    Array.isArray(source.segments) ? source.segments[0] : null,
+    Array.isArray(source.geometry?.segments) ? source.geometry.segments[0] : null,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const start = toFiniteNumber(
+      candidate.coreStartProgressMeters ??
+      candidate.sourceStartProgressMeters ??
+      candidate.startProgressMeters
+    );
+    const end = toFiniteNumber(
+      candidate.coreEndProgressMeters ??
+      candidate.sourceEndProgressMeters ??
+      candidate.endProgressMeters
+    );
+    const shapeId = candidate.shapeId || source.shapeId || source.geometry?.shapeId || null;
+    if (Number.isFinite(start) && Number.isFinite(end) && shapeId) {
+      return {
+        start: Math.min(start, end),
+        end: Math.max(start, end),
+        shapeId: String(shapeId),
+      };
+    }
+  }
+
+  return null;
+}
+
+function progressBoundsOverlapOrNear(left, right, maxGapMeters = 1000) {
+  if (!left || !right || left.shapeId !== right.shapeId) return false;
+  const gap = left.end < right.start
+    ? right.start - left.end
+    : right.end < left.start
+      ? left.start - right.end
+      : 0;
+  return gap <= maxGapMeters;
+}
+
+function progressBoundsAreEquivalent(left, right, endpointToleranceMeters = 100) {
+  if (!left || !right || left.shapeId !== right.shapeId) return false;
+  const leftSpan = Math.max(1, left.end - left.start);
+  const rightSpan = Math.max(1, right.end - right.start);
+  const overlap = Math.max(0, Math.min(left.end, right.end) - Math.max(left.start, right.start));
+  return overlap / Math.min(leftSpan, rightSpan) >= 0.8 &&
+    Math.abs(left.start - right.start) <= endpointToleranceMeters &&
+    Math.abs(left.end - right.end) <= endpointToleranceMeters;
+}
+
+function getEquivalentCurrentDetour(
+  removedPublishId,
+  routeId,
+  previousSnapshot,
+  publishableDetours = {}
+) {
+  const previousBounds = getProgressBoundsForSupersede(previousSnapshot);
+  if (!routeId) return null;
+
+  return Object.entries(publishableDetours)
+    .map(([publishId, detour]) => ({ publishId, detour }))
+    .find(({ publishId, detour }) => {
+      if (publishId === removedPublishId || detourRouteId(publishId, detour) !== routeId) return false;
+      const migrationPair = isLegacyRouteScopedSnapshot(removedPublishId, previousSnapshot) ||
+        isLegacyRouteScopedSnapshot(publishId, detour);
+      if (!migrationPair) return false;
+      const previousSharedId = String(previousSnapshot?.sharedDetourEventId || '').trim();
+      const currentGeometry = detour?.geometry || detour;
+      const currentSegments = Array.isArray(currentGeometry?.segments)
+        ? currentGeometry.segments
+        : [];
+      const currentSegmentSharedId = currentSegments
+        .map((segment) => String(
+          segment?.sharedDetourEventId || segment?.detourEventId || ''
+        ).trim())
+        .find(Boolean) || '';
+      const currentSharedId = String(
+        detour?.sharedDetourEventId ||
+        currentGeometry?.sharedDetourEventId ||
+        currentSegmentSharedId ||
+        ''
+      ).trim();
+      if (previousSharedId && currentSharedId && previousSharedId === currentSharedId) {
+        return true;
+      }
+      if (!previousBounds) return false;
+      return progressBoundsAreEquivalent(
+        previousBounds,
+        getProgressBoundsForSupersede(detour)
+      );
+    }) || null;
+}
+
+function snapshotsAreSpatiallyNear(left, right, maxDistanceMeters = 1200) {
+  const leftPoints = collectGeometryAnchorPoints(left);
+  const rightPoints = collectGeometryAnchorPoints(right);
+  if (leftPoints.length === 0 || rightPoints.length === 0) return false;
+
+  return leftPoints.some((leftPoint) => (
+    rightPoints.some((rightPoint) => distanceMeters(leftPoint, rightPoint) <= maxDistanceMeters)
+  ));
+}
+
+function getSupersedingGpsDetour(routeId, previousSnapshot, publishableDetours = {}) {
+  const previousBounds = getProgressBoundsForSupersede(previousSnapshot);
+  if (!routeId || !previousBounds) return null;
+
+  return Object.entries(publishableDetours)
+    .map(([publishId, detour]) => ({ publishId, detour }))
+    .find(({ publishId, detour }) => {
+      if (detourRouteId(publishId, detour) !== routeId) return false;
+      const geometry = detour?.geometry || detour;
+      if (!gpsSupersedesPreviousPath(geometry)) return false;
+      if (progressBoundsOverlapOrNear(
+        previousBounds,
+        getProgressBoundsForSupersede(detour)
+      )) {
+        return true;
+      }
+      return geometry?.configuredCorridor === true &&
+        snapshotsAreSpatiallyNear(previousSnapshot, geometry);
+    }) || null;
 }
 
 function assignSnapshotDate(doc, key, valueMs) {
@@ -2459,20 +2594,42 @@ async function publishDetours(activeDetours, options = {}) {
       await deletePublishedDetour(db, publishId, event, 'delete superseded legacy route detour', storageConfig);
       continue;
     }
-    if (isHiddenSnapshot(previous)) {
+    const equivalentCurrentDetour = getEquivalentCurrentDetour(
+      publishId,
+      routeId,
+      previous,
+      publishableDetours
+    );
+    if (equivalentCurrentDetour) {
       const event = {
         ...buildClearedEvent(routeId, previous, now),
-        clearReason: previous?.clearReason || 'hidden-detour-no-longer-confirmed',
+        clearReason: 'superseded-by-equivalent-event',
+        supersededByEventId: equivalentCurrentDetour.publishId,
       };
-      await deletePublishedDetour(db, publishId, event, 'delete absent hidden detour', storageConfig);
+      await deletePublishedDetour(db, publishId, event, 'delete equivalent duplicate detour', storageConfig);
       continue;
     }
-    if (isObsoleteShapeSnapshot(previous, { shapes: options.shapes, gtfsData })) {
+    if (
+      hasNormalRouteClearProof(previous) &&
+      isObsoleteShapeSnapshot(previous, { shapes: options.shapes, gtfsData })
+    ) {
       const event = {
         ...buildClearedEvent(routeId, previous, now),
         clearReason: 'obsolete-shape-normal-route-observed',
       };
       await deletePublishedDetour(db, publishId, event, 'delete obsolete-shape detour', storageConfig);
+      continue;
+    }
+    const supersedingGpsDetour = getSupersedingGpsDetour(routeId, previous, publishableDetours);
+    if (supersedingGpsDetour) {
+      const event = {
+        ...buildClearedEvent(routeId, previous, now),
+        clearReason: supersedingGpsDetour.detour?.geometry?.configuredCorridor === true
+          ? 'superseded-by-configured-corridor'
+          : 'superseded-by-new-gps-path',
+        supersededByEventId: supersedingGpsDetour.publishId,
+      };
+      await deletePublishedDetour(db, publishId, event, 'delete superseded detour path', storageConfig);
       continue;
     }
     if (!hasNormalRouteClearProof(previous)) {
@@ -2488,6 +2645,7 @@ async function publishDetours(activeDetours, options = {}) {
         lastSeenUpdateTime.set(publishId, now);
       } catch (err) {
         console.error(`[detourPublisher] Failed to retain ${publishId}:`, err.message);
+        throw err;
       }
       continue;
     }
@@ -2576,6 +2734,11 @@ async function publishDetours(activeDetours, options = {}) {
       try {
         geo = await matchDetourGeometry(geo, {
           shapes: options.shapes || options.gtfsData?.shapes || null,
+          logContext: {
+            routeId,
+            publishId,
+            eventId: detourForGeometry?.eventId || detourForGeometry?.detourEventId || publishId,
+          },
         });
         detourForGeometry = geo === detour.geometry ? detour : { ...detour, geometry: geo };
       } catch (err) {
@@ -2720,6 +2883,17 @@ async function publishDetours(activeDetours, options = {}) {
       doc.canShowDetourPath = false;
     }
     attachRiderPublishGates(doc);
+    recordDetourDecision({
+      publishId,
+      routeId,
+      doc,
+      detour: detourForGeometry,
+      geometry: geo,
+      previousSnapshot,
+      writeGeo,
+      isNew,
+      now,
+    });
 
     try {
       await db.collection(storageConfig.activeCollection).doc(publishId).set(doc, { merge: true });
@@ -2774,6 +2948,7 @@ async function publishDetours(activeDetours, options = {}) {
       }
     } catch (err) {
       console.error(`[detourPublisher] Failed to write ${publishId}:`, err.message);
+      throw err;
     }
   }
 
@@ -2792,8 +2967,9 @@ async function getDetourHistory(options = {}) {
   const storageConfig = resolveDetourStorageConfig(options.storageConfig);
 
   const parsedLimit = Number.parseInt(String(options.limit ?? HISTORY_DEFAULT_LIMIT), 10);
+  const maxLimit = options.internal === true ? 1000 : HISTORY_MAX_LIMIT;
   const limit = Number.isFinite(parsedLimit)
-    ? Math.min(Math.max(parsedLimit, 1), HISTORY_MAX_LIMIT)
+    ? Math.min(Math.max(parsedLimit, 1), maxLimit)
     : HISTORY_DEFAULT_LIMIT;
 
   const routeId = options.routeId ? String(options.routeId).trim() : '';
@@ -2855,6 +3031,7 @@ module.exports = {
   hasNormalRouteClearProof,
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
+  getEquivalentCurrentDetour,
   deriveSharedDetourEventAssignments,
   alignEventWindowSegmentSharedMetadata,
   hasEventWindowSegmentSharedMetadataMismatch,

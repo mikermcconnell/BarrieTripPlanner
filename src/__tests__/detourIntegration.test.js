@@ -346,7 +346,7 @@ describe('DetourOverlay component rendering', () => {
       expect(path.props.strokeWidth).toBe(4.5);
       expect(path.props.outlineWidth).toBe(1.25);
       expect(path.props.outlineColor).toBe('#2E7D32');
-      expect(path.props.showArrows).toBe(true);
+      expect(path.props.showArrows).toBe(false);
     });
 
     test('renders trusted inferred segment path when road-matched likely path is missing', () => {
@@ -532,36 +532,13 @@ describe('DetourOverlay component rendering', () => {
       expect(annotations.find((a) => a.props.id === 'detour-exit-point-8A')).toBeUndefined();
     });
 
-    test('adds twice as many prominent direction arrows to the detour path', () => {
+    test('omits prominent marker arrows so they cannot cover detour labels', () => {
       const inst = renderComponent(DetourOverlayNative, OVERLAY_ACTIVE);
-      const markerViews = inst.root.findAllByType('MarkerView');
-      const arrows = markerViews.filter((marker) =>
+      const arrows = inst.root.findAllByType('MarkerView').filter((marker) =>
         String(marker.props.id).startsWith('detour-direction-arrow-8A')
       );
-      const arrowMarkerViews = arrows.flatMap((marker) =>
-        marker.findAllByType('View').filter((view) =>
-          Array.isArray(view.props.style)
-            && view.props.style.some((style) => style?.width === 30 && style?.height === 30)
-        )
-      );
-      const arrowHeads = arrows.flatMap((marker) =>
-        marker.findAllByType('View').filter((view) =>
-          view.props.style?.borderBottomWidth === 11
-            && view.props.style?.borderBottomColor === '#FFFFFF'
-        )
-      );
-      const arrowStems = arrows.flatMap((marker) =>
-        marker.findAllByType('View').filter((view) =>
-          view.props.style?.width === 5
-            && view.props.style?.height === 8
-            && view.props.style?.backgroundColor === '#FFFFFF'
-        )
-      );
 
-      expect(arrows).toHaveLength(2);
-      expect(arrowMarkerViews).toHaveLength(2);
-      expect(arrowHeads).toHaveLength(2);
-      expect(arrowStems).toHaveLength(2);
+      expect(arrows).toHaveLength(0);
     });
 
     test('keeps closure markers but hides entry/exit callouts when stop markers are hidden', () => {
@@ -572,7 +549,7 @@ describe('DetourOverlay component rendering', () => {
       const annotations = inst.root.findAllByType('PointAnnotation');
       const markerViews = inst.root.findAllByType('MarkerView');
       expect(annotations).toHaveLength(0);
-      expect(markerViews).toHaveLength(5);
+      expect(markerViews).toHaveLength(3);
       expect(markerViews.some((a) => String(a.props.id).startsWith('detour-closed-stop-8A'))).toBe(true);
       const detourMapLabel = markerViews.find((a) => String(a.props.id).includes('detour-map-label-8A'));
       expect(detourMapLabel).toBeDefined();
@@ -596,7 +573,7 @@ describe('DetourOverlay component rendering', () => {
       expect(path).toBeDefined();
       expect(path.props.dashArray).toBeUndefined();
       expect(path.props.outlineColor).toBe('#2E7D32');
-      expect(path.props.showArrows).toBe(true);
+      expect(path.props.showArrows).toBe(false);
     });
 
     test('web renders trusted inferred segment path when road-matched likely path is missing', () => {
@@ -731,7 +708,7 @@ describe('DetourOverlay component rendering', () => {
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(7);
+      expect(markers).toHaveLength(5);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',
@@ -783,18 +760,13 @@ describe('DetourOverlay component rendering', () => {
       expect(Math.max(...stopIndexes)).toBeGreaterThan(0);
     });
 
-    test('adds twice as many prominent web direction arrows to the detour path', () => {
+    test('omits prominent web marker arrows so they cannot cover detour labels', () => {
       const inst = renderComponent(DetourOverlayWeb, OVERLAY_ACTIVE);
-      const markers = inst.root.findAllByType(MockWebHtmlMarker);
-      const arrows = markers.filter((m) => m.props.zIndexOffset === 1180);
+      const arrows = inst.root
+        .findAllByType(MockWebHtmlMarker)
+        .filter((marker) => marker.props.zIndexOffset === 1180);
 
-      expect(arrows).toHaveLength(2);
-      arrows.forEach((arrow) => {
-        expect(arrow.props.html).toContain('rotate(');
-        expect(arrow.props.html).toContain('width:30px');
-        expect(arrow.props.html).toContain('border-left:7px solid transparent');
-        expect(arrow.props.html).toContain('border-bottom:11px solid #ffffff');
-      });
+      expect(arrows).toHaveLength(0);
     });
 
     test('keeps closure markers but hides entry/exit callouts when stop markers are hidden', () => {
@@ -804,7 +776,7 @@ describe('DetourOverlay component rendering', () => {
       });
       const markers = inst.root.findAllByType(MockWebHtmlMarker);
       const labelLayers = inst.root.findAllByType(MockWebLineLabelLayer);
-      expect(markers).toHaveLength(5);
+      expect(markers).toHaveLength(3);
       expect(labelLayers).toHaveLength(1);
       expect(labelLayers[0].props.labels.map((label) => label.label)).toEqual([
         'Route closed',

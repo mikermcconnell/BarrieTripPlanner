@@ -1,13 +1,18 @@
-import React, { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
-import { BUS_HUBS, BUS_HUB_TYPES, getBusHubDisplayLabel } from '../config/busHubs';
+import {
+  BUS_HUBS,
+  BUS_HUB_TYPES,
+  buildBusHubFeatureCollection,
+  getBusHubDisplayLabel,
+} from '../config/busHubs';
 import { COLORS, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
 const HUB_MAJOR_ICON_WRAP_SIZE = 21;
 const HUB_MINOR_ICON_WRAP_SIZE = HUB_MAJOR_ICON_WRAP_SIZE * 0.75;
-const HUB_MAJOR_FRAME_HEIGHT = 112;
-const HUB_MINOR_FRAME_HEIGHT = 98;
+const HUB_MAJOR_FRAME_HEIGHT = 54;
+const HUB_MINOR_FRAME_HEIGHT = 46;
 
 const getHubMarkerAnchor = (type) => {
   const isMajor = type === BUS_HUB_TYPES.MAJOR;
@@ -33,7 +38,55 @@ const BusHubIcon = ({ type }) => {
   );
 };
 
-const BusHubOverlay = ({ currentZoom }) => (
+const AndroidBusHubOverlay = ({ currentZoom }) => {
+  const featureCollection = useMemo(
+    () => buildBusHubFeatureCollection(currentZoom),
+    [currentZoom]
+  );
+
+  return (
+    <MapLibreGL.ShapeSource id="bus-hubs-source" shape={featureCollection}>
+      <MapLibreGL.CircleLayer
+        id="bus-hubs-dots"
+        layerIndex={650}
+        style={{
+          circleRadius: [
+            'case',
+            ['==', ['get', 'hubType'], BUS_HUB_TYPES.MAJOR],
+            HUB_MAJOR_ICON_WRAP_SIZE / 2,
+            HUB_MINOR_ICON_WRAP_SIZE / 2,
+          ],
+          circleColor: COLORS.primary,
+          circleStrokeColor: COLORS.white,
+          circleStrokeWidth: 2,
+        }}
+      />
+      <MapLibreGL.SymbolLayer
+        id="bus-hubs-labels"
+        layerIndex={651}
+        style={{
+          textField: ['get', 'label'],
+          textSize: [
+            'case',
+            ['==', ['get', 'hubType'], BUS_HUB_TYPES.MAJOR],
+            11,
+            10,
+          ],
+          textFont: ['Noto Sans Bold'],
+          textColor: COLORS.textPrimary,
+          textHaloColor: COLORS.white,
+          textHaloWidth: 2,
+          textAnchor: 'top',
+          textOffset: [0, 1.25],
+          textAllowOverlap: false,
+          textIgnorePlacement: false,
+        }}
+      />
+    </MapLibreGL.ShapeSource>
+  );
+};
+
+const MarkerViewBusHubOverlay = ({ currentZoom }) => (
   <>
     {BUS_HUBS.map((hub) => {
       const label = getHubLabel(hub, currentZoom);
@@ -82,6 +135,12 @@ const BusHubOverlay = ({ currentZoom }) => (
   </>
 );
 
+const BusHubOverlay = ({ currentZoom }) => (
+  Platform.OS === 'android'
+    ? <AndroidBusHubOverlay currentZoom={currentZoom} />
+    : <MarkerViewBusHubOverlay currentZoom={currentZoom} />
+);
+
 const styles = StyleSheet.create({
   markerFrame: {
     alignItems: 'center',
@@ -91,11 +150,11 @@ const styles = StyleSheet.create({
     elevation: 65,
   },
   markerFrameMajor: {
-    width: 220,
+    width: 156,
     height: HUB_MAJOR_FRAME_HEIGHT,
   },
   markerFrameMinor: {
-    width: 170,
+    width: 132,
     height: HUB_MINOR_FRAME_HEIGHT,
   },
   iconWrap: {
@@ -120,26 +179,26 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   labelPill: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(12, 140, 229, 0.24)',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    maxWidth: 210,
+    maxWidth: 152,
     ...SHADOWS.small,
   },
   labelPillMajor: {
     position: 'absolute',
-    top: 22,
+    top: 21,
     alignSelf: 'center',
     borderColor: 'rgba(0, 78, 128, 0.28)',
   },
   labelPillMinor: {
     position: 'absolute',
-    top: 17,
+    top: 16,
     alignSelf: 'center',
-    maxWidth: 160,
+    maxWidth: 128,
     borderColor: 'rgba(52, 69, 99, 0.22)',
   },
   labelText: {

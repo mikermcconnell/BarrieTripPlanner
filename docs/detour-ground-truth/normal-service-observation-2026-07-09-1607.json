@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-07-09T16:07:29-04:00",
+  "operatorAssertion": "No active detours were identified during the original review; corrected on 2026-07-10 because Route 8B had an official Shanty Bay detour active from July 6 to September 4.",
+  "vehicleFeed": {
+    "status": "fresh",
+    "vehicleCount": 31,
+    "newestVehicleAgeSeconds": 4,
+    "reportingRouteIds": ["10","100","101","11","12A","12B","15A","2A","2B","400","7A","7B","8A","8B"]
+  },
+  "trueNegativeRouteIds": ["100","101","11","15A","2A","2B","7A","7B"],
+  "stalePublicAlertRouteIds": ["10","12A","12B","400","8A"],
+  "stalePublicAlertDocumentCount": 6,
+  "assessment": "Eight reporting routes produced clean true-negative output. Route 8B was removed from the true-negative set after the official July 6 to September 4 Shanty Bay detour was confirmed. Six rider-visible records on five other routes were still public despite operator-confirmed normal routing and require stale-clear remediation; their original detections may still have been valid historically."
+}

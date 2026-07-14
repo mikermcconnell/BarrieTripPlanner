@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { enrichItineraryWithWalking } from '../../services/walkingService';
 import logger from '../../utils/logger';
 
@@ -17,6 +17,12 @@ export const useNavigationItineraryController = ({
   trackStart = false,
 }) => {
   const [itinerary, setItinerary] = useState(initialItinerary);
+  const itineraryRevisionRef = useRef(0);
+
+  const replaceItinerary = useCallback((nextItinerary) => {
+    itineraryRevisionRef.current += 1;
+    setItinerary(nextItinerary);
+  }, []);
 
   useEffect(() => {
     if (trackStart && initialItinerary) {
@@ -31,9 +37,10 @@ export const useNavigationItineraryController = ({
     }
 
     let cancelled = false;
+    const enrichmentRevision = itineraryRevisionRef.current;
     enrichItineraryWithWalking(initialItinerary)
       .then((enriched) => {
-        if (!cancelled) {
+        if (!cancelled && itineraryRevisionRef.current === enrichmentRevision) {
           logger.log('Walking directions enriched for navigation');
           setItinerary(enriched);
         }
@@ -44,7 +51,7 @@ export const useNavigationItineraryController = ({
 
   return {
     itinerary,
-    setItinerary,
+    setItinerary: replaceItinerary,
   };
 };
 

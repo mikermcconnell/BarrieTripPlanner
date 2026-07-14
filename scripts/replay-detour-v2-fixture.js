@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { createDetourV2Detector } = require('../api-proxy/detourV2/detector');
+const { replayDetourV2Fixture } = require('./detourV2Replay');
 
 function usage() {
   console.error(`
@@ -19,39 +19,6 @@ function loadFixture(filePath) {
   return JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
 }
 
-function buildMaps(fixture) {
-  const route = fixture.baselineRoute10;
-  if (!route || !route.routeId || !route.shapes || !Array.isArray(route.shapeIds)) {
-    throw new Error('Fixture is missing baselineRoute10 routeId, shapeIds, or shapes');
-  }
-  return {
-    shapes: new Map(Object.entries(route.shapes)),
-    routeShapeMapping: new Map([[route.routeId, route.shapeIds]]),
-  };
-}
-
-function summarize(eventId, detour) {
-  const firstSegment = Array.isArray(detour?.geometry?.segments)
-    ? detour.geometry.segments[0]
-    : null;
-  return {
-    eventId,
-    routeId: detour?.routeId,
-    state: detour?.state,
-    riderVisible: detour?.riderVisible,
-    riderVisibilityReason: detour?.riderVisibilityReason,
-    canShowDetourPath: detour?.canShowDetourPath,
-    geometryTrustBlockedReason: detour?.geometry?.geometryTrustBlockedReason ?? null,
-    segmentReason: firstSegment?.geometryTrustBlockedReason ?? null,
-    evidencePointCount: detour?.geometry?.evidencePointCount ?? null,
-    currentVehicleCount: detour?.currentVehicleCount ?? null,
-    vehicleCount: detour?.vehicleCount ?? null,
-    uniqueVehicleCount: detour?.uniqueVehicleCount ?? null,
-    startProgressMeters: detour?.geometry?.startProgressMeters ?? null,
-    endProgressMeters: detour?.geometry?.endProgressMeters ?? null,
-  };
-}
-
 function main() {
   const fixturePath = process.argv[2];
   if (!fixturePath) {
@@ -60,20 +27,7 @@ function main() {
   }
 
   const fixture = loadFixture(fixturePath);
-  const { shapes, routeShapeMapping } = buildMaps(fixture);
-  const detector = createDetourV2Detector();
-  detector.hydrateRuntimeState(fixture.runtimeRoute10 || {});
-  const result = detector.processVehicles([], shapes, routeShapeMapping);
-  const eventId = fixture.expected?.eventId || Object.keys(result)[0];
-  const detour = result[eventId];
-
-  if (!detour) {
-    console.error(`Replay failed: expected event ${eventId} was not produced.`);
-    console.error(`Produced events: ${Object.keys(result).join(', ') || '(none)'}`);
-    process.exit(1);
-  }
-
-  const summary = summarize(eventId, detour);
+  const summary = replayDetourV2Fixture(fixture);
   console.log(JSON.stringify({
     fixture: fixturePath,
     expected: fixture.expected || null,

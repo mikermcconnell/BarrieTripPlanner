@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "route-10-mulcaster-simcoe-saved-output",
+      "type": "ground-truth-output",
+      "groundTruth": "route-10-mulcaster-simcoe-2026-05-26.json",
+      "activeDetours": "snapshots/route-10-mulcaster-simcoe-2026-05-26-active-detours.json"
+    },
+    {
+      "id": "route-10-stale-mixed-safety-replay",
+      "type": "detector-replay",
+      "fixture": "../../api-proxy/__tests__/fixtures/detour-v2/route-10-stale-mixed-live-2026-06-13.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-100",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-100.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-101",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-101.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-11",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-11.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-15a",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-15a.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-2a",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-2a.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-2b",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-2b.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-7a",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-7a.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-09-1607-route-7b",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-09-1607-route-7b.json",
+      "activeDetours": "snapshots/normal-service-2026-07-09-1607-active-detours.json"
+    },
+    {
+      "id": "normal-service-2026-07-14-route-8a-downtown-hub-egress",
+      "type": "ground-truth-output",
+      "groundTruth": "normal-service-2026-07-14-route-8a-downtown-hub-egress.json",
+      "activeDetours": "snapshots/normal-service-2026-07-14-route-8a-downtown-hub-egress-active-detours.json"
+    },
+    {
+      "id": "synthetic-30-second-detour-lab",
+      "type": "synthetic-detector-suite"
+    }
+  ]
+}

@@ -17,7 +17,6 @@ import RoutePolyline from './RoutePolyline';
 import ClosedStopMarker from './ClosedStopMarker';
 import { COLORS } from '../config/theme';
 import { haversineDistance, offsetPath, simplifyPath } from '../utils/geometryUtils';
-import { getDirectionalArrowPoints } from '../utils/detourDirectionArrows';
 import { formatDetourMapLabel } from '../utils/detourLabeling';
 import {
   canPlaceLineCenterLabel as canFitLineCenterLabel,
@@ -30,7 +29,6 @@ const DETOUR_LINE_STYLE = {
   outlineColor: COLORS.ctaGreen,
 };
 const BIDIRECTIONAL_DETOUR_LINE_OFFSETS = [-12, 12];
-const DETOUR_DIRECTION_ARROW_COUNT = 2;
 
 const SKIPPED_ROUTE_STYLE = {
   strokeWidth: 3,
@@ -60,10 +58,6 @@ const CALLOUT_MARKER_STYLE = {
   elevation: 140,
 };
 
-const DIRECTION_ARROW_MARKER_STYLE = {
-  zIndex: 110,
-  elevation: 110,
-};
 
 const DETOUR_LAYER_INDEX = {
   CLOSED_MASK: 300,
@@ -286,7 +280,7 @@ const buildLineLabelFeatures = ({
   return features;
 };
 
-const DetourLineLabelLayer = ({ routeId, features }) => {
+const DetourLineLabelLayer = ({ routeId, features, belowLayerID }) => {
   if (!Array.isArray(features) || features.length === 0) {
     return null;
   }
@@ -304,6 +298,7 @@ const DetourLineLabelLayer = ({ routeId, features }) => {
       <MapLibreGL.SymbolLayer
         id={`${sourceId}-symbols`}
         layerIndex={DETOUR_LAYER_INDEX.LINE_LABELS}
+        belowLayerID={belowLayerID || undefined}
         style={{
           symbolPlacement: DETOUR_LINE_LABEL_STYLE.symbolPlacement,
           symbolSortKey: ['get', 'sortKey'],
@@ -541,43 +536,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     lineHeight: 12,
   },
-  directionArrowMarker: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2.5,
-    borderColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.28,
-    shadowRadius: 5,
-    elevation: 10,
-  },
-  directionArrowGlyph: {
-    width: 16,
-    height: 19,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  directionArrowHead: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderBottomWidth: 11,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: COLORS.white,
-  },
-  directionArrowStem: {
-    width: 5,
-    height: 8,
-    marginTop: -1,
-    borderRadius: 2.5,
-    backgroundColor: COLORS.white,
-  },
   stopMarkerFrame: {
     zIndex: 40,
     elevation: 40,
@@ -644,11 +602,11 @@ const DetourOverlay = ({
   onPress,
   onStopPress,
   renderMode = 'all',
+  belowLayerID = null,
   currentZoom,
   labelDensity = 'full',
   directionArrowMode = 'forward',
   detourLaneOffsetMeters = 0,
-  detourArrowPositionOffsetRatio = 0,
   selectedSegmentIndex = null,
   lineStyleScale = 1,
 }) => {
@@ -769,6 +727,7 @@ const DetourOverlay = ({
         <DetourLineLabelLayer
           routeId={routeId}
           features={lineLabelFeatures}
+          belowLayerID={belowLayerID}
         />
       )}
 
@@ -807,6 +766,7 @@ const DetourOverlay = ({
                   }
                   outlineWidth={0}
                   layerIndex={DETOUR_LAYER_INDEX.CLOSED_MASK}
+                  belowLayerID={belowLayerID}
                   onPress={showClosedRouteMask ? handleSegmentPress : undefined}
                 />
                 <RoutePolyline
@@ -819,6 +779,7 @@ const DetourOverlay = ({
                   outlineWidth={scaleLineMetric(SKIPPED_ROUTE_STYLE.outlineWidth, lineStyleScale)}
                   outlineColor={SKIPPED_ROUTE_STYLE.outlineColor}
                   layerIndex={DETOUR_LAYER_INDEX.CLOSED_LINE}
+                  belowLayerID={belowLayerID}
                   onPress={handleSegmentPress}
                 />
               </>
@@ -835,44 +796,11 @@ const DetourOverlay = ({
                     opacity={segmentOpacity}
                     outlineWidth={scaleLineMetric(DETOUR_LINE_STYLE.outlineWidth, lineStyleScale)}
                     outlineColor={DETOUR_LINE_STYLE.outlineColor}
-                    showArrows={lineOffsetIndex === 0}
+                    showArrows={false}
                     layerIndex={DETOUR_LAYER_INDEX.DETOUR_LINE + lineOffsetIndex}
+                    belowLayerID={belowLayerID}
                     onPress={handleSegmentPress}
                   />
-                ))}
-                {getDirectionalArrowPoints(inferredDetourPath, {
-                  mode: directionArrowMode,
-                  arrowCount: DETOUR_DIRECTION_ARROW_COUNT,
-                  pathOffsetMeters: detourLaneOffsetMeters,
-                  bidirectionalOffsetMeters: Math.abs(BIDIRECTIONAL_DETOUR_LINE_OFFSETS[0]),
-                  positionOffsetRatio: detourArrowPositionOffsetRatio,
-                }).map((arrow, arrowIndex) => (
-                  <MapLibreGL.MarkerView
-                    key={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}
-                    id={`detour-direction-arrow-${routeId}-${index}-${arrow.direction}-${arrowIndex}`}
-                    coordinate={[arrow.point.longitude, arrow.point.latitude]}
-                    anchor={{ x: 0.5, y: 0.5 }}
-                    pointerEvents="none"
-                  >
-                    <View
-                      collapsable={false}
-                      pointerEvents="none"
-                      style={[
-                        styles.directionArrowMarker,
-                        DIRECTION_ARROW_MARKER_STYLE,
-                        {
-                          backgroundColor: detourColor,
-                          opacity: segmentOpacity,
-                          transform: [{ rotate: `${arrow.bearing}deg` }],
-                        },
-                      ]}
-                    >
-                      <View style={styles.directionArrowGlyph}>
-                        <View style={styles.directionArrowHead} />
-                        <View style={styles.directionArrowStem} />
-                      </View>
-                    </View>
-                  </MapLibreGL.MarkerView>
                 ))}
               </>
             ) : null}

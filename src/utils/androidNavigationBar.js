@@ -1,6 +1,6 @@
 import { Dimensions, Platform, StatusBar, useWindowDimensions } from 'react-native';
 
-const ANDROID_NAV_BAR_FALLBACK = 56;
+const ANDROID_NAV_BAR_FALLBACK = 24;
 const ANDROID_BOTTOM_CHROME_EXTRA_CLEARANCE = 10;
 
 export const estimateAndroidNavigationBarHeight = ({
@@ -41,11 +41,19 @@ export const getSafeBottomInset = (
 ) => {
   if (platformOS !== 'android') return safeAreaBottom || 0;
 
-  return Math.max(
-    safeAreaBottom || 0,
-    getAndroidNavigationBarHeight(windowDimensions, platformOS, screenDimensions, statusBarHeight),
-    ANDROID_NAV_BAR_FALLBACK
+  const measuredNavigationBar = getAndroidNavigationBarHeight(
+    windowDimensions,
+    platformOS,
+    screenDimensions,
+    statusBarHeight
   );
+  const reportedInset = Math.max(0, safeAreaBottom || 0);
+
+  if (reportedInset > 0 || measuredNavigationBar > 0) {
+    return Math.max(reportedInset, measuredNavigationBar);
+  }
+
+  return ANDROID_NAV_BAR_FALLBACK;
 };
 
 export const getAndroidBottomChromeLift = (platformOS = Platform?.OS) => (

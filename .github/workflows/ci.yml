@@ -28,6 +28,9 @@ jobs:
       - name: Run app test suite
         run: npm test -- --runInBand
 
+      - name: Score deterministic detour quality corpus
+        run: npm run score:detour-quality
+
       - name: Run platform parity check
         run: npm run check:parity
 

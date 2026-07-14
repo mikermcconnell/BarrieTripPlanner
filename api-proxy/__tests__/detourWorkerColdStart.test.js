@@ -278,6 +278,75 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     }
   });
 
+  test('reports a failed tick when runtime state cannot be persisted', async () => {
+    const persistenceError = new Error('runtime state write failed');
+    const detectorState = { detours: {}, detourStates: {} };
+
+    jest.doMock('../gtfsLoader', () => ({
+      getStaticData: jest.fn().mockResolvedValue({
+        lastRefresh: 1,
+        tripMapping: new Map(),
+        shapes: new Map(),
+        routeShapeMapping: new Map(),
+        stopsById: {},
+        routeStopSequencesMapping: {},
+        scheduleIndex: {},
+      }),
+      forceRefresh: jest.fn().mockResolvedValue(false),
+    }));
+    jest.doMock('../vehicleFetcher', () => ({
+      fetchVehicles: jest.fn().mockResolvedValue([]),
+      getVehicleFeedStatus: jest.fn(() => ({ freshness: { stale: false } })),
+      errors: { fetchFailures: 0 },
+    }));
+    jest.doMock('../baselineManager', () => ({
+      getBaselineData: jest.fn().mockResolvedValue({
+        shapes: new Map(),
+        routeShapeMapping: new Map(),
+      }),
+      getBaselineStatus: jest.fn(() => ({ readyForDetours: true })),
+      setBaselineRoutes: jest.fn().mockResolvedValue(),
+      logShapeDivergence: jest.fn(),
+    }));
+    jest.doMock('../detourDetector', () => ({
+      processVehicles: jest.fn(() => ({})),
+      getState: jest.fn(() => detectorState),
+      hydratePersistentDetours: jest.fn(),
+      hydratePersistentDetourGeometries: jest.fn(),
+      getPersistentDetours: jest.fn(() => ({})),
+      getPersistentDetourGeometries: jest.fn(() => ({})),
+      serializeDetectorRuntimeState: jest.fn(() => ({ routes: [] })),
+      hydrateRuntimeState: jest.fn(),
+      hydrateActiveDetourSnapshots: jest.fn(() => 0),
+    }));
+    jest.doMock('../detourPublisher', () => ({
+      publishDetours: jest.fn().mockResolvedValue(),
+    }));
+    jest.doMock('../persistentDetourStore', () => ({
+      loadPersistentDetours: jest.fn().mockResolvedValue({}),
+      loadPersistentDetourGeometries: jest.fn().mockResolvedValue({}),
+      syncPersistentDetours: jest.fn().mockResolvedValue(),
+    }));
+    jest.doMock('../detourRuntimeStateStore', () => ({
+      loadDetourRuntimeState: jest.fn().mockResolvedValue(null),
+      saveDetourRuntimeState: jest.fn().mockRejectedValue(persistenceError),
+    }));
+    jest.doMock('../activeDetourSnapshotStore', () => ({
+      loadActiveDetourSnapshots: jest.fn().mockResolvedValue({}),
+    }));
+
+    const worker = require('../detourWorker');
+    await expect(worker.runTick({ source: 'test-persistence-failure' })).resolves.toMatchObject({
+      ok: false,
+      skipped: false,
+      error: 'runtime state write failed',
+      status: {
+        lastSuccessfulTick: null,
+        errors: { publishFailures: 1 },
+      },
+    });
+  });
+
   test('auto-updates stable changed route baselines and clears old route detour state', async () => {
     const realDateNow = Date.now;
     Date.now = jest.fn(() => Date.parse('2026-06-09T14:00:00Z'));
@@ -559,6 +628,17 @@ describe('detourWorker cold-start active snapshot fallback', () => {
           historyCollection: 'detourEventHistoryV2',
           runtimeStateCollection: 'systemState',
           runtimeStateDoc: 'detourRuntimeV2',
+        }),
+        samplingHealth: expect.objectContaining({
+          tickCount: expect.any(Number),
+          bySource: expect.any(Object),
+        }),
+        roadMatching: expect.objectContaining({
+          requests: expect.any(Number),
+        }),
+        detectorDecisionJournal: expect.objectContaining({
+          recentDecisionCount: expect.any(Number),
+          trackedDetourCount: expect.any(Number),
         }),
       })
     );

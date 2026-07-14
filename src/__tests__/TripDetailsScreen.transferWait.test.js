@@ -2,6 +2,7 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 
 const React = require('react');
 const { create, act } = require('react-test-renderer');
+const mockPrepareItineraryForNavigation = jest.fn(async (itinerary) => itinerary);
 
 jest.mock('react-native', () => ({
   View: 'View',
@@ -50,6 +51,9 @@ jest.mock('../services/tripService', () => ({
     return lookup[timestamp] || `${timestamp}`;
   },
 }));
+jest.mock('../services/navigationRecalculationService', () => ({
+  prepareItineraryForNavigation: (...args) => mockPrepareItineraryForNavigation(...args),
+}));
 
 const TripDetailsScreen = require('../screens/TripDetailsScreen').default;
 
@@ -69,6 +73,11 @@ const renderTexts = (element) => {
 };
 
 describe('TripDetailsScreen transfer wait', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrepareItineraryForNavigation.mockImplementation(async (itinerary) => itinerary);
+  });
+
   test('shows get-off time and next boarding time between bus legs', () => {
     const texts = renderTexts(React.createElement(TripDetailsScreen, {
       navigation: { goBack: jest.fn(), navigate: jest.fn() },
@@ -163,5 +172,49 @@ describe('TripDetailsScreen transfer wait', () => {
     const text = texts.join(' ').replace(/\s+/g, ' ');
     expect(text).toContain('Transfer 1 of 2');
     expect(text).toContain('Transfer 2 of 2');
+  });
+
+  test('rechecks navigation safety after preparing walking directions', async () => {
+    const navigation = { goBack: jest.fn(), navigate: jest.fn() };
+    const itinerary = {
+      startTime: 0,
+      endTime: 600000,
+      duration: 600,
+      walkDistance: 100,
+      walkTime: 120,
+      transfers: 0,
+      legs: [{
+        mode: 'BUS',
+        startTime: 0,
+        endTime: 600000,
+        duration: 600,
+        route: { shortName: '8A' },
+        from: { name: 'Stop A', stopCode: '1' },
+        to: { name: 'Stop B', stopCode: '2' },
+      }],
+    };
+    mockPrepareItineraryForNavigation.mockResolvedValue({
+      ...itinerary,
+      hasMissedTransfer: true,
+    });
+
+    let inst;
+    act(() => {
+      inst = create(React.createElement(TripDetailsScreen, {
+        navigation,
+        route: { params: { itinerary } },
+      }));
+    });
+    const buttons = inst.root.findAllByType('TouchableOpacity');
+    await act(async () => {
+      await buttons[buttons.length - 1].props.onPress();
+    });
+
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(require('react-native').Alert.alert).toHaveBeenCalledWith(
+      'This transfer is no longer possible',
+      'Re-plan the trip to find a connection you can make.'
+    );
+    act(() => inst.unmount());
   });
 });

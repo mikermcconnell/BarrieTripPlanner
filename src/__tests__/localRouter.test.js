@@ -361,6 +361,44 @@ describe('localRouter — edge cases', () => {
     expect(result.itineraries.length).toBeLessThanOrEqual(ROUTING_CONFIG.MAX_ITINERARIES);
   });
 
+  test('finds arrive-by trips that depart more than one hour before arrival', async () => {
+    const longTripRoutingData = buildFakeRoutingData();
+    Object.keys(longTripRoutingData.stopDepartures).forEach((stopId) => {
+      longTripRoutingData.stopDepartures[stopId] = longTripRoutingData.stopDepartures[stopId]
+        .filter((departure) => departure.tripId === 'trip-A');
+    });
+    const longTripTimes = {
+      O1: 70320,
+      O2: 70440,
+      O3: 70560,
+      D1: 74520,
+      D2: 74580,
+      D3: 74640,
+    };
+    Object.entries(longTripTimes).forEach(([stopId, arrivalTime]) => {
+      longTripRoutingData.stopTimesIndex[`trip-A_${stopId}`] = {
+        arrivalTime,
+        departureTime: arrivalTime,
+      };
+    });
+
+    const result = await planTripLocal({
+      fromLat: 44.389,
+      fromLon: -79.700,
+      toLat: 44.400,
+      toLon: -79.680,
+      date: new Date('2025-06-11T00:00:00'),
+      time: new Date('2025-06-11T20:45:00'),
+      arriveBy: true,
+      routingData: longTripRoutingData,
+    });
+
+    expect(result.itineraries[0].tripIds).toContain('trip-A');
+    expect(result.itineraries[0].endTime)
+      .toBeLessThanOrEqual(new Date('2025-06-11T20:45:00').getTime());
+    expect(result.itineraries[0].duration).toBeGreaterThan(60 * 60);
+  });
+
   test('throws when origin and destination are too close', async () => {
     await expect(
       planTripLocal({

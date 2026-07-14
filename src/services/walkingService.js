@@ -330,6 +330,100 @@ const cacheDirections = async (cacheKey, data) => {
   }
 };
 
+const isWalkLeg = (leg) => String(leg?.mode || '').toUpperCase() === 'WALK';
+
+const getFiniteTime = (value) => {
+  if (value == null || value === '') return null;
+  const time = Number(value);
+  return Number.isFinite(time) ? time : null;
+};
+
+export const recalculateItineraryAfterWalkingEnrichment = (itinerary, legs = itinerary?.legs || []) => {
+  const alignedLegs = legs.map((leg) => ({ ...leg }));
+
+  for (let blockStart = 0; blockStart < alignedLegs.length;) {
+    if (!isWalkLeg(alignedLegs[blockStart])) {
+      blockStart += 1;
+      continue;
+    }
+
+    let blockEnd = blockStart;
+    while (blockEnd + 1 < alignedLegs.length && isWalkLeg(alignedLegs[blockEnd + 1])) {
+      blockEnd += 1;
+    }
+
+    const previousRide = alignedLegs[blockStart - 1];
+    const nextRide = alignedLegs[blockEnd + 1];
+    const durationsMs = [];
+    for (let index = blockStart; index <= blockEnd; index += 1) {
+      const durationSeconds = Math.max(0, Number(alignedLegs[index].duration) || 0);
+      alignedLegs[index].duration = durationSeconds;
+      durationsMs.push(durationSeconds * 1000);
+    }
+
+    const previousRideEndTime = getFiniteTime(previousRide?.endTime);
+    const nextRideStartTime = getFiniteTime(nextRide?.startTime);
+
+    if (previousRideEndTime != null) {
+      let cursor = previousRideEndTime;
+      for (let index = blockStart; index <= blockEnd; index += 1) {
+        alignedLegs[index].startTime = cursor;
+        cursor += durationsMs[index - blockStart];
+        alignedLegs[index].endTime = cursor;
+      }
+    } else if (nextRideStartTime != null) {
+      let cursor = nextRideStartTime;
+      for (let index = blockEnd; index >= blockStart; index -= 1) {
+        alignedLegs[index].endTime = cursor;
+        cursor -= durationsMs[index - blockStart];
+        alignedLegs[index].startTime = cursor;
+      }
+    } else {
+      const originalEnd = getFiniteTime(alignedLegs[blockEnd]?.endTime);
+      let cursor = itinerary?.arriveBy && originalEnd != null
+        ? originalEnd - durationsMs.reduce((total, duration) => total + duration, 0)
+        : getFiniteTime(alignedLegs[blockStart]?.startTime);
+      if (cursor != null) {
+        for (let index = blockStart; index <= blockEnd; index += 1) {
+          alignedLegs[index].startTime = cursor;
+          cursor += durationsMs[index - blockStart];
+          alignedLegs[index].endTime = cursor;
+        }
+      }
+    }
+
+    blockStart = blockEnd + 1;
+  }
+
+  const firstLeg = alignedLegs[0];
+  const lastLeg = alignedLegs[alignedLegs.length - 1];
+  const startTime = getFiniteTime(firstLeg?.startTime) ?? itinerary?.startTime;
+  const endTime = getFiniteTime(lastLeg?.endTime) ?? itinerary?.endTime;
+  const walkLegs = alignedLegs.filter(isWalkLeg);
+  const rideLegs = alignedLegs.filter((leg) => !isWalkLeg(leg));
+  const waitingTime = alignedLegs.reduce((total, leg, index) => {
+    if (index === 0) return total;
+    const previousEnd = getFiniteTime(alignedLegs[index - 1]?.endTime);
+    const currentStart = getFiniteTime(leg?.startTime);
+    if (previousEnd == null || currentStart == null) return total;
+    return total + Math.max(0, Math.round((currentStart - previousEnd) / 1000));
+  }, 0);
+
+  return {
+    ...itinerary,
+    legs: alignedLegs,
+    startTime,
+    endTime,
+    duration: Number.isFinite(startTime) && Number.isFinite(endTime)
+      ? Math.max(0, Math.round((endTime - startTime) / 1000))
+      : itinerary?.duration,
+    walkDistance: Math.round(walkLegs.reduce((total, leg) => total + (Number(leg.distance) || 0), 0)),
+    walkTime: Math.round(walkLegs.reduce((total, leg) => total + (Number(leg.duration) || 0), 0)),
+    transitTime: Math.round(rideLegs.reduce((total, leg) => total + (Number(leg.duration) || 0), 0)),
+    waitingTime,
+  };
+};
+
 /**
  * Enrich an itinerary with real walking directions
  * Replaces straight-line walking estimates with actual paths
@@ -395,23 +489,11 @@ export const enrichItineraryWithWalking = async (itinerary) => {
     });
   }
 
-  // Recalculate totals
-  const totalWalkDistance = enrichedLegs
-    .filter((leg) => leg.mode === 'WALK')
-    .reduce((sum, leg) => sum + leg.distance, 0);
-
-  const totalWalkTime = enrichedLegs
-    .filter((leg) => leg.mode === 'WALK')
-    .reduce((sum, leg) => sum + leg.duration, 0);
-
-  return {
+  return recalculateItineraryAfterWalkingEnrichment({
     ...itinerary,
-    legs: enrichedLegs,
-    walkDistance: totalWalkDistance,
-    walkTime: totalWalkTime,
     hasExcessiveWalk,
     longestWalkDistance: Math.round(longestWalkDistance),
-  };
+  }, enrichedLegs);
 };
 
 /**
@@ -494,6 +576,12 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
 
   // Sort by rider-friendly generalized cost so transfers need to save enough time.
   finalItineraries = rankItinerariesForRider(finalItineraries);
+  if (finalItineraries.some((itinerary) => itinerary.arriveBy)) {
+    finalItineraries.sort((a, b) => (
+      (b.startTime || 0) - (a.startTime || 0) ||
+      (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
+    ));
+  }
 
   // Add recommendation labels
   if (finalItineraries.length > 0) {

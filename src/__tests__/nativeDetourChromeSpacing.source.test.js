@@ -4,15 +4,15 @@ const path = require('path');
 const readSource = () => fs.readFileSync(path.join(__dirname, '..', 'screens/HomeScreen.js'), 'utf8');
 
 describe('native detour chrome spacing', () => {
-  test('places detour status directly under the Where to search bar', () => {
+  test('places detour status directly under search without a large top backdrop', () => {
     const source = readSource();
 
     expect(source).toContain('const HOME_MAP_CHROME_OFFSETS = Object.freeze({');
     expect(source).toContain('detourStatusTop: 84,');
     expect(source).toContain('detourStatusStack:');
     expect(source).toContain('top: HOME_MAP_CHROME_OFFSETS.detourStatusTop + STATUS_BAR_OFFSET');
-    expect(source).toContain('topChromeBackdropWithDetours:');
-    expect(source).toContain('height: 138');
+    expect(source).not.toContain('topChromeBackdropWithDetours:');
+    expect(source).not.toContain('styles.topChromeBackdrop');
   });
 
   test('anchors bottom map utilities closer to the tab bar with a named offset', () => {
@@ -25,7 +25,8 @@ describe('native detour chrome spacing', () => {
   test('shows upcoming detours on the main map outside detour mode', () => {
     const source = readSource();
 
-    expect(source).toContain('{visibleUpcomingDetourNotices.length > 0 && (');
+    expect(source).toContain('{showPrimaryUpcomingNotice && (');
+    expect(source).toContain('notices={visibleUpcomingDetourNotices}');
     expect(source).not.toContain('{isDetourView && visibleUpcomingDetourNotices.length > 0 && (');
   });
 

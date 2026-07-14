@@ -64,6 +64,7 @@ const buildWalkingOnlyItinerary = ({
     walkDistance,
     transfers: 0,
     isWalkingOnly: true,
+    arriveBy,
     legs: [{
       mode: 'WALK',
       startTime,
@@ -190,6 +191,7 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
 
     return {
       ...itinerary,
+      arriveBy: itinerary.arriveBy ?? Boolean(tripParams.arriveBy),
       labels: null,
       isRecommended: false,
       minutesUntilDeparture,
@@ -221,6 +223,12 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
       rankItinerariesForRider(finalItineraries)
     )
   );
+  if (tripParams.arriveBy) {
+    finalItineraries.sort((a, b) => (
+      (b.startTime || 0) - (a.startTime || 0) ||
+      (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
+    ));
+  }
 
   // Add "Recommended" label to first non-tomorrow trip
   const firstGoodTrip = finalItineraries.find(it => (

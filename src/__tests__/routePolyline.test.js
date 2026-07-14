@@ -95,6 +95,26 @@ describe('RoutePolyline', () => {
     ]);
   });
 
+  test('can anchor the whole polyline stack below another native map layer', () => {
+    const inst = render({
+      outlineWidth: 2,
+      showArrows: true,
+      routeLabel: '10',
+      belowLayerID: 'vehicle-anchor',
+    });
+
+    const outline = inst.root.findAllByType('LineLayer')
+      .find((layer) => layer.props.id === 'route-test-outline');
+    const fill = inst.root.findAllByType('LineLayer')
+      .find((layer) => layer.props.id === 'route-test-fill');
+    const arrows = inst.root.findAllByType('SymbolLayer')
+      .find((layer) => layer.props.id === 'route-test-arrows');
+
+    expect(outline.props.belowLayerID).toBe('vehicle-anchor');
+    expect(fill.props.aboveLayerID).toBe('route-test-outline');
+    expect(arrows.props.aboveLayerID).toBe('route-test-fill');
+  });
+
   test('keeps requested dash caps on both native line layers', () => {
     const inst = render({
       strokeWidth: 5,

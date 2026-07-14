@@ -4,6 +4,12 @@ export const BUS_HUB_TYPES = {
 };
 
 export const BUS_HUB_MINOR_LABEL_MIN_ZOOM = 14.25;
+export const BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM = 13;
+
+const BUS_HUB_CORRIDOR_MINOR_IDS = new Set([
+  'georgian-mall',
+  'rvh',
+]);
 
 export const BUS_HUBS = [
   {
@@ -87,7 +93,13 @@ export const BUS_HUB_MINOR_IDS = BUS_HUBS
   .map((hub) => hub.id);
 
 export const shouldShowBusHubLabel = (hub, currentZoom) => {
-  return Boolean(hub);
+  if (!hub) return false;
+
+  const zoom = Number.isFinite(currentZoom) ? currentZoom : BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM;
+  if (hub.type === BUS_HUB_TYPES.MAJOR) return true;
+  if (zoom >= BUS_HUB_MINOR_LABEL_MIN_ZOOM) return true;
+
+  return zoom >= BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM && BUS_HUB_CORRIDOR_MINOR_IDS.has(hub.id);
 };
 
 export const getVisibleBusHubLabels = (currentZoom) => (

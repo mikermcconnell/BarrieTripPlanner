@@ -5,7 +5,7 @@
  * keep rendering logic separate from trip planning state.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
@@ -175,8 +175,22 @@ const TripSearchHeaderWeb = ({
   const [isEditingSearch, setIsEditingSearch] = useState(false);
   const visiblePlaces = savedPlaces.slice(0, 5);
   const visibleTrips = savedTrips.slice(0, 3);
-  const fromSavedPlaceSuggestions = findMatchingSavedPlaces(fromText, savedPlaces);
-  const toSavedPlaceSuggestions = findMatchingSavedPlaces(toText, savedPlaces);
+  const fromSavedPlaceSuggestions = useMemo(
+    () => findMatchingSavedPlaces(fromText, savedPlaces),
+    [fromText, savedPlaces]
+  );
+  const toSavedPlaceSuggestions = useMemo(
+    () => findMatchingSavedPlaces(toText, savedPlaces),
+    [toText, savedPlaces]
+  );
+  const fromVisibleSuggestions = useMemo(() => [
+    ...fromSavedPlaceSuggestions,
+    ...(showFromSuggestions ? fromSuggestions : []),
+  ].slice(0, 5), [fromSavedPlaceSuggestions, fromSuggestions, showFromSuggestions]);
+  const toVisibleSuggestions = useMemo(() => [
+    ...toSavedPlaceSuggestions,
+    ...(showToSuggestions ? toSuggestions : []),
+  ].slice(0, 5), [toSavedPlaceSuggestions, showToSuggestions, toSuggestions]);
 
   useEffect(() => {
     if (!compact) {
@@ -185,18 +199,18 @@ const TripSearchHeaderWeb = ({
   }, [compact]);
 
   useEffect(() => {
-    if (activeField === 'from' && (showFromSuggestions || fromSavedPlaceSuggestions.length > 0) && (fromSavedPlaceSuggestions.length + fromSuggestions.length) > 0) {
-      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), fromSavedPlaceSuggestions.length + fromSuggestions.length - 1));
+    if (activeField === 'from' && fromVisibleSuggestions.length > 0) {
+      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), fromVisibleSuggestions.length - 1));
       return;
     }
 
-    if (activeField === 'to' && (showToSuggestions || toSavedPlaceSuggestions.length > 0) && (toSavedPlaceSuggestions.length + toSuggestions.length) > 0) {
-      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), toSavedPlaceSuggestions.length + toSuggestions.length - 1));
+    if (activeField === 'to' && toVisibleSuggestions.length > 0) {
+      setActiveSuggestionIndex((prev) => Math.min(Math.max(prev, 0), toVisibleSuggestions.length - 1));
       return;
     }
 
     setActiveSuggestionIndex(-1);
-  }, [activeField, fromSavedPlaceSuggestions.length, fromSuggestions, toSavedPlaceSuggestions.length, toSuggestions, showFromSuggestions, showToSuggestions]);
+  }, [activeField, fromVisibleSuggestions, toVisibleSuggestions]);
 
   const handleSuggestionKeyDown = useCallback((field, suggestions, onSelect) => (e) => {
     if (!suggestions.length) return;
@@ -316,7 +330,7 @@ const TripSearchHeaderWeb = ({
           value={fromText}
           onChangeText={onFromChange}
           onFocus={() => setActiveField('from')}
-          onKeyDown={handleSuggestionKeyDown('from', showFromSuggestions ? fromSuggestions : [], onFromSelect)}
+          onKeyDown={handleSuggestionKeyDown('from', fromVisibleSuggestions, onFromSelect)}
           placeholder="Your location"
           placeholderTextColor={COLORS.grey500}
           aria-label="Starting location"
@@ -346,22 +360,9 @@ const TripSearchHeaderWeb = ({
       </View>
     )}
 
-    {(fromSavedPlaceSuggestions.length > 0 || (showFromSuggestions && fromSuggestions.length > 0)) && (
+    {fromVisibleSuggestions.length > 0 && (
         <View style={styles.suggestionsDropdown} role="listbox" aria-label="Origin suggestions">
-        {fromSavedPlaceSuggestions.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.suggestionItem}
-            onPress={() => onFromSelect(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Saved place: ${item.shortName}`}
-          >
-            <Text style={styles.suggestionSavedIcon}>★</Text>
-            <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
-            <Text style={styles.suggestionDistance}>Saved</Text>
-          </TouchableOpacity>
-        ))}
-        {fromSuggestions.slice(0, 5).map((item, index) => (
+        {fromVisibleSuggestions.map((item, index) => (
           <TouchableOpacity
             key={getSuggestionKey(item, index)}
             style={[
@@ -371,10 +372,15 @@ const TripSearchHeaderWeb = ({
             onPress={() => onFromSelect(item)}
             role="option"
             aria-selected={activeField === 'from' && index === activeSuggestionIndex}
+            accessibilityRole="button"
+            accessibilityLabel={item.source === 'saved_place' ? `Saved place: ${item.shortName}` : item.shortName}
           >
+            {item.source === 'saved_place' && <Text style={styles.suggestionSavedIcon}>★</Text>}
             <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
             <Text style={styles.suggestionDistance}>
-              {getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km
+              {item.source === 'saved_place'
+                ? 'Saved'
+                : `${getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -399,7 +405,7 @@ const TripSearchHeaderWeb = ({
           value={toText}
           onChangeText={onToChange}
           onFocus={() => setActiveField('to')}
-          onKeyDown={handleSuggestionKeyDown('to', showToSuggestions ? toSuggestions : [], onToSelect)}
+          onKeyDown={handleSuggestionKeyDown('to', toVisibleSuggestions, onToSelect)}
           placeholder="Where to?"
           placeholderTextColor={COLORS.grey500}
           aria-label="Destination"
@@ -407,22 +413,9 @@ const TripSearchHeaderWeb = ({
       </View>
     </View>
 
-    {(toSavedPlaceSuggestions.length > 0 || (showToSuggestions && toSuggestions.length > 0)) && (
+    {toVisibleSuggestions.length > 0 && (
         <View style={styles.suggestionsDropdown} role="listbox" aria-label="Destination suggestions">
-        {toSavedPlaceSuggestions.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.suggestionItem}
-            onPress={() => onToSelect(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Saved place: ${item.shortName}`}
-          >
-            <Text style={styles.suggestionSavedIcon}>★</Text>
-            <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
-            <Text style={styles.suggestionDistance}>Saved</Text>
-          </TouchableOpacity>
-        ))}
-        {toSuggestions.slice(0, 5).map((item, index) => (
+        {toVisibleSuggestions.map((item, index) => (
           <TouchableOpacity
             key={getSuggestionKey(item, index)}
             style={[
@@ -432,10 +425,15 @@ const TripSearchHeaderWeb = ({
             onPress={() => onToSelect(item)}
             role="option"
             aria-selected={activeField === 'to' && index === activeSuggestionIndex}
+            accessibilityRole="button"
+            accessibilityLabel={item.source === 'saved_place' ? `Saved place: ${item.shortName}` : item.shortName}
           >
+            {item.source === 'saved_place' && <Text style={styles.suggestionSavedIcon}>★</Text>}
             <Text style={styles.suggestionText} numberOfLines={1}>{item.shortName}</Text>
             <Text style={styles.suggestionDistance}>
-              {getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km
+              {item.source === 'saved_place'
+                ? 'Saved'
+                : `${getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -540,6 +538,7 @@ const TripSearchHeaderWeb = ({
           <input
             type="datetime-local"
             value={selectedTime ? formatDateTimeLocal(selectedTime) : ''}
+            min={formatDateTimeLocal(new Date())}
             onChange={(e) => {
               if (onSelectedTimeChange && e.target.value) {
                 onSelectedTimeChange(new Date(e.target.value));

@@ -2,10 +2,12 @@ const {
   buildOsrmMatchUrl,
   buildOsrmRouteUrl,
   confidenceLabel,
+  getRoadMatcherStats,
   matchDetourGeometry,
   matchPolylineToRoads,
   normalizePolyline,
   removeAvoidableBacktracksFromPolyline,
+  resetRoadMatcherStats,
 } = require('../detourRoadMatcher');
 
 const INPUT_POLYLINE = [
@@ -55,6 +57,10 @@ const OSRM_ROUTE_RESPONSE = {
 };
 
 describe('detourRoadMatcher', () => {
+  beforeEach(() => {
+    resetRoadMatcherStats();
+  });
+
   test('normalizes coordinates and drops invalid points', () => {
     expect(normalizePolyline([
       { lat: '44.38', lon: '-79.69' },
@@ -102,6 +108,12 @@ describe('detourRoadMatcher', () => {
       'Grove Street',
       'Duckworth Street',
     ]);
+    expect(getRoadMatcherStats()).toEqual(expect.objectContaining({
+      requests: 1,
+      routeAttempts: 1,
+      successes: 1,
+      failures: 0,
+    }));
   });
 
   test('preferred OSRM route still rejects paths that reuse the closed segment', async () => {
@@ -430,12 +442,58 @@ describe('detourRoadMatcher', () => {
     expect(fetchImpl.mock.calls[0][0]).toContain('radiuses=75%3B75%3B75');
     expect(fetchImpl.mock.calls[1][0]).toContain('radiuses=25%3B25%3B25');
     expect(fetchImpl.mock.calls[1][0]).toContain('/match/v1/driving/');
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[detourRoadMatcher] OSRM match attempt failed'),
-      expect.objectContaining({ radiusMeters: 75, reason: expect.stringContaining('HTTP 400') })
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('"event":"detour_road_match_failed"'));
+    const warning = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(warning).toEqual(expect.objectContaining({
+      event: 'detour_road_match_failed',
+      source: 'osrm-match',
+      radiusMeters: 75,
+      reason: expect.stringContaining('HTTP 400'),
+    }));
     expect(result.roadMatchSource).toBe('osrm-match');
     expect(result.roadMatchConfidence).toBe('high');
+    warnSpy.mockRestore();
+  });
+
+  test('includes route and event context in road-match failure telemetry', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ code: 'InvalidValue', message: 'bad trace' }),
+    }));
+
+    await expect(matchPolylineToRoads(INPUT_POLYLINE, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED: 'false',
+      },
+      logContext: {
+        routeId: '8A',
+        publishId: '8A:event-1',
+        eventId: 'event-1',
+        segmentEventId: 'segment-1',
+      },
+      fetchImpl,
+    })).rejects.toThrow('Road matching failed with HTTP 400');
+
+    const warning = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(warning).toEqual(expect.objectContaining({
+      event: 'detour_road_match_failed',
+      routeId: '8A',
+      publishId: '8A:event-1',
+      eventId: 'event-1',
+      segmentEventId: 'segment-1',
+      source: 'osrm-match',
+    }));
+    expect(getRoadMatcherStats().recentEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'failure',
+        routeId: '8A',
+        publishId: '8A:event-1',
+      }),
+    ]));
     warnSpy.mockRestore();
   });
 
@@ -476,6 +534,58 @@ describe('detourRoadMatcher', () => {
       { latitude: 44.386, longitude: -79.6801 },
       { latitude: 44.3901, longitude: -79.6801 },
     ]);
+  });
+
+  test('does not use OSRM route fallback for configured corridor segments', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = jest.fn(async (url) => {
+      if (url.includes('/route/v1/driving/')) {
+        return {
+          ok: true,
+          json: async () => OSRM_ROUTE_RESPONSE,
+        };
+      }
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({}),
+      };
+    });
+    const geometry = {
+      canShowDetourPath: true,
+      inferredDetourPolyline: INPUT_POLYLINE,
+      skippedSegmentPolyline: [
+        { latitude: 44.38, longitude: -79.691 },
+        { latitude: 44.39, longitude: -79.679 },
+      ],
+      segments: [{
+        canShowDetourPath: true,
+        configuredCorridor: true,
+        configuredCorridorLabel: 'Livingstone-Anne',
+        inferredDetourPolyline: INPUT_POLYLINE,
+        skippedSegmentPolyline: [
+          { latitude: 44.38, longitude: -79.691 },
+          { latitude: 44.39, longitude: -79.679 },
+        ],
+      }],
+    };
+
+    const result = await matchDetourGeometry(geometry, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED: 'true',
+      },
+      fetchImpl,
+    });
+
+    expect(fetchImpl.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(fetchImpl.mock.calls.every((call) => call[0].includes('/match/v1/driving/'))).toBe(true);
+    expect(fetchImpl.mock.calls.some((call) => call[0].includes('/route/v1/driving/'))).toBe(false);
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].inferredDetourPolyline).toEqual(INPUT_POLYLINE);
+    warnSpy.mockRestore();
   });
 
   test('uses a fresh timeout signal for route fallback after match aborts', async () => {

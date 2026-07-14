@@ -172,6 +172,67 @@ describe('mapActiveDetourDoc', () => {
     ]);
   });
 
+  test('does not let hidden same-route records suppress a visible rider path', () => {
+    const skippedSegmentPolyline = [
+      { latitude: 44.40, longitude: -79.72 },
+      { latitude: 44.41, longitude: -79.71 },
+    ];
+    const likelyDetourPolyline = [
+      { latitude: 44.40, longitude: -79.719 },
+      { latitude: 44.405, longitude: -79.708 },
+      { latitude: 44.41, longitude: -79.71 },
+    ];
+    const grouped = groupActiveDetourEventsByRoute({
+      '11:shape-11:9600-11500': mapActiveDetourDoc('11:shape-11:9600-11500', {
+        eventId: '11:shape-11:9600-11500',
+        routeId: '11',
+        riderVisible: false,
+        riderVisibilityReason: 'stale-mixed-evidence',
+        canShowDetourPath: false,
+        segments: [{
+          canShowDetourPath: false,
+          geometryTrustBlockedReason: 'stale-mixed-evidence',
+          skippedStopIds: ['453', '462'],
+        }],
+      }),
+      'detour-event-route-11': mapActiveDetourDoc('detour-event-route-11', {
+        eventId: 'detour-event-route-11',
+        routeId: '11',
+        riderVisible: true,
+        riderVisibilityReason: 'gps-clear-required',
+        confidence: 'high',
+        vehicleCount: 25,
+        uniqueVehicleCount: 25,
+        canShowDetourPath: true,
+        skippedSegmentPolyline,
+        likelyDetourPolyline,
+        segments: [{
+          canShowDetourPath: true,
+          skippedSegmentPolyline,
+          likelyDetourPolyline,
+          skippedStopIds: ['453', '462'],
+        }],
+      }),
+    });
+
+    expect(grouped['11']).toEqual(expect.objectContaining({
+      eventId: 'detour-event-route-11',
+      riderVisible: true,
+      eventCount: 1,
+    }));
+    expect(grouped['11'].segments).toHaveLength(1);
+
+    const overlays = deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['11']),
+      activeDetours: grouped,
+    });
+
+    expect(overlays).toHaveLength(1);
+    expect(overlays[0].likelyDetourPolyline).toEqual(likelyDetourPolyline);
+    expect(overlays[0].skippedSegmentPolyline).toEqual(skippedSegmentPolyline);
+  });
+
   test('maps rider visibility fields', () => {
     const mapped = mapActiveDetourDoc('12A', {
       state: 'active',

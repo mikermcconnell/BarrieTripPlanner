@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import StartupLoadingScreen from './src/components/StartupLoadingScreen';
+import StartupLoadingScreen, { STARTUP_BACKGROUND_COLOR } from './src/components/StartupLoadingScreen';
 
 let LoadedRuntime = null;
 
@@ -71,7 +71,7 @@ export default function App() {
   if (showPreview || !Runtime) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" backgroundColor="#ffffff" />
+        <StatusBar style="dark" backgroundColor={STARTUP_BACKGROUND_COLOR} />
         <StartupLoadingScreen useBrandFonts={false} />
       </SafeAreaProvider>
     );

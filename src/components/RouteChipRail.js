@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, SHADOWS, FONT_SIZES, FONT_FAMILIES, BORDER_RADIUS } from '../config/theme';
+import { COLORS, SPACING, FONT_SIZES, FONT_FAMILIES, BORDER_RADIUS } from '../config/theme';
 import { sortRoutesByNumber } from '../utils/routeSorting';
 import { getRouteFamilyId } from '../utils/routeDetourMatching';
+import { HOME_MAP_THEME } from '../config/homeMapTheme';
 
 const RouteChipRail = ({
   visible = true,
@@ -13,6 +14,7 @@ const RouteChipRail = ({
   onRouteFamilySelect,
   getRouteColor,
   isRouteDetouring,
+  embedded = false,
   style,
 }) => {
   const routeFamilies = useMemo(() => {
@@ -36,7 +38,7 @@ const RouteChipRail = ({
   if (!visible || routeFamilies.length === 0) return null;
 
   return (
-    <View style={[styles.container, style]} pointerEvents="box-none">
+    <View style={[styles.container, embedded && styles.containerEmbedded, style]} pointerEvents="box-none">
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -49,6 +51,7 @@ const RouteChipRail = ({
           activeOpacity={0.78}
           accessibilityRole="button"
           accessibilityLabel="Show all routes"
+          accessibilityState={{ selected: !hasSelection }}
         >
           <Text style={[styles.chipText, !hasSelection && styles.chipTextActive]}>All</Text>
         </TouchableOpacity>
@@ -74,7 +77,9 @@ const RouteChipRail = ({
                 activeOpacity={0.78}
                 accessibilityRole="button"
                 accessibilityLabel={`${isSelected ? 'Hide' : 'Show'} route family ${family.label} on map`}
+                accessibilityState={{ selected: isSelected }}
               >
+                <View style={[styles.routeDot, { backgroundColor: isSelected ? COLORS.white : routeColor }]} />
                 <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{family.label}</Text>
               </TouchableOpacity>
               {isDetouring && <View style={styles.detourDot} />}
@@ -101,13 +106,18 @@ const styles = StyleSheet.create({
     right: 64,
     zIndex: 1000,
   },
+  containerEmbedded: {
+    position: 'relative',
+    left: undefined,
+    right: undefined,
+  },
   scrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
     paddingHorizontal: 2,
     paddingRight: 28,
-    paddingVertical: 3,
+    paddingVertical: 0,
   },
   scrollFade: {
     position: 'absolute',
@@ -122,8 +132,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   chip: {
-    minWidth: 46,
-    height: 38,
+    minWidth: HOME_MAP_THEME.routeChipMinWidth,
+    height: HOME_MAP_THEME.routeChipHeight,
     paddingHorizontal: SPACING.sm + 2,
     borderRadius: BORDER_RADIUS.round,
     alignItems: 'center',
@@ -131,7 +141,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.96)',
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    ...SHADOWS.small,
   },
   allChip: {
     borderColor: 'rgba(12, 140, 229, 0.24)',
@@ -141,7 +150,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   routeChip: {
-    borderLeftWidth: 4,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  routeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   chipText: {
     fontSize: FONT_SIZES.sm,

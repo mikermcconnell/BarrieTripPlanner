@@ -5,17 +5,25 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 
 const React = require('react');
 const { create, act } = require('react-test-renderer');
+let mockWindowDimensions = { width: 390, height: 844 };
 
-jest.mock('react-native', () => ({
-  Dimensions: { get: () => ({ width: 390, height: 844 }) },
-  Image: 'Image',
-  Platform: { OS: 'web' },
-  StyleSheet: { create: (styles) => styles },
-  StatusBar: { currentHeight: 24 },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 390, height: 844 }),
-}));
+jest.mock('react-native', () => {
+  class MockAnimatedValue {
+    interpolate() { return 0; }
+  }
+
+  return {
+    Animated: { Value: MockAnimatedValue, View: 'AnimatedView' },
+    Dimensions: { get: () => ({ width: 390, height: 844 }) },
+    Image: 'Image',
+    Platform: { OS: 'web' },
+    StyleSheet: { create: (styles) => styles },
+    StatusBar: { currentHeight: 24 },
+    Text: 'Text',
+    View: 'View',
+    useWindowDimensions: () => mockWindowDimensions,
+  };
+});
 
 jest.mock('expo-asset', () => ({
   Asset: {
@@ -23,9 +31,33 @@ jest.mock('expo-asset', () => ({
   },
 }));
 
+jest.mock('../components/StartupDetourAnimation', () => {
+  const ReactForMock = require('react');
+  return {
+    __esModule: true,
+    default: ({ imageSource, width, height }) => ReactForMock.createElement('Image', {
+      source: imageSource,
+      resizeMode: 'cover',
+      width,
+      height,
+    }),
+  };
+});
+
 const StartupLoadingScreen = require('../components/StartupLoadingScreen').default;
 
 describe('startup loading preview', () => {
+  function flattenText(value) {
+    if (Array.isArray(value)) return value.map(flattenText).join('');
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (value?.props) return flattenText(value.props.children);
+    return '';
+  }
+
+  function componentSourceText(root) {
+    return root.findAllByType('Text').map((node) => flattenText(node.props.children)).join(' ');
+  }
+
   function flattenStyle(style) {
     if (Array.isArray(style)) {
       return style.reduce((merged, item) => ({
@@ -37,7 +69,7 @@ describe('startup loading preview', () => {
     return style || {};
   }
 
-  test('renders simplified one-line startup copy and progress state', () => {
+  test('makes automatic detour detection the primary startup message', () => {
     let inst;
 
     act(() => {
@@ -52,13 +84,15 @@ describe('startup loading preview', () => {
       .filter((value) => typeof value === 'string');
 
     expect(texts).toContain('MyBarrie Transit');
-    expect(texts).toContain('Loading routes, stops, and live updates');
-    expect(texts).not.toContain('Good to go soon');
-    expect(texts).not.toContain('Getting Barrie Transit ready');
-    expect(texts).not.toContain('Loading routes, stops, live buses, and detour updates.');
-    expect(texts).toContain('Live Detour Awareness');
-    expect(texts).toContain('We check live bus movement to inform you of possible detours.');
-    expect(texts).toContain('Checking service alerts and detours...');
+    expect(texts).toContain('AUTOMATIC DETOUR DETECTION');
+    expect(componentSourceText(inst.root)).toContain('See likely detours.');
+    expect(componentSourceText(inst.root)).toContain('Avoid skipped stops.');
+    expect(texts).toContain('Powered by live bus movement.');
+    expect(componentSourceText(inst.root)).not.toContain('Live bus movement helps flag likely detours and skipped stops.');
+    expect(texts).not.toContain('Know when your bus leaves the route.');
+    expect(texts).toContain('Likely detour detected');
+    expect(texts).toContain('Route change identified from live bus movement');
+    expect(texts).toContain('Checking live routes and service alerts...');
     expect(texts).toContain('65%');
   });
 
@@ -71,9 +105,9 @@ describe('startup loading preview', () => {
 
     const artworkImages = inst.root
       .findAllByType('Image')
-      .filter((node) => node.props.resizeMode === 'contain');
+      .filter((node) => node.props.resizeMode === 'cover');
 
-    expect(artworkImages).toHaveLength(2);
+    expect(artworkImages).toHaveLength(1);
     artworkImages.forEach((node) => {
       expect(flattenStyle(node.props.style).opacity).not.toBe(0);
     });
@@ -108,9 +142,30 @@ describe('startup loading preview', () => {
     );
   });
 
+  test('scales the animated map down on very compact screens', () => {
+    mockWindowDimensions = { width: 320, height: 640 };
+    let inst;
+
+    try {
+      act(() => {
+        inst = create(React.createElement(StartupLoadingScreen));
+      });
+
+      const artwork = inst.root
+        .findAllByType('Image')
+        .find((node) => node.props.resizeMode === 'cover');
+
+      expect(artwork.props.width).toBeLessThanOrEqual(272);
+      expect(artwork.props.height).toBeLessThan(170);
+    } finally {
+      mockWindowDimensions = { width: 390, height: 844 };
+    }
+  });
+
   test('App.js exposes the web-only preview query flag without replacing normal startup', () => {
     const appSource = fs.readFileSync(path.join(__dirname, '../../App.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, '../../AppRuntime.js'), 'utf8');
     const componentSource = fs.readFileSync(path.join(__dirname, '../components/StartupLoadingScreen.js'), 'utf8');
+    const animationSource = fs.readFileSync(path.join(__dirname, '../components/StartupDetourAnimation.js'), 'utf8');
     const nativeHomeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.js'), 'utf8');
     const webHomeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.impl.js'), 'utf8');
 
@@ -139,16 +194,19 @@ describe('startup loading preview', () => {
     expect(appSource).toContain('{showStartupOverlay ? (');
     expect(appSource).toContain("Platform.OS !== 'web'");
     expect(componentSource).toContain("require('../../assets/splash-icon.png')");
-    expect(componentSource).toContain("require('../../assets/startup-home-scene.png')");
-    expect(componentSource).toContain("require('../../assets/startup-detour-card.png')");
+    expect(componentSource).toContain("require('../../assets/startup-auto-detour-map-base.png')");
     expect(componentSource).toContain('STARTUP_IMAGE_ASSETS');
     expect(componentSource).toContain('getStartupImageSource');
     expect(componentSource).toContain('onReadyToDisplay');
     expect(componentSource).not.toContain('FallbackHeroScene');
     expect(componentSource).not.toContain('FallbackMiniMap');
     expect(componentSource).not.toContain('onError={() => setImageFailed(true)}');
-    expect(componentSource).toContain('heroHeight');
-    expect(componentSource).toContain('miniMapHeight');
+    expect(componentSource).toContain('imageHeight');
+    expect(componentSource).toContain('DetectionHero');
+    expect(componentSource).toContain('<StartupDetourAnimation');
+    expect(animationSource).toContain('AccessibilityInfo?.isReduceMotionEnabled?.()');
+    expect(animationSource).toContain('Animated.loop');
+    expect(animationSource).toContain('strokeDashoffset={animationStyles.pathOffset}');
     expect(componentSource).toContain("from '../utils/androidNavigationBar'");
     expect(componentSource).toContain('useSafeBottomInset');
     expect(componentSource).toContain('paddingBottom: progressBottomPadding');

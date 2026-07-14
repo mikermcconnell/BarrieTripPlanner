@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyBarrie Transit — detour artwork options</title>
+  <style>
+    :root { font-family: Arial, Helvetica, sans-serif; color: #061a3b; background: #eef4f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; }
+    header { max-width: 980px; margin: 0 auto 26px; text-align: center; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 42px); letter-spacing: -1px; }
+    header p { margin: 0; color: #50647a; font-size: 16px; line-height: 1.5; }
+    .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; margin-top: 16px; color: #334a62; font-size: 13px; font-weight: 700; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .line { width: 30px; height: 7px; border-radius: 10px; background: #1174e7; }
+    .line.detour { background: repeating-linear-gradient(90deg, #8539d6 0 12px, transparent 12px 18px); }
+    .line.closed { background: repeating-linear-gradient(90deg, #f59e0b 0 5px, transparent 5px 12px); }
+    main { width: min(1180px, 100%); margin: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .card { overflow: hidden; border: 1px solid #d8e5ee; border-radius: 26px; background: #fff; box-shadow: 0 14px 36px rgba(6, 42, 83, .10); }
+    .art { display: block; width: 100%; aspect-ratio: 900 / 520; background: #f8fbfd; }
+    .copy { padding: 18px 20px 21px; }
+    .option { color: #6421a8; font-size: 12px; font-weight: 900; letter-spacing: .8px; }
+    h2 { margin: 5px 0 5px; font-size: 21px; }
+    .copy p { margin: 0; color: #5f7285; font-size: 14px; line-height: 1.4; }
+    .card:last-child { grid-column: 1 / -1; width: calc(50% - 12px); justify-self: center; }
+    .road { fill: none; stroke: #dce8f0; stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; }
+    .minor { fill: none; stroke: #eff4f7; stroke-width: 10; stroke-linecap: round; }
+    .regular-under { fill: none; stroke: #d9e9f7; stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; }
+    .regular { fill: none; stroke: #1174e7; stroke-width: 13; stroke-linecap: round; stroke-linejoin: round; }
+    .closed { fill: none; stroke: #f59e0b; stroke-width: 14; stroke-linecap: round; stroke-dasharray: 3 22; }
+    .detour-glow { fill: none; stroke: #8539d6; stroke-width: 25; stroke-linecap: round; stroke-linejoin: round; opacity: .14; }
+    .detour { fill: none; stroke: #8539d6; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20 12; }
+    .stop { fill: #fff; stroke: #1174e7; stroke-width: 6; }
+    .pulse { fill: none; stroke: #36b37e; stroke-width: 6; opacity: .45; }
+    .closure { fill: #fff7e6; stroke: #f59e0b; stroke-width: 5; }
+    .closure-x { stroke: #d94b2b; stroke-width: 8; stroke-linecap: round; }
+    .bus-dark { fill: #0a315d; }
+    .bus-blue { fill: #1174e7; }
+    .window { fill: #d8f2ff; }
+    .wheel { fill: #061a3b; }
+    .park { fill: #dff4e7; }
+    .water { fill: #d8f1fb; }
+    @media (max-width: 760px) {
+      body { padding: 16px; }
+      main { grid-template-columns: 1fr; }
+      .card:last-child { grid-column: auto; width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Choose a detour style</h1>
+    <p>Each option follows visible streets and shows a believable route around a closure.</p>
+    <div class="legend">
+      <span><i class="line"></i>Regular route</span>
+      <span><i class="line detour"></i>Likely detour</span>
+      <span><i class="line closed"></i>Closed section</span>
+    </div>
+  </header>
+
+  <main>
+    <article class="card">
+      <svg class="art" viewBox="0 0 900 520" role="img" aria-label="A one-block downtown detour using parallel streets">
+        <rect width="900" height="520" fill="#f9fcfe"/>
+        <path class="park" d="M0 0h170c-8 70-56 119-170 144zM900 520H711c31-76 94-120 189-132z"/>
+        <path class="road" d="M0 260H900M0 104H900M0 420H900M180 0V520M362 0V520M612 0V520M790 0V520"/>
+        <path class="minor" d="M0 181H900M0 342H900M88 0V520M502 0V520M700 0V520"/>
+        <path class="regular-under" d="M34 260H866"/>
+        <path class="regular" d="M34 260H362M612 260H866"/>
+        <path class="closed" d="M362 260H612"/>
+        <path class="detour-glow" d="M362 260V104H612V260"/>
+        <path class="detour" d="M362 260V104H612V260"/>
+        <circle class="stop" cx="180" cy="260" r="13"/><circle class="stop" cx="790" cy="260" r="13"/>
+        <g transform="translate(315 260)">
+          <circle class="pulse" r="52"/><circle class="pulse" r="70" opacity=".45"/>
+          <path d="M48 0 30-13v26z" fill="#111" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+          <circle r="32" fill="#004E80" stroke="#fff" stroke-width="5"/>
+          <g aria-label="Live bus"><path d="M-21-12h31c8 0 12 5 12 12v12h-43z" fill="#fff"/><path d="M-15-7h8v9h-8zm11 0h8v9h-8zm11 0h8l3 9H7z" fill="#004E80"/><circle cx="-13" cy="14" r="5" fill="#172B4D"/><circle cx="14" cy="14" r="5" fill="#172B4D"/><circle cx="-13" cy="14" r="2" fill="#fff"/><circle cx="14" cy="14" r="2" fill="#fff"/></g>
+        </g>
+        <g transform="translate(570 104)">
+          <circle class="pulse" r="52"/>
+          <path d="M48 0 30-13v26z" fill="#111" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+          <circle r="32" fill="#004E80" stroke="#fff" stroke-width="5"/>
+          <g aria-label="Live bus"><path d="M-21-12h31c8 0 12 5 12 12v12h-43z" fill="#fff"/><path d="M-15-7h8v9h-8zm11 0h8v9h-8zm11 0h8l3 9H7z" fill="#004E80"/><circle cx="-13" cy="14" r="5" fill="#172B4D"/><circle cx="14" cy="14" r="5" fill="#172B4D"/><circle cx="-13" cy="14" r="2" fill="#fff"/><circle cx="14" cy="14" r="2" fill="#fff"/></g>
+        </g>
+        <g transform="translate(488 260)"><circle class="closure" r="27"/><path class="closure-x" d="m-11-11 22 22m0-22-22 22"/></g>
+      </svg>
+      <div class="copy"><span class="option">OPTION 1</span><h2>Downtown block</h2><p>A crisp three-turn diversion around one closed block. Simple and immediately understandable.</p></div>
+    </article>
+
+    <article class="card">
+      <svg class="art" viewBox="0 0 900 520" role="img" aria-label="A detour around a closed intersection">
+        <rect width="900" height="520" fill="#f9fcfe"/>
+        <path class="park" d="M0 384c90-42 170-35 240 22l63 114H0zM900 0H715c35 70 99 116 185 135z"/>
+        <path class="road" d="M-20 454 920 35M170 520 795-10M32 175l825 270M0 330h900"/>
+        <path class="minor" d="M0 95h900M280 0v520M678 0v520"/>
+        <path class="regular-under" d="M30 454 441 271 870 80"/>
+        <path class="regular" d="M30 454 404 287M512 239 870 80"/>
+        <path class="closed" d="M404 287 512 239"/>
+        <path class="detour-glow" d="M404 287 332 330h273l-93-91"/>
+        <path class="detour" d="M404 287 332 330h273l-93-91"/>
+        <circle class="stop" cx="190" cy="383" r="13"/><circle class="stop" cx="700" cy="156" r="13"/>
+        <g transform="translate(352 310) rotate(-24)">
+          <circle class="pulse" r="53"/><rect class="bus-dark" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(555 330)">
+          <circle class="pulse" r="53"/><rect class="bus-blue" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(458 263)"><circle class="closure" r="27"/><path class="closure-x" d="m-11-11 22 22m0-22-22 22"/></g>
+      </svg>
+      <div class="copy"><span class="option">OPTION 2</span><h2>Intersection diversion</h2><p>A compact dogleg around a blocked intersection, with the alternate road clearly visible.</p></div>
+    </article>
+
+    <article class="card">
+      <svg class="art" viewBox="0 0 900 520" role="img" aria-label="A multi-block corridor detour on a parallel street">
+        <rect width="900" height="520" fill="#f9fcfe"/>
+        <path class="park" d="M0 0h235v119C141 94 60 103 0 148zM900 520H674v-96c94 6 170-15 226-62z"/>
+        <path class="road" d="M405-20V540M665-20V540M145-20V540M0 112H900M0 258H900M0 411H900"/>
+        <path class="minor" d="M277 0v520M540 0v520M790 0v520M0 184h900M0 337h900"/>
+        <path class="regular-under" d="M405 25V495"/>
+        <path class="regular" d="M405 25V112M405 411V495"/>
+        <path class="closed" d="M405 112V411"/>
+        <path class="detour-glow" d="M405 112H665V411H405"/>
+        <path class="detour" d="M405 112H665V411H405"/>
+        <circle class="stop" cx="405" cy="52" r="13"/><circle class="stop" cx="405" cy="470" r="13"/>
+        <g transform="translate(405 76) rotate(90)">
+          <circle class="pulse" r="52"/><rect class="bus-dark" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(665 300) rotate(90)">
+          <circle class="pulse" r="52"/><rect class="bus-blue" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(405 258)"><circle class="closure" r="27"/><path class="closure-x" d="m-11-11 22 22m0-22-22 22"/></g>
+      </svg>
+      <div class="copy"><span class="option">OPTION 3</span><h2>Parallel-street reroute</h2><p>A longer corridor closure with buses using the nearest parallel arterial.</p></div>
+    </article>
+
+    <article class="card">
+      <svg class="art" viewBox="0 0 900 520" role="img" aria-label="A bridge closure detour using a second crossing">
+        <rect width="900" height="520" fill="#f9fcfe"/>
+        <path class="water" d="M365-20c61 92 70 178 30 258-44 87-41 182 8 302h174c-49-116-52-211-8-297 41-81 31-169-30-263z"/>
+        <path class="road" d="M0 330H900M0 112H900M186 0V520M715 0V520"/>
+        <path class="minor" d="M0 221h900M89 0v520M810 0v520"/>
+        <path class="regular-under" d="M28 330H872"/>
+        <path class="regular" d="M28 330H365M577 330H872"/>
+        <path class="closed" d="M365 330H577"/>
+        <path class="detour-glow" d="M365 330H186V112H715V330H577"/>
+        <path class="detour" d="M365 330H186V112H715V330H577"/>
+        <circle class="stop" cx="92" cy="330" r="13"/><circle class="stop" cx="810" cy="330" r="13"/>
+        <g transform="translate(285 330)">
+          <circle class="pulse" r="52"/><rect class="bus-dark" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(610 112)">
+          <circle class="pulse" r="52"/><rect class="bus-blue" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(471 330)"><circle class="closure" r="27"/><path class="closure-x" d="m-11-11 22 22m0-22-22 22"/></g>
+      </svg>
+      <div class="copy"><span class="option">OPTION 4</span><h2>Alternate crossing</h2><p>A larger, more dramatic detour around a closed bridge or rail crossing.</p></div>
+    </article>
+
+    <article class="card">
+      <svg class="art" viewBox="0 0 900 520" role="img" aria-label="A neighbourhood detour following curved local streets">
+        <rect width="900" height="520" fill="#f9fcfe"/>
+        <path class="park" d="M0 0h193c12 88-49 137-193 154zM900 520H702c-21-92 45-146 198-158z"/>
+        <path class="road" d="M-20 338C154 277 284 249 404 255c139 7 249 61 516 17M-20 135c171-62 323-60 457 5 135 65 286 64 483-4M185-20c21 134 12 253-28 355-22 57-19 126 10 205M699-20c-17 118-4 220 39 306 37 74 44 159 20 254"/>
+        <path class="minor" d="M0 230c149-47 285-48 407-3 148 54 306 52 493-7M413-20c-24 128-18 247 19 358 22 65 25 132 9 202"/>
+        <path class="regular-under" d="M32 338C154 295 270 264 385 255M594 288c79 16 167 15 274-2"/>
+        <path class="regular" d="M32 338C154 295 270 264 385 255M594 288c79 16 167 15 274-2"/>
+        <path class="closed" d="M385 255c73 4 139 15 209 33"/>
+        <path class="detour-glow" d="M385 255c-16-54 7-100 66-122 64-24 153-10 205 25 44 30 30 91-62 130"/>
+        <path class="detour" d="M385 255c-16-54 7-100 66-122 64-24 153-10 205 25 44 30 30 91-62 130"/>
+        <circle class="stop" cx="171" cy="290" r="13"/><circle class="stop" cx="760" cy="297" r="13"/>
+        <g transform="translate(330 261) rotate(-8)">
+          <circle class="pulse" r="52"/><rect class="bus-dark" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(558 133) rotate(8)">
+          <circle class="pulse" r="52"/><rect class="bus-blue" x="-38" y="-25" width="76" height="50" rx="14"/><rect class="window" x="-25" y="-15" width="44" height="18" rx="5"/><rect class="window" x="24" y="-14" width="8" height="19" rx="3"/><circle class="wheel" cx="-23" cy="25" r="8"/><circle class="wheel" cx="23" cy="25" r="8"/>
+        </g>
+        <g transform="translate(490 266)"><circle class="closure" r="27"/><path class="closure-x" d="m-11-11 22 22m0-22-22 22"/></g>
+      </svg>
+      <div class="copy"><span class="option">OPTION 5</span><h2>Neighbourhood diversion</h2><p>A softer curved route for suburban areas where streets are less grid-like.</p></div>
+    </article>
+  </main>
+</body>
+</html>

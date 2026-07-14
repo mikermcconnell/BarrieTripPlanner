@@ -56,11 +56,11 @@ const OfficialImpactStrip = ({
         accessibilityRole="button"
         accessibilityLabel={`${countText}: ${firstImpact.title}`}
       >
-        <Text style={styles.icon}>ℹ️</Text>
+        <View style={styles.infoBadge}><Text style={styles.infoText}>i</Text></View>
         <View style={styles.copy}>
           <Text style={styles.eyebrow}>{countText}</Text>
           <Text style={styles.title} numberOfLines={1}>{firstImpact.title}</Text>
-          <Text style={styles.body} numberOfLines={2}>{buildOfficialImpactBody(firstImpact)}</Text>
+          <Text style={styles.body} numberOfLines={1}>{buildOfficialImpactBody(firstImpact)}</Text>
         </View>
         <View style={styles.routeRow}>
           {routeIds.slice(0, 4).map((route) => (
@@ -105,6 +105,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
+    minHeight: 44,
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
     borderColor: 'rgba(26, 115, 232, 0.22)',
@@ -116,8 +117,20 @@ const styles = StyleSheet.create({
   cardInline: {
     alignSelf: 'stretch',
   },
-  icon: {
+  infoBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primarySubtle,
+    borderWidth: 1,
+    borderColor: 'rgba(12, 140, 229, 0.24)',
+  },
+  infoText: {
     fontSize: FONT_SIZES.md,
+    fontFamily: FONT_FAMILIES.bold,
+    color: COLORS.primaryDark,
   },
   copy: {
     flex: 1,
@@ -141,7 +154,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textSecondary,
-    lineHeight: 15,
+    lineHeight: 14,
   },
   routeRow: {
     flexDirection: 'row',
@@ -163,9 +176,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   dismissButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.7)',

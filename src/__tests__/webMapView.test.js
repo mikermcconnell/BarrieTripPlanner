@@ -292,6 +292,13 @@ describe('WebMapView bus marker HTML', () => {
 
     expect(html).not.toContain('rotate(');
   });
+
+  test('keeps dimmed bus artwork fully opaque', () => {
+    const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8', 45, 1, true);
+
+    expect(html).toContain('opacity:1');
+    expect(html).not.toContain('opacity:0.42');
+  });
 });
 
 describe('WebMapView bus hub marker HTML', () => {

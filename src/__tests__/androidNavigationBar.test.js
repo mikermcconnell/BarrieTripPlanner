@@ -26,8 +26,16 @@ describe('androidNavigationBar', () => {
     expect(addSafeBottomPadding(24, 56)).toBe(80);
   });
 
-  test('keeps the larger Android bottom protection when safe area is smaller', () => {
-    expect(getSafeBottomInset(12, { height: 2296 }, 'android', { height: 2400 }, 24)).toBeGreaterThanOrEqual(56);
+  test('uses the measured navigation bar when it exceeds the reported inset', () => {
+    expect(getSafeBottomInset(12, { height: 2296 }, 'android', { height: 2400 }, 24)).toBe(80);
+  });
+
+  test('does not force three-button spacing onto gesture navigation', () => {
+    expect(getSafeBottomInset(24, { height: 2400 }, 'android', { height: 2400 }, 24)).toBe(24);
+  });
+
+  test('uses a conservative fallback only when Android reports no inset', () => {
+    expect(getSafeBottomInset(0, { height: 2400 }, 'android', { height: 2400 }, 24)).toBe(24);
   });
 
   test('adds a small Android-only lift for bottom chrome', () => {

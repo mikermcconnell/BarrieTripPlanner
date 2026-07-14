@@ -180,6 +180,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Audited operator reviews are read and written only through the API proxy
+    // using Firebase Admin. Rider clients have no direct access.
+    match /detourOperatorReviews/{reviewId} {
+      allow read, write: if false;
+
+      match /revisions/{revisionId} {
+        allow read, write: if false;
+      }
+    }
+
     // ==================== TRANSIT NEWS ====================
 
     // Backend news worker writes via Admin SDK.

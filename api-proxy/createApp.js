@@ -21,6 +21,7 @@ const { createLocationIqProxy } = require('./lib/locationIqProxy');
 const { registerLocationIqRoutes } = require('./routes/locationIqRoutes');
 const { registerHealthRoutes } = require('./routes/healthRoutes');
 const { registerDetourRoutes } = require('./routes/detourRoutes');
+const { registerDetourReviewRoutes } = require('./routes/detourReviewRoutes');
 const { registerBaselineRoutes } = require('./routes/baselineRoutes');
 const { registerNewsRoutes } = require('./routes/newsRoutes');
 const { registerOfficialBaselineImpactRoutes } = require('./routes/officialBaselineImpactRoutes');
@@ -102,6 +103,7 @@ function createApiProxyApp({
     isProd: config.isProd,
     allowDetailedRouteDebug: env.DETOUR_DEBUG_ROUTE_DETAILS_ENABLED === 'true',
   });
+  registerDetourReviewRoutes(app, { env, isProd: config.isProd });
 
   registerBaselineRoutes(app, { isProd: config.isProd });
   registerNewsRoutes(app, { newsWorker, isProd: config.isProd });

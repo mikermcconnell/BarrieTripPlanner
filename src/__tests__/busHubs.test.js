@@ -3,6 +3,7 @@ const {
   BUS_HUB_MAJOR_IDS,
   BUS_HUB_MINOR_IDS,
   BUS_HUB_MINOR_LABEL_MIN_ZOOM,
+  BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM,
   buildBusHubFeatureCollection,
   getBusHubDisplayLabel,
   getVisibleBusHubLabels,
@@ -36,11 +37,15 @@ describe('bus hub metadata', () => {
     });
   });
 
-  test('all hub labels are visible at every zoom', () => {
-    const lowZoomLabels = getVisibleBusHubLabels(BUS_HUB_MINOR_LABEL_MIN_ZOOM - 0.25);
-    expect(lowZoomLabels.map((hub) => hub.id)).toEqual([
+  test('hub label density increases from context to corridor to detail zoom', () => {
+    const lowZoomLabels = getVisibleBusHubLabels(BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM - 0.25);
+    expect(lowZoomLabels.map((hub) => hub.id)).toEqual(BUS_HUB_MAJOR_IDS);
+
+    const corridorLabels = getVisibleBusHubLabels(BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM);
+    expect(corridorLabels.map((hub) => hub.id)).toEqual([
       ...BUS_HUB_MAJOR_IDS,
-      ...BUS_HUB_MINOR_IDS,
+      'georgian-mall',
+      'rvh',
     ]);
 
     const highZoomLabels = getVisibleBusHubLabels(BUS_HUB_MINOR_LABEL_MIN_ZOOM);
@@ -60,6 +65,7 @@ describe('bus hub metadata', () => {
     const labels = buildBusHubFeatureCollection(12).features.map((feature) => feature.properties.label);
     expect(labels).toContain('Barrie Allandale Hub');
     expect(labels).toContain('Park Place');
+    expect(labels).not.toContain('Georgian Mall');
     expect(labels.join('\n')).not.toMatch(/\bTerminal\b/i);
   });
 });

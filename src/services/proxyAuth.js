@@ -2,7 +2,7 @@ const CLIENT_ID = 'barrie-transit-app';
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 const IS_TEST = process.env.NODE_ENV === 'test';
 
-async function getFirebaseIdToken() {
+async function getFirebaseIdToken(forceRefresh = false) {
   let firebaseAuth = null;
   try {
     ({ auth: firebaseAuth } = require('../config/firebase'));
@@ -26,13 +26,13 @@ async function getFirebaseIdToken() {
   }
 
   try {
-    return await currentUser.getIdToken();
+    return await currentUser.getIdToken(forceRefresh);
   } catch {
     return '';
   }
 }
 
-export async function getApiProxyRequestOptions(proxyToken = '') {
+export async function getApiProxyRequestOptions(proxyToken = '', { forceRefresh = false } = {}) {
   const headers = {
     'x-client-id': CLIENT_ID,
   };
@@ -42,7 +42,7 @@ export async function getApiProxyRequestOptions(proxyToken = '') {
     headers['x-api-token'] = proxyToken;
   }
 
-  const idToken = await getFirebaseIdToken();
+  const idToken = await getFirebaseIdToken(forceRefresh);
   if (idToken) {
     headers.Authorization = `Bearer ${idToken}`;
   }

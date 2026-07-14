@@ -60,7 +60,7 @@ const BusMarkerComponent = ({
         style={[
           styles.wrapper,
           {
-            opacity: dimmed ? 0.42 : 1,
+            opacity: 1,
             transform: [{ scale: scale * (dimmed ? 0.84 : 1) }],
           },
         ]}
@@ -73,7 +73,7 @@ const BusMarkerComponent = ({
             arrowWidth={7}
             arrowHeight={16}
             color="#111111"
-            dimmed={dimmed}
+            dimmed={false}
           />
         )}
 

@@ -237,7 +237,10 @@ Additional commands:
 ```bash
 npm run test:app
 npm run test:api
+npm run score:detour-quality
 ```
+
+`score:detour-quality` replays the checked-in detector safety case and scores saved rider output against operator-supplied ground truth. Add every confirmed production issue to this corpus before treating a fix as complete.
 
 The full testing strategy, mock guidance, and manual smoke checklist live in [docs/TESTING.md](./docs/TESTING.md).
 

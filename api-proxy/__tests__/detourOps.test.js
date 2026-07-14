@@ -45,7 +45,7 @@ describe('detourOps rollout health', () => {
 
     expect(result.status).toBe(200);
     expect(runTick).toHaveBeenCalledWith({
-      source: 'api-run-once',
+      source: 'scheduler-primary',
       forceReloadState: true,
     });
     expect(enqueueOffsetSample).toHaveBeenCalledWith(expect.objectContaining({
@@ -215,7 +215,7 @@ describe('detourOps rollout health', () => {
     expect(runTick).toHaveBeenCalledTimes(1);
   });
 
-  test('marks rollout pilot-ready when core health checks pass', async () => {
+  test('keeps rollout in caution state when core health passes but detections are unlabelled', async () => {
     const now = Date.parse('2026-04-24T12:00:00Z');
     const detourWorker = {
       getStatus: () => ({
@@ -242,9 +242,16 @@ describe('detourOps rollout health', () => {
 
     const result = await ops.getRolloutHealth();
 
-    expect(result.launchReadiness.status).toBe('pilot_ready');
+    expect(result.launchReadiness.status).toBe('pilot_ready_with_cautions');
+    expect(result.launchReadiness.failedWarnings).toContain('labelled_detection_precision');
     expect(result.falsePositiveCandidates.count).toBe(0);
     expect(result.falsePositiveRate.rate).toBeNull();
+    expect(result.falsePositiveRate.readinessEligible).toBe(false);
+    expect(result.labelledDetectionQuality).toEqual(expect.objectContaining({
+      reviewedCount: 0,
+      precision: null,
+      ready: false,
+    }));
     expect(result.featureFlags.autoDetoursEnabled).toBe(true);
   });
 
@@ -297,7 +304,7 @@ describe('detourOps rollout health', () => {
     expect(result.launchReadiness.failedWarnings).toEqual(expect.arrayContaining([
       'scheduled_or_interval_mode',
       'no_flapping_routes',
-      'false_positive_rate_under_target',
+      'labelled_detection_precision',
     ]));
     expect(result.flapping.flappingRoutes).toEqual([{ routeId: '8A', clearCount: 2 }]);
     expect(result.falsePositiveCandidates.count).toBe(1);
@@ -313,10 +320,11 @@ describe('detourOps rollout health', () => {
       rate: 0.5,
       falsePositiveCount: 1,
       detectedCount: 2,
+      readinessEligible: false,
     });
   });
 
-  test('allows launch when short-lived detections stay below the false-positive target', async () => {
+  test('allows launch when a sufficient labelled sample meets the precision target', async () => {
     const now = Date.parse('2026-04-24T12:00:00Z');
     const detourWorker = {
       getStatus: () => ({
@@ -334,6 +342,7 @@ describe('detourOps rollout health', () => {
     const detectedEvents = Array.from({ length: 20 }, (_, index) => ({
       routeId: `route-${index}`,
       eventType: 'DETOUR_DETECTED',
+      qualityLabel: 'true-positive',
     }));
 
     const ops = createDetourOps({
@@ -354,8 +363,68 @@ describe('detourOps rollout health', () => {
     const result = await ops.getRolloutHealth();
 
     expect(result.falsePositiveRate.rate).toBe(0.05);
-    expect(result.launchReadiness.failedWarnings).not.toContain('false_positive_rate_under_target');
+    expect(result.falsePositiveRate.readinessEligible).toBe(false);
+    expect(result.labelledDetectionQuality).toEqual(expect.objectContaining({
+      reviewedCount: 20,
+      truePositiveCount: 20,
+      falsePositiveCount: 0,
+      precision: 1,
+      ready: true,
+    }));
+    expect(result.launchReadiness.failedWarnings).not.toContain('labelled_detection_precision');
     expect(result.launchReadiness.status).toBe('pilot_ready');
+  });
+
+  test('does not report migration cleanup or separate event ids as route flapping', async () => {
+    const now = Date.parse('2026-07-09T18:00:00Z');
+    const detourWorker = {
+      getStatus: () => ({
+        mode: 'scheduled',
+        tickCount: 20,
+        lastSuccessfulTick: new Date(now - 60_000).toISOString(),
+        consecutiveFailureCount: 0,
+        activeDetours: {},
+        baseline: { readyForDetours: true },
+        errors: { publishFailures: 0 },
+      }),
+    };
+    const clearedEvents = [
+      {
+        routeId: '12B',
+        eventId: 'legacy-12b',
+        eventType: 'DETOUR_CLEARED',
+        clearReason: 'superseded-by-equivalent-event',
+      },
+      {
+        routeId: '12B',
+        eventId: 'event-a',
+        eventType: 'DETOUR_CLEARED',
+        clearReason: 'normal-route-observed',
+      },
+      {
+        routeId: '12B',
+        eventId: 'event-b',
+        eventType: 'DETOUR_CLEARED',
+        clearReason: 'normal-route-observed',
+      },
+    ];
+    const ops = createDetourOps({
+      detourWorker,
+      queryDetourHistory: jest.fn()
+        .mockResolvedValueOnce(clearedEvents)
+        .mockResolvedValueOnce(clearedEvents)
+        .mockResolvedValueOnce([]),
+      now: () => now,
+      env: { DETOUR_WORKER_ENABLED: 'true' },
+    });
+
+    const result = await ops.getRolloutHealth();
+
+    expect(result.flapping).toEqual({
+      flappingRoutes: [],
+      flappingCount: 0,
+      windowMs: 24 * 60 * 60 * 1000,
+    });
   });
 
   test('blocks launch when the stored baseline diverges from live GTFS', async () => {
@@ -506,6 +575,9 @@ describe('detourOps rollout health', () => {
           consecutiveFailureCount: 0,
           activeDetours: {},
           baseline: { readyForDetours: true },
+          samplingHealth: { tickCount: 2, bySource: { 'offset-30s': { tickCount: 1 } } },
+          roadMatching: { requests: 3, failures: 1 },
+          detectorDecisionJournal: { recentDecisionCount: 1, trackedDetourCount: 1 },
           errors: { publishFailures: 0 },
         }),
       },
@@ -528,6 +600,9 @@ describe('detourOps rollout health', () => {
         activeCollection: 'activeDetourEventsV2',
         historyCollection: 'detourEventHistoryV2',
       }),
+      samplingHealth: { tickCount: 2, bySource: { 'offset-30s': { tickCount: 1 } } },
+      roadMatching: { requests: 3, failures: 1 },
+      detectorDecisionJournal: { recentDecisionCount: 1, trackedDetourCount: 1 },
     }));
     expect(queryDetourHistory).toHaveBeenCalledWith(expect.objectContaining({
       storageConfig: expect.objectContaining({

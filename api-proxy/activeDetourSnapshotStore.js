@@ -54,13 +54,18 @@ function normalizeDetourZone(data = {}) {
   return explicit;
 }
 
-function normalizeSnapshot(routeId, data = {}) {
+function normalizeSnapshot(routeId, data = {}, eventId = null) {
   const lastEvidenceAt = toMillis(data.lastEvidenceAt) || toMillis(data.lastSeenAt) || null;
   const latestGpsEvidenceAt = toMillis(data.latestGpsEvidenceAt) || lastEvidenceAt;
   const geometryLastEvidenceAt = toMillis(data.geometryLastEvidenceAt) || lastEvidenceAt;
   const detourZone = normalizeDetourZone(data);
   return {
+    eventId: eventId || data.detourEventId || data.eventId || routeId,
+    detourEventId: data.detourEventId || null,
     routeId,
+    detourVersion: data.detourVersion || null,
+    detourModel: data.detourModel || null,
+    sharedDetourEventId: data.sharedDetourEventId || null,
     detectedAt: toMillis(data.detectedAt) || Date.now(),
     lastSeenAt: toMillis(data.lastSeenAt) || toMillis(data.detectedAt) || Date.now(),
     lastEvidenceAt,
@@ -94,6 +99,7 @@ function normalizeSnapshot(routeId, data = {}) {
       endProgressMeters: detourZone?.endProgressMeters ?? null,
       canShowDetourPath: data.canShowDetourPath ?? null,
     },
+    eventWindow: cloneJson(data.eventWindow) || null,
     detourZone,
     clearWindow: cloneJson(data.clearWindow) || null,
     clearWindows: cloneJson(data.clearWindows) || [],
@@ -117,12 +123,16 @@ async function loadActiveDetourSnapshots(options = {}) {
       snapshot.forEach((doc) => {
         const data = doc.data() || {};
         const routeId = data.routeId || doc.id;
-        records[routeId] = normalizeSnapshot(routeId, data);
+        // Firestore document identity owns the V2 lifecycle. detourEventId can
+        // be shared physical-geometry metadata and must not collapse records.
+        const eventId = doc.id;
+        records[eventId] = normalizeSnapshot(routeId, data, eventId);
       });
       return records;
     })().catch((error) => {
+      hydratePromise = null;
       console.error('[activeDetourSnapshotStore] Failed to hydrate active detours:', error.message);
-      return {};
+      throw error;
     });
   }
   return hydratePromise;

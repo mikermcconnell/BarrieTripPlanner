@@ -30,6 +30,102 @@ const DEFAULT_MIN_MATCH_CONFIDENCE = 0.45;
 const DEFAULT_ENDPOINT_MAX_MISMATCH_METERS = 45;
 const DEFAULT_REJOIN_CORRIDOR_MAX_MISMATCH_METERS = 125;
 const DEFAULT_REJOIN_CORRIDOR_PROXIMITY_METERS = 45;
+const MAX_RECENT_ROAD_MATCH_EVENTS = 20;
+
+const roadMatcherStats = {
+  requests: 0,
+  skipped: 0,
+  matchAttempts: 0,
+  routeAttempts: 0,
+  successes: 0,
+  failures: 0,
+  rejections: 0,
+  fallbackSuccesses: 0,
+  lastFailureAt: null,
+  lastSuccessAt: null,
+  recentEvents: [],
+};
+
+function recordRoadMatcherEvent(type, details = {}) {
+  if (type === 'request') roadMatcherStats.requests += 1;
+  if (type === 'skipped') roadMatcherStats.skipped += 1;
+  if (type === 'match-attempt') roadMatcherStats.matchAttempts += 1;
+  if (type === 'route-attempt') roadMatcherStats.routeAttempts += 1;
+  if (type === 'success') {
+    roadMatcherStats.successes += 1;
+    roadMatcherStats.lastSuccessAt = new Date().toISOString();
+  }
+  if (type === 'fallback-success') {
+    roadMatcherStats.fallbackSuccesses += 1;
+    roadMatcherStats.successes += 1;
+    roadMatcherStats.lastSuccessAt = new Date().toISOString();
+  }
+  if (type === 'failure') {
+    roadMatcherStats.failures += 1;
+    roadMatcherStats.lastFailureAt = new Date().toISOString();
+  }
+  if (type === 'rejection') roadMatcherStats.rejections += 1;
+
+  roadMatcherStats.recentEvents.push({
+    at: new Date().toISOString(),
+    type,
+    ...details,
+  });
+  while (roadMatcherStats.recentEvents.length > MAX_RECENT_ROAD_MATCH_EVENTS) {
+    roadMatcherStats.recentEvents.shift();
+  }
+}
+
+function getRoadMatcherStats() {
+  return {
+    ...roadMatcherStats,
+    recentEvents: roadMatcherStats.recentEvents.slice(),
+  };
+}
+
+function resetRoadMatcherStats() {
+  roadMatcherStats.requests = 0;
+  roadMatcherStats.skipped = 0;
+  roadMatcherStats.matchAttempts = 0;
+  roadMatcherStats.routeAttempts = 0;
+  roadMatcherStats.successes = 0;
+  roadMatcherStats.failures = 0;
+  roadMatcherStats.rejections = 0;
+  roadMatcherStats.fallbackSuccesses = 0;
+  roadMatcherStats.lastFailureAt = null;
+  roadMatcherStats.lastSuccessAt = null;
+  roadMatcherStats.recentEvents = [];
+}
+
+function logRoadMatchEvent(event, fields = {}) {
+  console.warn(JSON.stringify({
+    event,
+    ...fields,
+  }));
+}
+
+function compactString(value) {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, 160) : null;
+}
+
+function buildRoadMatchLogContext(options = {}) {
+  const source = options.logContext || {};
+  return {
+    routeId: compactString(source.routeId || options.routeId),
+    publishId: compactString(source.publishId || options.publishId),
+    eventId: compactString(source.eventId || options.eventId),
+    segmentEventId: compactString(source.segmentEventId || options.segmentEventId),
+  };
+}
+
+function withRoadMatchContext(details = {}, context = {}) {
+  return {
+    ...Object.fromEntries(Object.entries(context).filter(([, value]) => value != null)),
+    ...details,
+  };
+}
 
 function isTruthy(value) {
   return ['true', '1', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -847,7 +943,8 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
   };
 }
 
-function isRouteFallbackEnabled(env = process.env) {
+function isRouteFallbackEnabled(env = process.env, options = {}) {
+  if (options.allowRouteFallback === false) return false;
   return env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED == null
     ? true
     : isTruthy(env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED);
@@ -884,13 +981,24 @@ async function routePolylineToRoads(points, {
 
 async function matchPolylineToRoads(polyline, options = {}) {
   const env = options.env || process.env;
-  if (!isRoadMatchingEnabled(env)) return null;
+  const logContext = buildRoadMatchLogContext(options);
+  recordRoadMatcherEvent('request', withRoadMatchContext({}, logContext));
+  if (!isRoadMatchingEnabled(env)) {
+    recordRoadMatcherEvent('skipped', withRoadMatchContext({ reason: 'disabled' }, logContext));
+    return null;
+  }
 
   const baseUrl = getBaseUrl(env);
-  if (!baseUrl) return null;
+  if (!baseUrl) {
+    recordRoadMatcherEvent('skipped', withRoadMatchContext({ reason: 'base-url-missing' }, logContext));
+    return null;
+  }
 
   const fetchImpl = options.fetchImpl || global.fetch;
-  if (typeof fetchImpl !== 'function') return null;
+  if (typeof fetchImpl !== 'function') {
+    recordRoadMatcherEvent('skipped', withRoadMatchContext({ reason: 'fetch-missing' }, logContext));
+    return null;
+  }
 
   const maxPoints = parsePositiveInt(
     env.DETOUR_ROAD_MATCHING_MAX_POINTS,
@@ -899,7 +1007,10 @@ async function matchPolylineToRoads(polyline, options = {}) {
     100
   );
   const points = samplePolyline(normalizePolyline(polyline), maxPoints);
-  if (points.length < 2) return null;
+  if (points.length < 2) {
+    recordRoadMatcherEvent('skipped', withRoadMatchContext({ reason: 'too-few-points' }, logContext));
+    return null;
+  }
 
   const timeoutMs = parsePositiveInt(
     env.DETOUR_ROAD_MATCHING_TIMEOUT_MS,
@@ -927,21 +1038,42 @@ async function matchPolylineToRoads(polyline, options = {}) {
         options,
         recordRejectionReasons,
       });
-      if (routeFirstResult) return routeFirstResult;
+      recordRoadMatcherEvent('route-attempt', withRoadMatchContext({
+        mode: 'prefer-route',
+        ok: Boolean(routeFirstResult),
+      }, logContext));
+      if (routeFirstResult) {
+        recordRoadMatcherEvent('success', withRoadMatchContext({ source: ROAD_ROUTE_SOURCE }, logContext));
+        return routeFirstResult;
+      }
+      recordRoadMatcherEvent('rejection', withRoadMatchContext({
+        source: ROAD_ROUTE_SOURCE,
+        reason: 'unusable-route-result',
+      }, logContext));
       return null;
     } catch (err) {
       matchError = err;
       if (err?.name === 'AbortError') {
+        recordRoadMatcherEvent('failure', withRoadMatchContext({
+          source: ROAD_ROUTE_SOURCE,
+          reason: 'timeout',
+        }, logContext));
         return null;
       }
-      console.warn('[detourRoadMatcher] OSRM route attempt failed', {
+      recordRoadMatcherEvent('failure', withRoadMatchContext({
+        source: ROAD_ROUTE_SOURCE,
         reason: err?.message || String(err),
-      });
+      }, logContext));
+      logRoadMatchEvent('detour_road_match_failed', withRoadMatchContext({
+        source: ROAD_ROUTE_SOURCE,
+        reason: err?.message || String(err),
+      }, logContext));
     }
   }
 
   for (const radiusMeters of getAdaptiveMatchRadii(env)) {
     try {
+      recordRoadMatcherEvent('match-attempt', withRoadMatchContext({ radiusMeters }, logContext));
       const payload = await fetchOsrmJsonWithTimeout(
         buildOsrmMatchUrl(baseUrl, points, {
           ...env,
@@ -959,17 +1091,29 @@ async function matchPolylineToRoads(polyline, options = {}) {
           rejectionReasons,
         })
         : null;
-      if (matchResult) return matchResult;
+      if (matchResult) {
+        recordRoadMatcherEvent('success', withRoadMatchContext({
+          source: ROAD_MATCH_SOURCE,
+          radiusMeters,
+        }, logContext));
+        return matchResult;
+      }
       if (matching) {
         recordRejectionReasons(rejectionReasons);
         if (rejectionReasons.some(({ reason }) => reason === 'endpoint-mismatch')) {
           rejectedForTrust = true;
         }
-        console.warn('[detourRoadMatcher] OSRM match result rejected or unusable', {
+        logRoadMatchEvent('detour_road_match_rejected', withRoadMatchContext({
+          source: ROAD_MATCH_SOURCE,
           radiusMeters,
           reason: rejectionReasons[0]?.reason || 'no usable road-matched path after safety checks',
           details: rejectionReasons[0] || undefined,
-        });
+        }, logContext));
+        recordRoadMatcherEvent('rejection', withRoadMatchContext({
+          source: ROAD_MATCH_SOURCE,
+          radiusMeters,
+          reason: rejectionReasons[0]?.reason || 'unusable-match-result',
+        }, logContext));
         break;
       }
       matchError = null;
@@ -977,12 +1121,23 @@ async function matchPolylineToRoads(polyline, options = {}) {
     } catch (err) {
       matchError = err;
       if (err?.name === 'AbortError') {
+        recordRoadMatcherEvent('failure', withRoadMatchContext({
+          source: ROAD_MATCH_SOURCE,
+          radiusMeters,
+          reason: 'timeout',
+        }, logContext));
         break;
       }
-      console.warn('[detourRoadMatcher] OSRM match attempt failed', {
+      recordRoadMatcherEvent('failure', withRoadMatchContext({
+        source: ROAD_MATCH_SOURCE,
         radiusMeters,
         reason: err?.message || String(err),
-      });
+      }, logContext));
+      logRoadMatchEvent('detour_road_match_failed', withRoadMatchContext({
+        source: ROAD_MATCH_SOURCE,
+        radiusMeters,
+        reason: err?.message || String(err),
+      }, logContext));
     }
   }
 
@@ -990,18 +1145,41 @@ async function matchPolylineToRoads(polyline, options = {}) {
     return null;
   }
 
-  if (!isRouteFallbackEnabled(env)) {
+  if (!isRouteFallbackEnabled(env, options)) {
     if (matchError) throw matchError;
     return null;
   }
 
-  return routePolylineToRoads(points, {
-    baseUrl,
-    fetchImpl,
-    timeoutMs,
-    options,
-    recordRejectionReasons,
-  });
+  try {
+    const fallback = await routePolylineToRoads(points, {
+      baseUrl,
+      fetchImpl,
+      timeoutMs,
+      options,
+      recordRejectionReasons,
+    });
+    recordRoadMatcherEvent('route-attempt', withRoadMatchContext({
+      mode: 'fallback',
+      ok: Boolean(fallback),
+    }, logContext));
+    if (fallback) {
+      recordRoadMatcherEvent('fallback-success', withRoadMatchContext({
+        source: ROAD_ROUTE_SOURCE,
+      }, logContext));
+    } else {
+      recordRoadMatcherEvent('rejection', withRoadMatchContext({
+        source: ROAD_ROUTE_SOURCE,
+        reason: 'unusable-route-fallback',
+      }, logContext));
+    }
+    return fallback;
+  } catch (err) {
+    recordRoadMatcherEvent('failure', withRoadMatchContext({
+      source: ROAD_ROUTE_SOURCE,
+      reason: err?.message || String(err),
+    }, logContext));
+    throw err;
+  }
 }
 
 function clearRoadMatchedFields(value) {
@@ -1053,6 +1231,14 @@ async function matchSegment(segment, options) {
     const rejectionReasons = [];
     const match = await matchPolylineToRoads(candidate, {
       ...options,
+      allowRouteFallback: segment?.configuredCorridor === true ||
+        segment?.configuredCorridorLabel
+        ? false
+        : options.allowRouteFallback,
+      logContext: {
+        ...(options.logContext || {}),
+        segmentEventId: segment?.detourEventId || segment?.sharedDetourEventId || options.segmentEventId || null,
+      },
       blockedPolyline: segment?.skippedSegmentPolyline,
       routeShapePolyline: getRouteShapePolylineForSegment(segment, options),
       serviceRejoinPoint: segment?.serviceRejoinPoint,
@@ -1078,7 +1264,9 @@ async function matchSegment(segment, options) {
       ...match,
     };
   } catch (err) {
-    console.warn('[detourRoadMatcher] Falling back to inferred detour path:', err.message);
+    logRoadMatchEvent('detour_road_match_fallback_to_inferred', withRoadMatchContext({
+      reason: err.message,
+    }, buildRoadMatchLogContext(options)));
     return { ...segment };
   }
 }
@@ -1177,9 +1365,11 @@ module.exports = {
   buildOsrmMatchUrl,
   buildOsrmRouteUrl,
   confidenceLabel,
+  getRoadMatcherStats,
   isRoadMatchingEnabled,
   matchDetourGeometry,
   matchPolylineToRoads,
   normalizePolyline,
   removeAvoidableBacktracksFromPolyline,
+  resetRoadMatcherStats,
 };

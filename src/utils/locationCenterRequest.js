@@ -2,6 +2,11 @@ export const isLocationCenterRequestCurrent = (requestId, pendingRef) => (
   requestId === pendingRef?.current
 );
 
+export const hasActiveLocationCenterRequest = ({
+  isCentering = false,
+  releaseTimerRef = null,
+} = {}) => Boolean(isCentering || releaseTimerRef?.current);
+
 export const cancelLocationCenterRequest = ({
   pendingRef,
   releaseTimerRef = null,

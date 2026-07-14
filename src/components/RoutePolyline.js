@@ -26,6 +26,7 @@ const RoutePolylineComponent = ({
   fillLayerIndex = null,
   arrowLayerIndex = null,
   labelLayerIndex = null,
+  belowLayerID = null,
   onPress,
   offset = 0,
 }) => {
@@ -115,6 +116,7 @@ const RoutePolylineComponent = ({
         <MapLibreGL.LineLayer
           id={`${sourceId}-outline`}
           layerIndex={getResolvedLayerIndex(outlineLayerIndex, 0)}
+          belowLayerID={belowLayerID || undefined}
           style={{
             lineColor: outlineFill,
             lineWidth: outlineStrokeWidth,
@@ -169,6 +171,7 @@ const RoutePolylineComponent = ({
       <MapLibreGL.LineLayer
         id={`${sourceId}-fill`}
         layerIndex={getResolvedLayerIndex(fillLayerIndex, 0)}
+        belowLayerID={belowLayerID || undefined}
         style={{
           lineColor: fillColor,
           lineWidth: strokeWidth,
@@ -227,6 +230,7 @@ const areRoutePolylinePropsEqual = (prev, next) => (
   prev.fillLayerIndex === next.fillLayerIndex &&
   prev.arrowLayerIndex === next.arrowLayerIndex &&
   prev.labelLayerIndex === next.labelLayerIndex &&
+  prev.belowLayerID === next.belowLayerID &&
   prev.offset === next.offset &&
   prev.onPress === next.onPress &&
   areLineDashPatternsEqual(prev.lineDashPattern, next.lineDashPattern)

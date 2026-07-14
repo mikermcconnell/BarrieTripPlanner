@@ -24,6 +24,7 @@ const MAX_SERVICE_DISTANCE_KM = 20;
 
 // Minimum distance between origin and destination (meters)
 const MIN_TRIP_DISTANCE_M = 50;
+const PAST_TIME_GRACE_MS = 60 * 1000;
 
 /**
  * Validation result shape
@@ -148,6 +149,40 @@ export const validateTripInputs = ({ from, to, fromText, toText, onDemandZones }
       valid: false,
       errorCode: 'VALIDATION_ERROR',
       errorMessage: 'Your starting location and destination are too close together. Try walking instead!',
+    };
+  }
+
+  return { valid: true, errorCode: null, errorMessage: null };
+};
+
+export const validateTripDateTime = ({
+  timeMode = 'now',
+  selectedTime = null,
+  nowMs = Date.now(),
+} = {}) => {
+  if (timeMode === 'now') {
+    return { valid: true, errorCode: null, errorMessage: null };
+  }
+
+  const selectedTimeMs = selectedTime instanceof Date
+    ? selectedTime.getTime()
+    : new Date(selectedTime).getTime();
+
+  if (!Number.isFinite(selectedTimeMs)) {
+    return {
+      valid: false,
+      errorCode: 'VALIDATION_ERROR',
+      errorMessage: 'Please choose a valid trip date and time.',
+    };
+  }
+
+  if (selectedTimeMs < nowMs - PAST_TIME_GRACE_MS) {
+    return {
+      valid: false,
+      errorCode: 'VALIDATION_ERROR',
+      errorMessage: timeMode === 'arriveBy'
+        ? 'Arrival time must be in the future.'
+        : 'Departure time must be in the future.',
     };
   }
 

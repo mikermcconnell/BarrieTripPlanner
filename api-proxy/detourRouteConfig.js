@@ -1,6 +1,18 @@
 'use strict';
 
 const DEFAULT_ROUTE_DETECTOR_OVERRIDES = Object.freeze({
+  // Route 8A buses use the Downtown Hub street loop before joining the
+  // scheduled outbound shape on Maple. Treat that operator-confirmed terminal
+  // circulation as normal service, not as closure evidence.
+  '8A': Object.freeze({
+    ignoredRouteEdgeAreas: Object.freeze([Object.freeze({
+      label: 'Downtown Hub terminal egress',
+      edge: 'start',
+      center: Object.freeze({ latitude: 44.387753, longitude: -79.690237 }),
+      radiusMeters: 200,
+      maxProgressMeters: 250,
+    })]),
+  }),
   // Route 12 downtown geometry can have close entry/exit anchors. Keep the
   // anchor tolerance narrow; route-family projection is handled globally only
   // after a confirmed physical closure segment has renderable boundaries.
@@ -30,6 +42,12 @@ function normalizeCoordinate(value) {
   return { latitude, longitude };
 }
 
+function normalizeCoordinateList(value) {
+  if (!Array.isArray(value)) return null;
+  const points = value.map(normalizeCoordinate).filter(Boolean);
+  return points.length >= 2 ? points : null;
+}
+
 function normalizeOptionalTimestamp(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -56,10 +74,19 @@ function normalizeConfiguredDetourCorridor(rawCorridor) {
   };
 
   const paddingMeters = normalizePositiveNumber(rawCorridor.paddingMeters);
+  const outlierDistanceMeters = normalizePositiveNumber(rawCorridor.outlierDistanceMeters);
+  const detourPathPolyline = normalizeCoordinateList(
+    rawCorridor.detourPathPolyline ||
+    rawCorridor.pathPolyline ||
+    rawCorridor.polyline ||
+    rawCorridor.path
+  );
   const startsAt = normalizeOptionalTimestamp(rawCorridor.startsAt);
   const expiresAt = normalizeOptionalTimestamp(rawCorridor.expiresAt);
 
   if (paddingMeters != null) corridor.paddingMeters = paddingMeters;
+  if (outlierDistanceMeters != null) corridor.outlierDistanceMeters = outlierDistanceMeters;
+  if (detourPathPolyline != null) corridor.detourPathPolyline = detourPathPolyline;
   if (startsAt != null) corridor.startsAt = startsAt;
   if (expiresAt != null) corridor.expiresAt = expiresAt;
   if (typeof rawCorridor.label === 'string' && rawCorridor.label.trim()) {
@@ -67,6 +94,33 @@ function normalizeConfiguredDetourCorridor(rawCorridor) {
   }
 
   return corridor;
+}
+
+function normalizeIgnoredRouteEdgeArea(rawArea) {
+  if (!rawArea || typeof rawArea !== 'object' || rawArea.enabled === false) return null;
+  const center = normalizeCoordinate(rawArea.center || rawArea.coordinate);
+  const radiusMeters = normalizePositiveNumber(rawArea.radiusMeters);
+  const maxProgressMeters = normalizePositiveNumber(rawArea.maxProgressMeters);
+  const edge = String(rawArea.edge || '').trim().toLowerCase();
+  if (!center || radiusMeters == null || maxProgressMeters == null) return null;
+  if (edge !== 'start' && edge !== 'end') return null;
+
+  return {
+    enabled: true,
+    edge,
+    center,
+    radiusMeters,
+    maxProgressMeters,
+    ...(typeof rawArea.label === 'string' && rawArea.label.trim()
+      ? { label: rawArea.label.trim() }
+      : {}),
+  };
+}
+
+function normalizeIgnoredRouteEdgeAreas(value) {
+  if (!Array.isArray(value)) return null;
+  const areas = value.map(normalizeIgnoredRouteEdgeArea).filter(Boolean);
+  return areas.length > 0 ? areas : null;
 }
 
 function normalizeRouteOverride(rawOverride) {
@@ -114,6 +168,9 @@ function normalizeRouteOverride(rawOverride) {
   const configuredDetourCorridor = normalizeConfiguredDetourCorridor(
     rawOverride.configuredDetourCorridor || rawOverride.detourCorridor
   );
+  const ignoredRouteEdgeAreas = normalizeIgnoredRouteEdgeAreas(
+    rawOverride.ignoredRouteEdgeAreas || rawOverride.normalRouteEdgeAreas
+  );
 
   if (offRouteThresholdMeters != null) override.offRouteThresholdMeters = offRouteThresholdMeters;
   if (onRouteClearThresholdMeters != null) override.onRouteClearThresholdMeters = onRouteClearThresholdMeters;
@@ -158,6 +215,9 @@ function normalizeRouteOverride(rawOverride) {
   }
   if (configuredDetourCorridor) {
     override.configuredDetourCorridor = configuredDetourCorridor;
+  }
+  if (ignoredRouteEdgeAreas) {
+    override.ignoredRouteEdgeAreas = ignoredRouteEdgeAreas;
   }
 
   return override;
@@ -216,4 +276,5 @@ module.exports = {
   ROUTE_DETECTOR_OVERRIDES,
   getRouteDetectorConfig,
   normalizeConfiguredDetourCorridor,
+  normalizeIgnoredRouteEdgeArea,
 };

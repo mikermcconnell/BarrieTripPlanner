@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyBarrie Transit — bus marker icon options</title>
+  <style>
+    :root { font-family: Arial, Helvetica, sans-serif; color: #061a3b; background: #eef4f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; }
+    header { max-width: 900px; margin: 0 auto 26px; text-align: center; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 42px); letter-spacing: -1px; }
+    header p { margin: 0; color: #50647a; font-size: 16px; line-height: 1.5; }
+    main { width: min(1120px, 100%); margin: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .card { overflow: hidden; border: 1px solid #d8e5ee; border-radius: 26px; background: #fff; box-shadow: 0 14px 36px rgba(6, 42, 83, .10); }
+    .display { min-height: 310px; display: grid; grid-template-columns: 132px 1fr; align-items: center; gap: 10px; padding: 20px; background: #f9fcfe; }
+    .large-icon { width: 120px; height: 120px; filter: drop-shadow(0 8px 9px rgba(6,42,83,.18)); }
+    .map { width: 100%; border: 1px solid #d9e7ef; border-radius: 20px; background: #f9fcfe; }
+    .copy { padding: 18px 20px 21px; border-top: 1px solid #edf2f5; }
+    .option { color: #6421a8; font-size: 12px; font-weight: 900; letter-spacing: .8px; }
+    h2 { margin: 5px 0; font-size: 21px; }
+    .copy p { margin: 0; color: #5f7285; font-size: 14px; line-height: 1.4; }
+    .card:last-child { grid-column: 1 / -1; width: calc(50% - 12px); justify-self: center; }
+    @media (max-width: 760px) {
+      body { padding: 16px; }
+      main { grid-template-columns: 1fr; }
+      .card:last-child { grid-column: auto; width: auto; }
+      .display { grid-template-columns: 100px 1fr; min-height: 250px; padding: 12px; }
+      .large-icon { width: 94px; height: 94px; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <symbol id="marker-base" viewBox="-50 -50 100 100">
+        <circle r="47" fill="#004E80" stroke="#fff" stroke-width="7"/>
+        <path d="M-28-31h56A47 47 0 0 1 41-3h-82a47 47 0 0 1 13-28Z" fill="#fff" opacity=".10"/>
+      </symbol>
+
+      <symbol id="icon-outline" viewBox="-24 -24 48 48">
+        <rect x="-15" y="-18" width="30" height="32" rx="6" fill="none" stroke="#fff" stroke-width="4"/>
+        <path d="M-10-12h20v11h-20zM-14 7h28" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="-9" cy="7" r="2.5" fill="#fff"/><circle cx="9" cy="7" r="2.5" fill="#fff"/>
+        <path d="M-10 14v4m20-4v4" stroke="#172B4D" stroke-width="5" stroke-linecap="round"/>
+      </symbol>
+
+      <symbol id="icon-side" viewBox="-24 -24 48 48">
+        <path d="M-20-12h31c7 0 11 4 11 11v12h-42z" fill="#fff"/>
+        <path d="M-14-7h8v9h-8zm11 0h8v9h-8zm11 0h8l2 9H8z" fill="#B8102B"/>
+        <circle cx="-12" cy="13" r="5" fill="#172B4D"/><circle cx="13" cy="13" r="5" fill="#172B4D"/>
+        <circle cx="-12" cy="13" r="2" fill="#fff"/><circle cx="13" cy="13" r="2" fill="#fff"/>
+      </symbol>
+
+      <symbol id="icon-top" viewBox="-24 -24 48 48">
+        <rect x="-12" y="-20" width="24" height="40" rx="10" fill="#fff"/>
+        <path d="M-8-14h16v9H-8zm0 20h16v8H-8z" fill="#B8102B"/>
+        <path d="M-16-9h4m0 18h-4M12-9h4m-4 18h4" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        <path d="m-5-1 5 5 5-5" fill="none" stroke="#B8102B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <symbol id="icon-classic" viewBox="-24 -24 48 48">
+        <path d="M-17-13c0-5 4-8 17-8s17 3 17 8v26H-17z" fill="#fff"/>
+        <rect x="-11" y="-15" width="22" height="4" rx="2" fill="#B8102B"/>
+        <path d="M-12-7h11v10h-11zM2-7h10v10H2z" fill="#B8102B"/>
+        <path d="M-14 8h28" stroke="#B8102B" stroke-width="3"/>
+        <circle cx="-9" cy="9" r="2.5" fill="#B8102B"/><circle cx="9" cy="9" r="2.5" fill="#B8102B"/>
+        <path d="M-11 13v5m22-5v5" stroke="#172B4D" stroke-width="5" stroke-linecap="round"/>
+      </symbol>
+
+      <symbol id="icon-live" viewBox="-24 -24 48 48">
+        <rect x="-12" y="-15" width="24" height="25" rx="5" fill="#fff"/>
+        <rect x="-8" y="-10" width="16" height="8" rx="2" fill="#B8102B"/>
+        <circle cx="-7" cy="5" r="2" fill="#B8102B"/><circle cx="7" cy="5" r="2" fill="#B8102B"/>
+        <path d="M-8 10v4m16-4v4" stroke="#172B4D" stroke-width="4" stroke-linecap="round"/>
+        <path d="M-17-7c-4 4-4 11 0 15m34-15c4 4 4 11 0 15M-21-12c-7 7-7 18 0 25m42-25c7 7 7 18 0 25" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      </symbol>
+
+      <symbol id="detour-map" viewBox="0 0 420 220">
+        <rect width="420" height="220" fill="#f9fcfe"/>
+        <g fill="none" stroke="#dce8f0" stroke-width="12"><path d="M0 110h420M0 43h420M0 181h420M90 0v220M180 0v220M300 0v220"/></g>
+        <g fill="none" stroke="#eff4f7" stroke-width="5"><path d="M0 76h420M0 146h420M245 0v220M365 0v220"/></g>
+        <path d="M15 110h390" stroke="#d9e9f7" stroke-width="13" stroke-linecap="round"/>
+        <path d="M15 110h165M300 110h105" stroke="#1174e7" stroke-width="7" stroke-linecap="round"/>
+        <path d="M180 110h120" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-dasharray="2 11"/>
+        <path d="M180 110V43h120v67" fill="none" stroke="#8539d6" stroke-width="12" opacity=".14" stroke-linejoin="round"/>
+        <path d="M180 110V43h120v67" fill="none" stroke="#8539d6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="11 7"/>
+        <g transform="translate(240 110)"><circle r="15" fill="#fff7e6" stroke="#f59e0b" stroke-width="3"/><path d="m-6-6 12 12m0-12-12 12" stroke="#d94b2b" stroke-width="4" stroke-linecap="round"/></g>
+      </symbol>
+    </defs>
+  </svg>
+
+  <header>
+    <h1>Choose a bus symbol</h1>
+    <p>Five alternatives shown both enlarged and at the size riders will see on the startup map.</p>
+  </header>
+
+  <main id="options"></main>
+
+  <script>
+    const options = [
+      ['outline', 'Front outline', 'Clean and lightweight, with the familiar front of a bus.'],
+      ['side', 'Side profile', 'The most instantly recognizable vehicle silhouette.'],
+      ['top', 'Top-down vehicle', 'Feels closest to a live vehicle moving across a map.'],
+      ['classic', 'Classic transit bus', 'More detail and a traditional destination-sign shape.'],
+      ['live', 'Live signal bus', 'Adds movement signals to reinforce automatic detection.'],
+    ];
+
+    const marker = (icon, x, y) => `
+      <g transform="translate(${x} ${y})">
+        <circle r="27" fill="none" stroke="#36b37e" stroke-width="3" opacity=".34"/>
+        <use href="#marker-base" x="-22" y="-22" width="44" height="44"/>
+        <use href="#icon-${icon}" x="-13" y="-13" width="26" height="26"/>
+      </g>`;
+
+    document.querySelector('#options').innerHTML = options.map(([icon, title, description], index) => `
+      <article class="card">
+        <div class="display">
+          <svg class="large-icon" viewBox="-50 -50 100 100" role="img" aria-label="${title}">
+            <use href="#marker-base" x="-50" y="-50" width="100" height="100"/>
+            <use href="#icon-${icon}" x="-27" y="-27" width="54" height="54"/>
+          </svg>
+          <svg class="map" viewBox="0 0 420 220" role="img" aria-label="${title} shown on the detour map">
+            <use href="#detour-map"/>
+            ${marker(icon, 158, 110)}
+            ${marker(icon, 270, 43)}
+          </svg>
+        </div>
+        <div class="copy"><span class="option">OPTION ${index + 1}</span><h2>${title}</h2><p>${description}</p></div>
+      </article>
+    `).join('');
+  </script>
+</body>
+</html>

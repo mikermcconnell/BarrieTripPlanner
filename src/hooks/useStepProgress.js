@@ -5,11 +5,13 @@
  * Auto-advances based on location proximity and handles
  * walking -> waiting -> transit -> walking transitions.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { safeHaversineDistance as calculateDistance } from '../utils/geometryUtils';
 
 // Threshold for considering arrival at a destination (meters)
 const ARRIVAL_THRESHOLD = 30;
+const WALK_ARRIVAL_MAX_ACCURACY_METERS = 35;
+const WALK_ARRIVAL_REQUIRED_HITS = 2;
 
 const getStopCode = (stop) => stop?.stopCode || stop?.stopId || stop?.code || null;
 
@@ -25,6 +27,9 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
   const [legStatus, setLegStatus] = useState('not_started'); // 'not_started' | 'in_progress' | 'completed'
   const [transitStatus, setTransitStatus] = useState('waiting'); // 'waiting' | 'boarding' | 'on_board'
   const [isNavigationComplete, setIsNavigationComplete] = useState(false);
+  const [walkingArrivalEvidenceHits, setWalkingArrivalEvidenceHits] = useState(0);
+  const lastWalkingArrivalSampleRef = useRef(null);
+  const walkingArrivalLegIndexRef = useRef(currentLegIndex);
 
   const legs = itinerary?.legs || [];
   const currentLeg = legs[currentLegIndex];
@@ -65,6 +70,47 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
   const hasArrivedAtDestination = useMemo(() => {
     return distanceToDestination !== null && distanceToDestination < ARRIVAL_THRESHOLD;
   }, [distanceToDestination]);
+
+  useEffect(() => {
+    if (walkingArrivalLegIndexRef.current !== currentLegIndex) {
+      walkingArrivalLegIndexRef.current = currentLegIndex;
+      lastWalkingArrivalSampleRef.current = null;
+      setWalkingArrivalEvidenceHits(0);
+      return;
+    }
+
+    const accuracy = Number(userLocation?.accuracy);
+    const isReliableArrivalFix = (
+      currentLeg?.mode === 'WALK' &&
+      hasArrivedAtDestination &&
+      Number.isFinite(accuracy) &&
+      accuracy <= WALK_ARRIVAL_MAX_ACCURACY_METERS
+    );
+
+    if (!isReliableArrivalFix) {
+      lastWalkingArrivalSampleRef.current = null;
+      setWalkingArrivalEvidenceHits(0);
+      return;
+    }
+
+    const sampleKey = Number.isFinite(Number(userLocation?.timestamp))
+      ? Number(userLocation.timestamp)
+      : null;
+    if (sampleKey == null || sampleKey === lastWalkingArrivalSampleRef.current) return;
+
+    lastWalkingArrivalSampleRef.current = sampleKey;
+    setWalkingArrivalEvidenceHits((hits) => Math.min(WALK_ARRIVAL_REQUIRED_HITS, hits + 1));
+  }, [
+    currentLeg?.mode,
+    currentLegIndex,
+    hasArrivedAtDestination,
+    userLocation?.accuracy,
+    userLocation?.latitude,
+    userLocation?.longitude,
+    userLocation?.timestamp,
+  ]);
+
+  const hasReliableWalkingArrival = walkingArrivalEvidenceHits >= WALK_ARRIVAL_REQUIRED_HITS;
 
   // Navigation state for UI
   const navigationState = useMemo(() => {
@@ -238,14 +284,14 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
   useEffect(() => {
     if (!currentLeg) return;
 
-    if (currentLeg.mode === 'WALK' && hasArrivedAtDestination) {
+    if (currentLeg.mode === 'WALK' && hasReliableWalkingArrival) {
       // Wait a moment before auto-advancing
       const timer = setTimeout(() => {
         advanceLeg();
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [currentLeg, hasArrivedAtDestination, advanceLeg]);
+  }, [currentLeg, hasReliableWalkingArrival, advanceLeg]);
 
   // Do not auto-advance minor walking maneuvers. GPS drift can make tiny
   // street-level steps noisy; the rider-facing task is simply reaching the
@@ -308,6 +354,7 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
     instructionText,
     distanceToDestination,
     hasArrivedAtDestination,
+    hasReliableWalkingArrival,
     isNavigationComplete,
 
     // Actions

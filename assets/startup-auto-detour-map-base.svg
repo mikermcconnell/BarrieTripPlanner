@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+  <title id="title">Downtown street map</title>
+  <desc id="desc">A regular bus route crossing a downtown street grid.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F9FCFE"/>
+      <stop offset="1" stop-color="#F1F8FC"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="520" rx="44" fill="url(#background)"/>
+  <path d="M0 0h172c-8 70-58 120-172 146zM900 520H708c32-77 96-121 192-133z" fill="#DFF4E7"/>
+  <g fill="#BFE8CF">
+    <circle cx="53" cy="79" r="27"/><circle cx="96" cy="65" r="34"/><circle cx="142" cy="88" r="29"/>
+    <circle cx="762" cy="470" r="27"/><circle cx="810" cy="453" r="35"/><circle cx="859" cy="476" r="30"/>
+  </g>
+  <g fill="none" stroke="#DCE8F0" stroke-width="24" stroke-linecap="round">
+    <path d="M-20 260H920M-20 104H920M-20 420H920"/>
+    <path d="M180-20V540M362-20V540M612-20V540M790-20V540"/>
+  </g>
+  <g fill="none" stroke="#EFF4F7" stroke-width="10" stroke-linecap="round">
+    <path d="M-20 181H920M-20 342H920"/>
+    <path d="M88-20V540M502-20V540M700-20V540"/>
+  </g>
+  <path d="M34 260H866" fill="none" stroke="#D9E9F7" stroke-width="24" stroke-linecap="round"/>
+  <path d="M34 260H866" fill="none" stroke="#1174E7" stroke-width="13" stroke-linecap="round"/>
+  <g fill="#fff" stroke="#1174E7" stroke-width="6">
+    <circle cx="180" cy="260" r="13"/>
+    <circle cx="790" cy="260" r="13"/>
+  </g>
+</svg>

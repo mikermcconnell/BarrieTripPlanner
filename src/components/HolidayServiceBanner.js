@@ -37,7 +37,7 @@ const HolidayServiceBanner = ({ holidayServiceInfo, onPress, onDismiss, inline =
             ) : null}
           </View>
           <Text style={styles.title}>{holidayServiceInfo.title}</Text>
-          <Text style={styles.message} numberOfLines={2}>{holidayServiceInfo.shortMessage}</Text>
+          <Text style={styles.message} numberOfLines={1}>{holidayServiceInfo.shortMessage}</Text>
         </View>
         <Text style={styles.chevron}>›</Text>
       </TouchableOpacity>
@@ -61,6 +61,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 44,
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.xl,
@@ -81,9 +82,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xs,
   },
   iconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -110,7 +111,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   title: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.textPrimary,
   },
@@ -126,9 +127,9 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   dismissButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.62)',

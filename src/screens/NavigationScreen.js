@@ -74,6 +74,10 @@ import { buildNavigationMapModel } from '../features/navigation/model/buildNavig
 import { buildNavigationRoutePolylines } from '../features/navigation/model/buildNavigationRoutePolylines';
 import { buildNavigationVehicleMarkers } from '../features/navigation/model/buildNavigationVehicleMarkers';
 import { useNavigationItineraryController } from '../features/navigation/useNavigationItineraryController';
+import {
+  annotateItineraryWithLiveService,
+  getItineraryNavigationBlock,
+} from '../utils/tripNavigationSafety';
 import RoutePolyline from '../components/RoutePolyline';
 import Icon from '../components/Icon';
 import TripViewportControls from '../components/TripViewportControls';
@@ -271,8 +275,40 @@ const NavigationScreen = ({ route }) => {
   if (!itinerary) return null;
 
   // Get route shapes and realtime vehicles from TransitContext
-  const { shapes, routeShapeMapping, tripMapping, ensureRoutingData, stops } = useTransitStatic();
-  const { vehicles, onDemandZones } = useTransitRealtime();
+  const {
+    shapes,
+    routeShapeMapping,
+    routeStopsMapping,
+    routeStopSequencesMapping,
+    tripMapping,
+    ensureRoutingData,
+    stops,
+  } = useTransitStatic();
+  const {
+    vehicles,
+    onDemandZones,
+    activeDetours,
+    officialServiceImpacts,
+    transitNewsImpacts,
+  } = useTransitRealtime();
+  const serviceAwareItinerary = useMemo(() => annotateItineraryWithLiveService({
+    itinerary,
+    activeDetours,
+    officialServiceImpacts,
+    transitNewsImpacts,
+    stops,
+    routeStopsMapping,
+    routeStopSequencesMapping,
+  }), [
+    activeDetours,
+    itinerary,
+    officialServiceImpacts,
+    routeStopSequencesMapping,
+    routeStopsMapping,
+    stops,
+    transitNewsImpacts,
+  ]);
+  const liveNavigationBlock = getItineraryNavigationBlock(serviceAwareItinerary);
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
@@ -441,6 +477,12 @@ const NavigationScreen = ({ route }) => {
   // Start location tracking and navigation on mount
   useEffect(() => {
     const initNavigation = async () => {
+      if (liveNavigationBlock) {
+        Alert.alert(liveNavigationBlock.title, liveNavigationBlock.message, [
+          { text: 'Re-plan', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
       const success = await startTracking();
       if (success) {
         startNavigation();
@@ -1285,6 +1327,24 @@ const NavigationScreen = ({ route }) => {
           </View>
         )}
 
+        {liveNavigationBlock && (
+          <View style={styles.warningBanner} accessibilityRole="alert">
+            <Text style={styles.warningBannerText}>{liveNavigationBlock.title}</Text>
+            <Text style={styles.warningBannerDetail}>{liveNavigationBlock.message}</Text>
+            <View style={styles.warningBannerActions}>
+              <TouchableOpacity
+                style={styles.warningBannerButton}
+                onPress={handleRecalculate}
+                disabled={isRecalculatingRoute}
+              >
+                <Text style={styles.warningBannerButtonText}>
+                  {isRecalculatingRoute ? 'Recalculating…' : 'Re-plan now'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Stale itinerary warning banner */}
         {showStaleWarning && (
           <View style={styles.warningBanner}>
@@ -1860,6 +1920,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontWeight: '500',
     marginBottom: SPACING.sm,
+  },
+  warningBannerDetail: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 3,
   },
   warningBannerActions: {
     flexDirection: 'row',

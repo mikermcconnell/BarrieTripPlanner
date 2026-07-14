@@ -114,7 +114,7 @@ const getRouteInfo = (routingData, routeId) => {
 export const buildItinerary = (result, routingData, tripInfo) => {
   const { path, arrivalTime, walkToDestSeconds, destinationStopId } = result;
   const { stopIndex, tripIndex } = routingData;
-  const { fromLat, fromLon, toLat, toLon, date } = tripInfo;
+  const { fromLat, fromLon, toLat, toLon, date, arriveBy = false } = tripInfo;
 
   const legs = [];
   let totalWalkTime = 0;
@@ -322,6 +322,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
     waitingTime: Math.round(totalWaitTime),
     walkDistance: Math.round(totalWalkDistance),
     transfers: recalcTransfers,
+    arriveBy,
     legs: mergedLegs,
   };
 };
