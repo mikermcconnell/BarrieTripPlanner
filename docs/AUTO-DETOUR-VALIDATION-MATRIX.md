@@ -32,7 +32,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | ID | Scenario | Expected behavior | Automated coverage | Manual/live validation | Current status | Risk to watch |
 |---|---|---|---|---|---|---|
 | DET-001 | Normal confirmed detour | Publish an active detour only after confirmed off-route evidence from the required unique same-route vehicles. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourIntegration.test.js` | QA sections 3, 4, 9 | Covered | False positives from noisy GPS or bad baseline |
-| DET-002 | Likely path confidence gate | Keep the alert active, but hide the rider-facing likely path until trusted entry/exit and corridor evidence exist. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 6, 7 | Covered | Sparse evidence producing a convincing but wrong purple path |
+| DET-002 | Likely path confidence gate | Keep a confirmed alert active, but hide the rider-facing likely path and uncertain stops until trusted entry/exit and corridor evidence exist. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 6, 7 | Covered | Sparse evidence producing a convincing but wrong purple path |
 | DET-003 | Very short recurring detour | Capture a first off-route point as candidate evidence, but publish only when the same corridor has at least three matching off-route pings and two unique same-route trips/vehicles. The three pings can be split across trips. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12 | Covered | Counting repeated snapshots from the same trip as independent evidence |
 | DET-004 | Low-frequency / Sunday service | Keep candidate evidence long enough for the next low-frequency bus to corroborate; do not clear from bus absence. | `api-proxy/__tests__/detourDetector.test.js` | QA section 12 | Covered | Candidate memory too short or stale warnings mistaken for clear proof |
 | DET-005 | GPS-proven normal clearing | Clear only after normal-route traversal proof through the affected segment: either same-bus traversal or two unique same-route trips/vehicles collectively covering the clear window after latest off-route evidence. Default proof requires at least 60% overlap and enough route-progress movement through it (up to 100m; shorter segments use their 60% span), then delete the active Firestore doc after `clear-pending`. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11 | Covered | Premature clearing when a bus is merely near the route or when a fixed on-route ping count is met without traversal coverage |
@@ -48,11 +48,11 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
 | DET-016 | Short detour sampling cadence | If the GTFS-RT feed updates about every 30 seconds, the detector should support true half-minute sampling without keeping a Cloud Run request open. | `api-proxy/__tests__/detourOps.test.js`, `api-proxy/__tests__/detourOffsetTasks.test.js`, `api-proxy/__tests__/detourRunLock.test.js`, `api-proxy/__tests__/detourRoutes.test.js` | QA section 13 | Covered | Extra scheduler/task overlap; duplicate feed snapshots; cost from sleeping requests |
 | DET-017 | Unanchored no-stop geometry | Reject rider-facing geometry segments that have no entry stop, no exit stop, no skipped route segment, and explicit empty skipped/affected stop fields. Keep any valid anchored segment in the same route document. | `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Over-filtering older geometry that omitted stop-impact fields instead of explicitly proving none exist |
-| DET-018 | Stale rider visibility | Keep stale backend detour records until normal-route GPS proof clears them. Treat `staleForReview` as operations-review metadata, not a client-side hide rule; the rider UI hides only when the backend explicitly publishes `riderVisible=false`. Stale mixed V2 evidence should use the explicit reason `stale-mixed-evidence`, not generic `insufficient-geometry`, so operators can distinguish data-age/path-coherence suppression from missing geometry. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered, needs GPS-clear-window follow-up | Hiding a true long-running detour during a long gap if the app infers too much from stale GPS metadata |
+| DET-018 | Stale rider visibility | Keep confirmed active alerts public until normal-route GPS proof or operator action clears them. Treat `staleForReview` and stale-mixed evidence as detail-safety metadata: they may hide paths and stops but not the alert. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered, needs live deployment check | Alert-only records must not accidentally restore unsafe geometry |
 | DET-019 | Shared physical detour event cards | When several active route documents describe the same physical closure, publish a shared event ID so the alert strip shows one event card with multiple routes. Keep route-specific detour geometry and map overlays separate. | `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourEvents.test.js` | QA sections 2, 7, 9 | Covered | Over-grouping route variants that have no physical geometry, or nearby but unrelated downtown closures |
 | DET-020 | Loop-route terminal trip rollover | When a loop route starts and ends at the same terminal, a bus changing GTFS trips must not clear the previous detour segment by itself. The old vehicle association should drop, but clearing still needs valid normal-route proof outside that rollover context. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 10, 13, 14 | Covered | Suppressing a legitimate clear if the only available proof is the same bus immediately after a terminal rollover |
 | DET-021 | Tiny-span long out-and-back geometry | Reject and do not preserve a long likely/inferred path when the identified closed span is tiny and no skipped route segment exists. | `api-proxy/__tests__/segmentValidity.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Hiding geometry temporarily if a real closure cannot yet be anchored to a credible skipped segment |
-| DET-022 | Geometryless stale active detour | Keep records with no trustworthy geometry backend-only with `riderVisible=false`. Do not let route-family vehicles revive them. If no affected-segment clear window exists, do not auto-clear from generic same-route normal service; wait for a recovered clear window plus GPS traversal, or an explicit operator/admin clear. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 11, 12 | Covered, policy corrected | Hiding a true detour until usable geometry appears; retaining unresolved records that need operator review |
+| DET-022 | Geometryless stale active detour | Keep confirmed alerts public with `alertVisible=true` while geometry stays suppressed with `riderVisible=false`. Do not infer stops or a path, and do not auto-clear from generic normal service; wait for affected-segment traversal or operator action. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 10, 11, 12 | Covered, policy corrected | Alert-only records must be clearly worded and must not restore uncertain details |
 | DET-023 | Route-scoped stop impacts | A skipped stop is not treated as globally closed when another route still serves it; the rider UI says "not served by Route X" and "still served by Route Y" where known. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/stopNoticeUtils.test.js`, `src/__tests__/stopClosureMapUtils.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 6, 7, 9 | Covered | Accidentally hiding valid arrivals or making riders think a shared stop is closed to every route |
 | DET-024 | Global learned persistent geometry | Store trusted learned GPS geometry globally by physical detour fingerprint, while keeping route-specific publish and clear rules. Global geometry can seed rendering/restart recovery only after a route has already published or has a prior route persistent record. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/persistentDetourStore.test.js` | QA sections 2, 13, 14 | Covered | Accidentally treating global geometry as publish proof, or confusing GPS evidence time with geometry age |
 | DET-025 | Rider visibility flapping | Rider-facing visibility must not toggle merely because a vehicle enters or leaves the current GTFS-RT snapshot. Public visibility still requires the normal evidence and geometry gates. Once a configured, road-matched, or sufficiently dense GPS path is trusted and public, keep its last trusted geometry visible between buses until normal-route GPS clears it or new evidence proves the geometry unsafe. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `src/__tests__/detourVisibility.test.js` | QA sections 2, 3, 4, 11 | Covered, needs live Route 8B/15B recheck after deploy | Preserving a weak mixed path versus hiding a real detour every time the confirming bus leaves the corridor |
@@ -91,7 +91,7 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-058 | Inferred-path boundary continuity | A trusted inferred GPS path should connect to its regular-route entry and rejoin anchors when each endpoint gap is short and plausible. Evaluate both ends independently, leave already-continuous paths unchanged, and do not draw straight handoffs across gaps over 150m. | `api-proxy/__tests__/detourV2Detector.test.js`, `src/__tests__/detourOverlays.test.js` | QA sections 5, 7, 9 | Covered, needs live Route 15B recheck after deploy | A short straight handoff may not exactly follow the road; a large unresolved gap remains visible until road matching or better GPS evidence arrives |
 | DET-059 | Audited operator ground-truth review | Group each real detection lifecycle into one review case, merge same-geometry flap re-detections within 15 minutes, exclude simulations, and count only final rider-visible true/false reviews toward rollout precision. Preserve the reviewed evidence and every revision. | `api-proxy/__tests__/detourReviewOps.test.js`, `api-proxy/__tests__/detourReviewRoutes.test.js`, `src/__tests__/detourReviewScreen.source.test.js` | QA section 14 | Covered, needs deployed reviewer-account validation | Missing evidence in older retained history may require `not-applicable`; an incorrect operator label remains possible and must be corrected through the audit trail |
 | DET-060 | Synthetic 30-second GPS regression lab | Replay realistic test-only vehicle traces through the actual V2 detector for positive detection, false-positive traps, clearing, visibility stability, trip rollover, and restart hydration. Report synthetic scores separately and never count them as real ground truth. | `src/__tests__/detourSyntheticLab.test.js`, `scripts/detourV2Replay.js`, `scripts/detourSyntheticScenarios.js`, `npm run score:detour-synthetic-lab` | QA section 14 | Covered | Synthetic geometry can prove deterministic behavior but cannot establish live precision, feed quality, road feasibility, or launch readiness |
-| DET-061 | Hidden same-route record suppresses a visible map path | Keep backend-only records with `riderVisible=false` out of the client route model. A hidden segment's geometry safety flag must not veto a separate rider-visible event on the same route. | `src/__tests__/detourService.test.js`, `src/__tests__/detourOverlays.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 2, 7, 9 | Covered, needs released-client Route 11 recheck | Accidentally exposing backend monitoring records, or losing a valid visible overlay when another same-route event is hidden |
+| DET-061 | Hidden same-route record suppresses a visible map path | Keep records with `alertVisible=false` out of the client route model. Include alert-only records, but never let their suppressed geometry veto a separate trusted overlay on the same route. | `src/__tests__/detourService.test.js`, `src/__tests__/detourOverlays.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 2, 7, 9 | Covered, needs released-client Route 11 recheck | Accidentally exposing unconfirmed monitoring records, or losing a valid overlay when another same-route event is alert-only |
 | DET-062 | Focused detour bus visibility | When a rider opens a specific detour, keep buses in that route family visible at full opacity, even when the realtime feed is marked stale. Other routes may remain filtered or dimmed. | `src/__tests__/homeVehicleFeatures.test.js`, `src/__tests__/detourVehicleFiltering.test.js`, `src/__tests__/homeScreenPerformance.test.js` | QA sections 7, 8, 9 | Covered, needs released-client visual recheck | A stale-feed treatment or focus filter making the rider's bus difficult to see |
 | DET-063 | Confirmed normal terminal circulation | Operator-confirmed normal terminal entry/exit areas must not contribute off-route evidence when the bus is both inside the configured geographic area and within its configured route-edge progress limit. Other short route-edge detours remain eligible. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourRouteConfig.test.js` | QA sections 4, 5, 14 | Covered, needs deployed Route 8A recheck | A terminal circulation pattern changing beyond its configured area, or a real closure following the exact same terminal movement |
 | DET-064 | V2 runtime document exceeds Firestore size limit | Persist only canonical event-keyed V2 candidates, active events, and clear tracks, then store the runtime payload as a bounded gzip-compressed JSON blob with backward-compatible loading of older flat documents. Normal-route clear evidence must survive scheduled cold reloads. | `api-proxy/__tests__/detourRuntimeStateStore.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 10, 13, 14 | Covered, needs deployed Route 11 clear verification | A future compressed payload over the explicit 900 KiB safety ceiling must fail loudly and trigger a persistence redesign rather than silently losing state |
@@ -232,6 +232,27 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-DETECTION.md`
   - this matrix
 - Remaining risk: production deployment and a live Route `8B` / `15B` observation are still required to confirm the public Firestore record no longer toggles.
+
+### DET-025D — confirmed Route 15B alert hidden with stale-mixed geometry
+
+- Date/time observed: 2026-07-15 around 11:48 AM ET
+- Environment: live production Firestore and V2 runtime state
+- Route(s): `15B`
+- What happened: the McAusland event remained active with 57 confirming trip identities and a current bus about 79m off route, but `stale-mixed-evidence` set `riderVisible=false`, so riders received no alert.
+- What should have happened: keep the confirmed active alert public while withholding the stale-mixed path and uncertain stop impacts.
+- Root cause: one field represented both alert visibility and detailed geometry safety.
+- Fix:
+  - publish independent `alertVisible` / `alertVisibilityReason` fields
+  - keep baseline divergence, invalid self-loop evidence, insufficient confirmation, and cleared records fully hidden
+  - allow confirmed active alerts with unsafe geometry into the client route model
+  - render an alert-only details state and omit the map action until safe geometry exists
+- Tests added/updated:
+  - `api-proxy/__tests__/alertVisibility.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `api-proxy/__tests__/riderPublishGates.test.js`
+  - `src/__tests__/detourVisibility.test.js`
+  - `src/__tests__/detourService.test.js`
+- Remaining risk: production deployment and a live Route `15B` check are required before calling the incident fully resolved.
 
 ### DET-025C — Route 11 trusted path flapped across scheduled V2 reloads
 
@@ -916,6 +937,40 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `AUTO-DETOUR-DETECTION.md`
   - this matrix
 - Remaining risk: active official notices without parsed/spatially merged stop impacts will show as unplanned until the backend can associate them safely.
+
+### DET-025A — stale Route 8A alert kept a disconnected Welham path public
+
+- Date/time observed: 2026-07-15 around 9:00 AM ET
+- Environment: live production Firestore, GTFS, GTFS-RT, and Cloud Run log review
+- Route(s): `8A`, with related live `8B` comparison
+- What happened: Route 8A remained rider-visible after its last matching evidence had aged out, and its likely path continued south on Welham roughly 600m away from the stated route rejoin. Route 8B had newer matching evidence and remained operationally credible.
+- What should have happened: a confirmed event alert should stay visible until GPS clear proof or operator action. After an evidence gap, stale path and stop details may become unavailable, and a path that does not connect to both service boundaries must never be shown.
+- Evidence:
+  - active Route 8A event: two confirming identities, last matching evidence around 7:13 AM ET, `currentVehicleCount: 0`
+  - published Route 8A path: Welham road match with a roughly 600m exit handoff gap
+  - live Route 8B candidate: fresh same-corridor evidence around 9:00 AM ET
+- Classification:
+  - lifecycle / clearing
+  - geometry confidence
+  - publishing/history
+- Root cause:
+  - confirmed events had no rider-visibility evidence-age ceiling, even while the exact route continued reporting
+  - active events were not refreshed by one new matching bus after their original multi-bus candidate evidence aged out
+  - publisher path trust checked road-match agreement with the raw GPS trace but not final proximity to both service boundaries
+- Fix:
+  - suppress stale path and stop details after 90 minutes without matching GPS evidence while keeping the confirmed alert public until GPS clear proof or operator action
+  - refresh an already-confirmed event heartbeat from one new matching bus without weakening initial two-identity confirmation
+  - suppress inferred/likely paths more than 150m from either service boundary, allowing an explicit service rejoin target
+- Tests added/updated:
+  - `api-proxy/__tests__/staleClear.test.js`
+  - `api-proxy/__tests__/detourV2Detector.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - `API-PROXY-OPERATIONS.md`
+  - this matrix
+- Remaining risk: the 90-minute visibility window is intentionally conservative. Monitor low-frequency routes and operator-reviewed cases before shortening it.
 
 ## Status definitions
 

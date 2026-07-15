@@ -48,6 +48,8 @@ nul
 # Dev server logs
 .logs-*
 logs/
+web-dev.stdout.log
+web-dev.stderr.log
 
 # Local review/test artifacts
 .work-artifacts/

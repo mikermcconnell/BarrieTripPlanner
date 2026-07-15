@@ -81,18 +81,24 @@ function buildDetourGate(source = {}) {
   };
 }
 
+function isRiderAlertVisible(source = {}) {
+  return source.alertVisible === true || (
+    source.alertVisible == null && source.riderVisible !== false
+  );
+}
+
 function buildRiderAlertGate(source = {}) {
-  const riderVisible = source.riderVisible !== false;
+  const riderVisible = isRiderAlertVisible(source);
   return {
     passed: riderVisible,
     reason: riderVisible
-      ? (source.riderVisibilityReason || 'rider-visible-confirmed')
-      : (source.riderVisibilityReason || 'rider-hidden'),
+      ? (source.alertVisibilityReason || source.riderVisibilityReason || 'rider-visible-confirmed')
+      : (source.alertVisibilityReason || source.riderVisibilityReason || 'rider-hidden'),
   };
 }
 
 function buildLikelyPathGate(source = {}) {
-  if (source.riderVisible === false) {
+  if (!isRiderAlertVisible(source)) {
     return {
       passed: false,
       reason: 'rider-hidden',
@@ -120,7 +126,7 @@ function buildLikelyPathGate(source = {}) {
 }
 
 function buildSkippedStopsGate(source = {}) {
-  if (source.riderVisible === false) {
+  if (!isRiderAlertVisible(source)) {
     return {
       passed: false,
       reason: 'rider-hidden',

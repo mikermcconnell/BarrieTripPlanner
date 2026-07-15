@@ -310,7 +310,15 @@ describe('map and navigation button interactions', () => {
     const onViewOnMap = jest.fn();
     const inst = render(React.createElement(DetourDetailsSheet, {
       routeId: '8A',
-      detour: { state: 'active', confidence: 'high', detectedAt: Date.now() },
+      detour: {
+        state: 'active',
+        confidence: 'high',
+        detectedAt: Date.now(),
+        skippedSegmentPolyline: [
+          { latitude: 44.348, longitude: -79.614 },
+          { latitude: 44.349, longitude: -79.610 },
+        ],
+      },
       segmentStopDetails: [],
       onClose,
       onViewOnMap,

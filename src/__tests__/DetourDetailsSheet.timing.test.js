@@ -359,7 +359,15 @@ describe('DetourDetailsSheet MyRide timing', () => {
     act(() => {
       inst = create(React.createElement(DetourDetailsSheet, {
         routeId: '11',
-        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detour: {
+          routeId: '11',
+          state: 'active',
+          detectedAt: Date.parse('2026-05-14T12:00:00Z'),
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.70 },
+            { latitude: 44.40, longitude: -79.69 },
+          ],
+        },
         transitNews: [],
         onClose: jest.fn(),
       }));
@@ -376,7 +384,15 @@ describe('DetourDetailsSheet MyRide timing', () => {
     act(() => {
       inst = create(React.createElement(DetourDetailsSheetWeb, {
         routeId: '11',
-        detour: { routeId: '11', state: 'active', detectedAt: Date.parse('2026-05-14T12:00:00Z') },
+        detour: {
+          routeId: '11',
+          state: 'active',
+          detectedAt: Date.parse('2026-05-14T12:00:00Z'),
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.70 },
+            { latitude: 44.40, longitude: -79.69 },
+          ],
+        },
         transitNews: [],
         onClose: jest.fn(),
       }));
@@ -389,5 +405,36 @@ describe('DetourDetailsSheet MyRide timing', () => {
     expect(closeButtons).toHaveLength(1);
     expect(backdrop.props.pointerEvents).toBe('none');
     expect(texts).toContain('Tap or click a highlighted route line on the map to open that route’s detour details.');
+  });
+
+  test.each([
+    ['native', DetourDetailsSheet],
+    ['web', DetourDetailsSheetWeb],
+  ])('shows a safe alert-only state when %s detour geometry is unavailable', (_platform, Component) => {
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(Component, {
+        routeId: '15B',
+        detour: {
+          routeId: '15B',
+          state: 'active',
+          confidence: 'high',
+          alertVisible: true,
+          riderVisible: false,
+          canShowDetourPath: false,
+        },
+        transitNews: [],
+        onClose: jest.fn(),
+        onViewOnMap: jest.fn(),
+      }));
+    });
+
+    const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
+    expect(texts).toContain('Detour details updating');
+    expect(texts).toContain(
+      'This detour remains active. The exact path and affected stops are not yet reliable enough to display.'
+    );
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'View detour on map' })).toHaveLength(0);
   });
 });

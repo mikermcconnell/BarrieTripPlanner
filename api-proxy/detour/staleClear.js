@@ -1,5 +1,14 @@
 const { routeIdsShareFamily } = require('./routeFamily');
 
+const DEFAULT_RIDER_VISIBILITY_MAX_EVIDENCE_AGE_MS = 90 * 60 * 1000;
+
+function getRiderVisibilityMaxEvidenceAgeMs(env = process.env) {
+  const configured = Number.parseFloat(env.DETOUR_RIDER_VISIBILITY_MAX_EVIDENCE_AGE_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_RIDER_VISIBILITY_MAX_EVIDENCE_AGE_MS;
+}
+
 function toMillis(value) {
   if (value == null) return null;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -17,10 +26,18 @@ function routeFamilyHasRecentVehicle(routeId, vehicles = []) {
   return vehicles.some((vehicle) => routeIdsShareFamily(routeId, vehicle?.routeId));
 }
 
+function exactRouteHasRecentVehicle(routeId, vehicles = []) {
+  const normalizedRouteId = String(routeId || '').trim();
+  if (!normalizedRouteId) return false;
+  return vehicles.some((vehicle) => String(vehicle?.routeId || '').trim() === normalizedRouteId);
+}
+
 function getLatestEvidenceMs(detour, previousSnapshot) {
   return (
+    toMillis(detour?.latestGpsEvidenceAt) ??
     toMillis(detour?.geometry?.lastEvidenceAt) ??
     toMillis(detour?.lastEvidenceAt) ??
+    toMillis(previousSnapshot?.latestGpsEvidenceAt) ??
     toMillis(previousSnapshot?.lastEvidenceAt) ??
     toMillis(detour?.lastSeenAt) ??
     toMillis(previousSnapshot?.lastSeenAtMs) ??
@@ -60,8 +77,12 @@ function getConfirmedVehicleCount(detour, previousSnapshot = null) {
 }
 
 function evaluateStaleRiderVisibility({
+  routeId,
   detour,
   previousSnapshot = null,
+  vehicles = [],
+  now = Date.now(),
+  env = process.env,
 } = {}) {
   const currentVehicleCount = getCurrentVehicleCount(detour) ?? getCurrentVehicleCount(previousSnapshot) ?? 0;
   if (detour?.riderVisible === false) {
@@ -95,6 +116,25 @@ function evaluateStaleRiderVisibility({
   }
 
   const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
+  const evidenceAgeMs = evidenceMs == null ? null : Math.max(0, now - evidenceMs);
+  const maxEvidenceAgeMs = getRiderVisibilityMaxEvidenceAgeMs(env);
+  if (
+    evidenceAgeMs != null &&
+    evidenceAgeMs > maxEvidenceAgeMs &&
+    exactRouteHasRecentVehicle(routeId, vehicles) &&
+    hasRenderableGeometry(detour, previousSnapshot)
+  ) {
+    return {
+      riderVisible: false,
+      staleForReview: true,
+      reason: 'stale-evidence-awaiting-gps-clear',
+      currentVehicleCount,
+      confirmedVehicleCount,
+      lastEvidenceAt: evidenceMs,
+      evidenceAgeMs,
+      maxEvidenceAgeMs,
+    };
+  }
 
   return {
     riderVisible: true,
@@ -103,6 +143,8 @@ function evaluateStaleRiderVisibility({
     currentVehicleCount,
     confirmedVehicleCount,
     lastEvidenceAt: evidenceMs,
+    evidenceAgeMs,
+    maxEvidenceAgeMs,
   };
 }
 
@@ -233,6 +275,8 @@ function shouldAutoClearStaleDetour({
 module.exports = {
   shouldAutoClearStaleDetour,
   routeFamilyHasRecentVehicle,
+  exactRouteHasRecentVehicle,
+  getRiderVisibilityMaxEvidenceAgeMs,
   getLatestEvidenceMs,
   getCurrentVehicleCount,
   getConfirmedVehicleCount,

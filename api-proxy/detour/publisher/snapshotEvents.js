@@ -166,6 +166,12 @@ function makeSnapshot(doc, previousSnapshot = null) {
     riderVisibilityReason: hasOwn(doc, 'riderVisibilityReason')
       ? doc.riderVisibilityReason || null
       : previousSnapshot?.riderVisibilityReason || null,
+    alertVisible: hasOwn(doc, 'alertVisible')
+      ? doc.alertVisible === true
+      : previousSnapshot?.alertVisible === true,
+    alertVisibilityReason: hasOwn(doc, 'alertVisibilityReason')
+      ? doc.alertVisibilityReason || null
+      : previousSnapshot?.alertVisibilityReason || null,
     staleForReview: hasOwn(doc, 'staleForReview')
       ? Boolean(doc.staleForReview)
       : Boolean(previousSnapshot?.staleForReview),
@@ -273,6 +279,8 @@ function buildDetectedEvent(routeId, current, now) {
     currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
     riderVisible: current.riderVisible !== false,
     riderVisibilityReason: current.riderVisibilityReason || null,
+    alertVisible: current.alertVisible === true,
+    alertVisibilityReason: current.alertVisibilityReason || null,
     staleForReview: Boolean(current.staleForReview),
     confidence: current.confidence || null,
     evidencePointCount: current.evidencePointCount ?? null,
@@ -316,6 +324,8 @@ function buildUpdatedEvent(routeId, previous, current, now) {
   if ((previous.clearReason || null) !== (current.clearReason || null)) changedFields.push('clearReason');
   if ((previous.riderVisible !== false) !== (current.riderVisible !== false)) changedFields.push('riderVisible');
   if ((previous.riderVisibilityReason || null) !== (current.riderVisibilityReason || null)) changedFields.push('riderVisibilityReason');
+  if ((previous.alertVisible === true) !== (current.alertVisible === true)) changedFields.push('alertVisible');
+  if ((previous.alertVisibilityReason || null) !== (current.alertVisibilityReason || null)) changedFields.push('alertVisibilityReason');
 
   if (changedFields.length === 0) return null;
   const detectedAt = current?.detectedAtMs ?? toMillis(current.detectedAt) ?? previous.detectedAtMs ?? now;
@@ -339,6 +349,8 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     changedFields,
     riderVisible: current.riderVisible !== false,
     riderVisibilityReason: current.riderVisibilityReason || null,
+    alertVisible: current.alertVisible === true,
+    alertVisibilityReason: current.alertVisibilityReason || null,
     staleForReview: Boolean(current.staleForReview),
     baselineDiverged: Boolean(current.baselineDiverged),
     baselineUpdatePending: Boolean(current.baselineUpdatePending),

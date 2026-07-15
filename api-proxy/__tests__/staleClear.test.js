@@ -76,7 +76,7 @@ describe('detour GPS-clear policy', () => {
 describe('detour rider visibility policy', () => {
   const now = Date.parse('2026-04-26T20:00:00Z');
 
-  test('keeps confirmed zero-current detours rider-visible no matter how old the evidence is', () => {
+  test('hides confirmed zero-current detours after evidence expires while the exact route is reporting', () => {
     const decision = evaluateStaleRiderVisibility({
       routeId: '8A',
       detour: {
@@ -87,14 +87,42 @@ describe('detour rider visibility policy', () => {
         canShowDetourPath: false,
         geometry: {
           lastEvidenceAt: now - 24 * 60 * 60 * 1000,
-          canShowDetourPath: false,
-          segments: [],
-          skippedSegmentPolyline: null,
+          canShowDetourPath: true,
+          segments: [{
+            canShowDetourPath: true,
+            skippedSegmentPolyline: [
+              { latitude: 44.34517, longitude: -79.66986 },
+              { latitude: 44.34485, longitude: -79.67219 },
+            ],
+          }],
+          skippedSegmentPolyline: [
+            { latitude: 44.34517, longitude: -79.66986 },
+            { latitude: 44.34485, longitude: -79.67219 },
+          ],
           inferredDetourPolyline: null,
           likelyDetourPolyline: null,
         },
       },
       vehicles: [{ routeId: '8A' }],
+      now,
+    });
+
+    expect(decision.riderVisible).toBe(false);
+    expect(decision.staleForReview).toBe(true);
+    expect(decision.reason).toBe('stale-evidence-awaiting-gps-clear');
+  });
+
+  test('keeps old evidence visible when the exact route is not reporting', () => {
+    const decision = evaluateStaleRiderVisibility({
+      routeId: '8A',
+      detour: {
+        confidence: 'high',
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+        geometry: { lastEvidenceAt: now - 24 * 60 * 60 * 1000 },
+      },
+      vehicles: [{ routeId: '8B' }],
       now,
     });
 

@@ -1471,9 +1471,9 @@ describe('publishDetours event ids', () => {
       { latitude: 44.394, longitude: -79.700 },
     ];
     const detourPath = [
-      { latitude: 44.390, longitude: -79.698 },
-      { latitude: 44.392, longitude: -79.698 },
-      { latitude: 44.394, longitude: -79.698 },
+      { latitude: 44.390, longitude: -79.6982 },
+      { latitude: 44.392, longitude: -79.6982 },
+      { latitude: 44.394, longitude: -79.6982 },
     ];
     const servedStop = {
       id: 'stop-696',
@@ -2660,19 +2660,21 @@ describe('publishDetours event ids', () => {
     expect(deletes).toEqual([]);
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('insufficient-geometry');
+    expect(written.alertVisible).toBe(true);
+    expect(written.alertVisibilityReason).toBe('active-detour-details-unavailable');
     expect(written.staleForReview).toBe(true);
     expect(written.riderPublishGates).toMatchObject({
       riderAlert: {
-        passed: false,
-        reason: 'insufficient-geometry',
+        passed: true,
+        reason: 'active-detour-details-unavailable',
       },
       likelyPath: {
         passed: false,
-        reason: 'rider-hidden',
+        reason: 'path-not-trusted',
       },
       skippedStops: {
         passed: false,
-        reason: 'rider-hidden',
+        reason: 'no-explicit-skipped-stops',
       },
     });
   });
@@ -2741,6 +2743,8 @@ describe('publishDetours event ids', () => {
     expect(deletes).toEqual([]);
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('stale-mixed-evidence');
+    expect(written.alertVisible).toBe(true);
+    expect(written.alertVisibilityReason).toBe('active-detour-details-unavailable');
     expect(written.staleForReview).toBe(true);
   });
 
@@ -3359,14 +3363,14 @@ describe('enforceGeometryTrustGate', () => {
         { latitude: 44.39, longitude: -79.696 },
       ],
       inferredDetourPolyline: [
-        { latitude: 44.395, longitude: -79.696 },
-        { latitude: 44.395, longitude: -79.692 },
-        { latitude: 44.395, longitude: -79.688 },
+        { latitude: 44.3905, longitude: -79.696 },
+        { latitude: 44.3905, longitude: -79.692 },
+        { latitude: 44.3905, longitude: -79.688 },
       ],
       likelyDetourPolyline: [
-        { latitude: 44.396, longitude: -79.696 },
-        { latitude: 44.396, longitude: -79.692 },
-        { latitude: 44.396, longitude: -79.688 },
+        { latitude: 44.3906, longitude: -79.696 },
+        { latitude: 44.3906, longitude: -79.692 },
+        { latitude: 44.3906, longitude: -79.688 },
       ],
       canShowDetourPath: true,
       segments: [{
@@ -3378,14 +3382,14 @@ describe('enforceGeometryTrustGate', () => {
           { latitude: 44.39, longitude: -79.696 },
         ],
         inferredDetourPolyline: [
-          { latitude: 44.395, longitude: -79.696 },
-          { latitude: 44.395, longitude: -79.692 },
-          { latitude: 44.395, longitude: -79.688 },
+          { latitude: 44.3905, longitude: -79.696 },
+          { latitude: 44.3905, longitude: -79.692 },
+          { latitude: 44.3905, longitude: -79.688 },
         ],
         likelyDetourPolyline: [
-          { latitude: 44.396, longitude: -79.696 },
-          { latitude: 44.396, longitude: -79.692 },
-          { latitude: 44.396, longitude: -79.688 },
+          { latitude: 44.3906, longitude: -79.696 },
+          { latitude: 44.3906, longitude: -79.692 },
+          { latitude: 44.3906, longitude: -79.688 },
         ],
         canShowDetourPath: true,
       }],
@@ -3397,6 +3401,82 @@ describe('enforceGeometryTrustGate', () => {
     expect(result.likelyDetourPolyline[2].longitude).toBeCloseTo(-79.696, 3);
     expect(result.segments[0].inferredDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
     expect(result.segments[0].likelyDetourPolyline[0].longitude).toBeCloseTo(-79.688, 3);
+  });
+
+  test('suppresses an alternate path that does not reconnect to both detour boundaries', () => {
+    const entryPoint = { latitude: 44.34517, longitude: -79.66986 };
+    const exitPoint = { latitude: 44.34485, longitude: -79.67219 };
+    const disconnectedPath = [
+      entryPoint,
+      { latitude: 44.34308, longitude: -79.67003 },
+      { latitude: 44.33958, longitude: -79.67000 },
+    ];
+    const skippedSegmentPolyline = [entryPoint, exitPoint];
+
+    const result = enforceGeometryTrustGate({
+      shapeId: 'shape-8a',
+      entryPoint,
+      exitPoint,
+      skippedSegmentPolyline,
+      inferredDetourPolyline: disconnectedPath,
+      likelyDetourPolyline: disconnectedPath,
+      canShowDetourPath: true,
+      segments: [{
+        shapeId: 'shape-8a',
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline,
+        inferredDetourPolyline: disconnectedPath,
+        likelyDetourPolyline: disconnectedPath,
+        canShowDetourPath: true,
+        geometryGate: { passed: true },
+      }],
+    });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.inferredDetourPolyline).toBeNull();
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.skippedSegmentPolyline).toEqual(skippedSegmentPolyline);
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      inferredDetourPolyline: null,
+      likelyDetourPolyline: null,
+      detourPathSuppressedReason: 'detour-boundary-gap',
+      geometryTrustBlockedReason: 'detour-boundary-gap',
+    }));
+    expect(result.segments[0].geometryGate).toEqual(expect.objectContaining({
+      passed: false,
+      reason: 'detour-boundary-gap',
+      boundaryMaxGapMeters: expect.any(Number),
+      boundaryAllowedGapMeters: 150,
+    }));
+  });
+
+  test('accepts an explicit service rejoin as the alternate-path exit boundary', () => {
+    const entryPoint = { latitude: 44.0000, longitude: -79.7000 };
+    const exitPoint = { latitude: 44.0000, longitude: -79.6940 };
+    const serviceRejoinPoint = { latitude: 44.0020, longitude: -79.6970 };
+    const detourPath = [
+      entryPoint,
+      { latitude: 44.0010, longitude: -79.6980 },
+      serviceRejoinPoint,
+    ];
+
+    const result = enforceGeometryTrustGate({
+      canShowDetourPath: true,
+      segments: [{
+        canShowDetourPath: true,
+        entryPoint,
+        exitPoint,
+        serviceRejoinPoint,
+        skippedSegmentPolyline: [entryPoint, exitPoint],
+        inferredDetourPolyline: detourPath,
+      }],
+    });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.inferredDetourPolyline).toEqual(detourPath);
+    expect(result.segments[0].detourPathSuppressedReason).toBeUndefined();
   });
 
   test('hides legacy one-sided inferred paths while keeping alert geometry data', () => {
@@ -3666,7 +3746,7 @@ describe('enforceGeometryTrustGate', () => {
     ];
     const detourPath = [
       { latitude: 44.333067, longitude: -79.673553 },
-      { latitude: 44.33654, longitude: -79.669865 },
+      { latitude: 44.33472, longitude: -79.6689 },
     ];
 
     const result = enforceGeometryTrustGate({
@@ -3900,6 +3980,49 @@ describe('preserveTrustedDetourPath', () => {
     expect(result.canShowDetourPath).toBe(false);
     expect(result.likelyDetourPolyline).toBeNull();
     expect(result.segments[0].likelyDetourPolyline).toBeNull();
+  });
+
+  test('does not restore a previous path after the boundary gate rejects it', () => {
+    const entryPoint = { latitude: 44.34517, longitude: -79.66986 };
+    const exitPoint = { latitude: 44.34485, longitude: -79.67219 };
+    const disconnectedPath = [
+      entryPoint,
+      { latitude: 44.34308, longitude: -79.67003 },
+      { latitude: 44.33958, longitude: -79.67000 },
+    ];
+    const previous = {
+      shapeId: 'shape-8a',
+      entryPoint,
+      exitPoint,
+      skippedSegmentPolyline: [entryPoint, exitPoint],
+      canShowDetourPath: true,
+      inferredDetourPolyline: disconnectedPath,
+      likelyDetourPolyline: disconnectedPath,
+      roadMatchConfidence: 'high',
+      segments: [{
+        shapeId: 'shape-8a',
+        entryPoint,
+        exitPoint,
+        skippedSegmentPolyline: [entryPoint, exitPoint],
+        canShowDetourPath: true,
+        inferredDetourPolyline: disconnectedPath,
+        likelyDetourPolyline: disconnectedPath,
+        roadMatchConfidence: 'high',
+      }],
+    };
+
+    const rejected = enforceGeometryTrustGate(previous);
+    const result = preserveTrustedDetourPath(rejected, previous, { state: 'active' });
+
+    expect(result.canShowDetourPath).toBe(false);
+    expect(result.likelyDetourPolyline).toBeNull();
+    expect(result.inferredDetourPolyline).toBeNull();
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      geometryTrustBlockedReason: 'detour-boundary-gap',
+      likelyDetourPolyline: null,
+      inferredDetourPolyline: null,
+    }));
   });
 
   test('does not preserve a trusted path when current weak geometry is in a different location', () => {

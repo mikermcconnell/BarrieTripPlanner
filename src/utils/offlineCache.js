@@ -14,6 +14,9 @@ const CACHE_KEYS = {
 
 // Cache expiry: 24 hours for GTFS static data
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000;
+// Static route geometry is still useful while a fresh GTFS download runs in
+// the background. Keeping it for a week avoids a cold start after one day.
+const GTFS_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Max size per cache key (2 MB) — AsyncStorage/SQLite has a ~6 MB total DB limit
 const MAX_ITEM_BYTES = 2 * 1024 * 1024;
@@ -144,10 +147,10 @@ export const cacheGTFSData = async (data) => {
 export const getCachedGTFSData = async () => {
   try {
     const [routes, stops, mappings, shapes] = await Promise.all([
-      getCachedData(CACHE_KEYS.ROUTES),
-      getCachedData(CACHE_KEYS.STOPS),
-      getCachedData(CACHE_KEYS.MAPPINGS),
-      getCachedData(CACHE_KEYS.SHAPES),
+      getCachedData(CACHE_KEYS.ROUTES, GTFS_CACHE_MAX_AGE_MS),
+      getCachedData(CACHE_KEYS.STOPS, GTFS_CACHE_MAX_AGE_MS),
+      getCachedData(CACHE_KEYS.MAPPINGS, GTFS_CACHE_MAX_AGE_MS),
+      getCachedData(CACHE_KEYS.SHAPES, GTFS_CACHE_MAX_AGE_MS),
     ]);
 
     // Also try the legacy GTFS_DATA key for backwards compatibility
@@ -164,7 +167,7 @@ export const getCachedGTFSData = async () => {
     }
 
     // Fallback: try reading old single-blob key from before the split
-    const legacyData = await getCachedData(CACHE_KEYS.GTFS_DATA);
+    const legacyData = await getCachedData(CACHE_KEYS.GTFS_DATA, GTFS_CACHE_MAX_AGE_MS);
     if (legacyData) {
       return { routes, stops, ...legacyData };
     }

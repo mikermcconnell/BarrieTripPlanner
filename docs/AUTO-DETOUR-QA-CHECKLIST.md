@@ -44,6 +44,8 @@ Before fixing a meaningful detour issue, capture it in [`AUTO-DETOUR-VALIDATION-
   - [ ] `uniqueVehicleCount`
   - [ ] `currentVehicleCount`
   - [ ] `riderVisible`
+  - [ ] `alertVisible`
+  - [ ] `alertVisibilityReason`
   - [ ] `riderVisibilityReason`
   - [ ] `riderPublishGates` for detour, rider alert, likely path, skipped stops, and clear proof reasons
   - [ ] `staleForReview`
@@ -112,7 +114,8 @@ For each active detour:
 - [ ] If a segment has `canShowDetourPath=false` with `detourPathSuppressedReason=road-match-closed-overlap`, the app does not draw a stale top-level `likelyDetourPolyline` or `inferredDetourPolyline` for that segment.
 - [ ] A newly road-matched `likelyDetourPolyline` is continuous through the safe entry/rejoin handoff, with no visible gap and no material interior overlap on the closed route segment.
 - [ ] A trusted V2 inferred path with a short boundary gap is continuous at entry and rejoin; a gap over 150m is not bridged with a straight line and is flagged for better geometry or road matching.
-- [ ] If there is no trustworthy skipped segment or detour path, the backend keeps the record but publishes `riderVisible=false`, and the rider UI does not show the detour.
+- [ ] A final inferred/likely path that remains more than 150m from either service boundary is suppressed with `detourPathSuppressedReason=detour-boundary-gap`; an explicit `serviceRejoinPoint` is accepted as the exit target.
+- [ ] If there is no trustworthy skipped segment or detour path, a confirmed event publishes `alertVisible=true`, `riderVisible=false`, and `canShowDetourPath=false`; the rider UI shows an alert without unsafe map or stop details.
 - [ ] After a trustworthy path becomes rider-visible, it remains visible on between-bus ticks with `currentVehicleCount=0`; it does not alternate to `stale-mixed-evidence` unless newer evidence proves the geometry unsafe.
 
 ## 6. Map Rendering Check — Regular Tab
@@ -180,7 +183,7 @@ When buses return to route:
 - [ ] Confirm at least two useful same-bus on-route GPS samples show route-progress movement through the affected segment.
 - [ ] Confirm two unique same-route trips/vehicles can collectively clear only when their on-route samples cover the affected segment window and no newer off-route evidence has returned.
 - [ ] Confirm long segments may require more samples to prove the 60% overlap / up-to-100m movement rule; short segments can clear before the fixed consecutive-on-route threshold once traversal proof exists.
-- [ ] For geometryless stale records with no clear window, generic same-route normal-service pings do not clear; the record stays backend-only until a clear window is recovered and GPS-traversed, or an operator/admin explicitly clears it.
+- [ ] For geometryless confirmed records with no clear window, generic same-route normal-service pings do not clear; the alert stays public without map details until a clear window is recovered and GPS-traversed, or an operator/admin explicitly clears it.
 - [ ] `DETOUR_CLEARED` is written to `detourHistory`.
 - [ ] The `activeDetours` doc is deleted.
 - [ ] The app removes the rider-facing detour promptly.
@@ -192,13 +195,15 @@ When buses return to route:
 For old active detour protection:
 
 - [ ] The backend keeps the active detour record until normal-route GPS traversal proof exists.
-- [ ] `staleForReview` alone does not hide a rider-facing detour.
-- [ ] The rider UI hides an active detour only when the backend explicitly publishes `riderVisible=false`.
+- [ ] `staleForReview` alone does not hide a confirmed active alert.
+- [ ] When the exact route is reporting, an event with no matching GPS evidence for more than 90 minutes may become `riderVisible=false` with `stale-evidence-awaiting-gps-clear`, while `alertVisible=true` and the backend record remains active.
+- [ ] One new matching bus refreshes the heartbeat of an already-confirmed visible event; a previously hidden event still requires normal confirmation before returning to riders.
+- [ ] The rider UI hides an active alert only when the backend explicitly publishes `alertVisible=false`; `riderVisible=false` hides rich details only when `alertVisible=true`.
 - [ ] Geometryless/unsafe detours stay hidden from riders while the backend keeps monitoring for better geometry, a recoverable clear window, or operator review.
 - [ ] Confirm valid active construction detours, such as route-family detours between vehicle observations, remain active until normal-route GPS traversal proof exists.
 - [ ] No `DETOUR_AUTO_CLEARED_STALE` event is expected for current active detours; treat that event type as legacy/ops-review history.
 - [ ] The backend keeps the stale active doc until a `DETOUR_CLEARED` flow deletes it.
-- [ ] If `riderVisible=false`, the app hides the detour from the main rider map, alert strip, and detours tab while retaining the backend record for review.
+- [ ] If `alertVisible=true` and `riderVisible=false`, the app keeps the alert strip and detours entry, hides unsafe overlays and stop impacts, explains that details are updating, and omits the map action.
 - [ ] The detour is not recreated after GPS clear unless fresh off-route evidence returns.
 
 ## 12. Low-Frequency / Sunday Service Check
@@ -206,7 +211,7 @@ For old active detour protection:
 Use this to avoid false clears on hourly service:
 
 - [ ] Confirm route headway from GTFS for the current day/time.
-- [ ] Confirm there is no elapsed-time rule that clears or hides confirmed detours.
+- [ ] Confirm elapsed time never clears a detour; the 90-minute evidence-age rule may hide it from riders only while the exact route is actively reporting.
 - [ ] Confirm the system does not clear just because no bus reached the detour area yet.
 - [ ] Confirm no-scheduled-service periods do not clear from staleness alone.
 - [ ] Confirm no-scheduled-service periods do not hide otherwise valid detours solely because no bus is scheduled.

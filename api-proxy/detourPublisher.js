@@ -7,6 +7,7 @@ const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentV
 const { pruneDetourPathServedStopsFromGeometry } = require('./detour/stopImpacts');
 const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 const { applyRiderVisibilityGuard } = require('./detour/riderVisibilityGuard');
+const { attachRiderAlertVisibility } = require('./detour/alertVisibility');
 const { attachRiderPublishGates } = require('./detour/riderPublishGates');
 const {
   buildClearedEvent,
@@ -44,6 +45,13 @@ const ROAD_MATCH_CLOSED_OVERLAP_PROXIMITY_METERS = 35;
 const ROAD_MATCH_CLOSED_OVERLAP_ENDPOINT_RATIO = 0.2;
 const ROAD_MATCH_CLOSED_OVERLAP_MIN_POINTS = 3;
 const ROAD_MATCH_CLOSED_OVERLAP_MIN_RATIO = 0.05;
+const configuredPathBoundaryMaxGapMeters = Number.parseFloat(
+  process.env.DETOUR_PATH_BOUNDARY_MAX_GAP_METERS
+);
+const DETOUR_PATH_BOUNDARY_MAX_GAP_METERS =
+  Number.isFinite(configuredPathBoundaryMaxGapMeters) && configuredPathBoundaryMaxGapMeters > 0
+    ? configuredPathBoundaryMaxGapMeters
+    : 150;
 
 const lastPublishedIds = new Set();
 const lastPublishedState = new Map();
@@ -964,6 +972,7 @@ function gpsSupersedesPreviousPath(geometry) {
 
 function blocksTrustedPathPreservation(geometry) {
   const blockedReasons = new Set([
+    'detour-boundary-gap',
     'jumpy-inferred-path',
     'stale-mixed-evidence',
   ]);
@@ -1141,6 +1150,8 @@ function enforceGeometryTrustGate(geometry) {
       if (!hasConfirmedBoundaries && hasBoundaryDebug(normalized)) {
         normalized.skippedSegmentPolyline = null;
       }
+
+      suppressDisconnectedDetourPath(normalized);
 
       if (normalized.canShowDetourPath !== true) {
         normalized.canShowDetourPath =
@@ -1876,6 +1887,8 @@ function rememberPublishedDetour(publishId, data = {}) {
     handoffSourceRouteId: data.handoffSourceRouteId || null,
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
+    alertVisible: data.alertVisible === true,
+    alertVisibilityReason: data.alertVisibilityReason || null,
     staleForReview: Boolean(data.staleForReview),
     confidence: data.confidence || null,
     roadMatchConfidence: data.roadMatchConfidence || null,
@@ -2057,6 +2070,51 @@ async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete',
     console.error(`[detourPublisher] Failed to ${logPrefix} ${publishId}:`, err.message);
     throw err;
   }
+}
+
+function getDetourPathBoundaryAssessment(segment = {}) {
+  const path = normalizePolyline(
+    Array.isArray(segment.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2
+      ? segment.likelyDetourPolyline
+      : segment.inferredDetourPolyline
+  );
+  const entryPoint = normalizePoint(segment.entryPoint);
+  const exitPoint = normalizePoint(segment.serviceRejoinPoint || segment.exitPoint);
+  if (path.length < 2 || !entryPoint || !exitPoint) return null;
+
+  const entryGapMeters = distancePointToPolylineMeters(entryPoint, path);
+  const exitGapMeters = distancePointToPolylineMeters(exitPoint, path);
+  const maxGapMeters = Math.max(entryGapMeters, exitGapMeters);
+
+  return {
+    connected: maxGapMeters <= DETOUR_PATH_BOUNDARY_MAX_GAP_METERS,
+    entryGapMeters,
+    exitGapMeters,
+    maxGapMeters,
+    allowedGapMeters: DETOUR_PATH_BOUNDARY_MAX_GAP_METERS,
+  };
+}
+
+function suppressDisconnectedDetourPath(segment = {}) {
+  if (segment.canShowDetourPath !== true) return false;
+  const assessment = getDetourPathBoundaryAssessment(segment);
+  if (!assessment || assessment.connected) return false;
+
+  segment.canShowDetourPath = false;
+  segment.inferredDetourPolyline = null;
+  clearRoadMatchedPath(segment);
+  segment.detourPathSuppressedReason = 'detour-boundary-gap';
+  segment.geometryTrustBlockedReason = 'detour-boundary-gap';
+  segment.geometryGate = {
+    ...(segment.geometryGate || {}),
+    passed: false,
+    reason: 'detour-boundary-gap',
+    boundaryEntryGapMeters: Math.round(assessment.entryGapMeters),
+    boundaryExitGapMeters: Math.round(assessment.exitGapMeters),
+    boundaryMaxGapMeters: Math.round(assessment.maxGapMeters),
+    boundaryAllowedGapMeters: assessment.allowedGapMeters,
+  };
+  return true;
 }
 
 function hasNormalRouteClearProof(previousSnapshot) {
@@ -2437,6 +2495,7 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId 
     doc.riderVisibilityReason = 'stale-mixed-evidence';
   }
   applyRiderVisibilityGuard(doc, previousSnapshot);
+  attachRiderAlertVisibility(doc);
 
   return doc;
 }
@@ -2843,6 +2902,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
     applyRiderVisibilityGuard(doc, geo);
     applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);
+    attachRiderAlertVisibility(doc);
 
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;

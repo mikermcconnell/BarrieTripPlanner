@@ -31,7 +31,7 @@ describe('getAppStartupState', () => {
     expect(state.statusText).toBe('Loading routes, stops, and schedules...');
   });
 
-  test('preloads trip planning before releasing the app', () => {
+  test('opens the map without waiting for trip planning', () => {
     const state = getAppStartupState({
       ...readyBase,
       isRoutingReady: false,
@@ -41,52 +41,33 @@ describe('getAppStartupState', () => {
       },
     });
 
-    expect(state.ready).toBe(false);
-    expect(state.statusText).toBe('Preparing trip planning...');
+    expect(state.ready).toBe(true);
   });
 
-  test('waits for initial live buses, alerts, detours, and proxy health', () => {
-    expect(getAppStartupState({
-      ...readyBase,
-      lastVehicleUpdate: null,
-      diagnostics: {
-        ...readyBase.diagnostics,
-        realtimeVehicles: { status: 'loading' },
-      },
-    }).statusText).toBe('Loading live bus locations...');
-
-    expect(getAppStartupState({
-      ...readyBase,
-      hasLoadedServiceAlerts: false,
-    }).statusText).toBe('Checking service alerts...');
-
-    expect(getAppStartupState({
-      ...readyBase,
-      hasLoadedDetourFeed: false,
-    }).statusText).toBe('Checking detour updates...');
-
-    expect(getAppStartupState({
-      ...readyBase,
-      diagnostics: {
-        ...readyBase.diagnostics,
-        proxyApi: { status: 'loading' },
-      },
-    }).statusText).toBe('Checking trip planning connection...');
-  });
-
-  test('releases with static data after the optional startup wait expires', () => {
+  test('opens the map while auth, fonts, and live services finish in the background', () => {
     const state = getAppStartupState({
       ...readyBase,
-      isRoutingReady: false,
+      fontsLoaded: false,
+      authLoading: true,
       lastVehicleUpdate: null,
       hasLoadedServiceAlerts: false,
       hasLoadedDetourFeed: false,
-      optionalWaitElapsed: true,
       diagnostics: {
         routing: { status: 'loading' },
         realtimeVehicles: { status: 'loading' },
         proxyApi: { status: 'loading' },
       },
+    });
+
+    expect(state.ready).toBe(true);
+  });
+
+  test('opens the app error state when static data cannot load', () => {
+    const state = getAppStartupState({
+      isLoadingStatic: false,
+      staticError: new Error('network unavailable'),
+      routesCount: 0,
+      stopsCount: 0,
     });
 
     expect(state.ready).toBe(true);

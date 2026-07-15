@@ -32,36 +32,17 @@ export default function App() {
     }
 
     let cancelled = false;
-    const mountRuntime = () => {
-      setTimeout(() => {
-        loadRuntime()
-          .then((Loaded) => {
-            if (!cancelled) {
-              setRuntime(() => Loaded);
-            }
-          })
-          .catch(() => {
-            if (!cancelled) {
-              setRuntime(null);
-            }
-          });
-      }, 0);
-    };
-
-    if (
-      Platform.OS === 'web' &&
-      typeof window !== 'undefined' &&
-      typeof document !== 'undefined' &&
-      document.readyState !== 'complete'
-    ) {
-      window.addEventListener('load', mountRuntime, { once: true });
-      return () => {
-        cancelled = true;
-        window.removeEventListener('load', mountRuntime);
-      };
-    }
-
-    mountRuntime();
+    loadRuntime()
+      .then((Loaded) => {
+        if (!cancelled) {
+          setRuntime(() => Loaded);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRuntime(null);
+        }
+      });
 
     return () => {
       cancelled = true;

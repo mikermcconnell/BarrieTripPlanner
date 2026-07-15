@@ -278,11 +278,15 @@ export const TransitProvider = ({ children }) => {
     setStaticError(null);
     setUsingCachedData(false);
 
-    const online = await isOnline();
+    // Cache decoding and the network probe are independent. Running them
+    // together prevents a slow connectivity check from delaying saved data.
+    const [online, cachedData] = await Promise.all([
+      isOnline(),
+      getCachedGTFSData(),
+    ]);
     setIsOffline(!online);
 
     // Phase 1: Try cache first for instant map display
-    const cachedData = await getCachedGTFSData();
     if (cachedData) {
       gtfsDataRef.current = cachedData;
       applyStaticData(cachedData);
@@ -338,7 +342,10 @@ export const TransitProvider = ({ children }) => {
       applyStaticData(data);
       setLastStaticRefreshAt(Date.now());
       processAndStoreShapes(data.shapes);
-      await cacheGTFSData(data);
+      // The map can open as soon as its in-memory data is ready. Persisting
+      // the next launch cache is background work and must not hold the screen.
+      setIsLoadingStatic(false);
+      void cacheGTFSData(data);
     } catch (error) {
       logger.error('Failed to load static data:', error);
       setLastStaticFailureAt(Date.now());

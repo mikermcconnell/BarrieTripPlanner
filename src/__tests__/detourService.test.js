@@ -233,6 +233,70 @@ describe('mapActiveDetourDoc', () => {
     expect(overlays[0].skippedSegmentPolyline).toEqual(skippedSegmentPolyline);
   });
 
+  test('keeps an alert-only active detour in the route read model without creating an overlay', () => {
+    const grouped = groupActiveDetourEventsByRoute({
+      '15B:shape:6700-7100': mapActiveDetourDoc('15B:shape:6700-7100', {
+        routeId: '15B',
+        state: 'active',
+        confidence: 'high',
+        vehicleCount: 57,
+        uniqueVehicleCount: 57,
+        riderVisible: false,
+        riderVisibilityReason: 'stale-mixed-evidence',
+        alertVisible: true,
+        alertVisibilityReason: 'active-detour-details-unavailable',
+        canShowDetourPath: false,
+        segments: [{ canShowDetourPath: false }],
+      }),
+    });
+
+    expect(grouped['15B']).toEqual(expect.objectContaining({
+      alertVisible: true,
+      riderVisible: false,
+      eventCount: 1,
+    }));
+    expect(deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['15B']),
+      activeDetours: grouped,
+    })).toEqual([]);
+  });
+
+  test('does not let an alert-only same-route event veto a separate trusted overlay', () => {
+    const skippedSegmentPolyline = [
+      { latitude: 44.40, longitude: -79.72 },
+      { latitude: 44.41, longitude: -79.71 },
+    ];
+    const grouped = groupActiveDetourEventsByRoute({
+      alertOnly: mapActiveDetourDoc('alertOnly', {
+        routeId: '11',
+        confidence: 'high',
+        uniqueVehicleCount: 5,
+        riderVisible: false,
+        alertVisible: true,
+        canShowDetourPath: false,
+        segments: [{ canShowDetourPath: false }],
+      }),
+      trusted: mapActiveDetourDoc('trusted', {
+        routeId: '11',
+        confidence: 'high',
+        uniqueVehicleCount: 5,
+        riderVisible: true,
+        alertVisible: true,
+        canShowDetourPath: true,
+        skippedSegmentPolyline,
+        segments: [{ canShowDetourPath: true, skippedSegmentPolyline }],
+      }),
+    });
+
+    expect(grouped['11'].segments).toHaveLength(1);
+    expect(deriveDetourOverlays({
+      enabled: true,
+      selectedRouteIds: new Set(['11']),
+      activeDetours: grouped,
+    })).toHaveLength(1);
+  });
+
   test('maps rider visibility fields', () => {
     const mapped = mapActiveDetourDoc('12A', {
       state: 'active',
@@ -244,6 +308,8 @@ describe('mapActiveDetourDoc', () => {
 
     expect(mapped.riderVisible).toBe(false);
     expect(mapped.riderVisibilityReason).toBe('insufficient-geometry');
+    expect(mapped.alertVisible).toBe(false);
+    expect(mapped.alertVisibilityReason).toBe('insufficient-geometry');
     expect(mapped.staleForReview).toBe(true);
   });
   test('normalizes top-level and segment geometry from mixed field names', () => {

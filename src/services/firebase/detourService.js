@@ -69,6 +69,9 @@ export function normalizeDetourSegment(segment, fallbackDetourEventId = null) {
 export function mapActiveDetourDoc(docId, data = {}) {
   const eventId = data.eventId ?? data.detourEventId ?? docId;
   const routeId = data.routeId ?? docId;
+  const primarySegment = Array.isArray(data.segments)
+    ? data.segments.find((segment) => segment && typeof segment === 'object')
+    : null;
 
   return {
     eventId,
@@ -87,6 +90,14 @@ export function mapActiveDetourDoc(docId, data = {}) {
     clearReason: data.clearReason ?? null,
     riderVisible: data.riderVisible ?? true,
     riderVisibilityReason: data.riderVisibilityReason ?? null,
+    alertVisible: data.alertVisible ?? data.riderVisible ?? true,
+    alertVisibilityReason: data.alertVisibilityReason ?? data.riderVisibilityReason ?? null,
+    sharedDetourEventId: data.sharedDetourEventId ?? primarySegment?.sharedDetourEventId ?? null,
+    sharedRouteIds: Array.isArray(data.sharedRouteIds)
+      ? data.sharedRouteIds
+      : (Array.isArray(primarySegment?.sharedRouteIds) ? primarySegment.sharedRouteIds : []),
+    eventPrimaryRouteId: data.eventPrimaryRouteId ?? primarySegment?.eventPrimaryRouteId ?? null,
+    eventLocationLabel: data.eventLocationLabel ?? primarySegment?.eventLocationLabel ?? null,
     staleForReview: Boolean(data.staleForReview),
     canShowDetourPath: data.canShowDetourPath ?? null,
     segments: Array.isArray(data.segments)
@@ -153,14 +164,17 @@ const mergeUniqueScalars = (...arrays) => {
 export function groupActiveDetourEventsByRoute(eventMap = {}) {
   const grouped = {};
 
-  // Hidden records are backend monitoring state. Mixing their suppressed
+  // Non-alert records are backend monitoring state. Mixing their suppressed
   // segments into a visible same-route event can veto otherwise trusted map
-  // geometry, so only rider-visible records belong in the client read model.
+  // geometry, so only public alert records belong in the client read model.
   Object.values(eventMap || {})
-    .filter((event) => event?.riderVisible !== false)
+    .filter((event) => event?.alertVisible === true || (
+      event?.alertVisible == null && event?.riderVisible !== false
+    ))
     .forEach((event) => {
       if (!event?.routeId) return;
       const routeId = event.routeId;
+      const hasVisibleDetails = event.riderVisible !== false;
       const existing = grouped[routeId];
       if (!existing) {
         grouped[routeId] = {
@@ -168,7 +182,7 @@ export function groupActiveDetourEventsByRoute(eventMap = {}) {
           eventCount: 1,
           detourEvents: [event],
           eventWindows: event.eventWindow ? [event.eventWindow] : [],
-          segments: Array.isArray(event.segments) ? [...event.segments] : [],
+          segments: hasVisibleDetails && Array.isArray(event.segments) ? [...event.segments] : [],
         };
         return;
       }
@@ -185,16 +199,48 @@ export function groupActiveDetourEventsByRoute(eventMap = {}) {
       existing.uniqueVehicleCount = Math.max(existing.uniqueVehicleCount || 0, event.uniqueVehicleCount || 0);
       existing.currentVehicleCount = Math.max(existing.currentVehicleCount || 0, event.currentVehicleCount || 0);
       existing.riderVisible = existing.riderVisible || event.riderVisible;
+      existing.alertVisible = existing.alertVisible || event.alertVisible;
       existing.staleForReview = Boolean(existing.staleForReview || event.staleForReview);
       existing.confidence = betterConfidence(existing.confidence, event.confidence);
       existing.state = existing.state === 'active' || event.state === 'active' ? 'active' : (existing.state || event.state || 'active');
-      existing.segments = mergeArrays(existing.segments, event.segments);
-      existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
-      existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
-      existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
-      existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
-      existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
-      existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
+      if (hasVisibleDetails) {
+        const existingHadVisibleDetails = existing.detourEvents
+          .slice(0, -1)
+          .some((candidate) => candidate?.riderVisible !== false);
+        if (!existingHadVisibleDetails) {
+          const detailFields = [
+            'shapeId',
+            'canShowDetourPath',
+            'skippedSegmentPolyline',
+            'inferredDetourPolyline',
+            'likelyDetourPolyline',
+            'entryConnectorPolyline',
+            'exitConnectorPolyline',
+            'likelyDetourRoadNames',
+            'roadMatchConfidence',
+            'roadMatchRawConfidence',
+            'roadMatchSource',
+            'detourPathLabel',
+            'entryPoint',
+            'exitPoint',
+          ];
+          detailFields.forEach((field) => { existing[field] = event[field]; });
+          existing.segments = [];
+          existing.skippedStopIds = [];
+          existing.skippedStopCodes = [];
+          existing.affectedStopIds = [];
+          existing.affectedStopCodes = [];
+          existing.skippedStops = [];
+          existing.affectedStops = [];
+        }
+        existing.segments = mergeArrays(existing.segments, event.segments);
+        existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
+        existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
+        existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
+        existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
+        existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
+        existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
+      }
     });
 
   return grouped;

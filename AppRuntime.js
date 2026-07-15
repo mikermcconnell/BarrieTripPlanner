@@ -3,16 +3,15 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
-import { Animated, Image, Platform, View, StyleSheet, Text } from 'react-native';
+import { Animated, Platform, View, StyleSheet, Text } from 'react-native';
 import { useFonts } from 'expo-font';
-import { TransitProvider, useTransitRealtime, useTransitStatic } from './src/context/TransitContext';
+import { TransitProvider, useTransitStatic } from './src/context/TransitContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import TabNavigator from './src/navigation/TabNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import StartupLoadingScreen, {
   STARTUP_BACKGROUND_COLOR,
-  STARTUP_IMAGE_ASSETS,
 } from './src/components/StartupLoadingScreen';
 import { COLORS } from './src/config/theme';
 import { userFirestoreService } from './src/services/firebase/userFirestoreService';
@@ -22,8 +21,7 @@ import runtimeConfig, { hasCriticalStartupIssues } from './src/config/runtimeCon
 import { getAppStartupState } from './src/utils/appStartupState';
 
 const STARTUP_ENV_ISSUES = runtimeConfig.startup.criticalIssues;
-const STARTUP_OPTIONAL_LOADING_MAX_MS = 12000;
-const STARTUP_EXIT_FADE_MS = 260;
+const STARTUP_EXIT_FADE_MS = 140;
 const APP_FONT_MAP = Platform.OS === 'web'
   ? {}
   : (() => {
@@ -256,86 +254,27 @@ function StartupConfigErrorScreen({ issues }) {
 function AppStartupGate({
   fontsLoaded,
   navigationRef,
-  startupImagesReady = false,
   onStartupLoadingLayout,
 }) {
-  const routingPreloadRequestedRef = useRef(false);
   const startupStartedAtRef = useRef(Date.now());
   const startupPhaseRef = useRef(null);
   const startupReadyLoggedRef = useRef(false);
   const overlayOpacityRef = useRef(new Animated.Value(1));
-  const [optionalWaitElapsed, setOptionalWaitElapsed] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
-  const { isLoading: authLoading } = useAuth();
   const {
     routes,
     stops,
     isLoadingStatic,
     staticError,
     isOffline,
-    isRoutingReady,
-    ensureRoutingData,
-    diagnostics,
   } = useTransitStatic();
-  const {
-    lastVehicleUpdate,
-    isLoadingVehicles,
-    vehicleError,
-    hasLoadedServiceAlerts,
-    hasLoadedDetourFeed,
-  } = useTransitRealtime();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setOptionalWaitElapsed(true);
-    }, STARTUP_OPTIONAL_LOADING_MAX_MS);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, []);
-
-  useEffect(() => {
-    const hasStaticData = routes.length > 0 && stops.length > 0;
-    const routingStatus = diagnostics?.routing?.status;
-
-    if (
-      !hasStaticData ||
-      isOffline ||
-      isRoutingReady ||
-      routingPreloadRequestedRef.current ||
-      routingStatus === 'loading'
-    ) {
-      return;
-    }
-
-    routingPreloadRequestedRef.current = true;
-    void ensureRoutingData();
-  }, [
-    diagnostics?.routing?.status,
-    ensureRoutingData,
-    isOffline,
-    isRoutingReady,
-    routes.length,
-    stops.length,
-  ]);
 
   const startupState = getAppStartupState({
-    fontsLoaded,
-    authLoading,
     isLoadingStatic,
     staticError,
     routesCount: routes.length,
     stopsCount: stops.length,
     isOffline,
-    isRoutingReady,
-    lastVehicleUpdate,
-    isLoadingVehicles,
-    vehicleError,
-    hasLoadedServiceAlerts,
-    hasLoadedDetourFeed,
-    diagnostics,
-    optionalWaitElapsed,
   });
   const startupPhase = startupState.ready ? 'ready' : (startupState.statusText || startupState.detail || 'loading');
 
@@ -352,27 +291,6 @@ function AppStartupGate({
   }, [startupPhase, startupState.percent, startupState.ready]);
 
   useEffect(() => {
-    if (!optionalWaitElapsed || startupState.ready) return;
-
-    logger.warn('[startup] optional wait cap reached; opening with available startup data', {
-      elapsedMs: Date.now() - startupStartedAtRef.current,
-      routingStatus: diagnostics?.routing?.status || 'unknown',
-      realtimeStatus: diagnostics?.realtimeVehicles?.status || 'unknown',
-      proxyStatus: diagnostics?.proxyApi?.status || 'unknown',
-      hasLoadedServiceAlerts,
-      hasLoadedDetourFeed,
-    });
-  }, [
-    diagnostics?.proxyApi?.status,
-    diagnostics?.realtimeVehicles?.status,
-    diagnostics?.routing?.status,
-    hasLoadedDetourFeed,
-    hasLoadedServiceAlerts,
-    optionalWaitElapsed,
-    startupState.ready,
-  ]);
-
-  useEffect(() => {
     const overlayOpacity = overlayOpacityRef.current;
 
     if (!startupState.ready) {
@@ -387,7 +305,6 @@ function AppStartupGate({
       startupReadyLoggedRef.current = true;
       logger.info('[startup] ready', {
         elapsedMs: Date.now() - startupStartedAtRef.current,
-        optionalWaitElapsed,
         routes: routes.length,
         stops: stops.length,
       });
@@ -407,7 +324,7 @@ function AppStartupGate({
     return () => {
       overlayOpacity.stopAnimation();
     };
-  }, [optionalWaitElapsed, routes.length, startupState.ready, stops.length]);
+  }, [routes.length, startupState.ready, stops.length]);
 
   return (
     <View style={appStyles.startupGateContainer}>
@@ -431,7 +348,6 @@ function AppStartupGate({
             detail={startupState.detail}
             statusText={startupState.statusText}
             useBrandFonts={fontsLoaded}
-            preferPreloadedImages={startupImagesReady}
             onReadyToDisplay={onStartupLoadingLayout}
           />
         </Animated.View>
@@ -442,7 +358,6 @@ function AppStartupGate({
 
 export default function App() {
   const navigationRef = useRef();
-  const [startupImagesReady, setStartupImagesReady] = useState(Platform.OS === 'web');
   const [startupLoadingLayoutReady, setStartupLoadingLayoutReady] = useState(
     Platform.OS === 'web' || hasCriticalStartupIssues
   );
@@ -461,41 +376,10 @@ export default function App() {
 
   useEffect(() => {
     if (Platform.OS === 'web') {
-      return undefined;
-    }
-
-    let cancelled = false;
-    const { Asset } = require('expo-asset');
-
-    Asset.loadAsync(STARTUP_IMAGE_ASSETS)
-      .then((assets) => Promise.all(
-        assets
-          .map((asset) => asset.localUri || asset.uri)
-          .filter(Boolean)
-          .map((uri) => Image.prefetch(uri).catch(() => false))
-      ))
-      .catch((error) => {
-        logger.warn('[startup] startup image preload failed', {
-          message: error?.message || String(error),
-        });
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setStartupImagesReady(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') {
       return;
     }
 
-    if (!startupImagesReady || !startupLoadingLayoutReady) {
+    if (!startupLoadingLayoutReady) {
       return;
     }
 
@@ -506,7 +390,7 @@ export default function App() {
         message: error?.message || String(error),
       });
     });
-  }, [startupImagesReady, startupLoadingLayoutReady]);
+  }, [startupLoadingLayoutReady]);
 
   if (hasCriticalStartupIssues) {
     return (
@@ -535,7 +419,6 @@ export default function App() {
                 <AppStartupGate
                   fontsLoaded={fontsLoaded}
                   navigationRef={navigationRef}
-                  startupImagesReady={startupImagesReady}
                   onStartupLoadingLayout={() => setStartupLoadingLayoutReady(true)}
                 />
               </TransitProvider>

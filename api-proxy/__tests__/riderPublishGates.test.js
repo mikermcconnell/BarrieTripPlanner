@@ -52,11 +52,13 @@ describe('rider publish gates', () => {
     });
   });
 
-  test('explains why hidden geometryless detours have no public path or skipped-stop gate', () => {
+  test('keeps a confirmed alert public while geometry and stop details remain unavailable', () => {
     const gates = buildRiderPublishGates({
       routeId: '10',
       riderVisible: false,
       riderVisibilityReason: 'insufficient-geometry',
+      alertVisible: true,
+      alertVisibilityReason: 'active-detour-details-unavailable',
       uniqueVehicleCount: 2,
       currentVehicleCount: 0,
       canShowDetourPath: false,
@@ -69,16 +71,16 @@ describe('rider publish gates', () => {
         reason: 'confirmed-multi-vehicle-evidence',
       },
       riderAlert: {
-        passed: false,
-        reason: 'insufficient-geometry',
+        passed: true,
+        reason: 'active-detour-details-unavailable',
       },
       likelyPath: {
         passed: false,
-        reason: 'rider-hidden',
+        reason: 'path-not-trusted',
       },
       skippedStops: {
         passed: false,
-        reason: 'rider-hidden',
+        reason: 'no-explicit-skipped-stops',
       },
     });
   });

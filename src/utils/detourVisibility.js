@@ -47,11 +47,27 @@ const hasZeroConfirmedEvidence = (detour) => {
 
 export function isRiderVisibleDetour(detour) {
   if (!detour || detour.state === 'cleared') return false;
-  if (detour.riderVisible === false) return false;
+  const alertVisible = hasOwn(detour, 'alertVisible')
+    ? detour.alertVisible === true
+    : detour.riderVisible !== false;
+  if (!alertVisible) return false;
   if (!hasEnoughConfirmedEvidence(detour)) return false;
   if (hasZeroConfirmedEvidence(detour)) return false;
   const confidence = normalizeConfidence(detour.confidence);
   return RIDER_VISIBLE_CONFIDENCES.has(confidence);
+}
+
+const hasRenderablePolyline = (value) => Array.isArray(value) && value.length >= 2;
+
+const sourceHasMapGeometry = (source = {}) => (
+  hasRenderablePolyline(source.skippedSegmentPolyline) ||
+  hasRenderablePolyline(source.likelyDetourPolyline) ||
+  (source.canShowDetourPath === true && hasRenderablePolyline(source.inferredDetourPolyline))
+);
+
+export function hasRiderDetourMapGeometry(detour = {}) {
+  if (sourceHasMapGeometry(detour)) return true;
+  return Array.isArray(detour.segments) && detour.segments.some(sourceHasMapGeometry);
 }
 
 export function filterRiderVisibleDetours(detourMap = {}) {

@@ -9,6 +9,7 @@ import DetourImpactSummary from './DetourImpactSummary';
 import { formatDetourStartedAt, formatDetourTime, getConfidenceChip } from '../utils/detourHelpers';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { findRouteDetourNotice, getNoticeEndText } from '../utils/noticeTimingUtils';
+import { hasRiderDetourMapGeometry } from '../utils/detourVisibility';
 
 const getDetourTitle = (routeId, state) => {
   const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
@@ -66,6 +67,7 @@ const DetourDetailsSheet = ({
   const timeLabel = formatDetourTime(detour?.detectedAt);
   const startedAtLabel = formatDetourStartedAt(detour?.detectedAt);
   const confidenceChip = detour?.confidence ? getConfidenceChip(detour.confidence) : null;
+  const hasMapGeometry = hasRiderDetourMapGeometry(detour);
   const myRideNotice = findRouteDetourNotice(routeId, transitNews, Date.now(), { detour });
   const timingTitle = myRideNotice ? 'MyRide timing' : 'Unplanned detour';
   const myRideEndText = myRideNotice
@@ -199,8 +201,12 @@ const DetourDetailsSheet = ({
             <Icon name="Route" size={16} color={COLORS.primaryDark} />
           </View>
           <View style={styles.mapHintCopy}>
-            <Text style={styles.mapHintTitle}>Map tip</Text>
-            <Text style={styles.mapHintText}>{MAP_INTERACTION_HINT}</Text>
+            <Text style={styles.mapHintTitle}>{hasMapGeometry ? 'Map tip' : 'Detour details updating'}</Text>
+            <Text style={styles.mapHintText}>
+              {hasMapGeometry
+                ? MAP_INTERACTION_HINT
+                : 'This detour remains active. The exact path and affected stops are not yet reliable enough to display.'}
+            </Text>
           </View>
         </View>
 
@@ -223,14 +229,16 @@ const DetourDetailsSheet = ({
 
         <DetourImpactSummary routeId={routeId} routeLabel={impactRouteLabel} sections={segmentStopDetails} />
 
-        <TouchableOpacity
-          style={styles.viewButton}
-          onPress={onViewOnMap}
-          accessibilityRole="button"
-          accessibilityLabel="View detour on map"
-        >
-          <Text style={styles.viewButtonText}>View on Map</Text>
-        </TouchableOpacity>
+        {hasMapGeometry && (
+          <TouchableOpacity
+            style={styles.viewButton}
+            onPress={onViewOnMap}
+            accessibilityRole="button"
+            accessibilityLabel="View detour on map"
+          >
+            <Text style={styles.viewButtonText}>View on Map</Text>
+          </TouchableOpacity>
+        )}
       </BottomSheetScrollView>
     </BottomSheet>
   );

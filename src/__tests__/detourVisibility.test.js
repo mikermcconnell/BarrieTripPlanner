@@ -1,6 +1,7 @@
 import {
   filterRiderVisibleDetours,
   getCurrentOngoingDetourCount,
+  hasRiderDetourMapGeometry,
   isRiderVisibleDetour,
 } from '../utils/detourVisibility';
 
@@ -12,6 +13,36 @@ describe('detourVisibility', () => {
       riderVisible: false,
       riderVisibilityReason: 'insufficient-geometry',
     })).toBe(false);
+  });
+
+  test('shows a confirmed active alert when only its unsafe geometry is suppressed', () => {
+    expect(isRiderVisibleDetour({
+      confidence: 'high',
+      state: 'active',
+      uniqueVehicleCount: 57,
+      riderVisible: false,
+      riderVisibilityReason: 'stale-mixed-evidence',
+      alertVisible: true,
+      alertVisibilityReason: 'active-detour-details-unavailable',
+      canShowDetourPath: false,
+    })).toBe(true);
+  });
+
+  test('distinguishes alert-only detours from detours with safe map geometry', () => {
+    expect(hasRiderDetourMapGeometry({
+      alertVisible: true,
+      canShowDetourPath: false,
+      segments: [{ canShowDetourPath: false }],
+    })).toBe(false);
+
+    expect(hasRiderDetourMapGeometry({
+      alertVisible: true,
+      canShowDetourPath: false,
+      skippedSegmentPolyline: [
+        { latitude: 44.348, longitude: -79.614 },
+        { latitude: 44.349, longitude: -79.610 },
+      ],
+    })).toBe(true);
   });
 
   test('hides low-confidence detours', () => {

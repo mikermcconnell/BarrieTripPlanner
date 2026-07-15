@@ -1945,6 +1945,33 @@ describe('Auto Detour V2 detector', () => {
     );
   });
 
+  test('refreshes an already-confirmed event from one new matching bus without rebuilding confirmation', () => {
+    const detector = createDetourV2Detector();
+
+    const visible = detector.processVehicles([
+      shape1Vehicle({ id: 'bus-1', tripId: 'trip-1', longitude: -79.698, timestampMs: 1000 }),
+      shape1Vehicle({ id: 'bus-2', tripId: 'trip-2', longitude: -79.696, timestampMs: 2000 }),
+      shape1Vehicle({ id: 'bus-2', tripId: 'trip-2', longitude: -79.694, timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+    const eventId = visible['8A'].eventId;
+
+    const refreshed = detector.processVehicles([
+      shape1Vehicle({
+        id: 'bus-3',
+        tripId: 'trip-3',
+        longitude: -79.696,
+        timestampMs: 46 * 60 * 1000,
+      }),
+    ], shapes, routeShapeMapping);
+
+    expect(refreshed[eventId]).toEqual(expect.objectContaining({
+      state: 'active',
+      riderVisible: true,
+      currentVehicleCount: 1,
+      latestGpsEvidenceAt: 46 * 60 * 1000,
+    }));
+  });
+
   test('keeps trusted published geometry visible after scheduled state rehydration', () => {
     const detector = createDetourV2Detector();
     const freshMs = 8 * 60 * 60 * 1000;

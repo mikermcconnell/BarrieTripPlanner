@@ -3258,6 +3258,27 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function refreshActiveDetourHeartbeat(candidate, currentVehicleIds = new Set()) {
+    const detour = activeDetours.get(candidate?.eventId);
+    if (!detour) return;
+
+    const latestPointMs = Number(candidate?.lastSeenAt || 0);
+    if (Number.isFinite(latestPointMs) && latestPointMs > Number(detour.latestGpsEvidenceAt || 0)) {
+      detour.lastSeenAt = new Date(latestPointMs);
+      detour.latestGpsEvidenceAt = latestPointMs;
+    }
+    detour.vehiclesOffRoute = new Set(currentVehicleIds || []);
+    detour.currentVehicleCount = detour.vehiclesOffRoute.size;
+  }
+
+  function refreshActiveDetourCurrentVehicleCounts(currentVehicleIdsByEvent = new Map()) {
+    for (const [eventId, detour] of activeDetours.entries()) {
+      const currentVehicleIds = currentVehicleIdsByEvent.get(eventId) || new Set();
+      detour.vehiclesOffRoute = new Set(currentVehicleIds);
+      detour.currentVehicleCount = currentVehicleIds.size;
+    }
+  }
+
   function processVehicles(
     vehicles = [],
     shapes = new Map(),
@@ -3407,6 +3428,7 @@ function createDetourV2Detector(config = {}) {
         const currentEventOffRouteVehicleIds = currentOffRouteVehicleIdsByEvent.get(candidate.eventId) || new Set();
         currentEventOffRouteVehicleIds.add(id);
         currentOffRouteVehicleIdsByEvent.set(candidate.eventId, currentEventOffRouteVehicleIds);
+        refreshActiveDetourHeartbeat(candidate, currentEventOffRouteVehicleIds);
 
         if (hasEnoughConfirmingEvidence(candidate, {
           offRouteThresholdMeters,
@@ -3465,6 +3487,7 @@ function createDetourV2Detector(config = {}) {
     }
 
     pruneDuplicateConfiguredCorridorDetours();
+    refreshActiveDetourCurrentVehicleCounts(currentOffRouteVehicleIdsByEvent);
 
     for (const [eventId, detour] of activeDetours.entries()) {
       const routeId = detour.routeId || eventId;

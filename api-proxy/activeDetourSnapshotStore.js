@@ -81,6 +81,8 @@ function normalizeSnapshot(routeId, data = {}, eventId = null) {
     clearReason: data.clearReason || null,
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
+    alertVisible: data.alertVisible === true,
+    alertVisibilityReason: data.alertVisibilityReason || null,
     staleForReview: Boolean(data.staleForReview),
     canShowDetourPath: data.canShowDetourPath ?? null,
     confidence: data.confidence || null,
