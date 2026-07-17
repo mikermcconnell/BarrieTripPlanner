@@ -11,6 +11,10 @@ const { attachRiderAlertVisibility } = require('./detour/alertVisibility');
 const { attachRiderPublishGates } = require('./detour/riderPublishGates');
 const { projectOntoPolyline } = require('./detour/projection');
 const {
+  clearDisplayGeometry,
+  copyRefinedDisplayGeometry,
+} = require('./detour/displayGeometry');
+const {
   buildClearedEvent,
   buildDetectedEvent,
   buildUpdatedEvent,
@@ -629,17 +633,7 @@ function clearRoadMatchedPath(target) {
   target.roadMatchConfidence = null;
   target.roadMatchRawConfidence = null;
   target.roadMatchSource = null;
-  target.displayBoundaryRefined = false;
-  target.displayBoundaryReason = null;
-  target.displayEntryPoint = null;
-  target.displayExitPoint = null;
-  target.displaySkippedSegmentPolyline = null;
-  target.displaySkippedStops = [];
-  target.displaySkippedStopIds = [];
-  target.displaySkippedStopCodes = [];
-  target.displaySeparatedRunMeters = null;
-  target.displayPrefixTrimmedMeters = null;
-  target.displaySuffixTrimmedMeters = null;
+  clearDisplayGeometry(target);
 }
 
 function getRenderableSegment(segment) {
@@ -3155,21 +3149,7 @@ async function publishDetours(activeDetours, options = {}) {
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;
-      doc.displayBoundaryRefined = geo.displayBoundaryRefined === true;
-      doc.displayBoundaryReason = geo.displayBoundaryReason || null;
-      doc.displayEntryPoint = geo.displayEntryPoint || null;
-      doc.displayExitPoint = geo.displayExitPoint || null;
-      doc.displaySkippedSegmentPolyline = geo.displaySkippedSegmentPolyline || null;
-      doc.displaySkippedStops = Array.isArray(geo.displaySkippedStops) ? geo.displaySkippedStops : [];
-      doc.displaySkippedStopIds = Array.isArray(geo.displaySkippedStopIds)
-        ? geo.displaySkippedStopIds
-        : [];
-      doc.displaySkippedStopCodes = Array.isArray(geo.displaySkippedStopCodes)
-        ? geo.displaySkippedStopCodes
-        : [];
-      doc.displaySeparatedRunMeters = geo.displaySeparatedRunMeters ?? null;
-      doc.displayPrefixTrimmedMeters = geo.displayPrefixTrimmedMeters ?? null;
-      doc.displaySuffixTrimmedMeters = geo.displaySuffixTrimmedMeters ?? null;
+      copyRefinedDisplayGeometry(doc, geo);
       doc.noticeTemporaryStops = Array.isArray(geo.noticeTemporaryStops) ? geo.noticeTemporaryStops : [];
       doc.noticeTemporaryStopIds = Array.isArray(geo.noticeTemporaryStopIds) ? geo.noticeTemporaryStopIds : [];
       doc.noticeTemporaryStopCodes = Array.isArray(geo.noticeTemporaryStopCodes) ? geo.noticeTemporaryStopCodes : [];

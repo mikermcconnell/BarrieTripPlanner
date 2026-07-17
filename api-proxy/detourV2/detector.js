@@ -25,6 +25,7 @@ const {
   makeEvidenceIdentity,
 } = require('../detour/evidenceIdentity');
 const { estimateRouteHeadwayMs } = require('../detour/routeSchedule');
+const { createConfirmedEventRefresh } = require('./confirmedEventRefresh');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -3953,123 +3954,29 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
-  function isConfirmedRefreshEvent(detour) {
-    return Boolean(
-      detour &&
-      detour.state === 'active' &&
-      Number(detour.uniqueVehicleCount || detour.vehicleCount || 0) >= MIN_UNIQUE_SIGNATURES &&
-      getGeometryDetourPathPolylines(detour.geometry).length > 0
-    );
-  }
-
-  function getConfirmedRefreshEvents(routeId, projectedSample, distanceMeters) {
-    if (
-      !Number.isFinite(distanceMeters) ||
-      distanceMeters <= CONFIRMED_REFRESH_THRESHOLD_METERS ||
-      distanceMeters > offRouteThresholdMeters
-    ) {
-      return [];
-    }
-
-    return getActiveEventsForRoute(routeId).filter((detour) => {
-      if (!isConfirmedRefreshEvent(detour)) return false;
-      const detourShapeId = getShapeIdFromDetour(detour);
-      if (detourShapeId && projectedSample.shapeId && detourShapeId !== projectedSample.shapeId) {
-        return false;
-      }
-      const bounds = getDetourProgressBounds(detour);
-      if (
-        !bounds ||
-        projectedSample.progressMeters < bounds.start - TRACE_REVERSAL_TOLERANCE_METERS ||
-        projectedSample.progressMeters > bounds.end + TRACE_REVERSAL_TOLERANCE_METERS
-      ) {
-        return false;
-      }
-      return getMinDistanceToPolylines(
-        projectedSample.coordinate,
-        getGeometryDetourPathPolylines(detour.geometry)
-      ) <= CONFIRMED_REFRESH_PATH_PROXIMITY_METERS;
-    });
-  }
-
-  function armConfirmedEventRefreshes(
-    previousTransitionState,
-    projectedSample,
-    matchingEvents
-  ) {
-    const entrySample = previousTransitionState?.lastOnRouteSample;
-    if (
-      !entrySample ||
-      entrySample.shapeId !== projectedSample.shapeId ||
-      projectedSample.timestampMs - Number(entrySample.timestampMs || 0) >
-        TRANSITION_SAMPLE_MAX_GAP_MS
-    ) {
-      return [];
-    }
-
-    const existing = Array.isArray(previousTransitionState.pendingConfirmedRefreshes)
-      ? previousTransitionState.pendingConfirmedRefreshes
-      : [];
-    const byEventId = new Map(existing.map((item) => [item.eventId, item]));
-    for (const detour of matchingEvents) {
-      byEventId.set(detour.eventId, {
-        eventId: detour.eventId,
-        shapeId: projectedSample.shapeId,
-        entryProgressMeters: Number(entrySample.progressMeters),
-        marginalProgressMeters: Number(projectedSample.progressMeters),
-        observedAt: projectedSample.timestampMs,
-      });
-    }
-    return [...byEventId.values()];
-  }
-
-  function finalizeConfirmedEventRefreshes(previousTransitionState, exitSample) {
-    const pending = Array.isArray(previousTransitionState?.pendingConfirmedRefreshes)
-      ? previousTransitionState.pendingConfirmedRefreshes
-      : [];
-    const refreshedEventIds = new Set();
-    for (const item of pending) {
-      const detour = activeDetours.get(item.eventId);
-      const observedAt = Number(item.observedAt);
-      const entryProgress = Number(item.entryProgressMeters);
-      const marginalProgress = Number(item.marginalProgressMeters);
-      const exitProgress = Number(exitSample.progressMeters);
-      if (
-        !isConfirmedRefreshEvent(detour) ||
-        item.shapeId !== exitSample.shapeId ||
-        !Number.isFinite(observedAt) ||
-        exitSample.timestampMs - observedAt > TRANSITION_SAMPLE_MAX_GAP_MS ||
-        ![entryProgress, marginalProgress, exitProgress].every(Number.isFinite)
-      ) {
-        continue;
-      }
-      const traversalMeters = Math.abs(exitProgress - entryProgress);
-      const lower = Math.min(entryProgress, exitProgress) - TRACE_REVERSAL_TOLERANCE_METERS;
-      const upper = Math.max(entryProgress, exitProgress) + TRACE_REVERSAL_TOLERANCE_METERS;
-      if (
-        traversalMeters < CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS ||
-        marginalProgress < lower ||
-        marginalProgress > upper
-      ) {
-        continue;
-      }
-
-      detour.latestGpsEvidenceAt = Math.max(
-        Number(detour.latestGpsEvidenceAt || 0),
-        observedAt
-      );
-      detour.lastSeenAt = new Date(Math.max(toMillis(detour.lastSeenAt, 0), observedAt));
-      detour.lastConfirmedRefreshAt = observedAt;
-      detour.confirmedRefreshCount = Number(detour.confirmedRefreshCount || 0) + 1;
-      // Only discard normal-route clear proof after the marginal observation
-      // has completed a valid on-route/marginal/on-route traversal. An armed
-      // but incomplete pass is not strong enough to cancel other clear proof.
-      clearTracksByEvent.delete(item.eventId);
-      pendingClearsByEvent.delete(item.eventId);
-      refreshedEventIds.add(item.eventId);
-    }
-    return refreshedEventIds;
-  }
+  const confirmedEventRefresh = createConfirmedEventRefresh({
+    activeDetours,
+    getActiveEventsForRoute,
+    getPathPolylines: getGeometryDetourPathPolylines,
+    getShapeId: getShapeIdFromDetour,
+    getProgressBounds: getDetourProgressBounds,
+    getDistanceToPaths: getMinDistanceToPolylines,
+    clearNormalRouteEvidence: (eventId) => {
+      // A completed on-route/marginal/on-route traversal outweighs older
+      // normal-route clear proof. Merely arming a refresh does not clear it.
+      clearTracksByEvent.delete(eventId);
+      pendingClearsByEvent.delete(eventId);
+    },
+    rules: {
+      minimumUniqueSignatures: MIN_UNIQUE_SIGNATURES,
+      offRouteThresholdMeters,
+      marginalThresholdMeters: CONFIRMED_REFRESH_THRESHOLD_METERS,
+      pathProximityMeters: CONFIRMED_REFRESH_PATH_PROXIMITY_METERS,
+      minimumTraversalMeters: CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS,
+      reversalToleranceMeters: TRACE_REVERSAL_TOLERANCE_METERS,
+      maximumSampleGapMs: TRANSITION_SAMPLE_MAX_GAP_MS,
+    },
+  });
 
   function refreshActiveDetourHeartbeat(candidate, currentVehicleIds = new Set()) {
     const detour = activeDetours.get(candidate?.eventId);
@@ -4223,13 +4130,13 @@ function createDetourV2Detector(config = {}) {
         timestampMs,
       };
 
-      const confirmedRefreshEvents = getConfirmedRefreshEvents(
+      const confirmedRefreshEvents = confirmedEventRefresh.findMatches(
         routeId,
         projectedSample,
         projection.distanceMeters
       );
       if (confirmedRefreshEvents.length > 0) {
-        const pendingConfirmedRefreshes = armConfirmedEventRefreshes(
+        const pendingConfirmedRefreshes = confirmedEventRefresh.arm(
           previousTransitionState,
           projectedSample,
           confirmedRefreshEvents
@@ -4361,7 +4268,7 @@ function createDetourV2Detector(config = {}) {
           activeDetours.set(detour.eventId, detour);
         }
       } else if (projection.distanceMeters <= onRouteClearThresholdMeters) {
-        const refreshedEventIds = finalizeConfirmedEventRefreshes(
+        const refreshedEventIds = confirmedEventRefresh.finalize(
           previousTransitionState,
           projectedSample
         );

@@ -4,6 +4,23 @@ const DEFAULT_RADIUS_METERS = 75;
 const ROAD_MATCH_SOURCE = 'osrm-match';
 const ROAD_ROUTE_SOURCE = 'osrm-route';
 const DETOUR_PATH_LABEL = 'Likely detour path';
+const {
+  DISPLAY_GEOMETRY_FIELDS,
+  copyRefinedDisplayGeometry,
+} = require('./detour/displayGeometry');
+const {
+  dedupeConsecutivePoints,
+  haversineDistance,
+  normalizeCoordinate,
+  normalizePolyline,
+  pointToPolylineDistance,
+  toRadians,
+} = require('./detour/roadGeometry');
+const {
+  buildBoundaryRefinedDisplayGeometry,
+  doesPathUseBlockedSegment,
+  trimNormalRouteEndpointOverlap,
+} = require('./detour/boundaryRefinement');
 const ROAD_MATCH_FIELDS = [
   'likelyDetourPolyline',
   'entryConnectorPolyline',
@@ -14,27 +31,9 @@ const ROAD_MATCH_FIELDS = [
   'roadMatchSource',
   'endpointMismatchMeters',
   'endpointMismatchAcceptedReason',
-  'displayBoundaryRefined',
-  'displayBoundaryReason',
-  'displayEntryPoint',
-  'displayExitPoint',
-  'displaySkippedSegmentPolyline',
   'displayDetourPolyline',
-  'displaySkippedStops',
-  'displaySkippedStopIds',
-  'displaySkippedStopCodes',
-  'displaySeparatedRunMeters',
-  'displayPrefixTrimmedMeters',
-  'displaySuffixTrimmedMeters',
+  ...DISPLAY_GEOMETRY_FIELDS,
 ];
-const EARTH_RADIUS_METERS = 6371000;
-const DEFAULT_BLOCKED_PROXIMITY_METERS = 35;
-const DEFAULT_BLOCKED_OVERLAP_RATIO = 0.05;
-const DEFAULT_BLOCKED_ENDPOINT_RATIO = 0.12;
-const DEFAULT_BLOCKED_MIN_POINTS = 3;
-const DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS = 35;
-const DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS = 35;
-const DEFAULT_DISPLAY_MIN_SEPARATED_RUN_METERS = 75;
 const DEFAULT_BACKTRACK_PROXIMITY_METERS = 12;
 const DEFAULT_BACKTRACK_MIN_SEGMENT_METERS = 20;
 const DEFAULT_BACKTRACK_MIN_TURN_DEGREES = 150;
@@ -164,74 +163,6 @@ function parseNonNegativeFloat(value, fallback, min = 0, max = Number.MAX_SAFE_I
   return Math.min(Math.max(parsed, min), max);
 }
 
-function normalizeCoordinate(point) {
-  if (!point || typeof point !== 'object') return null;
-  const rawLatitude = point.latitude ?? point.lat;
-  const rawLongitude = point.longitude ?? point.lon;
-  const latitude = Number(rawLatitude);
-  const longitude = Number(rawLongitude);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  return { latitude, longitude };
-}
-
-function toRadians(degrees) {
-  return degrees * (Math.PI / 180);
-}
-
-function haversineDistance(pointA, pointB) {
-  if (!pointA || !pointB) return Infinity;
-  const lat1 = Number(pointA.latitude);
-  const lon1 = Number(pointA.longitude);
-  const lat2 = Number(pointB.latitude);
-  const lon2 = Number(pointB.longitude);
-  if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Infinity;
-
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return EARTH_RADIUS_METERS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function pointToSegmentDistance(point, start, end) {
-  if (!point || !start || !end) return Infinity;
-
-  const x = Number(point.longitude);
-  const y = Number(point.latitude);
-  const x1 = Number(start.longitude);
-  const y1 = Number(start.latitude);
-  const x2 = Number(end.longitude);
-  const y2 = Number(end.latitude);
-  if (![x, y, x1, y1, x2, y2].every(Number.isFinite)) return Infinity;
-
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  if (dx === 0 && dy === 0) {
-    return haversineDistance(point, start);
-  }
-
-  const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
-  const closest = {
-    latitude: y1 + t * dy,
-    longitude: x1 + t * dx,
-  };
-  return haversineDistance(point, closest);
-}
-
-function pointToPolylineDistance(point, polyline) {
-  const line = normalizePolyline(polyline);
-  if (line.length === 0) return Infinity;
-  if (line.length === 1) return haversineDistance(point, line[0]);
-
-  let minDistance = Infinity;
-  for (let i = 0; i < line.length - 1; i += 1) {
-    minDistance = Math.min(minDistance, pointToSegmentDistance(point, line[i], line[i + 1]));
-  }
-  return minDistance;
-}
-
 function bearingDegrees(start, end) {
   if (!start || !end) return null;
 
@@ -254,23 +185,6 @@ function turnDegrees(incomingBearing, outgoingBearing) {
 
   const delta = Math.abs(incomingBearing - outgoingBearing) % 360;
   return delta > 180 ? 360 - delta : delta;
-}
-
-function normalizePolyline(polyline) {
-  if (!Array.isArray(polyline)) return [];
-
-  const points = [];
-  let previousKey = null;
-  polyline.forEach((point) => {
-    const normalized = normalizeCoordinate(point);
-    if (!normalized) return;
-    const key = `${normalized.latitude.toFixed(6)},${normalized.longitude.toFixed(6)}`;
-    if (key === previousKey) return;
-    previousKey = key;
-    points.push(normalized);
-  });
-
-  return points;
 }
 
 function getBacktrackOptions(env = process.env) {
@@ -416,123 +330,6 @@ function removeAvoidableBacktracksFromPolyline(polyline, env = process.env) {
   return cleaned;
 }
 
-function doesPathUseBlockedSegment(path, blockedPolyline, env = process.env) {
-  const points = normalizePolyline(path);
-  const blocked = normalizePolyline(blockedPolyline);
-  if (points.length < 2 || blocked.length < 2) return false;
-
-  const endpointRatio = parseNonNegativeFloat(
-    env.DETOUR_ROAD_MATCHING_BLOCKED_ENDPOINT_RATIO,
-    DEFAULT_BLOCKED_ENDPOINT_RATIO,
-    0,
-    0.45
-  );
-  const proximityMeters = parsePositiveInt(
-    env.DETOUR_ROAD_MATCHING_BLOCKED_PROXIMITY_METERS,
-    DEFAULT_BLOCKED_PROXIMITY_METERS,
-    5,
-    200
-  );
-  const overlapRatio = parseNonNegativeFloat(
-    env.DETOUR_ROAD_MATCHING_BLOCKED_OVERLAP_RATIO,
-    DEFAULT_BLOCKED_OVERLAP_RATIO,
-    0.05,
-    1
-  );
-  const minPoints = parsePositiveInt(
-    env.DETOUR_ROAD_MATCHING_BLOCKED_MIN_POINTS,
-    DEFAULT_BLOCKED_MIN_POINTS,
-    1,
-    50
-  );
-  const endpointPointCount = Math.min(
-    Math.ceil(points.length * endpointRatio),
-    Math.max(0, Math.floor((points.length - minPoints) / 2))
-  );
-  const startIndex = endpointPointCount;
-  const endIndex = points.length - endpointPointCount - 1;
-  const interior = points.slice(startIndex, endIndex + 1);
-  if (interior.length === 0) return false;
-
-  const nearBlockedCount = interior.filter((point) =>
-    pointToPolylineDistance(point, blocked) <= proximityMeters
-  ).length;
-
-  return nearBlockedCount >= minPoints && (nearBlockedCount / interior.length) >= overlapRatio;
-}
-
-function polylineLengthMeters(polyline) {
-  const points = normalizePolyline(polyline);
-  if (points.length < 2) return 0;
-
-  let length = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const distance = haversineDistance(points[index - 1], points[index]);
-    if (Number.isFinite(distance)) length += distance;
-  }
-  return length;
-}
-
-function getEndpointRouteOverlapRun(path, routeShapePolyline, env = process.env, fromEnd = false) {
-  const orderedPath = fromEnd ? [...path].reverse() : path;
-  const run = [];
-  const proximityMeters = parsePositiveInt(
-    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_PROXIMITY_METERS,
-    DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS,
-    5,
-    200
-  );
-
-  for (const point of orderedPath) {
-    if (pointToPolylineDistance(point, routeShapePolyline) > proximityMeters) {
-      break;
-    }
-    run.push(point);
-  }
-
-  if (run.length < 2) return null;
-
-  const runLengthMeters = polylineLengthMeters(fromEnd ? run.reverse() : run);
-  const minRunMeters = parsePositiveInt(
-    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_MIN_RUN_METERS,
-    DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS,
-    1,
-    500
-  );
-  if (runLengthMeters < minRunMeters) return null;
-
-  return {
-    pointCount: run.length,
-    runLengthMeters,
-  };
-}
-
-function dedupeConsecutivePoints(points) {
-  if (!Array.isArray(points) || points.length === 0) return [];
-
-  return points.reduce((deduped, point) => {
-    const normalized = normalizeCoordinate(point);
-    if (!normalized) return deduped;
-
-    const previous = deduped[deduped.length - 1];
-    if (
-      previous &&
-      previous.latitude === normalized.latitude &&
-      previous.longitude === normalized.longitude
-    ) {
-      return deduped;
-    }
-
-    deduped.push(normalized);
-    return deduped;
-  }, []);
-}
-
-function buildConnectorPolyline(points) {
-  const connector = dedupeConsecutivePoints(points);
-  return connector.length >= 2 ? connector : null;
-}
-
 function stitchRenderableDetourPolyline(path, entryConnectorPolyline, exitConnectorPolyline) {
   const stitched = dedupeConsecutivePoints([
     ...(Array.isArray(entryConnectorPolyline) ? entryConnectorPolyline : []),
@@ -540,49 +337,6 @@ function stitchRenderableDetourPolyline(path, entryConnectorPolyline, exitConnec
     ...(Array.isArray(exitConnectorPolyline) ? exitConnectorPolyline : []),
   ]);
   return stitched.length >= 2 ? stitched : [];
-}
-
-function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.env) {
-  const points = normalizePolyline(path);
-  const route = normalizePolyline(routeShapePolyline);
-  if (points.length < 2 || route.length < 2) {
-    return {
-      path: points,
-      prefixTrimmed: false,
-      suffixTrimmed: false,
-    };
-  }
-
-  const prefixRun = getEndpointRouteOverlapRun(points, route, env, false);
-  const suffixRun = getEndpointRouteOverlapRun(points, route, env, true);
-  let startIndex = prefixRun ? prefixRun.pointCount : 0;
-  let endIndex = suffixRun ? points.length - suffixRun.pointCount - 1 : points.length - 1;
-
-  startIndex = Math.max(0, Math.min(startIndex, points.length));
-  endIndex = Math.max(-1, Math.min(endIndex, points.length - 1));
-
-  const trimmed = startIndex <= endIndex ? points.slice(startIndex, endIndex + 1) : [];
-  const entryConnectorPolyline = prefixRun && trimmed.length >= 1
-    ? buildConnectorPolyline([
-      ...points.slice(0, startIndex),
-      trimmed[0],
-    ])
-    : null;
-  const exitConnectorPolyline = suffixRun && trimmed.length >= 1
-    ? buildConnectorPolyline([
-      trimmed[trimmed.length - 1],
-      ...points.slice(endIndex + 1),
-    ])
-    : null;
-  return {
-    path: trimmed.length >= 2 ? trimmed : [],
-    prefixTrimmed: Boolean(prefixRun),
-    suffixTrimmed: Boolean(suffixRun),
-    prefixOverlapMeters: prefixRun?.runLengthMeters || 0,
-    suffixOverlapMeters: suffixRun?.runLengthMeters || 0,
-    entryConnectorPolyline,
-    exitConnectorPolyline,
-  };
 }
 
 function samplePolyline(points, maxPoints = DEFAULT_MAX_POINTS) {
@@ -985,151 +739,6 @@ function isRouteFallbackEnabled(env = process.env, options = {}) {
   return env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED == null
     ? true
     : isTruthy(env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED);
-}
-
-function projectPointOntoPolyline(point, polyline) {
-  const normalizedPoint = normalizeCoordinate(point);
-  const line = normalizePolyline(polyline);
-  if (!normalizedPoint || line.length < 2) return null;
-
-  let best = null;
-  let cumulativeMeters = 0;
-  for (let index = 0; index < line.length - 1; index += 1) {
-    const start = line[index];
-    const end = line[index + 1];
-    const dx = end.longitude - start.longitude;
-    const dy = end.latitude - start.latitude;
-    const denominator = dx * dx + dy * dy;
-    const t = denominator > 0
-      ? Math.max(0, Math.min(1, (
-        (normalizedPoint.longitude - start.longitude) * dx +
-        (normalizedPoint.latitude - start.latitude) * dy
-      ) / denominator))
-      : 0;
-    const projectedPoint = {
-      latitude: start.latitude + t * dy,
-      longitude: start.longitude + t * dx,
-    };
-    const distanceMeters = haversineDistance(normalizedPoint, projectedPoint);
-    const segmentLengthMeters = haversineDistance(start, end);
-    const progressMeters = cumulativeMeters + segmentLengthMeters * t;
-    if (!best || distanceMeters < best.distanceMeters) {
-      best = {
-        index,
-        t,
-        projectedPoint,
-        distanceMeters,
-        progressMeters,
-      };
-    }
-    cumulativeMeters += segmentLengthMeters;
-  }
-  return best;
-}
-
-function buildPolylineSpanFromProjections(polyline, firstProjection, secondProjection) {
-  const line = normalizePolyline(polyline);
-  if (line.length < 2 || !firstProjection || !secondProjection) return [];
-  const lower = firstProjection.progressMeters <= secondProjection.progressMeters
-    ? firstProjection
-    : secondProjection;
-  const upper = lower === firstProjection ? secondProjection : firstProjection;
-  const span = [lower.projectedPoint];
-  for (let index = lower.index + 1; index <= upper.index; index += 1) {
-    span.push(line[index]);
-  }
-  span.push(upper.projectedPoint);
-  return dedupeConsecutivePoints(span);
-}
-
-function getLongestSeparatedRunMeters(path, routeShapePolyline, env = process.env) {
-  const points = normalizePolyline(path);
-  const route = normalizePolyline(routeShapePolyline);
-  if (points.length < 2 || route.length < 2) return 0;
-  const proximityMeters = parsePositiveInt(
-    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_PROXIMITY_METERS,
-    DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS,
-    5,
-    200
-  );
-  let longestRunMeters = 0;
-  let currentRunMeters = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const startSeparated = pointToPolylineDistance(points[index - 1], route) > proximityMeters;
-    const endSeparated = pointToPolylineDistance(points[index], route) > proximityMeters;
-    // Count only segments whose full pair of sampled endpoints is separated.
-    // This stays conservative when a matcher returns a long, sparse segment
-    // that crosses the route-separation threshold between its endpoints.
-    if (startSeparated && endSeparated) {
-      currentRunMeters += haversineDistance(points[index - 1], points[index]);
-      longestRunMeters = Math.max(longestRunMeters, currentRunMeters);
-    } else {
-      currentRunMeters = 0;
-    }
-  }
-  return longestRunMeters;
-}
-
-function buildBoundaryRefinedDisplayGeometry(path, routeTrim, options = {}) {
-  const trimmedPath = normalizePolyline(path);
-  const routeShape = normalizePolyline(options.routeShapePolyline);
-  const blocked = normalizePolyline(options.blockedPolyline);
-  if (
-    trimmedPath.length < 2 ||
-    routeShape.length < 2 ||
-    blocked.length < 2 ||
-    (!routeTrim?.prefixTrimmed && !routeTrim?.suffixTrimmed)
-  ) {
-    return null;
-  }
-
-  const minimumSeparatedRunMeters = parsePositiveInt(
-    options.env?.DETOUR_ROAD_MATCHING_DISPLAY_MIN_SEPARATED_RUN_METERS,
-    DEFAULT_DISPLAY_MIN_SEPARATED_RUN_METERS,
-    25,
-    1000
-  );
-  const separatedRunMeters = getLongestSeparatedRunMeters(
-    trimmedPath,
-    routeShape,
-    options.env
-  );
-  if (separatedRunMeters < minimumSeparatedRunMeters) return null;
-
-  const entryProjection = projectPointOntoPolyline(trimmedPath[0], routeShape);
-  const exitProjection = projectPointOntoPolyline(trimmedPath[trimmedPath.length - 1], routeShape);
-  if (!entryProjection || !exitProjection) return null;
-
-  const displayEntryPoint = entryProjection.projectedPoint;
-  const displayExitPoint = exitProjection.projectedPoint;
-  const displaySkippedSegmentPolyline = buildPolylineSpanFromProjections(
-    routeShape,
-    entryProjection,
-    exitProjection
-  );
-  if (displaySkippedSegmentPolyline.length < 2) return null;
-
-  const displayPath = dedupeConsecutivePoints([
-    displayEntryPoint,
-    ...trimmedPath,
-    displayExitPoint,
-  ]);
-  if (displayPath.length < 2) return null;
-  if (doesPathUseBlockedSegment(displayPath, displaySkippedSegmentPolyline, options.env)) {
-    return null;
-  }
-
-  return {
-    displayEntryPoint,
-    displayExitPoint,
-    displaySkippedSegmentPolyline,
-    displayDetourPolyline: displayPath,
-    displayBoundaryRefined: true,
-    displayBoundaryReason: 'trimmed-normal-route-approaches',
-    displaySeparatedRunMeters: Math.round(separatedRunMeters),
-    displayPrefixTrimmedMeters: Math.round(routeTrim.prefixOverlapMeters || 0),
-    displaySuffixTrimmedMeters: Math.round(routeTrim.suffixOverlapMeters || 0),
-  };
 }
 
 function prefersRouteMatching(options = {}, env = process.env) {
@@ -1575,23 +1184,7 @@ async function matchDetourGeometry(geometry, options = {}) {
     next.endpointMismatchAcceptedReason = primaryMatch.endpointMismatchAcceptedReason ?? null;
     next.detourPathLabel = DETOUR_PATH_LABEL;
     if (primaryMatch.displayBoundaryRefined === true) {
-      next.displayBoundaryRefined = true;
-      next.displayBoundaryReason = primaryMatch.displayBoundaryReason || null;
-      next.displayEntryPoint = primaryMatch.displayEntryPoint || null;
-      next.displayExitPoint = primaryMatch.displayExitPoint || null;
-      next.displaySkippedSegmentPolyline = primaryMatch.displaySkippedSegmentPolyline || null;
-      next.displaySkippedStops = Array.isArray(primaryMatch.displaySkippedStops)
-        ? primaryMatch.displaySkippedStops
-        : [];
-      next.displaySkippedStopIds = Array.isArray(primaryMatch.displaySkippedStopIds)
-        ? primaryMatch.displaySkippedStopIds
-        : [];
-      next.displaySkippedStopCodes = Array.isArray(primaryMatch.displaySkippedStopCodes)
-        ? primaryMatch.displaySkippedStopCodes
-        : [];
-      next.displaySeparatedRunMeters = primaryMatch.displaySeparatedRunMeters ?? null;
-      next.displayPrefixTrimmedMeters = primaryMatch.displayPrefixTrimmedMeters ?? null;
-      next.displaySuffixTrimmedMeters = primaryMatch.displaySuffixTrimmedMeters ?? null;
+      copyRefinedDisplayGeometry(next, primaryMatch);
     }
   } else {
     ROAD_MATCH_FIELDS.forEach((field) => {

@@ -79,6 +79,16 @@ GTFS-RT Feed (vehicle positions)
 └─────────────────────┘
 ```
 
+### Backend code ownership
+
+- `detourV2/detector.js` owns candidate confirmation, active-event lifecycle, GPS clearing, and the main per-tick workflow.
+- `detourV2/confirmedEventRefresh.js` owns the narrow rule that lets a fully confirmed short detour stay fresh from a bracketed on-route / marginal / on-route traversal. It does not confirm new events or lower the normal off-route threshold.
+- `detourRoadMatcher.js` owns road-matcher requests, confidence checks, fallbacks, and result orchestration.
+- `detour/boundaryRefinement.js` owns conservative normal-route trimming and the narrower rider-map boundaries used for Shanty Bay-type paths.
+- `detour/roadGeometry.js` contains the small coordinate and polyline calculations shared by the road matcher and boundary refinement.
+- `detour/displayGeometry.js` is the single field contract for refined public-map geometry. Lifecycle fields such as `entryPoint`, `exitPoint`, and `skippedSegmentPolyline` are deliberately outside this module.
+- `detourPublisher.js` owns the final Firestore document and uses the shared display-geometry contract instead of maintaining its own field list.
+
 ### Detector memory model
 
 The detector uses four backend memory/diagnostic layers. The client app does not feed map-icon movement back into detection; app location updates are display-only. GTFS-RT vehicle positions remain the detector evidence source.
@@ -709,9 +719,15 @@ Safety notes:
 ### Server (api-proxy/)
 - `detourWorker.js` — Worker orchestrator, supports interval and single-tick execution
 - `detourDetector.js` — Core detection algorithm, route-level aggregation, segment-level lifecycle, vehicle tracking
+- `detourV2/detector.js` — Event-window V2 detection, lifecycle, clearing, hydration, and per-tick orchestration
+- `detourV2/confirmedEventRefresh.js` — Confirmed short-detour heartbeat from bracketed marginal GPS traversals
 - `detour/projection.js` — Shared route-shape projection and per-vehicle projection diagnostics
 - `detour/candidateMemory.js` — Headway-aware candidate evidence memory for low-frequency confirmation
 - `detourGeometry.js` — Skipped segment + inferred path computation
+- `detourRoadMatcher.js` — Road-matching request and validation workflow
+- `detour/boundaryRefinement.js` — Refined rider-map boundary and blocked-segment safety calculations
+- `detour/roadGeometry.js` — Road-matcher coordinate and polyline helpers
+- `detour/displayGeometry.js` — Shared refined public-map geometry field contract
 - `detourPublisher.js` — Firestore publisher with write throttling
 - `detour/publisher/snapshotEvents.js` — Active-detour snapshot and history event shaping
 - `activeDetourSnapshotStore.js` — Loads published `activeDetours` snapshots for cold-start hydration/deletion safety
@@ -730,6 +746,9 @@ Safety notes:
 ### Tests
 - `api-proxy/__tests__/detourDetector.test.js` — detection logic, hysteresis, multi-vehicle behavior, same-route multi-segment lifecycle
 - `api-proxy/__tests__/detourGeometry.test.js` — shape analysis, simplification, confidence, segment splitting
+- `api-proxy/__tests__/confirmedEventRefresh.test.js` — confirmed short-detour refresh state rules
+- `api-proxy/__tests__/boundaryRefinement.test.js` — refined display-boundary and closed-segment safety rules
+- `api-proxy/__tests__/displayGeometry.test.js` — shared refined display field clearing and copying
 - `api-proxy/__tests__/detourPublisher.test.js` — snapshots, throttling, history events
 - `api-proxy/__tests__/detourIntegration.test.js` — full pipeline, state transitions, one-route-two-segment publishing
 - `src/__tests__/detourOverlays.test.js` — overlay derivation, state filtering
