@@ -124,9 +124,69 @@ describe('detourService normalization helpers', () => {
       detourEventId: 'detour-event-8-yonge',
     });
   });
+
+  test('uses refined display boundaries without replacing backend evidence fields', () => {
+    const segment = normalizeDetourSegment({
+      displayBoundaryRefined: true,
+      entryPoint: { latitude: 44.3982, longitude: -79.6543 },
+      exitPoint: { latitude: 44.3953, longitude: -79.6648 },
+      skippedSegmentPolyline: [
+        { latitude: 44.3982, longitude: -79.6543 },
+        { latitude: 44.3953, longitude: -79.6648 },
+      ],
+      skippedStopIds: ['old-stop'],
+      displayEntryPoint: { lat: 44.3971, lon: -79.6571 },
+      displayExitPoint: { lat: 44.3952, lon: -79.6621 },
+      displaySkippedSegmentPolyline: [
+        { lat: 44.3971, lon: -79.6571 },
+        { lat: 44.3952, lon: -79.6621 },
+      ],
+      displaySkippedStopIds: ['display-stop'],
+      displaySkippedStopCodes: ['959'],
+      displaySkippedStops: [{ stopId: 'display-stop', stopCode: '959' }],
+    });
+
+    expect(segment.entryPoint).toEqual({ latitude: 44.3971, longitude: -79.6571 });
+    expect(segment.exitPoint).toEqual({ latitude: 44.3952, longitude: -79.6621 });
+    expect(segment.skippedSegmentPolyline).toEqual([
+      { latitude: 44.3971, longitude: -79.6571 },
+      { latitude: 44.3952, longitude: -79.6621 },
+    ]);
+    expect(segment.skippedStopIds).toEqual(['display-stop']);
+    expect(segment.displayEntryPoint).toEqual({ lat: 44.3971, lon: -79.6571 });
+  });
 });
 
 describe('mapActiveDetourDoc', () => {
+  test('uses top-level refined display geometry for rider maps', () => {
+    const mapped = mapActiveDetourDoc('8B:event', {
+      routeId: '8B',
+      displayBoundaryRefined: true,
+      entryPoint: { latitude: 44.3982, longitude: -79.6543 },
+      exitPoint: { latitude: 44.3953, longitude: -79.6648 },
+      skippedSegmentPolyline: [
+        { latitude: 44.3982, longitude: -79.6543 },
+        { latitude: 44.3953, longitude: -79.6648 },
+      ],
+      displayEntryPoint: { latitude: 44.3971, longitude: -79.6571 },
+      displayExitPoint: { latitude: 44.3952, longitude: -79.6621 },
+      displaySkippedSegmentPolyline: [
+        { latitude: 44.3971, longitude: -79.6571 },
+        { latitude: 44.3952, longitude: -79.6621 },
+      ],
+      displaySkippedStopIds: ['959'],
+      displaySkippedStopCodes: ['959'],
+      displaySkippedStops: [{ stopId: '959', stopCode: '959' }],
+    });
+
+    expect(mapped.entryPoint).toEqual({ latitude: 44.3971, longitude: -79.6571 });
+    expect(mapped.exitPoint).toEqual({ latitude: 44.3952, longitude: -79.6621 });
+    expect(mapped.skippedSegmentPolyline).toEqual([
+      { latitude: 44.3971, longitude: -79.6571 },
+      { latitude: 44.3952, longitude: -79.6621 },
+    ]);
+    expect(mapped.skippedStopCodes).toEqual(['959']);
+  });
 
   test('maps event-window detour documents', () => {
     const detour = mapActiveDetourDoc('8A:shape-1:100-300', {

@@ -48,11 +48,11 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-015 | Missed one-sample short detour | A brief off-route movement visible for only one GTFS-RT sample should become backend candidate evidence and be explainable through per-vehicle projection diagnostics. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 4, 12, 14 | Covered | Publishing too aggressively from one-bus GPS noise |
 | DET-016 | Short detour sampling cadence | If the GTFS-RT feed updates about every 30 seconds, the detector should support true half-minute sampling without keeping a Cloud Run request open. | `api-proxy/__tests__/detourOps.test.js`, `api-proxy/__tests__/detourOffsetTasks.test.js`, `api-proxy/__tests__/detourRunLock.test.js`, `api-proxy/__tests__/detourRoutes.test.js` | QA section 13 | Covered | Extra scheduler/task overlap; duplicate feed snapshots; cost from sleeping requests |
 | DET-017 | Unanchored no-stop geometry | Reject rider-facing geometry segments that have no entry stop, no exit stop, no skipped route segment, and explicit empty skipped/affected stop fields. Keep any valid anchored segment in the same route document. | `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Over-filtering older geometry that omitted stop-impact fields instead of explicitly proving none exist |
-| DET-018 | Stale rider visibility | Keep confirmed active alerts public until normal-route GPS proof or operator action clears them. Treat `staleForReview` and stale-mixed evidence as detail-safety metadata: they may hide paths and stops but not the alert. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered, needs live deployment check | Alert-only records must not accidentally restore unsafe geometry |
+| DET-018 | Stale rider visibility | Keep unresolved records in the backend until normal-route GPS proof or operator action clears them, but quarantine stale GPS-only alerts from riders. Official notices do not override the auto-detection evidence gate. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourVisibility.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 11, 12 | Covered, needs live deployment check | Hiding a real unannounced detour after the evidence window versus exposing old false alerts |
 | DET-019 | Shared physical detour event cards | When several active route documents describe the same physical closure, publish a shared event ID so the alert strip shows one event card with multiple routes. Keep route-specific detour geometry and map overlays separate. | `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourEvents.test.js` | QA sections 2, 7, 9 | Covered | Over-grouping route variants that have no physical geometry, or nearby but unrelated downtown closures |
 | DET-020 | Loop-route terminal trip rollover | When a loop route starts and ends at the same terminal, a bus changing GTFS trips must not clear the previous detour segment by itself. The old vehicle association should drop, but clearing still needs valid normal-route proof outside that rollover context. | `api-proxy/__tests__/detourDetector.test.js` | QA sections 10, 13, 14 | Covered | Suppressing a legitimate clear if the only available proof is the same bus immediately after a terminal rollover |
 | DET-021 | Tiny-span long out-and-back geometry | Reject and do not preserve a long likely/inferred path when the identified closed span is tiny and no skipped route segment exists. | `api-proxy/__tests__/segmentValidity.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA section 5 | Covered | Hiding geometry temporarily if a real closure cannot yet be anchored to a credible skipped segment |
-| DET-022 | Geometryless stale active detour | Keep confirmed alerts public with `alertVisible=true` while geometry stays suppressed with `riderVisible=false`. Do not infer stops or a path, and do not auto-clear from generic normal service; wait for affected-segment traversal or operator action. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 10, 11, 12 | Covered, policy corrected | Alert-only records must be clearly worded and must not restore uncertain details |
+| DET-022 | Geometryless stale active detour | Keep the record for operations, but set `alertVisible=false`. Do not infer stops or a path, do not publish it from an official notice alone, and do not auto-clear from generic normal service. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 10, 11, 12 | Covered, policy corrected | A real unannounced detour remains hidden until GPS produces meaningful bounded geometry |
 | DET-023 | Route-scoped stop impacts | A skipped stop is not treated as globally closed when another route still serves it; the rider UI says "not served by Route X" and "still served by Route Y" where known. | `api-proxy/__tests__/detourGeometry.test.js`, `src/__tests__/stopNoticeUtils.test.js`, `src/__tests__/stopClosureMapUtils.test.js`, `src/__tests__/useAffectedStops.test.js`, `src/__tests__/detourIntegration.test.js` | QA sections 6, 7, 9 | Covered | Accidentally hiding valid arrivals or making riders think a shared stop is closed to every route |
 | DET-024 | Global learned persistent geometry | Store trusted learned GPS geometry globally by physical detour fingerprint, while keeping route-specific publish and clear rules. Global geometry can seed rendering/restart recovery only after a route has already published or has a prior route persistent record. | `api-proxy/__tests__/detourDetector.test.js`, `api-proxy/__tests__/persistentDetourStore.test.js` | QA sections 2, 13, 14 | Covered | Accidentally treating global geometry as publish proof, or confusing GPS evidence time with geometry age |
 | DET-025 | Rider visibility flapping | Rider-facing visibility must not toggle merely because a vehicle enters or leaves the current GTFS-RT snapshot. Public visibility still requires the normal evidence and geometry gates. Once a configured, road-matched, or sufficiently dense GPS path is trusted and public, keep its last trusted geometry visible between buses until normal-route GPS clears it or new evidence proves the geometry unsafe. | `api-proxy/__tests__/staleClear.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `src/__tests__/detourVisibility.test.js` | QA sections 2, 3, 4, 11 | Covered, needs live Route 8B/15B recheck after deploy | Preserving a weak mixed path versus hiding a real detour every time the confirming bus leaves the corridor |
@@ -98,13 +98,51 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-065 | Candidate evidence crosses service days | Expire unconfirmed V2 candidate points after the configured 3h limit. Old points must not combine with a later bus or service day to publish a rider alert. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 4, 12, 14 | Covered | Setting the retention window too short for unusually long headways |
 | DET-066 | Clear samples cross service days | Require one time-contiguous same-trip traversal for individual clear proof. Split tracks on service date or after a 15min sample gap. | `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 10, 13, 14 | Covered | A severe live-feed gap delaying a legitimate clear |
 | DET-067 | V2 Firestore identity differs from physical geometry ID | Hydrate lifecycle state by the Firestore document/event-window ID. Preserve `detourEventId` only as physical geometry metadata so same-route events do not collapse or duplicate. | `api-proxy/__tests__/activeDetourSnapshotStore.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 2, 10, 13, 14 | Covered | Older migration records with inconsistent IDs need a live cleanup check |
+| DET-068 | Scheduled-shape projection, equivalent-shape confirmation, and same-route event isolation | For known trips, project against the trusted baseline copy of the scheduled GTFS shape so one continuous detour trace cannot switch between sibling route variants. Fall back safely when the mapping is unusable. A two-reading short detour may confirm only from two independent complete departure/rejoin transitions with strong off-route points and at least 100m of shared closure. Physically equivalent same-route shapes may share that proof only after safe reprojection; distant corridors remain separate. Keep distant same-route event-window documents on separate shared physical event IDs. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 4, 7, 9, 14, 15 | Covered, needs live Route 8B recheck after deploy | Incorrect or missing trip mappings must fall back safely; incomplete transitions must not reduce the three-reading gate; shape equivalence must not combine opposite directions or nearby independent closures |
 | DET-068 | Hidden record absent from one detector tick | Retain backend-only records unless normal-route GPS, obsolete-shape GPS proof, explicit supersession, baseline replacement, or an operator action provides a valid removal reason. | `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 10, 11, 12 | Covered | Unresolved hidden records require operator review rather than silent deletion |
 | DET-069 | Runtime persistence failure reported as success | Propagate runtime-state write or size failures into the worker tick failure path so monitoring and retry logic see the lifecycle incident. | `api-proxy/__tests__/detourRuntimeStateStore.test.js`, `api-proxy/__tests__/detourWorkerColdStart.test.js` | QA sections 10, 13, 14 | Covered | Repeated storage failure still requires operational response |
 | DET-070 | Obsolete shape disappears without GPS clear proof | A removed GTFS shape can suppress stale input geometry, but the publisher must retain the active Firestore event until the detector supplies conservative normal-route GPS proof or another explicit removal reason. | `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js` | QA sections 10, 13, 14 | Covered | Obsolete records may remain for operator review when current route vehicles cannot provide safe proof |
 | DET-071 | Publisher mutation failure reported as success | Active-detour writes, retained-record writes, deletions, and their history events must reject the publish cycle when Firestore fails so the worker reports a failed tick and retries idempotently. | `api-proxy/__tests__/detourPublisher.test.js` | QA sections 10, 13, 14 | Covered | A long Firestore outage still requires operational response; a successful active write followed by a failed history write is retried |
 | DET-072 | Hydration read failure cached as empty state | Distinguish a missing Firestore document from a failed read. Runtime and active-snapshot read failures must fail the tick and clear their local promise cache so the next tick retries instead of proceeding with a false empty state. | `api-proxy/__tests__/detourRuntimeStateStore.test.js`, `api-proxy/__tests__/activeDetourSnapshotStore.test.js` | QA sections 10, 13, 14 | Covered | Repeated startup read failures keep the worker unhealthy until Firestore recovers |
+| DET-073 | Stale unresolved records exposed as public alerts | Separate backend retention from rider-alert eligibility. Publish auto-detour alerts only with recent dense GPS evidence and meaningful bounded geometry. Official notices may enrich a qualified event but never create or preserve it. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 4, 5, 11, 14 | Covered, needs deployed Route 8A/8B/10 verification | Over-filtering low-frequency unannounced detours or allowing notice data to bypass auto-detection |
+| DET-074 | Parallel shared-route detour truncates one closure boundary | Derive boundaries from two-trip last-on-route/first-rejoin consensus, render one time-ordered same-trip trace, and reconcile a stronger shared physical boundary only after closed-polyline overlap and route-projection safeguards. Keep the 150m final path gate. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 4, 5, 7, 9, 14 | Covered, needs live Route 10/11 recheck | Sparse 30-60 second sampling can still delay endpoint consensus; a route without two agreeing transitions retains the safer projection fallback |
+| DET-075 | Short nearby detour has broad GPS boundaries and a safe road-matched middle | Keep detector evidence/clear boundaries unchanged, but refine rider display boundaries to the road-level divergence/rejoin when the middle path has at least 75m of continuous separation, follows the trusted trace, and avoids the clipped closed interior. Publish the alert without a line if no safe middle remains. A bracketed 25-40m same-trip pass may refresh only an already-confirmed matching event. | `api-proxy/__tests__/detourRoadMatcher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 4, 5, 7, 9, 14 | Covered locally, needs live Route 8B Shanty Bay recheck after deploy | Refined public boundaries must not leak into detector hydration/clearing; a short path that never separates meaningfully must remain hidden |
 
 ## Recorded issues
+
+### DET-075A — Shanty Bay path rejected after safe middle was reconnected to broad GPS boundaries
+
+- Date observed: 2026-07-17
+- Route/direction: Route `8B` southbound
+- What happened: the Shanty Bay event qualified as a rider alert, but its likely path was suppressed as `road-match-closed-overlap`.
+- Live replay evidence:
+  - the five-point GPS trace matched Blake Street with about `0.986` OSRM confidence
+  - each raw GPS point was about 3-10m from the matched line
+  - the road matcher trimmed the regular-route approach and rejoin, and the remaining middle path passed the blocked-interior check
+  - the publisher stitched the broad normal-route approaches back onto the line; the final stitched check then rejected it as `published-blocked-overlap`
+- Root cause: one set of entry/exit coordinates was serving two different purposes: conservative detector evidence bounds and precise rider-map divergence/rejoin bounds.
+- Fix:
+  - keep detector entry/exit and clear windows unchanged
+  - derive separate `displayEntryPoint`, `displayExitPoint`, `displaySkippedSegmentPolyline`, and display stop fields from the safely separated road-matched middle
+  - publish only that middle path when it has sufficient continuous separation; otherwise keep the alert and hide the line
+  - allow a bracketed marginal pass to refresh a confirmed event without weakening new-event confirmation
+- Regression criteria: Shanty Bay shows a Blake Street likely path with refined closed-segment boundaries; true closed-road reuse remains suppressed; normal Route 8A terminal circulation and nearby parallel-road GPS drift do not create new events.
+
+### DET-074A — Route 10 western closure boundary truncated while Route 11 was accurate
+
+- Date observed: 2026-07-16
+- Route(s): `10`, `11`
+- Ground truth supplied for validation only: east `44.4098889, -79.7080278`; west `44.4014167, -79.7291389`
+- What happened: Route 10's east endpoint was within about 14m, but its west endpoint was about 303m short because the first off-route GPS point projected inward on the parallel regular-route shape. Route 11 was within about 39m east and 13m west. The inferred paths began about 193m and 233m from their respective detected boundaries, so the unchanged 150m publisher safety gate correctly suppressed them as `detour-boundary-gap`.
+- Root cause: V2 bounded the closure from off-route nearest projections, did not persist departure/rejoin transition samples, sorted candidate points from several trips by route progress, and grouped the shared event without reconciling physical endpoints.
+- Fix:
+  - persist per-trip last-on-route and first-rejoin transition evidence across scheduled reloads
+  - carry transition evidence across adjacent event candidates when one continuous off-route run changes candidate windows
+  - require two independent trip identities before moving either endpoint from the projection fallback
+  - construct the inferred alternate from one coherent time-ordered trip trace
+  - allow the stronger shared-route endpoint result to project onto a sibling route only with strong closed-polyline overlap and endpoint proximity
+  - keep the 150m final path-boundary gate and keep official notices out of detection proof
+- Regression criteria: both Route 10/11 endpoints within about 50m of supplied ground truth after sufficient transition evidence; no truncated Route 10 segment; no multi-trip zigzag; no PDF/notice dependency.
 
 ### DET-070A — Route 101 combined non-consecutive Georgian/Gallie trips
 
@@ -971,6 +1009,36 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `API-PROXY-OPERATIONS.md`
   - this matrix
 - Remaining risk: the 90-minute visibility window is intentionally conservative. Monitor low-frequency routes and operator-reviewed cases before shortening it.
+
+### DET-068A — small Route 8B detour split across sibling shapes
+
+- Date/time observed: 2026-07-16 around 11:00 AM ET
+- Environment: live production runtime state, Firestore, GTFS, and Cloud Run decision-log review
+- Route(s): `8B`
+- What happened: a continuous Route 8B trip near `44.3947222,-79.6571389` produced several backend candidates. The fragments were hidden as `span-too-short` or `stale-mixed-evidence`, so riders did not receive the small detour path.
+- What should have happened: the known trip should have remained projected against its scheduled trusted baseline shape, producing one coherent closure with the normal safety gates intact.
+- Evidence:
+  - the same trip was mapped by GTFS to shape `9567c898-6050-4bc2-a182-a81164b99a34`
+  - V2 instead selected sibling shapes `d1c4c82f-bc2c-4c96-9360-80bd4ff1645c` and `8816892e-cd42-4495-bebd-1aef48d3dfdc` for successive samples
+  - the fragments measured about 52m and 69m, while scheduled-shape entry/rejoin progress covered about 840m
+  - all four published Route 8B event-window documents inherited one shared event ID even though the unrelated large event was about 4.2km away
+- Classification:
+  - detection threshold / projection
+  - publishing / history
+- Root cause:
+  - the worker passed GTFS trip mapping into V2, but V2 ignored it unless a synthetic/test vehicle already carried `tripShapeId`
+  - shared-event assignment used route-and-segment-index keys, which collide when V2 publishes more than one event-window document for the same route
+- Fix:
+  - resolve the scheduled shape from GTFS trip mapping when route and trusted baseline membership are valid; otherwise retain nearest-shape fallback
+  - allow two-point confirmation only after two independent complete same-shape departure/rejoin transitions agree on direction and share a meaningful closed interval
+  - safely coalesce complete-transition evidence across physically equivalent scheduled shapes while keeping distant same-route corridors and rider-visible events separate
+  - prevent the schedule-aware confirmation window from shrinking during the same service day
+  - scope shared-event assignments by publish/event-window ID and segment index
+  - retain the 100m closure-span gate and existing multi-trip confirmation
+- Tests added/updated:
+  - `api-proxy/__tests__/detourV2Detector.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+- Remaining risk: live Route 8B evidence must traverse the corridor again after deployment before the corrected coherent event can replace hidden fragments; no active record is deleted without the existing supersede or GPS-clear rules.
 
 ## Status definitions
 

@@ -15,8 +15,147 @@ const {
   hasEventWindowDetourForRoute,
   alignEventWindowSegmentSharedMetadata,
   hasEventWindowSegmentSharedMetadataMismatch,
+  reconcileSharedEventBoundariesForPublish,
+  deriveSharedDetourEventAssignments,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
+
+describe('same-route physical event assignment', () => {
+  test('keeps distant event-window documents on the same route separate', () => {
+    const assignments = deriveSharedDetourEventAssignments([
+      {
+        publishId: '8B:small:4600-5400',
+        routeId: '8B',
+        segmentIndex: 0,
+        detourEventId: 'small-event',
+        skippedSegmentPolyline: [
+          { latitude: 44.3974, longitude: -79.6564 },
+          { latitude: 44.3952, longitude: -79.6663 },
+        ],
+      },
+      {
+        publishId: '8B:large:11700-12600',
+        routeId: '8B',
+        segmentIndex: 0,
+        detourEventId: 'large-event',
+        skippedSegmentPolyline: [
+          { latitude: 44.4065, longitude: -79.7082 },
+          { latitude: 44.4099, longitude: -79.7079 },
+        ],
+      },
+    ]);
+
+    const small = assignments.byPublish.get('8B:small:4600-5400');
+    const large = assignments.byPublish.get('8B:large:11700-12600');
+    expect(small.sharedDetourEventId).toBe('small-event');
+    expect(large.sharedDetourEventId).toBe('large-event');
+    expect(small.sharedDetourEventId).not.toBe(large.sharedDetourEventId);
+  });
+});
+
+describe('shared physical boundary reconciliation', () => {
+  const groundTruthEast = { latitude: 44.4098889, longitude: -79.7080278 };
+  const groundTruthWest = { latitude: 44.4014167, longitude: -79.7291389 };
+  const interpolate = (start, end, ratio) => ({
+    latitude: start.latitude + (end.latitude - start.latitude) * ratio,
+    longitude: start.longitude + (end.longitude - start.longitude) * ratio,
+  });
+
+  function makeDetour(routeId, shapeId, westLongitude, consensus) {
+    const westRatio = (westLongitude - groundTruthEast.longitude) /
+      (groundTruthWest.longitude - groundTruthEast.longitude);
+    const east = groundTruthEast;
+    const middle = interpolate(groundTruthEast, groundTruthWest, westRatio / 2);
+    const west = interpolate(groundTruthEast, groundTruthWest, westRatio);
+    const path = [
+      { ...east, latitude: east.latitude + 0.001 },
+      { ...middle, latitude: middle.latitude + 0.001 },
+      { ...west, latitude: west.latitude + 0.001 },
+    ];
+    const segment = {
+      shapeId,
+      entryPoint: east,
+      exitPoint: west,
+      skippedSegmentPolyline: [east, middle, west],
+      inferredDetourPolyline: path,
+      canShowDetourPath: true,
+      coherentTripSignature: `${routeId}-trip`,
+      boundaryConsensus: consensus,
+      evidencePointCount: 8,
+    };
+    return {
+      eventId: `${routeId}-event`,
+      routeId,
+      geometry: {
+        ...segment,
+        segments: [segment],
+      },
+    };
+  }
+
+  test('projects the stronger shared closure endpoints onto a truncated sibling route', () => {
+    const targetShape = [
+      groundTruthEast,
+      interpolate(groundTruthEast, groundTruthWest, 0.5),
+      groundTruthWest,
+    ];
+    const detours = {
+      'route-10-event': makeDetour('10', 'shape-10', -79.7261, {
+        lowerSignatureCount: 2,
+        upperSignatureCount: 0,
+      }),
+      'route-11-event': makeDetour('11', 'shape-11', groundTruthWest.longitude, {
+        lowerSignatureCount: 2,
+        upperSignatureCount: 2,
+      }),
+    };
+    const shapes = new Map([
+      ['shape-10', targetShape],
+      ['shape-11', targetShape],
+    ]);
+
+    reconcileSharedEventBoundariesForPublish(detours, shapes);
+
+    const route10 = detours['route-10-event'].geometry;
+    expect(route10.sharedBoundaryReconciled).toBe(true);
+    expect(route10.sharedBoundarySourceRouteId).toBe('11');
+    expect(route10.entryPoint.latitude).toBeCloseTo(groundTruthEast.latitude, 5);
+    expect(route10.entryPoint.longitude).toBeCloseTo(groundTruthEast.longitude, 5);
+    expect(route10.exitPoint.latitude).toBeCloseTo(groundTruthWest.latitude, 5);
+    expect(route10.exitPoint.longitude).toBeCloseTo(groundTruthWest.longitude, 5);
+    expect(route10.inferredDetourPolyline[0]).toEqual(route10.entryPoint);
+    expect(route10.inferredDetourPolyline.at(-1)).toEqual(route10.exitPoint);
+    expect(route10.segments[0].sharedBoundaryConsensus).toEqual(expect.objectContaining({
+      lowerSignatureCount: 2,
+      upperSignatureCount: 2,
+    }));
+  });
+
+  test('does not reconcile from a route without two-trip endpoint consensus', () => {
+    const shape = [
+      groundTruthEast,
+      interpolate(groundTruthEast, groundTruthWest, 0.5),
+      groundTruthWest,
+    ];
+    const detours = {
+      'route-10-event': makeDetour('10', 'shape-10', -79.7261, {
+        lowerSignatureCount: 0,
+        upperSignatureCount: 0,
+      }),
+      'route-11-event': makeDetour('11', 'shape-11', groundTruthWest.longitude, {
+        lowerSignatureCount: 1,
+        upperSignatureCount: 1,
+      }),
+    };
+
+    reconcileSharedEventBoundariesForPublish(detours, new Map([
+      ['shape-10', shape],
+      ['shape-11', shape],
+    ]));
+
+    expect(detours['route-10-event'].geometry.sharedBoundaryReconciled).not.toBe(true);
+  });
+});
 
 describe('buildDetourEventId', () => {
   test('uses the skipped/closed segment so opposite route directions share an event id', () => {
@@ -1802,6 +1941,96 @@ describe('publishDetours event ids', () => {
       .not.toBe(writes['activeDetours/12B'].sharedDetourEventId);
   });
 
+  test('publishes distant same-route event windows with separate shared event ids', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-07-16T15:00:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => ({ orderBy: () => ({ limit: () => emptyQuery }), limit: () => emptyQuery }),
+          };
+        },
+        batch: () => ({ delete: () => {}, commit: async () => {} }),
+      }),
+    }));
+
+    const smallPath = [
+      { latitude: 44.3974, longitude: -79.6564 },
+      { latitude: 44.3960, longitude: -79.6601 },
+      { latitude: 44.3952, longitude: -79.6663 },
+    ];
+    const largePath = [
+      { latitude: 44.4065, longitude: -79.7082 },
+      { latitude: 44.4081, longitude: -79.7066 },
+      { latitude: 44.4099, longitude: -79.7079 },
+    ];
+    const makeEvent = (eventId, path) => ({
+      eventId,
+      routeId: '8B',
+      detectedAt: new Date(now - 30 * 60 * 1000),
+      lastSeenAt: new Date(now),
+      latestGpsEvidenceAt: now,
+      vehicleCount: 2,
+      uniqueVehicleCount: 2,
+      currentVehicleCount: 1,
+      state: 'active',
+      vehiclesOffRoute: new Set(['bus']),
+      eventWindow: {
+        routeId: '8B',
+        shapeId: eventId.includes('small') ? 'small-shape' : 'large-shape',
+        coreStartProgressMeters: 100,
+        coreEndProgressMeters: 900,
+        frozen: true,
+      },
+      geometry: {
+        confidence: 'high',
+        evidencePointCount: 8,
+        lastEvidenceAt: now,
+        canShowDetourPath: true,
+        segments: [{
+          confidence: 'high',
+          evidencePointCount: 8,
+          canShowDetourPath: true,
+          entryPoint: path[0],
+          exitPoint: path[path.length - 1],
+          skippedSegmentPolyline: path,
+          inferredDetourPolyline: path,
+        }],
+      },
+    });
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '8B:small-shape:4600-5400': makeEvent('8B:small-shape:4600-5400', smallPath),
+      '8B:large-shape:11700-12600': makeEvent('8B:large-shape:11700-12600', largePath),
+    }, {
+      now,
+      storageConfig: {
+        detourVersion: 'v2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
+      },
+    });
+
+    const small = writes['activeDetourEventsV2/8B:small-shape:4600-5400'];
+    const large = writes['activeDetourEventsV2/8B:large-shape:11700-12600'];
+    expect(small.sharedDetourEventId).toBeTruthy();
+    expect(large.sharedDetourEventId).toBeTruthy();
+    expect(small.sharedDetourEventId).not.toBe(large.sharedDetourEventId);
+    expect(small.segments[0].sharedDetourEventId).toBe(small.sharedDetourEventId);
+    expect(large.segments[0].sharedDetourEventId).toBe(large.sharedDetourEventId);
+  });
+
   test('keeps old renderable detours rider-visible until GPS clear proof', async () => {
     jest.resetModules();
     const writes = {};
@@ -2660,22 +2889,111 @@ describe('publishDetours event ids', () => {
     expect(deletes).toEqual([]);
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('insufficient-geometry');
-    expect(written.alertVisible).toBe(true);
-    expect(written.alertVisibilityReason).toBe('active-detour-details-unavailable');
+    expect(written.alertVisible).toBe(false);
+    expect(written.alertVisibilityReason).toBe('insufficient-alert-geometry');
     expect(written.staleForReview).toBe(true);
     expect(written.riderPublishGates).toMatchObject({
       riderAlert: {
-        passed: true,
-        reason: 'active-detour-details-unavailable',
+        passed: false,
+        reason: 'insufficient-alert-geometry',
       },
       likelyPath: {
         passed: false,
-        reason: 'path-not-trusted',
+        reason: 'rider-hidden',
       },
       skippedStops: {
         passed: false,
-        reason: 'no-explicit-skipped-stops',
+        reason: 'rider-hidden',
       },
+    });
+  });
+
+  test('does not publish a stale path-hidden detour from an official notice alone', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-07-15T17:30:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({ delete: () => {}, commit: async () => {} }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '8B:shape:4600-4700': {
+        routeId: '8B',
+        eventWindow: {
+          geoBounds: {
+            minLatitude: 44.3955,
+            maxLatitude: 44.3978,
+            minLongitude: -79.6599,
+            maxLongitude: -79.6568,
+          },
+          geoCenter: { latitude: 44.3966, longitude: -79.6583 },
+        },
+        detectedAt: new Date(now - 8 * 24 * 60 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        latestGpsEvidenceAt: now - 4 * 24 * 60 * 60 * 1000,
+        vehicleCount: 47,
+        uniqueVehicleCount: 47,
+        currentVehicleCount: 0,
+        state: 'active',
+        geometry: {
+          confidence: 'high',
+          evidencePointCount: 15,
+          lastEvidenceAt: now - 4 * 24 * 60 * 60 * 1000,
+          canShowDetourPath: false,
+          geometryTrustBlockedReason: 'stale-mixed-evidence',
+          segments: [{
+            confidence: 'high',
+            evidencePointCount: 15,
+            canShowDetourPath: false,
+            geometryTrustBlockedReason: 'stale-mixed-evidence',
+            entryPoint: null,
+            exitPoint: null,
+            spanMeters: 108,
+          }],
+        },
+      },
+    }, {
+      now,
+      noticeStopImpacts: [{
+        status: 'active',
+        archivedAt: null,
+        startsAt: now - 9 * 24 * 60 * 60 * 1000,
+        endsAt: now + 50 * 24 * 60 * 60 * 1000,
+        sourceNewsId: '1679',
+        affectedRoutes: ['8B'],
+        stopClosureCandidates: [{
+          stopCode: '959',
+          latitude: 44.39634709,
+          longitude: -79.65679556,
+        }],
+      }],
+      gtfsData: {},
+    });
+
+    expect(writes['activeDetours/8B:shape:4600-4700']).toMatchObject({
+      alertVisible: false,
+      alertVisibilityReason: 'insufficient-alert-geometry',
+      riderVisible: false,
     });
   });
 
@@ -2743,8 +3061,8 @@ describe('publishDetours event ids', () => {
     expect(deletes).toEqual([]);
     expect(written.riderVisible).toBe(false);
     expect(written.riderVisibilityReason).toBe('stale-mixed-evidence');
-    expect(written.alertVisible).toBe(true);
-    expect(written.alertVisibilityReason).toBe('active-detour-details-unavailable');
+    expect(written.alertVisible).toBe(false);
+    expect(written.alertVisibilityReason).toBe('insufficient-alert-geometry');
     expect(written.staleForReview).toBe(true);
   });
 
@@ -3449,6 +3767,71 @@ describe('enforceGeometryTrustGate', () => {
       reason: 'detour-boundary-gap',
       boundaryMaxGapMeters: expect.any(Number),
       boundaryAllowedGapMeters: 150,
+    }));
+  });
+
+  test('checks a boundary-refined path against its display boundaries', () => {
+    const evidenceEntryPoint = { latitude: 44.3400, longitude: -79.7100 };
+    const evidenceExitPoint = { latitude: 44.3500, longitude: -79.6900 };
+    const displayEntryPoint = { latitude: 44.3440, longitude: -79.7040 };
+    const displayExitPoint = { latitude: 44.3470, longitude: -79.6960 };
+    const displayPath = [
+      displayEntryPoint,
+      { latitude: 44.3460, longitude: -79.7000 },
+      displayExitPoint,
+    ];
+
+    const result = enforceGeometryTrustGate({
+      canShowDetourPath: true,
+      segments: [{
+        canShowDetourPath: true,
+        entryPoint: evidenceEntryPoint,
+        exitPoint: evidenceExitPoint,
+        displayBoundaryRefined: true,
+        displayEntryPoint,
+        displayExitPoint,
+        displaySkippedSegmentPolyline: [displayEntryPoint, displayExitPoint],
+        likelyDetourPolyline: displayPath,
+        inferredDetourPolyline: displayPath,
+      }],
+    });
+
+    expect(result.canShowDetourPath).toBe(true);
+    expect(result.likelyDetourPolyline).toEqual(displayPath);
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: true,
+      displayBoundaryRefined: true,
+      likelyDetourPolyline: displayPath,
+    }));
+    expect(result.segments[0].geometryTrustBlockedReason).not.toBe('detour-boundary-gap');
+  });
+
+  test('clears stale display boundaries when a detour path is no longer trusted', () => {
+    const result = enforceGeometryTrustGate({
+      canShowDetourPath: false,
+      segments: [{
+        canShowDetourPath: false,
+        displayBoundaryRefined: true,
+        displayEntryPoint: { latitude: 44.3440, longitude: -79.7040 },
+        displayExitPoint: { latitude: 44.3470, longitude: -79.6960 },
+        displaySkippedSegmentPolyline: [
+          { latitude: 44.3440, longitude: -79.7040 },
+          { latitude: 44.3470, longitude: -79.6960 },
+        ],
+        likelyDetourPolyline: [
+          { latitude: 44.3440, longitude: -79.7040 },
+          { latitude: 44.3470, longitude: -79.6960 },
+        ],
+      }],
+    });
+
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      canShowDetourPath: false,
+      likelyDetourPolyline: null,
+      displayBoundaryRefined: false,
+      displayEntryPoint: null,
+      displayExitPoint: null,
+      displaySkippedSegmentPolyline: null,
     }));
   });
 
@@ -4867,6 +5250,17 @@ describe('publishDetours road-match backfill persistence', () => {
 
     const matchDetourGeometry = jest.fn(async (geo) => ({
       ...geo,
+      displayBoundaryRefined: true,
+      displayBoundaryReason: 'trimmed-normal-route-approaches',
+      displayEntryPoint: snappedPath[0],
+      displayExitPoint: snappedPath[snappedPath.length - 1],
+      displaySkippedSegmentPolyline: closedPath,
+      displaySkippedStops: [{ stopId: 'display-stop', stopCode: '500' }],
+      displaySkippedStopIds: ['display-stop'],
+      displaySkippedStopCodes: ['500'],
+      displaySeparatedRunMeters: 420,
+      displayPrefixTrimmedMeters: 210,
+      displaySuffixTrimmedMeters: 180,
       likelyDetourPolyline: snappedPath,
       likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Bayfield Street'],
       roadMatchConfidence: null,
@@ -4874,6 +5268,11 @@ describe('publishDetours road-match backfill persistence', () => {
       roadMatchSource: 'osrm-route',
       segments: geo.segments.map((segment) => ({
         ...segment,
+        displayBoundaryRefined: true,
+        displayBoundaryReason: 'trimmed-normal-route-approaches',
+        displayEntryPoint: snappedPath[0],
+        displayExitPoint: snappedPath[snappedPath.length - 1],
+        displaySkippedSegmentPolyline: closedPath,
         likelyDetourPolyline: snappedPath,
         likelyDetourRoadNames: ['Mulcaster Street', 'Simcoe Street', 'Bayfield Street'],
         roadMatchConfidence: null,
@@ -4919,6 +5318,18 @@ describe('publishDetours road-match backfill persistence', () => {
       expect(writes['activeDetours/10'].likelyDetourPolyline).toEqual(snappedPath);
       expect(writes['activeDetours/10'].segments[0].roadMatchSource).toBe('osrm-route');
       expect(writes['activeDetours/10'].segments[0].likelyDetourPolyline).toEqual(snappedPath);
+      expect(writes['activeDetours/10']).toMatchObject({
+        displayBoundaryRefined: true,
+        displayBoundaryReason: 'trimmed-normal-route-approaches',
+        displayEntryPoint: snappedPath[0],
+        displayExitPoint: snappedPath[snappedPath.length - 1],
+        displaySkippedSegmentPolyline: closedPath,
+        displaySkippedStopIds: ['display-stop'],
+        displaySkippedStopCodes: ['500'],
+        displaySeparatedRunMeters: 420,
+        displayPrefixTrimmedMeters: 210,
+        displaySuffixTrimmedMeters: 180,
+      });
     } finally {
       jest.dontMock('../firebaseAdmin');
       jest.dontMock('../detourRoadMatcher');

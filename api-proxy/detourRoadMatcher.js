@@ -14,6 +14,18 @@ const ROAD_MATCH_FIELDS = [
   'roadMatchSource',
   'endpointMismatchMeters',
   'endpointMismatchAcceptedReason',
+  'displayBoundaryRefined',
+  'displayBoundaryReason',
+  'displayEntryPoint',
+  'displayExitPoint',
+  'displaySkippedSegmentPolyline',
+  'displayDetourPolyline',
+  'displaySkippedStops',
+  'displaySkippedStopIds',
+  'displaySkippedStopCodes',
+  'displaySeparatedRunMeters',
+  'displayPrefixTrimmedMeters',
+  'displaySuffixTrimmedMeters',
 ];
 const EARTH_RADIUS_METERS = 6371000;
 const DEFAULT_BLOCKED_PROXIMITY_METERS = 35;
@@ -22,6 +34,7 @@ const DEFAULT_BLOCKED_ENDPOINT_RATIO = 0.12;
 const DEFAULT_BLOCKED_MIN_POINTS = 3;
 const DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS = 35;
 const DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS = 35;
+const DEFAULT_DISPLAY_MIN_SEPARATED_RUN_METERS = 75;
 const DEFAULT_BACKTRACK_PROXIMITY_METERS = 12;
 const DEFAULT_BACKTRACK_MIN_SEGMENT_METERS = 20;
 const DEFAULT_BACKTRACK_MIN_TURN_DEGREES = 150;
@@ -921,8 +934,32 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
   );
   if (renderablePolyline.length < 2) return null;
   if (doesPathUseBlockedSegment(renderablePolyline, options.blockedPolyline, options.env)) {
-    addRejectionReason(options, 'published-blocked-overlap');
-    return null;
+    const refinedDisplayGeometry = buildBoundaryRefinedDisplayGeometry(
+      matchedPolyline,
+      routeTrim,
+      options
+    );
+    if (!refinedDisplayGeometry) {
+      addRejectionReason(options, 'published-blocked-overlap');
+      return null;
+    }
+    return {
+      likelyDetourPolyline: refinedDisplayGeometry.displayDetourPolyline,
+      entryConnectorPolyline: null,
+      exitConnectorPolyline: null,
+      likelyDetourRoadNames: extractRoadNames(matchable),
+      roadMatchConfidence: confidenceLabel(matchable.confidence),
+      roadMatchRawConfidence: Number.isFinite(Number(matchable.confidence))
+        ? Number(matchable.confidence)
+        : null,
+      roadMatchSource: source,
+      endpointMismatchMeters: endpointAssessment.mismatchMeters != null
+        ? Math.round(endpointAssessment.mismatchMeters)
+        : null,
+      endpointMismatchAcceptedReason: endpointAssessment.endpointMismatchAcceptedReason,
+      detourPathLabel: DETOUR_PATH_LABEL,
+      ...refinedDisplayGeometry,
+    };
   }
 
   return {
@@ -948,6 +985,151 @@ function isRouteFallbackEnabled(env = process.env, options = {}) {
   return env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED == null
     ? true
     : isTruthy(env.DETOUR_ROAD_MATCHING_ROUTE_FALLBACK_ENABLED);
+}
+
+function projectPointOntoPolyline(point, polyline) {
+  const normalizedPoint = normalizeCoordinate(point);
+  const line = normalizePolyline(polyline);
+  if (!normalizedPoint || line.length < 2) return null;
+
+  let best = null;
+  let cumulativeMeters = 0;
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const start = line[index];
+    const end = line[index + 1];
+    const dx = end.longitude - start.longitude;
+    const dy = end.latitude - start.latitude;
+    const denominator = dx * dx + dy * dy;
+    const t = denominator > 0
+      ? Math.max(0, Math.min(1, (
+        (normalizedPoint.longitude - start.longitude) * dx +
+        (normalizedPoint.latitude - start.latitude) * dy
+      ) / denominator))
+      : 0;
+    const projectedPoint = {
+      latitude: start.latitude + t * dy,
+      longitude: start.longitude + t * dx,
+    };
+    const distanceMeters = haversineDistance(normalizedPoint, projectedPoint);
+    const segmentLengthMeters = haversineDistance(start, end);
+    const progressMeters = cumulativeMeters + segmentLengthMeters * t;
+    if (!best || distanceMeters < best.distanceMeters) {
+      best = {
+        index,
+        t,
+        projectedPoint,
+        distanceMeters,
+        progressMeters,
+      };
+    }
+    cumulativeMeters += segmentLengthMeters;
+  }
+  return best;
+}
+
+function buildPolylineSpanFromProjections(polyline, firstProjection, secondProjection) {
+  const line = normalizePolyline(polyline);
+  if (line.length < 2 || !firstProjection || !secondProjection) return [];
+  const lower = firstProjection.progressMeters <= secondProjection.progressMeters
+    ? firstProjection
+    : secondProjection;
+  const upper = lower === firstProjection ? secondProjection : firstProjection;
+  const span = [lower.projectedPoint];
+  for (let index = lower.index + 1; index <= upper.index; index += 1) {
+    span.push(line[index]);
+  }
+  span.push(upper.projectedPoint);
+  return dedupeConsecutivePoints(span);
+}
+
+function getLongestSeparatedRunMeters(path, routeShapePolyline, env = process.env) {
+  const points = normalizePolyline(path);
+  const route = normalizePolyline(routeShapePolyline);
+  if (points.length < 2 || route.length < 2) return 0;
+  const proximityMeters = parsePositiveInt(
+    env.DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_PROXIMITY_METERS,
+    DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS,
+    5,
+    200
+  );
+  let longestRunMeters = 0;
+  let currentRunMeters = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const startSeparated = pointToPolylineDistance(points[index - 1], route) > proximityMeters;
+    const endSeparated = pointToPolylineDistance(points[index], route) > proximityMeters;
+    // Count only segments whose full pair of sampled endpoints is separated.
+    // This stays conservative when a matcher returns a long, sparse segment
+    // that crosses the route-separation threshold between its endpoints.
+    if (startSeparated && endSeparated) {
+      currentRunMeters += haversineDistance(points[index - 1], points[index]);
+      longestRunMeters = Math.max(longestRunMeters, currentRunMeters);
+    } else {
+      currentRunMeters = 0;
+    }
+  }
+  return longestRunMeters;
+}
+
+function buildBoundaryRefinedDisplayGeometry(path, routeTrim, options = {}) {
+  const trimmedPath = normalizePolyline(path);
+  const routeShape = normalizePolyline(options.routeShapePolyline);
+  const blocked = normalizePolyline(options.blockedPolyline);
+  if (
+    trimmedPath.length < 2 ||
+    routeShape.length < 2 ||
+    blocked.length < 2 ||
+    (!routeTrim?.prefixTrimmed && !routeTrim?.suffixTrimmed)
+  ) {
+    return null;
+  }
+
+  const minimumSeparatedRunMeters = parsePositiveInt(
+    options.env?.DETOUR_ROAD_MATCHING_DISPLAY_MIN_SEPARATED_RUN_METERS,
+    DEFAULT_DISPLAY_MIN_SEPARATED_RUN_METERS,
+    25,
+    1000
+  );
+  const separatedRunMeters = getLongestSeparatedRunMeters(
+    trimmedPath,
+    routeShape,
+    options.env
+  );
+  if (separatedRunMeters < minimumSeparatedRunMeters) return null;
+
+  const entryProjection = projectPointOntoPolyline(trimmedPath[0], routeShape);
+  const exitProjection = projectPointOntoPolyline(trimmedPath[trimmedPath.length - 1], routeShape);
+  if (!entryProjection || !exitProjection) return null;
+
+  const displayEntryPoint = entryProjection.projectedPoint;
+  const displayExitPoint = exitProjection.projectedPoint;
+  const displaySkippedSegmentPolyline = buildPolylineSpanFromProjections(
+    routeShape,
+    entryProjection,
+    exitProjection
+  );
+  if (displaySkippedSegmentPolyline.length < 2) return null;
+
+  const displayPath = dedupeConsecutivePoints([
+    displayEntryPoint,
+    ...trimmedPath,
+    displayExitPoint,
+  ]);
+  if (displayPath.length < 2) return null;
+  if (doesPathUseBlockedSegment(displayPath, displaySkippedSegmentPolyline, options.env)) {
+    return null;
+  }
+
+  return {
+    displayEntryPoint,
+    displayExitPoint,
+    displaySkippedSegmentPolyline,
+    displayDetourPolyline: displayPath,
+    displayBoundaryRefined: true,
+    displayBoundaryReason: 'trimmed-normal-route-approaches',
+    displaySeparatedRunMeters: Math.round(separatedRunMeters),
+    displayPrefixTrimmedMeters: Math.round(routeTrim.prefixOverlapMeters || 0),
+    displaySuffixTrimmedMeters: Math.round(routeTrim.suffixOverlapMeters || 0),
+  };
 }
 
 function prefersRouteMatching(options = {}, env = process.env) {
@@ -1221,6 +1403,45 @@ function getRouteShapePolylineForSegment(segment, options = {}) {
   return [];
 }
 
+function getStopId(stop) {
+  const value = stop?.stopId ?? stop?.id;
+  return value == null ? null : String(value);
+}
+
+function getStopCode(stop) {
+  const value = stop?.stopCode ?? stop?.code;
+  return value == null ? null : String(value);
+}
+
+function getStopCoordinate(stop) {
+  return normalizeCoordinate(stop?.coordinate || stop?.location || stop);
+}
+
+function filterStopsToDisplaySpan(stops, displaySkippedSegmentPolyline) {
+  if (!Array.isArray(stops)) return null;
+  const displaySpan = normalizePolyline(displaySkippedSegmentPolyline);
+  if (displaySpan.length < 2) return null;
+  return stops.filter((stop) => {
+    const coordinate = getStopCoordinate(stop);
+    return coordinate && pointToPolylineDistance(coordinate, displaySpan) <= 75;
+  });
+}
+
+function addDisplayStopMetadata(match, segment) {
+  if (!match?.displayBoundaryRefined) return match;
+  const displaySkippedStops = filterStopsToDisplaySpan(
+    segment?.skippedStops,
+    match.displaySkippedSegmentPolyline
+  );
+  if (!displaySkippedStops) return match;
+  return {
+    ...match,
+    displaySkippedStops,
+    displaySkippedStopIds: displaySkippedStops.map(getStopId).filter(Boolean),
+    displaySkippedStopCodes: displaySkippedStops.map(getStopCode).filter(Boolean),
+  };
+}
+
 async function matchSegment(segment, options) {
   const candidate = getMatchCandidate(segment);
   if (candidate.length < 2) {
@@ -1260,8 +1481,8 @@ async function matchSegment(segment, options) {
       return cleared;
     }
     return {
-      ...segment,
-      ...match,
+      ...clearRoadMatchedFields(segment),
+      ...addDisplayStopMetadata(match, segment),
     };
   } catch (err) {
     logRoadMatchEvent('detour_road_match_fallback_to_inferred', withRoadMatchContext({
@@ -1340,6 +1561,9 @@ async function matchDetourGeometry(geometry, options = {}) {
   }
 
   if (primaryMatch?.likelyDetourPolyline?.length >= 2) {
+    ROAD_MATCH_FIELDS.forEach((field) => {
+      delete next[field];
+    });
     next.likelyDetourPolyline = primaryMatch.likelyDetourPolyline;
     next.entryConnectorPolyline = primaryMatch.entryConnectorPolyline || null;
     next.exitConnectorPolyline = primaryMatch.exitConnectorPolyline || null;
@@ -1350,6 +1574,25 @@ async function matchDetourGeometry(geometry, options = {}) {
     next.endpointMismatchMeters = primaryMatch.endpointMismatchMeters ?? null;
     next.endpointMismatchAcceptedReason = primaryMatch.endpointMismatchAcceptedReason ?? null;
     next.detourPathLabel = DETOUR_PATH_LABEL;
+    if (primaryMatch.displayBoundaryRefined === true) {
+      next.displayBoundaryRefined = true;
+      next.displayBoundaryReason = primaryMatch.displayBoundaryReason || null;
+      next.displayEntryPoint = primaryMatch.displayEntryPoint || null;
+      next.displayExitPoint = primaryMatch.displayExitPoint || null;
+      next.displaySkippedSegmentPolyline = primaryMatch.displaySkippedSegmentPolyline || null;
+      next.displaySkippedStops = Array.isArray(primaryMatch.displaySkippedStops)
+        ? primaryMatch.displaySkippedStops
+        : [];
+      next.displaySkippedStopIds = Array.isArray(primaryMatch.displaySkippedStopIds)
+        ? primaryMatch.displaySkippedStopIds
+        : [];
+      next.displaySkippedStopCodes = Array.isArray(primaryMatch.displaySkippedStopCodes)
+        ? primaryMatch.displaySkippedStopCodes
+        : [];
+      next.displaySeparatedRunMeters = primaryMatch.displaySeparatedRunMeters ?? null;
+      next.displayPrefixTrimmedMeters = primaryMatch.displayPrefixTrimmedMeters ?? null;
+      next.displaySuffixTrimmedMeters = primaryMatch.displaySuffixTrimmedMeters ?? null;
+    }
   } else {
     ROAD_MATCH_FIELDS.forEach((field) => {
       delete next[field];

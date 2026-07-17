@@ -49,11 +49,30 @@ export function normalizeRoadNames(roadNames) {
 export function normalizeDetourSegment(segment, fallbackDetourEventId = null) {
   if (!segment || typeof segment !== 'object') return null;
 
+  const usesRefinedDisplayBoundary = segment.displayBoundaryRefined === true;
+
   return {
     ...segment,
-    entryPoint: normalizeDetourCoordinate(segment.entryPoint),
-    exitPoint: normalizeDetourCoordinate(segment.exitPoint),
-    skippedSegmentPolyline: normalizeDetourPolyline(segment.skippedSegmentPolyline),
+    entryPoint: normalizeDetourCoordinate(
+      usesRefinedDisplayBoundary ? segment.displayEntryPoint : segment.entryPoint
+    ),
+    exitPoint: normalizeDetourCoordinate(
+      usesRefinedDisplayBoundary ? segment.displayExitPoint : segment.exitPoint
+    ),
+    skippedSegmentPolyline: normalizeDetourPolyline(
+      usesRefinedDisplayBoundary
+        ? segment.displaySkippedSegmentPolyline
+        : segment.skippedSegmentPolyline
+    ),
+    skippedStops: usesRefinedDisplayBoundary && Array.isArray(segment.displaySkippedStops)
+      ? segment.displaySkippedStops
+      : segment.skippedStops,
+    skippedStopIds: usesRefinedDisplayBoundary && Array.isArray(segment.displaySkippedStopIds)
+      ? segment.displaySkippedStopIds
+      : segment.skippedStopIds,
+    skippedStopCodes: usesRefinedDisplayBoundary && Array.isArray(segment.displaySkippedStopCodes)
+      ? segment.displaySkippedStopCodes
+      : segment.skippedStopCodes,
     inferredDetourPolyline: normalizeDetourPolyline(segment.inferredDetourPolyline),
     likelyDetourPolyline: normalizeDetourPolyline(segment.likelyDetourPolyline),
     entryConnectorPolyline: normalizeDetourPolyline(segment.entryConnectorPolyline),
@@ -72,6 +91,7 @@ export function mapActiveDetourDoc(docId, data = {}) {
   const primarySegment = Array.isArray(data.segments)
     ? data.segments.find((segment) => segment && typeof segment === 'object')
     : null;
+  const usesRefinedDisplayBoundary = data.displayBoundaryRefined === true;
 
   return {
     eventId,
@@ -103,7 +123,11 @@ export function mapActiveDetourDoc(docId, data = {}) {
     segments: Array.isArray(data.segments)
       ? data.segments.map((segment) => normalizeDetourSegment(segment, eventId)).filter(Boolean)
       : [],
-    skippedSegmentPolyline: normalizeDetourPolyline(data.skippedSegmentPolyline),
+    skippedSegmentPolyline: normalizeDetourPolyline(
+      usesRefinedDisplayBoundary
+        ? data.displaySkippedSegmentPolyline
+        : data.skippedSegmentPolyline
+    ),
     inferredDetourPolyline: normalizeDetourPolyline(data.inferredDetourPolyline),
     likelyDetourPolyline: normalizeDetourPolyline(data.likelyDetourPolyline),
     entryConnectorPolyline: normalizeDetourPolyline(data.entryConnectorPolyline),
@@ -117,16 +141,26 @@ export function mapActiveDetourDoc(docId, data = {}) {
     detourVersion: data.detourVersion ?? null,
     detourModel: data.detourModel ?? null,
     eventCount: data.eventCount ?? 1,
-    skippedStopIds: Array.isArray(data.skippedStopIds) ? data.skippedStopIds : [],
-    skippedStopCodes: Array.isArray(data.skippedStopCodes) ? data.skippedStopCodes : [],
-    skippedStops: Array.isArray(data.skippedStops) ? data.skippedStops : [],
+    skippedStopIds: usesRefinedDisplayBoundary && Array.isArray(data.displaySkippedStopIds)
+      ? data.displaySkippedStopIds
+      : (Array.isArray(data.skippedStopIds) ? data.skippedStopIds : []),
+    skippedStopCodes: usesRefinedDisplayBoundary && Array.isArray(data.displaySkippedStopCodes)
+      ? data.displaySkippedStopCodes
+      : (Array.isArray(data.skippedStopCodes) ? data.skippedStopCodes : []),
+    skippedStops: usesRefinedDisplayBoundary && Array.isArray(data.displaySkippedStops)
+      ? data.displaySkippedStops
+      : (Array.isArray(data.skippedStops) ? data.skippedStops : []),
     affectedStopIds: Array.isArray(data.affectedStopIds) ? data.affectedStopIds : [],
     affectedStopCodes: Array.isArray(data.affectedStopCodes) ? data.affectedStopCodes : [],
     affectedStops: Array.isArray(data.affectedStops) ? data.affectedStops : [],
     entryStopId: data.entryStopId ?? null,
     exitStopId: data.exitStopId ?? null,
-    entryPoint: normalizeDetourCoordinate(data.entryPoint),
-    exitPoint: normalizeDetourCoordinate(data.exitPoint),
+    entryPoint: normalizeDetourCoordinate(
+      usesRefinedDisplayBoundary ? data.displayEntryPoint : data.entryPoint
+    ),
+    exitPoint: normalizeDetourCoordinate(
+      usesRefinedDisplayBoundary ? data.displayExitPoint : data.exitPoint
+    ),
     confidence: data.confidence ?? null,
     evidencePointCount: data.evidencePointCount ?? null,
     lastEvidenceAt: data.lastEvidenceAt ?? null,

@@ -9,6 +9,7 @@ const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 const { applyRiderVisibilityGuard } = require('./detour/riderVisibilityGuard');
 const { attachRiderAlertVisibility } = require('./detour/alertVisibility');
 const { attachRiderPublishGates } = require('./detour/riderPublishGates');
+const { projectOntoPolyline } = require('./detour/projection');
 const {
   buildClearedEvent,
   buildDetectedEvent,
@@ -52,6 +53,8 @@ const DETOUR_PATH_BOUNDARY_MAX_GAP_METERS =
   Number.isFinite(configuredPathBoundaryMaxGapMeters) && configuredPathBoundaryMaxGapMeters > 0
     ? configuredPathBoundaryMaxGapMeters
     : 150;
+const SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS = 75;
+const SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS = 1200;
 
 const lastPublishedIds = new Set();
 const lastPublishedState = new Map();
@@ -626,6 +629,17 @@ function clearRoadMatchedPath(target) {
   target.roadMatchConfidence = null;
   target.roadMatchRawConfidence = null;
   target.roadMatchSource = null;
+  target.displayBoundaryRefined = false;
+  target.displayBoundaryReason = null;
+  target.displayEntryPoint = null;
+  target.displayExitPoint = null;
+  target.displaySkippedSegmentPolyline = null;
+  target.displaySkippedStops = [];
+  target.displaySkippedStopIds = [];
+  target.displaySkippedStopCodes = [];
+  target.displaySeparatedRunMeters = null;
+  target.displayPrefixTrimmedMeters = null;
+  target.displaySuffixTrimmedMeters = null;
 }
 
 function getRenderableSegment(segment) {
@@ -1579,11 +1593,14 @@ function deriveSharedDetourEventAssignments(candidates = []) {
   });
 
   const byRoute = new Map();
+  const byPublish = new Map();
+  const byPublishSegment = new Map();
   const bySegment = new Map();
   for (const groupCandidates of grouped.values()) {
     const assignment = makeSharedAssignment(groupCandidates);
     groupCandidates.forEach((candidate) => {
       const routeId = normalizeRouteId(candidate.routeId);
+      const publishId = String(candidate.publishId || '').trim();
       const routeAssignment = byRoute.get(routeId);
       if (
         !routeAssignment ||
@@ -1591,14 +1608,18 @@ function deriveSharedDetourEventAssignments(candidates = []) {
       ) {
         byRoute.set(routeId, assignment);
       }
+      if (publishId) {
+        if (!byPublish.has(publishId)) byPublish.set(publishId, assignment);
+        byPublishSegment.set(`${publishId}:${candidate.segmentIndex ?? 'top'}`, assignment);
+      }
       bySegment.set(`${routeId}:${candidate.segmentIndex ?? 'top'}`, assignment);
     });
   }
 
-  return { byRoute, bySegment };
+  return { byRoute, byPublish, byPublishSegment, bySegment };
 }
 
-function getSharedDetourCandidates(routeId, source = {}) {
+function getSharedDetourCandidates(routeId, source = {}, publishId = null) {
   const normalizedRouteId = normalizeRouteId(routeId || source.routeId);
   const hasSegments = Array.isArray(source?.segments) && source.segments.length > 0;
   const segments = hasSegments ? source.segments : [source];
@@ -1610,6 +1631,7 @@ function getSharedDetourCandidates(routeId, source = {}) {
       (useTopLevel ? source?.detourEventId : null) ||
       null;
     const candidate = {
+      publishId: publishId ? String(publishId) : null,
       routeId: normalizedRouteId,
       segmentIndex: hasSegments ? index : 'top',
       detourEventId: explicitEventId,
@@ -1623,6 +1645,10 @@ function getSharedDetourCandidates(routeId, source = {}) {
       exitPoint: segment?.exitPoint || (useTopLevel ? source?.exitPoint : null),
       confidence: segment?.confidence || source?.confidence || null,
       evidencePointCount: segment?.evidencePointCount ?? source?.evidencePointCount ?? null,
+      shapeId: segment?.shapeId || (useTopLevel ? source?.shapeId : null),
+      boundaryConsensus: segment?.boundaryConsensus || (useTopLevel ? source?.boundaryConsensus : null),
+      coherentTripSignature:
+        segment?.coherentTripSignature || (useTopLevel ? source?.coherentTripSignature : null),
     };
 
     if (!candidate.detourEventId) {
@@ -1652,7 +1678,7 @@ function buildSharedDetourEventAssignmentsForPublish(publishableDetours = {}) {
     const source = hasRenderableGeometry(geo)
       ? { ...(previousSnapshot || {}), ...geo, routeId }
       : { ...(previousSnapshot || {}), routeId };
-    candidates.push(...getSharedDetourCandidates(routeId, source));
+    candidates.push(...getSharedDetourCandidates(routeId, source, publishId));
   });
 
   return deriveSharedDetourEventAssignments(candidates);
@@ -1671,31 +1697,43 @@ function applySharedDetourEventMetadata(target, assignment) {
   return target;
 }
 
-function getPrimarySharedAssignment(routeId, geo, assignments) {
+function getPrimarySharedAssignment(publishId, routeId, geo, assignments) {
+  const normalizedPublishId = String(publishId || '').trim();
   const normalizedRouteId = normalizeRouteId(routeId);
   const segments = Array.isArray(geo?.segments) ? geo.segments : [];
   const primaryIndex = segments.findIndex(getRenderableSegment);
   const selectedIndex = primaryIndex >= 0 ? primaryIndex : 0;
-  return assignments.bySegment.get(`${normalizedRouteId}:${selectedIndex}`) ||
+  return assignments.byPublishSegment.get(`${normalizedPublishId}:${selectedIndex}`) ||
+    assignments.byPublishSegment.get(`${normalizedPublishId}:top`) ||
+    assignments.byPublish.get(normalizedPublishId) ||
+    assignments.bySegment.get(`${normalizedRouteId}:${selectedIndex}`) ||
     assignments.bySegment.get(`${normalizedRouteId}:top`) ||
     assignments.byRoute.get(normalizedRouteId) ||
     null;
 }
 
-function applySharedDetourEventAssignmentsToGeometry(routeId, geo, assignments) {
+function applySharedDetourEventAssignmentsToGeometry(publishId, routeId, geo, assignments) {
   if (!geo || typeof geo !== 'object') return geo;
+  const normalizedPublishId = String(publishId || '').trim();
   const normalizedRouteId = normalizeRouteId(routeId);
   const next = cloneJson(geo);
 
   if (Array.isArray(next.segments)) {
     next.segments = next.segments.map((segment, index) => {
-      const assignment = assignments.bySegment.get(`${normalizedRouteId}:${index}`) ||
+      const assignment = assignments.byPublishSegment.get(`${normalizedPublishId}:${index}`) ||
+        assignments.byPublish.get(normalizedPublishId) ||
+        assignments.bySegment.get(`${normalizedRouteId}:${index}`) ||
         assignments.byRoute.get(normalizedRouteId);
       return assignment ? applySharedDetourEventMetadata({ ...segment }, assignment) : segment;
     });
   }
 
-  const primaryAssignment = getPrimarySharedAssignment(normalizedRouteId, next, assignments);
+  const primaryAssignment = getPrimarySharedAssignment(
+    normalizedPublishId,
+    normalizedRouteId,
+    next,
+    assignments
+  );
   if (primaryAssignment) {
     applySharedDetourEventMetadata(next, primaryAssignment);
   }
@@ -2072,14 +2110,182 @@ async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete',
   }
 }
 
+function getSharedBoundaryStrength(candidate = {}) {
+  const consensus = candidate.boundaryConsensus || {};
+  const lower = Number(consensus.lowerSignatureCount) || 0;
+  const upper = Number(consensus.upperSignatureCount) || 0;
+  const confirmedSides = Math.min(lower, upper);
+  return (
+    confirmedSides * 1_000_000 +
+    (lower + upper) * 10_000 +
+    Math.round(polylineLengthMeters(candidate.skippedSegmentPolyline)) +
+    (Number(candidate.evidencePointCount) || 0)
+  );
+}
+
+function hasIndependentConsensusBoundary(candidate = {}) {
+  const consensus = candidate.boundaryConsensus || {};
+  return Boolean(
+    candidate.coherentTripSignature &&
+    Number(consensus.lowerSignatureCount) >= 2 &&
+    Number(consensus.upperSignatureCount) >= 2
+  );
+}
+
+function buildShapeSpanFromProjections(shape, firstProjection, secondProjection) {
+  if (!Array.isArray(shape) || !firstProjection || !secondProjection) return [];
+  const lower = firstProjection.progressMeters <= secondProjection.progressMeters
+    ? firstProjection
+    : secondProjection;
+  const upper = lower === firstProjection ? secondProjection : firstProjection;
+  const points = [normalizePoint(lower.projectedPoint)];
+  for (let index = lower.index + 1; index <= upper.index; index += 1) {
+    const point = normalizePoint(shape[index]);
+    if (point) points.push(point);
+  }
+  points.push(normalizePoint(upper.projectedPoint));
+  return normalizePolyline(points);
+}
+
+function addSharedBoundaryPathAnchors(path, entryPoint, exitPoint) {
+  const points = normalizePolyline(path);
+  if (points.length < 2) return points;
+  const entryGap = distanceMeters(entryPoint, points[0]);
+  const exitGap = distanceMeters(points[points.length - 1], exitPoint);
+  if (entryGap > 0 && entryGap <= SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS) {
+    points.unshift(entryPoint);
+  }
+  if (exitGap > 0 && exitGap <= SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS) {
+    points.push(exitPoint);
+  }
+  return points;
+}
+
+function reconcileSharedEventBoundariesForPublish(publishableDetours = {}, shapes = null) {
+  if (!shapes?.get) return publishableDetours;
+  const candidates = [];
+
+  Object.entries(publishableDetours).forEach(([publishId, detour]) => {
+    const routeId = detourRouteId(publishId, detour);
+    getSharedDetourCandidates(routeId, detour?.geometry || {}).forEach((candidate) => {
+      candidates.push({ ...candidate, publishId, detour });
+    });
+  });
+
+  for (const target of candidates) {
+    if (!target.coherentTripSignature) continue;
+    const source = candidates
+      .filter((candidate) => (
+        candidate.publishId !== target.publishId &&
+        candidate.routeId !== target.routeId &&
+        hasIndependentConsensusBoundary(candidate) &&
+        hasClosedSegmentRelationship(candidate, target) &&
+        getSharedBoundaryStrength(candidate) > getSharedBoundaryStrength(target)
+      ))
+      .sort((a, b) => getSharedBoundaryStrength(b) - getSharedBoundaryStrength(a))[0];
+    if (!source) continue;
+
+    const shapeId = target.shapeId || target.detour?.geometry?.shapeId;
+    const targetShape = shapes.get(shapeId);
+    const sourceEntry = normalizePoint(source.entryPoint);
+    const sourceExit = normalizePoint(source.exitPoint);
+    if (!sourceEntry || !sourceExit || !Array.isArray(targetShape) || targetShape.length < 2) continue;
+
+    const firstProjection = projectOntoPolyline(sourceEntry, targetShape);
+    const secondProjection = projectOntoPolyline(sourceExit, targetShape);
+    if (
+      !firstProjection ||
+      !secondProjection ||
+      firstProjection.distanceMeters > SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS ||
+      secondProjection.distanceMeters > SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS
+    ) {
+      continue;
+    }
+
+    const proposedSpan = Math.abs(firstProjection.progressMeters - secondProjection.progressMeters);
+    const currentSpan = Math.max(1, polylineLengthMeters(target.skippedSegmentPolyline));
+    if (proposedSpan < currentSpan * 0.5 || proposedSpan > currentSpan * 2) continue;
+
+    const projectedFirst = normalizePoint(firstProjection.projectedPoint);
+    const projectedSecond = normalizePoint(secondProjection.projectedPoint);
+    const directDistance = distanceMeters(target.entryPoint, projectedFirst) +
+      distanceMeters(target.exitPoint, projectedSecond);
+    const reverseDistance = distanceMeters(target.entryPoint, projectedSecond) +
+      distanceMeters(target.exitPoint, projectedFirst);
+    const entryPoint = directDistance <= reverseDistance ? projectedFirst : projectedSecond;
+    const exitPoint = directDistance <= reverseDistance ? projectedSecond : projectedFirst;
+    let skippedSegmentPolyline = buildShapeSpanFromProjections(
+      targetShape,
+      firstProjection,
+      secondProjection
+    );
+    if (
+      skippedSegmentPolyline.length >= 2 &&
+      distanceMeters(skippedSegmentPolyline[0], entryPoint) >
+        distanceMeters(skippedSegmentPolyline[skippedSegmentPolyline.length - 1], entryPoint)
+    ) {
+      skippedSegmentPolyline.reverse();
+    }
+
+    const geometry = cloneJson(target.detour.geometry) || {};
+    const segments = Array.isArray(geometry.segments) ? geometry.segments : [geometry];
+    const segmentIndex = target.segmentIndex === 'top' ? 0 : Number(target.segmentIndex);
+    if (!Number.isInteger(segmentIndex) || !segments[segmentIndex]) continue;
+    const existingSegment = segments[segmentIndex];
+    const updatedSegment = {
+      ...existingSegment,
+      entryPoint,
+      exitPoint,
+      skippedSegmentPolyline,
+      inferredDetourPolyline: addSharedBoundaryPathAnchors(
+        existingSegment.inferredDetourPolyline,
+        entryPoint,
+        exitPoint
+      ),
+      likelyDetourPolyline: Array.isArray(existingSegment.likelyDetourPolyline)
+        ? addSharedBoundaryPathAnchors(existingSegment.likelyDetourPolyline, entryPoint, exitPoint)
+        : existingSegment.likelyDetourPolyline || null,
+      startProgressMeters: Math.min(firstProjection.progressMeters, secondProjection.progressMeters),
+      endProgressMeters: Math.max(firstProjection.progressMeters, secondProjection.progressMeters),
+      spanMeters: proposedSpan,
+      sharedBoundaryReconciled: true,
+      sharedBoundarySourceRouteId: source.routeId,
+      sharedBoundaryConsensus: cloneJson(source.boundaryConsensus),
+    };
+    segments[segmentIndex] = updatedSegment;
+    geometry.segments = segments;
+    geometry.shapeId = updatedSegment.shapeId || geometry.shapeId;
+    geometry.entryPoint = entryPoint;
+    geometry.exitPoint = exitPoint;
+    geometry.skippedSegmentPolyline = skippedSegmentPolyline;
+    geometry.inferredDetourPolyline = updatedSegment.inferredDetourPolyline;
+    geometry.likelyDetourPolyline = updatedSegment.likelyDetourPolyline;
+    geometry.startProgressMeters = updatedSegment.startProgressMeters;
+    geometry.endProgressMeters = updatedSegment.endProgressMeters;
+    geometry.sharedBoundaryReconciled = true;
+    geometry.sharedBoundarySourceRouteId = source.routeId;
+    target.detour.geometry = geometry;
+    publishableDetours[target.publishId] = target.detour;
+  }
+
+  return publishableDetours;
+}
+
 function getDetourPathBoundaryAssessment(segment = {}) {
   const path = normalizePolyline(
     Array.isArray(segment.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2
       ? segment.likelyDetourPolyline
       : segment.inferredDetourPolyline
   );
-  const entryPoint = normalizePoint(segment.entryPoint);
-  const exitPoint = normalizePoint(segment.serviceRejoinPoint || segment.exitPoint);
+  const usesRefinedDisplayBoundary = segment.displayBoundaryRefined === true;
+  const entryPoint = normalizePoint(
+    usesRefinedDisplayBoundary ? segment.displayEntryPoint : segment.entryPoint
+  );
+  const exitPoint = normalizePoint(
+    usesRefinedDisplayBoundary
+      ? segment.displayExitPoint
+      : (segment.serviceRejoinPoint || segment.exitPoint)
+  );
   if (path.length < 2 || !entryPoint || !exitPoint) return null;
 
   const entryGapMeters = distancePointToPolylineMeters(entryPoint, path);
@@ -2433,7 +2639,12 @@ function assignSnapshotDate(doc, key, valueMs) {
   }
 }
 
-function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId = null) {
+function buildRetainedAbsentDetourDoc(
+  routeId,
+  previousSnapshot,
+  now,
+  publishId = null
+) {
   const vehicleCount = normalizeVehicleCount(previousSnapshot?.vehicleCount);
   const uniqueVehicleCount = normalizeVehicleCount(
     previousSnapshot?.uniqueVehicleCount ?? previousSnapshot?.vehicleCount
@@ -2495,7 +2706,10 @@ function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId 
     doc.riderVisibilityReason = 'stale-mixed-evidence';
   }
   applyRiderVisibilityGuard(doc, previousSnapshot);
-  attachRiderAlertVisibility(doc);
+    attachRiderAlertVisibility(doc, {
+    now,
+    geometry: previousSnapshot,
+  });
 
   return doc;
 }
@@ -2605,6 +2819,10 @@ async function publishDetours(activeDetours, options = {}) {
     }
     return true;
   }));
+  reconcileSharedEventBoundariesForPublish(
+    publishableDetours,
+    options.shapes || options.gtfsData?.shapes || null
+  );
   const currentIds = new Set([
     ...Object.keys(publishableDetours),
     ...stalePublishSuppressedIds,
@@ -2744,6 +2962,8 @@ async function publishDetours(activeDetours, options = {}) {
       handoffSourceRouteId: detour.handoffSourceRouteId || null,
       latestGpsEvidenceAt: detour.latestGpsEvidenceAt ?? null,
       geometryLastEvidenceAt: detour.geometryLastEvidenceAt ?? detour.geometry?.lastEvidenceAt ?? null,
+      lastConfirmedRefreshAt: detour.lastConfirmedRefreshAt ?? null,
+      confirmedRefreshCount: Number(detour.confirmedRefreshCount || 0),
     };
 
     if (shouldUpdateLastSeen) {
@@ -2833,11 +3053,21 @@ async function publishDetours(activeDetours, options = {}) {
       }
     }
 
-    const sharedAssignment = getPrimarySharedAssignment(routeId, geo, sharedEventAssignments) ||
-      sharedEventAssignments.byRoute.get(normalizeRouteId(routeId)) ||
+    const sharedAssignment = getPrimarySharedAssignment(
+      publishId,
+      routeId,
+      geo,
+      sharedEventAssignments
+    ) ||
+      sharedEventAssignments.byPublish.get(String(publishId)) ||
       null;
     if (geo) {
-      geo = applySharedDetourEventAssignmentsToGeometry(routeId, geo, sharedEventAssignments);
+      geo = applySharedDetourEventAssignmentsToGeometry(
+        publishId,
+        routeId,
+        geo,
+        sharedEventAssignments
+      );
       const eventWindowSegmentMetadataNeedsWrite =
         hasEventWindowSegmentSharedMetadataMismatch(geo, sharedAssignment, detour);
       geo = alignEventWindowSegmentSharedMetadata(geo, sharedAssignment, detour);
@@ -2902,7 +3132,10 @@ async function publishDetours(activeDetours, options = {}) {
     }
     applyRiderVisibilityGuard(doc, geo);
     applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);
-    attachRiderAlertVisibility(doc);
+  attachRiderAlertVisibility(doc, {
+      now,
+      geometry: geo,
+    });
 
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;
@@ -2922,6 +3155,21 @@ async function publishDetours(activeDetours, options = {}) {
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;
+      doc.displayBoundaryRefined = geo.displayBoundaryRefined === true;
+      doc.displayBoundaryReason = geo.displayBoundaryReason || null;
+      doc.displayEntryPoint = geo.displayEntryPoint || null;
+      doc.displayExitPoint = geo.displayExitPoint || null;
+      doc.displaySkippedSegmentPolyline = geo.displaySkippedSegmentPolyline || null;
+      doc.displaySkippedStops = Array.isArray(geo.displaySkippedStops) ? geo.displaySkippedStops : [];
+      doc.displaySkippedStopIds = Array.isArray(geo.displaySkippedStopIds)
+        ? geo.displaySkippedStopIds
+        : [];
+      doc.displaySkippedStopCodes = Array.isArray(geo.displaySkippedStopCodes)
+        ? geo.displaySkippedStopCodes
+        : [];
+      doc.displaySeparatedRunMeters = geo.displaySeparatedRunMeters ?? null;
+      doc.displayPrefixTrimmedMeters = geo.displayPrefixTrimmedMeters ?? null;
+      doc.displaySuffixTrimmedMeters = geo.displaySuffixTrimmedMeters ?? null;
       doc.noticeTemporaryStops = Array.isArray(geo.noticeTemporaryStops) ? geo.noticeTemporaryStops : [];
       doc.noticeTemporaryStopIds = Array.isArray(geo.noticeTemporaryStopIds) ? geo.noticeTemporaryStopIds : [];
       doc.noticeTemporaryStopCodes = Array.isArray(geo.noticeTemporaryStopCodes) ? geo.noticeTemporaryStopCodes : [];
@@ -3093,6 +3341,7 @@ module.exports = {
   hasEventWindowDetourForRoute,
   getEquivalentCurrentDetour,
   deriveSharedDetourEventAssignments,
+  reconcileSharedEventBoundariesForPublish,
   alignEventWindowSegmentSharedMetadata,
   hasEventWindowSegmentSharedMetadataMismatch,
   makeSnapshot,

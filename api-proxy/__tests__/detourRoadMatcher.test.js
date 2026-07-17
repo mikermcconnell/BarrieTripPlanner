@@ -1286,9 +1286,15 @@ describe('detourRoadMatcher', () => {
 
     const result = await matchDetourGeometry({
       shapeId: 'shape-11',
+      displayBoundaryRefined: true,
+      displayEntryPoint: { latitude: 43.9, longitude: -79.8 },
+      displayExitPoint: { latitude: 43.9, longitude: -79.7 },
       inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
       segments: [{
         shapeId: 'shape-11',
+        displayBoundaryRefined: true,
+        displayEntryPoint: { latitude: 43.9, longitude: -79.8 },
+        displayExitPoint: { latitude: 43.9, longitude: -79.7 },
         skippedSegmentPolyline,
         inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
         canShowDetourPath: true,
@@ -1313,6 +1319,10 @@ describe('detourRoadMatcher', () => {
     expect(result.likelyDetourPolyline).toEqual(result.segments[0].likelyDetourPolyline);
     expect(result.segments[0].entryConnectorPolyline).toBeNull();
     expect(result.segments[0].exitConnectorPolyline).toBeNull();
+    expect(result.segments[0].displayBoundaryRefined).toBeUndefined();
+    expect(result.segments[0].displayEntryPoint).toBeUndefined();
+    expect(result.displayBoundaryRefined).toBeUndefined();
+    expect(result.displayEntryPoint).toBeUndefined();
   });
 
   test('publishes road-matched detour path with normal-route approaches already stitched in', async () => {
@@ -1383,5 +1393,148 @@ describe('detourRoadMatcher', () => {
     expect(result.segments[0].exitConnectorPolyline).toBeNull();
     expect(result.entryConnectorPolyline).toBeNull();
     expect(result.exitConnectorPolyline).toBeNull();
+  });
+
+  test('publishes only the separated middle path when normal-route approaches would fail the closed-road gate', async () => {
+    const routeShapePolyline = [
+      { latitude: 44.0, longitude: -79.700 },
+      { latitude: 44.0, longitude: -79.699 },
+      { latitude: 44.0, longitude: -79.698 },
+      { latitude: 44.0, longitude: -79.697 },
+      { latitude: 44.0, longitude: -79.696 },
+      { latitude: 44.0, longitude: -79.695 },
+      { latitude: 44.0, longitude: -79.694 },
+      { latitude: 44.0, longitude: -79.693 },
+    ];
+    const matchedPath = [
+      [-79.700, 44.000],
+      [-79.699, 44.000],
+      [-79.698, 44.000],
+      [-79.697, 44.002],
+      [-79.695, 44.002],
+      [-79.694, 44.000],
+      [-79.693, 44.000],
+    ];
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [{
+          confidence: 0.98,
+          geometry: { coordinates: matchedPath },
+          legs: [{ steps: [{ name: 'Parallel Detour Road' }] }],
+        }],
+      }),
+    });
+    const originalEntryPoint = { latitude: 44.0, longitude: -79.700 };
+    const originalExitPoint = { latitude: 44.0, longitude: -79.693 };
+
+    const result = await matchDetourGeometry({
+      shapeId: 'shape-short-detour',
+      entryPoint: originalEntryPoint,
+      exitPoint: originalExitPoint,
+      skippedSegmentPolyline: routeShapePolyline,
+      inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
+      canShowDetourPath: true,
+      segments: [{
+        shapeId: 'shape-short-detour',
+        entryPoint: originalEntryPoint,
+        exitPoint: originalExitPoint,
+        skippedSegmentPolyline: routeShapePolyline,
+        inferredDetourPolyline: matchedPath.map(([longitude, latitude]) => ({ latitude, longitude })),
+        skippedStops: [
+          { stopId: 'before', stopCode: '100', latitude: 44.0, longitude: -79.699 },
+          { stopId: 'inside', stopCode: '200', latitude: 44.0, longitude: -79.696 },
+        ],
+        canShowDetourPath: true,
+      }],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_MIN_RUN_METERS: '1',
+        DETOUR_ROAD_MATCHING_DISPLAY_MIN_SEPARATED_RUN_METERS: '75',
+      },
+      fetchImpl,
+      shapes: new Map([['shape-short-detour', routeShapePolyline]]),
+    });
+
+    const segment = result.segments[0];
+    expect(segment.canShowDetourPath).toBe(true);
+    expect(segment.detourPathSuppressedReason).toBeUndefined();
+    expect(segment.displayBoundaryRefined).toBe(true);
+    expect(segment.displayBoundaryReason).toBe('trimmed-normal-route-approaches');
+    expect(segment.entryPoint).toEqual(originalEntryPoint);
+    expect(segment.exitPoint).toEqual(originalExitPoint);
+    expect(segment.displayEntryPoint).toEqual({ latitude: 44.0, longitude: -79.697 });
+    expect(segment.displayExitPoint).toEqual({ latitude: 44.0, longitude: -79.695 });
+    expect(segment.likelyDetourPolyline).toEqual([
+      { latitude: 44.0, longitude: -79.697 },
+      { latitude: 44.002, longitude: -79.697 },
+      { latitude: 44.002, longitude: -79.695 },
+      { latitude: 44.0, longitude: -79.695 },
+    ]);
+    expect(segment.displaySkippedSegmentPolyline).toEqual([
+      { latitude: 44.0, longitude: -79.697 },
+      { latitude: 44.0, longitude: -79.696 },
+      { latitude: 44.0, longitude: -79.695 },
+    ]);
+    expect(segment.displaySkippedStopIds).toEqual(['inside']);
+    expect(segment.displaySkippedStopCodes).toEqual(['200']);
+    expect(result.displayBoundaryRefined).toBe(true);
+    expect(result.likelyDetourPolyline).toEqual(segment.likelyDetourPolyline);
+  });
+
+  test('does not refine a display boundary when the path has no meaningful separated middle', async () => {
+    const routeShapePolyline = [
+      { latitude: 44.0, longitude: -79.700 },
+      { latitude: 44.0, longitude: -79.699 },
+      { latitude: 44.0, longitude: -79.698 },
+      { latitude: 44.0, longitude: -79.697 },
+      { latitude: 44.0, longitude: -79.696 },
+    ];
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        matchings: [{
+          confidence: 0.98,
+          geometry: {
+            coordinates: [
+              [-79.700, 44.000],
+              [-79.699, 44.000],
+              [-79.698, 44.0002],
+              [-79.697, 44.000],
+              [-79.696, 44.000],
+            ],
+          },
+          legs: [{ steps: [{ name: 'Regular Road' }] }],
+        }],
+      }),
+    });
+
+    const result = await matchDetourGeometry({
+      shapeId: 'shape-no-detour',
+      inferredDetourPolyline: routeShapePolyline,
+      canShowDetourPath: true,
+      segments: [{
+        shapeId: 'shape-no-detour',
+        skippedSegmentPolyline: routeShapePolyline,
+        inferredDetourPolyline: routeShapePolyline,
+        canShowDetourPath: true,
+      }],
+    }, {
+      env: {
+        DETOUR_ROAD_MATCHING_ENABLED: 'true',
+        DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
+        DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_MIN_RUN_METERS: '1',
+      },
+      fetchImpl,
+      shapes: new Map([['shape-no-detour', routeShapePolyline]]),
+    });
+
+    expect(result.likelyDetourPolyline).toBeUndefined();
+    expect(result.segments[0].displayBoundaryRefined).not.toBe(true);
+    expect(result.segments[0].likelyDetourPolyline).toBeUndefined();
   });
 });
