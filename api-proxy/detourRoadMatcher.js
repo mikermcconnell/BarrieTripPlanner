@@ -19,6 +19,7 @@ const {
 const {
   buildBoundaryRefinedDisplayGeometry,
   doesPathUseBlockedSegment,
+  getBoundaryProjectionRoute,
   trimNormalRouteEndpointOverlap,
 } = require('./detour/boundaryRefinement');
 const ROAD_MATCH_FIELDS = [
@@ -660,9 +661,14 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
     return null;
   }
 
+  const boundaryProjection = getBoundaryProjectionRoute(
+    options.routeShapePolyline,
+    options.routeProgressWindow,
+    options.env
+  );
   const routeTrim = trimNormalRouteEndpointOverlap(
     matchedPolyline,
-    options.routeShapePolyline,
+    boundaryProjection.polyline,
     options.env
   );
   if (routeTrim.prefixTrimmed || routeTrim.suffixTrimmed) {
@@ -691,7 +697,13 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
     const refinedDisplayGeometry = buildBoundaryRefinedDisplayGeometry(
       matchedPolyline,
       routeTrim,
-      options
+      {
+        ...options,
+        boundaryProjectionPolyline: boundaryProjection.polyline,
+        boundaryProjectionConstrained: boundaryProjection.constrained,
+        boundaryProjectionWindowStartMeters: boundaryProjection.startProgressMeters,
+        boundaryProjectionWindowEndMeters: boundaryProjection.endProgressMeters,
+      }
     );
     if (!refinedDisplayGeometry) {
       addRejectionReason(options, 'published-blocked-overlap');
@@ -1012,6 +1024,17 @@ function getRouteShapePolylineForSegment(segment, options = {}) {
   return [];
 }
 
+function getRouteProgressWindowForSegment(segment) {
+  const start = Number(
+    segment?.detourZone?.startProgressMeters ?? segment?.startProgressMeters
+  );
+  const end = Number(
+    segment?.detourZone?.endProgressMeters ?? segment?.endProgressMeters
+  );
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+  return { startProgressMeters: start, endProgressMeters: end };
+}
+
 function getStopId(stop) {
   const value = stop?.stopId ?? stop?.id;
   return value == null ? null : String(value);
@@ -1071,6 +1094,7 @@ async function matchSegment(segment, options) {
       },
       blockedPolyline: segment?.skippedSegmentPolyline,
       routeShapePolyline: getRouteShapePolylineForSegment(segment, options),
+      routeProgressWindow: getRouteProgressWindowForSegment(segment),
       serviceRejoinPoint: segment?.serviceRejoinPoint,
       rejectionReasons,
     });

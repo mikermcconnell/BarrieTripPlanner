@@ -15,6 +15,9 @@ const DISPLAY_GEOMETRY_FIELDS = [
   'displaySeparatedRunMeters',
   'displayPrefixTrimmedMeters',
   'displaySuffixTrimmedMeters',
+  'displayBoundaryProjectionConstrained',
+  'displayBoundaryProjectionWindowStartMeters',
+  'displayBoundaryProjectionWindowEndMeters',
 ];
 
 function clearDisplayGeometry(target) {
@@ -30,6 +33,9 @@ function clearDisplayGeometry(target) {
     displaySeparatedRunMeters: null,
     displayPrefixTrimmedMeters: null,
     displaySuffixTrimmedMeters: null,
+    displayBoundaryProjectionConstrained: false,
+    displayBoundaryProjectionWindowStartMeters: null,
+    displayBoundaryProjectionWindowEndMeters: null,
   });
   return target;
 }
@@ -63,6 +69,12 @@ function copyRefinedDisplayGeometry(target, source) {
     displaySeparatedRunMeters: source.displaySeparatedRunMeters ?? null,
     displayPrefixTrimmedMeters: source.displayPrefixTrimmedMeters ?? null,
     displaySuffixTrimmedMeters: source.displaySuffixTrimmedMeters ?? null,
+    displayBoundaryProjectionConstrained:
+      source.displayBoundaryProjectionConstrained === true,
+    displayBoundaryProjectionWindowStartMeters:
+      source.displayBoundaryProjectionWindowStartMeters ?? null,
+    displayBoundaryProjectionWindowEndMeters:
+      source.displayBoundaryProjectionWindowEndMeters ?? null,
   });
   return target;
 }

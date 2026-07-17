@@ -11,6 +11,7 @@ const {
   pointToPolylineDistance,
   polylineLengthMeters,
   projectPointOntoPolyline,
+  slicePolylineByProgressWindow,
 } = require('./roadGeometry');
 
 const DEFAULT_BLOCKED_PROXIMITY_METERS = 35;
@@ -20,6 +21,7 @@ const DEFAULT_BLOCKED_MIN_POINTS = 3;
 const DEFAULT_ROUTE_OVERLAP_PROXIMITY_METERS = 35;
 const DEFAULT_ROUTE_OVERLAP_MIN_RUN_METERS = 35;
 const DEFAULT_DISPLAY_MIN_SEPARATED_RUN_METERS = 75;
+const DEFAULT_DISPLAY_PROGRESS_PADDING_METERS = 150;
 
 function positiveInteger(value, fallback, min = 1, max = Number.MAX_SAFE_INTEGER) {
   const parsed = Number.parseInt(String(value), 10);
@@ -139,6 +141,35 @@ function trimNormalRouteEndpointOverlap(path, routeShapePolyline, env = process.
   };
 }
 
+function getBoundaryProjectionRoute(routeShapePolyline, progressWindow = null, env = process.env) {
+  const fullRoute = normalizePolyline(routeShapePolyline);
+  const start = Number(progressWindow?.startProgressMeters);
+  const end = Number(progressWindow?.endProgressMeters);
+  if (fullRoute.length < 2 || !Number.isFinite(start) || !Number.isFinite(end) || start === end) {
+    return { polyline: fullRoute, constrained: false, startProgressMeters: null, endProgressMeters: null };
+  }
+
+  const paddingMeters = nonNegativeNumber(
+    env.DETOUR_ROAD_MATCHING_DISPLAY_PROGRESS_PADDING_METERS,
+    DEFAULT_DISPLAY_PROGRESS_PADDING_METERS,
+    0,
+    1000
+  );
+  const routeLengthMeters = polylineLengthMeters(fullRoute);
+  const windowStart = Math.max(0, Math.min(start, end) - paddingMeters);
+  const windowEnd = Math.min(routeLengthMeters, Math.max(start, end) + paddingMeters);
+  const windowedRoute = slicePolylineByProgressWindow(fullRoute, windowStart, windowEnd);
+  if (windowedRoute.length < 2) {
+    return { polyline: fullRoute, constrained: false, startProgressMeters: null, endProgressMeters: null };
+  }
+  return {
+    polyline: windowedRoute,
+    constrained: true,
+    startProgressMeters: Math.round(windowStart),
+    endProgressMeters: Math.round(windowEnd),
+  };
+}
+
 function getLongestSeparatedRunMeters(path, routeShapePolyline, env = process.env) {
   const points = normalizePolyline(path);
   const route = normalizePolyline(routeShapePolyline);
@@ -169,10 +200,12 @@ function getLongestSeparatedRunMeters(path, routeShapePolyline, env = process.en
 function buildBoundaryRefinedDisplayGeometry(path, routeTrim, options = {}) {
   const trimmedPath = normalizePolyline(path);
   const routeShape = normalizePolyline(options.routeShapePolyline);
+  const projectionRoute = normalizePolyline(options.boundaryProjectionPolyline || routeShape);
   const blocked = normalizePolyline(options.blockedPolyline);
   if (
     trimmedPath.length < 2 ||
     routeShape.length < 2 ||
+    projectionRoute.length < 2 ||
     blocked.length < 2 ||
     (!routeTrim?.prefixTrimmed && !routeTrim?.suffixTrimmed)
   ) {
@@ -188,14 +221,14 @@ function buildBoundaryRefinedDisplayGeometry(path, routeTrim, options = {}) {
   );
   if (separatedRunMeters < minimumSeparatedRunMeters) return null;
 
-  const entryProjection = projectPointOntoPolyline(trimmedPath[0], routeShape);
-  const exitProjection = projectPointOntoPolyline(trimmedPath[trimmedPath.length - 1], routeShape);
+  const entryProjection = projectPointOntoPolyline(trimmedPath[0], projectionRoute);
+  const exitProjection = projectPointOntoPolyline(trimmedPath[trimmedPath.length - 1], projectionRoute);
   if (!entryProjection || !exitProjection) return null;
 
   const displayEntryPoint = entryProjection.projectedPoint;
   const displayExitPoint = exitProjection.projectedPoint;
   const displaySkippedSegmentPolyline = buildPolylineSpanFromProjections(
-    routeShape,
+    projectionRoute,
     entryProjection,
     exitProjection
   );
@@ -223,11 +256,17 @@ function buildBoundaryRefinedDisplayGeometry(path, routeTrim, options = {}) {
     displaySeparatedRunMeters: Math.round(separatedRunMeters),
     displayPrefixTrimmedMeters: Math.round(routeTrim.prefixOverlapMeters || 0),
     displaySuffixTrimmedMeters: Math.round(routeTrim.suffixOverlapMeters || 0),
+    displayBoundaryProjectionConstrained: options.boundaryProjectionConstrained === true,
+    displayBoundaryProjectionWindowStartMeters:
+      options.boundaryProjectionWindowStartMeters ?? null,
+    displayBoundaryProjectionWindowEndMeters:
+      options.boundaryProjectionWindowEndMeters ?? null,
   };
 }
 
 module.exports = {
   buildBoundaryRefinedDisplayGeometry,
   doesPathUseBlockedSegment,
+  getBoundaryProjectionRoute,
   trimNormalRouteEndpointOverlap,
 };

@@ -147,6 +147,8 @@ If a route has multiple independent detour sections at the same time, they are p
 | `displayEntryPoint` / `displayExitPoint` | Object \| null | Optional rider-map boundaries derived from where the road-matched path actually separates from and returns to the scheduled route. The detector's original `entryPoint` / `exitPoint` remain unchanged for hydration and clearing. |
 | `displaySkippedSegmentPolyline` | Array \| null | The scheduled-route segment clipped to the refined display boundaries. The client prefers this line only when `displayBoundaryRefined=true`. |
 | `displaySkippedStops` / IDs / codes | Array | Stops filtered to the refined public closed segment. Detector evidence and clear-window stop metadata remain unchanged. |
+| `displayBoundaryProjectionConstrained` | Boolean | True when refined entry/rejoin projection was limited to the detector's padded route-progress window instead of the whole shape. |
+| `displayBoundaryProjectionWindowStartMeters` / `displayBoundaryProjectionWindowEndMeters` | Number \| null | Debug bounds used for the constrained rider-map projection. These do not replace lifecycle or clear-window bounds. |
 | `entryConnectorPolyline` / `exitConnectorPolyline` | String \| null | Legacy transition connectors from earlier road-matched records. New road-matched records normally stitch these transitions into `likelyDetourPolyline` before publishing and set connector fields to `null` to avoid client-side double stitching. Boundary-refined records deliberately omit broad transitions and also set these fields to `null`. |
 | `inferredPathHandoff` | Object \| null | V2 debug metadata showing whether a short entry or exit handoff was added to the inferred rider path, the measured endpoint gaps, and the maximum allowed handoff distance. |
 | `coherentTripSignature` | String \| null | Internal/debug identity of the single time-ordered trip trace selected for the inferred alternate path. |
@@ -161,6 +163,7 @@ If a route has multiple independent detour sections at the same time, they are p
 | `detourPathLabel` | String | Rider-facing label, currently `"Likely detour path"` |
 | `entryPoint` | `{ lat, lon }` \| null | Where vehicles leave the published route |
 | `exitPoint` | `{ lat, lon }` \| null | Where vehicles rejoin the published route |
+| `progressDirection` | `1` \| `-1` \| null | Confirmed travel direction along the stored GTFS shape. Used to validate short-detour heartbeat refreshes without assuming every trip uses increasing progress. |
 | `serviceRejoinPoint` | `{ lat, lon }` \| null | Optional point where the bus naturally resumes regular service when that differs from the artificial closure endpoint. |
 | `entryStopId` / `exitStopId` | String \| null | Stop anchors for the primary segment when known |
 | `skippedStopIds` / `skippedStopCodes` / `skippedStops` | Array | Stops not served by this detoured route for the primary segment |
@@ -192,6 +195,8 @@ V2 projection uses the scheduled GTFS shape for a known trip when that trip belo
 
 Very short detours can cross the off-route area between successive 30-second feed updates. The normal confirmation rule remains three off-route readings from at least two independent trip identities. A narrow fallback allows two readings only when they come from two independent trips on the same comparison corridor, both readings are strongly off-route, both trips have a time-ordered on-route departure and rejoin, the transition direction agrees, and the two transition intervals share at least 100m of closed route. Entry and rejoin samples must also cluster within the stricter complete-transition spread. The corridor may use one scheduled shape or a safely reprojected equivalent shape as described below. This is complete traversal proof, not a general reduction of the GPS point threshold.
 
+An already-confirmed short event may also receive a heartbeat from a bracketed 25-40m marginal pass. The event stores whether its confirming travel used increasing or decreasing shape progress. In enforcement mode, the later entry-to-exit traversal must follow that same direction; a mismatch or unknown direction does not refresh the heartbeat and does not erase normal-route clear evidence. Diagnostic mode records what enforcement would reject while retaining the previous behaviour for staged rollout.
+
 Some schedules alternate physically equivalent shapes for the same route and direction. Complete-transition candidates on different shapes may share confirmation only when their off-route GPS points are nearby and one candidate can be safely reprojected onto the other shape while retaining strong off-route classification, matching transition direction, two-trip entry/rejoin consensus, and at least 100m of shared closure. Distant same-route corridors and already rider-visible events are never coalesced. A candidate's schedule-aware confirmation window may grow during the same service day but does not shrink after collection, preventing a later headway change from expiring otherwise valid consecutive-trip evidence.
 
 Shared physical-event assignments are scoped by the Firestore publish/event-window ID as well as segment index. Two distant closures on the same route must therefore keep different `sharedDetourEventId` values; route ID alone is never sufficient grouping evidence.
@@ -205,6 +210,8 @@ Self-loop segments are not valid closures when they enter and exit at the same s
 Entry and exit points are service-boundary anchors, not always mandatory bus-driving waypoints. The skipped segment can describe the closed regular-route section while the likely detour path stops where the bus naturally resumes regular service. When that service rejoin differs from the artificial closure endpoint, records may include `serviceRejoinPoint`. Road matching may accept a modest endpoint mismatch when the unmatched endpoint is still on the route's regular-service corridor, so the system does not force an unrealistic turn just to touch the artificial closure endpoint.
 
 For loop routes or routes that pass near the same downtown area more than once, exit-anchor selection is route-agnostic and progress-aware. When multiple return-to-route GPS candidates exist, geometry prefers the downstream rejoin that creates a plausible closed route span instead of a later candidate near the original entry point. If multiple exit candidates still only produce a long likely path with a tiny/no closed span, that geometry is suppressed until a credible rejoin is available.
+
+Boundary-refined rider geometry also uses the detector's route-progress window, padded by 150m by default, when choosing the road-level entry and rejoin. This prevents a self-crossing route from selecting a different visit to the same street. Full-shape overlap checks remain in place, so the smaller projection window cannot hide that a proposed detour follows another regular-route branch.
 
 Active backend records and public rider alerts use separate lifecycle rules. An unresolved record remains stored until GPS clear proof or operator action, but an auto-detour is public only when it has fresh multi-trip GPS evidence with meaningful bounded geometry. Official notice data may add stop context to an auto-detected event after that gate passes, but it is never publication proof by itself. Path and stop details remain independently fail-closed through `riderVisible` and `canShowDetourPath`.
 
@@ -477,9 +484,12 @@ Key env vars for the detour system, set in the backend environment or `.env` loc
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_SEGMENT_METERS` | `20` | Minimum out-and-back segment size to strip as an avoidable detour spur |
 | `DETOUR_ROAD_MATCHING_BACKTRACK_MIN_TURN_DEGREES` | `150` | Minimum turn angle used to identify route-fallback U-turn spurs |
 | `DETOUR_ROAD_MATCHING_DISPLAY_MIN_SEPARATED_RUN_METERS` | `75` | Minimum continuous road-matched distance away from the regular-route corridor before broad GPS boundaries may be refined for rider display. |
+| `DETOUR_ROAD_MATCHING_DISPLAY_PROGRESS_PADDING_METERS` | `150` | Padding around the detector progress window used to project refined rider-map entry/rejoin points on loops or self-crossing shapes. |
 | `DETOUR_V2_CONFIRMED_REFRESH_THRESHOLD_METERS` | `25` | Minimum route separation for a marginal observation to participate in refreshing an already-confirmed event. This never creates a new event. |
 | `DETOUR_V2_CONFIRMED_REFRESH_PATH_PROXIMITY_METERS` | `60` | Maximum distance between a marginal observation and the confirmed event's trusted path. |
 | `DETOUR_V2_CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS` | `75` | Minimum same-trip entry-to-exit progress required before a bracketed marginal pass refreshes confirmed GPS evidence. |
+| `DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_MODE` | `diagnostic` | `off`, `diagnostic`, or `enforce`. Diagnostic mode counts unknown/mismatched direction while preserving existing refresh behaviour; enforcement rejects those refreshes. |
+| `DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS` | `75` | Maximum boundary-to-shape distance allowed when deriving direction for a legacy event without stored `progressDirection`. |
 | `DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS` | `275,600,1000,1500,1800` | Local dummy detour offsets to try until simulated GPS can be road-matched without reusing the closed segment |
 | `DETOUR_OFFSET_SAMPLING_ENABLED` | `false` | Enables Cloud Tasks delayed half-minute sampling after the primary scheduled tick. |
 | `DETOUR_OFFSET_SAMPLE_DELAY_SECONDS` | `30` | Delay before the offset sample runs. |

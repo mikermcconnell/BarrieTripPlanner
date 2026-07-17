@@ -900,7 +900,7 @@ describe('Auto Detour V2 detector', () => {
     const startProgressMeters = projectOntoPolyline(shape[1], shape).progressMeters;
     const endProgressMeters = projectOntoPolyline(shape[3], shape).progressMeters;
     const eventId = '8A:confirmed-short-refresh-shape:100-500';
-    const detector = createDetourV2Detector();
+    const detector = createDetourV2Detector({ confirmedRefreshDirectionMode: 'enforce' });
     detector.hydrateRuntimeState({
       activeEvents: {
         [eventId]: {
@@ -925,10 +925,12 @@ describe('Auto Detour V2 detector', () => {
           clearWindow: { shapeId, startProgressMeters, endProgressMeters },
           geometry: {
             shapeId,
+            progressDirection: 1,
             canShowDetourPath: true,
             inferredDetourPolyline: detourPath,
             segments: [{
               shapeId,
+              progressDirection: 1,
               canShowDetourPath: true,
               inferredDetourPolyline: detourPath,
               startProgressMeters,
@@ -971,6 +973,12 @@ describe('Auto Detour V2 detector', () => {
     expect(armedState.activeEvents[eventId].latestGpsEvidenceAt).toBe(1000);
     expect(armedState.activeEvents[eventId].currentVehicleCount).toBe(1);
     expect(armedState.clearTracksByEvent[eventId]['trip-short']).toHaveLength(1);
+    expect(armedState.confirmedRefreshDirection).toEqual(expect.objectContaining({
+      totals: expect.objectContaining({ armedIncreasing: 1 }),
+      byRoute: expect.objectContaining({
+        '8A': expect.objectContaining({ armedIncreasing: 1 }),
+      }),
+    }));
     expect(detector.getState().routeProjectionSummaries['8A'].confirmedRefresh).toBe(1);
 
     const result = detector.processVehicles([
@@ -991,6 +999,12 @@ describe('Auto Detour V2 detector', () => {
     }));
     expect(result[eventId].geometry.inferredDetourPolyline).toEqual(detourPath);
     expect(detector.serializeDetectorRuntimeState().clearTracksByEvent[eventId]).toBeUndefined();
+    expect(detector.getState().confirmedRefreshDirection).toMatchObject({
+      mode: 'enforce',
+      armedIncreasing: 1,
+      refreshed: 1,
+      enforcedReject: 0,
+    });
   });
 
   test('does not refresh a confirmed event from an unbracketed marginal point', () => {
@@ -1757,6 +1771,7 @@ describe('Auto Detour V2 detector', () => {
     }));
     expect(result['8A'].geometry.segments[0]).toEqual(expect.objectContaining({
       canShowDetourPath: true,
+      progressDirection: 1,
       coherentTripSignature: expect.stringMatching(/^trip-[12]$/),
       boundaryConsensus: expect.objectContaining({
         lowerSignatureCount: 2,
@@ -1764,6 +1779,82 @@ describe('Auto Detour V2 detector', () => {
       }),
     }));
     expect(result['8A'].geometry.segments[0].geometryGate.spanMeters).toBeGreaterThan(100);
+    expect(result['8A'].geometry.progressDirection).toBe(1);
+    expect(detector.serializeDetectorRuntimeState().activeEvents[result['8A'].eventId]
+      .geometry.progressDirection).toBe(1);
+  });
+
+  test('records decreasing progress direction for a valid reverse traversal', () => {
+    const detector = createDetourV2Detector();
+    const onRoute = (id, tripId, longitude, timestampMs) => vehicle({
+      id,
+      tripId,
+      coordinate: { latitude: 44.39, longitude },
+      timestampMs,
+    });
+    const offRoute = (id, tripId, longitude, timestampMs) => vehicle({
+      id,
+      tripId,
+      coordinate: { latitude: 44.395, longitude },
+      timestampMs,
+    });
+
+    detector.processVehicles([onRoute('bus-1', 'trip-1', -79.689, 1000)], shapes, routeShapeMapping);
+    detector.processVehicles([offRoute('bus-1', 'trip-1', -79.695, 2000)], shapes, routeShapeMapping);
+    detector.processVehicles([onRoute('bus-1', 'trip-1', -79.699, 3000)], shapes, routeShapeMapping);
+    detector.processVehicles([onRoute('bus-2', 'trip-2', -79.689, 4000)], shapes, routeShapeMapping);
+    detector.processVehicles([offRoute('bus-2', 'trip-2', -79.695, 5000)], shapes, routeShapeMapping);
+    const result = detector.processVehicles([
+      onRoute('bus-2', 'trip-2', -79.699, 6000),
+    ], shapes, routeShapeMapping);
+
+    expect(result['8A']).toEqual(expect.objectContaining({
+      riderVisible: true,
+      canShowDetourPath: true,
+    }));
+    expect(result['8A'].geometry.progressDirection).toBe(-1);
+    expect(result['8A'].geometry.segments[0].progressDirection).toBe(-1);
+    expect(result['8A'].geometry.entryPoint.longitude).toBeGreaterThan(
+      result['8A'].geometry.exitPoint.longitude
+    );
+  });
+
+  test('derives a credible direction for a legacy active event without stored metadata', () => {
+    const shape = shapes.get('shape-1');
+    const startProgressMeters = projectOntoPolyline(shape[2], shape).progressMeters;
+    const endProgressMeters = projectOntoPolyline(shape[7], shape).progressMeters;
+    const detour = {
+      detourZone: { shapeId: 'shape-1', startProgressMeters, endProgressMeters },
+      geometry: {
+        shapeId: 'shape-1',
+        entryPoint: shape[2],
+        exitPoint: shape[7],
+      },
+    };
+
+    expect(_test.resolveDetourProgressDirection(detour, { shapes })).toBe(1);
+    expect(_test.resolveDetourProgressDirection({
+      ...detour,
+      geometry: { ...detour.geometry, entryPoint: shape[7], exitPoint: shape[2] },
+    }, { shapes })).toBe(-1);
+  });
+
+  test('does not guess legacy direction when projected boundaries fall outside the event window', () => {
+    const shape = shapes.get('shape-1');
+    const detour = {
+      detourZone: {
+        shapeId: 'shape-1',
+        startProgressMeters: projectOntoPolyline(shape[0], shape).progressMeters,
+        endProgressMeters: projectOntoPolyline(shape[2], shape).progressMeters,
+      },
+      geometry: {
+        shapeId: 'shape-1',
+        entryPoint: shape[5],
+        exitPoint: shape[9],
+      },
+    };
+
+    expect(_test.resolveDetourProgressDirection(detour, { shapes })).toBeNull();
   });
 
   test('does not confirm two one-ping trips without complete rejoin transitions', () => {

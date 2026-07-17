@@ -1,6 +1,6 @@
 # Auto-Detour Validation Matrix
 
-Status: Current as of 2026-07-14
+Status: Current as of 2026-07-17
 
 Use this file to turn detour bugs, live observations, and product decisions into repeatable validation scenarios.
 
@@ -107,8 +107,24 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-073 | Stale unresolved records exposed as public alerts | Separate backend retention from rider-alert eligibility. Publish auto-detour alerts only with recent dense GPS evidence and meaningful bounded geometry. Official notices may enrich a qualified event but never create or preserve it. | `api-proxy/__tests__/alertVisibility.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 2, 4, 5, 11, 14 | Covered, needs deployed Route 8A/8B/10 verification | Over-filtering low-frequency unannounced detours or allowing notice data to bypass auto-detection |
 | DET-074 | Parallel shared-route detour truncates one closure boundary | Derive boundaries from two-trip last-on-route/first-rejoin consensus, render one time-ordered same-trip trace, and reconcile a stronger shared physical boundary only after closed-polyline overlap and route-projection safeguards. Keep the 150m final path gate. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 4, 5, 7, 9, 14 | Covered, needs live Route 10/11 recheck | Sparse 30-60 second sampling can still delay endpoint consensus; a route without two agreeing transitions retains the safer projection fallback |
 | DET-075 | Short nearby detour has broad GPS boundaries and a safe road-matched middle | Keep detector evidence/clear boundaries unchanged, but refine rider display boundaries to the road-level divergence/rejoin when the middle path has at least 75m of continuous separation, follows the trusted trace, and avoids the clipped closed interior. Publish the alert without a line if no safe middle remains. A bracketed 25-40m same-trip pass may refresh only an already-confirmed matching event. | `api-proxy/__tests__/detourRoadMatcher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 4, 5, 7, 9, 14 | Covered locally, needs live Route 8B Shanty Bay recheck after deploy | Refined public boundaries must not leak into detector hydration/clearing; a short path that never separates meaningfully must remain hidden |
+| DET-076 | Direction-safe refresh and loop-safe display projection | Preserve increasing or decreasing direction when an event is confirmed. A bracketed marginal refresh must follow that direction before enforcement may update GPS freshness or erase clear proof. Refined display boundaries use the padded event progress window on a self-crossing shape while full-shape overlap safety remains active. | `api-proxy/__tests__/confirmedEventRefresh.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/boundaryRefinement.test.js`, `api-proxy/__tests__/detourRoadMatcher.test.js` | QA sections 4, 5, 10, 14 | Implemented locally; diagnostic rollout pending | Too many legacy events resolving unknown direction, or an event window that is too narrow for a valid road-level divergence |
 
 ## Recorded issues
+
+### DET-076A — Confirmed refresh lacked event travel direction
+
+- Date reviewed: 2026-07-17
+- Risk: a backward traversal could theoretically refresh a confirmed short event because the old rule used absolute entry-to-exit progress.
+- Fix: persist `progressDirection` as `1` or `-1`, validate armed/current/observed direction, retain a strict legacy projection fallback, and preserve normal-route clear proof when enforcement rejects a refresh.
+- Rollout: start with `DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_MODE=diagnostic`, review route-level counts for one service cycle, then switch to `enforce`.
+- Regression criteria: increasing and decreasing valid trips pass; opposite direction, changed direction, and unknown enforced direction do not refresh.
+
+### DET-076B — Full-shape display projection could choose the wrong visit on a loop
+
+- Date reviewed: 2026-07-17
+- Risk: a refined endpoint near a self-crossing street could project onto another occurrence of that street on the same shape.
+- Fix: slice the route to the detector progress window plus configurable padding for endpoint projection and display-span construction, while retaining full-shape separation/overlap checks.
+- Regression criteria: the chosen display span remains inside the intended progress window; invalid bounds fall back safely; Shanty Bay-type and normal road-match paths remain unchanged.
 
 ### DET-075A — Shanty Bay path rejected after safe middle was reconnected to broad GPS boundaries
 

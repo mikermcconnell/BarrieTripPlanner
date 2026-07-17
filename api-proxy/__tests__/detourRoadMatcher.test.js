@@ -1438,6 +1438,7 @@ describe('detourRoadMatcher', () => {
       canShowDetourPath: true,
       segments: [{
         shapeId: 'shape-short-detour',
+        detourZone: { startProgressMeters: 0, endProgressMeters: 1000 },
         entryPoint: originalEntryPoint,
         exitPoint: originalExitPoint,
         skippedSegmentPolyline: routeShapePolyline,
@@ -1454,6 +1455,7 @@ describe('detourRoadMatcher', () => {
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example.com',
         DETOUR_ROAD_MATCHING_ROUTE_OVERLAP_MIN_RUN_METERS: '1',
         DETOUR_ROAD_MATCHING_DISPLAY_MIN_SEPARATED_RUN_METERS: '75',
+        DETOUR_ROAD_MATCHING_DISPLAY_PROGRESS_PADDING_METERS: '0',
       },
       fetchImpl,
       shapes: new Map([['shape-short-detour', routeShapePolyline]]),
@@ -1464,6 +1466,7 @@ describe('detourRoadMatcher', () => {
     expect(segment.detourPathSuppressedReason).toBeUndefined();
     expect(segment.displayBoundaryRefined).toBe(true);
     expect(segment.displayBoundaryReason).toBe('trimmed-normal-route-approaches');
+    expect(segment.displayBoundaryProjectionConstrained).toBe(true);
     expect(segment.entryPoint).toEqual(originalEntryPoint);
     expect(segment.exitPoint).toEqual(originalExitPoint);
     expect(segment.displayEntryPoint).toEqual({ latitude: 44.0, longitude: -79.697 });

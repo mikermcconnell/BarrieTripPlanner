@@ -25,7 +25,11 @@ const {
   makeEvidenceIdentity,
 } = require('../detour/evidenceIdentity');
 const { estimateRouteHeadwayMs } = require('../detour/routeSchedule');
-const { createConfirmedEventRefresh } = require('./confirmedEventRefresh');
+const {
+  createConfirmedEventRefresh,
+  normalizeDirection,
+  normalizeDirectionMode,
+} = require('./confirmedEventRefresh');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -174,6 +178,10 @@ const CONFIRMED_REFRESH_PATH_PROXIMITY_METERS = positiveNumber(
 );
 const CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS = positiveNumber(
   process.env.DETOUR_V2_CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS,
+  75
+);
+const CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS,
   75
 );
 const OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS = positiveNumber(
@@ -696,6 +704,11 @@ function getTraceDirection(points = []) {
   return progresses[progresses.length - 1] >= progresses[0] ? 1 : -1;
 }
 
+function getConfirmedTraceDirection(trace) {
+  if (!trace || Number(trace.spanMeters) < CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS) return null;
+  return normalizeDirection(trace.direction);
+}
+
 function selectCoherentTripTrace(points = []) {
   const bySignature = new Map();
   for (const point of points) {
@@ -921,6 +934,7 @@ function applyConsensusTransitionBoundaries(candidate, polyline, geometryEvidenc
       inferredPathPoints: trace?.points || [],
       coherentTripSignature: trace?.signature || null,
       progressSortDirection: trace?.direction || 1,
+      confirmedProgressDirection: getConfirmedTraceDirection(trace),
     };
   }
 
@@ -953,6 +967,7 @@ function applyConsensusTransitionBoundaries(candidate, polyline, geometryEvidenc
       inferredPathPoints: trace?.points || [],
       coherentTripSignature: trace?.signature || null,
       progressSortDirection: trace?.direction || 1,
+      confirmedProgressDirection: getConfirmedTraceDirection(trace),
     };
   }
 
@@ -968,6 +983,7 @@ function applyConsensusTransitionBoundaries(candidate, polyline, geometryEvidenc
     entryPoint: direction >= 0 ? lowerPoint : upperPoint,
     exitPoint: direction >= 0 ? upperPoint : lowerPoint,
     progressSortDirection: direction,
+    confirmedProgressDirection: getConfirmedTraceDirection(trace),
     inferredPathPoints: trace?.points || [],
     coherentTripSignature: trace?.signature || null,
     boundaryConsensus: {
@@ -1169,6 +1185,7 @@ function selectConfiguredCorridorEvidence(candidate, polyline, corridor) {
       corridor.exitPoint
     ),
     progressSortDirection: direction,
+    confirmedProgressDirection: direction,
     gpsSupersedesPreviousPath: true,
     configuredCorridorLabel: corridor.label || null,
     configuredCorridor: true,
@@ -1739,6 +1756,7 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
     },
     coherentTripSignature: geometryEvidence.coherentTripSignature || null,
     boundaryConsensus: cloneJson(geometryEvidence.boundaryConsensus) || null,
+    progressDirection: normalizeDirection(geometryEvidence.confirmedProgressDirection),
   };
 }
 
@@ -1776,6 +1794,7 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     lastEvidenceAt,
     startProgressMeters: primarySegment?.startProgressMeters ?? null,
     endProgressMeters: primarySegment?.endProgressMeters ?? null,
+    progressDirection: normalizeDirection(primarySegment?.progressDirection),
     gpsSupersedesPreviousPath: segments.some((segment) => segment.gpsSupersedesPreviousPath === true),
     staleMixedEvidence: segments.some((segment) => segment.staleMixedEvidence === true),
     configuredCorridor: segments.some((segment) => segment.configuredCorridor === true),
@@ -1913,6 +1932,57 @@ function getDetourProgressBounds(detour = {}) {
     if (bounds) return bounds;
   }
   return null;
+}
+
+function resolveDetourProgressDirection(detour = {}, { shapes } = {}) {
+  const geometry = detour.geometry || {};
+  const shapeId = getShapeIdFromDetour(detour);
+  const segments = Array.isArray(geometry.segments) ? geometry.segments : [];
+  const segment = segments.find((item) => !shapeId || item?.shapeId === shapeId) || segments[0] || null;
+  const storedDirection = normalizeDirection(
+    segment?.progressDirection ?? geometry.progressDirection ?? detour.progressDirection
+  );
+  if (storedDirection) return storedDirection;
+
+  const polyline = shapeId && typeof shapes?.get === 'function' ? shapes.get(shapeId) : null;
+  const entryPoint = segment?.entryPoint || geometry.entryPoint || detour.entryPoint;
+  const exitPoint = segment?.exitPoint || geometry.exitPoint || detour.exitPoint;
+  if (!Array.isArray(polyline) || polyline.length < 2 || !entryPoint || !exitPoint) return null;
+
+  const entryProjection = projectOntoPolyline(entryPoint, polyline);
+  const exitProjection = projectOntoPolyline(exitPoint, polyline);
+  if (
+    !entryProjection ||
+    !exitProjection ||
+    entryProjection.distanceMeters > CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS ||
+    exitProjection.distanceMeters > CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS
+  ) {
+    return null;
+  }
+
+  const entryProgress = Number(entryProjection.progressMeters);
+  const exitProgress = Number(exitProjection.progressMeters);
+  if (
+    !Number.isFinite(entryProgress) ||
+    !Number.isFinite(exitProgress) ||
+    Math.abs(exitProgress - entryProgress) < CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS
+  ) {
+    return null;
+  }
+
+  const bounds = getDetourProgressBounds(detour);
+  if (
+    bounds &&
+    (
+      entryProgress < bounds.start - TRACE_REVERSAL_TOLERANCE_METERS ||
+      entryProgress > bounds.end + TRACE_REVERSAL_TOLERANCE_METERS ||
+      exitProgress < bounds.start - TRACE_REVERSAL_TOLERANCE_METERS ||
+      exitProgress > bounds.end + TRACE_REVERSAL_TOLERANCE_METERS
+    )
+  ) {
+    return null;
+  }
+  return normalizeDirection(exitProgress - entryProgress);
 }
 
 function getCandidateProgressBounds(candidate = {}) {
@@ -2346,6 +2416,10 @@ function createDetourV2Detector(config = {}) {
       CANDIDATE_EVIDENCE_TTL_MS
     ),
   };
+  const confirmedRefreshDirectionMode = normalizeDirectionMode(
+    config.confirmedRefreshDirectionMode ??
+      process.env.DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_MODE
+  );
 
   let tickId = 0;
   let lastVehicleCount = 0;
@@ -3961,6 +4035,8 @@ function createDetourV2Detector(config = {}) {
     getShapeId: getShapeIdFromDetour,
     getProgressBounds: getDetourProgressBounds,
     getDistanceToPaths: getMinDistanceToPolylines,
+    resolveProgressDirection: resolveDetourProgressDirection,
+    directionMode: confirmedRefreshDirectionMode,
     clearNormalRouteEvidence: (eventId) => {
       // A completed on-route/marginal/on-route traversal outweighs older
       // normal-route clear proof. Merely arming a refresh does not clear it.
@@ -4139,7 +4215,8 @@ function createDetourV2Detector(config = {}) {
         const pendingConfirmedRefreshes = confirmedEventRefresh.arm(
           previousTransitionState,
           projectedSample,
-          confirmedRefreshEvents
+          confirmedRefreshEvents,
+          { shapes }
         );
         if (pendingConfirmedRefreshes.length > 0) {
           if (classification === 'on-route-clear') {
@@ -4268,10 +4345,22 @@ function createDetourV2Detector(config = {}) {
           activeDetours.set(detour.eventId, detour);
         }
       } else if (projection.distanceMeters <= onRouteClearThresholdMeters) {
-        const refreshedEventIds = confirmedEventRefresh.finalize(
+        const confirmedRefreshResult = confirmedEventRefresh.finalize(
           previousTransitionState,
-          projectedSample
+          projectedSample,
+          { shapes }
         );
+        const refreshedEventIds = confirmedRefreshResult.refreshedEventIds;
+        const rejectedRefreshes = confirmedRefreshResult.decisions.filter(
+          (decision) => decision.refreshed === false
+        );
+        if (rejectedRefreshes.length > 0) {
+          projectionDiagnostics.set(id, {
+            ...projectionDiagnostics.get(id),
+            confirmedRefreshRejectedEventIds: rejectedRefreshes.map((item) => item.eventId),
+            confirmedRefreshRejectedReasons: rejectedRefreshes.map((item) => item.reason),
+          });
+        }
         if (
           previousTransitionState.offRouteActive === true &&
           timestampMs - Number(previousTransitionState.lastOffRouteAt || 0) <=
@@ -4475,6 +4564,7 @@ function createDetourV2Detector(config = {}) {
       ),
       candidateEvidence,
       routeProjectionSummaries: lastRouteProjectionSummaries,
+      confirmedRefreshDirection: confirmedEventRefresh.getDirectionStats(),
     };
   }
 
@@ -4517,6 +4607,7 @@ function createDetourV2Detector(config = {}) {
       candidateEvidence: getState().candidateEvidence[route] || null,
       snapshot: (lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) ? serializeDetour(lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) : null,
       projectionSummary: lastRouteProjectionSummaries[route] || null,
+      confirmedRefreshDirection: confirmedEventRefresh.getDirectionStats(route),
       projectionDiagnostics: [...projectionDiagnostics.values()]
         .filter((diagnostic) => diagnostic.routeId === route),
     };
@@ -4631,6 +4722,7 @@ function createDetourV2Detector(config = {}) {
       transitionObservationState: Object.fromEntries(
         [...transitionObservationState.entries()].map(([key, value]) => [key, cloneJson(value)])
       ),
+      confirmedRefreshDirection: confirmedEventRefresh.serializeDirectionStats(),
       seenSamples: [...seenSamples].slice(-500),
     };
   }
@@ -4670,6 +4762,7 @@ function createDetourV2Detector(config = {}) {
     } else {
       hydrateClearTracks(snapshot.clearTracks || {}, { eventKeyed: false });
     }
+    confirmedEventRefresh.hydrateDirectionStats(snapshot.confirmedRefreshDirection || {});
     pruneSupersededLegacyRouteDetours();
   }
 
@@ -4793,6 +4886,7 @@ module.exports = {
     applyConsensusTransitionBoundaries,
     getRiderVisibilityReason,
     getCandidateConfirmationTiming,
+    resolveDetourProgressDirection,
     selectCoherentTripTrace,
     stitchSafeInferredPathHandoffs,
   },

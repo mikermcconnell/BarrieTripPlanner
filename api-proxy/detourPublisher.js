@@ -3149,6 +3149,11 @@ async function publishDetours(activeDetours, options = {}) {
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;
+      doc.progressDirection = Number(geo.progressDirection) === -1
+        ? -1
+        : Number(geo.progressDirection) === 1
+          ? 1
+          : null;
       copyRefinedDisplayGeometry(doc, geo);
       doc.noticeTemporaryStops = Array.isArray(geo.noticeTemporaryStops) ? geo.noticeTemporaryStops : [];
       doc.noticeTemporaryStopIds = Array.isArray(geo.noticeTemporaryStopIds) ? geo.noticeTemporaryStopIds : [];

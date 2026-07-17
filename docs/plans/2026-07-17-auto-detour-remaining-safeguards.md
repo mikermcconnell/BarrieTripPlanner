@@ -1,7 +1,7 @@
 # Auto-Detour Remaining Safeguards
 
 Date: 2026-07-17
-Status: Proposed
+Status: Implemented locally; diagnostic production rollout pending
 Starting checkpoint: `7decd9686f28b8a189b274b83df85007a8d21043`
 
 ## Goal
@@ -170,3 +170,21 @@ Run in this order:
 - Full tests and the 15-scenario synthetic lab pass.
 - Production diagnostics show no meaningful rise in hidden valid detours or unsafe published paths.
 - Source documentation and the validation matrix record the new behaviour and rollout evidence.
+
+## Implementation result
+
+- New V2 geometry stores a confirmed `progressDirection` of `1` or `-1`; weak traces do not guess a direction.
+- Legacy active events can derive direction only from credible entry/exit projections on the matching shape and inside the stored event window.
+- Confirmed refreshes now support `off`, `diagnostic`, and `enforce` modes. Enforcement preserves normal-route clear evidence when direction is unknown, changes after arming, or conflicts with the observed traversal.
+- Route and global direction counters are exposed through detector state and route debug output.
+- Refined display projection now uses the detector progress window plus 150m default padding. Full-route overlap safety remains unchanged.
+- Added regression coverage for increasing and decreasing travel, opposite and changed direction, unknown enforced direction, restart persistence, legacy fallback, self-crossing routes, missing bounds, full-route overlap, and the existing Route 8 short-detour path.
+
+## Verification result
+
+- Focused detour suites: 265 tests passed.
+- Full app and backend test command passed.
+- Backend: 65 suites and 791 tests passed.
+- Synthetic detour lab: 15 of 15 scenarios passed.
+- `git diff --check` passed.
+- No production deployment was performed. The default direction mode remains `diagnostic` for the planned staged rollout.

@@ -15,6 +15,44 @@ function timestampMs(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeDirection(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric === 0) return null;
+  return numeric > 0 ? 1 : -1;
+}
+
+function normalizeDirectionMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['off', 'diagnostic', 'enforce'].includes(normalized)
+    ? normalized
+    : 'diagnostic';
+}
+
+const DIRECTION_STAT_FIELDS = [
+  'armedIncreasing',
+  'armedDecreasing',
+  'unknown',
+  'mismatch',
+  'directionChanged',
+  'diagnosticWouldReject',
+  'enforcedReject',
+  'refreshed',
+];
+
+function emptyDirectionStats(mode) {
+  return {
+    mode,
+    armedIncreasing: 0,
+    armedDecreasing: 0,
+    unknown: 0,
+    mismatch: 0,
+    directionChanged: 0,
+    diagnosticWouldReject: 0,
+    enforcedReject: 0,
+    refreshed: 0,
+  };
+}
+
 function createConfirmedEventRefresh({
   activeDetours,
   getActiveEventsForRoute,
@@ -22,9 +60,14 @@ function createConfirmedEventRefresh({
   getShapeId,
   getProgressBounds,
   getDistanceToPaths,
+  resolveProgressDirection = () => null,
   clearNormalRouteEvidence,
+  directionMode = 'diagnostic',
   rules,
 }) {
+  const mode = normalizeDirectionMode(directionMode);
+  const stats = emptyDirectionStats(mode);
+  const statsByRoute = new Map();
   const {
     minimumUniqueSignatures,
     offRouteThresholdMeters,
@@ -34,6 +77,15 @@ function createConfirmedEventRefresh({
     reversalToleranceMeters,
     maximumSampleGapMs,
   } = rules;
+
+  function increment(detour, field) {
+    stats[field] += 1;
+    const routeId = String(detour?.routeId || '').trim();
+    if (!routeId) return;
+    const routeStats = statsByRoute.get(routeId) || emptyDirectionStats(mode);
+    routeStats[field] += 1;
+    statsByRoute.set(routeId, routeStats);
+  }
 
   function isRefreshable(detour) {
     return Boolean(
@@ -75,7 +127,7 @@ function createConfirmedEventRefresh({
     });
   }
 
-  function arm(previousState, projectedSample, matchingEvents) {
+  function arm(previousState, projectedSample, matchingEvents, context = {}) {
     const entrySample = previousState?.lastOnRouteSample;
     if (
       !entrySample ||
@@ -90,22 +142,35 @@ function createConfirmedEventRefresh({
       : [];
     const byEventId = new Map(existing.map((item) => [item.eventId, item]));
     for (const detour of matchingEvents) {
+      const expectedDirection = normalizeDirection(resolveProgressDirection(detour, context));
+      if (expectedDirection > 0) increment(detour, 'armedIncreasing');
+      if (expectedDirection < 0) increment(detour, 'armedDecreasing');
+      if (mode !== 'off' && expectedDirection == null) {
+        increment(detour, 'unknown');
+        if (mode === 'enforce') {
+          increment(detour, 'enforcedReject');
+          byEventId.delete(detour.eventId);
+          continue;
+        }
+      }
       byEventId.set(detour.eventId, {
         eventId: detour.eventId,
         shapeId: projectedSample.shapeId,
         entryProgressMeters: Number(entrySample.progressMeters),
         marginalProgressMeters: Number(projectedSample.progressMeters),
         observedAt: projectedSample.timestampMs,
+        expectedProgressDirection: expectedDirection,
       });
     }
     return [...byEventId.values()];
   }
 
-  function finalize(previousState, exitSample) {
+  function finalize(previousState, exitSample, context = {}) {
     const pending = Array.isArray(previousState?.pendingConfirmedRefreshes)
       ? previousState.pendingConfirmedRefreshes
       : [];
     const refreshedEventIds = new Set();
+    const decisions = [];
     for (const item of pending) {
       const detour = activeDetours.get(item.eventId);
       const observedAt = Number(item.observedAt);
@@ -133,6 +198,28 @@ function createConfirmedEventRefresh({
         continue;
       }
 
+      const observedDirection = normalizeDirection(exitProgress - entryProgress);
+      const armedDirection = normalizeDirection(item.expectedProgressDirection);
+      const currentDirection = normalizeDirection(resolveProgressDirection(detour, context));
+      let rejectionReason = null;
+      if (mode !== 'off' && (!armedDirection || !currentDirection)) {
+        rejectionReason = 'confirmed-refresh-direction-unknown';
+        increment(detour, 'unknown');
+      } else if (mode !== 'off' && armedDirection !== currentDirection) {
+        rejectionReason = 'confirmed-refresh-direction-changed';
+        increment(detour, 'directionChanged');
+      } else if (mode !== 'off' && observedDirection !== armedDirection) {
+        rejectionReason = 'confirmed-refresh-direction-mismatch';
+        increment(detour, 'mismatch');
+      }
+
+      if (rejectionReason && mode === 'enforce') {
+        increment(detour, 'enforcedReject');
+        decisions.push({ eventId: item.eventId, refreshed: false, reason: rejectionReason });
+        continue;
+      }
+      if (rejectionReason) increment(detour, 'diagnosticWouldReject');
+
       detour.latestGpsEvidenceAt = Math.max(
         Number(detour.latestGpsEvidenceAt || 0),
         observedAt
@@ -142,17 +229,59 @@ function createConfirmedEventRefresh({
       detour.confirmedRefreshCount = Number(detour.confirmedRefreshCount || 0) + 1;
       clearNormalRouteEvidence(item.eventId);
       refreshedEventIds.add(item.eventId);
+      increment(detour, 'refreshed');
+      decisions.push({
+        eventId: item.eventId,
+        refreshed: true,
+        reason: rejectionReason,
+      });
     }
-    return refreshedEventIds;
+    return { refreshedEventIds, decisions };
+  }
+
+  function getDirectionStats(routeId = null) {
+    if (routeId == null) return { ...stats };
+    return { ...(statsByRoute.get(String(routeId)) || emptyDirectionStats(mode)) };
+  }
+
+  function serializeDirectionStats() {
+    return {
+      totals: getDirectionStats(),
+      byRoute: Object.fromEntries(
+        [...statsByRoute.entries()].map(([routeId, routeStats]) => [routeId, { ...routeStats }])
+      ),
+    };
+  }
+
+  function hydrateDirectionStats(snapshot = {}) {
+    const apply = (target, source = {}) => {
+      for (const field of DIRECTION_STAT_FIELDS) {
+        const value = Number(source[field]);
+        target[field] = Number.isFinite(value) && value >= 0 ? value : 0;
+      }
+      target.mode = mode;
+    };
+    apply(stats, snapshot.totals);
+    statsByRoute.clear();
+    for (const [routeId, routeStats] of Object.entries(snapshot.byRoute || {})) {
+      const hydrated = emptyDirectionStats(mode);
+      apply(hydrated, routeStats);
+      statsByRoute.set(routeId, hydrated);
+    }
   }
 
   return {
     arm,
     finalize,
     findMatches,
+    getDirectionStats,
+    hydrateDirectionStats,
+    serializeDirectionStats,
   };
 }
 
 module.exports = {
   createConfirmedEventRefresh,
+  normalizeDirection,
+  normalizeDirectionMode,
 };

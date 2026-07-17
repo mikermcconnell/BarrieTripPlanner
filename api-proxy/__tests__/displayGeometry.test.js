@@ -25,6 +25,9 @@ describe('display geometry contract', () => {
       displaySkippedStops: [],
       displaySkippedStopIds: [],
       displaySkippedStopCodes: [],
+      displayBoundaryProjectionConstrained: false,
+      displayBoundaryProjectionWindowStartMeters: null,
+      displayBoundaryProjectionWindowEndMeters: null,
     });
   });
 
@@ -37,6 +40,9 @@ describe('display geometry contract', () => {
       displaySkippedStops: null,
       displaySkippedStopIds: ['10'],
       displaySeparatedRunMeters: 125,
+      displayBoundaryProjectionConstrained: true,
+      displayBoundaryProjectionWindowStartMeters: 900,
+      displayBoundaryProjectionWindowEndMeters: 1200,
     });
 
     expect(target).toMatchObject({
@@ -47,6 +53,9 @@ describe('display geometry contract', () => {
       displaySkippedStopIds: ['10'],
       displaySkippedStopCodes: [],
       displaySeparatedRunMeters: 125,
+      displayBoundaryProjectionConstrained: true,
+      displayBoundaryProjectionWindowStartMeters: 900,
+      displayBoundaryProjectionWindowEndMeters: 1200,
     });
   });
 

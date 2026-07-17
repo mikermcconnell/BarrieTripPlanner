@@ -94,6 +94,55 @@ function polylineLengthMeters(polyline) {
   return length;
 }
 
+function getCumulativeDistances(polyline) {
+  const points = normalizePolyline(polyline);
+  const distances = [0];
+  for (let index = 1; index < points.length; index += 1) {
+    distances.push(
+      distances[index - 1] + haversineDistance(points[index - 1], points[index])
+    );
+  }
+  return { points, distances };
+}
+
+function interpolatePointAtProgress(points, distances, progressMeters) {
+  if (points.length === 0) return null;
+  const maximum = distances[distances.length - 1] || 0;
+  const target = Math.max(0, Math.min(Number(progressMeters), maximum));
+  for (let index = 1; index < distances.length; index += 1) {
+    if (distances[index] < target) continue;
+    const segmentStart = distances[index - 1];
+    const segmentLength = distances[index] - segmentStart;
+    const ratio = segmentLength > 0 ? (target - segmentStart) / segmentLength : 0;
+    return {
+      latitude: points[index - 1].latitude +
+        (points[index].latitude - points[index - 1].latitude) * ratio,
+      longitude: points[index - 1].longitude +
+        (points[index].longitude - points[index - 1].longitude) * ratio,
+    };
+  }
+  return { ...points[points.length - 1] };
+}
+
+function slicePolylineByProgressWindow(polyline, startProgressMeters, endProgressMeters) {
+  const { points, distances } = getCumulativeDistances(polyline);
+  if (points.length < 2) return [];
+  const maximum = distances[distances.length - 1] || 0;
+  const rawStart = Number(startProgressMeters);
+  const rawEnd = Number(endProgressMeters);
+  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawStart === rawEnd) return [];
+  const start = Math.max(0, Math.min(rawStart, rawEnd, maximum));
+  const end = Math.max(0, Math.min(Math.max(rawStart, rawEnd), maximum));
+  if (end <= start) return [];
+
+  const sliced = [interpolatePointAtProgress(points, distances, start)];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    if (distances[index] > start && distances[index] < end) sliced.push(points[index]);
+  }
+  sliced.push(interpolatePointAtProgress(points, distances, end));
+  return dedupeConsecutivePoints(sliced);
+}
+
 function dedupeConsecutivePoints(points) {
   if (!Array.isArray(points) || points.length === 0) return [];
 
@@ -171,5 +220,6 @@ module.exports = {
   pointToPolylineDistance,
   polylineLengthMeters,
   projectPointOntoPolyline,
+  slicePolylineByProgressWindow,
   toRadians,
 };
