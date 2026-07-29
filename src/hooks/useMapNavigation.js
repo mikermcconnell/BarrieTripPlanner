@@ -7,7 +7,7 @@
  *
  * Shared between native and web HomeScreens.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getSelectedAddressFromParams, normalizeSelectedRouteId } from '../utils/mapSelection';
 
 export const useMapNavigation = ({
@@ -22,11 +22,22 @@ export const useMapNavigation = ({
   hasSelection,
   showLocation,
 }) => {
+  const consumedStopRequestRef = useRef(null);
+  const consumedRouteRequestRef = useRef(null);
+  const consumedAddressRequestRef = useRef(null);
+
   // Handle selected stop from navigation params
   useEffect(() => {
-    if (route?.params?.selectedStopId) {
-      const stop = stops.find((s) => s.id === route.params.selectedStopId);
+    const selectedStopId = route?.params?.selectedStopId;
+    if (!selectedStopId) {
+      consumedStopRequestRef.current = null;
+      return;
+    }
+
+    if (consumedStopRequestRef.current !== selectedStopId) {
+      const stop = stops.find((s) => s.id === selectedStopId);
       if (stop) {
+        consumedStopRequestRef.current = selectedStopId;
         setSelectedStop(stop);
         mapRef.current?.animateToRegion(
           {
@@ -37,15 +48,21 @@ export const useMapNavigation = ({
           },
           500
         );
+        navigation.setParams({ selectedStopId: undefined });
       }
     }
-  }, [route?.params?.selectedStopId, stops]);
+  }, [route?.params?.selectedStopId, stops, navigation]);
 
   // Handle selected route from navigation params
   useEffect(() => {
     const routeId = normalizeSelectedRouteId(route?.params);
-    if (!routeId) return;
+    if (!routeId) {
+      consumedRouteRequestRef.current = null;
+      return;
+    }
+    if (consumedRouteRequestRef.current === routeId) return;
 
+    consumedRouteRequestRef.current = routeId;
     selectRoute(routeId);
     setShowStops(true);
     navigation.setParams({ selectedRouteId: undefined });
@@ -54,9 +71,15 @@ export const useMapNavigation = ({
   // Handle selected address/coordinate from navigation params
   useEffect(() => {
     const selectedAddress = getSelectedAddressFromParams(route?.params);
-    if (!selectedAddress) return;
+    if (!selectedAddress) {
+      consumedAddressRequestRef.current = null;
+      return;
+    }
     const { coordinate, label } = selectedAddress;
+    const requestKey = `${coordinate.latitude}:${coordinate.longitude}:${label || ''}`;
+    if (consumedAddressRequestRef.current === requestKey) return;
 
+    consumedAddressRequestRef.current = requestKey;
     setSelectedStop(null);
     showLocation(coordinate, label);
 

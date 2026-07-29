@@ -6,7 +6,8 @@ describe('route line polish source wiring', () => {
     const nativeSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.js'), 'utf8');
     const webSource = fs.readFileSync(path.join(__dirname, '../screens/HomeScreen.web.impl.js'), 'utf8');
 
-    expect(nativeSource).toContain('outlineColor={routeVisual.outlineColor}');
+    expect(nativeSource).toContain("lineColor: ['get', 'routeColor']");
+    expect(nativeSource).toContain("lineWidth: ['get', 'routeStrokeWidth']");
     expect(nativeSource).toContain('routeColor: isSelected ? shape.color : ROUTE_LINE_MUTED_COLOR');
     expect(nativeSource).toContain('routeColor: isDetouring ? shape.color : ROUTE_LINE_MUTED_COLOR');
     expect(nativeSource).toContain('ROUTE_LINE_WIDTH_SCALE');

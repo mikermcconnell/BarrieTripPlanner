@@ -1,3 +1,18 @@
+diff --git a/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt b/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt
+index 9755671..6addbba 100644
+--- a/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt
++++ b/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt
+@@ -27,5 +27,9 @@ cmake_minimum_required(VERSION 3.13)
+ # Define the library name here.
+ project(appmodules)
+-
++# Keep the Android C++ runtime explicit for Windows SDK paths containing
++# spaces. CMake shortens the clang++ executable name in that case, which can
++# prevent the compiler driver from adding libc++ to generated link commands.
++link_libraries(c++_shared)
++
+ # This file includes all the necessary to let you build your application with the New Architecture.
+ include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
 diff --git a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/ReactActivityDelegate.java b/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/ReactActivityDelegate.java
 index 82d815c..7e83179 100644
 --- a/node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react/ReactActivityDelegate.java

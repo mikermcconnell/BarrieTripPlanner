@@ -59,6 +59,15 @@ function makeDbMock() {
   };
 }
 
+function makeLegacySimulationEnv(overrides = {}) {
+  return {
+    NODE_ENV: 'development',
+    DETOUR_SIMULATION_ENABLED: 'true',
+    DETOUR_DETECTOR_VERSION: 'v1',
+    ...overrides,
+  };
+}
+
 describe('detourSimulation', () => {
   test('buildSyntheticGeometry creates renderable skipped and inferred paths', () => {
     const { shape } = selectRouteAndShape(makeStaticData(), '1');
@@ -76,7 +85,7 @@ describe('detourSimulation', () => {
 
   test('create is disabled unless explicitly enabled outside production', async () => {
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'false' },
+      env: makeLegacySimulationEnv({ DETOUR_SIMULATION_ENABLED: 'false' }),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => makeDbMock(),
     });
@@ -90,7 +99,7 @@ describe('detourSimulation', () => {
   test('create writes a simulated activeDetours document', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -148,7 +157,7 @@ describe('detourSimulation', () => {
   test('farmers market preset writes simulated Route 11 detour', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -198,7 +207,7 @@ describe('detourSimulation', () => {
   test('saunders welham preset writes simulated Route 12A and 12B detours', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -263,7 +272,7 @@ describe('detourSimulation', () => {
   test('dunlop ferndale anne preset writes simulated Route 2A and 2B detours', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -345,7 +354,7 @@ describe('detourSimulation', () => {
   test('wellington owen grove preset writes simulated Route 7A and 7B detours', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -392,7 +401,7 @@ describe('detourSimulation', () => {
   test('legacy Route 7 preset aliases publish the replacement Wellington/Owen/Grove detour', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -448,7 +457,7 @@ describe('detourSimulation', () => {
   test('yonge big bay little preset writes simulated Route 8A detour', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
     });
@@ -503,12 +512,10 @@ describe('detourSimulation', () => {
       })),
     }));
     const ops = createDetourSimulationOps({
-      env: {
-        NODE_ENV: 'development',
-        DETOUR_SIMULATION_ENABLED: 'true',
+      env: makeLegacySimulationEnv({
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example',
-      },
+      }),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
       matchGeometry,
@@ -556,12 +563,10 @@ describe('detourSimulation', () => {
     const db = makeDbMock();
     const matchedPoint = { latitude: 44.391, longitude: -79.722 };
     const ops = createDetourSimulationOps({
-      env: {
-        NODE_ENV: 'development',
-        DETOUR_SIMULATION_ENABLED: 'true',
+      env: makeLegacySimulationEnv({
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example',
-      },
+      }),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
       matchGeometry: async (geometry) => ({
@@ -600,13 +605,11 @@ describe('detourSimulation', () => {
     const db = makeDbMock();
     const calls = [];
     const ops = createDetourSimulationOps({
-      env: {
-        NODE_ENV: 'development',
-        DETOUR_SIMULATION_ENABLED: 'true',
+      env: makeLegacySimulationEnv({
         DETOUR_ROAD_MATCHING_ENABLED: 'true',
         DETOUR_ROAD_MATCHING_BASE_URL: 'https://router.example',
         DETOUR_SIMULATION_OFFSET_CANDIDATES_METERS: '275,1000',
-      },
+      }),
       loadStaticData: async () => makeStaticData(),
       getFirestore: () => db,
       matchGeometry: jest.fn(async (geometry) => {
@@ -698,7 +701,7 @@ describe('detourSimulation', () => {
   test('clear deletes only the requested simulated route document', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
-      env: { NODE_ENV: 'development', DETOUR_SIMULATION_ENABLED: 'true' },
+      env: makeLegacySimulationEnv(),
       getFirestore: () => db,
     });
 

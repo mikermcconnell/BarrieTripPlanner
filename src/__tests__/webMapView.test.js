@@ -310,13 +310,14 @@ describe('WebMapView bus hub marker HTML', () => {
 
     expect(html).toContain('data-bus-hub-icon="true"');
     expect(html).toContain('Downtown Hub');
-    expect(html).toContain('data-bus-hub-major-circle="true"');
-    expect(html).toContain('background:#0C8CE5');
+    expect(html).toContain('data-bus-hub-square="major"');
+    expect(html).toContain('background:#004E80');
     expect(html).toContain('border:2px solid #FFFFFF');
     expect(html).not.toContain('src="test-file-stub"');
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<svg');
     expect(html).not.toContain('HUB</text>');
+    expect(html).not.toContain('>H</div>');
     expect(html).toContain('text-shadow');
     expect(html).toContain('width:21px;height:21px');
     expect(html).toContain('height:21px');
@@ -333,12 +334,33 @@ describe('WebMapView bus hub marker HTML', () => {
       hubType: 'minor',
     });
 
-    expect(html).toContain('data-bus-hub-minor-circle="true"');
+    expect(html).toContain('data-bus-hub-square="minor"');
     expect(html).toContain('RVH');
     expect(html).toContain('width:15.75px;height:15.75px');
     expect(html).toContain('border:2px solid #FFFFFF');
+    expect(html).toContain('background:#004E80');
+    expect(html).not.toContain('>H</div>');
     expect(html).toContain('top:16.75px');
     expect(html).not.toContain('src="test-file-stub"');
     expect(html).not.toContain('<img');
+  });
+});
+
+describe('WebMapView stop marker HTML', () => {
+  test('uses the neutral stop palette and reveals the stop code when requested', () => {
+    const html = __TEST_ONLY__.createStopHtml(false, false, '1234', 1, true);
+
+    expect(html).toContain('background:#FFFFFF');
+    expect(html).toContain('border:2px solid #505F79');
+    expect(html).toContain('1234');
+    expect(html).not.toContain('#1a73e8');
+  });
+
+  test('keeps closed stops fully opaque in warning orange', () => {
+    const html = __TEST_ONLY__.createStopHtml(false, true, '1234', 0.25, true);
+
+    expect(html).toContain('opacity:1');
+    expect(html).toContain('#FF991F');
+    expect(html).not.toContain('opacity:0.25');
   });
 });

@@ -5,6 +5,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   updateProfile,
+  verifyBeforeUpdateEmail,
   sendPasswordResetEmail,
   sendEmailVerification,
   GoogleAuthProvider,
@@ -135,6 +136,59 @@ export const authService = {
     }
   },
 
+  async updateDisplayName(displayName) {
+    const nextName = String(displayName || '').trim();
+    const user = auth.currentUser;
+    if (!user) return { success: false, error: 'You must be signed in.' };
+    if (nextName.length < 2 || nextName.length > 60) {
+      return { success: false, error: 'Name must be between 2 and 60 characters.' };
+    }
+
+    const previousName = user.displayName || '';
+    try {
+      await updateProfile(user, { displayName: nextName });
+      const profileResult = await userFirestoreService.updateUser(user.uid, { displayName: nextName });
+      if (!profileResult.success) {
+        try {
+          await updateProfile(user, { displayName: previousName });
+        } catch (rollbackError) {
+          logger.error('Display name rollback error:', rollbackError);
+          return {
+            success: false,
+            partial: true,
+            user: this.formatUser(user),
+            error: 'Your sign-in name changed, but your synced profile could not be updated. Try again when you are online.',
+          };
+        }
+        return profileResult;
+      }
+      return { success: true, user: this.formatUser(user) };
+    } catch (error) {
+      logger.error('Display name update error:', error);
+      return { success: false, error: this.getErrorMessage(error.code) };
+    }
+  },
+
+  async requestEmailChange(email) {
+    const nextEmail = String(email || '').trim().toLowerCase();
+    const user = auth.currentUser;
+    if (!user) return { success: false, error: 'You must be signed in.' };
+    if (!/^\S+@\S+\.\S+$/.test(nextEmail)) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+    if (nextEmail === String(user.email || '').toLowerCase()) {
+      return { success: false, error: 'Enter a different email address.' };
+    }
+
+    try {
+      await verifyBeforeUpdateEmail(user, nextEmail);
+      return { success: true };
+    } catch (error) {
+      logger.error('Email change request error:', error);
+      return { success: false, error: this.getErrorMessage(error.code) };
+    }
+  },
+
   // Listen to auth state changes
   onAuthStateChanged(callback) {
     return onAuthStateChanged(auth, (user) => {
@@ -157,6 +211,8 @@ export const authService = {
       displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
       emailVerified: firebaseUser.emailVerified,
       photoURL: firebaseUser.photoURL,
+      isAnonymous: Boolean(firebaseUser.isAnonymous),
+      providers: (firebaseUser.providerData || []).map((provider) => provider.providerId).filter(Boolean),
       createdAt: firebaseUser.metadata?.creationTime,
       lastLoginAt: firebaseUser.metadata?.lastSignInTime,
     };
@@ -238,7 +294,7 @@ export const authService = {
   // Get user-friendly error messages
   getErrorMessage(errorCode) {
     const errorMessages = {
-      'auth/email-already-in-use': 'This email is already registered. Try signing in instead.',
+      'auth/email-already-in-use': 'This email is already registered to another account.',
       'auth/invalid-email': 'Please enter a valid email address.',
       'auth/operation-not-allowed': 'Email/password accounts are not enabled.',
       'auth/weak-password': 'Password should be at least 6 characters.',
@@ -248,6 +304,7 @@ export const authService = {
       'auth/invalid-credential': 'Invalid email or password.',
       'auth/too-many-requests': 'Too many attempts. Please try again later.',
       'auth/network-request-failed': 'Network error. Check your connection.',
+      'auth/requires-recent-login': 'For security, sign out, sign back in, and try again.',
     };
 
     return errorMessages[errorCode] || 'An unexpected error occurred. Please try again.';

@@ -15,6 +15,15 @@ const sameCoordinates = (first, second) => (
   first.lon === second.lon
 );
 
+const isTransitLeg = (leg) => leg?.mode === 'BUS' || leg?.mode === 'TRANSIT';
+
+const findNextTransitLegIndex = (legs, startIndex) => {
+  for (let index = startIndex; index < legs.length; index += 1) {
+    if (isTransitLeg(legs[index])) return index;
+  }
+  return -1;
+};
+
 export const buildWalkingLandmarkMarkers = ({
   itinerary,
   currentLeg,
@@ -26,7 +35,8 @@ export const buildWalkingLandmarkMarkers = ({
     return [];
   }
 
-  const tripOrigin = itinerary?.legs?.[0]?.from;
+  const legs = itinerary?.legs || [];
+  const tripOrigin = legs[0]?.from;
   const previousLeg = itinerary?.legs?.[currentLegIndex - 1];
   const isPostTransitWalk = currentLegIndex > 0 && !nextTransitLeg && previousLeg?.mode !== 'WALK';
   const startLocation = currentLegIndex === 0 && hasValidCoordinates(tripOrigin)
@@ -36,6 +46,8 @@ export const buildWalkingLandmarkMarkers = ({
   let startCaption = 'Walk starts';
   if (currentLegIndex === 0) {
     startCaption = 'Started here';
+  } else if (nextTransitLeg && isTransitLeg(previousLeg)) {
+    startCaption = 'Transfer here';
   } else if (isPostTransitWalk) {
     startCaption = 'Get off here';
   }
@@ -67,6 +79,31 @@ export const buildWalkingLandmarkMarkers = ({
       ),
       caption: isBoardingStop ? 'Board here' : 'Walk here',
       detail: isBoardingStop ? formatBoardingArrivalDetail(nextTransitProximity) : null,
+    });
+  }
+
+  for (let index = Math.max(0, currentLegIndex); index < legs.length; index += 1) {
+    const transitLeg = legs[index];
+    if (!isTransitLeg(transitLeg) || !hasValidCoordinates(transitLeg.to)) continue;
+
+    const hasTransferAhead = findNextTransitLegIndex(legs, index + 1) >= 0;
+    const hasFinalWalkAhead = legs.slice(index + 1).some((leg) => leg?.mode === 'WALK');
+    if (!hasTransferAhead && !hasFinalWalkAhead) continue;
+
+    const type = hasTransferAhead ? 'walk-transfer-stop' : 'walk-exit-stop';
+    const duplicatesExistingMarker = result.some((marker) => (
+      marker.latitude === transitLeg.to.lat && marker.longitude === transitLeg.to.lon
+    ));
+    if (duplicatesExistingMarker) continue;
+
+    result.push({
+      id: `${type}-${index}`,
+      latitude: transitLeg.to.lat,
+      longitude: transitLeg.to.lon,
+      type,
+      title: formatNavigationLocationLabel(transitLeg.to, 'Transit stop'),
+      caption: hasTransferAhead ? 'Transfer here' : 'Get off here',
+      detail: null,
     });
   }
 

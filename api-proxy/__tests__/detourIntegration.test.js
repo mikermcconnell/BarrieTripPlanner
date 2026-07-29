@@ -7,6 +7,10 @@
 
 'use strict';
 
+// This suite exercises the legacy route-scoped detector/publisher pipeline.
+// Production and unspecified environments default to V2.
+process.env.DETOUR_DETECTOR_VERSION = 'v1';
+
 // ─── Shared test fixtures ────────────────────────────────────────────────────
 
 const shapes = new Map();

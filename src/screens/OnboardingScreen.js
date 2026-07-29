@@ -28,7 +28,7 @@ const SLIDES = [
   {
     id: '2',
     title: 'See detours clearly',
-    description: 'My Barrie Transit shows route changes, affected stops, and likely detour paths.',
+    description: 'MyBarrie Transit shows route changes, affected stops, and likely detour paths.',
   },
   {
     id: '3',
@@ -42,7 +42,7 @@ const SLIDES = [
   },
   {
     id: '5',
-    title: 'Start riding with My Barrie Transit',
+    title: 'Start riding with MyBarrie Transit',
     description: 'Plan trips, search stops, follow alerts, and ride with more confidence.',
   },
 ];

@@ -41,7 +41,7 @@ Tester:
 
 ## Required external setup
 
-- [ ] Firebase/Google Cloud has an Android OAuth client for `com.barrietransit.planner`
+- [ ] Firebase/Google Cloud has Android OAuth clients for `com.barrietransit.planner` using both EAS and local debug SHA-1 certificates
 - [ ] Firebase/Google Cloud includes the release/app-signing SHA-1 fingerprint
 - [ ] Updated `google-services.json` is present locally and as the EAS file secret
 - [ ] Firebase Anonymous Authentication is enabled for non-signed-in proxy access

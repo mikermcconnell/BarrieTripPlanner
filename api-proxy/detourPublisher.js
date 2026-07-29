@@ -1,6 +1,7 @@
 const { getDb } = require('./firebaseAdmin');
 const { DETOUR_PATH_LABEL, matchDetourGeometry } = require('./detourRoadMatcher');
 const { recordDetourDecision } = require('./detourDecisionJournal');
+const { buildDetourWriterMetadata } = require('./detour/environment');
 const { shouldAutoClearStaleDetour, evaluateStaleRiderVisibility } = require('./detour/staleClear');
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
@@ -1913,6 +1914,9 @@ function rememberPublishedDetour(publishId, data = {}) {
     currentVehicleCount: normalizeVehicleCount(data.currentVehicleCount ?? data.vehicleCount),
     state: data.state || 'active',
     clearReason: data.clearReason || null,
+    clearProof: cloneJson(data.clearProof) || null,
+    clearanceBlockedReason: data.clearanceBlockedReason || null,
+    blockedClearReason: data.blockedClearReason || null,
     detourVersion: data.detourVersion || null,
     detourModel: data.detourModel || null,
     eventWindow: cloneJson(data.eventWindow) || null,
@@ -2015,7 +2019,10 @@ async function writeHistoryEvent(db, event, storageConfig) {
   const suffix = Math.random().toString(36).slice(2, 8);
   const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
   const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}-${suffix}`;
-  await db.collection(storageConfig.historyCollection).doc(docId).set(event);
+  await db.collection(storageConfig.historyCollection).doc(docId).set({
+    ...event,
+    ...(storageConfig.writerMetadata || {}),
+  });
 }
 
 async function hydratePublisherState(db, storageConfig) {
@@ -2317,11 +2324,37 @@ function suppressDisconnectedDetourPath(segment = {}) {
   return true;
 }
 
-function hasNormalRouteClearProof(previousSnapshot) {
+function hasNormalRouteClearReason(previousSnapshot) {
   return (
     previousSnapshot?.clearReason === 'normal-route-observed' ||
     previousSnapshot?.clearReason === 'obsolete-shape-normal-route-observed'
   );
+}
+
+function hasAuditableGpsProofRecord(proof = {}) {
+  if (!proof || proof.evidenceType !== 'normal-route-gps') return false;
+  if (!String(proof.method || '').trim()) return false;
+  if (!Number.isFinite(Number(proof.observedAt)) || Number(proof.observedAt) <= 0) return false;
+  if (!Number.isFinite(Number(proof.sampleCount)) || Number(proof.sampleCount) < 1) return false;
+  if (!Number.isFinite(Number(proof.sourceCount)) || Number(proof.sourceCount) < 1) return false;
+
+  const segmentProofs = Array.isArray(proof.segments) ? proof.segments.filter(Boolean) : [];
+  if (segmentProofs.length > 0) {
+    return segmentProofs.every(hasAuditableGpsProofRecord);
+  }
+
+  return Boolean(String(proof.shapeId || '').trim());
+}
+
+function hasAuditableNormalRouteClearProof(previousSnapshot) {
+  return hasNormalRouteClearReason(previousSnapshot) &&
+    hasAuditableGpsProofRecord(previousSnapshot?.clearProof);
+}
+
+// A normal-route clear reason is only actionable when its evidence is
+// structured and auditable.
+function hasNormalRouteClearProof(previousSnapshot) {
+  return hasAuditableNormalRouteClearProof(previousSnapshot);
 }
 
 function hasCollectionEntries(collection) {
@@ -2658,6 +2691,9 @@ function buildRetainedAbsentDetourDoc(
     currentVehicleCount: 0,
     state: previousSnapshot?.state || 'active',
     clearReason: previousSnapshot?.clearReason || null,
+    clearProof: cloneJson(previousSnapshot?.clearProof) || null,
+    clearanceBlockedReason: previousSnapshot?.clearanceBlockedReason || null,
+    blockedClearReason: previousSnapshot?.blockedClearReason || null,
     isPersistent: Boolean(previousSnapshot?.isPersistent),
     handoffSourceRouteId: previousSnapshot?.handoffSourceRouteId || null,
     latestGpsEvidenceAt: previousSnapshot?.latestGpsEvidenceAt ?? null,
@@ -2705,6 +2741,20 @@ function buildRetainedAbsentDetourDoc(
     geometry: previousSnapshot,
   });
 
+  return doc;
+}
+
+function blockUnauditableV2Clearance(doc, previousSnapshot, now) {
+  doc.state = 'active';
+  doc.blockedClearReason = previousSnapshot?.clearReason || null;
+  doc.clearReason = null;
+  doc.clearanceBlockedReason = 'missing-clear-proof';
+  doc.clearanceBlockedAt = now;
+  doc.riderVisible = false;
+  doc.riderVisibilityReason = 'clearance-blocked-missing-proof';
+  doc.alertVisible = false;
+  doc.alertVisibilityReason = 'clearance-blocked-missing-proof';
+  doc.staleForReview = true;
   return doc;
 }
 
@@ -2771,6 +2821,8 @@ async function publishDetours(activeDetours, options = {}) {
     return { staleAutoClearedRouteIds: [] };
   }
   const storageConfig = resolvePublisherStorageConfig(options.storageConfig);
+  storageConfig.writerMetadata = options.writerMetadata ||
+    buildDetourWriterMetadata(process.env, storageConfig);
   await hydratePublisherState(db, storageConfig);
 
   const now = options.now || Date.now();
@@ -2881,7 +2933,7 @@ async function publishDetours(activeDetours, options = {}) {
       continue;
     }
     if (
-      hasNormalRouteClearProof(previous) &&
+      hasAuditableNormalRouteClearProof(previous) &&
       isObsoleteShapeSnapshot(previous, { shapes: options.shapes, gtfsData })
     ) {
       const event = {
@@ -2903,10 +2955,23 @@ async function publishDetours(activeDetours, options = {}) {
       await deletePublishedDetour(db, publishId, event, 'delete superseded detour path', storageConfig);
       continue;
     }
-    if (!hasNormalRouteClearProof(previous)) {
+    const isV2NormalRouteClear = (
+      storageConfig.detourVersion === 'v2' ||
+      String(previous?.detourVersion || '').toLowerCase().startsWith('v2')
+    ) && hasNormalRouteClearReason(previous);
+    if (!hasNormalRouteClearReason(previous) || (
+      isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)
+    )) {
       const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
+      if (isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)) {
+        blockUnauditableV2Clearance(retainedDoc, previous, now);
+      }
       applyBaselineSafetySuppression(retainedDoc, routeId, baselineRouteIds);
       attachRiderPublishGates(retainedDoc);
+      if (retainedDoc.clearanceBlockedReason === 'missing-clear-proof') {
+        blockUnauditableV2Clearance(retainedDoc, previous, now);
+      }
+      Object.assign(retainedDoc, storageConfig.writerMetadata || {});
       try {
         await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
@@ -2952,6 +3017,7 @@ async function publishDetours(activeDetours, options = {}) {
         : normalizeVehicleCount(detour.currentVehicleCount ?? 0),
       state: detour.state || 'active',
       clearReason: detour.clearReason || null,
+      clearProof: cloneJson(detour.clearProof) || null,
       isPersistent: Boolean(detour.isPersistent),
       handoffSourceRouteId: detour.handoffSourceRouteId || null,
       latestGpsEvidenceAt: detour.latestGpsEvidenceAt ?? null,
@@ -2959,6 +3025,7 @@ async function publishDetours(activeDetours, options = {}) {
       lastConfirmedRefreshAt: detour.lastConfirmedRefreshAt ?? null,
       confirmedRefreshCount: Number(detour.confirmedRefreshCount || 0),
     };
+    Object.assign(doc, storageConfig.writerMetadata);
 
     if (shouldUpdateLastSeen) {
       doc.lastSeenAt = toDate(detour.lastSeenAt, now);
@@ -3322,6 +3389,7 @@ module.exports = {
   mergeNoticeStopImpactsIntoGeometry,
   hasNoticeStopImpactWriteDelta,
   hasNormalRouteClearProof,
+  hasAuditableNormalRouteClearProof,
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
   getEquivalentCurrentDetour,

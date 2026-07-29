@@ -36,13 +36,20 @@ const calculateETA = (distanceMeters, mode = 'WALK') => {
   };
 };
 
-// Compute ETA from a scheduled arrival timestamp plus optional real-time delay
-const computeScheduledETA = (scheduledArrivalTime, delaySeconds = 0) => {
-  if (!scheduledArrivalTime) return null;
-  const adjustedArrival = scheduledArrivalTime + delaySeconds * 1000;
-  const minutesRemaining = Math.max(0, Math.ceil((adjustedArrival - Date.now()) / 60000));
-  const time = new Date(adjustedArrival).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// Navigation leg timestamps already include any applied real-time delay.
+const computeExpectedTime = (expectedTime) => {
+  if (!expectedTime) return null;
+  const minutesRemaining = Math.max(0, Math.ceil((expectedTime - Date.now()) / 60000));
+  const time = new Date(expectedTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   return { minutes: minutesRemaining, time };
+};
+
+const formatBoardingStop = (stop) => {
+  const stopCode = stop?.stopCode || stop?.stopId || stop?.code;
+  const stopName = stop?.name;
+  if (stopName && stopCode) return `${stopName} · Stop #${stopCode}`;
+  if (stopCode) return `Stop #${stopCode}`;
+  return stopName || 'Current bus stop';
 };
 
 const NavigationHeader = ({
@@ -55,7 +62,8 @@ const NavigationHeader = ({
   totalDistanceRemaining,
   currentMode = 'WALK',
   scheduledArrivalTime = null,
-  delaySeconds = 0,
+  scheduledDepartureTime = null,
+  boardingStop = null,
   isRealtime = false,
   walkingPaceLevel = 'on_pace',
 }) => {
@@ -130,9 +138,17 @@ const NavigationHeader = ({
     }
   };
 
-  const eta = scheduledArrivalTime
-    ? computeScheduledETA(scheduledArrivalTime, delaySeconds)
-    : calculateETA(totalDistanceRemaining, currentMode);
+  const isWaiting = navigationState?.type === 'waiting';
+  const eta = isWaiting
+    ? scheduledDepartureTime
+      ? computeExpectedTime(scheduledDepartureTime)
+      : null
+    : scheduledArrivalTime
+      ? computeExpectedTime(scheduledArrivalTime)
+      : calculateETA(totalDistanceRemaining, currentMode);
+  const primaryLocation = isWaiting
+    ? formatBoardingStop(boardingStop)
+    : destinationName || navigationState?.label || 'Destination';
 
   return (
     <View style={[styles.container, { backgroundColor: getBackgroundColor() }]}>
@@ -154,7 +170,7 @@ const NavigationHeader = ({
             <View style={styles.textContainer}>
               <Text style={styles.stateLabel}>{getHeaderLabel()}</Text>
               <Text style={styles.destination} numberOfLines={1}>
-                {destinationName || navigationState?.label || 'Destination'}
+                {primaryLocation}
               </Text>
             </View>
           </View>
@@ -162,14 +178,18 @@ const NavigationHeader = ({
           {/* ETA Display */}
           {eta && (
             <View style={styles.etaContainer}>
-              <Text style={styles.etaLabel}>ETA</Text>
+              <Text style={styles.etaLabel}>{isWaiting ? 'BUS EXPECTED' : 'ETA'}</Text>
               <View style={styles.etaTimeRow}>
-                <Text style={styles.etaTime}>~{eta.time}</Text>
-                {isRealtime && scheduledArrivalTime && (
+                <Text style={styles.etaTime}>{isWaiting ? eta.time : `~${eta.time}`}</Text>
+                {isRealtime && (isWaiting ? scheduledDepartureTime : scheduledArrivalTime) && (
                   <Text style={styles.liveIndicator}>LIVE</Text>
                 )}
               </View>
-              <Text style={styles.etaMinutes}>{eta.minutes} min</Text>
+              <Text style={styles.etaMinutes}>
+                {isWaiting
+                  ? eta.minutes === 0 ? 'Now' : `in ${eta.minutes} min`
+                  : `${eta.minutes} min`}
+              </Text>
             </View>
           )}
         </View>

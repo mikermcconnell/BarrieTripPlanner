@@ -120,6 +120,8 @@ For each active detour:
 
 ## 6. Map Rendering Check — Regular Tab
 
+- [ ] The main-map **Stops** button shows and hides regular bus stops without opening a secondary menu.
+- [ ] Closed stops remain visible and open their stop details when tapped even while regular bus stops are hidden.
 - [ ] The route still appears in regular route browsing.
 - [ ] Detoured/closed sections are shown as orange dashed overlays.
 - [ ] The closed section is not shown as a normal active route line.
@@ -137,9 +139,13 @@ For each active detour:
 - [ ] Orange dashed closed sections remain visible.
 - [ ] Likely detour path remains visible and road-following.
 - [ ] Bus stop markers render above all route/detour lines.
-- [ ] Open/closed stops are visually understandable.
+- [ ] Regular stops default on, use white/charcoal markers, and show stop codes at zoom 16 or closer.
+- [ ] Bus hubs use violet `H` markers and remain visually stronger than ordinary stops.
+- [ ] Closed stops remain orange and fully opaque in regular, detour, and clear-pending views.
 - [ ] Legend appears only when helpful and does not block critical map content.
 - [ ] No auto-zoom happens when simply entering detour view.
+- [ ] Opening an active detour fits the affected geometry once; after that, finger pan and pinch-zoom remain fully user-controlled.
+- [ ] Returning to the regular map preserves the exact rider-controlled center and zoom; it does not fit routes, recenter, or queue any camera command.
 - [ ] Focused camera padding keeps the full closed and detour paths clear of the search bar, alert strip, focus controls, and bottom navigation.
 - [ ] Vehicle markers do not cover the detour-path label; labels suppress or move when there is not enough room.
 - [ ] The collapsed alert uses a readable location and affected-stop count; raw stop codes remain available in details.

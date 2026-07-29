@@ -61,8 +61,33 @@ describe('BoardingInstructionCard', () => {
     expect(text).toContain('Downtown Terminal');
     expect(text).toContain('Board Stop #1234 · 3 stops to Downtown Terminal');
     expect(text).toContain('13 min');
-    expect(text).toContain('Departs');
+    expect(text).toContain('Expected');
     expect(text).toContain('Then: Walk 2 min to destination');
     expect(text).not.toContain('Departing');
+  });
+
+  test('does not apply a real-time delay twice to the expected time and countdown', () => {
+    const texts = renderTexts(React.createElement(BoardingInstructionCard, {
+      leg: {
+        mode: 'BUS',
+        from: { name: 'Mapleview Stop', stopCode: '1234' },
+        to: { name: 'Park Place', stopCode: '5000' },
+      },
+      routeShortName: '8A',
+      headsign: 'Park Place',
+      stopName: 'Mapleview Stop',
+      stopCode: '1234',
+      // Leg startTime is already adjusted by tripDelayService.
+      scheduledDeparture: Date.now() + 10 * 60 * 1000,
+      delaySeconds: 2 * 60,
+      isRealtime: true,
+    }));
+
+    const text = texts.join('');
+    expect(text).toContain('10 min');
+    expect(text).not.toContain('12 min');
+    expect(text).toContain('Expected');
+    expect(text).toContain('LIVE');
+    expect(text).toContain('+2');
   });
 });

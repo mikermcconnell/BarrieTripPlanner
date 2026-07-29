@@ -414,7 +414,7 @@ export const useTripPlanner = ({
     dispatch({ type: SET_FROM, payload: null });
     dispatch({ type: CLEAR_RESULTS });
     if (fromDebounceRef.current) clearTimeout(fromDebounceRef.current);
-    if (text.length < 3) {
+    if (text.trim().length < 2) {
       fromRequestSeqRef.current += 1;
       dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
@@ -445,7 +445,7 @@ export const useTripPlanner = ({
     dispatch({ type: SET_TO, payload: null });
     dispatch({ type: CLEAR_RESULTS });
     if (toDebounceRef.current) clearTimeout(toDebounceRef.current);
-    if (text.length < 3) {
+    if (text.trim().length < 2) {
       toRequestSeqRef.current += 1;
       dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
       dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });

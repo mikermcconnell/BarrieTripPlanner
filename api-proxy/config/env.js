@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { getAuth } = require('../firebaseAdmin');
+const { buildDetourStorageConfig } = require('../detour/storageConfig');
+const { validateDetourWorkerEnvironment } = require('../detour/environment');
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -114,6 +116,8 @@ function validateProxyConfig(config, env = process.env) {
   if (config.isProd && !env.ALLOWED_ORIGINS) {
     console.warn('ALLOWED_ORIGINS is not set. Browser clients will be blocked by CORS.');
   }
+
+  validateDetourWorkerEnvironment(env, buildDetourStorageConfig(env));
 }
 
 module.exports = {

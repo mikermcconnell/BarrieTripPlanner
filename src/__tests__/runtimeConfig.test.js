@@ -62,14 +62,14 @@ describe('runtimeConfig', () => {
     expect(runtimeConfig.detours.enabledByDefault).toBe(true);
   });
 
-  test('enables V2 auto detours by built-in fallback for native bundles', () => {
+  test('keeps V2 auto detours off by built-in fallback for public bundles', () => {
     delete process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS;
     delete process.env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI;
     delete process.env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION;
 
     const { default: runtimeConfig } = loadRuntimeConfig();
 
-    expect(runtimeConfig.detours.enabledByDefault).toBe(true);
+    expect(runtimeConfig.detours.enabledByDefault).toBe(false);
     expect(runtimeConfig.detours.activeCollection).toBe('activeDetourEventsV2');
   });
 });

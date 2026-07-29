@@ -72,6 +72,24 @@ These are not public rider endpoints:
   - or a UID listed in `SURVEY_ADMIN_UIDS`
 - detour debug may use `DETOUR_DEBUG_API_KEY` only outside production
 
+### Private app feedback
+
+- `POST /api/app-feedback` accepts authenticated rider feedback and stores no rider email or UID.
+- Submissions are limited to five per authenticated client every 15 minutes.
+- `GET /api/app-feedback/access` reports whether the signed-in user can open the developer inbox.
+- `GET /api/app-feedback`, `PATCH /api/app-feedback/:feedbackId`, and `DELETE /api/app-feedback/:feedbackId` require the dedicated developer authorization described below.
+- Inbox reads support server-side status filtering and cursor pagination so older unresolved submissions remain accessible.
+- The API enforces a Firestore-backed five-submission limit per authenticated client every 15 minutes; the in-memory limiter remains an additional short-term guard.
+- Firestore client rules deny all direct access to `appFeedback`; reads and writes go through the API proxy.
+- Resolved submissions can be permanently deleted from the developer inbox; remove feedback when it is no longer needed rather than retaining it indefinitely.
+- Retried submissions reuse a client-generated submission ID, so an uncertain network response does not create a second inbox item or alert.
+- Optional private email alerts use `RESEND_API_KEY`, `APP_FEEDBACK_ALERT_RECIPIENTS`, and optionally `APP_FEEDBACK_ALERT_FROM`. Alert failures are logged but do not turn a stored submission into a rider-facing error.
+- The backend writes `expiresAt` using `APP_FEEDBACK_RETENTION_DAYS=365` and `APP_FEEDBACK_RATE_LIMIT_RETENTION_DAYS=30`. Enable Firestore TTL for both collection groups:
+  ```bash
+  gcloud firestore fields ttls update expiresAt --collection-group=appFeedback --enable-ttl
+  gcloud firestore fields ttls update expiresAt --collection-group=appFeedbackRateLimits --enable-ttl
+  ```
+
 ## Required Environment
 
 ### Core proxy
@@ -91,20 +109,39 @@ These are not public rider endpoints:
 - `FIREBASE_SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`
 - `SURVEY_ADMIN_UIDS=uid1,uid2` only if admin custom claims are not available
 - `DETOUR_REVIEWER_UIDS=<Mike Firebase UID>` for the operator review tool; production requires this allowlist plus an `admin=true` or `detourAdmin=true` claim
+- `APP_FEEDBACK_ADMIN_UIDS=<Mike Firebase UID>` for the private app-feedback inbox; access also requires an `admin=true` or `appFeedbackAdmin=true` claim. Detour-review access does not grant feedback access.
+- `APP_FEEDBACK_ALERT_RECIPIENTS=<comma-separated private addresses>` and `RESEND_API_KEY` to alert the developer when new feedback is stored
+- `APP_FEEDBACK_RETENTION_DAYS=365` and `APP_FEEDBACK_RATE_LIMIT_RETENTION_DAYS=30` for Firestore expiry timestamps
 - Firebase Functions only: `API_PROXY_FUNCTION_INVOKER=private` for production platform auth hardening
 
 Do not ship `API_PROXY_TOKEN`, `API_PROXY_TOKENS`, `EXPO_PUBLIC_API_PROXY_TOKEN`, or `EXPO_PUBLIC_LOCATIONIQ_API_KEY` in public production.
 
 Public rider clients should obtain Firebase ID tokens before calling protected proxy routes. For riders who are not signed in, enable Firebase Anonymous Authentication so the app can mint a low-privilege anonymous Firebase token without exposing a shared proxy secret.
 
+### Rider account deletion
+
+`DELETE /api/account` permanently deletes the signed-in rider's Firestore profile and nested rider data, then deletes the Firebase Auth user.
+
+- This route always requires a valid, non-revoked Firebase Bearer token, even when general proxy auth is relaxed locally.
+- The target UID comes only from the verified token. The route does not accept a UID in the URL or request body.
+- The token's `auth_time` must be no more than five minutes old. Riders with an older session must sign out, sign back in, and retry.
+- Firestore recursive deletion completes before Firebase Auth deletion. If data cleanup fails, the Auth user is retained so the rider can retry.
+- Do not log bearer tokens, email addresses, names, or deleted profile contents.
+
 ### Detour worker
 
 - `DETOUR_WORKER_ENABLED=true`
+- `DETOUR_DATA_ENVIRONMENT=production|development|simulation`
+  - enabled workers must classify their data environment explicitly
+  - Cloud/production workers must use `production`; local workers must use isolated active, history, and runtime names
 - `DETOUR_WORKER_MODE=interval|manual|scheduled`
 - `DETOUR_DETECTOR_VERSION=v1|v2`
-  - default `v1` uses `activeDetours`, `detourHistory`, and `systemState/detourRuntime`
-  - `v2` uses isolated event storage: `activeDetourEventsV2`, `detourEventHistoryV2`, and `systemState/detourRuntimeV2`
+  - default and only supported production source is V2: `activeDetourEventsV2`, `detourEventHistoryV2`, and `systemState/detourRuntimeV2`
+  - production startup rejects V1 or alternate collection/runtime names
+  - V1 collections are archive-only; use `DETOUR_DETECTOR_VERSION=v1` only for isolated tests or migration audits and never as a production writer
   - optional explicit overrides: `DETOUR_ACTIVE_COLLECTION`, `DETOUR_HISTORY_COLLECTION`, `DETOUR_RUNTIME_STATE_COLLECTION`, `DETOUR_RUNTIME_STATE_DOC`
+- `DETOUR_WRITER_ID=<optional stable writer name>`
+  - active and history records also include the data environment, writer ID, Firebase project, worker mode, detector version, and collection names; Cloud Run revision is the fallback writer ID
 - `DETOUR_ENABLE_ROUTE_FAMILY_HANDOFF=true|false`
   - route-family handoff treats a confirmed closure segment as one physical detour event and can project it onto sibling route variants/directions when the source segment has confirmed boundaries
   - point-only short deviations are not projected because there is no reliable closed segment to map to the sibling route
@@ -132,7 +169,9 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
   - Default clear proof uses a clear window around the affected segment: at least 1,000m where possible, clipped to the route shape ends. The same bus must cover about 75% of that window on the baseline route (`DETOUR_CLEAR_WINDOW_MIN_METERS`, `DETOUR_CLEAR_WINDOW_MIN_COVERAGE_RATIO`). This prevents a bus from clearing its own detour just because it rejoins the route after the off-route section.
   - Collective clear fallback: if no single bus gives a clean traversal, two or more unique same-route trips/vehicles can collectively clear a geometry-backed detour only when their on-route sample intervals cover the same clear window and no newer off-route evidence has returned.
   - Clear-count gotcha: do not treat clearing as "4 pings anywhere on route". The configured consecutive-on-route value is a sampling guard/diagnostic; active geometry-backed detours clear only after same-bus normal-route traversal or the collective two-trip/vehicle fallback through the clear window. A single GPS point cannot prove traversal. In practice this means at least two useful on-route GPS samples far enough apart to show route progress, often more on long segments, followed by a later tick to finalize `clear-pending`.
-  - The publisher delete path is also proof-gated: if a route disappears from the current detector output, the Firestore `activeDetours` document is retained unless the previous published snapshot has `clearReason: "normal-route-observed"`.
+  - The publisher delete path is also proof-gated per event. A V2 event is deleted for normal-route clearing only when its snapshot has both the clear reason and structured `clearProof` with evidence type, method, observation time, sample/source counts, shape/window context, and segment proof where applicable.
+  - A V2 clear attempt without auditable proof is reset to operational `state: "active"`, marked `clearanceBlockedReason: "missing-clear-proof"`, retained in Firestore, and hidden from riders. Hidden means unresolved, not cleared.
+  - Clearing one event-window document never clears another event on the same route. Route-level clearance language is valid only when no other active same-route events remain.
   - Zero-current detours are not cleared automatically. They stay active until another bus adds off-route detour evidence or proves normal routing with GPS traversal through the affected segment.
   - Backend retention is separate from public alert eligibility. Active records still require GPS clear proof or operator action before deletion. Auto-detour rider alerts require fresh dense evidence with meaningful bounded geometry (`DETOUR_ALERT_MAX_GPS_EVIDENCE_AGE_MS=5400000`, `DETOUR_ALERT_MIN_EVIDENCE_POINTS=6`, `DETOUR_ALERT_MIN_SEGMENT_SPAN_METERS=75`). Official notices may enrich an already-qualified auto-detour but never create or preserve one.
   - If an active snapshot has no usable closure geometry or clear window, the automated detector must not infer a clear from elapsed time, same-route reporting, or two generic same-route normal pings. Keep the record for operations review and hide it from riders only for safety reasons such as insufficient/invalid geometry or an expired rider-evidence window while the exact route is reporting; automatic clearing still requires GPS evidence that can be tied to the affected segment, or an explicit operator/admin clear.
@@ -192,7 +231,13 @@ Optional environment:
 - `DETOUR_ALERT_EVENT_TYPES=DETOUR_DETECTED` to override the default event type list
 - `DETOUR_ALERT_NOTIFICATION_COLLECTION=detourEmailNotifications`
 
-Detour emails are text-only. The monitor enriches stop codes with GTFS stop names when available.
+Detour emails are text-only. The monitor enriches stop codes with GTFS stop names when available. It matches active records by exact event identity whenever IDs exist; route-only enrichment is limited to old detection records and is never used for clear events. Clear emails require a specific event ID, a supported clear reason, and auditable GPS proof or an explicit supersede/operator reason. They say “segment cleared” while another same-route event remains and “route detour cleared” only when none remain.
+
+### Local worker isolation
+
+The Android launcher does not start a detour writer unless `DETOUR_DEV_WORKER_ENABLED=true`. When enabled it forces V2 development mode and defaults to `devActiveDetourEventsV2`, `devDetourEventHistoryV2`, and `devSystemState/devDetourRuntimeV2`. The client collection must match the isolated dev active collection. Non-production workers targeting any production detour collection or runtime document fail startup.
+
+Do not delete legacy history during this transition. Treat `activeDetours`, `detourHistory`, `activeDetoursV2`, and `detourHistoryV2` as archive/audit inputs only; production monitoring and rider clients use the event-scoped V2 collections.
 
 ### Official baseline-impact scanner
 
@@ -227,6 +272,13 @@ Guardrails:
   - `https://www.myridebarrie.ca/News/GetAllNews`
 - In `manual` or `scheduled` mode, run one sync with `POST /api/news-run-once`.
 - Publishes normalized items to Firestore `transitNews` and parsed rider-facing impacts to `transitNewsImpacts`.
+- Sends Expo push notifications only to opted-in route subscribers (or all opted-in users for explicitly system-wide news).
+- Each scheduled detour tick also sends background-capable push alerts for newly rider-visible detours to opted-in route subscribers.
+- Detour sends are leased and deduplicated in `detourPushNotifications`; failed leases can be retried by a later tick.
+- Expo ticket errors are counted and `DeviceNotRegistered` tokens are removed only when they still match the affected user.
+- Push tokens are stored per device under `users/{uid}/pushTokens/{deviceId}` so signing in on another device does not disable the first device.
+- Expo ticket IDs are persisted in `pushNotificationReceipts`; later scheduled ticks check delivery receipts and invalidate devices rejected after initial acceptance.
+- Receipt and detour-notification records older than 30 days are pruned in bounded batches.
 
 Recommended modes:
 
@@ -573,9 +625,10 @@ Instead:
   - confirms recent scheduler calls are `2xx`, with no recent `401`
   - confirms active detour documents are still being refreshed
 - confirm Firestore writes:
-  - configured active detour collection, usually `activeDetours` or V2 event `activeDetourEventsV2`
-  - configured history collection, usually `detourHistory` or V2 event `detourEventHistoryV2`
-  - configured runtime doc, usually `systemState/detourRuntime` or lab `systemState/detourRuntimeV2`
+  - production active detour collection: `activeDetourEventsV2`
+  - production history collection: `detourEventHistoryV2`
+  - production runtime doc: `systemState/detourRuntimeV2`
+  - local validation uses the separately configured dev collection and runtime names
 - resume scheduler briefly and confirm repeated ticks advance state
 
 ## Rollback Notes

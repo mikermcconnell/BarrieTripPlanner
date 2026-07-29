@@ -1,0 +1,16 @@
+diff --git a/node_modules/react-native-worklets/android/CMakeLists.txt b/node_modules/react-native-worklets/android/CMakeLists.txt
+index 1d949d6..5741041 100644
+--- a/node_modules/react-native-worklets/android/CMakeLists.txt
++++ b/node_modules/react-native-worklets/android/CMakeLists.txt
+@@ -94,7 +94,10 @@ endif()
+ # build shared lib
+ set_target_properties(worklets PROPERTIES LINKER_LANGUAGE CXX)
+ 
+-target_link_libraries(worklets log ReactAndroid::jsi fbjni::fbjni)
++# Explicitly link the Android shared C++ runtime. With NDK 27, the prefab
++# libraries do not reliably propagate libc++ to this target, which leaves
++# standard C++ and exception symbols unresolved during release builds.
++target_link_libraries(worklets c++_shared log ReactAndroid::jsi fbjni::fbjni)
+ 
+ if(ReactAndroid_VERSION_MINOR GREATER_EQUAL 76)
+   target_link_libraries(worklets ReactAndroid::reactnative)

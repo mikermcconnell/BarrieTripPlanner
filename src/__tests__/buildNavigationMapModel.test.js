@@ -140,4 +140,33 @@ describe('buildNavigationMapModel', () => {
       }),
     ]);
   });
+
+  test('waiting view hides the next-stop marker and keeps the exit marker', () => {
+    const transitLeg = {
+      mode: 'BUS',
+      from: { name: 'Bayfield Mall', stopId: '100', lat: 44.4, lon: -79.7 },
+      intermediateStops: [
+        { name: 'Cundles', stopId: '101', lat: 44.405, lon: -79.695 },
+      ],
+      to: { name: 'Downtown Terminal', stopId: '102', lat: 44.41, lon: -79.69 },
+    };
+
+    const model = buildNavigationMapModel({
+      itinerary: { legs: [transitLeg] },
+      currentLeg: transitLeg,
+      currentTransitLeg: transitLeg,
+      transitStatus: 'waiting',
+      isUserOnBoard: false,
+    });
+
+    expect(model.transitStopMarkers).toEqual([
+      expect.objectContaining({
+        type: 'transit-alight-stop',
+        title: 'Downtown Terminal (#102)',
+      }),
+    ]);
+    expect(model.transitStopMarkers).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'transit-next-stop' })])
+    );
+  });
 });

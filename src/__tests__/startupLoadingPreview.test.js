@@ -92,8 +92,8 @@ describe('startup loading preview', () => {
     expect(texts).not.toContain('Know when your bus leaves the route.');
     expect(texts).toContain('Likely detour detected');
     expect(texts).toContain('Route change identified from live bus movement');
-    expect(texts).toContain('Checking live routes and service alerts...');
-    expect(texts).toContain('65%');
+    expect(texts).toContain('Loading routes, stops, and schedules...');
+    expect(texts).toContain('55%');
   });
 
   test('shows bundled startup artwork immediately without waiting for image-load events', () => {
@@ -176,10 +176,14 @@ describe('startup loading preview', () => {
     expect(appSource).toContain('STARTUP_EXIT_FADE_MS = 140');
     expect(appSource).not.toContain('STARTUP_IMAGE_PRELOAD_MAX_MS');
     expect(appSource).toContain('SplashScreen.preventAutoHideAsync()');
-    expect(appSource).not.toContain('Asset.loadAsync(STARTUP_IMAGE_ASSETS)');
+    expect(appSource.indexOf('SplashScreen.preventAutoHideAsync()')).toBeLessThan(
+      appSource.indexOf('export default function App()')
+    );
+    expect(appSource).toContain('Asset.loadAsync(STARTUP_IMAGE_ASSETS)');
+    expect(appSource).toContain('preferPreloadedImages={startupImagesReady}');
+    expect(appSource).not.toContain('await startupImagePreload');
     expect(appSource).not.toContain('Image.prefetch(uri)');
     expect(appSource).toContain('SplashScreen.hideAsync()');
-    expect(appSource).not.toContain('preferPreloadedImages={startupImagesReady}');
     expect(appSource).toContain('startupLoadingLayoutReady');
     expect(appSource).toContain('onStartupLoadingLayout');
     expect(appSource).not.toContain('minimumStartupElapsed');
@@ -189,6 +193,10 @@ describe('startup loading preview', () => {
     expect(appSource).not.toContain("window.addEventListener('load'");
     expect(appSource).toContain('startupOverlay');
     expect(appSource).toContain('<Animated.View');
+    expect(appSource).toContain('Runtime ? <Runtime onStartupStateChange={setStartupState} /> : null');
+    expect(appSource).not.toContain('showPreview || !Runtime');
+    expect(appSource).toContain('Barrie Transit could not open. Please restart the app.');
+    expect(appSource).toContain('!isStartupExternallyManaged && showStartupOverlay');
     expect(appSource).toContain("logger.info('[startup] phase'");
     expect(appSource).toContain("logger.info('[startup] ready'");
     expect(appSource).toContain('<NavigationContainer ref={navigationRef} linking={linking}>');
@@ -206,6 +214,7 @@ describe('startup loading preview', () => {
     expect(componentSource).toContain('DetectionHero');
     expect(componentSource).toContain('<StartupDetourAnimation');
     expect(animationSource).toContain('AccessibilityInfo?.isReduceMotionEnabled?.()');
+    expect(animationSource).toContain('timeline.setValue(STARTUP_SHOWCASE_PROGRESS)');
     expect(animationSource).toContain('Animated.loop');
     expect(animationSource).toContain('strokeDashoffset={animationStyles.pathOffset}');
     expect(componentSource).toContain("from '../utils/androidNavigationBar'");

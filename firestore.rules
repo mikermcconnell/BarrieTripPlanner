@@ -140,6 +140,17 @@ service cloud.firestore {
         // User can delete their saved trips
         allow delete: if isAuthenticated() && isOwner(userId);
       }
+
+      match /pushTokens/{deviceId} {
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow create, update: if isAuthenticated()
+          && isOwner(userId)
+          && request.resource.data.deviceId == deviceId
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 512;
+        allow delete: if isAuthenticated() && isOwner(userId);
+      }
     }
 
     // ==================== ACTIVE DETOURS (V2) ====================
@@ -180,6 +191,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Local detector output is isolated from the production rider feed. Dev
+    // builds must opt into this collection explicitly.
+    match /devActiveDetourEventsV2/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /devDetourEventHistoryV2/{eventId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Audited operator reviews are read and written only through the API proxy
     // using Firebase Admin. Rider clients have no direct access.
     match /detourOperatorReviews/{reviewId} {
@@ -188,6 +211,24 @@ service cloud.firestore {
       match /revisions/{revisionId} {
         allow read, write: if false;
       }
+    }
+
+    match /detourPushNotifications/{notificationId} {
+      allow read, write: if false;
+    }
+
+    match /pushNotificationReceipts/{receiptId} {
+      allow read, write: if false;
+    }
+
+    // App feedback is submitted and reviewed only through the authenticated API
+    // proxy. Direct client access is denied, including for administrator clients.
+    match /appFeedback/{feedbackId} {
+      allow read, write: if false;
+    }
+
+    match /appFeedbackRateLimits/{quotaId} {
+      allow read, write: if false;
     }
 
     // ==================== TRANSIT NEWS ====================

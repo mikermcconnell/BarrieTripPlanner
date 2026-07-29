@@ -76,6 +76,30 @@ describe('WalkingInstructionCard', () => {
     expect(text).toContain('Expand');
   });
 
+  test('uses the same remaining walk time in the pace line and blue summary pill', () => {
+    const texts = renderTexts(React.createElement(WalkingInstructionCard, {
+      currentStep: { type: 'depart', instruction: 'Start walking' },
+      currentLeg: {
+        mode: 'WALK',
+        duration: 5 * 60,
+        distance: 500,
+        to: { name: 'Mapleview Stop', stopCode: '1234' },
+      },
+      nextTransitLeg: {
+        mode: 'BUS',
+        startTime: Date.now() + 8 * 60 * 1000,
+      },
+      distanceToDestination: 400,
+      onNextLeg: jest.fn(),
+    }));
+
+    const text = texts.join('');
+    expect(text).toContain('Bus departs in 8 min · 4 min walk');
+    expect(text.match(/4 min walk/g)).toHaveLength(2);
+    expect(text).not.toContain('5 min walk');
+    expect(text).toContain('400 m');
+  });
+
   test('uses the pace artwork when walking to a stop', () => {
     const root = renderTree(React.createElement(WalkingInstructionCard, {
       currentStep: { type: 'depart', instruction: 'Start walking' },

@@ -18,6 +18,7 @@ import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import { OSM_MAP_STYLE } from '../config/constants';
 import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
 import { COLORS } from '../config/theme';
+import { MAP_MARKER_THEME } from '../config/mapMarkerTheme';
 import { escapeHtml } from '../utils/htmlUtils';
 
 const MAPLIBRE_CSS_URL = 'https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css';
@@ -466,21 +467,24 @@ const createBusHtml = (color, routeId, bearing = null, scale = 1, dimmed = false
   `;
 };
 
-const createStopHtml = (isSelected, isClosed = false, stopCode = '', opacity = 1) => {
+const createStopHtml = (isSelected, isClosed = false, stopCode = '', opacity = 1, showStopCode = false) => {
   const size = isSelected ? 16 : 12;
   const hitArea = isClosed ? 78 : 24;
-  const background = isSelected ? '#1a73e8' : 'white';
-  const border = isSelected ? 'white' : isClosed ? '#FF991F' : '#1a73e8';
+  const border = isSelected ? MAP_MARKER_THEME.stopSelected : MAP_MARKER_THEME.stopOutline;
 
   if (isClosed) {
     const codeLabel = stopCode
-      ? `<div style="padding:1px 5px;margin:0 0 3px 28px;border-radius:7px;background:#ffffff;border:1px solid #FF991F;box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,0.16);color:#FF991F;font:900 10px/1.2 Avenir, Arial, sans-serif;letter-spacing:0.2px;white-space:nowrap;">${escapeHtml(stopCode)}</div>`
+      ? `<div style="padding:1px 5px;margin:0 0 3px 28px;border-radius:7px;background:#ffffff;border:1px solid ${MAP_MARKER_THEME.closedStop};box-sizing:border-box;box-shadow:0 1px 4px rgba(0,0,0,0.16);color:${MAP_MARKER_THEME.closedStop};font:900 10px/1.2 Avenir, Arial, sans-serif;letter-spacing:0.2px;white-space:nowrap;">${escapeHtml(stopCode)}</div>`
       : '';
 
-    return `<div style="width:${hitArea}px;min-height:${hitArea}px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:visible;opacity:${opacity};">${codeLabel}<div style="background:#ffffff;width:22px;height:22px;border-radius:50%;border:3px solid #FF991F;box-shadow:0 1px 5px rgba(0,0,0,0.2);box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><div style="width:7px;height:7px;border-radius:50%;background:#FF991F;"></div></div></div>`;
+    return `<div style="width:${hitArea}px;min-height:${hitArea}px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:visible;opacity:1;">${codeLabel}<div style="background:#ffffff;width:22px;height:22px;border-radius:50%;border:3px solid ${MAP_MARKER_THEME.closedStop};box-shadow:0 1px 5px rgba(0,0,0,0.2);box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><div style="width:7px;height:7px;border-radius:50%;background:${MAP_MARKER_THEME.closedStop};"></div></div></div>`;
   }
 
-  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;overflow:visible;opacity:${opacity};"><div style="background:${background};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;"></div></div>`;
+  const codeLabel = showStopCode && stopCode
+    ? `<div style="position:absolute;left:20px;padding:1px 4px;border-radius:6px;background:#ffffff;border:1px solid ${border};color:${MAP_MARKER_THEME.stopOutline};font:800 10px/1.2 Avenir,Arial,sans-serif;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.16);">${escapeHtml(stopCode)}</div>`
+    : '';
+  const center = isSelected ? MAP_MARKER_THEME.stopSelected : MAP_MARKER_THEME.stopOutline;
+  return `<div style="width:${hitArea}px;height:${hitArea}px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;overflow:visible;opacity:${opacity};">${codeLabel}<div style="background:${MAP_MARKER_THEME.stopFill};width:${size}px;height:${size}px;border-radius:50%;border:2px solid ${border};box-shadow:${isSelected ? `0 0 0 3px rgba(111,66,193,0.18),` : ''} 0 1px 3px rgba(0,0,0,0.24);display:flex;align-items:center;justify-content:center;"><div style="width:3px;height:3px;border-radius:50%;background:${center};"></div></div></div>`;
 };
 
 const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
@@ -489,17 +493,11 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
   const iconSize = isMajor ? 21 : 21 * 0.75;
   const markerWidth = isMajor ? 190 : 150;
   const labelTop = iconSize + 1;
-  const artworkHtml = isMajor
-    ? `<div
-        data-bus-hub-major-circle="true"
-        aria-hidden="true"
-        style="width:${iconSize}px;height:${iconSize}px;border-radius:${iconSize / 2}px;background:#0C8CE5;border:2px solid #FFFFFF;box-sizing:border-box;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.24));"
-      ></div>`
-    : `<div
-        data-bus-hub-minor-circle="true"
-        aria-hidden="true"
-        style="width:${iconSize}px;height:${iconSize}px;border-radius:${iconSize / 2}px;background:#0C8CE5;border:2px solid #FFFFFF;box-sizing:border-box;filter:drop-shadow(0 3px 5px rgba(0,0,0,0.22));"
-      ></div>`;
+  const artworkHtml = `<div
+      data-bus-hub-square="${isMajor ? 'major' : 'minor'}"
+      aria-hidden="true"
+      style="width:${iconSize}px;height:${iconSize}px;background:${MAP_MARKER_THEME.hubFill};border:2px solid #FFFFFF;box-sizing:border-box;filter:drop-shadow(0 3px 5px rgba(0,0,0,${isMajor ? '0.24' : '0.22'}));"
+    ></div>`;
   const labelHtml = safeLabel
     ? `<div style="
         position:absolute;
@@ -509,7 +507,7 @@ const createBusHubHtml = ({ label = '', hubType = 'minor' } = {}) => {
         max-width:${isMajor ? 184 : 142}px;
         padding:3px 8px;
         border-radius:999px;
-        border:1px solid ${isMajor ? 'rgba(0,78,128,0.28)' : 'rgba(52,69,99,0.22)'};
+        border:1px solid ${MAP_MARKER_THEME.hubLabelBorder};
         background:rgba(255,255,255,0.97);
         box-shadow:0 1px 4px rgba(0,0,0,0.15);
         color:${COLORS.textPrimary};
@@ -1244,7 +1242,7 @@ const WebBusHubLayerComponent = ({ featureCollection }) => {
             className={`bus-hub-marker bus-hub-marker-${hubType}`}
             anchor="center"
             offset={BUS_HUB_ICON_CENTER_OFFSET}
-            zIndexOffset={hubType === 'major' ? 655 : 652}
+            zIndexOffset={1500}
             accessibilityLabel={label ? `${label} bus hub` : 'Bus hub'}
           />
         );
@@ -1373,6 +1371,7 @@ export const __TEST_ONLY__ = {
   applyLayerEvents,
   createBusHubHtml,
   createBusHtml,
+  createStopHtml,
   buildLineGeoJson,
   handleWebMapKeyboardPan,
   isEditableKeyboardTarget,
@@ -1384,7 +1383,16 @@ export const __TEST_ONLY__ = {
   updateLineLayerStyles,
 };
 
-export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, routeDirectionLabel = null, snapPath = null, dimmed = false }) => {
+export const WebBusMarker = memo(({
+  vehicle,
+  color,
+  routeLabel: routeLabelProp,
+  routeDirectionLabel = null,
+  snapPath = null,
+  dimmed = false,
+  quickDetails = null,
+  onPress,
+}) => {
   if (!vehicle?.coordinate?.latitude || !vehicle?.coordinate?.longitude) return null;
   const label = routeLabelProp || vehicle.routeId;
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
@@ -1408,28 +1416,41 @@ export const WebBusMarker = memo(({ vehicle, color, routeLabel: routeLabelProp, 
 
   if (!latitude || !longitude) return null;
 
+  const busIdentifier = quickDetails?.busIdentifier || vehicle.vehicleLabel || vehicle.label || vehicle.id;
+
+  const popupLines = [
+    `<strong>Route ${escapeHtml(label)}</strong>`,
+    quickDetails?.nextStopName ? `Next: ${escapeHtml(quickDetails.nextStopName)}` : null,
+    busIdentifier ? `Bus: ${escapeHtml(busIdentifier)}` : null,
+    quickDetails?.scheduleStatus ? escapeHtml(quickDetails.scheduleStatus) : null,
+  ].filter(Boolean);
+
   return (
     <WebHtmlMarker
       coordinate={{ latitude, longitude }}
       html={createBusHtml(color, label, bearing, scale, dimmed, routeDirectionLabel)}
       className="bus-icon"
       zIndexOffset={800}
-      popupHtml={`<strong>Route ${escapeHtml(label)}</strong>${vehicle.label ? `<br />Bus ${escapeHtml(vehicle.label)}` : ''}`}
-      accessibilityLabel={`Route ${label} bus${vehicle.label ? ` ${vehicle.label}` : ''}`}
+      onPress={onPress}
+      popupHtml={popupLines.join('<br />')}
+      accessibilityLabel={`Route ${label} bus${busIdentifier ? ` ${busIdentifier}` : ''}${quickDetails?.nextStopName ? `. Next stop ${quickDetails.nextStopName}` : ''}${quickDetails?.scheduleStatus ? `. ${quickDetails.scheduleStatus}` : ''}`}
     />
   );
 });
 
-export const WebStopMarker = memo(({ stop, onPress, isSelected, closedStopOpacity = 1 }) => (
-  <WebHtmlMarker
-    coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-    html={createStopHtml(isSelected, Boolean(stop.isClosed), String(stop.code ?? stop.stopCode ?? stop.id ?? ''), stop.isClosed ? closedStopOpacity : 1)}
-    zIndexOffset={isSelected ? 1000 : 500}
-    onPress={() => onPress?.(stop)}
-    popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}${stop.isClosed ? '<br /><span style="color:#8a5a00;">Stop closure reported</span>' : ''}`}
-    accessibilityLabel={`${stop.name}, stop ${stop.code}${stop.isClosed ? ', stop closure reported' : ''}`}
-  />
-));
+export const WebStopMarker = memo(({ stop, onPress, isSelected, closedStopOpacity = 1, showStopCode = false }) => {
+  const isClosed = Boolean(stop.isClosed || stop.isRouteScopedClosure);
+  return (
+    <WebHtmlMarker
+      coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
+      html={createStopHtml(isSelected, isClosed, String(stop.code ?? stop.stopCode ?? stop.id ?? ''), isClosed ? 1 : closedStopOpacity, showStopCode)}
+      zIndexOffset={isSelected ? 700 : 500}
+      onPress={() => onPress?.(stop)}
+      popupHtml={`<strong>${escapeHtml(stop.name)}</strong><br />Stop #${escapeHtml(stop.code)}${isClosed ? '<br /><span style="color:#8a5a00;">Stop closure reported</span>' : ''}`}
+      accessibilityLabel={`${stop.name}, stop ${stop.code}${isClosed ? ', stop closure reported' : ''}`}
+    />
+  );
+});
 
 const WebMapView = forwardRef(({
   initialRegion,

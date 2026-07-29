@@ -28,6 +28,10 @@ const getNewsScreen = () => require('../screens/NewsScreen').default;
 const getSurveyScreen = () => require('../screens/SurveyScreen').default;
 const getSurveyResultsScreen = () => require('../screens/SurveyResultsScreen').default;
 const getDetourReviewScreen = () => require('../screens/DetourReviewScreen').default;
+const getHelpSupportScreen = () => require('../screens/HelpSupportScreen').default;
+const getAboutScreen = () => require('../screens/AboutScreen').default;
+const getAppFeedbackScreen = () => require('../screens/AppFeedbackScreen').default;
+const getAppFeedbackInboxScreen = () => require('../screens/AppFeedbackInboxScreen').default;
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -86,6 +90,10 @@ const ProfileStack = () => (
     <Stack.Screen name="Survey" getComponent={getSurveyScreen} />
     <Stack.Screen name="SurveyResults" getComponent={getSurveyResultsScreen} />
     <Stack.Screen name="DetourReview" getComponent={getDetourReviewScreen} />
+    <Stack.Screen name="HelpSupport" getComponent={getHelpSupportScreen} />
+    <Stack.Screen name="About" getComponent={getAboutScreen} />
+    <Stack.Screen name="AppFeedback" getComponent={getAppFeedbackScreen} />
+    <Stack.Screen name="AppFeedbackInbox" getComponent={getAppFeedbackInboxScreen} />
   </Stack.Navigator>
 );
 

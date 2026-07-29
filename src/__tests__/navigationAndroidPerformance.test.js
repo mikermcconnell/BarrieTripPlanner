@@ -15,7 +15,7 @@ describe('Navigation Android map performance', () => {
     expect(passThroughCount).toBeGreaterThanOrEqual(markerViewCount);
   });
 
-  test('Android navigation bus markers avoid per-frame JS animation', () => {
+  test('navigation uses the shared bus marker in Walk View', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'NavigationScreen.js'),
       'utf8'
@@ -27,12 +27,22 @@ describe('Navigation Android map performance', () => {
 
     expect(componentStart).toBeGreaterThanOrEqual(0);
     expect(componentEnd).toBeGreaterThan(componentStart);
-    expect(busMarkerSource).toContain("Platform.OS === 'android'");
+    expect(busMarkerSource).toContain('<BusMarker');
+    expect(busMarkerSource).not.toContain("Platform.OS === 'android'");
+  });
 
-    const androidBranch = busMarkerSource.slice(
-      busMarkerSource.indexOf("if (Platform.OS === 'android')"),
-      busMarkerSource.indexOf('return (', busMarkerSource.indexOf("if (Platform.OS === 'android')") + 1)
+  test('web Walk View does not reset the map from live location updates', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'NavigationScreen.web.js'),
+      'utf8'
     );
-    expect(androidBranch).not.toContain('<BusMarker');
+
+    const initialRegionStart = source.indexOf('const initialRegion = useMemo');
+    const renderStart = source.indexOf('return (', initialRegionStart);
+    const initialRegionSource = source.slice(initialRegionStart, renderStart);
+
+    expect(initialRegionStart).toBeGreaterThanOrEqual(0);
+    expect(initialRegionSource).toContain('tripStart');
+    expect(initialRegionSource).not.toContain('userLocation');
   });
 });

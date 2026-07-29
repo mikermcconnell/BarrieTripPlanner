@@ -399,6 +399,7 @@ function normalizeClearTrackSample(sample = {}) {
     timestampMs,
     shapeId: sample.shapeId ? String(sample.shapeId) : null,
     vehicleId: sample.vehicleId ? String(sample.vehicleId) : null,
+    tripId: sample.tripId ? String(sample.tripId) : null,
     signature: sample.signature ? String(sample.signature) : null,
   };
 }
@@ -2251,6 +2252,7 @@ function snapshotDetour(detour) {
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
+    clearProof: cloneJson(detour.clearProof) || null,
   };
 }
 
@@ -2266,6 +2268,7 @@ function serializeDetour(detour) {
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
+    clearProof: cloneJson(detour.clearProof) || null,
   };
 }
 
@@ -2653,6 +2656,14 @@ function createDetourV2Detector(config = {}) {
 
     detour.state = 'clear-pending';
     detour.clearReason = 'obsolete-shape-normal-route-observed';
+    detour.clearProof = {
+      evidenceType: 'normal-route-gps',
+      method: 'obsolete-shape-all-current-vehicles-on-route',
+      observedAt: newestSampleMs,
+      sampleCount: Number(summary.total || 0),
+      sourceCount: Number(summary.total || 0),
+      shapeId: activeShapeId,
+    };
     detour.clearPendingTick = currentTickId;
     detour.vehiclesOffRoute = new Set();
     detour.currentVehicleCount = 0;
@@ -3530,13 +3541,48 @@ function createDetourV2Detector(config = {}) {
     ));
   }
 
-  function markNormalRouteClearPending(detour, currentTickId) {
+  function buildNormalRouteClearProof(clearWindow, samples, method) {
+    const matchingSamples = (Array.isArray(samples) ? samples : [])
+      .map(normalizeClearTrackSample)
+      .filter((sample) => sample && sampleMatchesClearWindow(clearWindow, sample));
+    const timestamps = matchingSamples.map((sample) => Number(sample.timestampMs)).filter(Number.isFinite);
+    const signatures = new Set(matchingSamples.map((sample) => sample.signature).filter(Boolean));
+    const vehicleIds = new Set(matchingSamples.map((sample) => sample.vehicleId).filter(Boolean));
+    const tripIds = new Set(matchingSamples.map((sample) => sample.tripId).filter(Boolean));
+    const metrics = getClearWindowMetrics(clearWindow, matchingSamples);
+    return {
+      evidenceType: 'normal-route-gps',
+      method,
+      observedAt: timestamps.length > 0 ? Math.max(...timestamps) : null,
+      firstObservedAt: timestamps.length > 0 ? Math.min(...timestamps) : null,
+      sampleCount: matchingSamples.length,
+      sourceCount: signatures.size || vehicleIds.size,
+      vehicleIds: [...vehicleIds].sort(),
+      tripIds: [...tripIds].sort(),
+      shapeId: clearWindow?.shapeId || null,
+      windowStartProgressMeters: Number(clearWindow?.startProgressMeters),
+      windowEndProgressMeters: Number(clearWindow?.endProgressMeters),
+      coverageRatio: metrics?.span > 0 ? metrics.overlapMeters / metrics.span : null,
+      movementMeters: metrics?.movementMeters ?? null,
+      maxProgressGapMeters: metrics?.maxProgressGapMeters ?? null,
+    };
+  }
+
+  function markNormalRouteClearPending(detour, currentTickId, clearProof = null) {
     detour.state = 'clear-pending';
     detour.clearReason = 'normal-route-observed';
     detour.clearPendingTick = currentTickId;
+    detour.clearProof = cloneJson(clearProof) || null;
   }
 
-  function enqueueSegmentClears(eventId, clearSegments, currentTickId, clearPendingAt) {
+  function enqueueSegmentClears(
+    eventId,
+    clearSegments,
+    currentTickId,
+    clearPendingAt,
+    samples = [],
+    method = 'single-track-traversal'
+  ) {
     if (!eventId || !Array.isArray(clearSegments) || clearSegments.length === 0) return;
     const entries = pendingClearsByEvent.get(eventId) || [];
     for (const item of clearSegments) {
@@ -3548,6 +3594,7 @@ function createDetourV2Detector(config = {}) {
         clearWindow: cloneJson(item.clearWindow),
         segment: cloneJson(item.segment),
         clearReason: 'normal-route-observed',
+        clearProof: buildNormalRouteClearProof(item.clearWindow, samples, method),
         clearPendingTick: currentTickId,
         clearPendingAt,
       });
@@ -3745,6 +3792,7 @@ function createDetourV2Detector(config = {}) {
       ...segmentSnapshot,
       state: 'cleared',
       clearReason: pendingClear.clearReason,
+      clearProof: cloneJson(pendingClear.clearProof) || null,
       clearPendingTick: pendingClear.clearPendingTick,
       clearedAtTick: pendingClear.clearPendingTick,
       clearedAt: pendingClear.clearPendingAt || null,
@@ -3800,7 +3848,17 @@ function createDetourV2Detector(config = {}) {
       pendingClearsByEvent.delete(eventId);
 
       if (applied.length > 0 && (!candidate || !hasEnoughEvidence(candidate))) {
-        markNormalRouteClearPending(detour, currentTickId);
+        const observedAt = applied
+          .map((item) => Number(item.clearProof?.observedAt || item.clearPendingAt || 0))
+          .reduce((max, value) => Math.max(max, value), 0);
+        markNormalRouteClearPending(detour, currentTickId, {
+          evidenceType: 'normal-route-gps',
+          method: 'event-segments-cleared',
+          observedAt: observedAt || null,
+          sampleCount: applied.reduce((sum, item) => sum + Number(item.clearProof?.sampleCount || 0), 0),
+          sourceCount: Math.max(...applied.map((item) => Number(item.clearProof?.sourceCount || 0))),
+          segments: applied.map((item) => cloneJson(item.clearProof)).filter(Boolean),
+        });
       }
     }
   }
@@ -3861,6 +3919,7 @@ function createDetourV2Detector(config = {}) {
       .filter((segment) => !activeWindows.some((window) => (
         windowsDescribeSameSegment(segment?.clearWindow, window)
       )));
+    detour.clearProof = cloneJson(previousDetour.clearProof) || detour.clearProof || null;
     return detour;
   }
 
@@ -3959,7 +4018,14 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        trackClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        track,
+        'single-track-traversal'
+      );
       return;
     }
 
@@ -3970,7 +4036,14 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        collectivelyClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        samples,
+        'collective-track-coverage'
+      );
     }
   }
 
@@ -3986,7 +4059,14 @@ function createDetourV2Detector(config = {}) {
           .map((item) => Number(item.timestampMs))
           .filter(Number.isFinite)
           .reduce((max, value) => Math.max(max, value), 0);
-        enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
+        enqueueSegmentClears(
+          eventId,
+          trackClearedSegments,
+          currentTickId,
+          clearPendingAt,
+          track,
+          'restored-single-track-traversal'
+        );
       }
       const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, eventTracks);
       if (collectivelyClearedSegments.length === 0) continue;
@@ -3995,7 +4075,14 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), 0);
-      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        collectivelyClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        samples,
+        'restored-collective-track-coverage'
+      );
     }
   }
 

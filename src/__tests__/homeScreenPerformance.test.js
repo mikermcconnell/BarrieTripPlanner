@@ -2,6 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 describe('HomeScreen map performance', () => {
+  test('quantizes zoom-driven React work to half steps', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
+      'utf8'
+    );
+
+    expect(source).toContain('const MAP_ZOOM_RENDER_STEP = 0.5;');
+  });
+
   test('passive home map marker views allow map gestures through', () => {
     const homeSource = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
@@ -47,9 +56,10 @@ describe('HomeScreen map performance', () => {
     expect(layerSource).toContain(
       'const shouldRenderDetourMapOverlays = shouldShowDetourGeometryOverlay({ isDetourView, hasDetourFocus });'
     );
-    expect(layerSource).toContain(
-      'showArrows={false}'
-    );
+    expect(layerSource).toContain('HOME_ROUTE_LAYER_ORDERS.map');
+    expect(layerSource).toContain("lineColor: ['get', 'routeColor']");
+    expect(layerSource).toContain("lineWidth: ['get', 'routeStrokeWidth']");
+    expect(layerSource).not.toContain('<RoutePolyline');
     expect(layerSource).toContain(
       'const routeMaskingDetourOverlays = shouldRenderDetourMapOverlays ? detourOverlays : [];'
     );
@@ -85,7 +95,7 @@ describe('HomeScreen map performance', () => {
     });
   });
 
-  test('regular home map mode includes standalone MyRide closure stops lightly', () => {
+  test('regular home map mode includes fully opaque standalone MyRide closure stops', () => {
     const nativeSource = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
       'utf8'
@@ -97,7 +107,8 @@ describe('HomeScreen map performance', () => {
 
     [nativeSource, webSource].forEach((source) => {
       expect(source).toContain('includeClosures: true');
-      expect(source).toContain('const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;');
+      expect(source).toContain('const closedStopMarkerOpacity = 1;');
+      expect(source).not.toContain('0.58');
     });
 
     expect(nativeSource).toContain('showAllStopMarkers={isDetourView || hasDetourFocus}');
@@ -106,7 +117,9 @@ describe('HomeScreen map performance', () => {
     expect(nativeSource).toContain('isClosedStopMarker(stop)');
     expect(nativeSource).toContain('Boolean(stop?.isClosed || stop?.isRouteScopedClosure)');
     expect(nativeSource).toContain('closedStopOpacity={closedStopMarkerOpacity}');
-    expect(nativeSource).toContain('showStopCode={isDetourView || hasDetourFocus}');
+    expect(nativeSource).toContain('id="home-top-stops-source"');
+    expect(nativeSource).toContain('showStopCode: isClosed && (isDetourView || hasDetourFocus)');
+    expect(nativeSource).toContain('hitbox={{ width: 44, height: 44 }}');
     expect(nativeSource).toContain('showSkippedStopCodes={isDetourView || hasDetourFocus}');
     expect(webSource).toContain('showSkippedStopCodes={isDetourView || hasDetourFocus}');
     expect(webSource).toContain('closedStopOpacity={closedStopMarkerOpacity}');
@@ -144,7 +157,7 @@ describe('HomeScreen map performance', () => {
     });
   });
 
-  test('Android home fleet uses one batched MapLibre source', () => {
+  test('Android home fleet uses one stable animated MapLibre source', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'components', 'home-map', 'HomeMapVehicleLayer.js'),
       'utf8'
@@ -152,10 +165,12 @@ describe('HomeScreen map performance', () => {
 
     expect(source).toContain('<MapLibreGL.Animated.ShapeSource');
     expect(source).toContain('useAnimatedHomeVehicleShape');
+    expect(source).not.toContain('useBatchedHomeVehiclePositions');
     expect(source).toContain('clusterMaxZoomLevel={HOME_MAP_THEME.vehicleClusterMaxZoom}');
     expect(source).toContain("textFont: ['Noto Sans Bold']");
     expect(source).toContain('id="home-live-vehicle-direction"');
-    expect(source).toContain('aboveLayerID="home-live-vehicle-labels"');
+    expect(source).toContain('aboveLayerID="home-live-vehicle-cluster-counts"');
+    expect(source).toContain('aboveLayerID="home-live-vehicle-direction"');
     expect(source).not.toContain('layerIndex={727}');
     expect(source).toContain('textOffset: [0, -1.45]');
     expect(source).toContain('const isVehicleFullyOpaque = useCallback');

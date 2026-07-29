@@ -93,6 +93,15 @@ const buildNavMarkerHtml = (marker) => {
         <circle cx="15.5" cy="17.5" r="1.4" fill="${GOOGLE_WALK_BLUE}"></circle>
       </svg>
     `,
+    'walk-transfer-stop': `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="5" y="7" width="14" height="8" rx="2" fill="white"></rect>
+        <rect x="7" y="9" width="4" height="3" rx="0.5" fill="${COLORS.warning}"></rect>
+        <rect x="13" y="9" width="4" height="3" rx="0.5" fill="${COLORS.warning}"></rect>
+        <circle cx="8.5" cy="17.5" r="1.4" fill="white"></circle>
+        <circle cx="15.5" cy="17.5" r="1.4" fill="white"></circle>
+      </svg>
+    `,
     'walk-target-destination': `
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M12 20C12 20 17 14.8 17 11.4C17 8.5 14.9 6.5 12 6.5C9.1 6.5 7 8.5 7 11.4C7 14.8 12 20 12 20Z" fill="white"></path>
@@ -134,6 +143,12 @@ const buildNavMarkerHtml = (marker) => {
         <rect x="12.5" y="11.1" width="2.1" height="1.4" rx="0.3" fill="white"></rect>
       </svg>
     `,
+    'walk-exit-stop': `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 20C12 20 17 14.8 17 11.4C17 8.5 14.9 6.5 12 6.5C9.1 6.5 7 8.5 7 11.4C7 14.8 12 20 12 20Z" fill="white"></path>
+        <rect x="8.2" y="10.1" width="7.6" height="4.8" rx="1.2" fill="${COLORS.error}"></rect>
+      </svg>
+    `,
   };
 
   const configByType = {
@@ -144,6 +159,8 @@ const buildNavMarkerHtml = (marker) => {
     'walk-start': { background: COLORS.success, size: 30, halo: 'rgba(76, 175, 80, 0.18)', glyph: glyphByType['walk-start'] },
     'walk-current': { background: GOOGLE_WALK_BLUE, size: 22, halo: 'rgba(66, 133, 244, 0.22)', glyph: glyphByType['walk-current'], border: '#FFFFFF', borderWidth: 4 },
     'walk-target-stop': { background: COLORS.white, size: 36, halo: 'rgba(66, 133, 244, 0.18)', glyph: glyphByType['walk-target-stop'], border: GOOGLE_WALK_BLUE },
+    'walk-transfer-stop': { background: COLORS.warning, size: 30, halo: 'rgba(245, 158, 11, 0.18)', glyph: glyphByType['walk-transfer-stop'] },
+    'walk-exit-stop': { background: COLORS.error, size: 30, halo: 'rgba(220, 38, 38, 0.14)', glyph: glyphByType['walk-exit-stop'] },
     'walk-target-destination': { background: COLORS.error, size: 30, halo: null, glyph: glyphByType['walk-target-destination'] },
     'bus-stop': { background: COLORS.secondary, size: 32, halo: 'rgba(0, 102, 204, 0.14)', glyph: glyphByType['bus-stop'] },
     'transit-next-stop': { background: COLORS.secondary, size: 34, halo: 'rgba(0, 102, 204, 0.18)', glyph: glyphByType['transit-next-stop'] },
@@ -844,9 +861,13 @@ const NavigationScreen = ({ route }) => {
     mapRef.current?.setBearing(0);
   }, [isHeadingUp, isMapReady, isTouchDevice, isWalkingLeg, userLocation?.heading]);
 
-  const initialRegion = userLocation
-    ? buildRegionForLocation(userLocation.latitude, userLocation.longitude, MAP_CONFIG.INITIAL_REGION)
-    : MAP_CONFIG.INITIAL_REGION;
+  const initialRegion = useMemo(() => {
+    const tripStart = itinerary?.legs?.[0]?.from;
+    if (Number.isFinite(tripStart?.lat) && Number.isFinite(tripStart?.lon)) {
+      return buildRegionForLocation(tripStart.lat, tripStart.lon, MAP_CONFIG.INITIAL_REGION);
+    }
+    return MAP_CONFIG.INITIAL_REGION;
+  }, [itinerary]);
 
   return (
     <View style={styles.container}>
@@ -987,10 +1008,11 @@ const NavigationScreen = ({ route }) => {
         totalLegs={totalLegs}
         onClose={handleClose}
         destinationName={finalDestination}
+        boardingStop={currentLeg?.from || null}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
         scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
-        delaySeconds={currentLeg?.delaySeconds || 0}
+        scheduledDepartureTime={currentLeg?.startTime || null}
         isRealtime={currentLeg?.isRealtime || false}
         walkingPaceLevel={walkingPaceStatus?.level || 'on_pace'}
       />
@@ -1015,6 +1037,7 @@ const NavigationScreen = ({ route }) => {
           isFollowActive={isFollowMode}
           onCenterOnUserLocation={jumpToMyLocation}
           onShowTrip={showTripOverview}
+          showLabels
         />
       </View>
 

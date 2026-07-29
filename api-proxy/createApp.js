@@ -27,6 +27,8 @@ const { registerNewsRoutes } = require('./routes/newsRoutes');
 const { registerOfficialBaselineImpactRoutes } = require('./routes/officialBaselineImpactRoutes');
 const { registerAiRoutes } = require('./routes/aiRoutes');
 const { registerPlatformMapRoutes } = require('./routes/platformMapRoutes');
+const { registerAccountRoutes } = require('./routes/accountRoutes');
+const { registerAppFeedbackRoutes } = require('./routes/appFeedbackRoutes');
 const { buildLocalAiConfig } = require('./lib/ai/config');
 
 function loadEnabledWorker(env, flagName, modulePath) {
@@ -96,6 +98,8 @@ function createApiProxyApp({
   });
   registerAiRoutes(app);
   registerPlatformMapRoutes(app);
+  registerAccountRoutes(app);
+  registerAppFeedbackRoutes(app, { env, isProd: config.isProd });
 
   registerDetourRoutes(app, {
     detourWorker,

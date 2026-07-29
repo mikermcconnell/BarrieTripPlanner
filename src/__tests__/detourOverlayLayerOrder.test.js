@@ -207,7 +207,7 @@ describe('DetourOverlay layer split', () => {
     });
 
     expect(inst.root.findAllByType('RoutePolyline')).toHaveLength(0);
-    expect(inst.root.findAllByType('ShapeSource')).toHaveLength(0);
+    expect(inst.root.findAllByType('ShapeSource')).toHaveLength(1);
     expect(inst.root.findAllByType('MarkerView')).toHaveLength(5);
     const skippedStopMarkers = inst.root
       .findAllByType('MarkerView')
@@ -215,7 +215,10 @@ describe('DetourOverlay layer split', () => {
     expect(skippedStopMarkers).toHaveLength(1);
     expect(inst.root.findAllByType('Text').some((text) => text.children.includes('123'))).toBe(true);
     expect(skippedStopMarkers[0].props.allowOverlap).toBe(true);
-    expect(() => skippedStopMarkers[0].findByType('Pressable').props.onPress()).not.toThrow();
+    const skippedStopTouchSource = inst.root
+      .findAllByType('ShapeSource')
+      .find((source) => String(source.props.id).startsWith('detour-skipped-stop-'));
+    expect(() => skippedStopTouchSource.props.onPress()).not.toThrow();
     expect(onStopPress).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'closed-1' }),
       expect.objectContaining({
@@ -278,9 +281,12 @@ describe('DetourOverlay layer split', () => {
     const skippedStopMarker = inst.root
       .findAllByType('MarkerView')
       .find((marker) => String(marker.props.id).startsWith('detour-skipped-stop-'));
+    const skippedStopTouchSource = inst.root
+      .findAllByType('ShapeSource')
+      .find((source) => String(source.props.id).startsWith(skippedStopMarker.props.id));
 
     act(() => {
-      skippedStopMarker.findByType('Pressable').props.onPress();
+      skippedStopTouchSource.props.onPress();
     });
 
     expect(onStopPress).toHaveBeenCalledWith(

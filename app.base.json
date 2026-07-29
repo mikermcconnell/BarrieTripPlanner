@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "My Barrie Transit",
+    "name": "MyBarrie Transit",
     "slug": "barrie-transit-planner",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,9 @@
       "policy": "appVersion"
     },
     "splash": {
-      "backgroundColor": "#ffffff"
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7FBFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -30,7 +32,12 @@
       }
     },
     "android": {
-      "versionCode": 16,
+      "versionCode": 18,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#0c8ce5"
@@ -62,6 +69,15 @@
         }
       ],
       "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F7FBFF",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-updates",
       "expo-secure-store",
       [
@@ -70,7 +86,6 @@
           "name": "MyBarrie"
         }
       ],
-      "./plugins/withTransparentAndroidSplash",
       [
         "@sentry/react-native",
         {

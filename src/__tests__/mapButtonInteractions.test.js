@@ -229,6 +229,25 @@ describe('map and navigation button interactions', () => {
     expect(onShowTrip).toHaveBeenCalled();
   });
 
+  test('trip viewport controls can show compact action labels', () => {
+    const inst = render(React.createElement(TripViewportControls, {
+      onToggleFollow: jest.fn(),
+      onCenterOnUserLocation: jest.fn(),
+      onShowTrip: jest.fn(),
+      showLabels: true,
+    }));
+
+    const textValues = inst.root.findAllByType('Text').map((node) => node.props.children);
+    expect(textValues).toEqual(expect.arrayContaining(['Follow', 'My location', 'Full trip']));
+
+    const locationLabel = inst.root.findAllByType('Text')
+      .find((node) => node.props.children === 'My location');
+    expect(locationLabel.props.style[0]).toMatchObject({
+      width: '100%',
+      textAlign: 'center',
+    });
+  });
+
   test('trip planner header buttons call their handlers', () => {
     const onClose = jest.fn();
     const onUseCurrentLocation = jest.fn();

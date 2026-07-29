@@ -8,4 +8,24 @@ describe('profile account navigation', () => {
     expect(navigatorSource).toContain("const getAccountScreen = () => require('../screens/AccountScreen').default");
     expect(navigatorSource).toContain('name="Account" getComponent={getAccountScreen}');
   });
+
+  test('registers complete Help and About destinations in the Profile stack', () => {
+    const navigatorSource = fs.readFileSync(path.join(__dirname, '../navigation/TabNavigator.js'), 'utf8');
+
+    expect(navigatorSource).toContain("const getHelpSupportScreen = () => require('../screens/HelpSupportScreen').default");
+    expect(navigatorSource).toContain("const getAboutScreen = () => require('../screens/AboutScreen').default");
+    expect(navigatorSource).toContain('name="HelpSupport" getComponent={getHelpSupportScreen}');
+    expect(navigatorSource).toContain('name="About" getComponent={getAboutScreen}');
+  });
+
+  test('registers rider feedback and developer inbox destinations', () => {
+    const navigatorSource = fs.readFileSync(path.join(__dirname, '../navigation/TabNavigator.js'), 'utf8');
+    const helpSource = fs.readFileSync(path.join(__dirname, '../screens/HelpSupportScreen.js'), 'utf8');
+
+    expect(navigatorSource).toContain("require('../screens/AppFeedbackScreen').default");
+    expect(navigatorSource).toContain("require('../screens/AppFeedbackInboxScreen').default");
+    expect(navigatorSource).toContain('name="AppFeedback" getComponent={getAppFeedbackScreen}');
+    expect(navigatorSource).toContain('name="AppFeedbackInbox" getComponent={getAppFeedbackInboxScreen}');
+    expect(helpSource).toContain("navigation.navigate('AppFeedback', { source: 'help_support' })");
+  });
 });

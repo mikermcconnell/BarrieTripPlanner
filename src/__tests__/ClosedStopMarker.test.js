@@ -6,18 +6,19 @@ const { create, act } = require('react-test-renderer');
 jest.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
-  Pressable: 'Pressable',
   StyleSheet: { create: (styles) => styles },
 }));
 
 jest.mock('@maplibre/maplibre-react-native', () => ({
   MarkerView: 'MarkerView',
+  ShapeSource: 'ShapeSource',
+  CircleLayer: 'CircleLayer',
 }));
 
 const ClosedStopMarker = require('../components/ClosedStopMarker').default;
 
 describe('ClosedStopMarker', () => {
-  test('uses a native marker view so stop closures render above map line layers', () => {
+  test('uses a passive marker and a MapLibre hitbox so map drags are not intercepted', () => {
     const onPress = jest.fn();
     let inst;
 
@@ -36,14 +37,18 @@ describe('ClosedStopMarker', () => {
     const marker = inst.root.findByType('MarkerView');
     expect(marker.props.coordinate).toEqual([-79.69, 44.389]);
     expect(marker.props.allowOverlap).toBe(true);
-    expect(marker.props.pointerEvents).toBe('auto');
+    expect(marker.props.pointerEvents).toBe('none');
     const frame = inst.root.findByProps({ testID: 'closed-stop-marker-frame' });
-    expect(frame.props.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ zIndex: expect.any(Number), elevation: expect.any(Number) }),
-    ]));
+    expect(frame.props.style).toEqual(expect.objectContaining({
+      width: 76,
+      height: 48,
+    }));
+    expect(frame.props.style).not.toHaveProperty('elevation');
+    const touchSource = inst.root.findByType('ShapeSource');
+    expect(touchSource.props.hitbox).toEqual({ width: 76, height: 48 });
 
     act(() => {
-      inst.root.findByType('Pressable').props.onPress();
+      touchSource.props.onPress();
     });
 
     expect(onPress).toHaveBeenCalledWith(expect.objectContaining({ id: 'stop-932' }));

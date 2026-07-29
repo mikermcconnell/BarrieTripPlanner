@@ -1,3 +1,7 @@
+// This file retains broad legacy-publisher regression coverage. Production
+// defaults are asserted separately and V2-specific cases pass explicit config.
+process.env.DETOUR_DETECTOR_VERSION = 'v1';
+
 const {
   shouldWriteGeometry,
   makeSnapshot,
@@ -11,6 +15,7 @@ const {
   mergeNoticeStopImpactsIntoGeometry,
   hasNoticeStopImpactWriteDelta,
   hasNormalRouteClearProof,
+  hasAuditableNormalRouteClearProof,
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
   alignEventWindowSegmentSharedMetadata,
@@ -19,6 +24,29 @@ const {
   deriveSharedDetourEventAssignments,
   GEOMETRY_WRITE_THROTTLE_MS,
 } = require('../detourPublisher');
+
+describe('auditable normal-route clearance proof', () => {
+  const proof = {
+    evidenceType: 'normal-route-gps',
+    method: 'single-track-traversal',
+    observedAt: 1_753_000_000_000,
+    sampleCount: 4,
+    sourceCount: 1,
+    shapeId: 'shape-8b',
+  };
+
+  test('requires structured GPS evidence, not only a clear reason', () => {
+    expect(hasAuditableNormalRouteClearProof({
+      clearReason: 'normal-route-observed',
+      clearProof: proof,
+    })).toBe(true);
+    expect(hasNormalRouteClearProof({ clearReason: 'normal-route-observed' })).toBe(false);
+    expect(hasAuditableNormalRouteClearProof({
+      clearReason: 'normal-route-observed',
+      clearProof: { ...proof, observedAt: null },
+    })).toBe(false);
+  });
+});
 
 describe('same-route physical event assignment', () => {
   test('keeps distant event-window documents on the same route separate', () => {
@@ -336,9 +364,18 @@ describe('notice stop impact merge', () => {
 });
 
 describe('hasNormalRouteClearProof', () => {
-  test('accepts normal route and obsolete shape clear reasons', () => {
-    expect(hasNormalRouteClearProof({ clearReason: 'normal-route-observed' })).toBe(true);
-    expect(hasNormalRouteClearProof({ clearReason: 'obsolete-shape-normal-route-observed' })).toBe(true);
+  test('requires auditable evidence for supported normal-route clear reasons', () => {
+    const clearProof = {
+      evidenceType: 'normal-route-gps',
+      method: 'single-track-traversal',
+      observedAt: 1000,
+      sampleCount: 2,
+      sourceCount: 1,
+      shapeId: 'shape-1',
+    };
+    expect(hasNormalRouteClearProof({ clearReason: 'normal-route-observed', clearProof })).toBe(true);
+    expect(hasNormalRouteClearProof({ clearReason: 'obsolete-shape-normal-route-observed', clearProof })).toBe(true);
+    expect(hasNormalRouteClearProof({ clearReason: 'normal-route-observed' })).toBe(false);
     expect(hasNormalRouteClearProof({ clearReason: 'gps-clear-required' })).toBe(false);
     expect(hasNormalRouteClearProof(null)).toBe(false);
   });
@@ -2629,6 +2666,75 @@ describe('publishDetours event ids', () => {
     )).toBe(false);
   });
 
+  test('blocks a V2 clear-pending event that has no auditable proof', async () => {
+    jest.resetModules();
+    const writes = {};
+    const deletes = [];
+    const historyWrites = [];
+    const now = Date.parse('2026-07-19T14:00:00Z');
+    const activeDocs = [{
+      id: '8B:maple:4600-5400',
+      data: () => ({
+        eventId: '8B:maple:4600-5400',
+        routeId: '8B',
+        detourVersion: 'v2',
+        detectedAt: new Date(now - 60 * 60 * 1000),
+        lastSeenAt: new Date(now - 60 * 1000),
+        state: 'clear-pending',
+        clearReason: 'normal-route-observed',
+        clearProof: null,
+        riderVisible: true,
+        alertVisible: true,
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 0,
+      }),
+    }];
+    const emptyQuery = { get: async () => ({ empty: true, size: 0, docs: [] }) };
+    const db = {
+      collection: (name) => ({
+        doc: (id = 'history') => ({
+          set: async (data) => {
+            if (name === 'detourEventHistoryV2') historyWrites.push(data);
+            else writes[`${name}/${id}`] = data;
+          },
+          delete: async () => { deletes.push(`${name}/${id}`); },
+        }),
+        get: async () => name === 'activeDetourEventsV2'
+          ? { size: 1, docs: activeDocs, forEach: (fn) => activeDocs.forEach(fn) }
+          : { size: 0, docs: [], forEach: () => {} },
+        orderBy: () => ({ limit: () => emptyQuery }),
+        where: () => ({ orderBy: () => ({ limit: () => emptyQuery }), limit: () => emptyQuery }),
+      }),
+    };
+    jest.doMock('../firebaseAdmin', () => ({ getDb: () => db }));
+
+    const { publishDetours } = require('../detourPublisher');
+    await publishDetours({}, {
+      now,
+      writerMetadata: { writerEnvironment: 'production', writerId: 'revision-test' },
+      storageConfig: {
+        detourVersion: 'v2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
+      },
+    });
+
+    expect(deletes).toEqual([]);
+    expect(writes['activeDetourEventsV2/8B:maple:4600-5400']).toMatchObject({
+      state: 'active',
+      clearReason: null,
+      blockedClearReason: 'normal-route-observed',
+      clearanceBlockedReason: 'missing-clear-proof',
+      riderVisible: false,
+      alertVisible: false,
+      staleForReview: true,
+      writerEnvironment: 'production',
+      writerId: 'revision-test',
+    });
+    expect(historyWrites.some((event) => event.eventType === 'DETOUR_CLEARED')).toBe(false);
+  });
+
   test('deletes an absent detour when the previous snapshot has normal-route GPS clear proof', async () => {
     jest.resetModules();
     const writes = {};
@@ -2645,6 +2751,14 @@ describe('publishDetours event ids', () => {
       currentVehicleCount: 0,
       state: 'clear-pending',
       clearReason: 'normal-route-observed',
+      clearProof: {
+        evidenceType: 'normal-route-gps',
+        method: 'single-track-traversal',
+        observedAt: now - 60 * 1000,
+        sampleCount: 4,
+        sourceCount: 1,
+        shapeId: 'shape-12b',
+      },
       confidence: 'high',
       canShowDetourPath: true,
       skippedSegmentPolyline: [

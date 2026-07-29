@@ -1,9 +1,14 @@
 import runtimeConfig from './runtimeConfig';
 
+const packageMetadata = require('../../package.json');
+const expoMetadata = require('../../app.base.json').expo;
+
 const readPublicEnv = (value, fallback = '') => {
   if (typeof value === 'string' && value.trim()) return value.trim();
   return fallback;
 };
+
+const LEGAL_SITE_URL = 'https://barrie-transit-trip-plan-cc84e.web.app';
 
 // Barrie Transit GTFS Data URLs
 // Source: https://www.transit.land/feeds/f-dpzk-barrietransit
@@ -96,9 +101,16 @@ export const ROUTE_COLORS = {
 
 // App-wide constants
 export const APP_CONFIG = {
-  APP_NAME: 'Barrie Transit',
-  VERSION: '1.0.0',
-  SUPPORT_EMAIL: 'support@barrietransit.app',
+  APP_NAME: expoMetadata.name,
+  VERSION: packageMetadata.version,
+  BUILD_NUMBER: String(expoMetadata.android?.versionCode || ''),
+  APP_CONTACT_EMAIL: 'mybarrietransit@outlook.com',
+  TRANSIT_CONTACT_EMAIL: 'ServiceBarrie@barrie.ca',
+  TRANSIT_CONTACT_URL: 'https://service.barrie.ca/',
+  TRANSIT_URL: 'https://www.barrie.ca/services-payments/transportation-parking/barrie-transit',
+  TERMS_URL: `${LEGAL_SITE_URL}/terms-of-service.html`,
+  PRIVACY_URL: `${LEGAL_SITE_URL}/privacy-policy.html`,
+  ACCOUNT_DELETION_URL: `${LEGAL_SITE_URL}/account-deletion.html`,
 };
 
 export const ONBOARDING_KEY = '@barrie_transit_onboarding_seen';

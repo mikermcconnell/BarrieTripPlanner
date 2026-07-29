@@ -3,11 +3,30 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, SHADOWS, SPACING } from '../../config/theme';
 import { isHomeVehicleStale } from '../../utils/homeVehicleFeatures';
 import { formatVehicleFreshness } from '../../utils/homeVehiclePresentation';
+import { getVehicleQuickDetails } from '../../utils/vehicleQuickDetails';
 
-const VehicleQuickCard = ({ vehicle, routeLabel, routeColor, feedIsStale = false, onClose, style }) => {
+const VehicleQuickCard = ({
+  vehicle,
+  routeLabel,
+  routeColor,
+  feedIsStale = false,
+  stops,
+  routeStopsMapping,
+  routeStopSequencesMapping,
+  tripUpdate,
+  onClose,
+  style,
+}) => {
   if (!vehicle) return null;
   const headsign = vehicle.headsign && vehicle.headsign !== 'Unknown' ? `To ${vehicle.headsign}` : 'Live Barrie Transit bus';
   const stale = isHomeVehicleStale(vehicle, Date.now(), feedIsStale);
+  const { busIdentifier, nextStopName, scheduleStatus } = getVehicleQuickDetails({
+    vehicle,
+    stops,
+    routeStopsMapping,
+    routeStopSequencesMapping,
+    tripUpdate,
+  });
 
   return (
     <View
@@ -18,10 +37,13 @@ const VehicleQuickCard = ({ vehicle, routeLabel, routeColor, feedIsStale = false
       </View>
       <View
         accessible
-        accessibilityLabel={`Route ${routeLabel}. ${headsign}. ${formatVehicleFreshness(vehicle, Date.now(), feedIsStale)}`}
+        accessibilityLabel={`Route ${routeLabel}. ${headsign}.${nextStopName ? ` Next stop: ${nextStopName}.` : ''}${busIdentifier ? ` Bus ${busIdentifier}.` : ''}${scheduleStatus ? ` ${scheduleStatus}.` : ''} ${formatVehicleFreshness(vehicle, Date.now(), feedIsStale)}`}
         style={styles.copy}
       >
         <Text style={styles.headsign} numberOfLines={1}>{headsign}</Text>
+        {nextStopName && <Text style={styles.detail} numberOfLines={1}>Next: {nextStopName}</Text>}
+        {busIdentifier && <Text style={styles.detail} numberOfLines={1}>Bus: {busIdentifier}</Text>}
+        {scheduleStatus && <Text style={styles.detail} numberOfLines={1}>{scheduleStatus}</Text>}
         <Text style={[styles.freshness, stale && styles.freshnessStale]} numberOfLines={1}>
           {formatVehicleFreshness(vehicle, Date.now(), feedIsStale)}
         </Text>
@@ -62,6 +84,7 @@ const styles = StyleSheet.create({
   routeText: { color: COLORS.white, fontSize: FONT_SIZES.md, fontFamily: FONT_FAMILIES.bold },
   copy: { flex: 1, minWidth: 0 },
   headsign: { fontSize: FONT_SIZES.md, fontFamily: FONT_FAMILIES.bold, color: COLORS.textPrimary },
+  detail: { marginTop: 2, fontSize: FONT_SIZES.xs, fontFamily: FONT_FAMILIES.medium, color: COLORS.textSecondary },
   freshness: { marginTop: 2, fontSize: FONT_SIZES.xs, fontFamily: FONT_FAMILIES.medium, color: COLORS.textSecondary },
   freshnessStale: { color: COLORS.accentDark },
   closeButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.grey50 },

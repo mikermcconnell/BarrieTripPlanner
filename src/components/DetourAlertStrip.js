@@ -34,7 +34,7 @@ const DetourAlertStrip = ({
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, detourEvents, routeGroups, topOffset, getRouteName,
+    expanded, toggleExpanded, dismiss, detourEvents, routeGroups, topOffset, getRouteName,
     getEventStatusLabel, visibleEvents, overflowCount, countText, shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
@@ -82,46 +82,61 @@ const DetourAlertStrip = ({
       pointerEvents="box-none"
     >
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
-      <TouchableOpacity
+      <View
         style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
-        onPress={handleCollapsedPress}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={
-          detourEvents.length === 1
-            ? `Open ${detourEvents[0].title} detour details`
-            : expanded ? 'Collapse detour list' : 'Expand detour list'
-        }
-        accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
-        <Icon name="Warning" size={16} color={COLORS.warning} />
-        <Text style={styles.countText} numberOfLines={1}>
-          {countText}
-        </Text>
-        {visibleCollapsedRouteBadges.length > 0 && (
-          <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
-            {visibleCollapsedRouteBadges.map((badge) => {
-              const color = getRouteColor(badge.routeId, badge.familyId);
-              return (
-                <View
-                  key={badge.key}
-                  style={[
-                    styles.routePill,
-                    inline && styles.routeCircle,
-                    { backgroundColor: color },
-                  ]}
-                >
-                  <Text style={[styles.routePillText, inline && styles.routeCircleText]}>{badge.label}</Text>
-                </View>
-              );
-            })}
-            {hiddenCollapsedRouteBadgeCount > 0 && (
-              <Text style={styles.pillOverflow}>+{hiddenCollapsedRouteBadgeCount}</Text>
-            )}
-          </View>
-        )}
-        <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.collapsedAction}
+          onPress={handleCollapsedPress}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={
+            detourEvents.length === 1
+              ? `Open ${detourEvents[0].title} detour details`
+              : expanded ? 'Collapse detour list' : 'Expand detour list'
+          }
+          accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
+        >
+          <Icon name="Warning" size={16} color={COLORS.warning} />
+          <Text style={styles.countText} numberOfLines={1}>
+            {countText}
+          </Text>
+          {visibleCollapsedRouteBadges.length > 0 && (
+            <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
+              {visibleCollapsedRouteBadges.map((badge) => {
+                const color = getRouteColor(badge.routeId, badge.familyId);
+                return (
+                  <View
+                    key={badge.key}
+                    style={[
+                      styles.routePill,
+                      inline && styles.routeCircle,
+                      { backgroundColor: color },
+                    ]}
+                  >
+                    <Text style={[styles.routePillText, inline && styles.routeCircleText]}>{badge.label}</Text>
+                  </View>
+                );
+              })}
+              {hiddenCollapsedRouteBadgeCount > 0 && (
+                <Text style={styles.pillOverflow}>+{hiddenCollapsedRouteBadgeCount}</Text>
+              )}
+            </View>
+          )}
+          <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.dismissButton}
+          onPress={dismiss}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss active detour alert"
+          accessibilityHint="Hides this alert until a new detour becomes active"
+          hitSlop={4}
+        >
+          <Icon name="X" size={14} color={COLORS.textSecondary} strokeWidth={2.5} />
+        </TouchableOpacity>
+      </View>
 
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
@@ -230,9 +245,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
     backgroundColor: 'rgba(255, 244, 229, 0.95)',
     borderRadius: BORDER_RADIUS.round,
-    paddingHorizontal: SPACING.md,
+    paddingLeft: SPACING.md,
+    paddingRight: 2,
     paddingVertical: SPACING.xs,
-    gap: SPACING.sm,
     ...SHADOWS.medium,
   },
   collapsedBarInline: {
@@ -242,6 +257,22 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 153, 31, 0.18)',
     backgroundColor: 'rgba(255, 248, 236, 0.94)',
     shadowOpacity: 0.08,
+  },
+  collapsedAction: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  dismissButton: {
+    width: 32,
+    height: 32,
+    marginLeft: SPACING.xs,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   countText: {
     flex: 1,

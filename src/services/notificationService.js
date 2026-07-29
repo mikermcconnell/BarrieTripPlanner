@@ -2,25 +2,45 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import * as Application from 'expo-application';
 import logger from '../utils/logger';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 const STORAGE_KEYS = {
   PUSH_TOKEN: '@barrie_transit_push_token',
+  PUSH_DEVICE_ID: '@barrie_transit_push_device_id',
   NOTIFICATION_SETTINGS: '@barrie_transit_notification_settings',
 };
 
 export const DEFAULT_NOTIFICATION_SETTINGS = {
-  serviceAlerts: true,
-  tripReminders: true,
-  nearbyAlerts: false,
+  serviceAlerts: false,
+  tripReminders: false,
   transitNews: false,
 };
 
-const normalizeNotificationSettings = (settings = {}) => ({
-  ...DEFAULT_NOTIFICATION_SETTINGS,
-  ...(settings && typeof settings === 'object' ? settings : {}),
-});
+export const getPushDeviceId = async () => {
+  const stored = await AsyncStorage.getItem(STORAGE_KEYS.PUSH_DEVICE_ID);
+  if (stored) return stored;
+  let deviceId = null;
+  if (Platform.OS === 'android') deviceId = Application.getAndroidId?.();
+  if (Platform.OS === 'ios') deviceId = await Application.getIosIdForVendorAsync?.();
+  if (!deviceId) deviceId = `install-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  await AsyncStorage.setItem(STORAGE_KEYS.PUSH_DEVICE_ID, deviceId);
+  return deviceId;
+};
+
+export const getNotificationPermissionStatus = async () => {
+  if (Platform.OS === 'web') return { granted: false, status: 'unsupported' };
+  const result = await Notifications.getPermissionsAsync();
+  return { granted: result.status === 'granted', status: result.status };
+};
+
+const normalizeNotificationSettings = (settings = {}) => Object.fromEntries(
+  Object.entries(DEFAULT_NOTIFICATION_SETTINGS).map(([key, defaultValue]) => [
+    key,
+    typeof settings?.[key] === 'boolean' ? settings[key] : defaultValue,
+  ])
+);
 
 // Note: Notification handler is configured in App.js to avoid duplicate configuration
 
@@ -62,6 +82,7 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
     });
 
     const token = tokenData.data;
+    const deviceId = await getPushDeviceId();
     await AsyncStorage.setItem(STORAGE_KEYS.PUSH_TOKEN, token);
 
     // Configure Android channel
@@ -91,7 +112,7 @@ export const registerForPushNotifications = async ({ requestPermission = true } 
       });
     }
 
-    return { success: true, token };
+    return { success: true, token, deviceId };
   } catch (error) {
     logger.error('Error registering for push notifications:', error);
     return { success: false, error: getUserFacingErrorMessage(error, 'Could not turn on notifications. Please try again.') };
@@ -247,7 +268,10 @@ export const getNotificationSettings = async () => {
  */
 export const saveNotificationSettings = async (settings) => {
   try {
-    await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATION_SETTINGS, JSON.stringify(settings));
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.NOTIFICATION_SETTINGS,
+      JSON.stringify(normalizeNotificationSettings(settings))
+    );
     return { success: true };
   } catch (error) {
     logger.error('Error saving notification settings:', error);

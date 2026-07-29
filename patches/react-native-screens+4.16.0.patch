@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-screens/android/CMakeLists.txt b/node_modules/react-native-screens/android/CMakeLists.txt
+index 86ec079..602e723 100644
+--- a/node_modules/react-native-screens/android/CMakeLists.txt
++++ b/node_modules/react-native-screens/android/CMakeLists.txt
+@@ -38,6 +38,8 @@ target_compile_definitions(
+ 
+ find_package(ReactAndroid REQUIRED CONFIG)
+ 
++target_link_libraries(rnscreens c++_shared)
++
+ if(${RNS_NEW_ARCH_ENABLED})
+     find_package(fbjni REQUIRED CONFIG)
+     

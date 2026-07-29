@@ -116,8 +116,8 @@ if (-not (Test-Path (Join-Path $apiProxyRoot "index.js"))) {
 }
 
 $devWorkerSwitch = Get-EnvFileValue -ProjectRoot $projectRoot -Name "DETOUR_DEV_WORKER_ENABLED"
-if ($devWorkerSwitch -and $devWorkerSwitch.ToLowerInvariant() -eq "false" -and -not $Force) {
-    Write-Status "Skipped because DETOUR_DEV_WORKER_ENABLED=false"
+if ((-not $devWorkerSwitch -or $devWorkerSwitch.ToLowerInvariant() -ne "true") -and -not $Force) {
+    Write-Status "Skipped because DETOUR_DEV_WORKER_ENABLED=true was not explicitly set"
     exit 0
 }
 
@@ -134,6 +134,20 @@ if (-not $clientEnabled -and -not $Force) {
 }
 
 Assert-FirebaseAdminCredentials -ProjectRoot $projectRoot
+
+$devActiveCollection = Get-EnvFileValue -ProjectRoot $projectRoot -Name "DETOUR_DEV_ACTIVE_COLLECTION"
+if (-not $devActiveCollection) { $devActiveCollection = "devActiveDetourEventsV2" }
+$devHistoryCollection = Get-EnvFileValue -ProjectRoot $projectRoot -Name "DETOUR_DEV_HISTORY_COLLECTION"
+if (-not $devHistoryCollection) { $devHistoryCollection = "devDetourEventHistoryV2" }
+$devRuntimeStateCollection = Get-EnvFileValue -ProjectRoot $projectRoot -Name "DETOUR_DEV_RUNTIME_STATE_COLLECTION"
+if (-not $devRuntimeStateCollection) { $devRuntimeStateCollection = "devSystemState" }
+$devRuntimeStateDoc = Get-EnvFileValue -ProjectRoot $projectRoot -Name "DETOUR_DEV_RUNTIME_STATE_DOC"
+if (-not $devRuntimeStateDoc) { $devRuntimeStateDoc = "devDetourRuntimeV2" }
+
+$clientActiveCollection = Get-EnvFileValue -ProjectRoot $projectRoot -Name "EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION"
+if (-not $Force -and $clientActiveCollection -ne $devActiveCollection) {
+    throw "Local detour worker uses isolated collection '$devActiveCollection'. Set EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION=$devActiveCollection in .env before enabling it."
+}
 
 if (Test-HttpReady -Url $healthUrl) {
     $health = Get-ApiHealth -Url $healthUrl
@@ -155,6 +169,13 @@ $previousEnv = Set-ProcessEnvTemporarily @{
     DETOUR_WORKER_ENABLED = "true"
     DETOUR_WORKER_MODE = "interval"
     DETOUR_HISTORY_ENABLED = "true"
+    DETOUR_DATA_ENVIRONMENT = "development"
+    DETOUR_DETECTOR_VERSION = "v2"
+    DETOUR_ACTIVE_COLLECTION = $devActiveCollection
+    DETOUR_HISTORY_COLLECTION = $devHistoryCollection
+    DETOUR_RUNTIME_STATE_COLLECTION = $devRuntimeStateCollection
+    DETOUR_RUNTIME_STATE_DOC = $devRuntimeStateDoc
+    DETOUR_WRITER_ID = "local-$env:COMPUTERNAME-$Port"
 }
 
 try {

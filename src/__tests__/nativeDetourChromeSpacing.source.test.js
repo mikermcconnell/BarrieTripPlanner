@@ -39,16 +39,16 @@ describe('native detour chrome spacing', () => {
     expect(source).not.toContain('activeDetours={officialServiceImpacts');
   });
 
-  test('provides a regular map exit that clears detour focus and fits all routes once', () => {
+  test('provides a regular map exit that clears detour focus without reclaiming the camera', () => {
     const source = readSource();
 
     expect(source).toContain('returnToRegularMapView');
     expect(source).toContain('accessibilityLabel="Back to Regular Route View"');
     expect(source).toContain('Back to Regular Route View');
     expect(source).toContain("handleMapViewModeChange('regular')");
-    expect(source).toContain('fitMapToAllRoutesOnce');
-    expect(source).toContain('allRouteViewportCoordinates');
-    expect(source).toContain('getViewportBoundsCoordinates(allRouteViewportCoordinates)');
-    expect(source).toContain('compatMapRef.current.fitToCoordinates(fitCoordinates');
+    expect(source).toContain('A content-mode change must never reclaim the camera');
+    expect(source).toContain("rider's exact center and zoom until another explicit focus action");
+    expect(source).not.toContain('fitMapToAllRoutesOnce');
+    expect(source).not.toContain('allRouteViewportCoordinates');
   });
 });

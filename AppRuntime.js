@@ -22,8 +22,23 @@ import { getAppStartupState } from './src/utils/appStartupState';
 
 const STARTUP_ENV_ISSUES = runtimeConfig.startup.criticalIssues;
 const STARTUP_EXIT_FADE_MS = 140;
+const NUNITO_FONT_MAP = (() => {
+  const {
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+  } = require('@expo-google-fonts/nunito');
+
+  return {
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
+  };
+})();
 const APP_FONT_MAP = Platform.OS === 'web'
-  ? {}
+  ? NUNITO_FONT_MAP
   : (() => {
       const {
         Outfit_400Regular,
@@ -37,18 +52,9 @@ const APP_FONT_MAP = Platform.OS === 'web'
         Outfit_500Medium,
         Outfit_600SemiBold,
         Outfit_700Bold,
+        ...NUNITO_FONT_MAP,
       };
     })();
-
-if (Platform.OS !== 'web') {
-  const SplashScreen = require('expo-splash-screen');
-
-  SplashScreen.preventAutoHideAsync().catch((error) => {
-    logger.warn('[startup] native splash hold failed', {
-      message: error?.message || String(error),
-    });
-  });
-}
 
 if (hasCriticalStartupIssues) {
   logger.error(`[StartupConfig] ${STARTUP_ENV_ISSUES.join(' | ')}`);
@@ -126,7 +132,7 @@ function NotificationInitializer({ navigationRef }) {
 
             if (user && result.token) {
               try {
-                await userFirestoreService.updatePushToken(user.uid, result.token);
+                await userFirestoreService.updatePushToken(user.uid, result.token, result.deviceId);
               } catch (tokenError) {
                 logger.error('Failed to save push token:', tokenError);
               }
@@ -255,6 +261,7 @@ function AppStartupGate({
   fontsLoaded,
   navigationRef,
   onStartupLoadingLayout,
+  onStartupStateChange,
 }) {
   const startupStartedAtRef = useRef(Date.now());
   const startupPhaseRef = useRef(null);
@@ -277,6 +284,18 @@ function AppStartupGate({
     isOffline,
   });
   const startupPhase = startupState.ready ? 'ready' : (startupState.statusText || startupState.detail || 'loading');
+  const isStartupExternallyManaged = typeof onStartupStateChange === 'function';
+
+  useEffect(() => {
+    onStartupStateChange?.(startupState);
+  }, [
+    onStartupStateChange,
+    startupState.detail,
+    startupState.percent,
+    startupState.ready,
+    startupState.statusText,
+    startupState.title,
+  ]);
 
   useEffect(() => {
     if (startupPhaseRef.current === startupPhase) return;
@@ -333,7 +352,7 @@ function AppStartupGate({
         <NotificationInitializer navigationRef={navigationRef} />
         <TabNavigator />
       </NavigationContainer>
-      {showStartupOverlay ? (
+      {!isStartupExternallyManaged && showStartupOverlay ? (
         <Animated.View
           pointerEvents={startupState.ready ? 'none' : 'auto'}
           style={[
@@ -356,13 +375,25 @@ function AppStartupGate({
   );
 }
 
-export default function App() {
+export default function App({ onStartupStateChange }) {
   const navigationRef = useRef();
   const [startupLoadingLayoutReady, setStartupLoadingLayoutReady] = useState(
     Platform.OS === 'web' || hasCriticalStartupIssues
   );
 
   const [fontsLoaded] = useFonts(APP_FONT_MAP);
+
+  useEffect(() => {
+    if (!hasCriticalStartupIssues) return;
+
+    onStartupStateChange?.({
+      ready: true,
+      percent: 100,
+      title: 'Barrie Transit needs attention',
+      detail: 'Opening startup details.',
+      statusText: 'Opening startup details...',
+    });
+  }, [onStartupStateChange]);
 
   useEffect(() => {
     const uninstallDiagnostics = installStartupDiagnostics();
@@ -420,6 +451,7 @@ export default function App() {
                   fontsLoaded={fontsLoaded}
                   navigationRef={navigationRef}
                   onStartupLoadingLayout={() => setStartupLoadingLayoutReady(true)}
+                  onStartupStateChange={onStartupStateChange}
                 />
               </TransitProvider>
             </AuthProvider>

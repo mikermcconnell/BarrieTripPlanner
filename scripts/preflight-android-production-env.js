@@ -4,12 +4,17 @@ const path = require('node:path');
 const projectRoot = path.resolve(__dirname, '..');
 
 function parseArgs(argv) {
-  const args = { profile: process.env.EAS_BUILD_PROFILE || 'production' };
+  const args = {
+    profile: process.env.EAS_BUILD_PROFILE || 'production',
+    allowAutoDetours: false,
+  };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--profile' && argv[i + 1]) {
       args.profile = argv[i + 1];
       i += 1;
+    } else if (arg === '--allow-auto-detours') {
+      args.allowAutoDetours = true;
     }
   }
   return args;
@@ -89,7 +94,7 @@ function cleanUrl(value) {
 }
 
 function main() {
-  const { profile } = parseArgs(process.argv);
+  const { profile, allowAutoDetours } = parseArgs(process.argv);
   const strictProductionProfile = profile === 'production' || profile === 'production-apk';
   const easJson = readJson('eas.json');
   const appBaseJson = readJson('app.base.json');
@@ -158,7 +163,15 @@ function main() {
   if (forbidden.length > 0) errors.push(`Forbidden public production env: ${forbidden.join(', ')}`);
 
   if (String(env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS).trim().toLowerCase() === 'true') {
-    warnings.push('Auto-detours are enabled. Confirm backend Firebase Admin credentials, baseline, and worker ticks before rider testing.');
+    const rolloutApproved = String(env.EXPO_PUBLIC_AUTO_DETOURS_APPROVED).trim().toLowerCase() === 'true';
+    if (allowAutoDetours || rolloutApproved) {
+      warnings.push('Auto-detours are enabled by explicit production approval. Confirm the live rollout gate before building.');
+    } else {
+      errors.push(
+        'EXPO_PUBLIC_ENABLE_AUTO_DETOURS requires EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true for an intentional production rollout. ' +
+        'Use --allow-auto-detours only for a one-time reviewed build.'
+      );
+    }
   }
 
   console.log(`Android production env preflight (${profile})`);

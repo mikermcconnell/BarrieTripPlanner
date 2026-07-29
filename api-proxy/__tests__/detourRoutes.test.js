@@ -2,6 +2,8 @@ const express = require('express');
 const request = require('supertest');
 const { registerDetourRoutes } = require('../routes/detourRoutes');
 
+const ORIGINAL_DETOUR_DETECTOR_VERSION = process.env.DETOUR_DETECTOR_VERSION;
+
 describe('detourRoutes', () => {
   test('passes scheduler trigger source into detour run-once ops', async () => {
     const app = express();
@@ -63,6 +65,11 @@ describe('detourRoutes', () => {
     jest.resetModules();
     jest.clearAllMocks();
     jest.unmock('../detourDetector');
+    if (ORIGINAL_DETOUR_DETECTOR_VERSION === undefined) {
+      delete process.env.DETOUR_DETECTOR_VERSION;
+    } else {
+      process.env.DETOUR_DETECTOR_VERSION = ORIGINAL_DETOUR_DETECTOR_VERSION;
+    }
   });
 
   test('detour-run-once returns 409 when worker is disabled', async () => {
@@ -202,6 +209,8 @@ describe('detourRoutes', () => {
   });
 
   test('detour-debug returns enriched route debug for a specific route', async () => {
+    // This regression uses the legacy detector's route-scoped debug shape.
+    process.env.DETOUR_DETECTOR_VERSION = 'v1';
     jest.doMock('../detourDetector', () => ({
       getRouteDebug: jest.fn().mockReturnValue({
         routeId: '8A',

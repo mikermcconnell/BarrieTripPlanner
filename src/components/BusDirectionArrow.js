@@ -17,6 +17,7 @@ const BusDirectionArrow = ({
   color = '#111111',
   outlineColor = 'rgba(255,255,255,0.95)',
   dimmed = false,
+  viewLevel = 6,
   style,
 }) => {
   const normalizedBearing = normalizeBearing(bearing);
@@ -41,6 +42,7 @@ const BusDirectionArrow = ({
           width: size,
           height: size,
           opacity: dimmed ? 0.5 : 1,
+          elevation: viewLevel,
           transform: [{ rotate: `${normalizedBearing}deg` }],
         },
         style,
@@ -95,8 +97,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     overflow: 'visible',
-    zIndex: 3,
-    elevation: 7,
+    zIndex: 1,
   },
   triangle: {
     position: 'absolute',

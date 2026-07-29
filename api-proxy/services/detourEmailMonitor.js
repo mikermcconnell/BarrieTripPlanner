@@ -82,12 +82,16 @@ function routeLabel(event) {
   return routeIds.length > 0 ? routeIds.join(', ') : 'Unknown route';
 }
 
-function eventLabel(eventType) {
+function eventLabel(eventOrType) {
+  const event = typeof eventOrType === 'object' && eventOrType != null ? eventOrType : {};
+  const eventType = typeof eventOrType === 'object' ? event.eventType : eventOrType;
   switch (String(eventType || '').toUpperCase()) {
     case 'DETOUR_DETECTED':
       return 'Detour detected';
     case 'DETOUR_CLEARED':
-      return 'Detour cleared';
+      return event.clearanceScope === 'segment'
+        ? 'Detour segment cleared'
+        : 'Route detour cleared';
     default:
       return String(eventType || 'Detour event').replace(/_/g, ' ');
   }
@@ -476,28 +480,89 @@ function makeNotificationId(event) {
 }
 
 function buildSubject(event) {
-  return `Barrie Transit Detour Alert | ${eventLabel(event.eventType)} | Route ${routeLabel(event)}`;
+  return `Barrie Transit Detour Alert | ${eventLabel(event)} | Route ${routeLabel(event)}`;
 }
 
 function shouldSendDetourEmailEvent(event) {
-  return event?.riderVisible === true;
+  if (event?.riderVisible !== true) return false;
+  if (String(event.eventType || '').toUpperCase() !== 'DETOUR_CLEARED') return true;
+  return event.clearValidation?.valid === true;
 }
 
-function eventIdentifierValues(event = {}) {
+function eventIdentifierValues(event = {}, { includeShared = true } = {}) {
   return [
     event.detourEventId,
     event.eventId,
-    event.sharedDetourEventId,
-    event.id,
+    includeShared ? event.sharedDetourEventId : null,
   ].map((value) => String(value || '').trim()).filter(Boolean);
 }
 
 function activeDocMatchesEvent(active = {}, event = {}) {
-  const eventIds = new Set(eventIdentifierValues(event));
-  const activeIds = eventIdentifierValues(active);
-  if (eventIds.size > 0 && activeIds.some((id) => eventIds.has(id))) return true;
+  const eventIds = new Set(eventIdentifierValues(event, { includeShared: false }));
+  const activeIds = eventIdentifierValues(active, { includeShared: false });
+  if (eventIds.size > 0) return activeIds.some((id) => eventIds.has(id));
+
+  const sharedEventId = String(event.sharedDetourEventId || '').trim();
+  if (sharedEventId) {
+    return String(active.sharedDetourEventId || '').trim() === sharedEventId;
+  }
+  if (String(event.eventType || '').toUpperCase() === 'DETOUR_CLEARED') return false;
   const eventRouteId = String(event.routeId || '').trim();
   return eventRouteId && String(active.routeId || '').trim() === eventRouteId;
+}
+
+function isAuditableNormalRouteClearProof(event = {}) {
+  const proof = event.clearProof;
+  if (!proof || proof.evidenceType !== 'normal-route-gps') return false;
+  if (!String(proof.method || '').trim()) return false;
+  if (!Number.isFinite(Number(proof.observedAt)) || Number(proof.observedAt) <= 0) return false;
+  if (!Number.isFinite(Number(proof.sampleCount)) || Number(proof.sampleCount) < 1) return false;
+  if (!Number.isFinite(Number(proof.sourceCount)) || Number(proof.sourceCount) < 1) return false;
+  const segmentProofs = Array.isArray(proof.segments) ? proof.segments.filter(Boolean) : [];
+  if (segmentProofs.length > 0) {
+    return segmentProofs.every((segmentProof) => isAuditableNormalRouteClearProof({ clearProof: segmentProof }));
+  }
+  return Boolean(String(proof.shapeId || '').trim());
+}
+
+function validateClearEvent(event = {}) {
+  if (String(event.eventType || '').toUpperCase() !== 'DETOUR_CLEARED') {
+    return { valid: true, reason: 'not-clear-event' };
+  }
+  const specificIds = eventIdentifierValues(event, { includeShared: false });
+  if (specificIds.length === 0) return { valid: false, reason: 'missing-event-id' };
+
+  const clearReason = String(event.clearReason || '').trim();
+  if (!clearReason) return { valid: false, reason: 'missing-clear-reason' };
+  if (
+    clearReason === 'normal-route-observed' ||
+    clearReason === 'obsolete-shape-normal-route-observed'
+  ) {
+    return isAuditableNormalRouteClearProof(event)
+      ? { valid: true, reason: 'auditable-gps-proof' }
+      : { valid: false, reason: 'missing-clear-proof' };
+  }
+  if (/^superseded-by-/.test(clearReason) || /^operator-/.test(clearReason) || clearReason === 'operator-cleared') {
+    return { valid: true, reason: clearReason };
+  }
+  return { valid: false, reason: 'unsupported-clear-reason' };
+}
+
+function classifyClearance(event = {}, activeCandidates = []) {
+  if (String(event.eventType || '').toUpperCase() !== 'DETOUR_CLEARED') return event;
+  const clearedIds = new Set(eventIdentifierValues(event, { includeShared: false }));
+  const routeId = String(event.routeId || '').trim();
+  const remaining = activeCandidates.filter((candidate) => {
+    if (String(candidate.routeId || '').trim() !== routeId) return false;
+    const candidateIds = eventIdentifierValues(candidate, { includeShared: false });
+    return !candidateIds.some((id) => clearedIds.has(id));
+  });
+  return {
+    ...event,
+    clearanceScope: remaining.length > 0 ? 'segment' : 'route',
+    remainingActiveRouteEventCount: remaining.length,
+    clearValidation: validateClearEvent(event),
+  };
 }
 
 function rankActiveDetourCandidate(active = {}, event = {}) {
@@ -529,6 +594,14 @@ async function queryActiveDetourCandidates(db, collectionName, event) {
   };
 
   const routeId = String(event?.routeId || '').trim();
+  for (const eventId of eventIdentifierValues(event, { includeShared: false })) {
+    if (typeof collection.doc !== 'function') break;
+    try {
+      addSnapshot(await collection.doc(eventId).get(), eventId);
+    } catch (_err) {
+      // Non-fatal. Some test doubles do not implement direct document reads.
+    }
+  }
   if (routeId && typeof collection.doc === 'function') {
     try {
       addSnapshot(await collection.doc(routeId).get(), routeId);
@@ -556,6 +629,9 @@ async function queryActiveDetourCandidates(db, collectionName, event) {
 async function enrichEventFromActiveDetour(db, storageConfig, event) {
   if (!db || !storageConfig?.activeCollection || !event?.routeId) return event;
   const candidates = await queryActiveDetourCandidates(db, storageConfig.activeCollection, event);
+  if (String(event.eventType || '').toUpperCase() === 'DETOUR_CLEARED') {
+    return classifyClearance(event, candidates);
+  }
   const best = candidates
     .filter((candidate) => candidate.riderVisible === true && activeDocMatchesEvent(candidate, event))
     .sort((a, b) => rankActiveDetourCandidate(b, event) - rankActiveDetourCandidate(a, event))[0];
@@ -579,7 +655,7 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
   const insights = buildDetourEmailInsights(event);
   const location = event.eventLocationLabel || event.detourZone?.label || '';
   const rows = [
-    ['Event', eventLabel(event.eventType)],
+    ['Event', eventLabel(event)],
     ['Route(s)', routeLabel(event)],
     ['Detected at', formatTimestamp(event.detectedAt || event.occurredAt)],
     ['Updated at', formatTimestamp(event.occurredAt)],
@@ -596,6 +672,13 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
       : (insights.affectedStops.length > 0 ? insights.affectedStops.join('; ') : '—')],
     ['Event ID', event.detourEventId || event.eventId || event.id || '—'],
   ];
+  if (String(event.eventType || '').toUpperCase() === 'DETOUR_CLEARED') {
+    rows.splice(2, 0,
+      ['Clearance scope', event.clearanceScope === 'segment' ? 'One detour segment' : 'Entire route'],
+      ['Clear reason', event.clearReason || '—'],
+      ['Other active route detours', event.remainingActiveRouteEventCount ?? 'unknown']
+    );
+  }
 
   const htmlRows = rows
     .map(([label, value]) => `
@@ -622,7 +705,11 @@ function buildEmailMessage(event, { appUrl = '' } = {}) {
     </tr>
     <tr>
       <td style="padding:20px">
-        <p style="font-size:16px;margin:0 0 12px"><strong>Confirmed public detour</strong> for route ${escapeHtml(routeLabel(event))}.</p>
+        <p style="font-size:16px;margin:0 0 12px"><strong>${escapeHtml(
+          String(event.eventType || '').toUpperCase() === 'DETOUR_CLEARED'
+            ? (event.clearanceScope === 'segment' ? 'Detour segment cleared' : 'Route detour cleared')
+            : 'Confirmed public detour'
+        )}</strong> for route ${escapeHtml(routeLabel(event))}.</p>
         ${insights.bestLocationTitle ? `<p style="font-size:18px;margin:0 0 12px"><strong>${escapeHtml(insights.bestLocationTitle)}</strong></p>` : ''}
         <p style="margin:0 0 12px">${escapeHtml(insights.closedSectionText)}<br>${escapeHtml(insights.detourPathText)}<br>${escapeHtml(insights.skippedStopsText)}</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}</table>
@@ -918,7 +1005,9 @@ async function runDetourEmailMonitor({
     if (!shouldSendDetourEmailEvent(activeEvent)) {
       skipped.push({
         id: event.id || event.eventId || null,
-        reason: 'not-rider-visible',
+        reason: activeEvent.clearValidation?.valid === false
+          ? activeEvent.clearValidation.reason
+          : 'not-rider-visible',
         riderVisible: activeEvent.riderVisible ?? null,
         riderVisibilityReason: activeEvent.riderVisibilityReason || null,
       });
@@ -980,6 +1069,7 @@ async function runDetourEmailMonitor({
 module.exports = {
   buildDetourEmailInsights,
   collectLikelyRoadNames,
+  classifyClearance,
   enrichEventStopNames,
   enrichEventFromActiveDetour,
   buildEmailMessage,
@@ -988,5 +1078,6 @@ module.exports = {
   makeNotificationId,
   runDetourEmailMonitor,
   shouldSendDetourEmailEvent,
+  validateClearEvent,
   sendViaResend,
 };

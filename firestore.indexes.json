@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "pushNotificationReceipts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "transitNews",
       "queryScope": "COLLECTION",
       "fields": [
@@ -98,6 +106,20 @@
         },
         {
           "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "appFeedback",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
       ]

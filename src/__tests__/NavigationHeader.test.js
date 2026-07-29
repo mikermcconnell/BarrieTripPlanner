@@ -80,6 +80,45 @@ describe('NavigationHeader', () => {
 
     const text = root.findAllByType('Text').flatMap((node) => collectText(node)).join('|');
     expect(text).toContain('ETA');
-    expect(text).toContain('23| min');
+    expect(text).toContain('23 min');
+  });
+
+  test('shows the boarding stop and expected bus time while waiting', () => {
+    const root = renderTree(React.createElement(NavigationHeader, {
+      navigationState: { type: 'waiting', label: 'Wait for 8A' },
+      destinationName: 'Park Place',
+      boardingStop: { name: 'Mapleview Drive', stopCode: '1234' },
+      currentLegIndex: 1,
+      totalLegs: 3,
+      onClose: jest.fn(),
+      scheduledDepartureTime: Date.now() + 10 * 60 * 1000,
+      delaySeconds: 2 * 60,
+      isRealtime: true,
+    }));
+
+    const text = root.findAllByType('Text').flatMap((node) => collectText(node)).join('|');
+    expect(text).toContain('WAITING AT');
+    expect(text).toContain('Mapleview Drive · Stop #1234');
+    expect(text).not.toContain('Park Place');
+    expect(text).toContain('BUS EXPECTED');
+    expect(text).toContain('in 10 min');
+    expect(text).not.toContain('in 12 min');
+    expect(text).toContain('LIVE');
+  });
+
+  test('does not label the final arrival as the bus expected time when departure is missing', () => {
+    const root = renderTree(React.createElement(NavigationHeader, {
+      navigationState: { type: 'waiting', label: 'Wait for 8A' },
+      destinationName: 'Park Place',
+      boardingStop: { name: 'Mapleview Drive', stopCode: '1234' },
+      currentLegIndex: 1,
+      totalLegs: 3,
+      onClose: jest.fn(),
+      scheduledArrivalTime: Date.now() + 30 * 60 * 1000,
+    }));
+
+    const text = root.findAllByType('Text').flatMap((node) => collectText(node)).join('|');
+    expect(text).not.toContain('BUS EXPECTED');
+    expect(text).not.toContain('30 min');
   });
 });

@@ -175,6 +175,7 @@ const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
         </Svg>
       );
     case 'walk-target-stop':
+    case 'walk-transfer-stop':
     case 'bus-stop':
     case 'transit-next-stop':
     case 'transit-intermediate-stop':
@@ -182,6 +183,7 @@ const NavigationMarkerGlyph = ({ type, color = COLORS.white }) => {
         <Icon name="BusStop" size={19} color={color} />
       );
     case 'transit-alight-stop':
+    case 'walk-exit-stop':
       return (
         <Svg width={18} height={18} viewBox="0 0 24 24">
           <Path
@@ -215,37 +217,6 @@ const NavigationBusMapMarker = ({ marker }) => {
     ...marker.vehicle,
     id: marker.id,
   };
-
-  if (Platform.OS === 'android') {
-    return (
-      <MapLibreGL.MarkerView
-        key={marker.id}
-        id={`nav-bus-${marker.id}`}
-        coordinate={marker.coordinate}
-        anchor={{ x: 0.5, y: 0.5 }}
-        pointerEvents="none"
-      >
-        <View style={styles.busMarkerContainer} pointerEvents="none">
-          <View
-            style={[
-              styles.busMarker,
-              { backgroundColor: marker.color },
-            ]}
-          >
-            <Text style={styles.busMarkerText} numberOfLines={1}>
-              {marker.routeShortName || vehicle.routeId || '?'}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.busMarkerArrow,
-              { borderBottomColor: marker.color },
-            ]}
-          />
-        </View>
-      </MapLibreGL.MarkerView>
-    );
-  }
 
   return (
     <BusMarker
@@ -1092,14 +1063,18 @@ const NavigationScreen = ({ route }) => {
                     styles.mapStopLabelBubble,
                     styles.mapStopLabelBubbleWalkingLandmark,
                     marker.type === 'walk-start' && styles.mapStopLabelBubbleWalkStart,
-                    marker.type !== 'walk-start' && styles.mapStopLabelBubbleWalkTarget,
+                    marker.type === 'walk-transfer-stop' && styles.mapStopLabelBubbleWalkTransfer,
+                    marker.type === 'walk-exit-stop' && styles.mapStopLabelBubbleWalkExit,
+                    !['walk-start', 'walk-transfer-stop', 'walk-exit-stop'].includes(marker.type) && styles.mapStopLabelBubbleWalkTarget,
                   ]}
                 >
                   <Text
                     style={[
                       styles.mapStopLabelCaption,
                       marker.type === 'walk-start' && styles.mapStopLabelCaptionWalkStart,
-                      marker.type !== 'walk-start' && styles.mapStopLabelCaptionWalkTarget,
+                      marker.type === 'walk-transfer-stop' && styles.mapStopLabelCaptionWalkTransfer,
+                      marker.type === 'walk-exit-stop' && styles.mapStopLabelCaptionWalkExit,
+                      !['walk-start', 'walk-transfer-stop', 'walk-exit-stop'].includes(marker.type) && styles.mapStopLabelCaptionWalkTarget,
                     ]}
                   >
                     {marker.caption}
@@ -1119,6 +1094,8 @@ const NavigationScreen = ({ route }) => {
                     marker.type === 'walk-start' && styles.markerWalkStart,
                     marker.type === 'walk-target-stop' && styles.markerWalkTargetStop,
                     marker.type === 'walk-target-destination' && styles.markerWalkTargetDestination,
+                    marker.type === 'walk-transfer-stop' && styles.markerWalkTransferStop,
+                    marker.type === 'walk-exit-stop' && styles.markerWalkExitStop,
                   ]}
                 >
                   <NavigationMarkerGlyph
@@ -1238,10 +1215,11 @@ const NavigationScreen = ({ route }) => {
         totalLegs={totalLegs}
         onClose={handleClose}
         destinationName={finalDestination}
+        boardingStop={currentLeg?.from || null}
         totalDistanceRemaining={totalRemainingDistance}
         currentMode={currentLeg?.mode || 'WALK'}
         scheduledArrivalTime={itinerary?.legs?.[itinerary.legs.length - 1]?.endTime || null}
-        delaySeconds={currentLeg?.delaySeconds || 0}
+        scheduledDepartureTime={currentLeg?.startTime || null}
         isRealtime={currentLeg?.isRealtime || false}
         walkingPaceLevel={walkingPaceStatus?.level || 'on_pace'}
       />
@@ -1280,6 +1258,7 @@ const NavigationScreen = ({ route }) => {
           isFollowActive={isFollowMode}
           onCenterOnUserLocation={jumpToMyLocation}
           onShowTrip={showTripOverview}
+          showLabels
         />
       </View>
 
@@ -1683,6 +1662,18 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
   },
+  markerWalkTransferStop: {
+    backgroundColor: COLORS.warning,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  markerWalkExitStop: {
+    backgroundColor: COLORS.error,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
   busStopIcon: {
     fontSize: 16,
   },
@@ -1774,6 +1765,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(76, 175, 80, 0.22)',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
   },
+  mapStopLabelBubbleWalkTransfer: {
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warningSubtle,
+  },
+  mapStopLabelBubbleWalkExit: {
+    borderColor: COLORS.error,
+    backgroundColor: COLORS.errorSubtle,
+  },
   mapStopLabelCaption: {
     fontSize: FONT_SIZES.xxs,
     fontWeight: '700',
@@ -1793,6 +1792,12 @@ const styles = StyleSheet.create({
   mapStopLabelCaptionWalkStart: {
     color: COLORS.primaryDark,
   },
+  mapStopLabelCaptionWalkTransfer: {
+    color: COLORS.warning,
+  },
+  mapStopLabelCaptionWalkExit: {
+    color: COLORS.error,
+  },
   mapStopLabelName: {
     fontSize: FONT_SIZES.xs,
     fontWeight: '600',
@@ -1807,33 +1812,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: GOOGLE_WALK_BLUE_DARK,
     marginTop: 4,
-  },
-  busMarkerContainer: {
-    alignItems: 'center',
-  },
-  busMarker: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.white,
-    ...SHADOWS.medium,
-  },
-  busMarkerText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  busMarkerArrow: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderBottomWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    transform: [{ rotate: '180deg' }],
-    marginTop: -2,
   },
   onDemandCard: {
     backgroundColor: COLORS.surface,

@@ -1,6 +1,6 @@
 {
   "name": "barrie-transit-planner",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -30,6 +30,7 @@
     "check:parity": "node scripts/check-platform-parity.js",
     "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "build:release:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Apk",
+    "verify:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-readiness.ps1",
     "prebuild:android:production": "node scripts/preflight-android-production-env.js --profile production",
     "eas:build:android": "npm run prebuild:android:eas && eas build --platform android --profile production --clear-cache",
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",
@@ -42,6 +43,7 @@
     "web:export": "expo export --platform web && node scripts/optimize-web-export.js dist"
   },
   "dependencies": {
+    "@expo-google-fonts/nunito": "^0.4.2",
     "@expo-google-fonts/outfit": "^0.4.2",
     "@gorhom/bottom-sheet": "^5.2.8",
     "@maplibre/maplibre-react-native": "^10.4.2",
@@ -54,6 +56,7 @@
     "@sentry/react-native": "~7.2.0",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.36",
+    "expo-application": "~7.0.8",
     "expo-asset": "~12.0.13",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",

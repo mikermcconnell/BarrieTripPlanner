@@ -6,6 +6,8 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     process.env = {
       ...ORIGINAL_ENV,
       DETOUR_REQUIRE_SAFE_BASELINE: 'true',
+      // Most cases mock the legacy detector. V2 cases override this explicitly.
+      DETOUR_DETECTOR_VERSION: 'v1',
     };
   });
 

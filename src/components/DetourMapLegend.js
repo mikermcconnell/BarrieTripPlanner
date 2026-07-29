@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, SHADOWS, SPACING } from '../config/theme';
+import { FRIENDLY_FEATURE_FONTS } from '../config/friendlyFeatureFonts';
 
 const CLOSED_DASH_COUNT = 4;
 const AUTO_COLLAPSE_MS = 12000;
 
 const DETECTION_STEPS = [
-  'Bus GPS leaves the regular route',
-  'More evidence confirms the pattern',
-  'The map shows the detour',
+  'Spots a route change',
+  'Checks the pattern',
+  'Shows riders what changed',
 ];
 
 const DetourMapLegend = ({
@@ -99,11 +100,11 @@ const DetourMapLegend = ({
         <View style={styles.explainerCard}>
           <View style={styles.explainerEyebrowRow}>
             <View style={styles.liveDot} />
-            <Text style={styles.explainerEyebrow}>Live GPS detection</Text>
+            <Text style={styles.explainerEyebrow}>Auto Detour Detector</Text>
           </View>
-          <Text style={styles.explainerTitle}>Auto-detected detours use live bus GPS.</Text>
+          <Text style={styles.explainerTitle}>This map keeps an eye on live buses.</Text>
           <Text style={styles.explainerBody}>
-            We wait for repeated bus GPS evidence before drawing a closure, so brand-new changes may not appear right away.
+            When several bus trips show the same change, the detector shares the likely detour with riders.
           </Text>
           <View style={styles.stepRow}>
             {DETECTION_STEPS.map((step, index) => (
@@ -257,20 +258,21 @@ const styles = StyleSheet.create({
   },
   explainerEyebrow: {
     fontSize: FONT_SIZES.xxs,
-    fontFamily: FONT_FAMILIES.bold,
+    fontFamily: FRIENDLY_FEATURE_FONTS.extrabold,
     color: COLORS.primaryDark,
     textTransform: 'uppercase',
     letterSpacing: 0.45,
   },
   explainerTitle: {
     fontSize: FONT_SIZES.sm,
-    fontFamily: FONT_FAMILIES.bold,
+    fontFamily: FRIENDLY_FEATURE_FONTS.bold,
     color: COLORS.textPrimary,
     lineHeight: 17,
   },
   explainerBody: {
     marginTop: SPACING.xs,
     fontSize: FONT_SIZES.xs,
+    fontFamily: FRIENDLY_FEATURE_FONTS.regular,
     color: COLORS.textSecondary,
     lineHeight: 16,
   },
@@ -296,11 +298,12 @@ const styles = StyleSheet.create({
   },
   stepNumberText: {
     fontSize: FONT_SIZES.xxs,
-    fontFamily: FONT_FAMILIES.bold,
+    fontFamily: FRIENDLY_FEATURE_FONTS.bold,
     color: COLORS.primaryDark,
   },
   stepText: {
     fontSize: FONT_SIZES.xxs,
+    fontFamily: FRIENDLY_FEATURE_FONTS.semibold,
     color: COLORS.textSecondary,
     lineHeight: 13,
     textAlign: 'center',

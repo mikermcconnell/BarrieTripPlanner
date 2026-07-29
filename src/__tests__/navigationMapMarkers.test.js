@@ -210,4 +210,56 @@ describe('navigationMapMarkers', () => {
       },
     ]);
   });
+
+  test('shows future transfer and final bus-exit landmarks during Walk View', () => {
+    const itinerary = {
+      legs: [
+        {
+          mode: 'WALK',
+          from: { name: 'Origin', lat: 44.38, lon: -79.70 },
+          to: { name: 'First stop', lat: 44.381, lon: -79.699 },
+        },
+        {
+          mode: 'BUS',
+          from: { name: 'First stop', lat: 44.381, lon: -79.699 },
+          to: { name: 'Transfer terminal', stopCode: '500', lat: 44.39, lon: -79.69 },
+        },
+        {
+          mode: 'WALK',
+          from: { name: 'Transfer terminal', stopCode: '500', lat: 44.39, lon: -79.69 },
+          to: { name: 'Transfer bay', stopCode: '501', lat: 44.3902, lon: -79.6898 },
+        },
+        {
+          mode: 'BUS',
+          from: { name: 'Transfer bay', stopCode: '501', lat: 44.3902, lon: -79.6898 },
+          to: { name: 'Final bus stop', stopCode: '900', lat: 44.41, lon: -79.67 },
+        },
+        {
+          mode: 'WALK',
+          from: { name: 'Final bus stop', stopCode: '900', lat: 44.41, lon: -79.67 },
+          to: { name: 'Destination', lat: 44.411, lon: -79.669 },
+        },
+      ],
+    };
+
+    const markers = buildWalkingLandmarkMarkers({
+      itinerary,
+      currentLeg: itinerary.legs[0],
+      currentLegIndex: 0,
+      nextTransitLeg: itinerary.legs[1],
+    });
+
+    expect(markers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'walk-transfer-stop',
+        title: 'Transfer terminal (#500)',
+        caption: 'Transfer here',
+      }),
+      expect.objectContaining({
+        type: 'walk-exit-stop',
+        title: 'Final bus stop (#900)',
+        caption: 'Get off here',
+      }),
+    ]));
+  });
 });

@@ -26,6 +26,7 @@ import { haversineDistance } from '../utils/geometryUtils';
 import { retryFetch } from '../utils/retryFetch';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
+import { findMatchingLocalLandmarks } from '../utils/localLandmarkSearch';
 
 let localGeocodingInitPromise = null;
 
@@ -306,8 +307,16 @@ const formatShortAddress = (item) => {
  * @returns {Promise<Array>} Array of address suggestions
  */
 export const autocompleteAddress = async (query) => {
-  if (!query || query.trim().length < 3) {
+  if (!query || query.trim().length < 2) {
     return [];
+  }
+
+  const landmarkResults = findMatchingLocalLandmarks(query, MAX_RESULTS);
+
+  // Two-character searches are supported for local abbreviations such as GO.
+  // Keep remote calls at three characters or more to avoid unnecessary API use.
+  if (query.trim().length < 3) {
+    return landmarkResults;
   }
 
   await ensureLocalGeocodingReady();
@@ -318,7 +327,12 @@ export const autocompleteAddress = async (query) => {
 
     // If query matches a known street/address pattern, use local only — no API call
     if (localResults.length > 0 && matchesLocalStreet(query)) {
-      return localResults;
+      return deduplicateResults([...landmarkResults, ...localResults]).slice(0, MAX_RESULTS);
+    }
+
+    // A curated landmark match is authoritative and does not need an API fallback.
+    if (landmarkResults.length > 0) {
+      return deduplicateResults([...landmarkResults, ...localResults]).slice(0, MAX_RESULTS);
     }
 
     // Query doesn't match any street — likely a POI/business name, call API
@@ -352,6 +366,10 @@ export const autocompleteAddress = async (query) => {
     }
   }
 
+  if (landmarkResults.length > 0) {
+    return landmarkResults;
+  }
+
   // Local data not ready — use API with cache
   const cacheKey = query.trim().toLowerCase();
   const cached = getCached(autocompleteCache, cacheKey);
@@ -370,8 +388,13 @@ export const autocompleteAddress = async (query) => {
  * @returns {Promise<Object|null>} Location object or null
  */
 export const geocodeAddress = async (address) => {
-  if (!address || address.trim().length < 3) {
+  if (!address || address.trim().length < 2) {
     return null;
+  }
+
+  const landmarkMatch = findMatchingLocalLandmarks(address, 1)[0];
+  if (landmarkMatch) {
+    return landmarkMatch;
   }
 
   await ensureLocalGeocodingReady();

@@ -16,14 +16,14 @@ describe('notification wiring source checks', () => {
   test('settings saves enabled push tokens to the signed-in user profile', () => {
     const source = readSource('screens/SettingsScreen.js');
 
-    expect(source).toContain('userFirestoreService.updatePushToken(user.uid, result.token)');
+    expect(source).toContain('userFirestoreService.updatePushToken(user.uid, result.token, result.deviceId)');
   });
 
   test('auth bootstrap syncs an already stored push token after sign in', () => {
     const source = readSource('context/AuthContext.js');
 
     expect(source).toContain('getStoredPushToken');
-    expect(source).toContain('userFirestoreService.updatePushToken(firebaseUser.uid, storedPushToken)');
+    expect(source).toContain('userFirestoreService.updatePushToken(firebaseUser.uid, storedPushToken, await getPushDeviceId())');
   });
 
   test('trip details exposes a one-off reminder action for future trips', () => {

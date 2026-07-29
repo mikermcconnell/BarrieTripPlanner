@@ -16,6 +16,11 @@ jest.mock('expo-constants', () => ({
   expoConfig: { extra: { eas: { projectId: 'project-id' } } },
 }));
 
+jest.mock('expo-application', () => ({
+  getAndroidId: jest.fn(() => 'test-device-id'),
+  getIosIdForVendorAsync: jest.fn(async () => 'test-ios-device-id'),
+}));
+
 jest.mock('../utils/logger', () => ({
   log: jest.fn(),
   warn: jest.fn(),
@@ -46,7 +51,9 @@ const AsyncStorage = require('@react-native-async-storage/async-storage');
 const {
   getStoredPushToken,
   getNotificationSettings,
+  getNotificationPermissionStatus,
   registerForPushNotifications,
+  saveNotificationSettings,
   scheduleTripReminder,
   showLocalNotification,
 } = require('../services/notificationService');
@@ -61,9 +68,30 @@ describe('notificationService quiet defaults', () => {
     const settings = await getNotificationSettings();
 
     expect(settings).toEqual({
-      serviceAlerts: true,
-      tripReminders: true,
-      nearbyAlerts: false,
+      serviceAlerts: false,
+      tripReminders: false,
+      transitNews: false,
+    });
+  });
+
+  test('drops obsolete and invalid values when notification settings are loaded or saved', async () => {
+    mockStorage.set('@barrie_transit_notification_settings', JSON.stringify({
+      serviceAlerts: false,
+      tripReminders: 'yes',
+      transitNews: true,
+      nearbyAlerts: true,
+    }));
+
+    await expect(getNotificationSettings()).resolves.toEqual({
+      serviceAlerts: false,
+      tripReminders: false,
+      transitNews: true,
+    });
+
+    await saveNotificationSettings({ serviceAlerts: false, nearbyAlerts: true });
+    expect(JSON.parse(mockStorage.get('@barrie_transit_notification_settings'))).toEqual({
+      serviceAlerts: false,
+      tripReminders: false,
       transitNews: false,
     });
   });
@@ -79,13 +107,18 @@ describe('notificationService quiet defaults', () => {
     expect(AsyncStorage.setItem).not.toHaveBeenCalled();
   });
 
+  test('reports whether device notification permission is actually granted', async () => {
+    Notifications.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    await expect(getNotificationPermissionStatus()).resolves.toEqual({ granted: false, status: 'denied' });
+  });
+
   test('stores and exposes the push token after permission is granted', async () => {
     Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
     mockGetExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[test-token]' });
 
     const result = await registerForPushNotifications();
 
-    expect(result).toEqual({ success: true, token: 'ExponentPushToken[test-token]' });
+    expect(result).toEqual({ success: true, token: 'ExponentPushToken[test-token]', deviceId: 'test-device-id' });
     await expect(getStoredPushToken()).resolves.toBe('ExponentPushToken[test-token]');
   });
 

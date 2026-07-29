@@ -50,19 +50,7 @@ const buildTransitStopMarkers = (
 
   const markers = [];
 
-  if (nextStop && hasValidCoordinates(nextStop)) {
-    markers.push({
-      id: `transit-next-${nextStop.id}`,
-      latitude: nextStop.lat,
-      longitude: nextStop.lon,
-      type: nextStop.type === 'alighting' ? 'transit-alight-stop' : 'transit-next-stop',
-      title: formatNavigationLocationLabel(nextStop, nextStop.name || 'Next stop'),
-      caption: nextStop.type === 'alighting' ? 'Get off next' : 'Next stop',
-      detail: null,
-    });
-  }
-
-  if (exitStop && exitStop.id !== nextStop?.id && hasValidCoordinates(exitStop)) {
+  if (exitStop && hasValidCoordinates(exitStop)) {
     markers.push({
       id: `transit-exit-${exitStop.id}`,
       latitude: exitStop.lat,

@@ -10,6 +10,8 @@ describe('home reduced map chrome', () => {
     expect(source).toContain('MapBottomControlTray');
     expect(source).toContain('showMainMapFloatingControls && !isDetourView');
     expect(source).toContain('onRouteFamilySelect={handleRouteFamilySelect}');
+    expect(source).toContain('showStops={showStops}');
+    expect(source).toContain('onToggleStops={toggleBusStops}');
     expect(source).toContain('onCenterOnLocation={centerOnUserLocationOnce}');
     expect(source).not.toContain('styles.mapUtilityControls');
     expect(source).not.toContain('MapOptionsControl');

@@ -12,7 +12,7 @@ describe('launcher display name plugin', () => {
   test('sets Android launcher app_name without changing the store name', () => {
     const stringsJson = {
       resources: {
-        string: [{ $: { name: 'app_name' }, _: 'My Barrie Transit' }],
+        string: [{ $: { name: 'app_name' }, _: 'MyBarrie Transit' }],
       },
     };
 
@@ -25,10 +25,10 @@ describe('launcher display name plugin', () => {
   });
 
   test('sets iOS launcher display name without removing existing plist values', () => {
-    const result = applyIosLauncherName({ CFBundleName: 'My Barrie Transit' }, 'MyBarrie');
+    const result = applyIosLauncherName({ CFBundleName: 'MyBarrie Transit' }, 'MyBarrie');
 
     expect(result).toEqual({
-      CFBundleName: 'My Barrie Transit',
+      CFBundleName: 'MyBarrie Transit',
       CFBundleDisplayName: 'MyBarrie',
     });
   });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import Icon from './Icon';
 import {
   COLORS,
@@ -14,6 +14,7 @@ const TripViewportControls = ({
   onShowTrip,
   onToggleFollow,
   isFollowActive = false,
+  showLabels = false,
 }) => {
   const actions = [];
 
@@ -21,6 +22,7 @@ const TripViewportControls = ({
     actions.push({
       key: 'follow',
       icon: 'Route',
+      label: 'Follow',
       active: isFollowActive,
       onPress: onToggleFollow,
       accessibilityLabel: isFollowActive ? 'Stop following my location' : 'Follow my location',
@@ -31,6 +33,7 @@ const TripViewportControls = ({
     actions.push({
       key: 'my-location',
       icon: 'MapPin',
+      label: 'My location',
       active: false,
       onPress: onCenterOnUserLocation,
       accessibilityLabel: 'Center on my location',
@@ -41,6 +44,7 @@ const TripViewportControls = ({
     actions.push({
       key: 'show-trip',
       icon: 'Map',
+      label: 'Full trip',
       active: false,
       onPress: onShowTrip,
       accessibilityLabel: 'Show full trip on the map',
@@ -67,6 +71,11 @@ const TripViewportControls = ({
             size={18}
             color={action.active ? COLORS.white : COLORS.textPrimary}
           />
+          {showLabels && (
+            <Text style={[styles.label, action.active && styles.labelActive]}>
+              {action.label}
+            </Text>
+          )}
         </TouchableOpacity>
       ))}
     </View>
@@ -90,6 +99,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
+  },
+  label: {
+    width: '100%',
+    marginTop: 1,
+    color: COLORS.textPrimary,
+    fontSize: 8,
+    fontWeight: '700',
+    lineHeight: 10,
+    textAlign: 'center',
+  },
+  labelActive: {
+    color: COLORS.white,
   },
   buttonActive: {
     backgroundColor: COLORS.primary,

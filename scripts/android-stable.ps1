@@ -51,6 +51,9 @@ if (Test-Path $detourWorkerScript) {
 
 if (-not $SkipBuild) {
     Write-Status "Building/installing Android release variant"
+    # Local release variants are smoke-test artifacts and do not have the
+    # production Sentry upload token. EAS handles source-map upload policy.
+    $env:SENTRY_DISABLE_AUTO_UPLOAD = "true"
     Push-Location $projectRoot
     try {
         & cmd.exe /c "`"$shortpathCmd`" --variant release"

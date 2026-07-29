@@ -35,6 +35,7 @@ jest.mock('@maplibre/maplibre-react-native', () => ({
   MarkerView: 'MarkerView',
   PointAnnotation: 'PointAnnotation',
   ShapeSource: 'ShapeSource',
+  CircleLayer: 'CircleLayer',
   SymbolLayer: 'SymbolLayer',
 }));
 

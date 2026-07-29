@@ -1,9 +1,7 @@
 import React, { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { COLORS, SHADOWS } from '../config/theme';
-
-const CLOSED_STOP_MARKER_Z_INDEX = 960;
 
 const getClosedStopCode = (stop) => (
   stop?.code ?? stop?.stopCode ?? stop?.id ?? ''
@@ -34,13 +32,14 @@ const ClosedStopMarkerComponent = ({
   }
 
   const stopCode = getClosedStopCode(stop);
+  const markerId = id || `closed-stop-${stop.id ?? stopCode}`;
 
   const markerContent = (
     <View
       testID="closed-stop-marker-frame"
       collapsable={false}
       pointerEvents="none"
-      style={[styles.frame, styles.aboveMapLines]}
+      style={styles.frame}
     >
       {showStopCode && stopCode ? (
         <Text
@@ -66,24 +65,35 @@ const ClosedStopMarkerComponent = ({
   );
 
   return (
-    <MapLibreGL.MarkerView
-      id={id || `closed-stop-${stop.id ?? stopCode}`}
-      coordinate={[longitude, latitude]}
-      anchor={{ x: 0.5, y: 0.5 }}
-      allowOverlap
-      pointerEvents={pointerEvents || (onPress ? 'auto' : 'none')}
-    >
+    <>
+      <MapLibreGL.MarkerView
+        id={markerId}
+        coordinate={[longitude, latitude]}
+        anchor={{ x: 0.5, y: 0.5 }}
+        allowOverlap
+        pointerEvents="none"
+      >
+        {markerContent}
+      </MapLibreGL.MarkerView>
       {onPress ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel || `Stop ${stopCode || stop.id || ''}. Not served by this route during the detour`}
+        <MapLibreGL.ShapeSource
+          id={`${markerId}-touch-source`}
+          shape={{
+            type: 'Feature',
+            id: `${markerId}-touch-feature`,
+            geometry: { type: 'Point', coordinates: [longitude, latitude] },
+            properties: { accessibilityLabel },
+          }}
+          hitbox={{ width: 76, height: 48 }}
           onPress={() => onPress(stop)}
-          style={styles.touchTarget}
         >
-          {markerContent}
-        </Pressable>
-      ) : markerContent}
-    </MapLibreGL.MarkerView>
+          <MapLibreGL.CircleLayer
+            id={`${markerId}-touch-layer`}
+            style={{ circleRadius: 1, circleOpacity: 0 }}
+          />
+        </MapLibreGL.ShapeSource>
+      ) : null}
+    </>
   );
 };
 
@@ -106,24 +116,11 @@ const arePropsEqual = (prev, next) => (
 
 const styles = StyleSheet.create({
   frame: {
-    minWidth: 76,
-    minHeight: 48,
+    width: 76,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
-  },
-  aboveMapLines: {
-    zIndex: CLOSED_STOP_MARKER_Z_INDEX,
-    elevation: CLOSED_STOP_MARKER_Z_INDEX,
-  },
-  touchTarget: {
-    minWidth: 76,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-    zIndex: CLOSED_STOP_MARKER_Z_INDEX,
-    elevation: CLOSED_STOP_MARKER_Z_INDEX,
   },
   codeLabel: {
     paddingHorizontal: 5,

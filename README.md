@@ -126,7 +126,8 @@ Android's system navigation bar can cover bottom-aligned UI. For full-screen loa
   - Runs recovery, starts Metro, starts any required local proxy, then launches the app.
   - The proxy avoids emulator bundle transfer issues seen with direct Metro streaming.
   - This is the preferred native development path for the current app.
-  - If `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true`, it also starts the local auto-detour worker on `http://127.0.0.1:3002`.
+  - It starts the local auto-detour worker on `http://127.0.0.1:3002` only when both `EXPO_PUBLIC_ENABLE_AUTO_DETOURS=true` and `DETOUR_DEV_WORKER_ENABLED=true`.
+  - Before enabling the worker, point `EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION` at the isolated dev collection (default `devActiveDetourEventsV2`).
 
 - `npm run android:dev:launch`
   - Fast relaunch path when Metro is already running.
@@ -174,7 +175,7 @@ Android's system navigation bar can cover bottom-aligned UI. For full-screen loa
     `C:\Users\Mike McConnell\.android\avd\BTTP_Emulator.avd\snapshots\default_boot`
   - Start the emulator once, then shut it down cleanly so Android Studio creates a fresh quick-boot snapshot.
 
-When auto-detour testing is enabled locally, `npm run android:recover` also stops the local detour worker. Set `DETOUR_DEV_WORKER_ENABLED=false` in `.env` if you want to launch the emulator without starting that worker.
+When auto-detour testing is enabled locally, `npm run android:recover` also stops the local detour worker. The worker is fail-closed by default; set `DETOUR_DEV_WORKER_ENABLED=true` only for an intentional isolated test run.
 For rider-visible detour testing, `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` must point to valid Firebase Admin credentials so the worker can publish to Firestore.
 
 ### Web Development (CORS Proxy Required)
@@ -253,6 +254,8 @@ The full testing strategy, mock guidance, and manual smoke checklist live in [do
 
 Data provided by [Barrie Transit](https://www.barrie.ca/transit).
 
+Trip-planning search also includes a researched [local Barrie landmark catalogue](./docs/LOCAL-LANDMARK-CATALOGUE.md) for common names, abbreviations, and former facility names.
+
 ## Planning Notes
 
 Dated plans and working notes live under [`docs/plans/`](./docs/plans/).
@@ -279,6 +282,8 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    ```
 2. Set environment variables:
    - `DETOUR_WORKER_ENABLED=true`
+   - `DETOUR_DATA_ENVIRONMENT=production` in production; local workers use `development` plus isolated dev collections
+   - `DETOUR_DETECTOR_VERSION=v2`, `DETOUR_ACTIVE_COLLECTION=activeDetourEventsV2`, `DETOUR_HISTORY_COLLECTION=detourEventHistoryV2`, and `DETOUR_RUNTIME_STATE_DOC=detourRuntimeV2` are the production storage contract
    - `DETOUR_WORKER_MODE=manual` for local/ad hoc testing, or `scheduled` for low-cost production with Cloud Scheduler calling `POST /api/detour-run-once` every 60 seconds; use `interval` only for the legacy always-on loop
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
@@ -292,6 +297,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    - `REQUIRE_FIREBASE_AUTH=true` (recommended/required for production)
    - `ALLOW_SHARED_TOKEN_AUTH=false` (recommended/required for production)
    - `SURVEY_ADMIN_UIDS=...` only if you cannot use Firebase admin/surveyAdmin custom claims
+   - `APP_FEEDBACK_ADMIN_UIDS=<developer Firebase UID>` to restrict the private app-feedback inbox
    - `ALLOWED_ORIGINS=...` (required for browser clients)
    - Optional non-production token auth: `API_PROXY_TOKEN=...` (or `API_PROXY_TOKENS=token1,token2`)
 3. Start backend:
@@ -334,9 +340,9 @@ Detour emails are text-only and enrich stop codes with GTFS stop names when avai
 ### Firestore rules
 
 Deploy updated rules so clients can read:
-- `activeDetours/*`
-- `detourHistory/*`
-- `activeDetourEventsV2/*` and `detourEventHistoryV2/*` for the isolated V2 event feed; legacy `activeDetoursV2/*` and `detourHistoryV2/*` remain readable for transition/debugging
+- `activeDetourEventsV2/*` and `detourEventHistoryV2/*` for the production event feed
+- dev active/history collections only when local isolated testing is intentionally enabled
+- legacy `activeDetours/*`, `detourHistory/*`, `activeDetoursV2/*`, and `detourHistoryV2/*` remain read-only archive/audit data and are not production sources of truth
 
 ### EAS Android Firebase file
 
@@ -348,6 +354,14 @@ Deploy updated rules so clients can read:
 
 - Before building any Android App Bundle (`.aab`) for Google Play Console, always increment the Android `versionCode`.
 - Keep the Expo config and native Android config in sync: update `android.versionCode` in `app.base.json` and `versionCode` in `android/app/build.gradle`.
+
+### Production release gate
+
+- Run `npm run verify:production` from a clean branch that is synchronized with its upstream branch.
+- The gate checks tests, production environment safety, Expo health, dependency severity, live API auth, legal URLs, and feedback-retention TTL policies.
+- Public auto-detours require `EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true`. The production release gate also verifies the live baseline and rollout health before a build can proceed.
+- Run `npm run build:release` only after the gate passes. It creates the Google Play AAB through EAS-managed upload signing; a local Gradle release is a smoke-test artifact and must not be uploaded.
+- Static legal pages live in `legal-public/` and Firebase Hosting is configured to deploy only that directory. They identify Mike McMike as the independent operator. Obtain legal review, run `firebase deploy --only hosting`, then verify each public URL. The app contact is `mybarrietransit@outlook.com`; Service Barrie remains the transit-service contact only.
 
 ### Client behavior
 

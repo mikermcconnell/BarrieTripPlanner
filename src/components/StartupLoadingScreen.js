@@ -16,11 +16,12 @@ const APP_ICON = require('../../assets/splash-icon.png');
 const AUTO_DETOUR_MAP_BASE = require('../../assets/startup-auto-detour-map-base.png');
 const STARTUP_IMAGE_ASSETS = [APP_ICON, AUTO_DETOUR_MAP_BASE];
 
-const DEFAULT_STATUS = 'Checking live routes and service alerts...';
-const DEFAULT_PERCENT = 65;
+const DEFAULT_STATUS = 'Loading routes, stops, and schedules...';
+const DEFAULT_PERCENT = 55;
 const STARTUP_HEADLINE = 'See likely detours. Avoid skipped stops.';
 const STARTUP_SUPPORTING_TEXT = 'Powered by live bus movement.';
 const STARTUP_BACKGROUND_COLOR = '#F7FBFF';
+const STARTUP_SHOWCASE_PROGRESS = 0.76;
 
 function getStartupImageSource(moduleId, preferPreloadedImages = false) {
   if (!preferPreloadedImages || Platform.OS === 'web') {
@@ -35,8 +36,13 @@ function getStartupImageSource(moduleId, preferPreloadedImages = false) {
   }
 }
 
-function DetectionHero({ width, compact = false, preferPreloadedImages = false }) {
-  const timeline = useRef(new Animated.Value(0)).current;
+function DetectionHero({
+  width,
+  compact = false,
+  preferPreloadedImages = false,
+  useBrandFonts = true,
+}) {
+  const timeline = useRef(new Animated.Value(STARTUP_SHOWCASE_PROGRESS)).current;
   const imageHeight = Math.round(width * (520 / 900));
   const alertAnimation = {
     opacity: timeline.interpolate({
@@ -75,8 +81,16 @@ function DetectionHero({ width, compact = false, preferPreloadedImages = false }
           <Text style={styles.alertIconText}>!</Text>
         </View>
         <View style={styles.alertCopy}>
-          <Text style={styles.alertTitle} numberOfLines={2}>Likely detour detected</Text>
-          <Text style={styles.alertDescription} numberOfLines={2}>
+          <Text
+            style={[styles.alertTitle, useBrandFonts && styles.boldFont]}
+            numberOfLines={2}
+          >
+            Likely detour detected
+          </Text>
+          <Text
+            style={[styles.alertDescription, useBrandFonts && styles.regularFont]}
+            numberOfLines={2}
+          >
             Route change identified from live bus movement
           </Text>
         </View>
@@ -189,6 +203,7 @@ export default function StartupLoadingScreen({
           width={heroWidth}
           compact={compact}
           preferPreloadedImages={preferPreloadedImages}
+          useBrandFonts={useBrandFonts}
         />
 
         <View style={[styles.progressArea, veryCompact && styles.progressAreaVeryCompact]}>
@@ -225,6 +240,7 @@ export {
   STARTUP_HEADLINE,
   STARTUP_BACKGROUND_COLOR,
   STARTUP_IMAGE_ASSETS,
+  STARTUP_SHOWCASE_PROGRESS,
   STARTUP_SUPPORTING_TEXT,
   getStartupImageSource,
 };
@@ -407,7 +423,6 @@ const styles = StyleSheet.create({
   },
   alertTitle: {
     color: '#061A3B',
-    fontFamily: FONT_FAMILIES.bold,
     fontSize: 15,
     lineHeight: 19,
     fontWeight: FONT_WEIGHTS.bold,
@@ -415,7 +430,6 @@ const styles = StyleSheet.create({
   alertDescription: {
     marginTop: 2,
     color: '#5F7387',
-    fontFamily: FONT_FAMILIES.regular,
     fontSize: 12,
     lineHeight: 16,
   },

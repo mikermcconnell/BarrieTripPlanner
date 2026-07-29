@@ -8,11 +8,14 @@ import {
   getBusHubDisplayLabel,
 } from '../config/busHubs';
 import { COLORS, FONT_WEIGHTS, SHADOWS } from '../config/theme';
+import { MAP_MARKER_THEME } from '../config/mapMarkerTheme';
 
 const HUB_MAJOR_ICON_WRAP_SIZE = 21;
 const HUB_MINOR_ICON_WRAP_SIZE = HUB_MAJOR_ICON_WRAP_SIZE * 0.75;
 const HUB_MAJOR_FRAME_HEIGHT = 54;
 const HUB_MINOR_FRAME_HEIGHT = 46;
+const HUB_LABEL_LAYER_ID = 'bus-hubs-labels';
+const HUB_ICON_LAYER_ID = 'bus-hubs-icons';
 
 const getHubMarkerAnchor = (type) => {
   const isMajor = type === BUS_HUB_TYPES.MAJOR;
@@ -38,7 +41,7 @@ const BusHubIcon = ({ type }) => {
   );
 };
 
-const AndroidBusHubOverlay = ({ currentZoom }) => {
+const AndroidBusHubOverlay = ({ currentZoom, aboveLayerID }) => {
   const featureCollection = useMemo(
     () => buildBusHubFeatureCollection(currentZoom),
     [currentZoom]
@@ -46,24 +49,9 @@ const AndroidBusHubOverlay = ({ currentZoom }) => {
 
   return (
     <MapLibreGL.ShapeSource id="bus-hubs-source" shape={featureCollection}>
-      <MapLibreGL.CircleLayer
-        id="bus-hubs-dots"
-        layerIndex={650}
-        style={{
-          circleRadius: [
-            'case',
-            ['==', ['get', 'hubType'], BUS_HUB_TYPES.MAJOR],
-            HUB_MAJOR_ICON_WRAP_SIZE / 2,
-            HUB_MINOR_ICON_WRAP_SIZE / 2,
-          ],
-          circleColor: COLORS.primary,
-          circleStrokeColor: COLORS.white,
-          circleStrokeWidth: 2,
-        }}
-      />
       <MapLibreGL.SymbolLayer
-        id="bus-hubs-labels"
-        layerIndex={651}
+        id={HUB_LABEL_LAYER_ID}
+        aboveLayerID={aboveLayerID}
         style={{
           textField: ['get', 'label'],
           textSize: [
@@ -80,6 +68,25 @@ const AndroidBusHubOverlay = ({ currentZoom }) => {
           textOffset: [0, 1.25],
           textAllowOverlap: false,
           textIgnorePlacement: false,
+        }}
+      />
+      <MapLibreGL.SymbolLayer
+        id={HUB_ICON_LAYER_ID}
+        aboveLayerID={HUB_LABEL_LAYER_ID}
+        style={{
+          textField: '■',
+          textSize: [
+            'case',
+            ['==', ['get', 'hubType'], BUS_HUB_TYPES.MAJOR],
+            HUB_MAJOR_ICON_WRAP_SIZE,
+            HUB_MINOR_ICON_WRAP_SIZE,
+          ],
+          textFont: ['Noto Sans Bold'],
+          textColor: MAP_MARKER_THEME.hubFill,
+          textHaloColor: COLORS.white,
+          textHaloWidth: 2,
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
         }}
       />
     </MapLibreGL.ShapeSource>
@@ -135,9 +142,9 @@ const MarkerViewBusHubOverlay = ({ currentZoom }) => (
   </>
 );
 
-const BusHubOverlay = ({ currentZoom }) => (
+const BusHubOverlay = ({ currentZoom, aboveLayerID }) => (
   Platform.OS === 'android'
-    ? <AndroidBusHubOverlay currentZoom={currentZoom} />
+    ? <AndroidBusHubOverlay currentZoom={currentZoom} aboveLayerID={aboveLayerID} />
     : <MarkerViewBusHubOverlay currentZoom={currentZoom} />
 );
 
@@ -165,16 +172,16 @@ const styles = StyleSheet.create({
   iconWrapMajor: {
     width: HUB_MAJOR_ICON_WRAP_SIZE,
     height: HUB_MAJOR_ICON_WRAP_SIZE,
-    borderRadius: HUB_MAJOR_ICON_WRAP_SIZE / 2,
-    backgroundColor: COLORS.primary,
+    borderRadius: 0,
+    backgroundColor: MAP_MARKER_THEME.hubFill,
     borderColor: COLORS.white,
     borderWidth: 2,
   },
   iconWrapMinor: {
     width: HUB_MINOR_ICON_WRAP_SIZE,
     height: HUB_MINOR_ICON_WRAP_SIZE,
-    borderRadius: HUB_MINOR_ICON_WRAP_SIZE / 2,
-    backgroundColor: COLORS.primary,
+    borderRadius: 0,
+    backgroundColor: MAP_MARKER_THEME.hubFill,
     borderColor: COLORS.white,
     borderWidth: 2,
   },
@@ -183,7 +190,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(12, 140, 229, 0.24)',
+    borderColor: MAP_MARKER_THEME.hubLabelBorder,
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     maxWidth: 152,
     ...SHADOWS.small,
@@ -192,7 +199,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 21,
     alignSelf: 'center',
-    borderColor: 'rgba(0, 78, 128, 0.28)',
+    borderColor: MAP_MARKER_THEME.hubLabelBorder,
   },
   labelPillMinor: {
     position: 'absolute',

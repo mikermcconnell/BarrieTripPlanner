@@ -380,6 +380,8 @@ const TripSearchHeaderWeb = ({
             <Text style={styles.suggestionDistance}>
               {item.source === 'saved_place'
                 ? 'Saved'
+                : item.source === 'local_landmark'
+                  ? 'Landmark'
                 : `${getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km`}
             </Text>
           </TouchableOpacity>
@@ -433,6 +435,8 @@ const TripSearchHeaderWeb = ({
             <Text style={styles.suggestionDistance}>
               {item.source === 'saved_place'
                 ? 'Saved'
+                : item.source === 'local_landmark'
+                  ? 'Landmark'
                 : `${getDistanceFromBarrie(item.lat, item.lon).toFixed(1)}km`}
             </Text>
           </TouchableOpacity>

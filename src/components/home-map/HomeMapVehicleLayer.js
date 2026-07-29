@@ -1,7 +1,10 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { HOME_MAP_THEME } from '../../config/homeMapTheme';
-import { HOME_MAP_VEHICLE_LAYER_ANCHOR_ID } from '../../config/homeMapLayerIds';
+import {
+  HOME_MAP_VEHICLE_LAYER_ANCHOR_ID,
+  HOME_MAP_VEHICLE_TOP_LAYER_ID,
+} from '../../config/homeMapLayerIds';
 import { useAnimatedHomeVehicleShape } from '../../hooks/useAnimatedHomeVehicleShape';
 import { buildHomeVehicleFeatureCollection } from '../../utils/homeVehicleFeatures';
 import { inferHomeVehicleBearings } from '../../utils/homeVehicleInterpolation';
@@ -141,9 +144,30 @@ const HomeMapVehicleLayer = ({
           textIgnorePlacement: true,
         }}
       />
+      {/* MapLibre draws a whole layer at once. Keep arrows below the body layer
+          so one vehicle's arrow can never cover another vehicle's marker. */}
+      <MapLibreGL.SymbolLayer
+        id="home-live-vehicle-direction"
+        aboveLayerID="home-live-vehicle-cluster-counts"
+        filter={DIRECTION_FILTER}
+        style={{
+          textField: '▲',
+          textSize: 15,
+          textFont: ['Noto Sans Bold'],
+          textColor: ['get', 'routeColor'],
+          textHaloColor: '#FFFFFF',
+          textHaloWidth: 1.75,
+          textRotate: ['get', 'bearing'],
+          textOffset: [0, -1.45],
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
+          textOpacity: 1,
+          textRotationAlignment: 'map',
+        }}
+      />
       <MapLibreGL.CircleLayer
         id="home-live-vehicle-selected-ring"
-        aboveLayerID="home-live-vehicle-cluster-counts"
+        aboveLayerID="home-live-vehicle-direction"
         filter={VEHICLE_FILTER}
         style={{
           circleRadius: ['case', ['==', ['get', 'isSelected'], 1], HOME_MAP_THEME.busMarkerSelectedDiameter / 2 + 4, 0],
@@ -167,7 +191,7 @@ const HomeMapVehicleLayer = ({
         }}
       />
       <MapLibreGL.SymbolLayer
-        id="home-live-vehicle-labels"
+        id={HOME_MAP_VEHICLE_TOP_LAYER_ID}
         aboveLayerID="home-live-vehicle-bodies"
         filter={VEHICLE_FILTER}
         style={{
@@ -181,25 +205,6 @@ const HomeMapVehicleLayer = ({
           textAllowOverlap: true,
           textIgnorePlacement: true,
           textOpacity: 1,
-        }}
-      />
-      <MapLibreGL.SymbolLayer
-        id="home-live-vehicle-direction"
-        aboveLayerID="home-live-vehicle-labels"
-        filter={DIRECTION_FILTER}
-        style={{
-          textField: '▲',
-          textSize: 15,
-          textFont: ['Noto Sans Bold'],
-          textColor: ['get', 'routeColor'],
-          textHaloColor: '#FFFFFF',
-          textHaloWidth: 1.75,
-          textRotate: ['get', 'bearing'],
-          textOffset: [0, -1.45],
-          textAllowOverlap: true,
-          textIgnorePlacement: true,
-          textOpacity: 1,
-          textRotationAlignment: 'map',
         }}
       />
     </MapLibreGL.Animated.ShapeSource>

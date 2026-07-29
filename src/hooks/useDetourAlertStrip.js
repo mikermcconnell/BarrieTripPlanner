@@ -37,6 +37,7 @@ const formatRouteSummary = (groups) => {
 
 export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes = [] }) => {
   const [expanded, setExpanded] = useState(false);
+  const [dismissedEventIds, setDismissedEventIds] = useState(() => new Set());
 
   const toggleExpanded = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -78,6 +79,24 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
     () => buildActiveDetourEvents(activeDetours),
     [activeDetours]
   );
+  const activeEventIdsKey = detourEvents.map((event) => event.eventId).join('|');
+
+  useEffect(() => {
+    const activeEventIds = new Set(detourEvents.map((event) => event.eventId));
+    setDismissedEventIds((previous) => {
+      const next = new Set([...previous].filter((eventId) => activeEventIds.has(eventId)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [activeEventIdsKey]);
+
+  const dismiss = useCallback(() => {
+    setExpanded(false);
+    setDismissedEventIds((previous) => {
+      const next = new Set(previous);
+      detourEvents.forEach((event) => next.add(event.eventId));
+      return next;
+    });
+  }, [detourEvents]);
 
   const topOffset = alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP;
 
@@ -136,6 +155,7 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
 
   return {
     expanded,
+    dismiss,
     toggleExpanded,
     routeIds,
     detourEvents,
@@ -148,6 +168,6 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
     visibleEvents,
     overflowCount,
     countText,
-    shouldRender: detourEvents.length > 0,
+    shouldRender: detourEvents.some((event) => !dismissedEventIds.has(event.eventId)),
   };
 };

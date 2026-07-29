@@ -1,44 +1,31 @@
-# Account Deletion — My Barrie Transit
+# Delete Your MyBarrie Transit Account
 
-**Last Updated: February 14, 2026**
+**Last updated: July 20, 2026**
 
-## How to Delete Your Account
+## Delete in the App
 
-You can delete your account directly within the app:
+1. Open **MyBarrie Transit** and sign in.
+2. Open the **Profile** tab.
+3. Select **Account**.
+4. Select **Delete account** and confirm.
 
-1. Open **My Barrie Transit**
-2. Tap the **Profile** tab
-3. Tap **Settings**
-4. Tap **Delete Account**
-5. Confirm the deletion when prompted
+For security, you may be asked to sign out and sign in again. Successful in-app deletion immediately removes the account from the live authentication and account database.
 
-Your account and all associated data will be permanently deleted.
+## Request Deletion Without the App
 
-## What Data Is Deleted
+Email Mike McMike at [mybarrietransit@outlook.com](mailto:mybarrietransit@outlook.com?subject=MyBarrie%20Transit%20account%20deletion). State that you want to delete your MyBarrie Transit account and provide the account email address. Do not send your password. The app operator may verify that you control the account. Service Barrie and the City of Barrie do not operate this app and cannot delete its accounts.
 
-When you delete your account, the following data is permanently removed:
+## Data Deleted
 
-- **Account information** — email address, display name, profile photo
-- **Favorite stops and routes** — all saved favorites
-- **Trip history** — all recent trip searches
-- **Notification preferences** — alert settings and push notification token
-- **User settings** — map preferences, accessibility settings
+- Firebase sign-in account, email address, display name, and profile information.
+- Cloud-synced favorites, saved places and trips, trip history, route subscriptions, notification preferences, push tokens, and user settings stored under the account.
+- App account data held in the live user record and its subcollections.
 
-## What Data Is NOT Affected
+## Data Not Automatically Deleted
 
-- **Locally cached data** (transit schedules, stop data) remains on your device. You can clear this from Settings → Clear Cache, or by uninstalling the app.
-- **Crash reports** previously sent to our error tracking service (Sentry) are anonymized and cannot be linked back to your account.
+- Transit data and caches on the device. Clear the cache in Settings or uninstall the app.
+- Feedback submitted through the private feedback form because feedback does not contain your email. Feedback is scheduled for deletion after no more than 365 days and can be deleted earlier by authorized staff.
+- Pseudonymous feedback rate-limit records, scheduled for deletion after no more than 30 days.
+- Limited logs, backups, or records retained temporarily for security, continuity, or legal obligations.
 
-## Timeline
-
-Account deletion is processed immediately. All personal data is permanently removed from our servers (Firebase) within 30 days.
-
-## Without an Account
-
-My Barrie Transit works fully without an account. After deletion, you can continue using the app — your favorites and trip history will simply be stored locally on your device instead of synced to the cloud.
-
-## Contact
-
-If you have trouble deleting your account or have questions about your data, contact us at:
-
-**Email**: support@barrietransit.app
+Deletion cannot be undone. You can continue using core transit features without an account and may create a new account later.

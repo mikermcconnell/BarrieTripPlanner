@@ -216,7 +216,7 @@ const TripDetailsScreen = ({ route, navigation }) => {
       return;
     }
     if (registration.token) {
-      await updatePushToken(registration.token);
+      await updatePushToken(registration.token, registration.deviceId);
     }
 
     const result = await scheduleTripReminder({

@@ -75,6 +75,7 @@ const AddressAutocomplete = ({
   accessibilityLabel,
   accessibilityHint,
   savedPlaces = [],
+  showLoadingFeedback = false,
 }) => {
   // State for suggestions dropdown
   const [suggestions, setSuggestions] = useState([]);
@@ -103,9 +104,11 @@ const AddressAutocomplete = ({
 
     const savedPlaceMatches = findMatchingSavedPlaces(searchText, savedPlaces);
 
-    // Don't search remote addresses for very short queries, but still show saved places.
-    if (!searchText || searchText.trim().length < 3) {
+    // Two characters are enough for local abbreviations such as GO.
+    if (!searchText || searchText.trim().length < 2) {
       requestSeqRef.current += 1;
+      setIsLoading(false);
+      setSearchError(null);
       setSuggestions(savedPlaceMatches);
       setShowDropdown(isFocusedRef.current && savedPlaceMatches.length > 0);
       return;
@@ -113,15 +116,19 @@ const AddressAutocomplete = ({
 
     // Don't search if it's the same as last search
     if (searchText === lastSearchRef.current) {
+      setIsLoading(false);
       return;
     }
+
+    // Show that the search has started immediately, including during the
+    // debounce delay before the address lookup begins.
+    setIsLoading(true);
+    setSearchError(null);
 
     // Set a timer to search after debounce delay
     debounceTimerRef.current = setTimeout(async () => {
       const requestSeq = ++requestSeqRef.current;
       lastSearchRef.current = searchText;
-      setIsLoading(true);
-      setSearchError(null);
 
       try {
         const results = await autocompleteAddress(searchText);
@@ -188,6 +195,7 @@ const AddressAutocomplete = ({
       blurTimerRef.current = null;
     }
     requestSeqRef.current += 1;
+    setIsLoading(false);
 
     // Mark this value as already searched to avoid duplicate lookup on same text
     lastSearchRef.current = item.shortName;
@@ -257,7 +265,7 @@ const AddressAutocomplete = ({
           <Icon
             name={item.source === 'saved_place' ? (item.icon || 'MapPin') : 'MapPin'}
             size={16}
-            color={item.source === 'saved_place' ? COLORS.primary : COLORS.textSecondary}
+            color={['saved_place', 'local_landmark'].includes(item.source) ? COLORS.primary : COLORS.textSecondary}
           />
         </View>
         <View style={styles.suggestionContent}>
@@ -318,6 +326,17 @@ const AddressAutocomplete = ({
         )}
       </View>
 
+      {showLoadingFeedback && isLoading && (
+        <View
+          style={styles.loadingStatus}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Finding destination suggestions"
+          accessibilityLiveRegion="polite"
+        >
+          <Text style={styles.loadingStatusText}>Finding places…</Text>
+        </View>
+      )}
+
       {/* Error Message */}
       {searchError && !showDropdown && (
         <View style={styles.errorContainer}>
@@ -339,9 +358,11 @@ const AddressAutocomplete = ({
           {/* Attribution — show source of results */}
           <View style={styles.attribution}>
             <Text style={styles.attributionText}>
-              {suggestions.every((s) => s.source === 'local')
-                ? 'Address data: City of Barrie Open Data'
-                : 'Powered by LocationIQ'}
+              {suggestions.some((s) => !['local', 'local_landmark', 'saved_place'].includes(s.source))
+                ? 'Barrie data · Powered by LocationIQ'
+                : suggestions.some((s) => s.source === 'local_landmark')
+                  ? 'Barrie landmarks · © OpenStreetMap contributors'
+                  : 'Address data: City of Barrie Open Data'}
             </Text>
           </View>
         </View>
@@ -386,6 +407,19 @@ const styles = StyleSheet.create({
   },
   loadingIndicatorWithOverlayIcon: {
     right: 48,
+  },
+  loadingStatus: {
+    alignSelf: 'flex-start',
+    marginTop: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  loadingStatusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '500',
+    color: COLORS.primaryDark,
   },
   rightIconContainer: {
     marginLeft: SPACING.xs,

@@ -5,10 +5,11 @@ import { userFirestoreService } from '../services/firebase/userFirestoreService'
 import { favoritesFirestoreService } from '../services/firebase/favoritesFirestoreService';
 import { tripHistoryFirestoreService } from '../services/firebase/tripHistoryFirestoreService';
 import { savedTransitFirestoreService } from '../services/firebase/savedTransitFirestoreService';
-import { getStoredPushToken } from '../services/notificationService';
+import { getStoredPushToken, getPushDeviceId } from '../services/notificationService';
 import { secureSet, secureGet, secureDelete } from '../utils/secureStorage';
 import logger from '../utils/logger';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
+import { deleteCurrentAccount } from '../services/accountService';
 
 const AuthContext = createContext(null);
 
@@ -58,13 +59,21 @@ export const AuthProvider = ({ children }) => {
             setUser(firebaseUser);
 
             // Load user profile from Firestore
-            const profile = await userFirestoreService.getUser(firebaseUser.uid);
+            let profile = await userFirestoreService.getUser(firebaseUser.uid);
+            if (profile && firebaseUser.email && profile.email !== firebaseUser.email) {
+              const emailSyncResult = await userFirestoreService.updateUser(firebaseUser.uid, {
+                email: firebaseUser.email,
+              });
+              if (emailSyncResult.success) {
+                profile = { ...profile, email: firebaseUser.email };
+              }
+            }
             setUserProfile(profile);
 
             try {
               const storedPushToken = await getStoredPushToken();
               if (storedPushToken) {
-                await userFirestoreService.updatePushToken(firebaseUser.uid, storedPushToken);
+                await userFirestoreService.updatePushToken(firebaseUser.uid, storedPushToken, await getPushDeviceId());
               }
             } catch (tokenError) {
               logger.error('Failed to sync stored push token:', tokenError);
@@ -247,6 +256,9 @@ export const AuthProvider = ({ children }) => {
   const signOut = useCallback(async () => {
     try {
       cleanupListeners();
+      if (user) {
+        await userFirestoreService.removePushToken(user.uid, await getPushDeviceId());
+      }
       const result = await authService.signOut();
 
       if (result.success) {
@@ -287,6 +299,39 @@ export const AuthProvider = ({ children }) => {
   // Send password reset email
   const sendPasswordReset = useCallback(async (email) => {
     return await authService.sendPasswordReset(email);
+  }, [user]);
+
+  const updateDisplayName = useCallback(async (displayName) => {
+    const result = await authService.updateDisplayName(displayName);
+    if (result.user) {
+      setUser(result.user);
+    }
+    if (result.success && result.user) {
+      setUserProfile((profile) => profile ? { ...profile, displayName: result.user.displayName } : profile);
+    }
+    return result;
+  }, []);
+
+  const requestEmailChange = useCallback(async (email) => authService.requestEmailChange(email), []);
+
+  const deleteAccount = useCallback(async () => {
+    const result = await deleteCurrentAccount();
+    if (!result.success) return result;
+
+    cleanupListeners();
+    await authService.signOut().catch(() => {});
+    await AsyncStorage.multiRemove([
+      ...Object.values(STORAGE_KEYS),
+      '@barrie_transit_notification_settings',
+    ]);
+    await secureDelete('@barrie_transit_push_token');
+    setUser(null);
+    setUserProfile(null);
+    setFavorites({ stops: [], routes: [] });
+    setTripHistory([]);
+    setSavedPlaces([]);
+    setSavedTrips([]);
+    return { success: true };
   }, []);
 
   // ==================== FAVORITES ====================
@@ -491,14 +536,14 @@ export const AuthProvider = ({ children }) => {
 
   // Update push token
   const updatePushToken = useCallback(
-    async (token) => {
+    async (token, deviceId = null) => {
       if (!user) {
         // Store locally for later sync
         await secureSet('@barrie_transit_push_token', token);
         return { success: true };
       }
 
-      return await userFirestoreService.updatePushToken(user.uid, token);
+      return await userFirestoreService.updatePushToken(user.uid, token, deviceId || await getPushDeviceId());
     },
     [user]
   );
@@ -556,6 +601,9 @@ export const AuthProvider = ({ children }) => {
     signInWithGoogle,
     signOut,
     sendPasswordReset,
+    updateDisplayName,
+    requestEmailChange,
+    deleteAccount,
 
     // Favorites
     favorites,

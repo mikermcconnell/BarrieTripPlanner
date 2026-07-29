@@ -11,6 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const PATH_LENGTH = 620;
+const STARTUP_SHOWCASE_PROGRESS = 0.76;
 const TIMELINE_INPUT = [0, 0.18, 0.48, 0.53, 0.62, 0.76, 0.88, 1];
 
 function SideBusIcon() {
@@ -31,19 +32,40 @@ function SideBusIcon() {
 }
 
 export default function StartupDetourAnimation({ imageSource, width, height, timeline: sharedTimeline }) {
-  const internalTimeline = useRef(new Animated.Value(0)).current;
+  const internalTimeline = useRef(new Animated.Value(STARTUP_SHOWCASE_PROGRESS)).current;
   const timeline = sharedTimeline || internalTimeline;
   const markerSize = Math.max(28, Math.min(42, width * 0.105));
 
   useEffect(() => {
     let active = true;
-    let animation;
+    let introAnimation;
+    let loopAnimation;
 
     const startAnimation = () => {
       if (!active) return;
-      timeline.setValue(0);
-      animation = Animated.loop(
+      introAnimation = Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(timeline, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.linear,
+          useNativeDriver: false,
+          isInteraction: false,
+        }),
+        Animated.delay(300),
+      ]);
+      introAnimation.start(({ finished }) => {
+        if (!active || !finished) return;
+
+        loopAnimation = Animated.loop(
         Animated.sequence([
+          Animated.timing(timeline, {
+            toValue: 0,
+            duration: 0,
+            easing: Easing.linear,
+            useNativeDriver: false,
+            isInteraction: false,
+          }),
           Animated.timing(timeline, {
             toValue: 1,
             duration: 4200,
@@ -54,15 +76,16 @@ export default function StartupDetourAnimation({ imageSource, width, height, tim
           Animated.delay(700),
         ]),
         { resetBeforeIteration: true }
-      );
-      animation.start();
+        );
+        loopAnimation.start();
+      });
     };
 
     Promise.resolve(AccessibilityInfo?.isReduceMotionEnabled?.())
       .then((reduceMotionEnabled) => {
         if (!active) return;
         if (reduceMotionEnabled) {
-          timeline.setValue(1);
+          timeline.setValue(STARTUP_SHOWCASE_PROGRESS);
         } else {
           startAnimation();
         }
@@ -71,7 +94,8 @@ export default function StartupDetourAnimation({ imageSource, width, height, tim
 
     return () => {
       active = false;
-      animation?.stop?.();
+      introAnimation?.stop?.();
+      loopAnimation?.stop?.();
       timeline.stopAnimation();
     };
   }, [timeline]);

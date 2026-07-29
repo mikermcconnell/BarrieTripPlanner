@@ -108,6 +108,9 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
 | DET-074 | Parallel shared-route detour truncates one closure boundary | Derive boundaries from two-trip last-on-route/first-rejoin consensus, render one time-ordered same-trip trace, and reconcile a stronger shared physical boundary only after closed-polyline overlap and route-projection safeguards. Keep the 150m final path gate. | `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js` | QA sections 4, 5, 7, 9, 14 | Covered, needs live Route 10/11 recheck | Sparse 30-60 second sampling can still delay endpoint consensus; a route without two agreeing transitions retains the safer projection fallback |
 | DET-075 | Short nearby detour has broad GPS boundaries and a safe road-matched middle | Keep detector evidence/clear boundaries unchanged, but refine rider display boundaries to the road-level divergence/rejoin when the middle path has at least 75m of continuous separation, follows the trusted trace, and avoids the clipped closed interior. Publish the alert without a line if no safe middle remains. A bracketed 25-40m same-trip pass may refresh only an already-confirmed matching event. | `api-proxy/__tests__/detourRoadMatcher.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 4, 5, 7, 9, 14 | Covered locally, needs live Route 8B Shanty Bay recheck after deploy | Refined public boundaries must not leak into detector hydration/clearing; a short path that never separates meaningfully must remain hidden |
 | DET-076 | Direction-safe refresh and loop-safe display projection | Preserve increasing or decreasing direction when an event is confirmed. A bracketed marginal refresh must follow that direction before enforcement may update GPS freshness or erase clear proof. Refined display boundaries use the padded event progress window on a self-crossing shape while full-shape overlap safety remains active. | `api-proxy/__tests__/confirmedEventRefresh.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `api-proxy/__tests__/boundaryRefinement.test.js`, `api-proxy/__tests__/detourRoadMatcher.test.js` | QA sections 4, 5, 10, 14 | Implemented locally; diagnostic rollout pending | Too many legacy events resolving unknown direction, or an event window that is too narrow for a valid road-level divergence |
+| DET-077 | One-time detour and regular-map camera handoff | Opening an active detour may fit its geometry once, and returning to the regular map may fit all routes once. After either initial move, rider pan and pinch-zoom must retain camera control without delayed or repeated refocusing. | `src/__tests__/detourViewportFreedom.source.test.js`, `src/__tests__/detourViewport.test.js` | QA sections 7, 8 | Covered, needs native gesture recheck | A future state-driven camera effect or delayed fit reintroducing map snap-back |
+| DET-078 | Closed-stop access independent of regular stop visibility | Provide a direct native main-map Stops toggle for regular stop clutter. Closed stops remain visible and clickable while regular stops are hidden, and opening their details must not change the rider's regular-stop visibility choice. | `src/__tests__/mapBottomControlTray.test.js`, `src/__tests__/homeClosedStopAccess.source.test.js`, `src/__tests__/ClosedStopMarker.test.js` | QA sections 6, 7, 9 | Covered, needs native touch recheck | Dense overlapping map features reducing the effective closed-stop touch target |
+| DET-079 | Environment-isolated, event-scoped and proof-audited clearance | Require explicit worker environment classification; enforce the exact V2 production storage contract; isolate local worker collections/runtime; stamp writer identity; retain and hide V2 clear attempts without auditable proof; clear one event at a time; and describe an entire route as cleared only when no same-route events remain. | `api-proxy/__tests__/detourEnvironment.test.js`, `api-proxy/__tests__/detourPublisher.test.js`, `api-proxy/__tests__/detourEmailMonitor.test.js`, `api-proxy/__tests__/detourV2Detector.test.js`, `src/__tests__/detourService.test.js` | QA sections 2, 10, 11, 13, 14 | Covered locally; deployment audit pending | Misclassified deployment environment, an old writer that bypasses startup validation, or operator action without a specific event identity |
 
 ## Recorded issues
 
@@ -1055,6 +1058,84 @@ If this file conflicts with the behavior doc, fix the conflict instead of treati
   - `api-proxy/__tests__/detourV2Detector.test.js`
   - `api-proxy/__tests__/detourPublisher.test.js`
 - Remaining risk: live Route 8B evidence must traverse the corridor again after deployment before the corrected coherent event can replace hidden fragments; no active record is deleted without the existing supersede or GPS-clear rules.
+
+### DET-077A — camera repeatedly reclaimed control after one-time map navigation
+
+- Date/time observed: 2026-07-18
+- Environment: rider-reported active-detour map flow
+- Route(s): active detour view; not route-specific
+- What happened:
+  - opening an active detour correctly moved the map to the affected location, but subsequent finger navigation could be pulled back to the detour
+  - returning to the regular view correctly showed the full network, but subsequent pan or pinch-zoom could be pulled back out
+- What should have happened: opening a detour may perform its one explicit focus action, then the camera should remain completely under rider control. Returning to the regular map should change map content only and preserve the current center and zoom.
+- Classification:
+  - frontend rendering / map interaction
+- Root cause:
+  - detour geometry presses previously had a refocus path; that path is now blocked by regression coverage
+  - the native regular-view action was still coupled to a full-network fit; removing its earlier delay changed the timing but did not satisfy the requirement that this mode change leave the viewport untouched
+- Fix:
+  - keep detour focusing attached only to the explicit initial detour selection
+  - keep map-geometry presses camera-neutral
+  - make the regular-view action camera-neutral: do not fit, recenter, zoom, or queue a camera command
+- Tests added/updated:
+  - `src/__tests__/detourViewportFreedom.source.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: confirm on the Android emulator that returning to regular view preserves the exact center and zoom while route and detour layers change.
+
+### DET-078A — regular stop toggle was missing and closed stops depended on stop visibility
+
+- Date/time observed: 2026-07-18
+- Environment: rider-reported main-map flow
+- Route(s): not route-specific
+- What happened: the native main map no longer offered a direct way to show regular bus stops, and closed-stop details needed to remain available even when regular stops were hidden.
+- What should have happened: riders should be able to toggle ordinary bus stops from the main map, while closed stops stay visible and clickable at all times.
+- Classification:
+  - frontend rendering / map interaction
+- Fix:
+  - add an accessible Stops toggle to the native bottom map tray
+  - keep closed stops merged into the map independently of the regular-stop toggle
+  - use the dedicated closed-stop touch source to open stop details
+  - preserve the rider's regular-stop visibility choice when a closed stop is opened
+- Tests added/updated:
+  - `src/__tests__/mapBottomControlTray.test.js`
+  - `src/__tests__/homeClosedStopAccess.source.test.js`
+  - `src/__tests__/ClosedStopMarker.test.js`
+- Docs updated:
+  - `AUTO-DETOUR-DETECTION.md`
+  - `AUTO-DETOUR-QA-CHECKLIST.md`
+  - this matrix
+- Remaining risk: visually confirm the new tray spacing and closed-stop touch target on the Android emulator with overlapping buses and route lines.
+
+### DET-079A — Route 8B false route-clear signal from an unclassified legacy writer
+
+- Date/time reviewed: 2026-07-19
+- Environment: production Firestore, Cloud Run revision configuration, and local launcher review
+- Route(s): `8B`
+- What happened: a Maple Avenue Route 8B clearance appeared only in legacy route-level history, while separate Blake Street Route 8B V2 events remained operationally active but rider-hidden.
+- What should have happened: only the event with valid clearance evidence should be removed. Hidden same-route events remain unresolved, and no notification should say the entire route is clear while another Route 8B event is active.
+- Evidence:
+  - production Cloud Run revisions used `activeDetourEventsV2`, `detourEventHistoryV2`, and `detourRuntimeV2`
+  - the questionable record appeared only in legacy `detourHistory`
+  - the local launcher could previously auto-start with production Admin credentials and implicit V1 defaults
+  - current Blake Street records had `state: active`, `clearReason: null`, and `alertVisible: false`
+- Root cause: writer environment/storage identity was not enforced; normal-route clear reasons were not structurally proof-validated at the publisher boundary; and email enrichment could fall back to a different active event on the same route.
+- Fix:
+  - make V2 the production default and exact production storage contract
+  - require explicit environment classification and isolate local worker storage/runtime
+  - stamp writer identity on active and history records
+  - retain and hide V2 clear attempts without auditable `clearProof`
+  - match notifications by event ID, classify segment versus route clearance from remaining active same-route events, and prohibit route-only fallback for clears
+  - preserve legacy records as archive/audit data rather than deleting them
+- Tests added/updated:
+  - `api-proxy/__tests__/detourEnvironment.test.js`
+  - `api-proxy/__tests__/detourPublisher.test.js`
+  - `api-proxy/__tests__/detourEmailMonitor.test.js`
+  - `api-proxy/__tests__/detourV2Detector.test.js`
+  - `src/__tests__/detourService.test.js`
+- Remaining risk: deployment configuration and live writer metadata still require a post-release audit; an older external writer that does not run this code must be disabled separately.
 
 ## Status definitions
 

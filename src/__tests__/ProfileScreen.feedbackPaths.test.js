@@ -5,6 +5,7 @@ const mockNavigate = jest.fn();
 const mockOpenURL = jest.fn();
 const mockAlert = jest.fn();
 const mockSignOut = jest.fn();
+const mockGetFeedbackAccess = jest.fn();
 let mockAuthState;
 
 jest.mock('react-native', () => ({
@@ -29,11 +30,20 @@ jest.mock('../context/AuthContext', () => ({
   useAuth: () => mockAuthState,
 }));
 
+jest.mock('../services/appFeedbackService', () => ({
+  appFeedbackService: { getAccess: (...args) => mockGetFeedbackAccess(...args) },
+}));
+
+jest.mock('../services/detourReviewService', () => ({
+  detourReviewService: { getAccess: jest.fn().mockResolvedValue({ canReview: false }) },
+}));
+
 jest.mock('../config/constants', () => ({
   APP_CONFIG: {
     APP_NAME: 'Barrie Transit',
     VERSION: '1.0.0',
-    SUPPORT_EMAIL: 'support@example.com',
+    APP_CONTACT_EMAIL: 'app@example.com',
+    TRANSIT_CONTACT_EMAIL: 'transit@example.com',
   },
 }));
 
@@ -73,6 +83,7 @@ describe('ProfileScreen feedback paths', () => {
     mockOpenURL.mockClear();
     mockAlert.mockClear();
     mockSignOut.mockClear();
+    mockGetFeedbackAccess.mockReset().mockResolvedValue({ canManage: false });
     mockAuthState = {
       user: null,
       isAuthenticated: false,
@@ -88,7 +99,7 @@ describe('ProfileScreen feedback paths', () => {
     const inst = renderProfile();
     const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
 
-    expect(texts).toContain('Help shape My Barrie Transit');
+    expect(texts).toContain('Help shape MyBarrie Transit');
     expect(texts).toContain(
       "This app is new and we're actively improving it. Tell us what's working, what's confusing, or what you'd like to see next."
     );
@@ -107,7 +118,7 @@ describe('ProfileScreen feedback paths', () => {
     const texts = inst.root.findAllByType('Text').flatMap((node) => collectText(node));
 
     expect(texts).toContain('Manage account');
-    expect(texts).toContain('Name, email, password, and account actions');
+    expect(texts).toContain('Name, email, password, and account deletion');
     expect(texts).toContain('Sign out');
 
     const manageAccount = findTouchableByText(inst.root, 'Manage account');
@@ -146,7 +157,7 @@ describe('ProfileScreen feedback paths', () => {
     expect(mockNavigate).toHaveBeenCalledWith('Survey', { trigger: 'transit_network' });
   });
 
-  test('app feedback explains that feedback is encouraged before opening email', () => {
+  test('app feedback opens the private in-app form instead of email', () => {
     const inst = renderProfile();
     const item = findTouchableByText(inst.root, 'App feedback');
 
@@ -155,22 +166,29 @@ describe('ProfileScreen feedback paths', () => {
     });
 
     expect(mockOpenURL).not.toHaveBeenCalled();
-    expect(mockAlert).toHaveBeenCalledWith(
-      'App feedback is welcome',
-      'This app is new and still improving. Bug reports, confusing moments, and feature ideas are all helpful.',
-      expect.any(Array)
-    );
+    expect(mockAlert).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('AppFeedback', { source: 'profile' });
+  });
 
-    const buttons = mockAlert.mock.calls[0][2];
-    const shareButton = buttons.find((button) => button.text === 'Share app feedback');
+  test('shows the developer inbox only after server-authorized access', async () => {
+    mockAuthState = {
+      ...mockAuthState,
+      user: { uid: 'mike-uid', displayName: 'Mike McConnell', email: 'mike@example.com' },
+      isAuthenticated: true,
+    };
+    mockGetFeedbackAccess.mockResolvedValue({ canManage: true });
 
-    act(() => {
-      shareButton.onPress();
+    let inst;
+    await act(async () => {
+      inst = create(React.createElement(ProfileScreen, {
+        navigation: { navigate: mockNavigate, getParent: () => ({ navigate: mockNavigate }) },
+      }));
+      await Promise.resolve();
     });
 
-    expect(mockOpenURL).toHaveBeenCalledWith(
-      expect.stringMatching(/^mailto:support@example\.com\?/)
-    );
-    expect(mockOpenURL.mock.calls[0][0]).toContain('subject=App%20feedback');
+    expect(inst.root.findAllByType('Text').flatMap((node) => collectText(node)))
+      .toContain('Developer Feedback');
+    act(() => findTouchableByText(inst.root, 'Developer Feedback').props.onPress());
+    expect(mockNavigate).toHaveBeenCalledWith('AppFeedbackInbox');
   });
 });

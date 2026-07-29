@@ -55,9 +55,9 @@ GTFS-RT Feed (vehicle positions)
          │
          ▼
 ┌─────────────────────┐
-│  detourDetector.js   │  Route-level wrapper with segment-level state machines:
+│  detourV2/detector   │  Event-window state machines:
 │  (core algorithm)    │  (accumulating) → active → clear-pending → cleared
-│                      │  Per-vehicle thresholds + recurring short-deviation aggregation
+│                      │  Multi-trip confirmation + proof-gated clearing
 └────────┬────────────┘
          │
          ▼
@@ -68,8 +68,8 @@ GTFS-RT Feed (vehicle positions)
          │
          ▼
 ┌─────────────────────┐
-│  Firestore           │  activeDetours collection (real-time pub/sub)
-│                      │  detourHistory collection (event log, 30-day retention)
+│  Firestore           │  activeDetourEventsV2 collection (real-time pub/sub)
+│                      │  detourEventHistoryV2 collection (event log, 30-day retention)
 └────────┬────────────┘
          │
          ▼
@@ -125,6 +125,8 @@ If a route has multiple independent detour sections at the same time, they are p
 | `staleForReview` | Boolean | Operations-review marker. This does not by itself mean the record should be hidden or cleared. |
 | `state` | String | `"active"` or `"clear-pending"` (documents are deleted when cleared, not updated to `"cleared"`) |
 | `clearReason` | String \| null | Why a detour is moving toward clear, for example `"normal-route-observed"`. |
+| `clearProof` | Object \| null | Auditable evidence for a normal-route clear: evidence type/method, observation timestamps, sample and source counts, vehicle/trip IDs when available, shape and clear-window bounds, and coverage/movement/gap metrics. Segment-level clears retain their own proof. |
+| `clearanceBlockedReason` / `blockedClearReason` | String \| null | A rejected clear attempt and its original reason. `missing-clear-proof` means the event remains operationally active and rider-hidden until valid GPS or operator evidence exists. |
 | `isPersistent` | Boolean | Whether the published route snapshot is currently backed by a learned persistent detour record |
 | `handoffSourceRouteId` | String \| null | Source route when this document is a projected sibling-route view of the same physical detour |
 | `detourEventId` | String \| null | Route/segment-specific physical event ID used for geometry continuity. |
@@ -250,9 +252,9 @@ Rules:
 - The global record stores trusted geometry, learned GPS evidence, `routeIds`, `latestGpsEvidenceAt`, `geometryLastEvidenceAt`, and `recordUpdatedAt`.
 - Clearing remains route-specific and GPS-proof based. Removing one route's persistent record removes that route from the global geometry record but does not automatically clear other routes.
 
-#### `detourHistory` collection
+#### `detourEventHistoryV2` collection
 
-One document per event. Auto-generated IDs: `{timestamp}-{routeId}-{eventType}-{random}`.
+One document per event. Auto-generated IDs include the event-window ID so concurrent detours on one route remain distinct. Legacy `detourHistory` is archive-only.
 
 Main event types:
 - **`DETOUR_DETECTED`** — `routeId`, `occurredAt`, `detectedAt`, `lastSeenAt`, `triggerVehicleId`, `vehicleCount`, `uniqueVehicleCount`, `currentVehicleCount`, `confidence`, `evidencePointCount`, `lastEvidenceAt`, `shapeId`, `entryPoint`, `exitPoint`, `skippedSegmentPolyline`, `inferredDetourPolyline`, `segmentCount`, `source`
@@ -296,6 +298,8 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - **Geometryless rider suppression** — active records without trustworthy geometry stay in Firestore for monitoring, but are hidden from rider UI until the backend can explain the detour safely.
 - **Baseline divergence and GTFS refresh handling** — if a route's stored detour baseline meaningfully differs from current public GTFS geometry, active records for that route are hidden from riders while the change is pending with `riderVisibilityReason: "baseline-update-pending"`. After the default 30-minute stability window, the worker force-refreshes GTFS; if the route geometry is still changed and stable, only that route baseline is replaced from live GTFS and old active detour state clears with `clearReason: "baseline-auto-updated"`. If the divergence disappears or changes again, the pending window resets instead of publishing a rider-facing detour.
 - **Segment-level detour lifecycle under one route document** — same-route detours separated by normal on-route travel are now tracked as separate internal segments with independent clear-pending and clearing behavior.
+- **Event-scoped clearing** — V2 publication removes only the cleared event-window document. Other active events on the same route remain active, and route-level “cleared” wording is used only when none remain.
+- **Hidden is unresolved** — `alertVisible=false` removes a record from the rider feed but does not change its operational `state` to cleared. Missing or invalid clear proof leaves the record active for review.
 - Firestore publishing (active detours + geometry) with write throttling
 - Detour history event logging (30-day retention)
 - Debug endpoints: `/api/detour-status`, `/api/detour-debug`, `/api/detour-logs`
@@ -309,6 +313,8 @@ The client already renders multi-segment detours from `segments[]`; the recent b
 - Wired into TransitContext and HomeScreen (both platforms)
 
 ### Most recent findings
+- **Updated 2026-07-18: regular stops default on and closed stops stay prominent** — Regular stops are visible by default on the main map and can still be hidden from the Stops control. Stop codes appear from zoom 16 onward. Closed stops remain visible, clickable, orange, and fully opaque in every map mode. Stops use a neutral white/charcoal treatment and hubs use violet so bright blue remains reserved for rider location.
+- **Fixed 2026-07-18: returning to the regular map is camera-neutral** — Opening an active detour may fit that detour once. After that, finger pan and pinch-zoom remain fully user-controlled. Returning to the regular map changes only the displayed map content and preserves the rider's exact center and zoom; it never fits all routes or queues another camera command. Detour geometry presses also remain camera-neutral.
 - **Fixed 2026-03-15: same-route detours were merging into one giant lifecycle** — The detector used to keep one active lifecycle per route, so two separate detours on the same route could collapse into one record and then clear when the bus served normal stops between them. The detector now keeps segment-level state internally and publishes both sections in one route document.
 - **Fixed 2026-03-20: noisy multi-vehicle detour geometry could render overlapping reroute branches** — The geometry builder used to simplify one timestamp-ordered list of all evidence points, which could weave together multiple buses and draw a messy inferred path. The backend now scores per-vehicle trajectories and publishes one representative reroute line so riders see a cleaner detour overlay.
 - **Fixed 2026-05-26: repeated downtown detour trips could render as a zigzag path** — Representative path selection now splits the same vehicle into continuous traces by trip, time gap, and route-progress direction, and exit-anchor selection avoids far stale candidates when a nearer candidate matches the selected trace.
@@ -512,7 +518,7 @@ Key env vars for the detour system, set in the backend environment or `.env` loc
 ### V2 Lab Storage Isolation
 | Variable | Default | Description |
 |---|---|---|
-| `DETOUR_DETECTOR_VERSION` | `v1` | Backend storage selector. `v2` uses `activeDetourEventsV2`, `detourEventHistoryV2`, and `systemState/detourRuntimeV2`. |
+| `DETOUR_DETECTOR_VERSION` | `v2` | Backend storage selector. V2 uses `activeDetourEventsV2`, `detourEventHistoryV2`, and `systemState/detourRuntimeV2`. V1 requires an explicit opt-in and is limited to isolated tests or migration audits. |
 | `DETOUR_ACTIVE_COLLECTION` | version default | Optional explicit active-detour collection override. |
 | `DETOUR_HISTORY_COLLECTION` | version default | Optional explicit history collection override. |
 | `DETOUR_RUNTIME_STATE_COLLECTION` | `systemState` | Optional runtime-state collection override. |

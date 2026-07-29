@@ -49,6 +49,48 @@ describe('DetourAlertStrip', () => {
     }));
   });
 
+  test('dismisses the active detour bar until a new detour becomes active', () => {
+    const onPress = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(DetourAlertStrip, {
+        activeDetours: {
+          '8A': { state: 'active', confidence: 'high' },
+        },
+        routes: [
+          { id: '8A', shortName: '8A' },
+          { id: '10', shortName: '10' },
+        ],
+        onPress,
+      }));
+    });
+
+    const dismissButton = inst.root.findByProps({ accessibilityLabel: 'Dismiss active detour alert' });
+    act(() => {
+      dismissButton.props.onPress();
+    });
+
+    expect(inst.toJSON()).toBeNull();
+    expect(onPress).not.toHaveBeenCalled();
+
+    act(() => {
+      inst.update(React.createElement(DetourAlertStrip, {
+        activeDetours: {
+          '8A': { state: 'active', confidence: 'high' },
+          '10': { state: 'active', confidence: 'high' },
+        },
+        routes: [
+          { id: '8A', shortName: '8A' },
+          { id: '10', shortName: '10' },
+        ],
+        onPress,
+      }));
+    });
+
+    expect(inst.toJSON()).not.toBeNull();
+  });
+
   test('does not render low-confidence detours', () => {
     let inst;
 

@@ -26,18 +26,11 @@ import { subscribeToOnDemandZones } from '../services/firebase/zoneService';
 import { fetchProxyHealth, PROXY_HEALTH_CHECK_INTERVAL_MS } from '../services/backendHealthService';
 import logger from '../utils/logger';
 import { DIAGNOSTIC_STATUS, buildTransitDiagnostics } from '../utils/transitDiagnostics';
-import { getNotificationSettings, showLocalNotification } from '../services/notificationService';
 import { LOCATIONIQ_CONFIG } from '../config/constants';
 import runtimeConfig from '../config/runtimeConfig';
 import { getDetoursEnabled, saveDetoursEnabled } from '../services/detourSettingsService';
-import {
-  diffDetourRouteIds,
-  filterHighConfidenceDetourRouteIds,
-  filterRelevantDetourRouteIds,
-} from '../utils/detourNotificationUtils';
 import { filterRiderVisibleDetours } from '../utils/detourVisibility';
 import { getRouteDetourFromMap, routeIsDetouring } from '../utils/routeDetourMatching';
-import { useAuth } from './AuthContext';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 import {
   filterRouteMappingToVisibleRoutes,
@@ -72,8 +65,6 @@ export const useTransitRealtime = () => {
 };
 
 export const TransitProvider = ({ children }) => {
-  const { favorites } = useAuth();
-
   // Static GTFS data
   const [routes, setRoutes] = useState([]);
   const [stops, setStops] = useState([]);
@@ -124,10 +115,7 @@ export const TransitProvider = ({ children }) => {
   const [detourFeed, setDetourFeed] = useState({});
   const [hasLoadedDetourFeed, setHasLoadedDetourFeed] = useState(false);
   const [detoursEnabled, setDetoursEnabledState] = useState(runtimeConfig.detours.enabledByDefault);
-  const prevDetourIdsRef = useRef(new Set());
   const detoursEnabledRef = useRef(detoursEnabled);
-  const hasSeenInitialDetourSnapshotRef = useRef(false);
-  const favoriteRoutesRef = useRef([]);
 
   // Transit news (server-side, via Firestore)
   const [transitNews, setTransitNews] = useState([]);
@@ -159,9 +147,6 @@ export const TransitProvider = ({ children }) => {
     detoursEnabledRef.current = detoursEnabled;
   }, [detoursEnabled]);
 
-  useEffect(() => {
-    favoriteRoutesRef.current = Array.isArray(favorites?.routes) ? favorites.routes : [];
-  }, [favorites?.routes]);
 
   useEffect(() => {
     let isMounted = true;
@@ -694,60 +679,12 @@ export const TransitProvider = ({ children }) => {
     [activeDetours]
   );
 
-  const notifyNewDetours = useCallback(async (routeIds) => {
-    if (!detoursEnabledRef.current || !Array.isArray(routeIds) || routeIds.length === 0) {
-      return;
-    }
-
-    const notificationSettings = await getNotificationSettings();
-    if (!notificationSettings?.serviceAlerts) {
-      return;
-    }
-
-    const relevantRouteIds = filterRelevantDetourRouteIds({
-      routeIds,
-      favoriteRoutes: favoriteRoutesRef.current,
-    });
-    if (relevantRouteIds.length === 0) {
-      return;
-    }
-
-    await Promise.all(
-      relevantRouteIds.map((routeId) =>
-        showLocalNotification({
-          title: 'Route ' + routeId + ' Detour',
-          body: 'Route ' + routeId + ' is on detour \u2014 stops may be affected.',
-          data: { type: 'detour_alert', routeId },
-          channelId: 'alerts',
-        }).catch(() => {})
-      )
-    );
-  }, []);
-
   // Subscribe to active detours (public collection, no auth required)
   useEffect(() => {
     const unsubscribe = subscribeToActiveDetours(
       (detourMap) => {
-        const riderVisibleDetourMap = filterRiderVisibleDetours(detourMap);
-        const { nextIds, newRouteIds } = diffDetourRouteIds({
-          detourMap: riderVisibleDetourMap,
-          prevIds: prevDetourIdsRef.current,
-          hasSeenInitialSnapshot: hasSeenInitialDetourSnapshotRef.current,
-        });
-
-        hasSeenInitialDetourSnapshotRef.current = true;
         setHasLoadedDetourFeed(true);
-        prevDetourIdsRef.current = new Set(nextIds);
         setDetourFeed(detourMap);
-
-        const highConfidenceNewRouteIds = filterHighConfidenceDetourRouteIds({
-          routeIds: newRouteIds,
-          detourMap: riderVisibleDetourMap,
-        });
-
-        if (highConfidenceNewRouteIds.length > 0) {
-          void notifyNewDetours(highConfidenceNewRouteIds);
-        }
       },
       (error) => {
         setHasLoadedDetourFeed(true);
@@ -755,7 +692,7 @@ export const TransitProvider = ({ children }) => {
       }
     );
     return () => unsubscribe();
-  }, [notifyNewDetours]);
+  }, []);
 
   // Subscribe to transit news (public collection, no auth required)
   useEffect(() => {

@@ -1,86 +1,59 @@
 # Privacy Policy
 
-**Barrie Transit Trip Planner**
-**Last Updated: February 10, 2026**
+**MyBarrie Transit**
 
-## Introduction
+**Last updated: July 20, 2026**
 
-Barrie Transit Trip Planner ("the App") is a transit navigation application for the City of Barrie, Ontario. This Privacy Policy explains how we collect, use, and protect your information when you use the App.
+This policy explains how MyBarrie Transit, independently operated by Mike McMike, handles information. The app is not affiliated with, endorsed by, or operated by the City of Barrie or Barrie Transit.
 
-## Information We Collect
+## Information the App Handles
 
-### Information You Provide
-- **Account Information**: If you create an account, we collect your email address and display name through Firebase Authentication.
-- **Favorites and Preferences**: Saved stops, routes, and notification preferences are stored in your account.
-- **Trip History**: Recent trip searches are stored to provide quick access to frequent routes.
+- **Account information:** If you create an account, Firebase Authentication processes your email address, display name, profile photo, sign-in provider, and account identifier.
+- **Saved rider data:** Favorites, saved places and trips, recent trips, route subscriptions, notification preferences, and app settings may be stored in Firebase and on your device.
+- **Location and searches:** With permission, the app uses your location for nearby stops and walking connections. Address searches and walking-route requests may send an address, coordinates, or both through the app's API proxy to LocationIQ. The app does not build a location-history profile.
+- **Notifications:** If enabled, the app and Firebase store notification preferences, a device identifier, and an Expo push token.
+- **App feedback:** Submitted feedback includes the category, message, app version, platform, source screen, timestamps, and a pseudonymous identifier for rate limiting and retry protection. It does not attach your email address. Do not include sensitive personal information.
+- **Performance data:** If crash reporting is enabled, Sentry may receive crash details, diagnostics, device type, operating-system version, and technical context. The app does not intentionally add account or precise-location data to crash reports.
+- **Web analytics:** The web version may use Firebase Analytics for app interactions and general technical information. Native Android and iOS analytics calls are disabled in the current implementation.
+- **Transit and map requests:** Transit and map providers may receive standard network information such as an IP address.
 
-### Information Collected Automatically
-- **Location Data**: With your permission, we access your device's location to show nearby transit stops and provide walking directions. Location data is used in real-time and is not stored on our servers.
-- **Transit Data Usage**: The App downloads publicly available GTFS (General Transit Feed Specification) data from Barrie Transit to provide schedules, routes, and real-time vehicle positions.
-- **Device Information**: We collect basic device information (device type, operating system) for crash reporting and app stability purposes.
-- **Push Notification Tokens**: If you enable notifications, we store your device's push notification token to send trip reminders and service alerts.
+## Why Information Is Used
 
-### Information We Do NOT Collect
-- We do not collect or store your precise location history.
-- We do not collect payment or financial information.
-- We do not sell, rent, or share your personal information with third parties for marketing purposes.
+- Provide trip planning, nearby stops, arrivals, maps, favorites, and account sync.
+- Deliver notifications that you choose to enable.
+- Respond to feedback, secure the service, prevent abuse, and improve reliability.
+- Meet legal, security, audit, and operational requirements.
 
-## How We Use Your Information
+## Service Providers
 
-- **Provide Transit Services**: Display nearby stops, plan trips, and show real-time bus positions.
-- **Personalization**: Save your favorite stops and routes for quick access.
-- **Notifications**: Send trip reminders and service alerts you have opted into.
-- **App Improvement**: Aggregate, anonymized usage data helps us improve the App's performance and reliability.
-- **Crash Reporting**: Error data is collected to identify and fix bugs.
+| Provider | Purpose |
+|---|---|
+| Google Firebase / Google Cloud | Authentication, account and app data, API hosting, web analytics, and service operations |
+| Expo | Push notification delivery, app updates, and build services |
+| LocationIQ | Address search and walking directions |
+| Sentry | Crash reporting and diagnostics when enabled |
+| Resend | Optional private email alerts containing submitted feedback and technical context for authorized staff |
+| OpenStreetMap and CARTO | Map data and map tiles |
 
-## Data Storage and Security
+## Retention
 
-- Account data and preferences are stored securely using Google Firebase (Firestore and Firebase Authentication).
-- Data is transmitted using HTTPS encryption.
-- Firebase Security Rules restrict access so users can only read and modify their own data.
-- Locally cached data (for offline use) is stored on your device using the platform's standard storage mechanisms.
+- Account data is kept while the account is active and deleted through the account-deletion process.
+- App feedback is scheduled for deletion after no more than 365 days and may be deleted earlier after resolution.
+- Pseudonymous feedback rate-limit records are scheduled for deletion after no more than 30 days.
+- Local caches remain until cleared, deleted, or the app is uninstalled.
+- Provider logs and backups may be retained for limited security, continuity, and legal periods under applicable provider and app-operator schedules.
 
-## Third-Party Services
+## Your Choices
 
-The App uses the following third-party services:
+- Use core transit features without an account.
+- Change location and notification permissions in device settings.
+- Delete a signed-in account in the app or follow [the account deletion instructions](account-deletion.md).
+- Use the private in-app feedback form for app issues. Account deletion requests can also follow the account-deletion process.
 
-| Service | Purpose | Privacy Policy |
-|---------|---------|----------------|
-| Google Firebase | Authentication, data storage, analytics | [Firebase Privacy](https://firebase.google.com/support/privacy) |
-| Sentry | Crash reporting and error tracking | [Sentry Privacy](https://sentry.io/privacy/) |
-| LocationIQ | Address search and walking directions | [LocationIQ Privacy](https://locationiq.com/privacy) |
-| OpenStreetMap | Map tile rendering | [OSM Privacy](https://wiki.osmfoundation.org/wiki/Privacy_Policy) |
-| Expo (Expo Application Services) | Push notifications and over-the-air updates | [Expo Privacy](https://expo.dev/privacy) |
-| Barrie Transit (GTFS) | Public transit schedules and real-time data | Publicly available open data |
+## Security and Legal Framework
 
-## Your Rights and Choices
+Information is transmitted over encrypted connections and access is restricted according to operational need. No system can guarantee absolute security. The app operator handles information in accordance with applicable Canadian and Ontario privacy law.
 
-- **Location Permission**: You can deny or revoke location access at any time through your device settings. The App will still function but cannot show nearby stops or provide location-based directions.
-- **Push Notifications**: You can disable notifications in your device settings or within the App.
-- **Account Deletion**: You may delete your account at any time, which will remove all associated data (favorites, trip history, notification preferences) from our servers.
-- **Data Export**: You may request a copy of your stored data by contacting us.
+## Contact
 
-## Data Retention
-
-- Account data is retained as long as your account is active.
-- Trip history is limited to your 20 most recent searches.
-- Cached transit data is refreshed every 24 hours and does not contain personal information.
-- If you delete your account, all associated personal data is permanently removed within 30 days.
-
-## Children's Privacy
-
-The App is not directed at children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us.
-
-## Changes to This Policy
-
-We may update this Privacy Policy from time to time. We will notify users of significant changes through the App or by updating the "Last Updated" date above.
-
-## Contact Us
-
-If you have questions about this Privacy Policy or your data, please contact us at:
-
-**Email**: support@barrietransit.app
-
-## Jurisdiction
-
-This Privacy Policy is governed by the laws of the Province of Ontario, Canada, including the Personal Information Protection and Electronic Documents Act (PIPEDA).
+For app support, privacy requests, access, correction, or deletion, contact Mike McMike at [mybarrietransit@outlook.com](mailto:mybarrietransit@outlook.com). For fares, schedules, transit service, or other Barrie Transit questions, email [ServiceBarrie@barrie.ca](mailto:ServiceBarrie@barrie.ca). Service Barrie is not the app operator.

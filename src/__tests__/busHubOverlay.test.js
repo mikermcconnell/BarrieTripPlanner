@@ -45,19 +45,24 @@ describe('BusHubOverlay', () => {
     act(() => {
       inst = create(React.createElement(BusHubOverlay, {
         currentZoom: BUS_HUB_CORRIDOR_LABEL_MIN_ZOOM - 0.5,
+        aboveLayerID: 'home-live-vehicle-labels',
       }));
     });
 
     const source = inst.root.findByType('ShapeSource');
-    const dots = inst.root.findByType('CircleLayer');
-    const labels = inst.root.findByType('SymbolLayer');
+    const symbols = inst.root.findAllByType('SymbolLayer');
+    const icons = symbols.find((layer) => layer.props.id === 'bus-hubs-icons');
+    const labels = symbols.find((layer) => layer.props.id === 'bus-hubs-labels');
 
     expect(inst.root.findAllByType('MarkerView')).toHaveLength(0);
     expect(source.props.shape.features).toHaveLength(BUS_HUBS.length);
     expect(source.props.shape.features[0].properties.label).toBe('Barrie Allandale Hub');
     expect(source.props.shape.features.find((feature) => feature.id === 'georgian-mall').properties.label).toBe('');
-    expect(dots.props.layerIndex).toBe(650);
-    expect(labels.props.layerIndex).toBe(651);
+    expect(inst.root.findAllByType('CircleLayer')).toHaveLength(0);
+    expect(labels.props.aboveLayerID).toBe('home-live-vehicle-labels');
+    expect(icons.props.aboveLayerID).toBe('bus-hubs-labels');
+    expect(icons.props.style.textField).toBe('■');
+    expect(icons.props.style.textColor).toBe('#004E80');
     expect(labels.props.style.textFont).toEqual(['Noto Sans Bold']);
   });
 

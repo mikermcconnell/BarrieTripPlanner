@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Linking,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -23,6 +22,7 @@ import {
 } from '../utils/profileViewModel';
 import { getDesktopContentFrameStyle, isWideWebViewport } from '../utils/webLayout';
 import { detourReviewService } from '../services/detourReviewService';
+import { appFeedbackService } from '../services/appFeedbackService';
 
 const ProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -43,6 +43,7 @@ const ProfileScreen = ({ navigation }) => {
   const favoriteRoutes = favorites?.routes || [];
   const accountView = buildProfileAccountViewModel({ isAuthenticated, user });
   const [canReviewDetours, setCanReviewDetours] = useState(false);
+  const [canManageAppFeedback, setCanManageAppFeedback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +54,17 @@ const ProfileScreen = ({ navigation }) => {
     detourReviewService.getAccess()
       .then((result) => !cancelled && setCanReviewDetours(result.canReview === true))
       .catch(() => !cancelled && setCanReviewDetours(false));
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.uid]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAuthenticated) {
+      setCanManageAppFeedback(false);
+      return undefined;
+    }
+    appFeedbackService.getAccess()
+      .then((result) => !cancelled && setCanManageAppFeedback(result.canManage === true))
+      .catch(() => !cancelled && setCanManageAppFeedback(false));
     return () => { cancelled = true; };
   }, [isAuthenticated, user?.uid]);
   const statsView = buildProfileStatsViewModel({
@@ -76,23 +88,8 @@ const ProfileScreen = ({ navigation }) => {
     ]);
   };
 
-  const openAppFeedbackEmail = () => {
-    const subject = encodeURIComponent('App feedback');
-    const body = encodeURIComponent(
-      'Tell us what happened, what you expected, and any device details that may help.\n\n'
-    );
-    Linking.openURL(`mailto:${APP_CONFIG.SUPPORT_EMAIL}?subject=${subject}&body=${body}`);
-  };
-
   const handleAppFeedback = () => {
-    Alert.alert(
-      'App feedback is welcome',
-      'This app is new and still improving. Bug reports, confusing moments, and feature ideas are all helpful.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Share app feedback', onPress: openAppFeedbackEmail },
-      ]
-    );
+    navigation.navigate('AppFeedback', { source: 'profile' });
   };
 
   const menuSections = [
@@ -106,6 +103,13 @@ const ProfileScreen = ({ navigation }) => {
           title: 'Detour Review',
           subtitle: 'Label detector evidence and rollout quality',
           onPress: () => navigation.navigate('DetourReview'),
+        }] : []),
+        ...(canManageAppFeedback ? [{
+          id: 'developer-feedback',
+          icon: 'Search',
+          title: 'Developer Feedback',
+          subtitle: 'Review private app feedback',
+          onPress: () => navigation.navigate('AppFeedbackInbox'),
         }] : []),
         {
           id: 'favorites',
@@ -133,16 +137,9 @@ const ProfileScreen = ({ navigation }) => {
       title: 'Updates',
       items: [
         {
-          id: 'alerts',
+          id: 'service-alerts',
           icon: 'Warning',
           title: 'Service Alerts',
-          subtitle: 'Current route and stop alerts',
-          onPress: () => navigation.getParent()?.navigate('Map', { screen: 'Alerts' }),
-        },
-        {
-          id: 'news',
-          icon: 'Map',
-          title: 'Transit News',
           subtitle: 'Latest Barrie Transit updates',
           onPress: () => navigation.navigate('News'),
         },
@@ -157,7 +154,7 @@ const ProfileScreen = ({ navigation }) => {
             id: 'account',
             icon: 'User',
             title: 'Manage account',
-            subtitle: 'Name, email, password, and account actions',
+            subtitle: 'Name, email, password, and account deletion',
             onPress: () => navigation.navigate('Account'),
           },
         ] : []),
@@ -173,14 +170,14 @@ const ProfileScreen = ({ navigation }) => {
           icon: 'Search',
           title: 'Help & Support',
           subtitle: 'FAQ and contact',
-          onPress: () => Alert.alert('Help', `For support, contact us at ${APP_CONFIG.SUPPORT_EMAIL}`),
+          onPress: () => navigation.navigate('HelpSupport'),
         },
         {
           id: 'about',
           icon: 'Map',
           title: 'About',
           subtitle: `Version ${APP_CONFIG.VERSION}`,
-          onPress: () => Alert.alert(APP_CONFIG.APP_NAME, `Version ${APP_CONFIG.VERSION}\n\nMade for Barrie Transit riders.`),
+          onPress: () => navigation.navigate('About'),
         },
         {
           id: 'transit-network-feedback',
@@ -328,7 +325,7 @@ const ProfileScreen = ({ navigation }) => {
             <Icon name="Star" size={22} color={COLORS.primary} />
           </View>
           <View style={styles.feedbackCalloutContent}>
-            <Text style={styles.feedbackCalloutTitle}>Help shape My Barrie Transit</Text>
+            <Text style={styles.feedbackCalloutTitle}>Help shape MyBarrie Transit</Text>
             <Text style={styles.feedbackCalloutText}>
               This app is new and we're actively improving it. Tell us what's working, what's confusing, or what you'd like to see next.
             </Text>

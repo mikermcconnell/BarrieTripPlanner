@@ -1,13 +1,13 @@
 const { buildDetourStorageConfig } = require('../detour/storageConfig');
 
 describe('detour storage config', () => {
-  test('defaults to V1 collection and runtime names', () => {
+  test('defaults to the production V2 collection and runtime names', () => {
     expect(buildDetourStorageConfig({})).toEqual({
-      detourVersion: 'v1',
-      activeCollection: 'activeDetours',
-      historyCollection: 'detourHistory',
+      detourVersion: 'v2',
+      activeCollection: 'activeDetourEventsV2',
+      historyCollection: 'detourEventHistoryV2',
       runtimeStateCollection: 'systemState',
-      runtimeStateDoc: 'detourRuntime',
+      runtimeStateDoc: 'detourRuntimeV2',
     });
   });
 
@@ -23,6 +23,7 @@ describe('detour storage config', () => {
 
   test('allows explicit collection and runtime overrides', () => {
     expect(buildDetourStorageConfig({
+      DETOUR_DETECTOR_VERSION: 'v1',
       DETOUR_ACTIVE_COLLECTION: 'labActive',
       DETOUR_HISTORY_COLLECTION: 'labHistory',
       DETOUR_RUNTIME_STATE_COLLECTION: 'labState',

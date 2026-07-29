@@ -33,4 +33,14 @@ describe('trip preview auto-fit helpers', () => {
       userHasMovedMap: true,
     })).toEqual({ shouldFit: false, fitKey: '0:1000:2000:WALK|trip-a' });
   });
+
+  test('does not refit the same preview when background data causes another check', () => {
+    expect(shouldAutoFitTripPreview({
+      isTripPreviewMode: true,
+      selectedItinerary: itinerary,
+      selectedItineraryIndex: 0,
+      lastFitKey: '0:1000:2000:WALK|trip-a',
+      userHasMovedMap: false,
+    })).toEqual({ shouldFit: false, fitKey: '0:1000:2000:WALK|trip-a' });
+  });
 });

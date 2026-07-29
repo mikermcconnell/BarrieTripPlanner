@@ -229,7 +229,7 @@ const NewsScreen = ({ navigation }) => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backButtonText}>{'\u2190'}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Transit News</Text>
+        <Text style={styles.headerTitle}>Service Alerts</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -340,7 +340,7 @@ const NewsScreen = ({ navigation }) => {
           ))}
         </Section>
 
-        <Section title="Latest notices" subtitle={`${buckets.otherNews.length} item${buckets.otherNews.length === 1 ? '' : 's'}`} emptyText="No transit news right now.">
+        <Section title="Latest notices" subtitle={`${buckets.otherNews.length} item${buckets.otherNews.length === 1 ? '' : 's'}`} emptyText="No service alerts right now.">
           {buckets.otherNews.map(renderNewsItem)}
         </Section>
       </ScrollView>

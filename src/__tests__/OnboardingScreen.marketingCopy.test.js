@@ -16,11 +16,11 @@ describe('first-open onboarding marketing copy', () => {
     expect(onboardingSource).toContain('See planned and unplanned detours before you walk to a skipped stop.');
   });
 
-  test('uses public My Barrie Transit naming and avoids internal/public overclaims', () => {
+  test('uses public MyBarrie Transit naming and avoids internal/public overclaims', () => {
     const publicOnboarding = `${onboardingSource}\n${sceneSource}`;
 
     expect(publicOnboarding).toContain('MY BARRIE TRANSIT');
-    expect(publicOnboarding).toContain('My Barrie Transit');
+    expect(publicOnboarding).toContain('MyBarrie Transit');
     expect(publicOnboarding).not.toMatch(/BTTP/);
     expect(publicOnboarding).not.toMatch(/never miss your bus/i);
   });

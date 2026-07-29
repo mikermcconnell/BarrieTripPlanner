@@ -20,6 +20,7 @@ import {
   ROUTE_LINE_WIDTH_SCALE,
 } from '../config/mapLineStyles';
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, FONT_FAMILIES, TOUCH_TARGET } from '../config/theme';
+import { MAP_MARKER_THEME } from '../config/mapMarkerTheme';
 import { getPlatformMapForStop } from '../config/platformMaps';
 import StopBottomSheet from '../components/StopBottomSheet';
 import PlatformMapViewerModal from '../components/PlatformMapViewerModal';
@@ -35,6 +36,7 @@ import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { useDismissedOfficialImpacts } from '../hooks/useDismissedOfficialImpacts';
 import TripBottomSheet from '../components/TripBottomSheet';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
+import { fetchTripUpdates } from '../services/arrivalService';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { getDetourOverlayRouteIds, useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -42,6 +44,7 @@ import TripSearchHeaderWeb from '../components/TripSearchHeader.web';
 import MapTapPopup from '../components/MapTapPopup';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
+import { getVehicleQuickDetails } from '../utils/vehicleQuickDetails';
 import {
   getDetourRouteLayerOrder,
   shouldKeepHiddenRouteShapeLayerMounted,
@@ -80,9 +83,9 @@ import DetourAlertStrip from '../components/DetourAlertStrip';
 import DetourDetailsSheet from '../components/DetourDetailsSheet';
 import MapOptionsControl from '../components/MapOptionsControl';
 import DetourMapLegend from '../components/DetourMapLegend';
+import DetourExplainerButton from '../components/DetourExplainerButton';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
 import OfficialImpactStrip from '../components/OfficialImpactStrip';
-import TripViewportControls from '../components/TripViewportControls';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { getSelectedDetourSegments, mergeFamilySegmentStopDetails } from '../utils/detourSheetSelection';
 import StatusBadge from '../components/StatusBadge';
@@ -111,7 +114,6 @@ import {
 } from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
-import { focusMapToDetour } from '../utils/detourViewport';
 import {
   DEFAULT_DETOUR_EXPLORER_SELECTION,
   buildDetourExplorerSelection,
@@ -535,6 +537,8 @@ const HomeScreen = ({ route }) => {
     selectedRoutes, hasSelection, handleRouteSelect: rawHandleRouteSelect, isRouteSelected, selectRoute, selectRoutes, zoomToRoutes,
   } = useRouteSelection({ routeShapeMapping, shapes, mapRef, multiSelect: true });
   const [selectedStop, setSelectedStop] = useState(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+  const [selectedVehicleTripUpdate, setSelectedVehicleTripUpdate] = useState(null);
   const [activePlatformMap, setActivePlatformMap] = useState(null);
   const [isCenteringOnUserLocation, setIsCenteringOnUserLocation] = useState(false);
   const [centeredUserLocation, setCenteredUserLocation] = useState(null);
@@ -554,7 +558,7 @@ const HomeScreen = ({ route }) => {
     setActivePlatformMap(null);
   }, []);
   const [showRoutes, setShowRoutes] = useState(true);
-  const [showStops, setShowStops] = useState(false);
+  const [showStops, setShowStops] = useState(true);
   const [mapRegion, setMapRegion] = useState(MAP_CONFIG.INITIAL_REGION);
   const [userHasInteracted, setUserHasInteracted] = useState(false);
   const pendingLocationCenterRef = useRef(0);
@@ -686,17 +690,8 @@ const HomeScreen = ({ route }) => {
     setMapViewMode(nextMode);
 
     if (nextMode === 'regular') {
-      const hadDetourMapSelection = Boolean(
-        focusedDetourRouteId ||
-        detourSheetRouteId ||
-        detourExplorerSelection.level !== DEFAULT_DETOUR_EXPLORER_SELECTION.level
-      );
-
+      setShowStops(true);
       clearDetourMapSelection();
-
-      if (hadDetourMapSelection) {
-        selectRoute(null);
-      }
       return;
     }
 
@@ -706,10 +701,6 @@ const HomeScreen = ({ route }) => {
     }
   }, [
     clearDetourMapSelection,
-    detourExplorerSelection.level,
-    detourSheetRouteId,
-    focusedDetourRouteId,
-    selectRoute,
   ]);
 
   useEffect(() => {
@@ -751,6 +742,41 @@ const HomeScreen = ({ route }) => {
     selectedRoutes,
     vehicles,
   ]);
+  const selectedVehicle = useMemo(
+    () => mapDisplayedVehicles.find((vehicle) => String(vehicle.id) === String(selectedVehicleId)) || null,
+    [mapDisplayedVehicles, selectedVehicleId]
+  );
+
+  useEffect(() => {
+    if (!selectedVehicle?.tripId) {
+      setSelectedVehicleTripUpdate(null);
+      return undefined;
+    }
+
+    setSelectedVehicleTripUpdate(null);
+    let active = true;
+    let latestRequest = 0;
+    const loadTripUpdate = async () => {
+      const requestId = ++latestRequest;
+      try {
+        const updates = await fetchTripUpdates();
+        const tripUpdate = updates.find(
+          (entity) => String(entity?.tripUpdate?.tripId) === String(selectedVehicle.tripId)
+        )?.tripUpdate || null;
+        if (active && requestId === latestRequest) setSelectedVehicleTripUpdate(tripUpdate);
+      } catch (error) {
+        logger.warn('Could not load selected bus schedule status:', error);
+        if (active && requestId === latestRequest) setSelectedVehicleTripUpdate(null);
+      }
+    };
+
+    void loadTripUpdate();
+    const refreshInterval = setInterval(() => void loadTripUpdate(), 30000);
+    return () => {
+      active = false;
+      clearInterval(refreshInterval);
+    };
+  }, [selectedVehicle?.tripId]);
 
   const routeColorByRouteId = useMemo(
     () => Object.fromEntries((routes || []).filter((route) => route?.id).map((route) => [route.id, getRouteColor(route.id)])),
@@ -808,22 +834,6 @@ const HomeScreen = ({ route }) => {
     [statusDetours]
   );
 
-  const focusMapOnDetour = useCallback((routeId, detourEvent = null) => {
-    if (!routeId) return;
-
-    focusMapToDetour({
-      activeDetours,
-      routeId,
-      routeIds: detourEvent?.routeIds,
-      segmentIndex: Number.isInteger(detourEvent?.primarySegmentIndex)
-        ? detourEvent.primarySegmentIndex
-        : null,
-      mapRef,
-      edgePadding: { top: 180, right: 60, bottom: 340, left: 60 },
-      animated: true,
-    });
-  }, [activeDetours, mapRef]);
-
   const showDetourEventOnMap = useCallback((routeId, detourEvent = null) => {
     const primaryRouteId = getDetourEventPrimaryRouteId(detourEvent, routeId);
     if (!primaryRouteId) return;
@@ -839,8 +849,7 @@ const HomeScreen = ({ route }) => {
       routeId: primaryRouteId,
     }));
     handleMapViewModeChange('detour');
-    focusMapOnDetour(primaryRouteId, detourEvent);
-  }, [focusMapOnDetour, handleMapViewModeChange]);
+  }, [handleMapViewModeChange]);
 
   const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
     if (!routeId) return;
@@ -857,13 +866,7 @@ const HomeScreen = ({ route }) => {
       routeId,
     }));
     handleMapViewModeChange('detour');
-    focusMapOnDetour(routeId, {
-      ...detourEvent,
-      routeIds: [routeId],
-      primaryRouteId: routeId,
-      primarySegmentIndex: segmentIndex,
-    });
-  }, [detourSheetEvent, focusMapOnDetour, handleMapViewModeChange]);
+  }, [detourSheetEvent, handleMapViewModeChange]);
 
   const showAllDetoursOnMap = useCallback(() => {
     setFocusedDetourRouteId(null);
@@ -974,7 +977,7 @@ const HomeScreen = ({ route }) => {
       includeClosures: true,
     })
   ), [displayedStopsForMap, detourMapClosureStops]);
-  const closedStopMarkerOpacity = isDetourView || hasDetourFocus ? 1 : 0.58;
+  const closedStopMarkerOpacity = 1;
   const detourMapBadgeCount = getActiveDetourEventCount(statusDetours);
   const mapChromeOffsets = getMapChromeOffsets({
     isWideWeb,
@@ -1415,7 +1418,6 @@ const HomeScreen = ({ route }) => {
       transitNewsImpacts,
       officialServiceImpacts: visibleOfficialServiceImpacts,
     }));
-    setShowStops(true);
   }, [getRouteDetour, transitNewsImpacts, visibleOfficialServiceImpacts]);
 
   // Handle "Trip from here" from stop bottom sheet
@@ -1540,14 +1542,6 @@ const HomeScreen = ({ route }) => {
       }
     );
   }, [isCenteringOnUserLocation, mapRegion]);
-
-  const showTripOverview = useCallback(() => {
-    if (!selectedItinerary) {
-      return;
-    }
-
-    fitMapToItinerary(selectedItinerary, busApproachViewportCoordinates);
-  }, [busApproachViewportCoordinates, fitMapToItinerary, selectedItinerary]);
 
   useEffect(() => {
     const decision = shouldAutoFitTripPreview({
@@ -1822,6 +1816,7 @@ const HomeScreen = ({ route }) => {
             onPress={handleStopPress}
             isSelected={selectedStop?.id === stop.id}
             closedStopOpacity={closedStopMarkerOpacity}
+            showStopCode={currentZoom >= MAP_MARKER_THEME.stopCodeMinZoom}
           />
         ))}
         {/* Detour open/closed stop markers — above route and detour lines */}
@@ -1858,6 +1853,15 @@ const HomeScreen = ({ route }) => {
               ? !isDetouring
               : false;
           const markerColor = dimmed ? COLORS.grey400 : getRouteColor(vehicle.routeId);
+          const quickDetails = getVehicleQuickDetails({
+            vehicle,
+            stops,
+            routeStopsMapping,
+            routeStopSequencesMapping,
+            tripUpdate: String(vehicle.id) === String(selectedVehicleId)
+              ? selectedVehicleTripUpdate
+              : null,
+          });
 
           return (
             <WebBusMarker
@@ -1868,6 +1872,8 @@ const HomeScreen = ({ route }) => {
               routeDirectionLabel={getVehicleRouteDirectionLabel(vehicle, getRouteLabel(vehicle))}
               snapPath={getVehicleSnapPath(vehicle)}
               dimmed={false}
+              quickDetails={quickDetails}
+              onPress={() => setSelectedVehicleId(vehicle.id)}
             />
           );
         })}
@@ -2100,6 +2106,7 @@ const HomeScreen = ({ route }) => {
               icon={<SearchIcon size={18} color={COLORS.grey500} />}
               style={styles.whereToAutocomplete}
               inputStyle={styles.whereToInput}
+              showLoadingFeedback
               rightIcon={
                 <View style={styles.headerRight}>
                   <SystemHealthChip diagnostics={diagnostics} />
@@ -2196,6 +2203,10 @@ const HomeScreen = ({ route }) => {
               ),
             ]}
           />
+
+          {!isTripPlanningMode && !isDetourView && (
+            <DetourExplainerButton style={styles.detourExplainerButton} />
+          )}
 
           {/* Center Map Button - Top Right */}
           <TouchableOpacity
@@ -2322,14 +2333,6 @@ const HomeScreen = ({ route }) => {
           </View>
         </>
       ) : null}
-
-      {isTripPreviewMode && (
-        <TripViewportControls
-          style={styles.tripViewportControls}
-          onCenterOnUserLocation={centerOnUserLocationOnce}
-          onShowTrip={showTripOverview}
-        />
-      )}
 
       {/* Favorite Stop Quick View */}
       {!isTripPlanningMode && !selectedStop && (
@@ -2678,6 +2681,13 @@ const styles = StyleSheet.create({
   detourLegendWithCollapsedUpcoming: {
     top: 172,
   },
+  detourExplainerButton: {
+    position: 'absolute',
+    right: SPACING.sm,
+    bottom: SPACING.xl,
+    zIndex: 999,
+    cursor: 'pointer',
+  },
   upcomingDetourStrip: {
     top: 172,
     left: SPACING.sm,
@@ -2906,12 +2916,6 @@ const styles = StyleSheet.create({
   },
   centerButtonDisabled: {
     opacity: 0.7,
-  },
-  tripViewportControls: {
-    position: 'absolute',
-    top: 116,
-    right: SPACING.sm,
-    zIndex: 999,
   },
   mapOptionsControl: {
     bottom: SPACING.xl,

@@ -28,6 +28,11 @@ const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
 const { getRoadMatcherStats } = require('./detourRoadMatcher');
 const { getDetourDecisionJournalStats } = require('./detourDecisionJournal');
+const { notifyUsersOfDetours } = require('./detourPushNotifier');
+const {
+  buildDetourWriterMetadata,
+  validateDetourWorkerEnvironment,
+} = require('./detour/environment');
 
 const TICK_INTERVAL = 30_000;
 const MAX_EVENTS = 20;
@@ -35,6 +40,7 @@ const MAX_RECENT_TICK_SAMPLES = 120;
 const SAMPLING_HEALTH_WINDOW_MS = 5 * 60 * 1000;
 const REQUIRE_SAFE_BASELINE = process.env.DETOUR_REQUIRE_SAFE_BASELINE !== 'false';
 const detourStorageConfig = buildDetourStorageConfig(process.env);
+const detourWriterMetadata = buildDetourWriterMetadata(process.env, detourStorageConfig);
 const detector = getDetectorForStorageConfig(detourStorageConfig);
 const {
   processVehicles,
@@ -58,6 +64,8 @@ let consecutiveFailureCount = 0;
 let lastGtfsRefresh = null;
 let tickInProgress = false;
 let publishFailures = 0;
+let pushFailures = 0;
+let lastPushSummary = null;
 let persistentDetoursHydrated = false;
 let runtimeStateHydrated = false;
 let lastTickStartedAt = null;
@@ -271,6 +279,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
   const tickStartedAtMs = Date.now();
 
   try {
+    validateDetourWorkerEnvironment(process.env, detourStorageConfig);
     await ensurePersistentDetoursHydrated({ force: forceReloadState });
     const runtimeHydration = await ensureRuntimeStateHydrated({ force: forceReloadState });
     let activeSnapshotHydration = {
@@ -390,6 +399,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         suppressDeleteReason: suppressDeletesWhenEmpty
           ? 'runtime-and-active-snapshot-hydration-empty'
           : undefined,
+        writerMetadata: detourWriterMetadata,
       });
       if (detourStorageConfig.detourVersion !== 'v2') {
         await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
@@ -400,6 +410,18 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       ), {
         storageConfig: detourStorageConfig,
       });
+      try {
+        lastPushSummary = detourWriterMetadata.writerEnvironment === 'production'
+          ? await notifyUsersOfDetours(activeDetours)
+          : { attempted: 0, accepted: 0, skipped: 0, failed: 0, reason: 'non-production-worker' };
+        if (lastPushSummary.attempted > 0 || lastPushSummary.failed > 0) {
+          console.log(JSON.stringify({ event: 'detour_push_delivery', ...lastPushSummary }));
+        }
+      } catch (pushError) {
+        pushFailures += 1;
+        lastPushSummary = { failed: true, error: pushError.message, at: new Date().toISOString() };
+        console.error('[detourWorker] Push delivery failed without blocking detour publishing:', pushError.message);
+      }
       if (Object.keys(activeDetours).length > 0) {
         lastDetourPublishAt = new Date().toISOString();
       }
@@ -471,6 +493,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
 
 function start() {
   if (interval) return;
+  validateDetourWorkerEnvironment(process.env, detourStorageConfig);
   running = true;
   console.log('[detourWorker] Starting detour detection loop (30s interval)');
   void runTick({ source: 'interval' });
@@ -506,6 +529,9 @@ function getStatus() {
       historyCollection: detourStorageConfig.historyCollection,
       runtimeStateCollection: detourStorageConfig.runtimeStateCollection,
       runtimeStateDoc: detourStorageConfig.runtimeStateDoc,
+      writerEnvironment: detourWriterMetadata.writerEnvironment,
+      writerId: detourWriterMetadata.writerId,
+      writerProjectId: detourWriterMetadata.writerProjectId,
     },
     tickCount,
     lastSuccessfulTick,
@@ -524,8 +550,9 @@ function getStatus() {
     vehicleFeed: getVehicleFeedStatus(),
     roadMatching: getRoadMatcherStats(),
     detectorDecisionJournal: getDetourDecisionJournalStats(),
+    notifications: { pushFailures, lastPushSummary },
     recentEvents: [...recentEvents],
-    errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures },
+    errors: { fetchFailures: fetchErrors.fetchFailures, publishFailures, pushFailures },
   };
 }
 

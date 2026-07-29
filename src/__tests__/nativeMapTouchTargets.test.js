@@ -34,4 +34,13 @@ describe('native map touch targets', () => {
     expect(source).toContain('onPress={handlePress}');
     expect(source).not.toContain('<TouchableOpacity');
   });
+
+  test('closed-stop markers select through a MapLibre source instead of a React Native pressable', () => {
+    const source = readSource('components', 'ClosedStopMarker.js');
+
+    expect(source).toContain('<MapLibreGL.ShapeSource');
+    expect(source).toContain('hitbox={{ width: 76, height: 48 }}');
+    expect(source).toContain('pointerEvents="none"');
+    expect(source).not.toContain('<Pressable');
+  });
 });

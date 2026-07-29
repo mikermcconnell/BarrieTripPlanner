@@ -65,7 +65,7 @@ const BoardingInstructionCard = ({
     ? `${stopsAfterBoarding} stop${stopsAfterBoarding !== 1 ? 's' : ''} to ${alightingName}`
     : null;
   const timeSummary = departureTime
-    ? `Departs ${departureTime}`
+    ? `Expected ${departureTime}`
     : null;
 
   return (

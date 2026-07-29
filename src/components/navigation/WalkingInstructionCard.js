@@ -85,12 +85,17 @@ const getDestinationCopy = ({ currentLeg, destinationName, nextTransitLeg }) => 
   };
 };
 
-const getWalkSummary = (currentLeg) => {
+const getWalkSummary = ({ currentLeg, distanceToDestination, paceStatus }) => {
   const parts = [];
-  if (currentLeg?.duration) {
+  if (paceStatus?.walkTimeLabel) {
+    parts.push(paceStatus.walkTimeLabel);
+  } else if (currentLeg?.duration) {
     parts.push(`${Math.max(1, Math.ceil(currentLeg.duration / 60))} min walk`);
   }
-  if (currentLeg?.distance) {
+  const remainingDistance = Number(distanceToDestination);
+  if (distanceToDestination != null && Number.isFinite(remainingDistance) && remainingDistance >= 0) {
+    parts.push(formatDistance(remainingDistance));
+  } else if (currentLeg?.distance) {
     parts.push(formatDistance(currentLeg.distance));
   }
   return parts.join(' • ');
@@ -172,7 +177,7 @@ const WalkingInstructionCard = ({
   if (!currentLeg && !currentStep) return null;
 
   const destinationCopy = getDestinationCopy({ currentLeg, destinationName, nextTransitLeg });
-  const walkSummary = getWalkSummary(currentLeg);
+  const walkSummary = getWalkSummary({ currentLeg, distanceToDestination, paceStatus });
   const [walkTimeLabel, walkDistanceLabel] = walkSummary.split(' • ');
   const upcomingInstruction = formatUpcomingInstruction(nextLegPreview);
   const hasDetails = detailSteps.length > 0;

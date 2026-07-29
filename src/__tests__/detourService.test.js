@@ -322,6 +322,36 @@ describe('mapActiveDetourDoc', () => {
     })).toEqual([]);
   });
 
+  test('treats a hidden Route 8B event as unresolved backend state, not a cleared rider alert', () => {
+    const hidden = mapActiveDetourDoc('8B:blake:11700-12600', {
+      routeId: '8B',
+      state: 'active',
+      clearReason: null,
+      alertVisible: false,
+      alertVisibilityReason: 'stale-unresolved-awaiting-gps-clear',
+      riderVisible: false,
+      clearanceBlockedReason: 'missing-clear-proof',
+      blockedClearReason: 'normal-route-observed',
+    });
+    const visible = mapActiveDetourDoc('8B:maple:4600-5400', {
+      routeId: '8B',
+      state: 'active',
+      alertVisible: true,
+      riderVisible: true,
+      segments: [{ detourEventId: '8B:maple:4600-5400', canShowDetourPath: true }],
+    });
+
+    expect(hidden).toMatchObject({
+      state: 'active',
+      clearReason: null,
+      alertVisible: false,
+      clearanceBlockedReason: 'missing-clear-proof',
+    });
+    const grouped = groupActiveDetourEventsByRoute({ hidden, visible });
+    expect(grouped['8B'].eventCount).toBe(1);
+    expect(grouped['8B'].detourEvents[0].eventId).toBe('8B:maple:4600-5400');
+  });
+
   test('does not let an alert-only same-route event veto a separate trusted overlay', () => {
     const skippedSegmentPolyline = [
       { latitude: 44.40, longitude: -79.72 },

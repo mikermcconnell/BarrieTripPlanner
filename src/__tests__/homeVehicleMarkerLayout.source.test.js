@@ -5,7 +5,7 @@ import { act, create } from 'react-test-renderer';
 
 jest.mock('@maplibre/maplibre-react-native', () => ({
   Animated: {
-    ShapeSource: 'ShapeSource',
+    ShapeSource: 'AnimatedShapeSource',
   },
   CircleLayer: 'CircleLayer',
   SymbolLayer: 'SymbolLayer',
@@ -16,7 +16,10 @@ jest.mock('../hooks/useAnimatedHomeVehicleShape', () => ({
 }));
 
 const HomeMapVehicleLayer = require('../components/home-map/HomeMapVehicleLayer').default;
-const { HOME_MAP_VEHICLE_LAYER_ANCHOR_ID } = require('../config/homeMapLayerIds');
+const {
+  HOME_MAP_VEHICLE_LAYER_ANCHOR_ID,
+  HOME_MAP_VEHICLE_TOP_LAYER_ID,
+} = require('../config/homeMapLayerIds');
 
 describe('home vehicle marker layout', () => {
   const source = fs.readFileSync(
@@ -54,14 +57,33 @@ describe('home vehicle marker layout', () => {
       .map((node) => node.props);
     const byId = Object.fromEntries(layers.map((layer) => [layer.id, layer]));
 
-    expect(instance.root.findByType('ShapeSource').props.shape.features).toEqual([]);
+    expect(instance.root.findByType('AnimatedShapeSource').props.shape.features).toEqual([]);
     expect(byId[HOME_MAP_VEHICLE_LAYER_ANCHOR_ID].aboveLayerID).toBeUndefined();
     expect(byId['home-live-vehicle-cluster-counts'].aboveLayerID).toBe(HOME_MAP_VEHICLE_LAYER_ANCHOR_ID);
-    expect(byId['home-live-vehicle-selected-ring'].aboveLayerID).toBe('home-live-vehicle-cluster-counts');
+    expect(byId['home-live-vehicle-direction'].aboveLayerID).toBe('home-live-vehicle-cluster-counts');
+    expect(byId['home-live-vehicle-selected-ring'].aboveLayerID).toBe('home-live-vehicle-direction');
     expect(byId['home-live-vehicle-bodies'].aboveLayerID).toBe('home-live-vehicle-selected-ring');
-    expect(byId['home-live-vehicle-labels'].aboveLayerID).toBe('home-live-vehicle-bodies');
-    expect(byId['home-live-vehicle-direction'].aboveLayerID).toBe('home-live-vehicle-labels');
+    expect(byId[HOME_MAP_VEHICLE_TOP_LAYER_ID].aboveLayerID).toBe('home-live-vehicle-bodies');
     expect(layers.every((layer) => layer.layerIndex == null)).toBe(true);
+  });
+
+  test('orders the blue hub square above the complete live-bus icon stack', () => {
+    const nativeHome = fs.readFileSync(
+      path.join(__dirname, '../screens/HomeScreen.js'),
+      'utf8'
+    );
+
+    expect(nativeHome).toContain(
+      'aboveLayerID={isTripPreviewMode ? undefined : HOME_MAP_VEHICLE_TOP_LAYER_ID}'
+    );
+  });
+
+  test('keeps direction arrows below every bus body so they cannot cover nearby buses', () => {
+    const directionLayerIndex = source.indexOf('id="home-live-vehicle-direction"');
+    const bodyLayerIndex = source.indexOf('id="home-live-vehicle-bodies"');
+
+    expect(directionLayerIndex).toBeGreaterThan(-1);
+    expect(bodyLayerIndex).toBeGreaterThan(directionLayerIndex);
   });
 
   test('renders buses after detour callouts on native and web maps', () => {
@@ -82,5 +104,24 @@ describe('home vehicle marker layout', () => {
     expect(webHome.indexOf('Live buses render after detour geometry/callouts')).toBeGreaterThan(
       webHome.lastIndexOf('key={`detour-callouts-${overlay.routeId}`}')
     );
+  });
+
+  test('keeps buses above stops and stops above route lines on the home map', () => {
+    const nativeHome = fs.readFileSync(
+      path.join(__dirname, '../screens/HomeScreen.js'),
+      'utf8'
+    );
+    const webMap = fs.readFileSync(
+      path.join(__dirname, '../components/WebMapView.js'),
+      'utf8'
+    );
+
+    expect(nativeHome).toMatch(
+      /id="home-stops-border"[\s\S]*?layerIndex=\{MAP_LAYER_INDEX\.REGULAR_STOPS_BORDER\}[\s\S]*?belowLayerID=\{HOME_MAP_VEHICLE_LAYER_ANCHOR_ID\}/
+    );
+    expect(nativeHome).toContain('REGULAR_STOPS_BORDER: 700');
+    expect(nativeHome).toContain('ROUTES: 100');
+    expect(webMap).toContain('zIndexOffset={800}');
+    expect(webMap).toContain('zIndexOffset={isSelected ? 700 : 500}');
   });
 });

@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import logger from '../../utils/logger';
@@ -46,9 +47,8 @@ export const userFirestoreService = {
         lastLoginAt: serverTimestamp(),
         settings: {
           notifications: {
-            serviceAlerts: true,
-            tripReminders: true,
-            nearbyAlerts: false,
+            serviceAlerts: false,
+            tripReminders: false,
             transitNews: false,
           },
           preferences: {
@@ -133,13 +133,12 @@ export const userFirestoreService = {
   },
 
   // Update push token
-  async updatePushToken(uid, pushToken) {
+  async updatePushToken(uid, pushToken, deviceId = 'legacy') {
     try {
-      const userRef = doc(db, COLLECTION, uid);
-
-      await updateDoc(userRef, {
-        pushToken,
-        pushTokenUpdatedAt: serverTimestamp(),
+      const tokenRef = doc(db, COLLECTION, uid, 'pushTokens', deviceId);
+      await setDoc(tokenRef, {
+        token: pushToken,
+        deviceId,
         updatedAt: serverTimestamp(),
       });
 
@@ -147,6 +146,16 @@ export const userFirestoreService = {
     } catch (error) {
       logUserFirestoreError('Error updating push token:', error);
       return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings. Please try again.') };
+    }
+  },
+
+  async removePushToken(uid, deviceId) {
+    try {
+      await deleteDoc(doc(db, COLLECTION, uid, 'pushTokens', deviceId));
+      return { success: true };
+    } catch (error) {
+      logUserFirestoreError('Error removing push token:', error);
+      return { success: false, error: getUserFacingErrorMessage(error, 'Could not update notification settings.') };
     }
   },
 

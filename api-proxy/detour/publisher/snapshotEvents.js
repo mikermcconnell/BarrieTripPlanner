@@ -156,6 +156,15 @@ function makeSnapshot(doc, previousSnapshot = null) {
     currentVehicleCount: normalizeVehicleCount(doc.currentVehicleCount ?? doc.vehicleCount),
     state: doc.state || 'active',
     clearReason: doc.clearReason || null,
+    clearProof: hasOwn(doc, 'clearProof')
+      ? cloneJson(doc.clearProof)
+      : cloneJson(previousSnapshot?.clearProof) || null,
+    clearanceBlockedReason: hasOwn(doc, 'clearanceBlockedReason')
+      ? doc.clearanceBlockedReason || null
+      : previousSnapshot?.clearanceBlockedReason || null,
+    blockedClearReason: hasOwn(doc, 'blockedClearReason')
+      ? doc.blockedClearReason || null
+      : previousSnapshot?.blockedClearReason || null,
     isPersistent: Boolean(doc.isPersistent),
     handoffSourceRouteId: hasOwn(doc, 'handoffSourceRouteId')
       ? doc.handoffSourceRouteId || null
@@ -346,6 +355,7 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     uniqueVehicleCount: current.uniqueVehicleCount ?? current.vehicleCount,
     currentVehicleCount: current.currentVehicleCount ?? current.vehicleCount,
     clearReason: current.clearReason || null,
+    clearProof: cloneJson(current.clearProof) || null,
     changedFields,
     riderVisible: current.riderVisible !== false,
     riderVisibilityReason: current.riderVisibilityReason || null,
@@ -375,6 +385,7 @@ function buildClearedEvent(routeId, previous, now) {
     uniqueVehicleCount: previous?.uniqueVehicleCount ?? previous?.vehicleCount ?? 0,
     currentVehicleCount: previous?.currentVehicleCount ?? previous?.vehicleCount ?? 0,
     clearReason: previous?.clearReason || 'detector-cleared',
+    clearProof: cloneJson(previous?.clearProof) || null,
     confidence: previous?.confidence || null,
     evidencePointCount: previous?.evidencePointCount ?? null,
     lastEvidenceAt: previous?.lastEvidenceAt ?? null,
@@ -392,6 +403,11 @@ function buildClearedEvent(routeId, previous, now) {
   if (previous?.roadMatchConfidence) event.roadMatchConfidence = previous.roadMatchConfidence;
   if (previous?.detourPathLabel) event.detourPathLabel = previous.detourPathLabel;
   if (previous?.segmentCount > 0) event.segmentCount = previous.segmentCount;
+  if (previous?.sharedDetourEventId) event.sharedDetourEventId = previous.sharedDetourEventId;
+  if (Array.isArray(previous?.sharedRouteIds) && previous.sharedRouteIds.length > 0) {
+    event.sharedRouteIds = cloneJson(previous.sharedRouteIds);
+  }
+  if (previous?.eventLocationLabel) event.eventLocationLabel = previous.eventLocationLabel;
   return event;
 }
 

@@ -184,6 +184,15 @@ After deployment:
 3. Confirm detour details sheet "View on Map" fits the correct geometry
 4. After a detour clears, confirm the history record retains location fields for later analysis
 
+## 2026-07-18 Camera Ownership Follow-up
+
+The investigation now also covers two related camera-control regressions:
+
+- Opening an active detour should fit the affected geometry once, then allow unrestricted finger pan and pinch-zoom.
+- Returning to the regular map should fit the full network once, then allow unrestricted finger pan and pinch-zoom.
+
+The detour-overlay press path is camera-neutral and protected by a source regression test. The native regular-view reset was also changed from a delayed `requestAnimationFrame`/timeout fit to an immediate one-time fit, preventing a queued command from pulling the map back after the rider begins interacting.
+
 ## Suggested Next Prompt
 
 Use this if continuing in a new chat:

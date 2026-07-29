@@ -13,6 +13,7 @@ import {
   getNotificationSettings,
   saveNotificationSettings,
   registerForPushNotifications,
+  getNotificationPermissionStatus,
 } from '../services/notificationService';
 import { getCacheSize, clearCache } from '../utils/offlineCache';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +22,7 @@ import { userFirestoreService } from '../services/firebase/userFirestoreService'
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { openAppContactEmail, openExternalUrl, openTransitContactEmail } from '../utils/externalLinks';
 
 const SettingsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -29,14 +31,12 @@ const SettingsScreen = ({ navigation }) => {
   const { routes } = useTransitStatic();
   const { detoursEnabled, setDetoursEnabled } = useTransitRealtime();
   const [notificationSettings, setNotificationSettings] = useState({
-    serviceAlerts: true,
-    tripReminders: true,
-    nearbyAlerts: false,
+    serviceAlerts: false,
+    tripReminders: false,
     transitNews: false,
   });
   const [subscribedRoutes, setSubscribedRoutes] = useState([]);
   const [cacheInfo, setCacheInfo] = useState({ sizeFormatted: 'Calculating...' });
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -47,7 +47,17 @@ const SettingsScreen = ({ navigation }) => {
   }, [isAuthenticated, user]);
 
   const loadSettings = async () => {
-    const settings = await getNotificationSettings();
+    const [settings, permission] = await Promise.all([
+      getNotificationSettings(),
+      getNotificationPermissionStatus(),
+    ]);
+    if (!permission.granted) {
+      const disabled = Object.fromEntries(Object.keys(settings).map((key) => [key, false]));
+      await saveNotificationSettings(disabled);
+      if (isAuthenticated && user) await userFirestoreService.updateNotificationSettings(user.uid, disabled);
+      setNotificationSettings(disabled);
+      return;
+    }
     setNotificationSettings(settings);
   };
 
@@ -71,7 +81,12 @@ const SettingsScreen = ({ navigation }) => {
       ? subscribedRoutes.filter((r) => r !== routeId)
       : [...subscribedRoutes, routeId];
     setSubscribedRoutes(updated);
-    await userFirestoreService.updateSubscribedRoutes(user.uid, updated);
+    const saveResult = await userFirestoreService.updateSubscribedRoutes(user.uid, updated);
+    if (!saveResult.success) {
+      setSubscribedRoutes(subscribedRoutes);
+      Alert.alert('Could not update routes', saveResult.error || 'Please try again.');
+      return;
+    }
 
     if (isAddingRoute && !notificationSettings.transitNews) {
       Alert.alert(
@@ -82,7 +97,7 @@ const SettingsScreen = ({ navigation }) => {
           {
             text: 'Turn on',
             onPress: () => {
-              void enableTransitNewsPushes();
+              void handleNotificationToggle('transitNews');
             },
           },
         ]
@@ -91,59 +106,46 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const handleNotificationToggle = async (key) => {
+    const enabling = !notificationSettings[key];
+    if (enabling) {
+      const result = await registerForPushNotifications();
+      if (!result.success) {
+        Alert.alert('Could not turn on notifications', result.error || 'Please try again.');
+        return;
+      }
+      if (isAuthenticated && user && result.token) {
+        const tokenResult = await userFirestoreService.updatePushToken(user.uid, result.token, result.deviceId);
+        if (!tokenResult.success) {
+          Alert.alert('Could not save notification setup', tokenResult.error || 'Please try again.');
+          return;
+        }
+      }
+    }
+
     const newSettings = {
       ...notificationSettings,
-      [key]: !notificationSettings[key],
+      [key]: enabling,
     };
-    setNotificationSettings(newSettings);
-    await saveNotificationSettings(newSettings);
-    if (isAuthenticated && user) {
-      await userFirestoreService.updateNotificationSettings(user.uid, newSettings);
+    const localResult = await saveNotificationSettings(newSettings);
+    if (!localResult.success) {
+      Alert.alert('Could not update notifications', localResult.error || 'Please try again.');
+      return;
     }
+    if (isAuthenticated && user) {
+      const remoteResult = await userFirestoreService.updateNotificationSettings(user.uid, newSettings);
+      if (!remoteResult.success) {
+        await saveNotificationSettings(notificationSettings);
+        Alert.alert('Could not update notifications', remoteResult.error || 'Please try again.');
+        return;
+      }
+    }
+    setNotificationSettings(newSettings);
   };
 
   const handleDetourToggle = async (enabled) => {
     const result = await setDetoursEnabled(enabled);
     if (!result.success) {
       Alert.alert('Could not update detour setting', result.error || 'Please try again.');
-    }
-  };
-
-  const enableTransitNewsPushes = async () => {
-    const result = await registerForPushNotifications();
-    if (!result.success) {
-      Alert.alert('Could not turn on notifications', result.error || 'Please try again.');
-      return false;
-    }
-
-    if (isAuthenticated && user && result.token) {
-      await userFirestoreService.updatePushToken(user.uid, result.token);
-    }
-
-    const newSettings = {
-      ...notificationSettings,
-      transitNews: true,
-    };
-    setNotificationSettings(newSettings);
-    await saveNotificationSettings(newSettings);
-    if (isAuthenticated && user) {
-      await userFirestoreService.updateNotificationSettings(user.uid, newSettings);
-    }
-    return true;
-  };
-
-  const handleEnableNotifications = async () => {
-    setIsLoading(true);
-    const result = await registerForPushNotifications();
-    setIsLoading(false);
-
-    if (result.success) {
-      if (isAuthenticated && user && result.token) {
-        await userFirestoreService.updatePushToken(user.uid, result.token);
-      }
-      Alert.alert('Notifications', 'Notifications are on.');
-    } else {
-      Alert.alert('Could not turn on notifications', result.error || 'Please try again.');
     }
   };
 
@@ -157,8 +159,12 @@ const SettingsScreen = ({ navigation }) => {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            await clearCache();
-            loadCacheInfo();
+            const result = await clearCache();
+            if (!result.success) {
+              Alert.alert('Could not clear cache', result.error || 'Please try again.');
+              return;
+            }
+            await loadCacheInfo();
             Alert.alert('Cache', 'Cache cleared.');
           },
         },
@@ -199,6 +205,31 @@ const SettingsScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderInfoRow = (icon, label, description) => (
+    <View style={styles.actionRow}>
+      <Text style={styles.actionIcon}>{icon}</Text>
+      <View style={styles.actionContent}>
+        <Text style={styles.actionLabel}>{label}</Text>
+        {description && <Text style={styles.actionDescription}>{description}</Text>}
+      </View>
+    </View>
+  );
+
+  const openConfiguredLink = async (url, title) => {
+    const result = await openExternalUrl(url);
+    if (!result.success) Alert.alert(`Could not open ${title}`, result.error);
+  };
+
+  const contactBarrieTransit = async () => {
+    const result = await openTransitContactEmail({ body: 'Please describe your Barrie Transit service question.\n' });
+    if (!result.success) Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.TRANSIT_CONTACT_EMAIL}`);
+  };
+
+  const contactAppSupport = async () => {
+    const result = await openAppContactEmail({ body: 'Please describe the app issue or question.\n' });
+    if (!result.success) Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.APP_CONTACT_EMAIL}`);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -219,7 +250,7 @@ const SettingsScreen = ({ navigation }) => {
           <>
             {renderToggleRow(
               'Service Alerts',
-              'Get notified about delays and disruptions',
+              'Push alerts for qualifying detours on selected routes',
               notificationSettings.serviceAlerts,
               () => handleNotificationToggle('serviceAlerts')
             )}
@@ -230,31 +261,16 @@ const SettingsScreen = ({ navigation }) => {
               () => handleNotificationToggle('tripReminders')
             )}
             {renderToggleRow(
-              'Nearby Alerts',
-              'Alerts for stops near your location',
-              notificationSettings.nearbyAlerts,
-              () => handleNotificationToggle('nearbyAlerts')
-            )}
-            {renderToggleRow(
               'Transit News',
               'Push only for watched routes or major system-wide updates',
               notificationSettings.transitNews,
               () => handleNotificationToggle('transitNews')
             )}
-            <TouchableOpacity
-              style={styles.enableButton}
-              onPress={handleEnableNotifications}
-              disabled={isLoading}
-            >
-              <Text style={styles.enableButtonText}>
-                {isLoading ? 'Turning on...' : 'Turn on notifications'}
-              </Text>
-            </TouchableOpacity>
           </>
         )}
 
         {isAuthenticated && renderSection(
-          'Route Subscriptions',
+          'Notification Routes',
           <View style={styles.routeChipsContainer}>
             <Text style={styles.routeChipsHint}>
               {!notificationSettings.transitNews
@@ -303,13 +319,7 @@ const SettingsScreen = ({ navigation }) => {
         {renderSection(
           'Data & Storage',
           <>
-            {renderActionRow(
-              '💾',
-              'Cache Size',
-              cacheInfo.sizeFormatted,
-              () => {},
-              false
-            )}
+            {renderInfoRow('💾', 'Cache Size', cacheInfo.sizeFormatted)}
             {renderActionRow(
               '🗑️',
               'Clear Cache',
@@ -323,46 +333,47 @@ const SettingsScreen = ({ navigation }) => {
         {renderSection(
           'Accessibility',
           <>
-            {renderActionRow(
-              '🔤',
-              'Text Size',
-              'Use system text size settings',
-              () => Alert.alert('Info', 'Text size follows your device settings'),
-              false
-            )}
-            {renderActionRow(
-              '🎨',
-              'High Contrast',
-              'Improved visibility for map elements',
-              () => Alert.alert('Coming Soon', 'This feature is in development'),
-              false
-            )}
+            {renderInfoRow('🔤', 'Text Size', 'Uses your device text size settings')}
           </>
         )}
 
         {renderSection(
           'About',
           <>
-            {renderActionRow('ℹ️', 'Version', APP_CONFIG.VERSION, () => {}, false)}
+            {renderInfoRow('ℹ️', 'Version', APP_CONFIG.BUILD_NUMBER ? `${APP_CONFIG.VERSION} (${APP_CONFIG.BUILD_NUMBER})` : APP_CONFIG.VERSION)}
             {renderActionRow(
               '📜',
               'Terms of Service',
               null,
-              () => Alert.alert('Terms of Service', 'Coming soon'),
+              () => openConfiguredLink(APP_CONFIG.TERMS_URL, 'Terms of Service'),
               false
             )}
             {renderActionRow(
               '🔒',
               'Privacy Policy',
               null,
-              () => Alert.alert('Privacy Policy', 'Coming soon'),
+              () => openConfiguredLink(APP_CONFIG.PRIVACY_URL, 'Privacy Policy'),
+              false
+            )}
+            {renderActionRow(
+              '🗑️',
+              'Account deletion information',
+              null,
+              () => openConfiguredLink(APP_CONFIG.ACCOUNT_DELETION_URL, 'Account deletion information'),
               false
             )}
             {renderActionRow(
               '📧',
-              'Contact Support',
-              APP_CONFIG.SUPPORT_EMAIL,
-              () => Alert.alert('Support', `Email us at ${APP_CONFIG.SUPPORT_EMAIL}`),
+              'Contact App Support',
+              APP_CONFIG.APP_CONTACT_EMAIL,
+              contactAppSupport,
+              false
+            )}
+            {renderActionRow(
+              '🚌',
+              'Contact Barrie Transit',
+              APP_CONFIG.TRANSIT_CONTACT_EMAIL,
+              contactBarrieTransit,
               false
             )}
           </>
@@ -454,18 +465,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
-  },
-  enableButton: {
-    backgroundColor: COLORS.primary,
-    margin: SPACING.md,
-    padding: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    alignItems: 'center',
-  },
-  enableButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
   },
   actionRow: {
     flexDirection: 'row',

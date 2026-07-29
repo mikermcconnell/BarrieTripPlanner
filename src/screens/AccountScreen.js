@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
-import { APP_CONFIG } from '../config/constants';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { buildProfileAccountViewModel } from '../utils/profileViewModel';
@@ -18,9 +20,46 @@ import { buildProfileAccountViewModel } from '../utils/profileViewModel';
 const AccountScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { user, isAuthenticated, sendPasswordReset, signOut } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    sendPasswordReset,
+    signOut,
+    updateDisplayName,
+    requestEmailChange,
+    deleteAccount,
+  } = useAuth();
   const accountView = buildProfileAccountViewModel({ isAuthenticated, user });
   const email = user?.email || '';
+  const providers = Array.isArray(user?.providers) ? user.providers : [];
+  const supportsPassword = providers.length === 0 || providers.includes('password');
+  const [editor, setEditor] = useState(null);
+  const [fieldValue, setFieldValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const openEditor = (type) => {
+    setEditor(type);
+    setFieldValue(type === 'name' ? (user?.displayName || '') : email);
+  };
+
+  const saveEditor = async () => {
+    setIsSaving(true);
+    const result = editor === 'name'
+      ? await updateDisplayName(fieldValue)
+      : await requestEmailChange(fieldValue);
+    setIsSaving(false);
+    if (!result?.success) {
+      Alert.alert('Could not update account', result?.error || 'Please try again.');
+      return;
+    }
+    setEditor(null);
+    Alert.alert(
+      editor === 'name' ? 'Name updated' : 'Verification email sent',
+      editor === 'name'
+        ? 'Your account name has been updated.'
+        : 'Open the message sent to your new address to confirm the change.'
+    );
+  };
 
   const handlePasswordReset = async () => {
     if (!email) {
@@ -48,6 +87,39 @@ const AccountScreen = ({ navigation }) => {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your saved transit, trip history, settings, subscriptions, and sign-in account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => Alert.alert(
+            'Permanently delete account',
+            'This cannot be undone. Delete your account now?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete permanently',
+                style: 'destructive',
+                onPress: async () => {
+                  const result = await deleteAccount();
+                  if (!result?.success) {
+                    Alert.alert('Could not delete account', result?.error || 'Please try again.');
+                    return;
+                  }
+                  navigation.goBack();
+                },
+              },
+            ]
+          ),
+        },
+      ]
+    );
   };
 
   const renderActionRow = ({ icon, title, subtitle, onPress, destructive = false }) => (
@@ -103,16 +175,22 @@ const AccountScreen = ({ navigation }) => {
               <View style={styles.sectionContent}>
                 {renderActionRow({
                   icon: 'User',
-                  title: 'Account details',
-                  subtitle: email || 'No email on this account',
-                  onPress: () => Alert.alert('Account details', email ? `Signed in as ${email}` : 'No email address is attached to this account.'),
+                  title: 'Edit name',
+                  subtitle: user?.displayName || 'Add your name',
+                  onPress: () => openEditor('name'),
                 })}
-                {renderActionRow({
+                {supportsPassword ? renderActionRow({
+                  icon: 'User',
+                  title: 'Change email',
+                  subtitle: email || 'No email on this account',
+                  onPress: () => openEditor('email'),
+                }) : null}
+                {supportsPassword ? renderActionRow({
                   icon: 'Settings',
                   title: 'Reset password',
                   subtitle: 'Send reset instructions to your email',
                   onPress: handlePasswordReset,
-                })}
+                }) : null}
                 {renderActionRow({
                   icon: 'Door',
                   title: 'Sign out',
@@ -120,13 +198,22 @@ const AccountScreen = ({ navigation }) => {
                   onPress: handleSignOut,
                   destructive: true,
                 })}
+                {renderActionRow({
+                  icon: 'Door',
+                  title: 'Delete account',
+                  subtitle: 'Permanently remove your account and saved data',
+                  onPress: handleDeleteAccount,
+                  destructive: true,
+                })}
               </View>
             </View>
 
             <View style={styles.helpCard}>
-              <Text style={styles.helpTitle}>Need to change or delete your account?</Text>
+              <Text style={styles.helpTitle}>{supportsPassword ? 'Account security' : 'Signed in with Google'}</Text>
               <Text style={styles.helpText}>
-                Contact support at {APP_CONFIG.SUPPORT_EMAIL}. Include the email shown above so we can find the right account.
+                {supportsPassword
+                  ? 'Email changes require verification. Firebase may ask you to sign in again before a sensitive change.'
+                  : 'Your email and password are managed by Google. You can still edit your app name or delete this account.'}
               </Text>
             </View>
           </>
@@ -146,6 +233,32 @@ const AccountScreen = ({ navigation }) => {
           </View>
         )}
       </ScrollView>
+      <Modal visible={Boolean(editor)} transparent animationType="fade" onRequestClose={() => !isSaving && setEditor(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{editor === 'name' ? 'Edit name' : 'Change email'}</Text>
+            <Text style={styles.modalText}>
+              {editor === 'name' ? 'Enter the name shown in your profile.' : 'We will send a verification link to the new address.'}
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={fieldValue}
+              onChangeText={setFieldValue}
+              autoCapitalize={editor === 'name' ? 'words' : 'none'}
+              keyboardType={editor === 'email' ? 'email-address' : 'default'}
+              editable={!isSaving}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} disabled={isSaving} onPress={() => setEditor(null)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} disabled={isSaving} onPress={saveEditor}>
+                {isSaving ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveButtonText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -294,6 +407,16 @@ const styles = StyleSheet.create({
   destructiveText: {
     color: COLORS.error,
   },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: SPACING.lg },
+  modalCard: { backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg, padding: SPACING.lg, ...SHADOWS.medium },
+  modalTitle: { fontSize: FONT_SIZES.xl, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.xs },
+  modalText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, lineHeight: 20, marginBottom: SPACING.md },
+  input: { minHeight: 48, borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.md, paddingHorizontal: SPACING.md, fontSize: FONT_SIZES.md, color: COLORS.textPrimary, backgroundColor: COLORS.background },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.lg },
+  cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: SPACING.md },
+  cancelButtonText: { color: COLORS.textSecondary, fontWeight: '600' },
+  saveButton: { minWidth: 92, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.md, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.primary },
+  saveButtonText: { color: COLORS.white, fontWeight: '700' },
   chevron: {
     fontSize: 24,
     color: COLORS.grey400,

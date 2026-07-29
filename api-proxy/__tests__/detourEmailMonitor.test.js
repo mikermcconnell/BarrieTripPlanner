@@ -1,6 +1,7 @@
 const {
   buildDetourEmailInsights,
   buildEmailMessage,
+  classifyClearance,
   collectLikelyRoadNames,
   enrichEventStopNames,
   enrichEventFromActiveDetour,
@@ -9,6 +10,7 @@ const {
   runDetourEmailMonitor,
   shouldSendDetourEmailEvent,
   sendViaResend,
+  validateClearEvent,
 } = require('../services/detourEmailMonitor');
 
 function createFakeDb(initial = {}) {
@@ -349,6 +351,124 @@ describe('detour email monitor', () => {
     expect(message.text).toContain('Duckworth Street -> Bernick Drive -> Cook Street');
     expect(message.text).not.toContain('unknown road section');
     expect(message.attachments).toHaveLength(0);
+  });
+
+  test('does not enrich a specific event from a different event that only shares a group ID', async () => {
+    const db = createFakeDb({
+      activeDetourEventsV2: {
+        '8B:blake:11700-12600': {
+          eventId: '8B:blake:11700-12600',
+          detourEventId: '8B:blake:11700-12600',
+          sharedDetourEventId: 'route-8b-shared',
+          routeId: '8B',
+          riderVisible: true,
+          eventLocationLabel: 'Blake Street',
+        },
+      },
+    });
+    const mapleEvent = {
+      eventType: 'DETOUR_DETECTED',
+      eventId: '8B:maple:4600-5400',
+      detourEventId: '8B:maple:4600-5400',
+      sharedDetourEventId: 'route-8b-shared',
+      routeId: '8B',
+      riderVisible: true,
+    };
+
+    const enriched = await enrichEventFromActiveDetour(db, {
+      activeCollection: 'activeDetourEventsV2',
+    }, mapleEvent);
+
+    expect(enriched.eventId).toBe('8B:maple:4600-5400');
+    expect(enriched.eventLocationLabel).toBeUndefined();
+  });
+
+  test('keeps concurrent Route 8B events separate when one segment clears', async () => {
+    const db = createFakeDb({
+      activeDetourEventsV2: {
+        '8B:blake:11700-12600': {
+          eventId: '8B:blake:11700-12600',
+          detourEventId: '8B:blake:11700-12600',
+          routeId: '8B',
+          riderVisible: true,
+          alertVisible: true,
+          eventLocationLabel: 'Blake Street',
+        },
+      },
+    });
+    const mapleClear = {
+      id: 'history-route-8b-maple-clear',
+      eventType: 'DETOUR_CLEARED',
+      eventId: '8B:maple:4600-5400',
+      detourEventId: '8B:maple:4600-5400',
+      routeId: '8B',
+      riderVisible: true,
+      clearReason: 'normal-route-observed',
+      clearProof: {
+        evidenceType: 'normal-route-gps',
+        method: 'single-track-traversal',
+        observedAt: Date.parse('2026-07-19T13:00:00Z'),
+        sampleCount: 4,
+        sourceCount: 1,
+        shapeId: 'shape-8b',
+      },
+    };
+
+    const enriched = await enrichEventFromActiveDetour(db, {
+      activeCollection: 'activeDetourEventsV2',
+    }, mapleClear);
+
+    expect(enriched.eventLocationLabel).toBeUndefined();
+    expect(enriched.clearanceScope).toBe('segment');
+    expect(enriched.remainingActiveRouteEventCount).toBe(1);
+    expect(enriched.clearValidation).toEqual({ valid: true, reason: 'auditable-gps-proof' });
+    expect(buildEmailMessage(enriched).subject).toContain('Detour segment cleared');
+    expect(buildEmailMessage(enriched).text).toContain('Other active route detours: 1');
+  });
+
+  test('labels Route 8B as route-cleared only when no active Route 8B event remains', () => {
+    const cleared = classifyClearance({
+      eventType: 'DETOUR_CLEARED',
+      eventId: '8B:maple:4600-5400',
+      routeId: '8B',
+      riderVisible: true,
+      clearReason: 'operator-cleared',
+    }, [{
+      eventId: '7B:other',
+      routeId: '7B',
+    }]);
+
+    expect(cleared.clearanceScope).toBe('route');
+    expect(cleared.remainingActiveRouteEventCount).toBe(0);
+    expect(buildEmailMessage(cleared).subject).toContain('Route detour cleared');
+  });
+
+  test('rejects a normal-route clear email without auditable evidence', async () => {
+    const invalidClear = {
+      id: 'history-route-8b-invalid-clear',
+      eventType: 'DETOUR_CLEARED',
+      eventId: '8B:maple:4600-5400',
+      routeId: '8B',
+      riderVisible: true,
+      clearReason: 'normal-route-observed',
+    };
+    expect(validateClearEvent(invalidClear)).toEqual({ valid: false, reason: 'missing-clear-proof' });
+
+    const sendEmail = jest.fn();
+    const result = await runDetourEmailMonitor({
+      env: { ...BASE_ENV, DETOUR_ALERT_INCLUDE_CLEARED: 'true' },
+      db: createFakeDb(),
+      queryDetourHistory: jest.fn().mockResolvedValue([invalidClear]),
+      getGtfsData: jest.fn().mockResolvedValue(null),
+      sendEmail,
+      now: () => Date.parse('2026-07-19T13:05:00Z'),
+    });
+
+    expect(result.sentCount).toBe(0);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ id: invalidClear.id, reason: 'missing-clear-proof' }),
+    ]);
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
   test('sends first-time detour alerts and records notification dedupe', async () => {

@@ -4,6 +4,7 @@ const mockFirestore = {
   setDoc: jest.fn(),
   updateDoc: jest.fn(),
   serverTimestamp: jest.fn(() => 'SERVER_TIMESTAMP'),
+  deleteDoc: jest.fn(),
 };
 
 const mockLogger = {
@@ -70,7 +71,7 @@ describe('userFirestoreService', () => {
     const consoleError = jest.spyOn(console, 'error');
     const offlineError = new Error('FirebaseError: Failed to update document because the client is offline.');
     offlineError.code = 'unavailable';
-    mockFirestore.updateDoc.mockRejectedValue(offlineError);
+    mockFirestore.setDoc.mockRejectedValue(offlineError);
 
     const result = await userFirestoreService.updatePushToken('user-1', 'ExponentPushToken[test]');
 
@@ -82,6 +83,17 @@ describe('userFirestoreService', () => {
     expect(mockLogger.info).toHaveBeenCalledWith(
       'Error updating push token: Firestore is offline; using local fallback where available.',
       { code: 'unavailable' }
+    );
+  });
+
+  test('stores each device token in its own user subdocument', async () => {
+    mockFirestore.setDoc.mockResolvedValue();
+    await expect(userFirestoreService.updatePushToken('user-1', 'ExpoPushToken[test]', 'phone-1'))
+      .resolves.toEqual({ success: true });
+    expect(mockFirestore.doc).toHaveBeenCalledWith('DB', 'users', 'user-1', 'pushTokens', 'phone-1');
+    expect(mockFirestore.setDoc).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ token: 'ExpoPushToken[test]', deviceId: 'phone-1' })
     );
   });
 });

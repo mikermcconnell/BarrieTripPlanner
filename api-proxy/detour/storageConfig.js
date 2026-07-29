@@ -19,7 +19,9 @@ function clean(value) {
 }
 
 function versionFromEnv(env = process.env) {
-  return clean(env.DETOUR_DETECTOR_VERSION).toLowerCase() === 'v2' ? 'v2' : 'v1';
+  // V2 is the production source of truth. V1 remains available only when a
+  // test or isolated migration tool opts into it explicitly.
+  return clean(env.DETOUR_DETECTOR_VERSION).toLowerCase() === 'v1' ? 'v1' : 'v2';
 }
 
 function buildDetourStorageConfig(env = process.env) {

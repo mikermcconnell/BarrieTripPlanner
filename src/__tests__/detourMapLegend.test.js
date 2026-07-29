@@ -26,12 +26,12 @@ describe('DetourMapLegend', () => {
     const texts = inst.root.findAllByType('Text').map((node) => node.props.children);
 
     expect(texts).toContain('Map key');
-    expect(texts).toContain('Live GPS detection');
-    expect(texts).toContain('Auto-detected detours use live bus GPS.');
-    expect(texts).toContain('We wait for repeated bus GPS evidence before drawing a closure, so brand-new changes may not appear right away.');
-    expect(texts).toContain('Bus GPS leaves the regular route');
-    expect(texts).toContain('More evidence confirms the pattern');
-    expect(texts).toContain('The map shows the detour');
+    expect(texts).toContain('Auto Detour Detector');
+    expect(texts).toContain('This map keeps an eye on live buses.');
+    expect(texts).toContain('When several bus trips show the same change, the detector shares the likely detour with riders.');
+    expect(texts).toContain('Spots a route change');
+    expect(texts).toContain('Checks the pattern');
+    expect(texts).toContain('Shows riders what changed');
     expect(texts).toContain('Detour route');
     expect(texts).toContain('Buses are using this temporary path.');
     expect(texts).toContain('Road closed');

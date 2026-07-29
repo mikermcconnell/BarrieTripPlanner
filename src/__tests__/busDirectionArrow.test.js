@@ -10,7 +10,7 @@ const TestRenderer = require('react-test-renderer');
 const BusDirectionArrow = require('../components/BusDirectionArrow').default;
 
 describe('BusDirectionArrow', () => {
-  test('renders as a foreground rim tab rotated to the vehicle bearing', () => {
+  test('renders at its bus body view level and rotates to the vehicle bearing', () => {
     let renderer;
 
     TestRenderer.act(() => {
@@ -19,6 +19,7 @@ describe('BusDirectionArrow', () => {
           bearing: 450,
           size: 88,
           color: '#111111',
+          viewLevel: 4,
         })
       );
     });
@@ -31,8 +32,8 @@ describe('BusDirectionArrow', () => {
     const fillStyle = Object.assign({}, ...tree.children[2].props.style.filter(Boolean));
 
     expect(flattenedLayerStyle.transform).toEqual([{ rotate: '90deg' }]);
-    expect(flattenedLayerStyle.zIndex).toBeGreaterThan(1);
-    expect(flattenedLayerStyle.elevation).toBeGreaterThan(1);
+    expect(flattenedLayerStyle.zIndex).toBe(1);
+    expect(flattenedLayerStyle.elevation).toBe(4);
     expect(outlineStyle.top).toBe(3);
     expect(outlineStyle.borderBottomWidth).toBe(19);
     expect(rimConnectorStyle.top).toBe(19);

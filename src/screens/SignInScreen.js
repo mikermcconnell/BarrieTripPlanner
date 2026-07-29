@@ -11,10 +11,32 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+
+const GoogleLogo = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" accessibilityLabel="Google logo">
+    <Path
+      fill="#4285F4"
+      d="M21.35 12.27c0-.79-.07-1.55-.2-2.27H12v4.3h5.23a4.47 4.47 0 0 1-1.94 2.93v2.79h3.59c2.1-1.94 3.31-4.8 3.31-7.75Z"
+    />
+    <Path
+      fill="#34A853"
+      d="M12 21.74c2.64 0 4.86-.88 6.48-2.38l-3.59-2.79c-.99.67-2.25 1.07-3.89 1.07-2.54 0-4.69-1.72-5.46-4.03H1.83v2.88A9.78 9.78 0 0 0 12 21.74Z"
+    />
+    <Path
+      fill="#FBBC05"
+      d="M5.54 13.61a5.88 5.88 0 0 1 0-3.75V6.98H1.83a9.75 9.75 0 0 0 0 9.5l3.71-2.87Z"
+    />
+    <Path
+      fill="#EA4335"
+      d="M12 5.83c1.77 0 3.35.61 4.6 1.81l3.45-3.45C16.86 1.21 14.64.26 12 .26A9.78 9.78 0 0 0 1.83 6.98l3.71 2.88C6.31 7.55 8.46 5.83 12 5.83Z"
+    />
+  </Svg>
+);
 
 const SignInScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -169,7 +191,9 @@ const SignInScreen = ({ navigation }) => {
               <ActivityIndicator color={COLORS.textPrimary} />
             ) : (
               <>
-                <Text style={styles.googleButtonIcon}>G</Text>
+                <View style={styles.googleButtonIcon}>
+                  <GoogleLogo />
+                </View>
                 <Text style={styles.googleButtonText}>Continue with Google</Text>
               </>
             )}
@@ -318,9 +342,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   googleButtonIcon: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '700',
-    color: '#4285F4',
     marginRight: SPACING.sm,
   },
   googleButtonText: {
