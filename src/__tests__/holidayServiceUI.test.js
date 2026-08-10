@@ -11,6 +11,7 @@ jest.mock('react-native', () => ({
   ScrollView: 'ScrollView',
   ActivityIndicator: 'ActivityIndicator',
   StyleSheet: { create: (styles) => styles },
+  Linking: { openURL: jest.fn(() => Promise.resolve()) },
 }));
 
 jest.mock('../components/Icon', () => 'Icon');
@@ -133,5 +134,25 @@ describe('holiday service UI', () => {
     expect(text).toContain('2A');
     expect(text).toContain('8:00 AM');
     expect(text).toContain('9:02 AM');
+  });
+
+  test('details sheet links to the official MyRide notice when available', () => {
+    const { Linking } = require('react-native');
+    let instance;
+    act(() => {
+      instance = create(React.createElement(HolidayServiceDetailsSheet, {
+        visible: true,
+        holidayServiceInfo: {
+          ...holidayInfo,
+          sourceUrl: 'https://www.myridebarrie.ca/News/1685/civic-holiday-service-august-3/',
+        },
+        onClose: jest.fn(),
+      }));
+    });
+    const link = instance.root.findAllByType('TouchableOpacity').find((node) => (
+      node.props.accessibilityLabel === 'Open official MyRide holiday service notice'
+    ));
+    act(() => link.props.onPress());
+    expect(Linking.openURL).toHaveBeenCalledWith('https://www.myridebarrie.ca/News/1685/civic-holiday-service-august-3/');
   });
 });

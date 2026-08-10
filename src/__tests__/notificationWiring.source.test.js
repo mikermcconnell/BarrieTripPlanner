@@ -13,6 +13,20 @@ describe('notification wiring source checks', () => {
     expect(source).toContain("navigationRef.current.navigate('Map', { screen: 'Alerts' })");
   });
 
+  test('holiday service reminders open the main map where the notice is shown', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../AppRuntime.js'), 'utf8');
+
+    expect(source).toContain("case 'holiday_service':");
+    expect(source).toContain("navigationRef.current.navigate('Map', { screen: 'MapMain' })");
+  });
+
+  test('service restoration notifications open the main map', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../AppRuntime.js'), 'utf8');
+
+    expect(source).toContain("case 'service_restored':");
+    expect(source).toContain("navigationRef.current.navigate('Map', { screen: 'MapMain' })");
+  });
+
   test('settings saves enabled push tokens to the signed-in user profile', () => {
     const source = readSource('screens/SettingsScreen.js');
 

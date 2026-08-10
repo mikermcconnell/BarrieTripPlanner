@@ -61,6 +61,8 @@ describe('BusHubOverlay', () => {
     expect(inst.root.findAllByType('CircleLayer')).toHaveLength(0);
     expect(labels.props.aboveLayerID).toBe('home-live-vehicle-labels');
     expect(icons.props.aboveLayerID).toBe('bus-hubs-labels');
+    expect(labels.props.style.textAllowOverlap).toBe(true);
+    expect(labels.props.style.textIgnorePlacement).toBe(true);
     expect(icons.props.style.textField).toBe('■');
     expect(icons.props.style.textColor).toBe('#004E80');
     expect(labels.props.style.textFont).toEqual(['Noto Sans Bold']);
@@ -82,4 +84,5 @@ describe('BusHubOverlay', () => {
       belowPriorityMarkers: true,
     }));
   });
+
 });

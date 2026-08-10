@@ -4,7 +4,40 @@ const {
   isExpoPushToken,
   sendExpoPushMessages,
   processPendingPushReceipts,
+  isHolidayReminderDue,
+  holidayReminderId,
+  resolveHolidayReminderRecipients,
 } = require('../pushNotifier');
+
+describe('holiday service reminders', () => {
+  const impact = {
+    id: 'holidayService_1685_20260803',
+    type: 'holiday_service',
+    status: 'upcoming',
+    startsAt: Date.parse('2026-08-03T00:00:00-04:00'),
+    dateKey: '20260803',
+    sourceNewsId: '1685',
+    affectsAllRoutes: true,
+  };
+
+  test('becomes due once within the 48-hour reminder window', () => {
+    expect(isHolidayReminderDue(impact, Date.parse('2026-07-31T23:59:00-04:00'))).toBe(false);
+    expect(isHolidayReminderDue(impact, Date.parse('2026-08-01T00:00:00-04:00'))).toBe(true);
+    expect(isHolidayReminderDue(impact, Date.parse('2026-08-03T00:00:00-04:00'))).toBe(false);
+  });
+
+  test('uses a stable Firestore-safe reminder ID', () => {
+    expect(holidayReminderId(impact)).toBe('1685_20260803');
+  });
+
+  test('sends system-wide holiday reminders only to service-alert users', () => {
+    const users = [
+      { uid: 'alerts', serviceAlertsEnabled: true, subscribedRoutes: [] },
+      { uid: 'news', serviceAlertsEnabled: false, transitNewsEnabled: true, subscribedRoutes: [] },
+    ];
+    expect(resolveHolidayReminderRecipients(users, impact).map((user) => user.uid)).toEqual(['alerts']);
+  });
+});
 
 describe('pushNotifier quiet notification policy', () => {
   test('route-scoped news only notifies users subscribed to the affected route', () => {

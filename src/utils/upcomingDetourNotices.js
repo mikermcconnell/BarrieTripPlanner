@@ -9,6 +9,8 @@ import {
 
 const ROUTE_DIRECTION_SUFFIX = /-(?:NB|SB|EB|WB)$/i;
 
+export const ACTIVE_OFFICIAL_DETOUR_LABEL = 'Active official detour';
+
 const cleanText = (value) => String(value || '')
   .replace(/<[^>]+>/g, ' ')
   .replace(/&nbsp;/gi, ' ')
@@ -104,5 +106,35 @@ export const getUpcomingDetourNotices = (transitNews = [], now = Date.now()) => 
       const aStart = Number.isFinite(a.window?.startsAt) ? a.window.startsAt : Number.POSITIVE_INFINITY;
       const bStart = Number.isFinite(b.window?.startsAt) ? b.window.startsAt : Number.POSITIVE_INFINITY;
       return aStart - bStart;
+    })
+);
+
+export const getActiveDetourNotices = (transitNews = [], now = Date.now()) => (
+  (transitNews || [])
+    .filter((item) => (
+      item?.archivedAt == null &&
+      looksLikeDetourNotice(item) &&
+      !looksLikeStopClosureNotice(item)
+    ))
+    .map((item) => normalizeDetourNotice(item, now))
+    .filter((item) => item.status === 'active')
+    .map((item) => ({
+      ...item,
+      id: `official-route-detour-${item.id}`,
+      type: 'official_route_detour',
+      routeId: item.routes[0] || '',
+      message: cleanText(item.body || item.message || item.summary),
+      summary: cleanText(item.summary || item.body || item.message),
+      sourceUrl: item.sourceUrl || item.url || null,
+      sourceLabel: ACTIVE_OFFICIAL_DETOUR_LABEL,
+      sourceType: 'official_transit_news',
+      startsAt: item.window?.startsAt ?? null,
+      endsAt: item.window?.endsAt ?? null,
+      isOfficial: true,
+    }))
+    .sort((a, b) => {
+      const aEnd = Number.isFinite(a.window?.endsAt) ? a.window.endsAt : Number.POSITIVE_INFINITY;
+      const bEnd = Number.isFinite(b.window?.endsAt) ? b.window.endsAt : Number.POSITIVE_INFINITY;
+      return aEnd - bEnd;
     })
 );

@@ -1402,14 +1402,21 @@ function enrichSegmentsWithStopImpacts(
   });
 }
 
-function enrichGeometryStopImpacts(routeId, geometry, shapes, stopImpactData) {
+function enrichGeometryStopImpacts(
+  routeId,
+  geometry,
+  shapes,
+  stopImpactData,
+  serviceEvidencePoints = []
+) {
   if (!geometry || typeof geometry !== 'object') return geometry;
   const enrichedSegments = enrichSegmentsWithStopImpacts(
     routeId,
     geometry.segments,
     shapes,
     geometry.shapeId,
-    stopImpactData
+    stopImpactData,
+    serviceEvidencePoints
   );
   const segments = filterNonClosureSelfLoopSegments(enrichedSegments);
   if (!Array.isArray(segments) || segments.length === 0) {
@@ -1433,6 +1440,9 @@ function enrichGeometryStopImpacts(routeId, geometry, shapes, stopImpactData) {
         affectedStopIds: [],
         affectedStopCodes: [],
         affectedStops: [],
+        uncertainStopIds: [],
+        uncertainStopCodes: [],
+        uncertainStops: [],
         entryStopId: null,
         exitStopId: null,
       }
@@ -1459,6 +1469,9 @@ function enrichGeometryStopImpacts(routeId, geometry, shapes, stopImpactData) {
     affectedStopIds: primarySegment?.affectedStopIds || [],
     affectedStopCodes: primarySegment?.affectedStopCodes || [],
     affectedStops: primarySegment?.affectedStops || [],
+    uncertainStopIds: primarySegment?.uncertainStopIds || [],
+    uncertainStopCodes: primarySegment?.uncertainStopCodes || [],
+    uncertainStops: primarySegment?.uncertainStops || [],
     entryStopId: primarySegment?.entryStopId || null,
     exitStopId: primarySegment?.exitStopId || null,
   };
@@ -1470,7 +1483,13 @@ function enrichDetourMapStopImpacts(detourMap, shapes, stopImpactData) {
 
   Object.entries(detourMap).forEach(([routeId, detour]) => {
     if (!detour?.geometry) return;
-    detour.geometry = enrichGeometryStopImpacts(routeId, detour.geometry, shapes, stopImpactData);
+    detour.geometry = enrichGeometryStopImpacts(
+      routeId,
+      detour.geometry,
+      shapes,
+      stopImpactData,
+      detour.serviceTraceSamples || []
+    );
   });
 
   return detourMap;
@@ -1672,6 +1691,9 @@ function buildGeometry(routeId, evidenceWindow, shapes, routeShapeMapping, now, 
     affectedStopIds: primarySegment?.affectedStopIds || [],
     affectedStopCodes: primarySegment?.affectedStopCodes || [],
     affectedStops: primarySegment?.affectedStops || [],
+    uncertainStopIds: primarySegment?.uncertainStopIds || [],
+    uncertainStopCodes: primarySegment?.uncertainStopCodes || [],
+    uncertainStops: primarySegment?.uncertainStops || [],
     entryStopId: primarySegment?.entryStopId || null,
     exitStopId: primarySegment?.exitStopId || null,
     evidencePointCount: points.length,

@@ -136,11 +136,11 @@ import {
   deriveMappableStopClosureStops,
   mergeStopClosuresForDetourMap,
 } from '../utils/stopClosureMapUtils';
-import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
+import { getActiveDetourNotices, getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
 import { getActiveOfficialServiceImpacts } from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
-import { focusMapToDetour } from '../utils/detourViewport';
+import { focusMapToDetour, focusMapToDetourEvent } from '../utils/detourViewport';
 import {
   DEFAULT_DETOUR_EXPLORER_SELECTION,
   buildDetourExplorerSelection,
@@ -1659,9 +1659,16 @@ const HomeScreen = ({ route }) => {
 
   const tripDelayOptions = useMemo(() => ({ vehicles }), [vehicles]);
   const activeOfficialServiceImpacts = useMemo(
-    () => getActiveOfficialServiceImpacts(officialServiceImpacts)
-      .filter((impact) => impact.type === 'baseline_detour'),
-    [officialServiceImpacts]
+    () => {
+      const reviewedImpacts = getActiveOfficialServiceImpacts(officialServiceImpacts)
+        .filter((impact) => impact.type === 'baseline_detour');
+      const activeNewsDetours = detoursEnabled ? getActiveDetourNotices(transitNews) : [];
+      return [...new Map(
+        [...reviewedImpacts, ...activeNewsDetours]
+          .map((impact) => [String(impact.id || impact.sourceUrl || impact.title), impact])
+      ).values()];
+    },
+    [detoursEnabled, officialServiceImpacts, transitNews]
   );
   const {
     visibleImpacts: visibleOfficialServiceImpacts,
@@ -1735,24 +1742,26 @@ const HomeScreen = ({ route }) => {
     calendarDates,
     trips,
     routes,
-  }), [calendar, calendarDates, routes, tripPlannerDate, trips]);
+    holidayServiceNotices: transitNewsImpacts,
+  }), [calendar, calendarDates, routes, transitNewsImpacts, tripPlannerDate, trips]);
 
   const homeHolidayServiceInfo = useMemo(() => getUpcomingHolidayServiceInfo({
     calendar,
     calendarDates,
     trips,
     routes,
-    daysAhead: 1,
-  }), [calendar, calendarDates, routes, trips]);
-  const homeHolidayDateKey = homeHolidayServiceInfo?.dateKey || null;
-  const visibleHomeHolidayServiceInfo = homeHolidayServiceInfo && homeHolidayDateKey !== dismissedHomeHolidayDateKey
+    daysAhead: 7,
+    holidayServiceNotices: transitNewsImpacts,
+  }), [calendar, calendarDates, routes, transitNewsImpacts, trips]);
+  const homeHolidayNoticeKey = homeHolidayServiceInfo?.noticeKey || homeHolidayServiceInfo?.dateKey || null;
+  const visibleHomeHolidayServiceInfo = homeHolidayServiceInfo && homeHolidayNoticeKey !== dismissedHomeHolidayDateKey
     ? homeHolidayServiceInfo
     : null;
   const dismissHomeHolidayServiceNotice = useCallback(() => {
-    if (homeHolidayDateKey) {
-      setDismissedHomeHolidayDateKey(homeHolidayDateKey);
+    if (homeHolidayNoticeKey) {
+      setDismissedHomeHolidayDateKey(homeHolidayNoticeKey);
     }
-  }, [homeHolidayDateKey]);
+  }, [homeHolidayNoticeKey]);
 
   const selectedHolidayDetailsInfo = useMemo(() => getHolidayServiceInfo({
     date: holidayDetailsDate || homeHolidayServiceInfo?.date || tripPlannerDate,
@@ -1761,6 +1770,7 @@ const HomeScreen = ({ route }) => {
     trips,
     routes,
     stopTimes: routingData?.stopTimes || [],
+    holidayServiceNotices: transitNewsImpacts,
   }), [
     calendar,
     calendarDates,
@@ -1768,6 +1778,7 @@ const HomeScreen = ({ route }) => {
     homeHolidayServiceInfo,
     routes,
     routingData,
+    transitNewsImpacts,
     tripPlannerDate,
     trips,
   ]);
@@ -2349,7 +2360,20 @@ const HomeScreen = ({ route }) => {
       routeId: primaryRouteId,
     }));
     handleMapViewModeChange('detour');
-  }, [handleMapViewModeChange]);
+    focusMapToDetourEvent({
+      activeDetours: statusDetours,
+      detourEvent,
+      fallbackRouteId: primaryRouteId,
+      mapRef: compatMapRef,
+      edgePadding: {
+        top: 180,
+        right: 60,
+        bottom: 340 + floatingBottomOffset,
+        left: 60,
+      },
+      animated: true,
+    });
+  }, [compatMapRef, floatingBottomOffset, handleMapViewModeChange, statusDetours]);
 
   const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
     if (!routeId) return;

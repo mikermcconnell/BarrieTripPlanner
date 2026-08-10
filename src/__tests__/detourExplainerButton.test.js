@@ -74,6 +74,33 @@ describe('DetourExplainerButton', () => {
     );
   });
 
+  test('minimizes the detector card to an icon and restores it', () => {
+    let instance;
+    act(() => {
+      instance = create(React.createElement(DetourExplainerButton));
+    });
+
+    const minimizeButton = instance.root.findByProps({
+      accessibilityLabel: 'Minimize Auto Detour Detector button',
+    });
+    expect(minimizeButton.props.style.width).toBe(44);
+    expect(minimizeButton.props.style.height).toBe(44);
+    act(() => minimizeButton.props.onPress());
+
+    expect(instance.root.findAllByProps({
+      accessibilityLabel: 'Learn how the Auto Detour Detector works',
+    })).toHaveLength(0);
+
+    const restoreButton = instance.root.findByProps({
+      accessibilityLabel: 'Show Auto Detour Detector button',
+    });
+    act(() => restoreButton.props.onPress());
+
+    expect(instance.root.findByProps({
+      accessibilityLabel: 'Learn how the Auto Detour Detector works',
+    })).toBeTruthy();
+  });
+
   test('uses the friendly Nunito type family', () => {
     let instance;
     act(() => {

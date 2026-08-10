@@ -169,6 +169,7 @@ const TripSearchHeaderWeb = ({
   onSaveFromPlace,
   onSaveToPlace,
   compact = false,
+  holidayServiceInfo = null,
 }) => {
   const [activeField, setActiveField] = useState(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
@@ -285,6 +286,12 @@ const TripSearchHeaderWeb = ({
             <Text style={styles.editButtonText}>Edit</Text>
           </TouchableOpacity>
         </View>
+        {holidayServiceInfo ? (
+          <View style={styles.holidayBadge}>
+            <Text style={styles.holidayBadgeLabel}>{holidayServiceInfo.badgeLabel}</Text>
+            <Text style={styles.holidayBadgeTitle}>{holidayServiceInfo.title}</Text>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -317,6 +324,13 @@ const TripSearchHeaderWeb = ({
         <CloseIcon size={20} color={COLORS.textSecondary} />
       </TouchableOpacity>
     </View>
+
+    {holidayServiceInfo ? (
+      <View style={styles.holidayBadge}>
+        <Text style={styles.holidayBadgeLabel}>{holidayServiceInfo.badgeLabel}</Text>
+        <Text style={styles.holidayBadgeTitle}>{holidayServiceInfo.title}</Text>
+      </View>
+    ) : null}
 
     {/* From Field */}
     <View style={styles.tripInputRow}>
@@ -647,6 +661,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: SPACING.sm,
+  },
+  holidayBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.warningSubtle,
+  },
+  holidayBadgeLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.warning,
+  },
+  holidayBadgeTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.textPrimary,
   },
   tripPlanTitleGroup: {
     flex: 1,

@@ -522,10 +522,13 @@ describe('deriveAffectedStopDetailsForDetour', () => {
           affectedStops: [
             { id: 's2', code: 's2', detourStopRole: 'boundary' },
             { id: 's3', code: 's3', detourStopRole: 'served-by-detour' },
+            { id: 's4', code: 's4', detourStopRole: 'uncertain' },
           ],
           skippedStops: [],
           boundaryStops: [{ id: 's2', code: 's2', detourStopRole: 'boundary' }],
           detourPathServedStops: [{ id: 's3', code: 's3', detourStopRole: 'served-by-detour' }],
+          uncertainStops: [{ id: 's4', code: 's4', detourStopRole: 'uncertain' }],
+          uncertainStopIds: ['s4'],
         },
       ],
       stops,
@@ -533,7 +536,7 @@ describe('deriveAffectedStopDetailsForDetour', () => {
       routeStopSequencesMapping,
     });
 
-    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3']);
+    expect(result.segmentStopDetails[0].affectedStops.map((stop) => stop.id)).toEqual(['s2', 's3', 's4']);
     expect(result.segmentStopDetails[0].skippedStops).toEqual([]);
     expect(result.segmentStopDetails[0].notifyingAffectedStops).toEqual([]);
   });

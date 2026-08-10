@@ -52,31 +52,63 @@ const DETECTION_STEPS = [
 
 const DetourExplainerButton = ({ style }) => {
   const [visible, setVisible] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const insets = useSafeAreaInsets();
   const safeBottomPadding = useSafeBottomPadding(SPACING.lg, insets.bottom);
 
   return (
     <>
-      <TouchableOpacity
-        style={[styles.trigger, style]}
-        onPress={() => setVisible(true)}
-        activeOpacity={0.78}
-        accessibilityRole="button"
-        accessibilityLabel="Learn how the Auto Detour Detector works"
-        accessibilityHint="Opens an explanation of the live GPS feature"
-      >
-        <View style={styles.detectorIcon} accessible={false}>
-          <View style={styles.detectorRingLarge} />
-          <View style={styles.detectorRingSmall} />
-          <View style={styles.detectorDot} />
-        </View>
-        <View style={styles.triggerCopy}>
-          <Text style={styles.triggerEyebrow}>LIVE MAP FEATURE</Text>
-          <Text style={styles.triggerText}>Auto Detour Detector</Text>
-          <Text style={styles.triggerSubtext}>See how it works</Text>
-        </View>
-        <Text style={styles.triggerArrow}>›</Text>
-      </TouchableOpacity>
+      <View style={[styles.triggerContainer, style]}>
+        {minimized ? (
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={() => setMinimized(false)}
+            activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel="Show Auto Detour Detector button"
+            accessibilityHint="Restores the Auto Detour Detector information button"
+          >
+            <View style={styles.detectorIcon} accessible={false}>
+              <View style={styles.detectorRingLarge} />
+              <View style={styles.detectorRingSmall} />
+              <View style={styles.detectorDot} />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.trigger}
+              onPress={() => setVisible(true)}
+              activeOpacity={0.78}
+              accessibilityRole="button"
+              accessibilityLabel="Learn how the Auto Detour Detector works"
+              accessibilityHint="Opens an explanation of the live GPS feature"
+            >
+              <View style={styles.detectorIcon} accessible={false}>
+                <View style={styles.detectorRingLarge} />
+                <View style={styles.detectorRingSmall} />
+                <View style={styles.detectorDot} />
+              </View>
+              <View style={styles.triggerCopy}>
+                <Text style={styles.triggerEyebrow}>LIVE MAP FEATURE</Text>
+                <Text style={styles.triggerText}>Auto Detour Detector</Text>
+                <Text style={styles.triggerSubtext}>See how it works</Text>
+              </View>
+              <Text style={styles.triggerArrow}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.minimizeButton}
+              onPress={() => setMinimized(true)}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel="Minimize Auto Detour Detector button"
+              accessibilityHint="Collapses this information button to a small icon"
+            >
+              <Text style={styles.minimizeButtonText}>−</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
       <Modal
         visible={visible}
@@ -167,6 +199,11 @@ const DetourExplainerButton = ({ style }) => {
 };
 
 const styles = StyleSheet.create({
+  triggerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
   trigger: {
     minHeight: 60,
     flexDirection: 'row',
@@ -177,6 +214,34 @@ const styles = StyleSheet.create({
     paddingLeft: SPACING.sm,
     paddingRight: SPACING.md,
     borderRadius: BORDER_RADIUS.xxl,
+    borderWidth: 2,
+    borderColor: COLORS.grey200,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  minimizeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: COLORS.grey200,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.small,
+  },
+  minimizeButtonText: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xl,
+    fontFamily: FRIENDLY_FEATURE_FONTS.bold,
+    lineHeight: 22,
+  },
+  restoreButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
     borderWidth: 2,
     borderColor: COLORS.grey200,
     backgroundColor: COLORS.white,

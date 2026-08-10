@@ -1,7 +1,7 @@
 const { fetchNewsItems } = require('./newsFetcher');
 const { publishNews, getKnownNewsIds } = require('./newsPublisher');
 const { publishNewsImpacts } = require('./newsImpactPublisher');
-const { notifyUsersOfNews } = require('./pushNotifier');
+const { notifyUsersOfNews, notifyUsersOfHolidayServiceReminders } = require('./pushNotifier');
 
 const TICK_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -19,11 +19,12 @@ async function tick() {
   try {
     const items = await fetchNewsItems();
     const newItems = await publishNews(items);
-    await publishNewsImpacts(items);
+    const impacts = await publishNewsImpacts(items);
 
     if (newItems.length > 0) {
       await notifyUsersOfNews(newItems);
     }
+    await notifyUsersOfHolidayServiceReminders(impacts);
 
     lastItemCount = items.length;
     tickCount++;

@@ -33,6 +33,16 @@ function getNormalizedSegments(detour) {
   return [detour];
 }
 
+function appendSegmentGeometry(target, seen, segment) {
+  if (!segment) return;
+
+  appendPolyline(target, seen, segment.skippedSegmentPolyline);
+  appendPolyline(target, seen, segment.likelyDetourPolyline);
+  appendPolyline(target, seen, segment.inferredDetourPolyline);
+  appendCoordinate(target, seen, segment.entryPoint);
+  appendCoordinate(target, seen, segment.exitPoint);
+}
+
 function normalizeFocusedRouteIds({ activeDetours, focusedRouteId, focusedRouteIds }) {
   const ids = Array.isArray(focusedRouteIds) && focusedRouteIds.length > 0
     ? focusedRouteIds
@@ -68,36 +78,68 @@ export function getDetourViewportCoordinates({
     if (!detour) return;
 
     const segments = getViewportSegments(detour, segmentIndex);
-    segments.forEach((segment) => {
-      appendPolyline(coordinates, seen, segment?.skippedSegmentPolyline);
-      appendPolyline(coordinates, seen, segment?.likelyDetourPolyline);
-      appendPolyline(coordinates, seen, segment?.inferredDetourPolyline);
-      appendCoordinate(coordinates, seen, segment?.entryPoint);
-      appendCoordinate(coordinates, seen, segment?.exitPoint);
-    });
+    segments.forEach((segment) => appendSegmentGeometry(coordinates, seen, segment));
   });
 
   return coordinates;
 }
 
-export function focusMapToDetour({
+export function getDetourEventViewportCoordinates({
   activeDetours = {},
-  routeId = null,
-  routeIds = null,
-  segmentIndex = null,
+  detourEvent = null,
+  fallbackRouteId = null,
+}) {
+  const candidates = Array.isArray(detourEvent?.candidates)
+    ? detourEvent.candidates
+    : [];
+
+  if (candidates.length === 0) {
+    return getDetourViewportCoordinates({
+      activeDetours,
+      focusedRouteId: fallbackRouteId || detourEvent?.primaryRouteId || null,
+      focusedRouteIds: detourEvent?.routeIds,
+      segmentIndex: Number.isInteger(detourEvent?.primarySegmentIndex)
+        ? detourEvent.primarySegmentIndex
+        : null,
+    });
+  }
+
+  const coordinates = [];
+  const seen = new Set();
+
+  candidates.forEach((candidate) => {
+    const routeId = String(candidate?.routeId || '').trim();
+    const detour = (routeId ? activeDetours?.[routeId] : null) || candidate?.detour || null;
+    const segments = getNormalizedSegments(detour);
+    const segment = candidate?.segment || (
+      Number.isInteger(candidate?.segmentIndex)
+        ? segments[candidate.segmentIndex]
+        : detour
+    );
+
+    appendSegmentGeometry(coordinates, seen, segment || detour);
+  });
+
+  if (coordinates.length > 0) return coordinates;
+
+  return getDetourViewportCoordinates({
+    activeDetours,
+    focusedRouteId: fallbackRouteId || detourEvent?.primaryRouteId || null,
+    focusedRouteIds: detourEvent?.routeIds,
+    segmentIndex: Number.isInteger(detourEvent?.primarySegmentIndex)
+      ? detourEvent.primarySegmentIndex
+      : null,
+  });
+}
+
+function focusMapOnCoordinates({
+  coordinates,
   mapRef = null,
   edgePadding = null,
   animated = true,
   duration = 500,
   singlePointDelta = 0.01,
 }) {
-  const coordinates = getDetourViewportCoordinates({
-    activeDetours,
-    focusedRouteId: routeId,
-    focusedRouteIds: routeIds,
-    segmentIndex,
-  });
-
   const map = mapRef?.current || mapRef;
   if (!map || coordinates.length === 0) {
     return { focused: false, coordinateCount: coordinates.length };
@@ -123,4 +165,58 @@ export function focusMapToDetour({
   }
 
   return { focused: false, coordinateCount: coordinates.length };
+}
+
+export function focusMapToDetour({
+  activeDetours = {},
+  routeId = null,
+  routeIds = null,
+  segmentIndex = null,
+  mapRef = null,
+  edgePadding = null,
+  animated = true,
+  duration = 500,
+  singlePointDelta = 0.01,
+}) {
+  const coordinates = getDetourViewportCoordinates({
+    activeDetours,
+    focusedRouteId: routeId,
+    focusedRouteIds: routeIds,
+    segmentIndex,
+  });
+
+  return focusMapOnCoordinates({
+    coordinates,
+    mapRef,
+    edgePadding,
+    animated,
+    duration,
+    singlePointDelta,
+  });
+}
+
+export function focusMapToDetourEvent({
+  activeDetours = {},
+  detourEvent = null,
+  fallbackRouteId = null,
+  mapRef = null,
+  edgePadding = null,
+  animated = true,
+  duration = 500,
+  singlePointDelta = 0.01,
+}) {
+  const coordinates = getDetourEventViewportCoordinates({
+    activeDetours,
+    detourEvent,
+    fallbackRouteId,
+  });
+
+  return focusMapOnCoordinates({
+    coordinates,
+    mapRef,
+    edgePadding,
+    animated,
+    duration,
+    singlePointDelta,
+  });
 }

@@ -16,4 +16,17 @@ describe('holiday service HomeScreen integration', () => {
     expect(source).toContain('holidayServiceInfo={tripHolidayServiceInfo}');
     expect(source).toContain('<HolidayServiceDetailsSheet');
   });
+
+  test('web home screen uses parsed holiday notices for the banner and trip badge', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'screens', 'HomeScreen.web.impl.js'),
+      'utf8'
+    );
+
+    expect(source).toContain("import HolidayServiceBanner from '../components/HolidayServiceBanner';");
+    expect(source).toContain('holidayServiceNotices: transitNewsImpacts');
+    expect(source).toContain('daysAhead: 7');
+    expect(source).toContain('holidayServiceInfo={tripHolidayServiceInfo}');
+    expect(source).toContain('<HolidayServiceDetailsSheet');
+  });
 });

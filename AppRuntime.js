@@ -179,6 +179,12 @@ function NotificationInitializer({ navigationRef }) {
               // Navigate to Alerts screen within the Map stack
               navigationRef.current.navigate('Map', { screen: 'Alerts' });
               break;
+            case 'holiday_service':
+              navigationRef.current.navigate('Map', { screen: 'MapMain' });
+              break;
+            case 'service_restored':
+              navigationRef.current.navigate('Map', { screen: 'MapMain' });
+              break;
             case 'transit_news':
               navigationRef.current.navigate('Profile', { screen: 'News' });
               break;

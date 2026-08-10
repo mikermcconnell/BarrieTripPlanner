@@ -11,6 +11,7 @@ const NON_NOTIFYING_DETOUR_STOP_ROLES = new Set([
   'served-by-detour',
   'served-by-gps',
   'notice-active',
+  'uncertain',
 ]);
 
 const normalizeStopKey = (value) => (
@@ -121,12 +122,14 @@ const hasExplicitStopImpacts = (segment) => (
   hasNonEmptyArray(segment?.boundaryStopIds) ||
   hasNonEmptyArray(segment?.detourPathServedStopIds) ||
   hasNonEmptyArray(segment?.gpsServedStopIds) ||
+  hasNonEmptyArray(segment?.uncertainStopIds) ||
   hasNonEmptyArray(segment?.noticeActiveStopIds) ||
   hasNonEmptyArray(segment?.skippedStops) ||
   hasNonEmptyArray(segment?.affectedStops) ||
   hasNonEmptyArray(segment?.boundaryStops) ||
   hasNonEmptyArray(segment?.detourPathServedStops) ||
   hasNonEmptyArray(segment?.gpsServedStops) ||
+  hasNonEmptyArray(segment?.uncertainStops) ||
   hasNonEmptyArray(segment?.noticeActiveStops)
 );
 

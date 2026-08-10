@@ -12,6 +12,8 @@ const DETOUR_PATH_ENDPOINT_BUFFER_METERS = 60;
 const DETOUR_STOP_IMPACT_BOUNDARY_BUFFER_METERS = 45;
 const STOP_SERVICE_GPS_PROXIMITY_METERS = 55;
 const STOP_SERVICE_GPS_PROGRESS_TOLERANCE_METERS = 70;
+const MAJOR_TERMINAL_NAME_PATTERN = /\b(?:transit\s+(?:terminal|hub)|bus\s+(?:terminal|station)|go\s+(?:station|platform)|station\s+platform|terminal)\b/i;
+const POSITIVE_SKIP_PROGRESS_TOLERANCE_METERS = 150;
 
 function normalizeStopId(value) {
   return value == null ? null : String(value).trim();
@@ -39,7 +41,17 @@ function normalizeStop(stop) {
     name: String(stop.name ?? stop.stop_name ?? '').trim(),
     latitude: Number(stop.latitude ?? stop.stop_lat),
     longitude: Number(stop.longitude ?? stop.stop_lon),
+    locationType: Number.parseInt(String(stop.locationType ?? stop.location_type ?? 0), 10) || 0,
+    parentStation: normalizeStopId(stop.parentStation ?? stop.parent_station),
   };
+}
+
+function isMajorTerminalStop(stop = {}) {
+  if (!stop || typeof stop !== 'object') return false;
+  const locationType = Number.parseInt(String(stop.locationType ?? stop.location_type ?? 0), 10) || 0;
+  const parentStation = normalizeStopId(stop.parentStation ?? stop.parent_station);
+  const name = String(stop.name ?? stop.stop_name ?? '').trim();
+  return locationType === 1 || Boolean(parentStation) || MAJOR_TERMINAL_NAME_PATTERN.test(name);
 }
 
 function pickCanonicalStopSequence(patternMap) {
@@ -132,6 +144,44 @@ function getRouteStopSequence(routeId, shapeId, routeStopSequencesMapping = {}) 
     return routeSequences[DEFAULT_ROUTE_STOP_SEQUENCE_KEY];
   }
   return [];
+}
+
+function getMajorTerminalRouteEdge({
+  routeId,
+  shapeId,
+  eventWindow,
+  shapeLengthMeters,
+  stopImpactData = {},
+  maxSourceSpanMeters = 250,
+  edgePaddingMeters = 75,
+} = {}) {
+  const safeStopImpactData = stopImpactData || {};
+  const start = Number(eventWindow?.coreStartProgressMeters);
+  const end = Number(eventWindow?.coreEndProgressMeters);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return null;
+  const minimum = Math.min(start, end);
+  const maximum = Math.max(start, end);
+  if (maximum - minimum > maxSourceSpanMeters) return null;
+
+  const shapeLength = Number(shapeLengthMeters);
+  const edge = minimum <= edgePaddingMeters
+    ? 'start'
+    : Number.isFinite(shapeLength) && shapeLength - maximum <= edgePaddingMeters
+      ? 'end'
+      : null;
+  if (!edge) return null;
+
+  const stopIds = getRouteStopSequence(
+    routeId,
+    shapeId,
+    safeStopImpactData.routeStopSequencesMapping
+  );
+  const stopId = edge === 'start' ? stopIds[0] : stopIds[stopIds.length - 1];
+  const stopsById = safeStopImpactData.stopsById;
+  const rawStop = stopsById?.get?.(String(stopId)) ?? stopsById?.[String(stopId)];
+  const stop = normalizeStop(rawStop);
+  if (!stop || !isMajorTerminalStop(stop)) return null;
+  return { edge, stopId: stop.id, stop };
 }
 
 function getRoutesServingStop(stopId, routeStopSequencesMapping = {}) {
@@ -317,6 +367,10 @@ function normalizeServiceEvidenceEntries(serviceEvidencePoints, polyline, cumula
         distanceMeters: Number.isFinite(projected.distanceMeters) ? projected.distanceMeters : 0,
         timestampMs: point.timestampMs ?? null,
         vehicleId: point.vehicleId ?? null,
+        tripId: point.tripId ?? null,
+        signature: point.signature ?? point.tripId ?? point.vehicleId ?? null,
+        onRoute: point.onRoute !== false && point.kind !== 'off-route',
+        kind: point.kind ?? null,
       };
     })
     .filter(Boolean);
@@ -329,6 +383,7 @@ function hasGpsServiceEvidence(stopEntry, serviceEvidenceEntries) {
   }
 
   return serviceEvidenceEntries.some((evidence) => (
+    evidence.onRoute === true &&
     Math.abs(evidence.progressMeters - stopEntry.progressMeters) <= STOP_SERVICE_GPS_PROGRESS_TOLERANCE_METERS &&
     evidence.distanceMeters <= STOP_ROUTE_PROJECTION_MAX_METERS &&
     haversineDistance(
@@ -338,6 +393,67 @@ function hasGpsServiceEvidence(stopEntry, serviceEvidenceEntries) {
       evidence.longitude
     ) <= STOP_SERVICE_GPS_PROXIMITY_METERS
   ));
+}
+
+function hasPositiveSkipEvidence(stopEntry, serviceEvidenceEntries) {
+  if (!stopEntry || !Array.isArray(serviceEvidenceEntries)) return false;
+  const stop = stopEntry.stop;
+  if (!stop) return false;
+  const bySignature = new Map();
+  for (const entry of serviceEvidenceEntries) {
+    const signature = String(entry?.signature || entry?.tripId || entry?.vehicleId || '').trim();
+    if (!signature) continue;
+    const samples = bySignature.get(signature) || [];
+    samples.push(entry);
+    bySignature.set(signature, samples);
+  }
+
+  let completeSkipCount = 0;
+  for (const unorderedSamples of bySignature.values()) {
+    const samples = [...unorderedSamples]
+      .filter((sample) => (
+        sample.timestampMs != null && Number.isFinite(Number(sample.timestampMs))
+      ))
+      .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+    const bypassSamples = samples.filter((sample) => (
+      sample.onRoute === false &&
+      sample.distanceMeters > STOP_SERVICE_GPS_PROXIMITY_METERS &&
+      Math.abs(sample.progressMeters - stopEntry.progressMeters) <= POSITIVE_SKIP_PROGRESS_TOLERANCE_METERS &&
+      haversineDistance(
+        stop.latitude,
+        stop.longitude,
+        sample.latitude,
+        sample.longitude
+      ) > STOP_SERVICE_GPS_PROXIMITY_METERS
+    ));
+
+    const hasOrderedBypass = bypassSamples.some((bypass) => {
+      const bypassTimestamp = Number(bypass.timestampMs);
+      const earlierOnRouteSamples = samples.filter((sample) => (
+        sample.onRoute === true && Number(sample.timestampMs) < bypassTimestamp
+      ));
+      const laterOnRouteSamples = samples.filter((sample) => (
+        sample.onRoute === true && Number(sample.timestampMs) > bypassTimestamp
+      ));
+      const increasingProgress =
+        earlierOnRouteSamples.some((sample) => (
+          sample.progressMeters < stopEntry.progressMeters - ROUTE_PROGRESS_TOLERANCE_METERS
+        )) &&
+        laterOnRouteSamples.some((sample) => (
+          sample.progressMeters > stopEntry.progressMeters + ROUTE_PROGRESS_TOLERANCE_METERS
+        ));
+      const decreasingProgress =
+        earlierOnRouteSamples.some((sample) => (
+          sample.progressMeters > stopEntry.progressMeters + ROUTE_PROGRESS_TOLERANCE_METERS
+        )) &&
+        laterOnRouteSamples.some((sample) => (
+          sample.progressMeters < stopEntry.progressMeters - ROUTE_PROGRESS_TOLERANCE_METERS
+        ));
+      return increasingProgress || decreasingProgress;
+    });
+    if (hasOrderedBypass) completeSkipCount += 1;
+  }
+  return completeSkipCount >= 2;
 }
 
 function deriveSegmentStopImpacts({
@@ -407,6 +523,10 @@ function deriveSegmentStopImpacts({
     isServedByDetourPath(entry.stop, segment)
   ));
   const isDetourPathServed = (entry) => detourPathServedStopEntries.some((served) => served.stop.id === entry.stop.id);
+  const isMajorTerminal = (entry) => isMajorTerminalStop(entry?.stop);
+  const hasConfirmedSkip = (entry) => (
+    !isMajorTerminal(entry) || hasPositiveSkipEvidence(entry, serviceEvidenceEntries)
+  );
   const isBoundary = (entry) => (
     entry.progressMeters <= startProgress + boundaryBufferMeters ||
     entry.progressMeters >= endProgress - boundaryBufferMeters
@@ -417,13 +537,15 @@ function deriveSegmentStopImpacts({
       entry.progressMeters > startProgress + boundaryBufferMeters &&
       entry.progressMeters < endProgress - boundaryBufferMeters &&
       !isGpsServed(entry) &&
-      !isDetourPathServed(entry)
+      !isDetourPathServed(entry) &&
+      hasConfirmedSkip(entry)
     ) {
       return 'skipped';
     }
     if (isBoundary(entry)) return 'boundary';
     if (isGpsServed(entry)) return 'served-by-gps';
     if (isDetourPathServed(entry)) return 'served-by-detour';
+    if (isMajorTerminal(entry)) return 'uncertain';
     return 'affected';
   };
   const affectedStops = affectedStopEntries.map((entry) => withDetourStopRole(entry.stop, getEntryRole(entry)));
@@ -434,19 +556,29 @@ function deriveSegmentStopImpacts({
     entry.progressMeters > startProgress + boundaryBufferMeters &&
     entry.progressMeters < endProgress - boundaryBufferMeters &&
     !isGpsServed(entry) &&
-    !isDetourPathServed(entry)
+    !isDetourPathServed(entry) &&
+    hasConfirmedSkip(entry)
   )) || null;
   const skippedStopEntries = affectedStopEntries.filter((entry) => (
     entry.progressMeters > startProgress + boundaryBufferMeters &&
     entry.progressMeters < endProgress - boundaryBufferMeters &&
     !isGpsServed(entry) &&
-    !isDetourPathServed(entry)
+    !isDetourPathServed(entry) &&
+    hasConfirmedSkip(entry)
   ));
   const boundaryStopEntries = affectedStopEntries.filter(isBoundary);
   const skippedStops = skippedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'skipped'));
   const gpsServedStops = gpsServedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'served-by-gps'));
   const detourPathServedStops = detourPathServedStopEntries.map((entry) => withDetourStopRole(entry.stop, 'served-by-detour'));
   const boundaryStops = boundaryStopEntries.map((entry) => withDetourStopRole(entry.stop, 'boundary'));
+  const uncertainStopEntries = affectedStopEntries.filter((entry) => (
+    isMajorTerminal(entry) &&
+    !isBoundary(entry) &&
+    !isGpsServed(entry) &&
+    !isDetourPathServed(entry) &&
+    !hasConfirmedSkip(entry)
+  ));
+  const uncertainStops = uncertainStopEntries.map((entry) => withDetourStopRole(entry.stop, 'uncertain'));
   const lastServedBeforeDetourStopEntry = affectedStopEntries
     .filter((entry) => entry.progressMeters <= startProgress + boundaryBufferMeters)
     .at(-1) || null;
@@ -470,6 +602,9 @@ function deriveSegmentStopImpacts({
     boundaryStopIds: boundaryStops.map((stop) => stop.id),
     boundaryStopCodes: boundaryStops.map((stop) => stop.code).filter(Boolean),
     boundaryStops,
+    uncertainStopIds: uncertainStops.map((stop) => stop.id),
+    uncertainStopCodes: uncertainStops.map((stop) => stop.code).filter(Boolean),
+    uncertainStops,
     firstSkippedStopId: firstSkippedStopEntry?.stop?.id || null,
     firstSkippedStopCode: getStopCode(firstSkippedStopEntry?.stop),
     firstSkippedStop: firstSkippedStopEntry?.stop || null,
@@ -570,6 +705,8 @@ module.exports = {
   buildRouteStopSequencesMapping,
   deriveSegmentStopImpacts,
   getRouteStopSequence,
+  getMajorTerminalRouteEdge,
+  isMajorTerminalStop,
   isServedByDetourPath,
   pruneDetourPathServedStopsFromGeometry,
   pruneDetourPathServedStopsFromSegment,

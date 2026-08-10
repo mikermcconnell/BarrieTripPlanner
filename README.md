@@ -22,6 +22,7 @@ Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start w
 - Stop search and information
 - Trip planning with integrated trip details and navigation
 - Service alerts and detour overlays
+- Official MyRide holiday-service notices with advance in-app and opted-in push reminders
 - Platform maps for major transit hubs from the City of Barrie source PDF
 - Favorites and account-backed rider preferences
 - Supporting profile flows for news, surveys, and settings

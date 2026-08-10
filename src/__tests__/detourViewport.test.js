@@ -1,6 +1,8 @@
 const {
+  getDetourEventViewportCoordinates,
   getDetourViewportCoordinates,
   focusMapToDetour,
+  focusMapToDetourEvent,
 } = require('../utils/detourViewport');
 
 describe('getDetourViewportCoordinates', () => {
@@ -191,5 +193,80 @@ describe('getDetourViewportCoordinates', () => {
       animated: true,
     });
     expect(animateToRegion).not.toHaveBeenCalled();
+  });
+});
+
+describe('selected detour event viewport', () => {
+  const activeDetours = {
+    '12A': {
+      segments: [
+        {
+          inferredDetourPolyline: [
+            { latitude: 44.35, longitude: -79.65 },
+            { latitude: 44.351, longitude: -79.651 },
+          ],
+        },
+        {
+          skippedSegmentPolyline: [
+            { latitude: 44.39, longitude: -79.70 },
+            { latitude: 44.391, longitude: -79.701 },
+          ],
+          likelyDetourPolyline: [
+            { latitude: 44.392, longitude: -79.702 },
+            { latitude: 44.393, longitude: -79.703 },
+          ],
+        },
+      ],
+    },
+    '12B': {
+      segments: [{
+        inferredDetourPolyline: [
+          { latitude: 44.394, longitude: -79.704 },
+          { latitude: 44.395, longitude: -79.705 },
+        ],
+      }],
+    },
+  };
+
+  const detourEvent = {
+    primaryRouteId: '12A',
+    primarySegmentIndex: 1,
+    routeIds: ['12A', '12B'],
+    candidates: [
+      { routeId: '12A', segmentIndex: 1 },
+      { routeId: '12B', segmentIndex: 0 },
+    ],
+  };
+
+  test('uses only the candidate segments that belong to the selected event', () => {
+    expect(getDetourEventViewportCoordinates({ activeDetours, detourEvent })).toEqual([
+      { latitude: 44.39, longitude: -79.70 },
+      { latitude: 44.391, longitude: -79.701 },
+      { latitude: 44.392, longitude: -79.702 },
+      { latitude: 44.393, longitude: -79.703 },
+      { latitude: 44.394, longitude: -79.704 },
+      { latitude: 44.395, longitude: -79.705 },
+    ]);
+  });
+
+  test('issues one immediate fit for the selected event', () => {
+    const fitToCoordinates = jest.fn();
+
+    const result = focusMapToDetourEvent({
+      activeDetours,
+      detourEvent,
+      mapRef: { current: { fitToCoordinates } },
+      edgePadding: { top: 180, right: 60, bottom: 340, left: 60 },
+    });
+
+    expect(result).toEqual({ focused: true, coordinateCount: 6 });
+    expect(fitToCoordinates).toHaveBeenCalledTimes(1);
+    expect(fitToCoordinates).toHaveBeenCalledWith(
+      getDetourEventViewportCoordinates({ activeDetours, detourEvent }),
+      {
+        edgePadding: { top: 180, right: 60, bottom: 340, left: 60 },
+        animated: true,
+      }
+    );
   });
 });

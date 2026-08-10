@@ -24,9 +24,9 @@ const getMapViewModeHandler = (source) => {
   return source.slice(start, end);
 };
 
-const getDetourSelectionHandlers = (source) => {
+const getDetourEventSelectionHandler = (source) => {
   const start = source.indexOf('const showDetourEventOnMap = useCallback');
-  const end = source.indexOf('const showAllDetoursOnMap', start);
+  const end = source.indexOf('const showDetourRouteOnMap', start);
   return source.slice(start, end);
 };
 
@@ -43,15 +43,14 @@ describe('detour viewport freedom', () => {
   );
 
   test.each(['HomeScreen.js', 'HomeScreen.web.impl.js'])(
-    '%s preserves the viewport when a detour notification is selected',
+    '%s performs exactly one immediate camera fit when a specific detour is selected',
     (fileName) => {
-      const handlers = getDetourSelectionHandlers(readScreen(fileName));
+      const handler = getDetourEventSelectionHandler(readScreen(fileName));
 
-      expect(handlers).toContain("handleMapViewModeChange('detour')");
-      expect(handlers).not.toContain('focusMapOnDetour(');
-      expect(handlers).not.toContain('focusMapToDetour(');
-      expect(handlers).not.toContain('fitToCoordinates');
-      expect(handlers).not.toContain('setCamera');
+      expect(handler).toContain("handleMapViewModeChange('detour')");
+      expect(handler.match(/focusMapToDetourEvent\(/g)).toHaveLength(1);
+      expect(handler).not.toContain('setTimeout');
+      expect(handler).not.toContain('requestAnimationFrame');
     }
   );
 

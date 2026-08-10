@@ -14,6 +14,7 @@ const getStatusTone = (statusLabel) => {
 };
 
 const MAP_ROUTE_HINT = 'Tap or click a highlighted route line on the map for details.';
+const DETAILS_PENDING_TEXT = 'Exact path and affected stops are still being confirmed.';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -98,9 +99,14 @@ const DetourAlertStrip = ({
           accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
         >
           <Icon name="Warning" size={16} color={COLORS.warning} />
-          <Text style={styles.countText} numberOfLines={1}>
-            {countText}
-          </Text>
+          <View style={styles.collapsedCopy}>
+            <Text style={styles.countText} numberOfLines={1}>
+              {countText}
+            </Text>
+            {detourEvents.length === 1 && detourEvents[0].detailsPending && (
+              <Text style={styles.detailsPendingText} numberOfLines={2}>{DETAILS_PENDING_TEXT}</Text>
+            )}
+          </View>
           {visibleCollapsedRouteBadges.length > 0 && (
             <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
               {visibleCollapsedRouteBadges.map((badge) => {
@@ -141,6 +147,19 @@ const DetourAlertStrip = ({
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
         <View style={[styles.expandedPanel, inline && styles.expandedPanelInline]}>
+          <View style={styles.expandedHeader}>
+            <Text style={styles.expandedHeaderText}>Active detours</Text>
+            <TouchableOpacity
+              style={styles.minimizeListButton}
+              onPress={toggleExpanded}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel="Minimize active detour list"
+            >
+              <Text style={styles.minimizeListIcon}>−</Text>
+              <Text style={styles.minimizeListText}>Minimize</Text>
+            </TouchableOpacity>
+          </View>
           {visibleEvents.map((event, eventIndex) => {
             const routeColor = getRouteColor(event.primaryRouteId);
             const isClearPending = event.state === 'clear-pending';
@@ -178,6 +197,9 @@ const DetourAlertStrip = ({
                 </View>
                 <View style={styles.eventCopy}>
                   <Text style={styles.detailLabel} numberOfLines={2}>{event.title}</Text>
+                  {event.detailsPending && (
+                    <Text style={styles.detailsPendingText}>{DETAILS_PENDING_TEXT}</Text>
+                  )}
                   <View style={styles.eventMetaRow}>
                     <View style={[styles.statusBadge, statusBadgeStyle]}>
                       <Text style={[styles.statusBadgeText, statusBadgeTextStyle]}>{statusLabel}</Text>
@@ -275,7 +297,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   countText: {
-    flex: 1,
     fontSize: FONT_SIZES.sm,
     fontFamily: FONT_FAMILIES.semibold,
     color: COLORS.textPrimary,
@@ -293,6 +314,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
+  },
+  collapsedCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailsPendingText: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.xs,
+    lineHeight: 15,
+    color: COLORS.textSecondary,
   },
   routeCircle: {
     width: 27,
@@ -360,6 +391,41 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.textPrimary,
     lineHeight: 17,
+  },
+  expandedHeader: {
+    minHeight: 42,
+    paddingLeft: SPACING.md,
+    paddingRight: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  expandedHeaderText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
+    fontFamily: FONT_FAMILIES.semibold,
+  },
+  minimizeListButton: {
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  minimizeListIcon: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.lg,
+    lineHeight: FONT_SIZES.lg,
+  },
+  minimizeListText: {
+    color: COLORS.primaryDark,
+    fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.semibold,
   },
   eventNumberBadge: {
     width: 22,

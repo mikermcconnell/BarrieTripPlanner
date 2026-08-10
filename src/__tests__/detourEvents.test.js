@@ -278,6 +278,70 @@ describe('detourEvents', () => {
     expect(events.map((event) => event.primarySegmentIndex)).toEqual([0, 1]);
   });
 
+  test('keeps a pending same-route event separate from a detailed event', () => {
+    const events = buildActiveDetourEvents({
+      '100': {
+        routeId: '100',
+        state: 'active',
+        confidence: 'high',
+        uniqueVehicleCount: 4,
+        alertVisible: true,
+        riderVisible: true,
+        detailsPending: true,
+        detourEvents: [
+          {
+            routeId: '100',
+            state: 'active',
+            confidence: 'high',
+            uniqueVehicleCount: 2,
+            alertVisible: true,
+            riderVisible: false,
+            detailsPending: true,
+            detourEventId: '100:pending',
+            eventWindow: {
+              routeId: '100',
+              shapeId: 'shape-100',
+              coreStartProgressMeters: 100,
+              coreEndProgressMeters: 300,
+            },
+            segments: [{
+              detourEventId: '100:pending',
+              // Approximate boundaries may exist before the exact rider path
+              // is trustworthy. They must not collapse this pending record
+              // into the separate detailed event below.
+              entryPoint: { latitude: 44.3901, longitude: -79.7001 },
+              exitPoint: { latitude: 44.4001, longitude: -79.6901 },
+            }],
+          },
+          {
+            routeId: '100',
+            state: 'active',
+            confidence: 'high',
+            uniqueVehicleCount: 2,
+            alertVisible: true,
+            riderVisible: true,
+            detailsPending: false,
+            detourEventId: '100:detailed',
+            segments: [{
+              detourEventId: '100:detailed',
+              likelyDetourRoadNames: ['Dunlop Street West'],
+              entryPoint: { latitude: 44.39, longitude: -79.70 },
+              exitPoint: { latitude: 44.40, longitude: -79.69 },
+            }],
+          },
+        ],
+      },
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events.find((event) => event.eventId === 'event:100:pending')).toMatchObject({
+      detailsPending: true,
+    });
+    expect(events.find((event) => event.eventId === 'event:100:detailed')).toMatchObject({
+      detailsPending: false,
+    });
+  });
+
   test('does not use generic detour labels as event titles', () => {
     expect(buildDetourEventTitle({
       routeId: '10',

@@ -250,7 +250,7 @@ const SettingsScreen = ({ navigation }) => {
           <>
             {renderToggleRow(
               'Service Alerts',
-              'Push alerts for qualifying detours on selected routes',
+              'Push alerts for qualifying detours and major holiday service changes',
               notificationSettings.serviceAlerts,
               () => handleNotificationToggle('serviceAlerts')
             )}

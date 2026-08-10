@@ -202,7 +202,7 @@ For old active detour protection:
 
 - [ ] The backend keeps the active detour record until normal-route GPS traversal proof exists.
 - [ ] `staleForReview` alone does not hide a confirmed active alert.
-- [ ] When the exact route is reporting, an event with no matching GPS evidence for more than 90 minutes may become `riderVisible=false` with `stale-evidence-awaiting-gps-clear`, while `alertVisible=true` and the backend record remains active.
+- [ ] Stale aging freezes outside the exact route/direction's scheduled service. One observed matching trip passing the affected segment without detour refresh retains details; two distinct missed passages may set `riderVisible=false` with `stale-evidence-awaiting-gps-clear`. If passage cannot be measured, the fallback is `max(90 in-service minutes, 2 headways + 10 minutes)`. The backend record remains active until GPS clear proof.
 - [ ] One new matching bus refreshes the heartbeat of an already-confirmed visible event; a previously hidden event still requires normal confirmation before returning to riders.
 - [ ] The rider UI hides an active alert only when the backend explicitly publishes `alertVisible=false`; `riderVisible=false` hides rich details only when `alertVisible=true`.
 - [ ] Geometryless/unsafe detours stay hidden from riders while the backend keeps monitoring for better geometry, a recoverable clear window, or operator review.

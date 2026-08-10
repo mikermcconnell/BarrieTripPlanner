@@ -206,6 +206,33 @@ describe('mapActiveDetourDoc', () => {
     expect(detour.segments[0].detourEventId).toBe('8A:shape-1:100-300');
   });
 
+  test('maps pending geometry and uncertain terminal-stop details', () => {
+    const detour = mapActiveDetourDoc('100:pending', {
+      routeId: '100',
+      state: 'active',
+      alertVisible: true,
+      detailsPending: true,
+      uncertainStopIds: ['allandale-platform-5'],
+      uncertainStopCodes: ['9005'],
+      uncertainStops: [{
+        id: 'allandale-platform-5',
+        code: '9005',
+        detourStopRole: 'uncertain',
+      }],
+    });
+
+    expect(detour).toMatchObject({
+      routeId: '100',
+      alertVisible: true,
+      detailsPending: true,
+      uncertainStopIds: ['allandale-platform-5'],
+      uncertainStopCodes: ['9005'],
+    });
+    expect(detour.uncertainStops[0]).toEqual(expect.objectContaining({
+      detourStopRole: 'uncertain',
+    }));
+  });
+
   test('groups active detour events by route for existing UI consumers', () => {
     const grouped = groupActiveDetourEventsByRoute({
       '8A:shape-1:100-300': mapActiveDetourDoc('8A:shape-1:100-300', {

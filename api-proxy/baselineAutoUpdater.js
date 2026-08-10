@@ -16,6 +16,12 @@ function normalizeRouteId(routeId) {
   return String(routeId || '').trim();
 }
 
+function normalizeRouteIdSet(routeIds = []) {
+  return new Set(
+    Array.from(routeIds || []).map(normalizeRouteId).filter(Boolean)
+  );
+}
+
 function getMapValue(collection, key) {
   if (!collection) return undefined;
   if (typeof collection.get === 'function') return collection.get(key);
@@ -56,13 +62,16 @@ async function evaluateBaselineAutoUpdate({
   forceRefresh,
   getStaticData,
   setBaselineRoutes,
+  protectedRouteIds = [],
   nowMs = Date.now(),
 } = {}) {
+  const protectedRouteIdSet = normalizeRouteIdSet(protectedRouteIds);
   if (!isEnabled()) {
     return {
       baselineDivergence,
       pendingRouteIds: [],
       autoUpdatedRouteIds: [],
+      reviewRequiredRouteIds: [],
       liveData,
     };
   }
@@ -78,6 +87,7 @@ async function evaluateBaselineAutoUpdate({
       baselineDivergence,
       pendingRouteIds: [],
       autoUpdatedRouteIds: [],
+      reviewRequiredRouteIds: [],
       liveData,
     };
   }
@@ -99,7 +109,7 @@ async function evaluateBaselineAutoUpdate({
     }
 
     const current = pendingRoutes.get(routeId);
-    if (current && nowMs >= current.dueAt) {
+    if (current && nowMs >= current.dueAt && !protectedRouteIdSet.has(routeId)) {
       dueRouteIds.push(routeId);
     }
   }
@@ -139,14 +149,23 @@ async function evaluateBaselineAutoUpdate({
   }
 
   const autoUpdatedSet = new Set(autoUpdatedRouteIds);
+  const reviewRequiredRouteIds = getChangedRouteIds(refreshedDivergence)
+    .filter((routeId) => protectedRouteIdSet.has(routeId))
+    .sort();
+  const reviewRequiredSet = new Set(reviewRequiredRouteIds);
   const pendingRouteIds = getChangedRouteIds(refreshedDivergence)
-    .filter((routeId) => !autoUpdatedSet.has(routeId) && pendingRoutes.has(routeId))
+    .filter((routeId) => (
+      !autoUpdatedSet.has(routeId) &&
+      !reviewRequiredSet.has(routeId) &&
+      pendingRoutes.has(routeId)
+    ))
     .sort();
 
   return {
     baselineDivergence: refreshedDivergence,
     pendingRouteIds,
     autoUpdatedRouteIds: autoUpdatedRouteIds.sort(),
+    reviewRequiredRouteIds,
     liveData: refreshedLiveData,
   };
 }
