@@ -209,6 +209,12 @@ function makeSnapshot(doc, previousSnapshot = null) {
     skippedStops,
     riderPublishGates,
     eventWindow,
+    directionId: hasOwn(doc, 'directionId')
+      ? doc.directionId ?? null
+      : previousSnapshot?.directionId ?? null,
+    progressDirection: hasOwn(doc, 'progressDirection')
+      ? (Number(doc.progressDirection) === -1 ? -1 : Number(doc.progressDirection) === 1 ? 1 : null)
+      : previousSnapshot?.progressDirection ?? null,
     detourVersion: hasOwn(doc, 'detourVersion')
       ? doc.detourVersion || null
       : previousSnapshot?.detourVersion || null,
@@ -238,6 +244,39 @@ function makeSnapshot(doc, previousSnapshot = null) {
     lastEvidenceAt,
     latestGpsEvidenceAt,
     geometryLastEvidenceAt,
+    staleVisibilityTracking: hasOwn(doc, 'staleVisibilityTracking')
+      ? cloneJson(doc.staleVisibilityTracking) || null
+      : cloneJson(previousSnapshot?.staleVisibilityTracking) || null,
+    riderVisibilityPolicySource: hasOwn(doc, 'riderVisibilityPolicySource')
+      ? doc.riderVisibilityPolicySource || null
+      : previousSnapshot?.riderVisibilityPolicySource || null,
+    riderVisibilityMissedOpportunityCount: hasOwn(doc, 'riderVisibilityMissedOpportunityCount')
+      ? normalizeVehicleCount(doc.riderVisibilityMissedOpportunityCount)
+      : normalizeVehicleCount(previousSnapshot?.riderVisibilityMissedOpportunityCount),
+    riderVisibilityActiveServiceAgeMs: hasOwn(doc, 'riderVisibilityActiveServiceAgeMs')
+      ? (doc.riderVisibilityActiveServiceAgeMs != null && Number.isFinite(Number(doc.riderVisibilityActiveServiceAgeMs))
+        ? Number(doc.riderVisibilityActiveServiceAgeMs)
+        : null)
+      : previousSnapshot?.riderVisibilityActiveServiceAgeMs ?? null,
+    riderVisibilityMaxActiveServiceAgeMs: hasOwn(doc, 'riderVisibilityMaxActiveServiceAgeMs')
+      ? (doc.riderVisibilityMaxActiveServiceAgeMs != null && Number.isFinite(Number(doc.riderVisibilityMaxActiveServiceAgeMs))
+        ? Number(doc.riderVisibilityMaxActiveServiceAgeMs)
+        : null)
+      : previousSnapshot?.riderVisibilityMaxActiveServiceAgeMs ?? null,
+    riderVisibilityHeadwayMs: hasOwn(doc, 'riderVisibilityHeadwayMs')
+      ? (doc.riderVisibilityHeadwayMs != null && Number.isFinite(Number(doc.riderVisibilityHeadwayMs))
+        ? Number(doc.riderVisibilityHeadwayMs)
+        : null)
+      : previousSnapshot?.riderVisibilityHeadwayMs ?? null,
+    riderVisibilityDirectionId: hasOwn(doc, 'riderVisibilityDirectionId')
+      ? doc.riderVisibilityDirectionId ?? null
+      : previousSnapshot?.riderVisibilityDirectionId ?? null,
+    riderVisibilityPassageTargetAvailable: hasOwn(doc, 'riderVisibilityPassageTargetAvailable')
+      ? doc.riderVisibilityPassageTargetAvailable === true
+      : previousSnapshot?.riderVisibilityPassageTargetAvailable === true,
+    riderVisibilityFailSafeReason: hasOwn(doc, 'riderVisibilityFailSafeReason')
+      ? doc.riderVisibilityFailSafeReason || null
+      : previousSnapshot?.riderVisibilityFailSafeReason || null,
     segments,
     segmentCount: Array.isArray(segments) ? segments.length : 0,
     geometrySignature: Array.isArray(segments)

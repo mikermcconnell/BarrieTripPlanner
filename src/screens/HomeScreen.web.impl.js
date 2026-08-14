@@ -54,6 +54,7 @@ import { routeIsDetouring } from '../utils/routeDetourMatching';
 import { getDisplayedVehiclesForDetourView, isRouteInSameDetourFamily } from '../utils/detourVehicleFiltering';
 import { getRouteShapeVisibleSegments } from '../utils/detourRouteMasking';
 import { getCartographicRouteCoordinates } from '../utils/cartographicRouteGeometry';
+import { focusMapToDetourEvent } from '../utils/detourViewport';
 import {
   getDetourLabelDensity,
   getDetourGeometryOverlayProps,
@@ -86,6 +87,8 @@ import DetourMapLegend from '../components/DetourMapLegend';
 import DetourExplainerButton from '../components/DetourExplainerButton';
 import UpcomingDetourStrip from '../components/UpcomingDetourStrip';
 import OfficialImpactStrip from '../components/OfficialImpactStrip';
+import HolidayServiceBanner from '../components/HolidayServiceBanner';
+import HolidayServiceDetailsSheet from '../components/HolidayServiceDetailsSheet';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { getSelectedDetourSegments, mergeFamilySegmentStopDetails } from '../utils/detourSheetSelection';
 import StatusBadge from '../components/StatusBadge';
@@ -105,7 +108,8 @@ import {
   deriveMappableStopClosureStops,
   mergeStopClosuresForDetourMap,
 } from '../utils/stopClosureMapUtils';
-import { getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
+import { getActiveDetourNotices, getUpcomingDetourNotices } from '../utils/upcomingDetourNotices';
+import { getHolidayServiceInfo, getUpcomingHolidayServiceInfo } from '../utils/holidayService';
 import {
   buildOfficialImpactBody,
   findOfficialImpactsForRoute,
@@ -476,6 +480,8 @@ const HomeScreen = ({ route }) => {
   const tripPreviewFitKeyRef = useRef(null);
   const {
     routes,
+    calendar,
+    calendarDates,
     stops,
     shapes,
     trips,
@@ -578,6 +584,8 @@ const HomeScreen = ({ route }) => {
   const [detourLegendAutoCollapseSignal, setDetourLegendAutoCollapseSignal] = useState(0);
   const [upcomingDetoursCollapsed, setUpcomingDetoursCollapsed] = useState(false);
   const [dismissedUpcomingDetourSignature, setDismissedUpcomingDetourSignature] = useState(null);
+  const [dismissedHolidayNoticeKey, setDismissedHolidayNoticeKey] = useState(null);
+  const [holidayDetailsVisible, setHolidayDetailsVisible] = useState(false);
   const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
   const pulseAnim = useMapPulseAnimation();
   const { isExpanded: routePanelExpanded, toggle: toggleRoutePanel, expand: expandRoutePanel, collapse: collapseRoutePanel, autoCollapseOnSelect } = useRoutePanel({ defaultExpanded: false });
@@ -659,9 +667,16 @@ const HomeScreen = ({ route }) => {
     }
   }, [upcomingDetourNoticeSignature]);
   const activeOfficialServiceImpacts = useMemo(
-    () => getActiveOfficialServiceImpacts(officialServiceImpacts)
-      .filter((impact) => impact.type === 'baseline_detour'),
-    [officialServiceImpacts]
+    () => {
+      const reviewedImpacts = getActiveOfficialServiceImpacts(officialServiceImpacts)
+        .filter((impact) => impact.type === 'baseline_detour');
+      const activeNewsDetours = detoursEnabled ? getActiveDetourNotices(transitNews) : [];
+      return [...new Map(
+        [...reviewedImpacts, ...activeNewsDetours]
+          .map((impact) => [String(impact.id || impact.sourceUrl || impact.title), impact])
+      ).values()];
+    },
+    [detoursEnabled, officialServiceImpacts, transitNews]
   );
   const {
     visibleImpacts: visibleOfficialServiceImpacts,
@@ -849,7 +864,15 @@ const HomeScreen = ({ route }) => {
       routeId: primaryRouteId,
     }));
     handleMapViewModeChange('detour');
-  }, [handleMapViewModeChange]);
+    focusMapToDetourEvent({
+      activeDetours: statusDetours,
+      detourEvent,
+      fallbackRouteId: primaryRouteId,
+      mapRef,
+      edgePadding: { top: 180, right: 60, bottom: 340, left: 60 },
+      animated: true,
+    });
+  }, [handleMapViewModeChange, mapRef, statusDetours]);
 
   const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
     if (!routeId) return;
@@ -1055,6 +1078,32 @@ const HomeScreen = ({ route }) => {
     timeMode,
     selectedTime,
   } = tripState;
+
+  const tripPlannerDate = useMemo(
+    () => (timeMode === 'now' ? new Date() : (selectedTime || new Date())),
+    [selectedTime, timeMode]
+  );
+  const tripHolidayServiceInfo = useMemo(() => getHolidayServiceInfo({
+    date: tripPlannerDate,
+    calendar,
+    calendarDates,
+    trips,
+    routes,
+    holidayServiceNotices: transitNewsImpacts,
+  }), [calendar, calendarDates, routes, transitNewsImpacts, tripPlannerDate, trips]);
+  const homeHolidayServiceInfo = useMemo(() => getUpcomingHolidayServiceInfo({
+    calendar,
+    calendarDates,
+    trips,
+    routes,
+    holidayServiceNotices: transitNewsImpacts,
+    daysAhead: 7,
+  }), [calendar, calendarDates, routes, transitNewsImpacts, trips]);
+  const homeHolidayNoticeKey = homeHolidayServiceInfo?.noticeKey || homeHolidayServiceInfo?.dateKey || null;
+  const visibleHomeHolidayServiceInfo = homeHolidayNoticeKey !== dismissedHolidayNoticeKey
+    ? homeHolidayServiceInfo
+    : null;
+  const showHolidayNotice = Boolean(visibleHomeHolidayServiceInfo);
 
   const {
     tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
@@ -2081,6 +2130,7 @@ const HomeScreen = ({ route }) => {
           onTimeModeChange={setTimeMode}
           onSelectedTimeChange={setSelectedTime}
           compact={shouldCompactTripSearchHeader}
+          holidayServiceInfo={tripHolidayServiceInfo}
           onSearch={() => {
             if (tripFromLocation && tripToLocation) {
               addToHistory('trips', {
@@ -2203,6 +2253,22 @@ const HomeScreen = ({ route }) => {
               ),
             ]}
           />
+          {showHolidayNotice ? (
+            <HolidayServiceBanner
+              holidayServiceInfo={visibleHomeHolidayServiceInfo}
+              onPress={() => setHolidayDetailsVisible(true)}
+              onDismiss={() => setDismissedHolidayNoticeKey(homeHolidayNoticeKey)}
+              style={[
+                styles.upcomingDetourStrip,
+                !isWideWeb && visibleOfficialServiceImpacts.length > 0 && { top: 224 },
+                isWideWeb && {
+                  top: mapChromeOffsets.mapViewTop + (visibleOfficialServiceImpacts.length > 0 ? 158 : 54),
+                  left: desktopMapMainLeft,
+                  right: 'auto',
+                },
+              ]}
+            />
+          ) : null}
 
           {!isTripPlanningMode && !isDetourView && (
             <DetourExplainerButton style={styles.detourExplainerButton} />
@@ -2451,6 +2517,12 @@ const HomeScreen = ({ route }) => {
           onDirectionsToHub={handleZoneDirectionsToHub}
         />
       )}
+
+      <HolidayServiceDetailsSheet
+        visible={holidayDetailsVisible}
+        holidayServiceInfo={homeHolidayServiceInfo}
+        onClose={() => setHolidayDetailsVisible(false)}
+      />
 
     </View>
   );

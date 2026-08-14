@@ -27,7 +27,15 @@ describe('gtfsSnapshotStore', () => {
         '12B': { __default__: ['100', '725'] },
       },
       stopsById: new Map([
-        ['725', { id: '725', code: '725', name: 'Barrie South GO', latitude: 44.36, longitude: -79.63 }],
+        ['725', {
+          id: '725',
+          code: '725',
+          name: 'Barrie South GO',
+          latitude: 44.36,
+          longitude: -79.63,
+          locationType: 0,
+          parentStation: 'barrie-south-go',
+        }],
       ]),
       lastRefresh: 1770000000000,
     });
@@ -38,7 +46,13 @@ describe('gtfsSnapshotStore', () => {
         '12B': { __default__: ['100', '725'] },
       },
       stopsById: {
-        '725': { id: '725', code: '725', name: 'Barrie South GO' },
+        '725': {
+          id: '725',
+          code: '725',
+          name: 'Barrie South GO',
+          locationType: 0,
+          parentStation: 'barrie-south-go',
+        },
       },
       sourceLastRefresh: 1770000000000,
     });

@@ -22,8 +22,18 @@ jest.mock('react-native', () => ({
 jest.mock('../components/Icon', () => 'Icon');
 
 const DetourAlertStrip = require('../components/DetourAlertStrip').default;
+const WebDetourAlertStrip = require('../components/DetourAlertStrip.web').default;
 
 describe('DetourAlertStrip', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
   test('opens details directly when the collapsed banner has one detour', () => {
     const onPress = jest.fn();
     let inst;
@@ -47,6 +57,35 @@ describe('DetourAlertStrip', () => {
       primaryRouteId: '8A',
       title: 'Route 8 detour',
     }));
+  });
+
+  test.each([
+    ['native', DetourAlertStrip],
+    ['web', WebDetourAlertStrip],
+  ])('%s Route 100 banner explains when exact details are pending', (_platform, Component) => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(Component, {
+        activeDetours: {
+          '100:pending': {
+            routeId: '100',
+            state: 'active',
+            confidence: 'high',
+            alertVisible: true,
+            detailsPending: true,
+          },
+        },
+        routes: [{ id: '100', shortName: '100' }],
+        onPress: jest.fn(),
+      }));
+    });
+
+    const copy = inst.root.findAllByType('Text')
+      .flatMap((node) => node.children)
+      .join(' ');
+    expect(copy).toContain('Exact path and affected stops are still being confirmed.');
+
+    act(() => inst.unmount());
   });
 
   test('dismisses the active detour bar until a new detour becomes active', () => {
@@ -334,6 +373,80 @@ describe('DetourAlertStrip', () => {
     const detailRow = inst.root.findAllByType('TouchableOpacity')
       .find((node) => String(node.props.accessibilityLabel || '').includes('Mulcaster & Simcoe'));
     expect(detailRow.props.accessibilityLabel).toContain('Routes 10, 11, 101');
+
+    const minimizeButton = inst.root.findByProps({ accessibilityLabel: 'Minimize active detour list' });
+    expect(minimizeButton.props.style.minHeight).toBe(44);
+    act(() => minimizeButton.props.onPress());
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'Minimize active detour list' })).toHaveLength(0);
+    expect(inst.root.findByProps({ accessibilityLabel: 'Expand detour list' })).toBeTruthy();
+
+    act(() => {
+      inst.unmount();
+    });
+  });
+
+  test('web expanded detour list has an explicit minimize button', () => {
+    let inst;
+    act(() => {
+      inst = create(React.createElement(WebDetourAlertStrip, {
+        activeDetours: {
+          '8A': { state: 'active', confidence: 'high' },
+          '10': { state: 'active', confidence: 'high' },
+        },
+        routes: [
+          { id: '8A', shortName: '8A' },
+          { id: '10', shortName: '10' },
+        ],
+        onPress: jest.fn(),
+      }));
+    });
+
+    act(() => inst.root.findByProps({ accessibilityLabel: 'Expand detour list' }).props.onPress());
+    const minimizeButton = inst.root.findByProps({ accessibilityLabel: 'Minimize active detour list' });
+    expect(minimizeButton.props.style.minHeight).toBe(44);
+    act(() => minimizeButton.props.onPress());
+
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'Minimize active detour list' })).toHaveLength(0);
+    expect(inst.root.findByProps({ accessibilityLabel: 'Expand detour list' })).toBeTruthy();
+
+    act(() => {
+      inst.unmount();
+    });
+  });
+
+  test.each([
+    ['native', DetourAlertStrip],
+    ['web', WebDetourAlertStrip],
+  ])('%s banner waits for a specific detour selection before calling onPress', (_platform, Component) => {
+    const onPress = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(Component, {
+        activeDetours: {
+          '8A': { state: 'active', confidence: 'high', title: 'Barrie Road detour' },
+          '10': { state: 'active', confidence: 'high', title: 'Bayfield Street detour' },
+        },
+        routes: [
+          { id: '8A', shortName: '8A' },
+          { id: '10', shortName: '10' },
+        ],
+        onPress,
+      }));
+    });
+
+    act(() => inst.root.findByProps({ accessibilityLabel: 'Expand detour list' }).props.onPress());
+    expect(onPress).not.toHaveBeenCalled();
+
+    const selectedDetour = inst.root.findAllByType('TouchableOpacity')
+      .find((node) => String(node.props.accessibilityLabel || '').includes('Barrie Road'));
+    act(() => selectedDetour.props.onPress());
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onPress).toHaveBeenCalledWith('8A', expect.objectContaining({
+      title: 'Barrie Road',
+      primaryRouteId: '8A',
+    }));
 
     act(() => {
       inst.unmount();

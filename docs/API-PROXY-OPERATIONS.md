@@ -272,9 +272,12 @@ Guardrails:
   - `https://www.myridebarrie.ca/News/GetAllNews`
 - In `manual` or `scheduled` mode, run one sync with `POST /api/news-run-once`.
 - Publishes normalized items to Firestore `transitNews` and parsed rider-facing impacts to `transitNewsImpacts`.
+- Deterministically classifies dated official holiday operating notices as `holiday_service` impacts. These records include the service date, holiday name, stated schedule level, official copy, and source URL; vague holiday mentions fail closed.
 - Sends Expo push notifications only to opted-in route subscribers (or all opted-in users for explicitly system-wide news).
+- Sends one advance holiday-service reminder when a parsed holiday impact enters the 48-hour window. Holiday reminders use the **Service Alerts** preference, are leased and deduplicated in `holidayServicePushNotifications`, and do not resend successfully accepted device tokens after a partial failure.
 - Each scheduled detour tick also sends background-capable push alerts for newly rider-visible detours to opted-in route subscribers.
 - Detour sends are leased and deduplicated in `detourPushNotifications`; failed leases can be retried by a later tick.
+- A detour clear sends **Route X has returned to regular routing** only when the publisher accepted auditable `normal-route-gps` clear proof. The restoration goes only to current devices recorded as having received that exact detour alert, respects a later Service Alerts opt-out, and retries partial delivery without resending to successful devices. Operator clears, timeouts, hidden alerts, baseline replacements, and superseded event documents do not generate restoration pushes.
 - Expo ticket errors are counted and `DeviceNotRegistered` tokens are removed only when they still match the affected user.
 - Push tokens are stored per device under `users/{uid}/pushTokens/{deviceId}` so signing in on another device does not disable the first device.
 - Expo ticket IDs are persisted in `pushNotificationReceipts`; later scheduled ticks check delivery receipts and invalidate devices rejected after initial acceptance.
@@ -359,7 +362,7 @@ Baseline endpoints:
 - `POST /api/baseline/routes` with `{ "routeIds": ["12"] }` — replace only selected route baselines from current GTFS
 - `POST /api/baseline/clear`
 
-Only detour admins should run manual baseline mutation endpoints. During worker ticks, meaningful GTFS route geometry changes are handled automatically: the changed route is hidden from riders while pending, force-rechecked after the stability window, then that route's baseline is replaced from live GTFS and old active detour state clears with `baseline-auto-updated`.
+Only detour admins should run manual baseline mutation endpoints. During worker ticks, meaningful GTFS route geometry changes on routes without active detours are handled automatically: the changed route is hidden from riders while pending, force-rechecked after the stability window, then that route's baseline is replaced from live GTFS. A route with an active detour is protected from automatic adoption and clearing. Its record retains its previous visibility and publishes `baselineReviewRequired: true` until an operator determines whether the GTFS change is a permanent redesign or the construction detour itself. Use the route-scoped baseline endpoint only after that review.
 
 `GET /api/detour-rollout-health` includes a `launchReadiness` block with pass/warn/fail checks for recent ticks, consecutive failures, publish failure rate, flapping routes, and operator-labelled detection precision. By default, readiness stays at `pilot_ready_with_cautions` until at least 20 unique, rider-visible real-world cases have an audited `true-positive` or `false-positive` operator review and precision is at least 90%. Hidden, uncertain, simulated, and short clear/re-detect flap duplicates do not count. Configure the sample floor with `DETOUR_MIN_LABELLED_DETECTIONS`.
 
@@ -377,7 +380,7 @@ Reviews live in `detourOperatorReviews`; every edit is copied to a `revisions` s
 The response retains `falsePositiveRate` for backward compatibility, but marks it `measurement: "short-lived-clear-proxy"` and `readinessEligible: false`. It counts cleared detours under five minutes only as a review signal. The ten-minute clear grace means this proxy cannot establish real false-positive accuracy. `suspiciousShortLivedDetours` similarly identifies cases for human review rather than labelling them automatically.
 
 Flapping is counted by physical/event identity when one is available, not by route alone. Technical cleanup events such as `superseded-by-equivalent-event`, other `superseded-by-*` migrations, and `baseline-auto-updated` are excluded so migrations and separate same-route closures do not look like rider-visible flapping.
-Launch readiness also checks whether the stored baseline diverges from current live GTFS. A route that is waiting for the auto-baseline stability recheck is hidden from riders until it is either accepted as the new baseline or stops diverging. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
+Launch readiness also checks whether the stored baseline diverges from current live GTFS. A route without an active detour that is waiting for the auto-baseline stability recheck is hidden until it is either accepted as the new baseline or stops diverging. An active route instead reports `baselineReviewRequired` and keeps its previous detour visibility until operator review. Stale/headway warnings are monitoring evidence only and should be reviewed before public rollout; they should not clear active detours without normal-route GPS proof.
 
 `GET /api/detour-status` and `GET /api/detour-rollout-health` also include operational sampling diagnostics:
 
@@ -512,6 +515,10 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 - `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=1.25`
 - `DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS=600000`
 - `DETOUR_CANDIDATE_CONFIRMATION_MAX_MS=5400000`
+- `DETOUR_RIDER_VISIBILITY_MAX_EVIDENCE_AGE_MS=5400000` as the minimum active-service fallback age, not wall-clock age
+- `DETOUR_RIDER_VISIBILITY_HEADWAY_BUFFER_MS=600000`
+- `DETOUR_RIDER_VISIBILITY_PASSAGE_MAX_GAP_MS=2700000`
+- `DETOUR_RIDER_VISIBILITY_PASSAGE_MARGIN_METERS=75`
 - `DETOUR_HISTORY_ENABLED=true`
 - `NEWS_WORKER_ENABLED=true`
 - `NEWS_WORKER_MODE=scheduled`

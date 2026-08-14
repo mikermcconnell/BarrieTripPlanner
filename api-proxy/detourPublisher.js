@@ -1920,6 +1920,12 @@ function rememberPublishedDetour(publishId, data = {}) {
     detourVersion: data.detourVersion || null,
     detourModel: data.detourModel || null,
     eventWindow: cloneJson(data.eventWindow) || null,
+    directionId: data.directionId ?? null,
+    progressDirection: Number(data.progressDirection) === -1
+      ? -1
+      : Number(data.progressDirection) === 1
+        ? 1
+        : null,
     handoffSourceRouteId: data.handoffSourceRouteId || null,
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
@@ -1938,6 +1944,17 @@ function rememberPublishedDetour(publishId, data = {}) {
     lastEvidenceAt: data.lastEvidenceAt || null,
     latestGpsEvidenceAt: data.latestGpsEvidenceAt || data.lastEvidenceAt || null,
     geometryLastEvidenceAt: data.geometryLastEvidenceAt || data.lastEvidenceAt || null,
+    staleVisibilityTracking: cloneJson(data.staleVisibilityTracking) || null,
+    riderVisibilityPolicySource: data.riderVisibilityPolicySource || null,
+    riderVisibilityMissedOpportunityCount: normalizeVehicleCount(
+      data.riderVisibilityMissedOpportunityCount
+    ),
+    riderVisibilityActiveServiceAgeMs: data.riderVisibilityActiveServiceAgeMs ?? null,
+    riderVisibilityMaxActiveServiceAgeMs: data.riderVisibilityMaxActiveServiceAgeMs ?? null,
+    riderVisibilityHeadwayMs: data.riderVisibilityHeadwayMs ?? null,
+    riderVisibilityDirectionId: data.riderVisibilityDirectionId ?? null,
+    riderVisibilityPassageTargetAvailable: data.riderVisibilityPassageTargetAvailable === true,
+    riderVisibilityFailSafeReason: data.riderVisibilityFailSafeReason || null,
     detourZone: cloneJson(data.detourZone) || null,
     clearWindow: cloneJson(data.clearWindow) || null,
     clearWindows: cloneJson(data.clearWindows) || [],
@@ -2343,7 +2360,48 @@ function hasAuditableGpsProofRecord(proof = {}) {
     return segmentProofs.every(hasAuditableGpsProofRecord);
   }
 
-  return Boolean(String(proof.shapeId || '').trim());
+  if (!String(proof.shapeId || '').trim()) return false;
+  if (proof.method === 'obsolete-shape-all-current-vehicles-on-route') {
+    const requiredGraceMs = Number(proof.requiredGraceMs);
+    const observedGraceMs = Number(proof.observedGraceMs);
+    return Boolean(
+      proof.passed === true &&
+      proof.allCurrentVehiclesOnRoute === true &&
+      Number.isFinite(requiredGraceMs) &&
+      requiredGraceMs > 0 &&
+      Number.isFinite(observedGraceMs) &&
+      observedGraceMs >= requiredGraceMs
+    );
+  }
+  const coverageRatio = Number(proof.coverageRatio);
+  const requiredCoverageRatio = Number(proof.requiredCoverageRatio);
+  const movementMeters = Number(proof.movementMeters);
+  const requiredMovementMeters = Number(proof.requiredMovementMeters);
+  const coreSampleCount = Number(proof.coreSampleCount);
+  const maxProgressGapMeters = Number(proof.maxProgressGapMeters);
+  const maxAllowedProgressGapMeters = Number(proof.maxAllowedProgressGapMeters);
+  return Boolean(
+    proof.passed === true &&
+    proof.coveragePassed === true &&
+    proof.movementPassed === true &&
+    proof.coreCoveragePassed === true &&
+    proof.progressGapPassed === true &&
+    Number.isFinite(coverageRatio) &&
+    Number.isFinite(requiredCoverageRatio) &&
+    requiredCoverageRatio > 0 &&
+    requiredCoverageRatio <= 1 &&
+    coverageRatio >= requiredCoverageRatio &&
+    Number.isFinite(movementMeters) &&
+    Number.isFinite(requiredMovementMeters) &&
+    requiredMovementMeters > 0 &&
+    movementMeters >= requiredMovementMeters &&
+    Number.isFinite(coreSampleCount) &&
+    coreSampleCount > 0 &&
+    Number.isFinite(maxProgressGapMeters) &&
+    Number.isFinite(maxAllowedProgressGapMeters) &&
+    maxAllowedProgressGapMeters > 0 &&
+    maxProgressGapMeters <= maxAllowedProgressGapMeters
+  );
 }
 
 function hasAuditableNormalRouteClearProof(previousSnapshot) {
@@ -2666,11 +2724,34 @@ function assignSnapshotDate(doc, key, valueMs) {
   }
 }
 
+function applyStaleVisibilityDiagnostics(doc, decision = {}) {
+  doc.riderVisibilityPolicySource = decision.policySource || null;
+  doc.riderVisibilityMissedOpportunityCount = Number.isFinite(decision.missedOpportunityCount)
+    ? decision.missedOpportunityCount
+    : 0;
+  doc.riderVisibilityActiveServiceAgeMs = Number.isFinite(decision.activeServiceAgeMs)
+    ? decision.activeServiceAgeMs
+    : null;
+  doc.riderVisibilityMaxActiveServiceAgeMs = Number.isFinite(decision.maxActiveServiceAgeMs)
+    ? decision.maxActiveServiceAgeMs
+    : null;
+  doc.riderVisibilityHeadwayMs = Number.isFinite(decision.headwayMs)
+    ? decision.headwayMs
+    : null;
+  doc.riderVisibilityDirectionId = decision.directionId ?? null;
+  doc.riderVisibilityPassageTargetAvailable = decision.passageTargetAvailable === true;
+  doc.riderVisibilityFailSafeReason = decision.failSafeReason || null;
+  if (decision.staleVisibilityTracking) {
+    doc.staleVisibilityTracking = cloneJson(decision.staleVisibilityTracking);
+  }
+}
+
 function buildRetainedAbsentDetourDoc(
   routeId,
   previousSnapshot,
   now,
-  publishId = null
+  publishId = null,
+  context = {}
 ) {
   const vehicleCount = normalizeVehicleCount(previousSnapshot?.vehicleCount);
   const uniqueVehicleCount = normalizeVehicleCount(
@@ -2721,11 +2802,16 @@ function buildRetainedAbsentDetourDoc(
     routeId,
     detour: detourForVisibility,
     previousSnapshot,
+    vehicles: context.vehicles,
+    scheduleIndex: context.scheduleIndex,
+    shapes: context.shapes,
+    tripMapping: context.tripMapping,
     now,
   });
   doc.riderVisible = riderVisibility.riderVisible !== false;
   doc.riderVisibilityReason = riderVisibility.reason || null;
   doc.staleForReview = Boolean(riderVisibility.staleForReview);
+  applyStaleVisibilityDiagnostics(doc, riderVisibility);
 
   if (doc.riderVisible !== false && !hasTrustworthyRiderGeometry(previousSnapshot)) {
     doc.riderVisible = false;
@@ -2794,8 +2880,29 @@ function getBaselineAutoUpdatedRouteIds(options = {}) {
   return ids;
 }
 
+function getBaselineReviewRequiredRouteIds(options = {}) {
+  const ids = new Set();
+  (options.baselineReviewRequiredRouteIds || []).forEach((routeId) => {
+    if (routeId != null && String(routeId).trim()) {
+      ids.add(String(routeId).trim());
+    }
+  });
+  return ids;
+}
+
 function applyBaselineSafetySuppression(doc, routeId, baselineRouteIds = {}) {
   const normalizedRouteId = String(routeId);
+  // Active records are merge-written. Always reset route-scoped baseline
+  // markers so an approved or otherwise resolved review cannot leave stale
+  // operational flags on the Firestore document.
+  doc.baselineReviewRequired = false;
+  doc.baselineUpdatePending = false;
+  doc.baselineDiverged = false;
+  if (baselineRouteIds.reviewRequired?.has(normalizedRouteId)) {
+    doc.baselineReviewRequired = true;
+    doc.baselineDiverged = true;
+    return doc;
+  }
   if (baselineRouteIds.pending?.has(normalizedRouteId)) {
     doc.riderVisible = false;
     doc.riderVisibilityReason = 'baseline-update-pending';
@@ -2818,7 +2925,7 @@ async function publishDetours(activeDetours, options = {}) {
   const db = getDb();
   if (!db) {
     console.warn('[detourPublisher] Firestore not configured — skipping publish');
-    return { staleAutoClearedRouteIds: [] };
+    return { staleAutoClearedRouteIds: [], serviceRestorationEvents: [] };
   }
   const storageConfig = resolvePublisherStorageConfig(options.storageConfig);
   storageConfig.writerMetadata = options.writerMetadata ||
@@ -2826,15 +2933,18 @@ async function publishDetours(activeDetours, options = {}) {
   await hydratePublisherState(db, storageConfig);
 
   const now = options.now || Date.now();
+  const serviceRestorationEvents = [];
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
   const scheduleIndex = options.scheduleIndex || options.gtfsData?.scheduleIndex || null;
   const baselineDivergedRouteIds = getBaselineDivergedRouteIds(options);
   const baselinePendingRouteIds = getBaselinePendingRouteIds(options);
   const baselineAutoUpdatedRouteIds = getBaselineAutoUpdatedRouteIds(options);
+  const baselineReviewRequiredRouteIds = getBaselineReviewRequiredRouteIds(options);
   const baselineRouteIds = {
     diverged: baselineDivergedRouteIds,
     pending: baselinePendingRouteIds,
     autoUpdated: baselineAutoUpdatedRouteIds,
+    reviewRequired: baselineReviewRequiredRouteIds,
   };
   const gtfsData = options.gtfsData || {};
   const noticeStopImpacts = Array.isArray(options.noticeStopImpacts)
@@ -2891,7 +3001,7 @@ async function publishDetours(activeDetours, options = {}) {
     console.warn(
       `[detourPublisher] Suppressing activeDetours deletion: ${options.suppressDeleteReason || 'unknown'}`
     );
-    return { staleAutoClearedRouteIds: [] };
+    return { staleAutoClearedRouteIds: [], serviceRestorationEvents };
   }
 
   const removedIds = [...lastPublishedIds].filter(id => !currentIds.has(id));
@@ -2941,6 +3051,7 @@ async function publishDetours(activeDetours, options = {}) {
         clearReason: 'obsolete-shape-normal-route-observed',
       };
       await deletePublishedDetour(db, publishId, event, 'delete obsolete-shape detour', storageConfig);
+      serviceRestorationEvents.push(event);
       continue;
     }
     const supersedingGpsDetour = getSupersedingGpsDetour(routeId, previous, publishableDetours);
@@ -2962,7 +3073,12 @@ async function publishDetours(activeDetours, options = {}) {
     if (!hasNormalRouteClearReason(previous) || (
       isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)
     )) {
-      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
+      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId, {
+        vehicles,
+        scheduleIndex,
+        shapes: options.shapes || options.gtfsData?.shapes || null,
+        tripMapping: options.gtfsData?.tripMapping || null,
+      });
       if (isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)) {
         blockUnauditableV2Clearance(retainedDoc, previous, now);
       }
@@ -2987,6 +3103,9 @@ async function publishDetours(activeDetours, options = {}) {
     }
     const event = buildClearedEvent(routeId, previous, now);
     await deletePublishedDetour(db, publishId, event, 'delete', storageConfig);
+    if (hasAuditableNormalRouteClearProof(previous)) {
+      serviceRestorationEvents.push(event);
+    }
   }
 
   const sharedEventAssignments = buildSharedDetourEventAssignmentsForPublish(publishableDetours);
@@ -3170,11 +3289,14 @@ async function publishDetours(activeDetours, options = {}) {
       previousSnapshot,
       vehicles,
       scheduleIndex,
+      shapes: options.shapes || options.gtfsData?.shapes || null,
+      tripMapping: options.gtfsData?.tripMapping || null,
       now,
     });
     doc.riderVisible = riderVisibility.riderVisible !== false;
     doc.riderVisibilityReason = riderVisibility.reason || null;
     doc.staleForReview = Boolean(riderVisibility.staleForReview);
+    applyStaleVisibilityDiagnostics(doc, riderVisibility);
 
     if (shouldClearSuppressedGeometry(geo, previousSnapshot)) {
       doc.riderVisible = false;
@@ -3193,7 +3315,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
     applyRiderVisibilityGuard(doc, geo);
     applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);
-  attachRiderAlertVisibility(doc, {
+    attachRiderAlertVisibility(doc, {
       now,
       geometry: geo,
     });
@@ -3232,6 +3354,9 @@ async function publishDetours(activeDetours, options = {}) {
       doc.noticeStopImpactSourceNewsIds = Array.isArray(geo.noticeStopImpactSourceNewsIds)
         ? geo.noticeStopImpactSourceNewsIds
         : [];
+      doc.uncertainStops = Array.isArray(geo.uncertainStops) ? geo.uncertainStops : [];
+      doc.uncertainStopIds = Array.isArray(geo.uncertainStopIds) ? geo.uncertainStopIds : [];
+      doc.uncertainStopCodes = Array.isArray(geo.uncertainStopCodes) ? geo.uncertainStopCodes : [];
       doc.confidence = geo.confidence || null;
       doc.evidencePointCount = geo.evidencePointCount ?? null;
       doc.lastEvidenceAt = geo.lastEvidenceAt ?? null;
@@ -3315,6 +3440,7 @@ async function publishDetours(activeDetours, options = {}) {
   await pruneHistoryIfNeeded(db, now, storageConfig);
   return {
     staleAutoClearedRouteIds: [],
+    serviceRestorationEvents,
   };
 }
 

@@ -84,19 +84,33 @@ function buildScheduleIndex({ tripsRaw, stopTimesCSV = '', calendarCSV = '', cal
       routeId: row.route_id,
       serviceId: row.service_id,
       directionId: row.direction_id || '',
+      shapeId: row.shape_id || '',
     });
   }
 
   const firstStopTimeByTripId = new Map();
+  const lastStopTimeByTripId = new Map();
   if (stopTimesCSV) {
     for (const row of parseCSV(stopTimesCSV)) {
       const tripId = row.trip_id;
       if (!tripId || !tripMetaById.has(tripId)) continue;
-      const seconds = parseGtfsTimeToSeconds(row.departure_time || row.arrival_time);
-      if (!Number.isFinite(seconds)) continue;
-      const current = firstStopTimeByTripId.get(tripId);
-      if (current == null || seconds < current) {
-        firstStopTimeByTripId.set(tripId, seconds);
+      const arrivalSeconds = parseGtfsTimeToSeconds(row.arrival_time || row.departure_time);
+      const departureSeconds = parseGtfsTimeToSeconds(row.departure_time || row.arrival_time);
+      if (Number.isFinite(departureSeconds)) {
+        const currentFirst = firstStopTimeByTripId.get(tripId);
+        if (currentFirst == null || departureSeconds < currentFirst) {
+          firstStopTimeByTripId.set(tripId, departureSeconds);
+        }
+      }
+      const endSeconds = Math.max(
+        Number.isFinite(arrivalSeconds) ? arrivalSeconds : -Infinity,
+        Number.isFinite(departureSeconds) ? departureSeconds : -Infinity
+      );
+      if (Number.isFinite(endSeconds)) {
+        const currentLast = lastStopTimeByTripId.get(tripId);
+        if (currentLast == null || endSeconds > currentLast) {
+          lastStopTimeByTripId.set(tripId, endSeconds);
+        }
       }
     }
   }
@@ -111,7 +125,9 @@ function buildScheduleIndex({ tripsRaw, stopTimesCSV = '', calendarCSV = '', cal
       routeId: meta.routeId,
       serviceId: meta.serviceId,
       directionId: meta.directionId,
+      shapeId: meta.shapeId,
       startTimeSeconds,
+      endTimeSeconds: lastStopTimeByTripId.get(tripId) ?? null,
     });
   }
   for (const trips of tripsByRouteId.values()) {
@@ -212,6 +228,8 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
       name: String(row.stop_name || '').trim(),
       latitude: Number.parseFloat(row.stop_lat),
       longitude: Number.parseFloat(row.stop_lon),
+      locationType: Number.parseInt(row.location_type || '0', 10) || 0,
+      parentStation: String(row.parent_station || '').trim() || null,
     };
     stopsById.set(stop.id, stop);
     if (stop.code) stopsByCode.set(stop.code, stop);

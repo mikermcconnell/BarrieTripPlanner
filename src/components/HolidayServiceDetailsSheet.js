@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, StyleSheet, Linking } from 'react-native';
 import Icon from './Icon';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 
@@ -39,6 +39,19 @@ const HolidayServiceDetailsSheet = ({
           </View>
 
           <Text style={styles.summary}>{holidayServiceInfo.detailsMessage}</Text>
+
+          {holidayServiceInfo.sourceUrl ? (
+            <TouchableOpacity
+              style={styles.sourceButton}
+              onPress={() => {
+                void Linking.openURL(holidayServiceInfo.sourceUrl).catch(() => {});
+              }}
+              accessibilityRole="link"
+              accessibilityLabel="Open official MyRide holiday service notice"
+            >
+              <Text style={styles.sourceButtonText}>Open official MyRide notice</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {isLoadingDetails && (
             <View style={styles.loadingRow}>
@@ -150,6 +163,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
     lineHeight: 21,
+  },
+  sourceButton: {
+    alignSelf: 'flex-start',
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primarySubtle,
+  },
+  sourceButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
   },
   loadingRow: {
     marginTop: SPACING.md,

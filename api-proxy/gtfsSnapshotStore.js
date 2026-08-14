@@ -15,6 +15,8 @@ function normalizeStop(stop, fallbackId) {
     name: String(stop?.name ?? stop?.stop_name ?? '').trim(),
     latitude: Number(stop?.latitude ?? stop?.stop_lat),
     longitude: Number(stop?.longitude ?? stop?.stop_lon),
+    locationType: Number.parseInt(String(stop?.locationType ?? stop?.location_type ?? 0), 10) || 0,
+    parentStation: String(stop?.parentStation ?? stop?.parent_station ?? '').trim() || null,
   };
 }
 

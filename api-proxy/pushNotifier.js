@@ -1,9 +1,13 @@
 const { getDb } = require('./firebaseAdmin');
+const { createHash } = require('crypto');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
 const BATCH_SIZE = 100;
 const USER_PAGE_SIZE = 500;
+const HOLIDAY_REMINDER_COLLECTION = 'holidayServicePushNotifications';
+const HOLIDAY_REMINDER_LEAD_MS = 48 * 60 * 60 * 1000;
+const HOLIDAY_REMINDER_LEASE_MS = 5 * 60 * 1000;
 
 async function loadUsersWithPushTokens(db) {
   let modernUsers = [];
@@ -271,6 +275,122 @@ function resolveRecipients(newsItem, subscriberIndex) {
   return recipients;
 }
 
+function isHolidayReminderDue(impact, nowMs = Date.now()) {
+  if (impact?.type !== 'holiday_service' || impact?.status === 'expired' || impact?.status === 'archived') {
+    return false;
+  }
+  const startsAt = Number(impact?.startsAt);
+  if (!Number.isFinite(startsAt)) return false;
+  const timeUntilStart = startsAt - nowMs;
+  return timeUntilStart > 0 && timeUntilStart <= HOLIDAY_REMINDER_LEAD_MS;
+}
+
+function holidayReminderId(impact) {
+  return String(`${impact?.sourceNewsId || impact?.id || 'holiday'}_${impact?.dateKey || impact?.startsAt || 'date'}`)
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 500);
+}
+
+function pushTokenHash(token) {
+  return createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function resolveHolidayReminderRecipients(users, impact) {
+  const affectedRoutes = new Set((impact?.affectedRoutes || []).map((route) => String(route).toUpperCase()));
+  return (users || []).filter((user) => (
+    user.serviceAlertsEnabled === true &&
+    (impact?.affectsAllRoutes === true || affectedRoutes.size === 0 || user.subscribedRoutes.some((route) => affectedRoutes.has(route)))
+  ));
+}
+
+async function claimHolidayReminder(db, id, nowMs = Date.now()) {
+  const ref = db.collection(HOLIDAY_REMINDER_COLLECTION).doc(id);
+  return db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const existing = snapshot.exists ? snapshot.data() : null;
+    const leaseUntilMs = Number(existing?.leaseUntilMs || 0);
+    if (existing?.status === 'delivered' || (existing?.status === 'processing' && leaseUntilMs > nowMs)) {
+      return null;
+    }
+    tx.set(ref, {
+      status: 'processing',
+      attempts: Number(existing?.attempts || 0) + 1,
+      leaseUntilMs: nowMs + HOLIDAY_REMINDER_LEASE_MS,
+      updatedAt: new Date(nowMs),
+    }, { merge: true });
+    return {
+      ref,
+      terminalTokenHashes: Array.isArray(existing?.terminalTokenHashes) ? existing.terminalTokenHashes : [],
+    };
+  });
+}
+
+async function notifyUsersOfHolidayServiceReminders(impacts, { db = getDb(), nowMs = Date.now() } = {}) {
+  if (!db) return { attempted: 0, accepted: 0, failed: 0, skipped: 0 };
+  const due = (impacts || []).filter((impact) => isHolidayReminderDue(impact, nowMs));
+  const summary = { attempted: 0, accepted: 0, failed: 0, skipped: 0 };
+  if (due.length === 0) return summary;
+
+  const users = await loadUsersWithPushTokens(db);
+  for (const impact of due) {
+    const claim = await claimHolidayReminder(db, holidayReminderId(impact), nowMs);
+    if (!claim) {
+      summary.skipped += 1;
+      continue;
+    }
+
+    const terminalTokenHashes = new Set(claim.terminalTokenHashes);
+    const recipients = resolveHolidayReminderRecipients(users, impact)
+      .filter((user) => !terminalTokenHashes.has(pushTokenHash(user.pushToken)));
+    const title = `${impact.holidayName || 'Holiday'} service reminder`;
+    const body = String(impact.message || `${impact.serviceLabel || 'Holiday service'} is scheduled.`)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
+    const messages = recipients.map((user) => ({
+      uid: user.uid,
+      deviceId: user.deviceId,
+      token: user.pushToken,
+      message: {
+        to: user.pushToken,
+        sound: 'default',
+        title,
+        body,
+        data: {
+          type: 'holiday_service',
+          dateKey: impact.dateKey || null,
+          newsId: impact.sourceNewsId || null,
+        },
+        channelId: 'alerts',
+      },
+    }));
+
+    const result = messages.length > 0
+      ? await sendExpoPushMessages(messages, { db })
+      : { attempted: 0, accepted: 0, failed: 0 };
+    summary.attempted += result.attempted;
+    summary.accepted += result.accepted;
+    summary.failed += result.failed;
+    for (const outcome of result.outcomes || []) {
+      if (outcome.status === 'accepted' || outcome.status === 'invalid') {
+        terminalTokenHashes.add(pushTokenHash(outcome.token));
+      }
+    }
+    await claim.ref.set({
+      status: result.failed === 0 ? 'delivered' : 'failed',
+      attempted: result.attempted,
+      accepted: result.accepted,
+      failed: result.failed,
+      sourceNewsId: impact.sourceNewsId || null,
+      dateKey: impact.dateKey || null,
+      terminalTokenHashes: [...terminalTokenHashes],
+      completedAt: new Date(nowMs),
+      leaseUntilMs: 0,
+    }, { merge: true });
+  }
+  return summary;
+}
+
 /**
  * Send push notifications for new transit news items.
  * Queries users with pushTokens, filters by route subscriptions,
@@ -337,4 +457,9 @@ module.exports = {
   isExpoPushToken,
   processPendingPushReceipts,
   pruneNotificationRecords,
+  isHolidayReminderDue,
+  holidayReminderId,
+  resolveHolidayReminderRecipients,
+  pushTokenHash,
+  notifyUsersOfHolidayServiceReminders,
 };

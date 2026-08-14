@@ -9,6 +9,7 @@ jest.mock('../newsPublisher', () => ({
 
 jest.mock('../pushNotifier', () => ({
   notifyUsersOfNews: jest.fn(),
+  notifyUsersOfHolidayServiceReminders: jest.fn(),
 }));
 
 jest.mock('../newsImpactPublisher', () => ({
@@ -17,7 +18,7 @@ jest.mock('../newsImpactPublisher', () => ({
 
 const { fetchNewsItems } = require('../newsFetcher');
 const { publishNews } = require('../newsPublisher');
-const { notifyUsersOfNews } = require('../pushNotifier');
+const { notifyUsersOfNews, notifyUsersOfHolidayServiceReminders } = require('../pushNotifier');
 const { publishNewsImpacts } = require('../newsImpactPublisher');
 const newsWorker = require('../newsWorker');
 
@@ -54,5 +55,6 @@ describe('newsWorker', () => {
     expect(publishNews).toHaveBeenCalledWith([item]);
     expect(publishNewsImpacts).toHaveBeenCalledWith([item]);
     expect(notifyUsersOfNews).toHaveBeenCalledWith([item]);
+    expect(notifyUsersOfHolidayServiceReminders).toHaveBeenCalledWith([]);
   });
 });

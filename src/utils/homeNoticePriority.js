@@ -7,7 +7,9 @@ export const getHomeNoticeVisibility = ({
   const activeDetour = Boolean(hasActiveDetour);
   const official = !activeDetour && officialImpactCount > 0;
   const upcoming = !activeDetour && !official && upcomingDetourCount > 0;
-  const holiday = !activeDetour && !official && !upcoming && Boolean(hasHolidayNotice);
+  // Schedule changes and detours answer different rider questions, so keep the
+  // holiday notice available alongside the highest-priority detour notice.
+  const holiday = Boolean(hasHolidayNotice);
 
   return { activeDetour, official, upcoming, holiday };
 };

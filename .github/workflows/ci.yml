@@ -22,8 +22,14 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
+      - name: Install api-proxy dependencies
+        run: npm --prefix api-proxy ci
+
       - name: Validate Expo project health
         run: npx expo-doctor
+
+      - name: Generate Android project for configuration tests
+        run: npx expo prebuild --platform android --no-install
 
       - name: Run app test suite
         run: npm test -- --runInBand
@@ -35,13 +41,10 @@ jobs:
         run: npm run check:parity
 
       - name: Audit root production dependencies
-        run: npm audit --omit=dev --audit-level=high
-
-      - name: Install api-proxy dependencies
-        run: npm --prefix api-proxy ci
+        run: node scripts/audit-production.js .
 
       - name: Run api-proxy tests
         run: npm --prefix api-proxy test
 
       - name: Audit api-proxy production dependencies
-        run: npm --prefix api-proxy audit --omit=dev --audit-level=high
+        run: node scripts/audit-production.js api-proxy

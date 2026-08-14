@@ -1,6 +1,7 @@
 const {
   getHolidayServiceInfo,
   getHolidayNameForDate,
+  getUpcomingHolidayServiceInfo,
 } = require('../utils/holidayService');
 
 const weekdayServiceId = 'weekday';
@@ -110,5 +111,43 @@ describe('holidayService', () => {
   test('names common Barrie holiday service dates for display only', () => {
     expect(getHolidayNameForDate(new Date('2026-08-03T09:00:00-04:00'))).toBe('Civic Holiday');
     expect(getHolidayNameForDate(new Date('2026-12-26T09:00:00-04:00'))).toBe('Boxing Day');
+  });
+
+  test('uses a parsed MyRide notice to identify holiday service seven days ahead', () => {
+    const notices = [{
+      id: 'holidayService_1685_20260803',
+      type: 'holiday_service',
+      status: 'upcoming',
+      dateKey: '20260803',
+      holidayName: 'Civic Holiday',
+      serviceLevel: 'sunday',
+      serviceLabel: 'Sunday service',
+      message: 'Barrie Transit will operate according to a Sunday service schedule with added Kempenfest shuttle service.',
+      sourceNewsId: '1685',
+      sourceUrl: 'https://www.myridebarrie.ca/News/1685/civic-holiday-service-august-3/',
+    }];
+
+    const info = getUpcomingHolidayServiceInfo({
+      calendar,
+      calendarDates: [],
+      trips,
+      routes,
+      holidayServiceNotices: notices,
+      now: new Date('2026-07-29T09:00:00-04:00'),
+      daysAhead: 7,
+    });
+
+    expect(info).toMatchObject({
+      dateKey: '20260803',
+      title: 'Civic Holiday service',
+      badgeLabel: 'Sunday service',
+      relativeLabel: 'Monday',
+      noticeKey: '1685:20260803',
+      serviceLevel: 'sunday',
+      isGtfsConfirmed: false,
+      activeRouteCount: 2,
+      shortMessage: 'On Monday, service runs on Sunday schedules.',
+    });
+    expect(info.detailsMessage).toContain('Kempenfest shuttle');
   });
 });

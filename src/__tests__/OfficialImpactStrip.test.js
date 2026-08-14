@@ -77,4 +77,29 @@ describe('OfficialImpactStrip', () => {
 
     expect(onPress).toHaveBeenCalledWith(impact, ['12B', '15']);
   });
+
+  test('labels an active MyRide item as an active official detour', () => {
+    const activeImpact = {
+      ...impact,
+      id: 'official-route-detour-1679',
+      title: 'Shanty Bay Detour - Route 8B-SB',
+      affectedRoutes: ['8B'],
+      replacementRoutes: [],
+      sourceLabel: 'Active official detour',
+    };
+    let inst;
+    act(() => {
+      inst = create(React.createElement(OfficialImpactStrip, {
+        impacts: [activeImpact],
+      }));
+    });
+
+    const text = inst.root.findAllByType('Text').flatMap((node) => collectText(node)).join(' ');
+
+    expect(text).toContain('Active official detour');
+    expect(text).toContain('8B');
+    expect(inst.root.findByProps({
+      accessibilityLabel: 'Active official detour: Shanty Bay Detour - Route 8B-SB',
+    })).toBeTruthy();
+  });
 });

@@ -384,6 +384,7 @@ const createCandidate = ({ routeId, detour, segment, segmentIndex }) => ({
   eventPrimaryRouteId: normalizeRouteId(segment?.eventPrimaryRouteId || detour?.eventPrimaryRouteId),
   confidence: normalizeConfidence(segment?.confidence || detour?.confidence),
   state: detour?.state === 'clear-pending' || segment?.state === 'clear-pending' ? 'clear-pending' : 'active',
+  detailsPending: detour?.detailsPending === true || segment?.detailsPending === true,
 });
 
 const titleQuality = (candidate) => {
@@ -462,6 +463,15 @@ const candidateBelongsInGroup = (candidate, group) => {
     return true;
   }
 
+  // Two separate records for the same route must not collapse merely because
+  // their approximate endpoints overlap when only one has rider-ready detail.
+  // Exact shared event IDs above still group intentionally.
+  const hasSameRoutePendingMismatch = group.candidates.some((existing) => (
+    existing.routeId === candidate.routeId &&
+    existing.detailsPending !== candidate.detailsPending
+  ));
+  if (hasSameRoutePendingMismatch) return false;
+
   return group.candidates.some((existing) => (
     sameRouteFamilyDuplicateWindow(candidate, existing) ||
     samePhysicalDetour(candidate, existing)
@@ -469,16 +479,22 @@ const candidateBelongsInGroup = (candidate, group) => {
 };
 
 const getDetourCandidates = (routeId, detour) => {
-  const segments = Array.isArray(detour?.segments) && detour.segments.length > 0
-    ? detour.segments
-    : [null];
+  const sourceEvents = Array.isArray(detour?.detourEvents) && detour.detourEvents.length > 0
+    ? detour.detourEvents
+    : [detour];
 
-  return segments.map((segment, index) => createCandidate({
-    routeId,
-    detour,
-    segment,
-    segmentIndex: segment ? index : null,
-  }));
+  return sourceEvents.flatMap((sourceEvent) => {
+    const segments = Array.isArray(sourceEvent?.segments) && sourceEvent.segments.length > 0
+      ? sourceEvent.segments
+      : [null];
+
+    return segments.map((segment, index) => createCandidate({
+      routeId: sourceEvent?.routeId || routeId,
+      detour: sourceEvent,
+      segment,
+      segmentIndex: segment ? index : null,
+    }));
+  });
 };
 
 const buildEventFromCandidates = (groupKey, candidates) => {
@@ -513,6 +529,7 @@ const buildEventFromCandidates = (groupKey, candidates) => {
     primarySegmentIndex: primary.segmentIndex,
     confidence: confidence || null,
     state: allClearing ? 'clear-pending' : 'active',
+    detailsPending: candidates.some((candidate) => candidate.detailsPending === true),
     candidates,
   };
 };

@@ -31,6 +31,29 @@ function boundedGeometry(overrides = {}) {
   };
 }
 
+function liveBlakeDetour(overrides = {}) {
+  return confirmedDetour({
+    routeId: '8B',
+    eventId: '8B:fd9e71d0-cbbe-449f-b261-1685c7e62bd2:8800-9200',
+    confidence: 'medium',
+    uniqueVehicleCount: 2,
+    evidencePointCount: 4,
+    riderVisibilityReason: 'insufficient-geometry',
+    eventWindow: {
+      coreStartProgressMeters: 8800,
+      coreEndProgressMeters: 9200,
+      geoCenter: { latitude: 44.39675, longitude: -79.664 },
+      geoBounds: {
+        minLatitude: 44.395,
+        maxLatitude: 44.3985,
+        minLongitude: -79.6655,
+        maxLongitude: -79.6625,
+      },
+    },
+    ...overrides,
+  });
+}
+
 describe('rider detour alert visibility', () => {
   test('publishes a recent, well-supported alert while withholding its unsafe path', () => {
     expect(evaluateRiderAlertVisibility(confirmedDetour(), {
@@ -58,6 +81,38 @@ describe('rider detour alert visibility', () => {
   test('quarantines a stale unresolved event without an official match', () => {
     expect(evaluateRiderAlertVisibility(confirmedDetour({
       latestGpsEvidenceAt: NOW - 4 * 24 * 60 * 60 * 1000,
+    }), {
+      now: NOW,
+      geometry: boundedGeometry(),
+    })).toEqual({
+      alertVisible: false,
+      reason: 'stale-unresolved-awaiting-gps-clear',
+    });
+  });
+
+  test('uses the schedule-aware rider decision instead of the legacy wall-clock age', () => {
+    expect(evaluateRiderAlertVisibility(confirmedDetour({
+      latestGpsEvidenceAt: NOW - 10 * 60 * 60 * 1000,
+      riderVisible: true,
+      riderVisibilityReason: 'gps-clear-required',
+      riderVisibilityPolicySource: 'observed-passage-opportunities',
+      riderVisibilityMissedOpportunityCount: 1,
+    }), {
+      now: NOW,
+      geometry: boundedGeometry(),
+    })).toEqual({
+      alertVisible: true,
+      reason: 'schedule-aware-gps-clear-required',
+    });
+  });
+
+  test('still hides a schedule-aware event after the visibility policy expires it', () => {
+    expect(evaluateRiderAlertVisibility(confirmedDetour({
+      latestGpsEvidenceAt: NOW - 10 * 60 * 60 * 1000,
+      riderVisible: false,
+      riderVisibilityReason: 'stale-evidence-awaiting-gps-clear',
+      riderVisibilityPolicySource: 'observed-passage-opportunities',
+      riderVisibilityMissedOpportunityCount: 2,
     }), {
       now: NOW,
       geometry: boundedGeometry(),
@@ -109,6 +164,170 @@ describe('rider detour alert visibility', () => {
       now: NOW,
       geometry: { confidence: 'high', evidencePointCount: 8, segments: [] },
     })).toEqual({
+      alertVisible: false,
+      reason: 'insufficient-alert-geometry',
+    });
+  });
+
+  test('publishes a bounded Route 100 alert while exact geometry details are pending', () => {
+    expect(evaluateRiderAlertVisibility(confirmedDetour({
+      routeId: '100',
+      riderVisibilityReason: 'insufficient-geometry',
+      eventWindow: {
+        coreStartProgressMeters: 100,
+        coreEndProgressMeters: 900,
+        geoCenter: { latitude: 44.389, longitude: -79.69 },
+        geoBounds: {
+          minLatitude: 44.38,
+          maxLatitude: 44.398,
+          minLongitude: -79.70,
+          maxLongitude: -79.68,
+        },
+      },
+    }), {
+      now: NOW,
+      geometry: { confidence: 'high', evidencePointCount: 8, segments: [] },
+    })).toEqual({
+      alertVisible: true,
+      detailsPending: true,
+      reason: 'fresh-confirmed-gps-details-pending',
+    });
+  });
+
+  test('keeps the live-shaped zero-width Route 8A Blake event hidden', () => {
+    expect(evaluateRiderAlertVisibility(confirmedDetour({
+      routeId: '8A',
+      eventId: '8A:f8afde22-c790-4e13-bd28-45ad3b718ef3:3900-4000',
+      confidence: 'medium',
+      evidencePointCount: 6,
+      riderVisibilityReason: 'insufficient-geometry',
+      eventWindow: {
+        coreStartProgressMeters: 3950,
+        coreEndProgressMeters: 3950,
+        geoCenter: { latitude: 44.39675, longitude: -79.664 },
+        geoBounds: {
+          minLatitude: 44.395,
+          maxLatitude: 44.3985,
+          minLongitude: -79.6655,
+          maxLongitude: -79.6625,
+        },
+      },
+    }), {
+      now: NOW,
+      geometry: { confidence: 'medium', evidencePointCount: 6, segments: [] },
+    })).toEqual({
+      alertVisible: false,
+      reason: 'insufficient-alert-geometry',
+    });
+  });
+
+  test('keeps the live-shaped Route 8B Blake event hidden with only four useful points', () => {
+    expect(evaluateRiderAlertVisibility(liveBlakeDetour(), {
+      now: NOW,
+      geometry: { confidence: 'medium', evidencePointCount: 4, segments: [] },
+    })).toEqual({
+      alertVisible: false,
+      reason: 'insufficient-recent-gps-evidence',
+    });
+  });
+
+  test('publishes the live-shaped Route 8B Blake event alert-only after six useful points', () => {
+    expect(evaluateRiderAlertVisibility(liveBlakeDetour({ evidencePointCount: 6 }), {
+      now: NOW,
+      geometry: { confidence: 'medium', evidencePointCount: 6, segments: [] },
+    })).toEqual({
+      alertVisible: true,
+      detailsPending: true,
+      reason: 'fresh-confirmed-gps-details-pending',
+    });
+  });
+
+  test.each([
+    ['top-level suppression flag', { invalidGeometrySuppressed: true }, {}],
+    ['top-level stale mixed evidence', { staleMixedEvidence: true }, {}],
+    ['top-level stale mixed reason', { riderVisibilityReason: 'stale-mixed-evidence' }, {}],
+    ['top-level trust blocker', {}, { geometryTrustBlockedReason: 'stale-mixed-evidence' }],
+    ['segment trust blocker', {}, { segments: [{ geometryTrustBlockedReason: 'detour-boundary-gap' }] }],
+    ['segment geometry gate', {}, { segments: [{ geometryGate: { reason: 'jumpy-inferred-path' } }] }],
+  ])('keeps a safe bounded window hidden with a known-invalid %s', (_label, sourceOverrides, geometryOverrides) => {
+    expect(evaluateRiderAlertVisibility(liveBlakeDetour({
+      evidencePointCount: 6,
+      ...sourceOverrides,
+    }), {
+      now: NOW,
+      geometry: {
+        confidence: 'medium',
+        evidencePointCount: 6,
+        segments: [],
+        ...geometryOverrides,
+      },
+    })).toEqual({
+      alertVisible: false,
+      reason: 'insufficient-alert-geometry',
+    });
+  });
+
+  test('still allows alert-only fallback for ordinary incomplete geometry', () => {
+    expect(evaluateRiderAlertVisibility(liveBlakeDetour({ evidencePointCount: 6 }), {
+      now: NOW,
+      geometry: {
+        confidence: 'medium',
+        evidencePointCount: 6,
+        geometryTrustBlockedReason: 'missing-entry-or-exit',
+        segments: [],
+      },
+    })).toEqual({
+      alertVisible: true,
+      detailsPending: true,
+      reason: 'fresh-confirmed-gps-details-pending',
+    });
+  });
+
+  test('does not expose known-invalid geometry through the details-pending fallback', () => {
+    expect(evaluateRiderAlertVisibility(confirmedDetour({
+      routeId: '100',
+      riderVisibilityReason: 'suppressed-invalid-geometry',
+      eventWindow: {
+        coreStartProgressMeters: 100,
+        coreEndProgressMeters: 900,
+        geoCenter: { latitude: 44.389, longitude: -79.69 },
+        geoBounds: {
+          minLatitude: 44.38,
+          maxLatitude: 44.398,
+          minLongitude: -79.70,
+          maxLongitude: -79.68,
+        },
+      },
+    }), {
+      now: NOW,
+      geometry: { confidence: 'high', evidencePointCount: 8, segments: [] },
+    })).toEqual({
+      alertVisible: false,
+      reason: 'suppressed-invalid-geometry',
+    });
+  });
+
+  test('does not publish details-pending alerts for an unbounded geographic window', () => {
+    const decision = evaluateRiderAlertVisibility(confirmedDetour({
+      routeId: '100',
+      riderVisibilityReason: 'insufficient-geometry',
+      eventWindow: {
+        coreStartProgressMeters: 100,
+        coreEndProgressMeters: 900,
+        geoCenter: { latitude: 44.39, longitude: -79.69 },
+        geoBounds: {
+          minLatitude: 44.30,
+          maxLatitude: 44.48,
+          minLongitude: -79.80,
+          maxLongitude: -79.58,
+        },
+      },
+    }), {
+      now: NOW,
+      geometry: { confidence: 'high', evidencePointCount: 8, segments: [] },
+    });
+
+    expect(decision).toEqual({
       alertVisible: false,
       reason: 'insufficient-alert-geometry',
     });

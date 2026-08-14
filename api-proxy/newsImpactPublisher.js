@@ -1,5 +1,5 @@
 const { getDb } = require('./firebaseAdmin');
-const { extractStopClosureImpacts } = require('./newsImpactParser');
+const { extractNewsImpacts } = require('./newsImpactParser');
 const { getStaticData } = require('./gtfsLoader');
 
 const COLLECTION = 'transitNewsImpacts';
@@ -41,7 +41,7 @@ async function publishNewsImpacts(newsItems) {
   }
 
   const stopIndex = await loadStopIndex();
-  const impacts = await extractStopClosureImpacts(newsItems, stopIndex, {
+  const impacts = await extractNewsImpacts(newsItems, stopIndex, {
     fetchOfficialNotices: true,
   });
   const currentIds = new Set(impacts.map((impact) => impact.id));

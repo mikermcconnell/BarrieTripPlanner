@@ -28,7 +28,7 @@ const { buildDetourStorageConfig } = require('./detour/storageConfig');
 const { getDetectorForStorageConfig } = require('./detour/detectorSelector');
 const { getRoadMatcherStats } = require('./detourRoadMatcher');
 const { getDetourDecisionJournalStats } = require('./detourDecisionJournal');
-const { notifyUsersOfDetours } = require('./detourPushNotifier');
+const { notifyUsersOfDetours, notifyUsersOfServiceRestorations } = require('./detourPushNotifier');
 const {
   buildDetourWriterMetadata,
   validateDetourWorkerEnvironment,
@@ -87,6 +87,14 @@ function addEvent(msg) {
 
 function detourKeys(detours) {
   return new Set(Object.keys(detours));
+}
+
+function getActiveRouteIds(state = getState()) {
+  return [...new Set(
+    Object.entries(state?.detours || {})
+      .map(([entryKey, detour]) => String(detour?.routeId || entryKey || '').trim())
+      .filter(Boolean)
+  )].sort();
 }
 
 function recordTickSample(sample) {
@@ -320,36 +328,6 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       liveRouteShapeMapping: data.routeShapeMapping,
     });
 
-    const baselineAutoUpdate = await evaluateBaselineAutoUpdate({
-      baselineDivergence,
-      baselineData: baseline,
-      liveData: data,
-      forceRefresh,
-      getStaticData,
-      setBaselineRoutes,
-      nowMs: Date.now(),
-    });
-    data = baselineAutoUpdate.liveData || data;
-    for (const routeId of baselineAutoUpdate.autoUpdatedRouteIds || []) {
-      clearRouteDetour(routeId);
-      addEvent(`Route ${routeId}: baseline auto-updated`);
-    }
-    if ((baselineAutoUpdate.autoUpdatedRouteIds || []).length > 0) {
-      baseline = await getBaselineData(data);
-      baselineDivergence = buildBaselineDivergence({
-        baselineShapes: baseline.shapes,
-        baselineRouteShapeMapping: baseline.routeShapeMapping,
-        liveShapes: data.shapes,
-        liveRouteShapeMapping: data.routeShapeMapping,
-      });
-      console.warn(
-        `[detourWorker] Auto-updated GTFS baseline for route(s): ` +
-        baselineAutoUpdate.autoUpdatedRouteIds.join(', ')
-      );
-    } else {
-      baselineDivergence = baselineAutoUpdate.baselineDivergence || baselineDivergence;
-    }
-
     const tripObj = Object.fromEntries(data.tripMapping);
     const fetchedVehicles = await fetchVehicles(tripObj);
     const vehicleFeedStatus = getVehicleFeedStatus();
@@ -379,13 +357,48 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     );
     recordStateTransitions(prevSnapshot, activeDetours);
 
+    // Evaluate baseline adoption only after this tick's GPS evidence has been
+    // processed against the existing trusted baseline. A route that becomes
+    // confirmed on the adoption-deadline tick must be protected for review,
+    // rather than having its candidate evidence normalized away first.
+    const baselineAutoUpdate = await evaluateBaselineAutoUpdate({
+      baselineDivergence,
+      baselineData: baseline,
+      liveData: data,
+      forceRefresh,
+      getStaticData,
+      setBaselineRoutes,
+      protectedRouteIds: getActiveRouteIds(),
+      nowMs: Date.now(),
+    });
+    data = baselineAutoUpdate.liveData || data;
+    for (const routeId of baselineAutoUpdate.autoUpdatedRouteIds || []) {
+      clearRouteDetour(routeId);
+      addEvent(`Route ${routeId}: baseline auto-updated`);
+    }
+    if ((baselineAutoUpdate.autoUpdatedRouteIds || []).length > 0) {
+      baseline = await getBaselineData(data);
+      baselineDivergence = buildBaselineDivergence({
+        baselineShapes: baseline.shapes,
+        baselineRouteShapeMapping: baseline.routeShapeMapping,
+        liveShapes: data.shapes,
+        liveRouteShapeMapping: data.routeShapeMapping,
+      });
+      console.warn(
+        `[detourWorker] Auto-updated GTFS baseline for route(s): ` +
+        baselineAutoUpdate.autoUpdatedRouteIds.join(', ')
+      );
+    } else {
+      baselineDivergence = baselineAutoUpdate.baselineDivergence || baselineDivergence;
+    }
+
     try {
       const suppressDeletesWhenEmpty =
         runtimeHydration?.needsActiveSnapshotFallback === true &&
         activeSnapshotHydration.attempted === true &&
         activeSnapshotHydration.hydratedCount === 0 &&
         Object.keys(activeDetours).length === 0;
-      await publishDetours(activeDetours, {
+      const publishResult = await publishDetours(activeDetours, {
         vehicles,
         scheduleIndex: data.scheduleIndex,
         shapes: baseline.shapes,
@@ -394,6 +407,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         baselineDivergedRouteIds: baselineDivergence.changedRouteIds,
         baselinePendingRouteIds: baselineAutoUpdate.pendingRouteIds,
         baselineAutoUpdatedRouteIds: baselineAutoUpdate.autoUpdatedRouteIds,
+        baselineReviewRequiredRouteIds: baselineAutoUpdate.reviewRequiredRouteIds,
         baselineDivergence,
         suppressDeletesWhenEmpty,
         suppressDeleteReason: suppressDeletesWhenEmpty
@@ -411,9 +425,22 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
         storageConfig: detourStorageConfig,
       });
       try {
-        lastPushSummary = detourWriterMetadata.writerEnvironment === 'production'
-          ? await notifyUsersOfDetours(activeDetours)
-          : { attempted: 0, accepted: 0, skipped: 0, failed: 0, reason: 'non-production-worker' };
+        if (detourWriterMetadata.writerEnvironment === 'production') {
+          const restorationSummary = await notifyUsersOfServiceRestorations(
+            publishResult?.serviceRestorationEvents || []
+          );
+          const detourAlertSummary = await notifyUsersOfDetours(activeDetours);
+          lastPushSummary = {
+            ...detourAlertSummary,
+            attempted: detourAlertSummary.attempted + restorationSummary.attempted,
+            accepted: detourAlertSummary.accepted + restorationSummary.accepted,
+            skipped: detourAlertSummary.skipped + restorationSummary.skipped,
+            failed: detourAlertSummary.failed + restorationSummary.failed,
+            restorations: restorationSummary,
+          };
+        } else {
+          lastPushSummary = { attempted: 0, accepted: 0, skipped: 0, failed: 0, reason: 'non-production-worker' };
+        }
         if (lastPushSummary.attempted > 0 || lastPushSummary.failed > 0) {
           console.log(JSON.stringify({ event: 'detour_push_delivery', ...lastPushSummary }));
         }

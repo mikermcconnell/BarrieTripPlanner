@@ -6,6 +6,8 @@ const {
   buildNoticeStopImpactsFromText,
   buildRuleStopClosures,
   extractStopClosureImpacts,
+  extractHolidayServiceImpacts,
+  extractNewsImpacts,
   extractStopCodesFromText,
   parseDateWindow,
   statusForDateWindow,
@@ -53,6 +55,51 @@ describe('newsImpactParser', () => {
     ], stopIndex, { now: '2026-06-08T12:00:00-04:00' });
 
     expect(impacts).toEqual([]);
+  });
+
+  test('parses the official Civic Holiday notice into a dated holiday service impact', () => {
+    const impacts = extractHolidayServiceImpacts([{
+      id: '1685',
+      title: 'Civic Holiday Service - August 3',
+      body: 'On the Civic Holiday, August 3, Barrie Transit will operate according to a Sunday service schedule with added Kempenfest shuttle service.',
+      publishedAt: Date.parse('2026-07-20T08:00:00-04:00'),
+      affectsAllRoutes: true,
+      source: 'myridebarrie',
+      url: 'https://www.myridebarrie.ca/News/1685/civic-holiday-service-august-3/',
+    }], { now: '2026-07-29T12:00:00-04:00' });
+
+    expect(impacts).toEqual([expect.objectContaining({
+      id: 'holidayService_1685_20260803',
+      type: 'holiday_service',
+      status: 'upcoming',
+      dateKey: '20260803',
+      holidayName: 'Civic Holiday',
+      serviceLevel: 'sunday',
+      serviceLabel: 'Sunday service',
+      affectsAllRoutes: true,
+      sourceNewsId: '1685',
+    })]);
+  });
+
+  test('fails closed for vague holiday mentions without a dated operating notice', () => {
+    expect(extractHolidayServiceImpacts([{
+      id: 'festival',
+      title: 'Holiday weekend events',
+      body: 'Enjoy the long weekend in Barrie.',
+    }], { now: '2026-07-29T12:00:00-04:00' })).toEqual([]);
+  });
+
+  test('extractNewsImpacts returns holiday service alongside stop impacts', async () => {
+    const impacts = await extractNewsImpacts([{
+      id: '1685',
+      title: 'Civic Holiday Service - August 3',
+      body: 'Barrie Transit will operate according to a Sunday service schedule on the Civic Holiday, August 3.',
+      publishedAt: Date.parse('2026-07-20T08:00:00-04:00'),
+      affectsAllRoutes: true,
+    }], stopIndex, { now: '2026-07-29T12:00:00-04:00' });
+
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0].type).toBe('holiday_service');
   });
 
   test('extractStopClosureImpacts validates stops against GTFS stop index', async () => {

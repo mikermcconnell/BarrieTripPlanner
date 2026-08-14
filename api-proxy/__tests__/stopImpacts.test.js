@@ -1,5 +1,40 @@
 const { deriveSegmentStopImpacts } = require('../detour/stopImpacts');
 
+const TERMINAL_STOP = {
+  id: 'allandale-platform-5',
+  code: '9005',
+  name: 'Barrie Allandale Transit Terminal Platform 5',
+  latitude: 44.3747,
+  longitude: -79.690,
+  parentStation: 'allandale-terminal',
+};
+
+function deriveAllandaleTerminalImpact(serviceEvidencePoints) {
+  return deriveSegmentStopImpacts({
+    routeId: '8A',
+    shapeId: 'route-8-lakeshore',
+    polyline: [
+      { latitude: 44.374, longitude: -79.705 },
+      { latitude: 44.374, longitude: -79.675 },
+    ],
+    segment: {
+      entryPoint: { latitude: 44.374, longitude: -79.703 },
+      exitPoint: { latitude: 44.374, longitude: -79.677 },
+      skippedSegmentPolyline: [
+        { latitude: 44.374, longitude: -79.703 },
+        { latitude: 44.374, longitude: -79.677 },
+      ],
+    },
+    serviceEvidencePoints,
+    stopImpactData: {
+      routeStopSequencesMapping: {
+        '8A': { 'route-8-lakeshore': [TERMINAL_STOP.id] },
+      },
+      stopsById: new Map([[TERMINAL_STOP.id, TERMINAL_STOP]]),
+    },
+  });
+}
+
 describe('deriveSegmentStopImpacts', () => {
   test('does not mark a stop before the detour entry as skipped', () => {
     const result = deriveSegmentStopImpacts({
@@ -228,5 +263,139 @@ describe('deriveSegmentStopImpacts', () => {
     expect(result.affectedStops.find((stop) => stop.code === '486')).toEqual(
       expect.objectContaining({ detourStopRole: 'boundary' })
     );
+  });
+
+  test('keeps an Allandale terminal platform uncertain while confirmed interior stops remain skipped', () => {
+    const result = deriveSegmentStopImpacts({
+      routeId: '8A',
+      shapeId: 'route-8-lakeshore',
+      polyline: [
+        { latitude: 44.374, longitude: -79.705 },
+        { latitude: 44.374, longitude: -79.675 },
+      ],
+      segment: {
+        entryPoint: { latitude: 44.374, longitude: -79.703 },
+        exitPoint: { latitude: 44.374, longitude: -79.677 },
+        skippedSegmentPolyline: [
+          { latitude: 44.374, longitude: -79.703 },
+          { latitude: 44.374, longitude: -79.677 },
+        ],
+      },
+      stopImpactData: {
+        routeStopSequencesMapping: {
+          '8A': {
+            'route-8-lakeshore': ['9005', '154', '156', '158'],
+          },
+        },
+        stopsById: new Map([
+          ['9005', {
+            id: '9005',
+            code: '9005',
+            name: 'Barrie Allandale Transit Terminal Platform 5',
+            latitude: 44.374,
+            longitude: -79.697,
+            parentStation: 'allandale-terminal',
+          }],
+          ['154', { id: '154', code: '154', name: 'Lakeshore stop 154', latitude: 44.374, longitude: -79.692 }],
+          ['156', { id: '156', code: '156', name: 'Lakeshore stop 156', latitude: 44.374, longitude: -79.688 }],
+          ['158', { id: '158', code: '158', name: 'Lakeshore stop 158', latitude: 44.374, longitude: -79.683 }],
+        ]),
+      },
+    });
+
+    expect(result.skippedStopCodes).toEqual(['154', '156', '158']);
+    expect(result.skippedStopCodes).not.toContain('9005');
+    expect(result.uncertainStopCodes).toEqual(['9005']);
+    expect(result.affectedStops.find((stop) => stop.code === '9005')).toEqual(
+      expect.objectContaining({ detourStopRole: 'uncertain' })
+    );
+  });
+
+  test('does not call a terminal skipped when buses physically serve its off-shape platform', () => {
+    const serviceEvidencePoints = [];
+    for (const [signature, startTime] of [['trip-a', 1_000], ['trip-b', 10_000]]) {
+      serviceEvidencePoints.push(
+        { latitude: 44.374, longitude: -79.699, signature, onRoute: true, timestampMs: startTime },
+        {
+          latitude: TERMINAL_STOP.latitude,
+          longitude: TERMINAL_STOP.longitude,
+          signature,
+          onRoute: false,
+          kind: 'off-route',
+          timestampMs: startTime + 1_000,
+        },
+        { latitude: 44.374, longitude: -79.681, signature, onRoute: true, timestampMs: startTime + 2_000 }
+      );
+    }
+
+    const result = deriveAllandaleTerminalImpact(serviceEvidencePoints);
+    expect(result.skippedStopCodes).toEqual([]);
+    expect(result.uncertainStopCodes).toEqual(['9005']);
+  });
+
+  test('accepts two ordered terminal bypass traces that stay physically away from the platform', () => {
+    const serviceEvidencePoints = [];
+    for (const [signature, startTime] of [['trip-a', 1_000], ['trip-b', 10_000]]) {
+      serviceEvidencePoints.push(
+        { latitude: 44.374, longitude: -79.699, signature, onRoute: true, timestampMs: startTime },
+        {
+          latitude: 44.3757,
+          longitude: TERMINAL_STOP.longitude,
+          signature,
+          onRoute: false,
+          kind: 'off-route',
+          timestampMs: startTime + 1_000,
+        },
+        { latitude: 44.374, longitude: -79.681, signature, onRoute: true, timestampMs: startTime + 2_000 }
+      );
+    }
+
+    const result = deriveAllandaleTerminalImpact(serviceEvidencePoints);
+    expect(result.skippedStopCodes).toEqual(['9005']);
+    expect(result.uncertainStopCodes).toEqual([]);
+  });
+
+  test('accepts two ordered terminal bypass traces in the reverse travel direction', () => {
+    const serviceEvidencePoints = [];
+    for (const [signature, startTime] of [['trip-a', 1_000], ['trip-b', 10_000]]) {
+      serviceEvidencePoints.push(
+        { latitude: 44.374, longitude: -79.681, signature, onRoute: true, timestampMs: startTime },
+        {
+          latitude: 44.3757,
+          longitude: TERMINAL_STOP.longitude,
+          signature,
+          onRoute: false,
+          kind: 'off-route',
+          timestampMs: startTime + 1_000,
+        },
+        { latitude: 44.374, longitude: -79.699, signature, onRoute: true, timestampMs: startTime + 2_000 }
+      );
+    }
+
+    const result = deriveAllandaleTerminalImpact(serviceEvidencePoints);
+    expect(result.skippedStopCodes).toEqual(['9005']);
+    expect(result.uncertainStopCodes).toEqual([]);
+  });
+
+  test('rejects terminal bypass samples that are not bracketed in time by approach and rejoin', () => {
+    const serviceEvidencePoints = [];
+    for (const [signature, startTime] of [['trip-a', 1_000], ['trip-b', 10_000]]) {
+      serviceEvidencePoints.push(
+        { latitude: 44.374, longitude: -79.699, signature, onRoute: true, timestampMs: startTime },
+        {
+          latitude: 44.3757,
+          longitude: TERMINAL_STOP.longitude,
+          signature,
+          onRoute: false,
+          kind: 'off-route',
+          timestampMs: startTime + 2_000,
+        },
+        { latitude: 44.374, longitude: -79.681, signature, onRoute: true, timestampMs: startTime + 1_000 }
+      );
+    }
+
+    const result = deriveAllandaleTerminalImpact(serviceEvidencePoints);
+    expect(result.skippedStopCodes).toEqual([]);
+    expect(result.uncertainStopCodes).toEqual(['9005']);
   });
 });

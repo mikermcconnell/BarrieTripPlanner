@@ -14,9 +14,15 @@ const NORMAL_ROUTE_CLEAR_REASONS = new Set([
 
 const ALERT_VISIBLE_STATES = new Set(['active', 'clear-pending']);
 const ALERT_VISIBLE_CONFIDENCES = new Set(['medium', 'high']);
+const KNOWN_INVALID_GEOMETRY_REASONS = new Set([
+  'detour-boundary-gap',
+  'jumpy-inferred-path',
+  'stale-mixed-evidence',
+]);
 const DEFAULT_MAX_GPS_EVIDENCE_AGE_MS = 90 * 60 * 1000;
 const DEFAULT_MIN_EVIDENCE_POINTS = 6;
 const DEFAULT_MIN_SEGMENT_SPAN_METERS = 75;
+const DEFAULT_MAX_EVENT_WINDOW_DIAGONAL_METERS = 5000;
 
 function toNonNegativeInt(value) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -53,10 +59,81 @@ function collectSegments(source = {}, geometry = null) {
   return candidate && typeof candidate === 'object' ? [candidate] : [];
 }
 
+function hasKnownInvalidGeometry(source = {}, geometry = null) {
+  const candidates = [source, geometry]
+    .filter((candidate) => candidate && typeof candidate === 'object');
+
+  for (const candidate of [...candidates]) {
+    if (Array.isArray(candidate.segments)) {
+      candidates.push(...candidate.segments.filter((segment) => segment && typeof segment === 'object'));
+    }
+  }
+
+  return candidates.some((candidate) => {
+    const reasons = [
+      candidate.riderVisibilityReason,
+      candidate.geometryTrustBlockedReason,
+      candidate.detourPathSuppressedReason,
+      candidate.geometryGate?.reason,
+    ].map((reason) => String(reason || '').trim().toLowerCase());
+
+    return candidate.invalidGeometrySuppressed === true ||
+      candidate.staleMixedEvidence === true ||
+      reasons.some((reason) => KNOWN_INVALID_GEOMETRY_REASONS.has(reason));
+  });
+}
+
 function hasPoint(point) {
   const latitude = Number(point?.latitude ?? point?.lat);
   const longitude = Number(point?.longitude ?? point?.lon ?? point?.lng);
   return Number.isFinite(latitude) && Number.isFinite(longitude);
+}
+
+function distanceMeters(a, b) {
+  if (!hasPoint(a) || !hasPoint(b)) return Infinity;
+  const latitudeA = Number(a.latitude ?? a.lat);
+  const longitudeA = Number(a.longitude ?? a.lon ?? a.lng);
+  const latitudeB = Number(b.latitude ?? b.lat);
+  const longitudeB = Number(b.longitude ?? b.lon ?? b.lng);
+  const toRadians = (degrees) => degrees * Math.PI / 180;
+  const deltaLatitude = toRadians(latitudeB - latitudeA);
+  const deltaLongitude = toRadians(longitudeB - longitudeA);
+  const firstLatitude = toRadians(latitudeA);
+  const secondLatitude = toRadians(latitudeB);
+  const haversine = Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(firstLatitude) * Math.cos(secondLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * 6_371_000 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function hasSafeBoundedEventWindow(source = {}, maxDiagonalMeters = DEFAULT_MAX_EVENT_WINDOW_DIAGONAL_METERS) {
+  const eventWindow = source?.eventWindow;
+  const center = eventWindow?.geoCenter;
+  const bounds = eventWindow?.geoBounds;
+  if (!eventWindow || !hasPoint(center) || !bounds || typeof bounds !== 'object') return false;
+
+  const minimum = {
+    latitude: Number(bounds.minLatitude),
+    longitude: Number(bounds.minLongitude),
+  };
+  const maximum = {
+    latitude: Number(bounds.maxLatitude),
+    longitude: Number(bounds.maxLongitude),
+  };
+  if (!hasPoint(minimum) || !hasPoint(maximum)) return false;
+  if (minimum.latitude > maximum.latitude || minimum.longitude > maximum.longitude) return false;
+  if (
+    Number(center.latitude ?? center.lat) < minimum.latitude ||
+    Number(center.latitude ?? center.lat) > maximum.latitude ||
+    Number(center.longitude ?? center.lon ?? center.lng) < minimum.longitude ||
+    Number(center.longitude ?? center.lon ?? center.lng) > maximum.longitude
+  ) {
+    return false;
+  }
+
+  const coreStart = Number(eventWindow.coreStartProgressMeters);
+  const coreEnd = Number(eventWindow.coreEndProgressMeters);
+  if (!Number.isFinite(coreStart) || !Number.isFinite(coreEnd) || coreStart === coreEnd) return false;
+  return distanceMeters(minimum, maximum) <= maxDiagonalMeters;
 }
 
 function segmentSpanMeters(segment = {}) {
@@ -136,6 +213,14 @@ function evaluateRiderAlertVisibility(source = {}, options = {}) {
     DEFAULT_MIN_SEGMENT_SPAN_METERS,
     { min: 1 }
   );
+  const maxEventWindowDiagonalMeters = getConfiguredNumber(
+    options.maxEventWindowDiagonalMeters ?? process.env.DETOUR_ALERT_MAX_EVENT_WINDOW_DIAGONAL_METERS,
+    DEFAULT_MAX_EVENT_WINDOW_DIAGONAL_METERS,
+    { min: 1 }
+  );
+  const detailsPending = !hasKnownInvalidGeometry(source, options.geometry || null) &&
+    hasSafeBoundedEventWindow(source, maxEventWindowDiagonalMeters) &&
+    !hasMeaningfulAlertGeometry(source, options.geometry || null, minSegmentSpanMeters);
 
   if (!ALERT_VISIBLE_STATES.has(state)) {
     return { alertVisible: false, reason: state === 'cleared' ? 'detour-cleared' : 'detour-not-active' };
@@ -172,7 +257,7 @@ function evaluateRiderAlertVisibility(source = {}, options = {}) {
     return { alertVisible: true, reason: 'current-confirmed-detour-vehicle' };
   }
 
-  if (!hasMeaningfulAlertGeometry(source, geometry, minSegmentSpanMeters)) {
+  if (!hasMeaningfulAlertGeometry(source, geometry, minSegmentSpanMeters) && !detailsPending) {
     return { alertVisible: false, reason: 'insufficient-alert-geometry' };
   }
 
@@ -188,15 +273,28 @@ function evaluateRiderAlertVisibility(source = {}, options = {}) {
 
   const latestGpsEvidenceAt = getLatestGpsEvidenceAt(source, geometry);
   const evidenceAgeMs = latestGpsEvidenceAt == null ? null : Math.max(0, now - latestGpsEvidenceAt);
-  if (evidenceAgeMs == null || evidenceAgeMs > maxGpsEvidenceAgeMs) {
+  const serviceAwareVisibilityEvaluated = Boolean(source.riderVisibilityPolicySource);
+  if (
+    evidenceAgeMs == null ||
+    (!serviceAwareVisibilityEvaluated && evidenceAgeMs > maxGpsEvidenceAgeMs) ||
+    riderVisibilityReason === 'stale-evidence-awaiting-gps-clear'
+  ) {
     return { alertVisible: false, reason: 'stale-unresolved-awaiting-gps-clear' };
   }
+  const retainedBeyondLegacyAge = serviceAwareVisibilityEvaluated && evidenceAgeMs > maxGpsEvidenceAgeMs;
 
   return {
     alertVisible: true,
-    reason: completeTransitionProof
-      ? 'fresh-complete-transition-evidence'
-      : 'fresh-confirmed-gps-evidence',
+    ...(detailsPending ? { detailsPending: true } : {}),
+    reason: detailsPending
+      ? (retainedBeyondLegacyAge
+        ? 'schedule-aware-gps-details-pending'
+        : 'fresh-confirmed-gps-details-pending')
+      : retainedBeyondLegacyAge
+        ? 'schedule-aware-gps-clear-required'
+      : completeTransitionProof
+        ? 'fresh-complete-transition-evidence'
+        : 'fresh-confirmed-gps-evidence',
   };
 }
 
@@ -204,6 +302,7 @@ function attachRiderAlertVisibility(target = {}, options = {}) {
   const decision = evaluateRiderAlertVisibility(target, options);
   target.alertVisible = decision.alertVisible;
   target.alertVisibilityReason = decision.reason;
+  target.detailsPending = decision.detailsPending === true;
   return target;
 }
 
@@ -212,10 +311,13 @@ module.exports = {
   DEFAULT_MAX_GPS_EVIDENCE_AGE_MS,
   DEFAULT_MIN_EVIDENCE_POINTS,
   DEFAULT_MIN_SEGMENT_SPAN_METERS,
+  DEFAULT_MAX_EVENT_WINDOW_DIAGONAL_METERS,
   attachRiderAlertVisibility,
   evaluateRiderAlertVisibility,
   getConfirmedVehicleCount,
   getLatestGpsEvidenceAt,
   hasCompleteTransitionAlertProof,
+  hasKnownInvalidGeometry,
   hasMeaningfulAlertGeometry,
+  hasSafeBoundedEventWindow,
 };

@@ -34,6 +34,12 @@ describe('detourDecisionJournal', () => {
         currentVehicleCount: 1,
         latestGpsEvidenceAt: NOW - 30_000,
         geometryLastEvidenceAt: NOW - 45_000,
+        riderVisibilityPolicySource: 'observed-passage-opportunities',
+        riderVisibilityMissedOpportunityCount: 1,
+        riderVisibilityDirectionId: '1',
+        riderVisibilityPassageTargetAvailable: true,
+        alertVisible: true,
+        alertVisibilityReason: 'schedule-aware-gps-clear-required',
         clearWindows: [{ id: 'window-1' }],
       },
       geometry: {
@@ -73,6 +79,12 @@ describe('detourDecisionJournal', () => {
       geometryLastEvidenceAgeMs: 45_000,
       clearWindowCount: 1,
       geometryWriteAttempted: true,
+      riderVisibilityPolicySource: 'observed-passage-opportunities',
+      riderVisibilityMissedOpportunityCount: 1,
+      riderVisibilityDirectionId: '1',
+      riderVisibilityPassageTargetAvailable: true,
+      alertVisible: true,
+      alertVisibilityReason: 'schedule-aware-gps-clear-required',
     }));
     expect(decision.geometry).toEqual(expect.objectContaining({
       canShowDetourPath: true,

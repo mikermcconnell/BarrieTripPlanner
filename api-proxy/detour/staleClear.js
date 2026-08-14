@@ -1,4 +1,5 @@
 const { routeIdsShareFamily } = require('./routeFamily');
+const { evaluateServiceAwareStaleness } = require('./serviceAwareVisibility');
 
 const DEFAULT_RIDER_VISIBILITY_MAX_EVIDENCE_AGE_MS = 90 * 60 * 1000;
 
@@ -81,6 +82,9 @@ function evaluateStaleRiderVisibility({
   detour,
   previousSnapshot = null,
   vehicles = [],
+  scheduleIndex = null,
+  shapes = null,
+  tripMapping = null,
   now = Date.now(),
   env = process.env,
 } = {}) {
@@ -95,12 +99,51 @@ function evaluateStaleRiderVisibility({
     };
   }
 
+  const previousVisibilityReason =
+    previousSnapshot?.riderVisibilityReason || previousSnapshot?.visibilityReason || null;
+  const previousEvidenceMs = getLatestEvidenceMs(previousSnapshot, null);
+  const currentEvidenceMs = getLatestEvidenceMs(detour, null);
+  if (
+    previousVisibilityReason === 'stale-evidence-awaiting-gps-clear' &&
+    (
+      currentEvidenceMs == null ||
+      (previousEvidenceMs != null && currentEvidenceMs <= previousEvidenceMs)
+    )
+  ) {
+    return {
+      riderVisible: false,
+      staleForReview: true,
+      reason: 'stale-evidence-awaiting-gps-clear',
+      currentVehicleCount,
+      confirmedVehicleCount: getConfirmedVehicleCount(detour, previousSnapshot),
+      lastEvidenceAt: previousEvidenceMs,
+      staleVisibilityTracking: previousSnapshot?.staleVisibilityTracking || null,
+      policySource: previousSnapshot?.riderVisibilityPolicySource || null,
+      missedOpportunityCount: previousSnapshot?.riderVisibilityMissedOpportunityCount ?? 0,
+      activeServiceAgeMs: previousSnapshot?.riderVisibilityActiveServiceAgeMs ?? null,
+      maxActiveServiceAgeMs: previousSnapshot?.riderVisibilityMaxActiveServiceAgeMs ?? null,
+      headwayMs: previousSnapshot?.riderVisibilityHeadwayMs ?? null,
+      directionId: previousSnapshot?.riderVisibilityDirectionId ?? null,
+      passageTargetAvailable: previousSnapshot?.riderVisibilityPassageTargetAvailable === true,
+      failSafeReason: previousSnapshot?.riderVisibilityFailSafeReason || null,
+    };
+  }
+
   if (currentVehicleCount > 0) {
+    const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
     return {
       riderVisible: true,
       staleForReview: false,
       reason: 'current-detour-vehicle',
       currentVehicleCount,
+      lastEvidenceAt: evidenceMs,
+      staleVisibilityTracking: evidenceMs == null ? null : {
+        version: 1,
+        evidenceAtMs: evidenceMs,
+        lastEvaluatedAtMs: now,
+        missedOpportunitySignatures: [],
+        observedTrips: [],
+      },
     };
   }
 
@@ -118,10 +161,21 @@ function evaluateStaleRiderVisibility({
   const evidenceMs = getLatestEvidenceMs(detour, previousSnapshot);
   const evidenceAgeMs = evidenceMs == null ? null : Math.max(0, now - evidenceMs);
   const maxEvidenceAgeMs = getRiderVisibilityMaxEvidenceAgeMs(env);
+  const serviceAwareStaleness = evidenceMs == null ? null : evaluateServiceAwareStaleness({
+    routeId,
+    detour,
+    previousSnapshot,
+    vehicles,
+    scheduleIndex,
+    shapes,
+    tripMapping,
+    evidenceMs,
+    now,
+    minimumAgeMs: maxEvidenceAgeMs,
+    env,
+  });
   if (
-    evidenceAgeMs != null &&
-    evidenceAgeMs > maxEvidenceAgeMs &&
-    exactRouteHasRecentVehicle(routeId, vehicles) &&
+    serviceAwareStaleness?.shouldHide === true &&
     hasRenderableGeometry(detour, previousSnapshot)
   ) {
     return {
@@ -133,6 +187,8 @@ function evaluateStaleRiderVisibility({
       lastEvidenceAt: evidenceMs,
       evidenceAgeMs,
       maxEvidenceAgeMs,
+      ...serviceAwareStaleness,
+      staleVisibilityTracking: serviceAwareStaleness.trackingState,
     };
   }
 
@@ -145,6 +201,8 @@ function evaluateStaleRiderVisibility({
     lastEvidenceAt: evidenceMs,
     evidenceAgeMs,
     maxEvidenceAgeMs,
+    ...(serviceAwareStaleness || {}),
+    staleVisibilityTracking: serviceAwareStaleness?.trackingState || null,
   };
 }
 

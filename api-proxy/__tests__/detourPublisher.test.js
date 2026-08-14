@@ -33,6 +33,18 @@ describe('auditable normal-route clearance proof', () => {
     sampleCount: 4,
     sourceCount: 1,
     shapeId: 'shape-8b',
+    coverageRatio: 1,
+    requiredCoverageRatio: 0.95,
+    coveragePassed: true,
+    movementMeters: 950,
+    requiredMovementMeters: 950,
+    movementPassed: true,
+    coreSampleCount: 1,
+    coreCoveragePassed: true,
+    maxProgressGapMeters: 100,
+    maxAllowedProgressGapMeters: 500,
+    progressGapPassed: true,
+    passed: true,
   };
 
   test('requires structured GPS evidence, not only a clear reason', () => {
@@ -44,6 +56,17 @@ describe('auditable normal-route clearance proof', () => {
     expect(hasAuditableNormalRouteClearProof({
       clearReason: 'normal-route-observed',
       clearProof: { ...proof, observedAt: null },
+    })).toBe(false);
+  });
+
+  test('rejects a proof whose claimed pass flags do not meet its coverage threshold', () => {
+    expect(hasAuditableNormalRouteClearProof({
+      clearReason: 'normal-route-observed',
+      clearProof: {
+        ...proof,
+        coverageRatio: 0.8,
+        requiredCoverageRatio: 0.95,
+      },
     })).toBe(false);
   });
 });
@@ -372,6 +395,18 @@ describe('hasNormalRouteClearProof', () => {
       sampleCount: 2,
       sourceCount: 1,
       shapeId: 'shape-1',
+      coverageRatio: 1,
+      requiredCoverageRatio: 0.95,
+      coveragePassed: true,
+      movementMeters: 950,
+      requiredMovementMeters: 950,
+      movementPassed: true,
+      coreSampleCount: 1,
+      coreCoveragePassed: true,
+      maxProgressGapMeters: 100,
+      maxAllowedProgressGapMeters: 500,
+      progressGapPassed: true,
+      passed: true,
     };
     expect(hasNormalRouteClearProof({ clearReason: 'normal-route-observed', clearProof })).toBe(true);
     expect(hasNormalRouteClearProof({ clearReason: 'obsolete-shape-normal-route-observed', clearProof })).toBe(true);
@@ -1401,6 +1436,98 @@ describe('detourPublisher storage config', () => {
       staleForReview: true,
       baselineUpdatePending: true,
       baselineDiverged: true,
+    });
+  });
+
+  test('keeps a protected Route 8B detour visible for review when its baseline changes', async () => {
+    jest.resetModules();
+    const writes = {};
+    const set = jest.fn(async (data) => {
+      writes.active = data;
+    });
+    const emptyQuery = { get: async () => ({ docs: [] }) };
+    const collection = jest.fn((name) => ({
+      doc: () => ({
+        set: name === 'activeDetours' ? set : jest.fn(async () => {}),
+        delete: jest.fn(async () => {}),
+      }),
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+      orderBy: () => ({ limit: () => emptyQuery }),
+      where: () => ({ orderBy: () => ({ limit: () => emptyQuery }), limit: () => emptyQuery }),
+    }));
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({ collection }),
+    }));
+
+    const skippedSegmentPolyline = [
+      { latitude: 44.3982, longitude: -79.6543 },
+      { latitude: 44.3953, longitude: -79.6648 },
+    ];
+    const { publishDetours } = require('../detourPublisher');
+    const activeDetours = {
+      '8B:blake:11700-12600': {
+        eventId: '8B:blake:11700-12600',
+        routeId: '8B',
+        state: 'active',
+        detectedAt: Date.parse('2026-08-08T08:00:00Z'),
+        lastSeenAt: Date.parse('2026-08-08T12:00:00Z'),
+        latestGpsEvidenceAt: Date.parse('2026-08-08T12:00:00Z'),
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        vehiclesOffRoute: new Set(['route-8b-bus']),
+        geometry: {
+          shapeId: 'route-8b-blake-shape',
+          confidence: 'high',
+          evidencePointCount: 8,
+          canShowDetourPath: true,
+          skippedSegmentPolyline,
+          inferredDetourPolyline: skippedSegmentPolyline,
+          uncertainStopIds: ['allandale-platform-5'],
+          uncertainStopCodes: ['9005'],
+          uncertainStops: [{
+            id: 'allandale-platform-5',
+            code: '9005',
+            detourStopRole: 'uncertain',
+          }],
+          segments: [{
+            shapeId: 'route-8b-blake-shape',
+            confidence: 'high',
+            canShowDetourPath: true,
+            spanMeters: 900,
+            skippedSegmentPolyline,
+            inferredDetourPolyline: skippedSegmentPolyline,
+          }],
+        },
+      },
+    };
+    await publishDetours(activeDetours, {
+      now: Date.parse('2026-08-08T12:05:00Z'),
+      baselineDivergedRouteIds: ['8B'],
+      baselineReviewRequiredRouteIds: ['8B'],
+      noticeStopImpacts: [],
+    });
+
+    expect(writes.active).toMatchObject({
+      routeId: '8B',
+      riderVisible: true,
+      baselineDiverged: true,
+      baselineReviewRequired: true,
+      uncertainStopIds: ['allandale-platform-5'],
+      uncertainStopCodes: ['9005'],
+    });
+    expect(writes.active.riderVisibilityReason).not.toBe('baseline-diverged');
+
+    await publishDetours(activeDetours, {
+      now: Date.parse('2026-08-08T12:06:00Z'),
+      noticeStopImpacts: [],
+    });
+    expect(writes.active).toMatchObject({
+      routeId: '8B',
+      baselineDiverged: false,
+      baselineReviewRequired: false,
+      baselineUpdatePending: false,
     });
   });
 
@@ -2758,6 +2885,18 @@ describe('publishDetours event ids', () => {
         sampleCount: 4,
         sourceCount: 1,
         shapeId: 'shape-12b',
+        coverageRatio: 1,
+        requiredCoverageRatio: 0.95,
+        coveragePassed: true,
+        movementMeters: 950,
+        requiredMovementMeters: 950,
+        movementPassed: true,
+        coreSampleCount: 1,
+        coreCoveragePassed: true,
+        maxProgressGapMeters: 100,
+        maxAllowedProgressGapMeters: 500,
+        progressGapPassed: true,
+        passed: true,
       },
       confidence: 'high',
       canShowDetourPath: true,
@@ -2817,7 +2956,7 @@ describe('publishDetours event ids', () => {
     }));
 
     const publisher = require('../detourPublisher');
-    await publisher.publishDetours({
+    const result = await publisher.publishDetours({
       '10': {
         routeId: '10',
         detectedAt: new Date(now - 10 * 60 * 1000),
@@ -2836,6 +2975,14 @@ describe('publishDetours event ids', () => {
     );
     expect(clearEvent).toBeDefined();
     expect(clearEvent.clearReason).toBe('normal-route-observed');
+    expect(result.serviceRestorationEvents).toEqual([
+      expect.objectContaining({
+        eventType: 'DETOUR_CLEARED',
+        routeId: '12B',
+        clearReason: 'normal-route-observed',
+        clearProof: expect.objectContaining({ evidenceType: 'normal-route-gps' }),
+      }),
+    ]);
     expect(publisher.getLastPublishedIds().has('12B')).toBe(false);
   });
 
@@ -3019,6 +3166,75 @@ describe('publishDetours event ids', () => {
         passed: false,
         reason: 'rider-hidden',
       },
+    });
+  });
+
+  test('publishes a bounded Route 100 alert while exact path details are pending', async () => {
+    jest.resetModules();
+    const writes = {};
+    const now = Date.parse('2026-08-08T12:00:00Z');
+
+    jest.doMock('../firebaseAdmin', () => ({
+      getDb: () => ({
+        collection: (name) => {
+          const emptyQuery = { get: async () => ({ empty: true, docs: [] }) };
+          const whereQuery = {
+            orderBy: () => ({ limit: () => emptyQuery }),
+            limit: () => emptyQuery,
+          };
+          return {
+            doc: (id) => ({
+              set: async (data) => { writes[`${name}/${id}`] = data; },
+              delete: async () => {},
+            }),
+            get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+            orderBy: () => ({ limit: () => emptyQuery }),
+            where: () => whereQuery,
+          };
+        },
+        batch: () => ({ delete: () => {}, commit: async () => {} }),
+      }),
+    }));
+
+    const publisher = require('../detourPublisher');
+    await publisher.publishDetours({
+      '100:pending': {
+        eventId: '100:pending',
+        routeId: '100',
+        detectedAt: new Date(now - 5 * 60 * 1000),
+        lastSeenAt: new Date(now),
+        latestGpsEvidenceAt: now,
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        currentVehicleCount: 1,
+        state: 'active',
+        eventWindow: {
+          coreStartProgressMeters: 100,
+          coreEndProgressMeters: 900,
+          geoCenter: { latitude: 44.389, longitude: -79.69 },
+          geoBounds: {
+            minLatitude: 44.38,
+            maxLatitude: 44.398,
+            minLongitude: -79.70,
+            maxLongitude: -79.68,
+          },
+        },
+        geometry: {
+          confidence: 'high',
+          evidencePointCount: 8,
+          lastEvidenceAt: now,
+          canShowDetourPath: false,
+          segments: [],
+        },
+      },
+    }, { now, noticeStopImpacts: [] });
+
+    expect(writes['activeDetours/100:pending']).toMatchObject({
+      routeId: '100',
+      riderVisible: false,
+      alertVisible: true,
+      detailsPending: true,
+      alertVisibilityReason: 'fresh-confirmed-gps-details-pending',
     });
   });
 
@@ -3722,6 +3938,38 @@ describe('makeSnapshot', () => {
     expect(snap.confidence).toBeNull();
     expect(snap.evidencePointCount).toBeNull();
     expect(snap.lastEvidenceAt).toBeNull();
+  });
+
+  test('preserves schedule-aware stale visibility tracking across publisher snapshots', () => {
+    const tracking = {
+      version: 1,
+      evidenceAtMs: 1_786_000_000_000,
+      lastEvaluatedAtMs: 1_786_000_120_000,
+      missedOpportunitySignatures: ['trip:8b-1'],
+      observedTrips: [{ signature: 'trip:8b-2', beforeAtMs: 1_786_000_120_000 }],
+    };
+    const snap = makeSnapshot({
+      routeId: '8B',
+      detectedAt: new Date(),
+      vehicleCount: 2,
+      directionId: 1,
+      progressDirection: 1,
+      staleVisibilityTracking: tracking,
+      riderVisibilityPolicySource: 'observed-passage-opportunities',
+      riderVisibilityMissedOpportunityCount: 1,
+      riderVisibilityDirectionId: '1',
+      riderVisibilityPassageTargetAvailable: true,
+    });
+
+    expect(snap).toMatchObject({
+      directionId: 1,
+      progressDirection: 1,
+      staleVisibilityTracking: tracking,
+      riderVisibilityPolicySource: 'observed-passage-opportunities',
+      riderVisibilityMissedOpportunityCount: 1,
+      riderVisibilityDirectionId: '1',
+      riderVisibilityPassageTargetAvailable: true,
+    });
   });
 
   test('preserves previous geometry when current write is throttled', () => {

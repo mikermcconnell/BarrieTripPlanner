@@ -35,9 +35,15 @@ const OfficialImpactStrip = ({
   if (!impacts.length) return null;
 
   const firstImpact = impacts[0];
+  const firstLabel = firstImpact.sourceLabel || PLANNED_DETOUR_NOTICE_LABEL;
+  const allLabelsMatch = impacts.every((impact) => (
+    (impact.sourceLabel || PLANNED_DETOUR_NOTICE_LABEL) === firstLabel
+  ));
   const countText = impacts.length === 1
-    ? PLANNED_DETOUR_NOTICE_LABEL
-    : `${impacts.length} planned detour notices`;
+    ? firstLabel
+    : allLabelsMatch
+      ? `${impacts.length} ${firstLabel.toLowerCase()} notices`
+      : `${impacts.length} official detour notices`;
   const routeIds = getOfficialImpactRouteIds(firstImpact);
   const handlePress = () => {
     if (onPress) {
@@ -77,7 +83,7 @@ const OfficialImpactStrip = ({
             style={styles.dismissButton}
             onPress={() => onDismiss(firstImpact.id)}
             accessibilityRole="button"
-            accessibilityLabel="Hide planned detour notice"
+            accessibilityLabel={`Hide ${firstLabel.toLowerCase()}`}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.dismissText}>×</Text>

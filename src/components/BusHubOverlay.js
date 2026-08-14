@@ -66,8 +66,10 @@ const AndroidBusHubOverlay = ({ currentZoom, aboveLayerID }) => {
           textHaloWidth: 2,
           textAnchor: 'top',
           textOffset: [0, 1.25],
-          textAllowOverlap: false,
-          textIgnorePlacement: false,
+          // Hub names are priority map information. Do not let a live bus
+          // route label hide them when the two markers overlap.
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
         }}
       />
       <MapLibreGL.SymbolLayer

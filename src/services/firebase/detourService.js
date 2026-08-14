@@ -115,6 +115,7 @@ export function mapActiveDetourDoc(docId, data = {}) {
     riderVisibilityReason: data.riderVisibilityReason ?? null,
     alertVisible: data.alertVisible ?? data.riderVisible ?? true,
     alertVisibilityReason: data.alertVisibilityReason ?? data.riderVisibilityReason ?? null,
+    detailsPending: data.detailsPending === true,
     sharedDetourEventId: data.sharedDetourEventId ?? primarySegment?.sharedDetourEventId ?? null,
     sharedRouteIds: Array.isArray(data.sharedRouteIds)
       ? data.sharedRouteIds
@@ -156,6 +157,9 @@ export function mapActiveDetourDoc(docId, data = {}) {
     affectedStopIds: Array.isArray(data.affectedStopIds) ? data.affectedStopIds : [],
     affectedStopCodes: Array.isArray(data.affectedStopCodes) ? data.affectedStopCodes : [],
     affectedStops: Array.isArray(data.affectedStops) ? data.affectedStops : [],
+    uncertainStopIds: Array.isArray(data.uncertainStopIds) ? data.uncertainStopIds : [],
+    uncertainStopCodes: Array.isArray(data.uncertainStopCodes) ? data.uncertainStopCodes : [],
+    uncertainStops: Array.isArray(data.uncertainStops) ? data.uncertainStops : [],
     entryStopId: data.entryStopId ?? null,
     exitStopId: data.exitStopId ?? null,
     entryPoint: normalizeDetourCoordinate(
@@ -237,6 +241,7 @@ export function groupActiveDetourEventsByRoute(eventMap = {}) {
       existing.currentVehicleCount = Math.max(existing.currentVehicleCount || 0, event.currentVehicleCount || 0);
       existing.riderVisible = existing.riderVisible || event.riderVisible;
       existing.alertVisible = existing.alertVisible || event.alertVisible;
+      existing.detailsPending = Boolean(existing.detailsPending || event.detailsPending);
       existing.staleForReview = Boolean(existing.staleForReview || event.staleForReview);
       existing.confidence = betterConfidence(existing.confidence, event.confidence);
       existing.state = existing.state === 'active' || event.state === 'active' ? 'active' : (existing.state || event.state || 'active');
@@ -267,16 +272,22 @@ export function groupActiveDetourEventsByRoute(eventMap = {}) {
           existing.skippedStopCodes = [];
           existing.affectedStopIds = [];
           existing.affectedStopCodes = [];
+          existing.uncertainStopIds = [];
+          existing.uncertainStopCodes = [];
           existing.skippedStops = [];
           existing.affectedStops = [];
+          existing.uncertainStops = [];
         }
         existing.segments = mergeArrays(existing.segments, event.segments);
         existing.skippedStopIds = mergeUniqueScalars(existing.skippedStopIds, event.skippedStopIds);
         existing.skippedStopCodes = mergeUniqueScalars(existing.skippedStopCodes, event.skippedStopCodes);
         existing.affectedStopIds = mergeUniqueScalars(existing.affectedStopIds, event.affectedStopIds);
         existing.affectedStopCodes = mergeUniqueScalars(existing.affectedStopCodes, event.affectedStopCodes);
+        existing.uncertainStopIds = mergeUniqueScalars(existing.uncertainStopIds, event.uncertainStopIds);
+        existing.uncertainStopCodes = mergeUniqueScalars(existing.uncertainStopCodes, event.uncertainStopCodes);
         existing.skippedStops = mergeArrays(existing.skippedStops, event.skippedStops);
         existing.affectedStops = mergeArrays(existing.affectedStops, event.affectedStops);
+        existing.uncertainStops = mergeArrays(existing.uncertainStops, event.uncertainStops);
       }
     });
 

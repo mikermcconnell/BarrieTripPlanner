@@ -1,5 +1,6 @@
 const {
   extractDetourNoticeRoutes,
+  getActiveDetourNotices,
   getUpcomingDetourNotices,
   normalizeDetourNotice,
 } = require('../utils/upcomingDetourNotices');
@@ -65,5 +66,50 @@ describe('upcomingDetourNotices', () => {
     expect(extractDetourNoticeRoutes({
       title: 'Downtown Paving Detour - Routes 8A-NB, 8B-SB, 10, 11, 100 & 101',
     })).toEqual(['8A', '8B', '10', '11', '100', '101']);
+  });
+
+  test('keeps an active official Route 8B detour visible during an hourly holiday schedule', () => {
+    const holidayNow = Date.parse('2026-08-03T10:00:00-04:00');
+    const notices = [
+      {
+        id: '1679',
+        title: 'Shanty Bay Detour - Route 8B-SB',
+        body: 'Route 8B-SB is on detour from July 6 to September 4 due to a road closure on Shanty Bay.',
+        url: 'https://www.myridebarrie.ca/News/1679/shanty-bay-detour-route-8b-sb/',
+        publishedAt: Date.parse('2026-07-03T12:00:00-04:00'),
+      },
+      {
+        id: '1673',
+        title: 'Blake Detour - Routes 8A-NB, 8B-SB, 100, & 101',
+        body: 'This detour is in effect on July 2 due to construction on Blake Street.',
+        publishedAt: Date.parse('2026-07-01T12:00:00-04:00'),
+        archivedAt: Date.parse('2026-07-03T08:00:00-04:00'),
+      },
+    ];
+
+    expect(getActiveDetourNotices(notices, holidayNow)).toEqual([
+      expect.objectContaining({
+        id: 'official-route-detour-1679',
+        type: 'official_route_detour',
+        status: 'active',
+        routes: ['8B'],
+        sourceLabel: 'Active official detour',
+        sourceUrl: notices[0].url,
+        isOfficial: true,
+      }),
+    ]);
+  });
+
+  test('does not turn an active official notice into live GPS geometry', () => {
+    const [notice] = getActiveDetourNotices([{
+      id: '1679',
+      title: 'Shanty Bay Detour - Route 8B-SB',
+      body: 'Route 8B-SB is on detour from July 6 to September 4.',
+      publishedAt: Date.parse('2026-07-03T12:00:00-04:00'),
+    }], Date.parse('2026-08-03T10:00:00-04:00'));
+
+    expect(notice).not.toHaveProperty('entryPoint');
+    expect(notice).not.toHaveProperty('exitPoint');
+    expect(notice).not.toHaveProperty('inferredDetourPolyline');
   });
 });

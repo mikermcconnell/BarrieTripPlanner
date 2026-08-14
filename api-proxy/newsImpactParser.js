@@ -222,6 +222,92 @@ function buildRuleStopClosures(newsItem) {
   }));
 }
 
+const HOLIDAY_NAMES = [
+  "New Year's Day",
+  'Family Day',
+  'Good Friday',
+  'Easter Sunday',
+  'Victoria Day',
+  'Canada Day',
+  'Civic Holiday',
+  'Labour Day',
+  'Thanksgiving',
+  'Christmas Day',
+  'Boxing Day',
+  "New Year's Eve",
+];
+
+function dateKeyForTimestamp(timestamp) {
+  if (!Number.isFinite(timestamp)) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SERVICE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(timestamp)).replace(/-/g, '');
+}
+
+function extractHolidayName(text) {
+  const input = String(text || '');
+  return HOLIDAY_NAMES.find((name) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i').test(input))
+    || 'Holiday';
+}
+
+function parseHolidayServiceNotice(newsItem, now = new Date()) {
+  const text = `${newsItem?.title || ''}\n${newsItem?.body || ''}`.trim();
+  if (!text || !/\b(?:holiday service|holiday.*service|service.*holiday)\b/i.test(text)) return null;
+  if (!/\b(?:service schedule|operate|service is scheduled|no (?:fixed-route )?service|no transit service)\b/i.test(text)) {
+    return null;
+  }
+
+  const dateMatch = new RegExp(`${MONTH_PATTERN}\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?`, 'i').exec(text);
+  if (!dateMatch) return null;
+
+  const fallbackYear = referenceYear(newsItem, now);
+  const startsAt = parseMonthDate([null, dateMatch[1], dateMatch[2], dateMatch[3]], fallbackYear);
+  const endsAt = parseMonthDate([null, dateMatch[1], dateMatch[2], dateMatch[3]], fallbackYear, true);
+  if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt)) return null;
+
+  const noService = /\b(?:no (?:fixed-route )?service|no transit service|will not operate)\b/i.test(text);
+  const scheduleMatch = /\b(sunday|saturday|weekday|regular|modified)\s+(?:service\s+)?schedule\b/i.exec(text);
+  const serviceLevel = noService ? 'no_service' : scheduleMatch?.[1]?.toLowerCase() || 'holiday';
+  const holidayName = extractHolidayName(text);
+
+  return {
+    id: `holidayService_${newsItem.id}_${dateKeyForTimestamp(startsAt)}`,
+    type: 'holiday_service',
+    status: statusForDateWindow({ startsAt, endsAt }, now),
+    dateKey: dateKeyForTimestamp(startsAt),
+    holidayName,
+    serviceLevel,
+    serviceLabel: noService
+      ? 'No service'
+      : serviceLevel === 'holiday'
+        ? 'Holiday service'
+        : `${serviceLevel[0].toUpperCase()}${serviceLevel.slice(1)} service`,
+    affectsAllRoutes: newsItem.affectsAllRoutes === true,
+    affectedRoutes: uniqueStrings(newsItem.affectedRoutes || []),
+    source: newsItem.source || 'myridebarrie',
+    sourceNewsId: String(newsItem.id),
+    sourceTitle: newsItem.title || `${holidayName} service`,
+    sourceUrl: newsItem.url || null,
+    message: newsItem.body || newsItem.title || `${holidayName} service information`,
+    confidence: 'high',
+    parser: 'rules',
+    reason: 'Matched an official MyRide holiday service notice with an explicit service date.',
+    publishedAt: newsItem.publishedAt || null,
+    startsAt,
+    endsAt,
+  };
+}
+
+function extractHolidayServiceImpacts(newsItems, options = {}) {
+  const now = options.now ? new Date(options.now) : new Date();
+  return (newsItems || [])
+    .map((newsItem) => parseHolidayServiceNotice(newsItem, now))
+    .filter(Boolean);
+}
+
 function normalizeStopCode(value) {
   return String(value || '').trim();
 }
@@ -601,6 +687,14 @@ async function extractStopClosureImpacts(newsItems, stopIndex = {}, options = {}
   return impacts;
 }
 
+async function extractNewsImpacts(newsItems, stopIndex = {}, options = {}) {
+  const stopClosureImpacts = await extractStopClosureImpacts(newsItems, stopIndex, options);
+  return [
+    ...stopClosureImpacts,
+    ...extractHolidayServiceImpacts(newsItems, options),
+  ];
+}
+
 module.exports = {
   buildNoticeStopImpactsFromText,
   buildOfficialNoticeStopImpacts,
@@ -610,4 +704,7 @@ module.exports = {
   statusForDateWindow,
   buildRuleStopClosures,
   extractStopClosureImpacts,
+  extractHolidayServiceImpacts,
+  extractNewsImpacts,
+  parseHolidayServiceNotice,
 };

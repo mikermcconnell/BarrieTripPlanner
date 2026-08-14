@@ -51,6 +51,25 @@ const getCalendarDateExceptions = (calendarDates = [], dateKey) => (
   calendarDates.filter((entry) => entry?.date === dateKey)
 );
 
+const getHolidayNoticeForDate = (holidayServiceNotices = [], dateKey) => (
+  holidayServiceNotices.find((notice) => (
+    notice?.type === 'holiday_service' &&
+    notice?.dateKey === dateKey &&
+    notice?.archivedAt == null &&
+    notice?.status !== 'archived' &&
+    notice?.status !== 'expired'
+  )) || null
+);
+
+const getServiceIdsForNoticeLevel = ({ dateKey, calendar = [], serviceLevel }) => {
+  const dayName = String(serviceLevel || '').toLowerCase();
+  if (!WEEKDAYS.includes(dayName)) return new Set();
+
+  return new Set(calendar
+    .filter((entry) => entry?.serviceId && inCalendarRange(dateKey, entry) && entry[dayName])
+    .map((entry) => entry.serviceId));
+};
+
 const getNthWeekdayOfMonth = (year, monthIndex, weekday, nth) => {
   const date = new Date(year, monthIndex, 1);
   const offset = (weekday - date.getDay() + 7) % 7;
@@ -119,6 +138,20 @@ const formatDisplayDate = (date) => (
     day: 'numeric',
   })
 );
+
+const formatWeekday = (date) => date.toLocaleDateString('en-CA', { weekday: 'long' });
+
+const buildServiceShortMessage = ({ date, isNoService, serviceLevel, serviceLabel, displayDate }) => {
+  if (isNoService) return `No Barrie Transit service is scheduled for ${displayDate}.`;
+
+  const normalizedLevel = String(serviceLevel || '').toLowerCase();
+  if (WEEKDAYS.includes(normalizedLevel)) {
+    const scheduleName = normalizedLevel.charAt(0).toUpperCase() + normalizedLevel.slice(1);
+    return `On ${formatWeekday(date)}, service runs on ${scheduleName} schedules.`;
+  }
+
+  return `${serviceLabel} is scheduled for ${displayDate}.`;
+};
 
 const formatTimeLabel = (seconds) => {
   if (!Number.isFinite(seconds)) return null;
@@ -190,20 +223,32 @@ export const getHolidayServiceInfo = ({
   trips = [],
   routes = [],
   stopTimes = [],
+  holidayServiceNotices = [],
 } = {}) => {
   const value = date instanceof Date ? date : new Date(date);
   const dateKey = formatHolidayDateKey(value);
   if (!dateKey) return null;
 
   const exceptions = getCalendarDateExceptions(calendarDates, dateKey);
-  if (exceptions.length === 0) return null;
+  const officialNotice = getHolidayNoticeForDate(holidayServiceNotices, dateKey);
+  if (exceptions.length === 0 && !officialNotice) return null;
 
-  const activeServices = getActiveServiceIdsForGtfsDate({ date: value, calendar, calendarDates });
+  let activeServices = getActiveServiceIdsForGtfsDate({ date: value, calendar, calendarDates });
+  if (exceptions.length === 0 && officialNotice?.serviceLevel) {
+    const noticeServices = getServiceIdsForNoticeLevel({
+      dateKey,
+      calendar,
+      serviceLevel: officialNotice.serviceLevel,
+    });
+    if (noticeServices.size > 0) activeServices = noticeServices;
+  }
   const routeSummaries = buildRouteSummaries({ activeServices, trips, routes, stopTimes });
-  const holidayName = getHolidayNameForDate(value);
-  const isNoService = activeServices.size === 0 || routeSummaries.length === 0;
+  const holidayName = officialNotice?.holidayName || getHolidayNameForDate(value);
+  const isNoService = officialNotice?.serviceLevel === 'no_service'
+    || (!officialNotice && (activeServices.size === 0 || routeSummaries.length === 0));
   const status = isNoService ? 'no_service' : 'holiday_service';
   const displayDate = formatDisplayDate(value);
+  const serviceLabel = officialNotice?.serviceLabel || (isNoService ? 'No service' : 'Holiday service');
 
   return {
     date: value,
@@ -211,13 +256,25 @@ export const getHolidayServiceInfo = ({
     holidayName,
     status,
     title: `${holidayName} service`,
-    badgeLabel: isNoService ? 'No service' : 'Holiday service',
-    shortMessage: isNoService
-      ? `No Barrie Transit service is scheduled for ${displayDate}.`
-      : `Holiday service is scheduled for ${displayDate}.`,
-    detailsMessage: isNoService
+    badgeLabel: serviceLabel,
+    shortMessage: buildServiceShortMessage({
+      date: value,
+      isNoService,
+      serviceLevel: officialNotice?.serviceLevel,
+      serviceLabel,
+      displayDate,
+    }),
+    detailsMessage: officialNotice?.message || (isNoService
       ? 'GTFS calendar_dates removes scheduled service for this date.'
-      : `Barrie Transit is running ${routeSummaries.length} route${routeSummaries.length === 1 ? '' : 's'} on this holiday schedule.`,
+      : `Barrie Transit is running ${routeSummaries.length} route${routeSummaries.length === 1 ? '' : 's'} on this holiday schedule.`),
+    noticeKey: officialNotice
+      ? `${officialNotice.sourceNewsId || officialNotice.id}:${dateKey}`
+      : dateKey,
+    sourceNewsId: officialNotice?.sourceNewsId || null,
+    sourceTitle: officialNotice?.sourceTitle || null,
+    sourceUrl: officialNotice?.sourceUrl || null,
+    serviceLevel: officialNotice?.serviceLevel || null,
+    isGtfsConfirmed: exceptions.length > 0,
     activeServiceIds: [...activeServices],
     exceptions,
     activeRouteCount: routeSummaries.length,
@@ -232,15 +289,27 @@ export const getUpcomingHolidayServiceInfo = ({
   routes = [],
   now = new Date(),
   daysAhead = 1,
+  holidayServiceNotices = [],
 } = {}) => {
   for (let offset = 0; offset <= daysAhead; offset += 1) {
     const date = new Date(now);
     date.setDate(now.getDate() + offset);
-    const info = getHolidayServiceInfo({ date, calendar, calendarDates, trips, routes });
+    const info = getHolidayServiceInfo({
+      date,
+      calendar,
+      calendarDates,
+      trips,
+      routes,
+      holidayServiceNotices,
+    });
     if (info) {
       return {
         ...info,
-        relativeLabel: offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : null,
+        relativeLabel: offset === 0
+          ? 'Today'
+          : offset === 1
+            ? 'Tomorrow'
+            : date.toLocaleDateString('en-CA', { weekday: 'long' }),
       };
     }
   }
