@@ -22,7 +22,7 @@
     "firebase-functions": "^7.2.5",
     "json2csv": "^5.0.7",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^5.7.284"
+    "pdfjs-dist": "^6.2.108"
   },
   "devDependencies": {
     "jest": "^29.7.0",
@@ -32,7 +32,10 @@
     "fast-xml-parser": "^5.7.0",
     "protobufjs": "^7.5.5",
     "node-forge": "^1.4.0",
-    "undici": "^7.24.0",
-    "path-to-regexp": "^0.1.13"
+    "undici": "^7.29.0",
+    "path-to-regexp": "^0.1.13",
+    "rimraf": {
+      "brace-expansion": "^2.1.4"
+    }
   }
 }
