@@ -15,6 +15,7 @@
   <ul>
     <li><strong>Account information:</strong> If you create an account, Firebase Authentication processes your email address, display name, profile photo, sign-in provider, and account identifier.</li>
     <li><strong>Saved rider data:</strong> Favorites, saved places and trips, recent trips, route subscriptions, notification preferences, and other app settings may be stored in Firebase and on your device.</li>
+    <li><strong>Shared trip links:</strong> When you create a shared trip, its name, origin, destination, summary, edit-history metadata, and an anonymous editor identifier are stored in Firebase. Anyone who receives the unguessable link can view and edit that trip. Do not share a trip containing a home, work, or other sensitive address unless you are comfortable sharing it with every recipient of the link.</li>
     <li><strong>Location and searches:</strong> With permission, the app uses your device location to show nearby stops and plan walking connections. Address searches and walking-route requests may send an address, coordinates, or both through the app's API proxy to LocationIQ. The app does not build a location-history profile.</li>
     <li><strong>Notifications:</strong> If you enable notifications, the app and Firebase store notification preferences, a device identifier, and an Expo push token. Expo processes the token to deliver notifications.</li>
     <li><strong>App feedback:</strong> If you submit feedback, the app stores the category, message, app version, platform, source screen, timestamps, and a pseudonymous identifier used for rate limiting and retry protection. It does not attach your email address to the feedback message. Do not include sensitive personal information in feedback.</li>
@@ -56,6 +57,7 @@
   <h2>Your choices</h2>
   <ul>
     <li>Use core transit features without creating an account.</li>
+    <li>Keep trips only on your device, or deliberately create a collaboration link when you want to share one.</li>
     <li>Change location and notification permissions in device settings.</li>
     <li>Delete your signed-in account in the app or follow the <a href="account-deletion.html">account deletion instructions</a>.</li>
     <li>Use the in-app feedback form for app issues. Account deletion requests can also follow the process on the account deletion page.</li>

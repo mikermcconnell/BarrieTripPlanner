@@ -148,6 +148,7 @@ import {
   getDetourEventSegmentIndexForRoute,
 } from '../utils/detourExplorerSelection';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
+import { sharedTripFirestoreService } from '../services/firebase/sharedTripFirestoreService';
 import { trackEvent } from '../services/analyticsService';
 import { shouldShowMainMapFloatingControls } from '../utils/homeChromeVisibility';
 import { getHomeNoticeVisibility } from '../utils/homeNoticePriority';
@@ -1414,6 +1415,7 @@ const HomeScreen = ({ route }) => {
   const routeFilterSheetRef = useRef(null);
   const [isRouteFilterSheetOpen, setIsRouteFilterSheetOpen] = useState(false);
   const [isMapGestureActive, setIsMapGestureActive] = useState(false);
+  const [sharedTripEdit, setSharedTripEdit] = useState(null);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const bottomSafeArea = useSafeBottomInset(insets.bottom);
@@ -1725,6 +1727,8 @@ const HomeScreen = ({ route }) => {
     hasSearched: hasTripSearched,
     isTypingFrom,
     isTypingTo,
+    fromSearchError,
+    toSearchError,
     fromSuggestions,
     toSuggestions,
     timeMode,
@@ -2028,10 +2032,6 @@ const HomeScreen = ({ route }) => {
   }, [enterPlanningMode, touchSavedTrip, setTripFrom, setTripTo, searchTrips]);
 
   const handleSaveCurrentTrip = useCallback(async () => {
-    if (!isAuthenticated) {
-      Alert.alert('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
-      return;
-    }
     const payload = buildSavedTripPayload({
       from: { ...tripFromLocation, name: tripFromText || 'Start' },
       to: { ...tripToLocation, name: tripToText || 'Destination' },
@@ -2041,9 +2041,30 @@ const HomeScreen = ({ route }) => {
       Alert.alert('Trip not ready', 'Choose a valid origin and destination before saving this trip.');
       return;
     }
+
+    if (sharedTripEdit?.shareId) {
+      const sharedResult = await sharedTripFirestoreService.updateSharedTrip(
+        sharedTripEdit.shareId,
+        payload,
+        sharedTripEdit.revision
+      );
+      if (!sharedResult.success) {
+        Alert.alert('Could not update shared trip', sharedResult.error || 'Open the latest shared trip and try again.');
+        return;
+      }
+      await addSavedTrip(payload);
+      setSharedTripEdit(null);
+      Alert.alert('Shared trip updated', 'Everyone with the link will see this version.');
+      navigation.getParent()?.navigate('Profile', {
+        screen: 'SharedTrip',
+        params: { shareId: sharedTripEdit.shareId },
+      });
+      return;
+    }
+
     const result = await addSavedTrip(payload);
     Alert.alert(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
-  }, [isAuthenticated, tripFromLocation, tripFromText, tripToLocation, tripToText, itineraries, selectedItineraryIndex, addSavedTrip]);
+  }, [sharedTripEdit, tripFromLocation, tripFromText, tripToLocation, tripToText, itineraries, selectedItineraryIndex, addSavedTrip, navigation]);
 
   const handleSavePlace = useCallback(async (location, text, label = 'Saved place', labelType = 'custom') => {
     if (!isAuthenticated) {
@@ -2090,6 +2111,14 @@ const HomeScreen = ({ route }) => {
     handleSelectSavedTrip(tripToPlan);
     navigation.setParams({ savedTripToPlan: undefined });
   }, [route?.params?.savedTripToPlan, handleSelectSavedTrip, navigation]);
+
+  useEffect(() => {
+    const tripToEdit = route?.params?.sharedTripToEdit;
+    if (!tripToEdit?.shareId || !tripToEdit?.trip) return;
+    setSharedTripEdit({ shareId: tripToEdit.shareId, revision: tripToEdit.revision });
+    handleSelectSavedTrip(tripToEdit.trip);
+    navigation.setParams({ sharedTripToEdit: undefined });
+  }, [route?.params?.sharedTripToEdit, handleSelectSavedTrip, navigation]);
 
   const [currentZoom, setCurrentZoom] = useState(() =>
     Math.log(360 / MAP_CONFIG.INITIAL_REGION.latitudeDelta) / Math.LN2
@@ -3374,6 +3403,8 @@ const HomeScreen = ({ route }) => {
             isLoading={isTripLoading}
             isTypingFrom={isTypingFrom}
             isTypingTo={isTypingTo}
+            fromSearchError={fromSearchError}
+            toSearchError={toSearchError}
             fromSuggestions={fromSuggestions}
             toSuggestions={toSuggestions}
             savedPlaces={rankedSavedPlaces}
@@ -3416,6 +3447,7 @@ const HomeScreen = ({ route }) => {
                 savedTrips={rankedSavedTrips}
                 onSelectSavedTrip={handleSelectSavedTrip}
                 onSaveCurrentTrip={handleSaveCurrentTrip}
+                saveCurrentTripLabel={sharedTripEdit ? 'Update shared trip' : 'Save this route'}
                 repeatTripSuggestion={repeatTripSuggestion}
                 onRetry={() => {
                   if (tripFromLocation && tripToLocation) {

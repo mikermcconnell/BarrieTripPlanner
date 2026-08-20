@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Shared trip - MyBarrie Transit</title>
+  <link rel="stylesheet" href="trip.css">
+</head>
+<body>
+  <main>
+    <header>
+      <span class="brand-mark" aria-hidden="true">MB</span>
+      <div>
+        <p class="eyebrow">MyBarrie Transit</p>
+        <h1>Shared trip</h1>
+      </div>
+    </header>
+
+    <section id="loading" class="card status-card" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>Opening the latest shared trip…</p>
+    </section>
+
+    <section id="error" class="card status-card" hidden>
+      <h2>Trip unavailable</h2>
+      <p id="error-message">Check the link and try again.</p>
+    </section>
+
+    <section id="trip" hidden>
+      <p class="live"><span></span> Live collaboration</p>
+      <article class="card trip-card">
+        <h2 id="trip-name">Shared trip</h2>
+        <div class="point">
+          <span class="point-dot"></span>
+          <div><small>From</small><strong id="trip-from"></strong></div>
+        </div>
+        <div class="route-line"></div>
+        <div class="point">
+          <span class="point-dot destination"></span>
+          <div><small>To</small><strong id="trip-to"></strong></div>
+        </div>
+        <p id="trip-updated" class="meta"></p>
+      </article>
+
+      <p class="explanation">This page updates automatically whenever someone saves a new version.</p>
+      <a id="open-app" class="primary-button" href="#">Open and edit in MyBarrie</a>
+      <button id="copy-link" class="secondary-button" type="button">Copy this edit link</button>
+      <p id="copy-status" class="copy-status" aria-live="polite"></p>
+    </section>
+
+    <footer>Anyone with this link can view the trip. Editing opens the MyBarrie Transit app and does not require an account.</footer>
+  </main>
+  <script type="module" src="trip.js"></script>
+</body>
+</html>

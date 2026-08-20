@@ -66,6 +66,7 @@ const TripBottomSheet = ({
   savedTrips = [],
   onSelectSavedTrip,
   onSaveCurrentTrip,
+  saveCurrentTripLabel = 'Save this route',
   repeatTripSuggestion = null,
 }) => {
   const insets = useSafeAreaInsets();
@@ -214,10 +215,10 @@ const TripBottomSheet = ({
                 style={styles.saveTripButton}
                 onPress={onSaveCurrentTrip}
                 accessibilityRole="button"
-                accessibilityLabel="Save this route"
+                accessibilityLabel={saveCurrentTripLabel}
               >
                 <Icon name="Star" size={14} color={COLORS.primary} />
-                <Text style={styles.saveTripButtonText}>Save this route</Text>
+                <Text style={styles.saveTripButtonText}>{saveCurrentTripLabel}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity

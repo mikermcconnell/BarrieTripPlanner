@@ -63,6 +63,22 @@ export const getItineraryNavigationBlock = (itinerary) => {
     };
   }
 
+  if (itinerary.realtimeServiceDisruption?.type === 'trip_cancelled') {
+    return {
+      code: 'CANCELLED_TRIP',
+      title: 'This trip was cancelled',
+      message: 'Re-plan the trip to find service that is still operating.',
+    };
+  }
+
+  if (itinerary.realtimeServiceDisruption?.type === 'stop_skipped') {
+    return {
+      code: 'SKIPPED_STOP',
+      title: 'A required stop will be skipped',
+      message: 'Re-plan the trip using stops that this bus will serve.',
+    };
+  }
+
   if (itinerary.hasMissedDeparture) {
     return {
       code: 'MISSED_DEPARTURE',

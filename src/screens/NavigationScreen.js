@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Map components - MapLibre
 import MapLibreGL from '@maplibre/maplibre-react-native';
@@ -49,7 +48,7 @@ import BusMarker from '../components/BusMarker';
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
 import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
-import { useStepProgress } from '../hooks/useStepProgress';
+import { useStepProgress, buildStepProgressPresentation } from '../hooks/useStepProgress';
 import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
 import { useDevNavigationSimulator } from '../hooks/useDevNavigationSimulator';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
@@ -74,6 +73,7 @@ import { buildNavigationMapModel } from '../features/navigation/model/buildNavig
 import { buildNavigationRoutePolylines } from '../features/navigation/model/buildNavigationRoutePolylines';
 import { buildNavigationVehicleMarkers } from '../features/navigation/model/buildNavigationVehicleMarkers';
 import { useNavigationItineraryController } from '../features/navigation/useNavigationItineraryController';
+import { useNavigationCompletion } from '../features/navigation/useNavigationCompletion';
 import {
   annotateItineraryWithLiveService,
   getItineraryNavigationBlock,
@@ -354,8 +354,6 @@ const NavigationScreen = ({ route }) => {
     transitStatus,
     totalLegs,
     isUserOnBoard,
-    navigationState,
-    instructionText,
     distanceToDestination,
     hasArrivedAtDestination,
     isNavigationComplete,
@@ -414,6 +412,15 @@ const NavigationScreen = ({ route }) => {
 
   // Bus proximity tracking with user location and on-board status
   const busProximity = useBusProximity(currentTransitLeg, true, navigationUserLocation, isUserOnBoard);
+  const { navigationState, instructionText } = useMemo(
+    () => buildStepProgressPresentation({
+      currentLeg,
+      legStatus,
+      transitStatus,
+      busProximity,
+    }),
+    [currentLeg, legStatus, transitStatus, busProximity]
+  );
 
   const notifyAutoBoardReady = useCallback(() => {
     triggerHapticOnce('auto-board', Haptics.NotificationFeedbackType.Success);
@@ -530,31 +537,7 @@ const NavigationScreen = ({ route }) => {
     }
   }, [isFollowMode, isHeadingUp, isWalkingLeg]);
 
-  // Handle navigation completion
-  useEffect(() => {
-    if (isNavigationComplete) {
-      try {
-        const { trackEvent } = require('../services/analyticsService');
-        trackEvent('navigation_completed');
-      } catch {}
-      try {
-        const { maybeRequestReview } = require('../services/reviewService');
-        maybeRequestReview();
-      } catch {}
-      // Set nudge flag for post-trip survey banner on HomeScreen
-      AsyncStorage.setItem('@barrie_transit_show_survey_nudge', 'true').catch(() => {});
-      Alert.alert(
-        'Trip Complete!',
-        'You have arrived at your destination.',
-        [
-          {
-            text: 'Done',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    }
-  }, [isNavigationComplete, navigation]);
+  useNavigationCompletion(isNavigationComplete, navigation);
 
   // Auto-update transit status when bus arrives (board prompt)
   useEffect(() => {

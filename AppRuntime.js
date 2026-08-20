@@ -224,6 +224,7 @@ const linking = {
       Profile: {
         screens: {
           DetourReview: 'operator/detour-review',
+          SharedTrip: 'trip/:shareId',
         },
       },
     },

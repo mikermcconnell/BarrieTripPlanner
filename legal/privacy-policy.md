@@ -10,6 +10,7 @@ This policy explains how MyBarrie Transit, independently operated by Mike McMike
 
 - **Account information:** If you create an account, Firebase Authentication processes your email address, display name, profile photo, sign-in provider, and account identifier.
 - **Saved rider data:** Favorites, saved places and trips, recent trips, route subscriptions, notification preferences, and app settings may be stored in Firebase and on your device.
+- **Shared trip links:** When you create a shared trip, its name, origin, destination, summary, edit history metadata, and an anonymous editor identifier are stored in Firebase. Anyone who receives the unguessable link can view and edit that trip. Do not share a trip containing a home, work, or other sensitive address unless you are comfortable sharing it with every recipient of the link.
 - **Location and searches:** With permission, the app uses your location for nearby stops and walking connections. Address searches and walking-route requests may send an address, coordinates, or both through the app's API proxy to LocationIQ. The app does not build a location-history profile.
 - **Notifications:** If enabled, the app and Firebase store notification preferences, a device identifier, and an Expo push token.
 - **App feedback:** Submitted feedback includes the category, message, app version, platform, source screen, timestamps, and a pseudonymous identifier for rate limiting and retry protection. It does not attach your email address. Do not include sensitive personal information.
@@ -46,6 +47,7 @@ This policy explains how MyBarrie Transit, independently operated by Mike McMike
 ## Your Choices
 
 - Use core transit features without an account.
+- Keep trips only on your device, or deliberately create a collaboration link when you want to share one.
 - Change location and notification permissions in device settings.
 - Delete a signed-in account in the app or follow [the account deletion instructions](account-deletion.md).
 - Use the private in-app feedback form for app issues. Account deletion requests can also follow the account-deletion process.

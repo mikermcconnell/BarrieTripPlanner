@@ -70,6 +70,7 @@ describe('navigationRecalculationService', () => {
       toLat: 44.41,
       toLon: -79.67,
       enrichWalking: false,
+      useCache: false,
       routingData: { mocked: true },
     }));
     expect(enrichItineraryWithWalkingMock).toHaveBeenCalledWith(expect.objectContaining({

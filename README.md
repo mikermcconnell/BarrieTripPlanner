@@ -21,6 +21,7 @@ Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start w
 - Interactive map with route polylines
 - Stop search and information
 - Trip planning with integrated trip details and navigation
+- Local-first My Trips with editable, real-time collaboration links
 - Service alerts and detour overlays
 - Official MyRide holiday-service notices with advance in-app and opted-in push reminders
 - Platform maps for major transit hubs from the City of Barrie source PDF
@@ -289,7 +290,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
    - `DETOUR_BURST_SAMPLING_ENABLED=false` for normal scheduled production; burst sampling is diagnostic only
-   - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000` and `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000` keep compact backend memory for low-frequency route confirmation
+   - `DETOUR_DETECTOR_VERSION=v2`, `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`, and the headway-aware candidate defaults (`2700000` fallback, `1.25` headway multiplier, `600000` buffer, `5400000` cap) keep event-scoped storage and bounded backend memory for low-frequency route confirmation
    - `BASELINE_AUTO_INIT=false` (prevents seeding the baseline from live GTFS during an active detour)
    - `DETOUR_REQUIRE_SAFE_BASELINE=true` (blocks detection until a trusted baseline is loaded)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
@@ -344,6 +345,14 @@ Deploy updated rules so clients can read:
 - `activeDetourEventsV2/*` and `detourEventHistoryV2/*` for the production event feed
 - dev active/history collections only when local isolated testing is intentionally enabled
 - legacy `activeDetours/*`, `detourHistory/*`, `activeDetoursV2/*`, and `detourHistoryV2/*` remain read-only archive/audit data and are not production sources of truth
+
+Shared trips also require:
+
+- Firebase Anonymous Authentication enabled. It provides an invisible low-privilege identity for edits; riders do not see a sign-in screen.
+- the current `firestore.rules` deployed so exact `sharedTrips/{shareId}` links can be read while collection listing stays disabled
+- Firebase Hosting deployed from `legal-public/` so `trip.html?id=...` provides the public live viewer and app-edit handoff
+
+My Trips is local-first for signed-out riders. Account sign-in is optional and remains useful for account-backed cross-device storage. Shared-trip updates are revision checked so a stale editor cannot overwrite a newer saved version.
 
 ### EAS Android Firebase file
 

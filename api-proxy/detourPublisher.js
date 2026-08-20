@@ -1,7 +1,6 @@
 const { getDb } = require('./firebaseAdmin');
 const { DETOUR_PATH_LABEL, matchDetourGeometry } = require('./detourRoadMatcher');
 const { recordDetourDecision } = require('./detourDecisionJournal');
-const { buildDetourWriterMetadata } = require('./detour/environment');
 const { shouldAutoClearStaleDetour, evaluateStaleRiderVisibility } = require('./detour/staleClear');
 const { normalizeDetourGeometryOrientation } = require('./detour/geometry/pathOrientation');
 const { filterNonClosureSelfLoopSegments } = require('./detour/geometry/segmentValidity');
@@ -10,11 +9,6 @@ const { resolveDetourStorageConfig } = require('./detour/storageConfig');
 const { applyRiderVisibilityGuard } = require('./detour/riderVisibilityGuard');
 const { attachRiderAlertVisibility } = require('./detour/alertVisibility');
 const { attachRiderPublishGates } = require('./detour/riderPublishGates');
-const { projectOntoPolyline } = require('./detour/projection');
-const {
-  clearDisplayGeometry,
-  copyRefinedDisplayGeometry,
-} = require('./detour/displayGeometry');
 const {
   buildClearedEvent,
   buildDetectedEvent,
@@ -58,8 +52,6 @@ const DETOUR_PATH_BOUNDARY_MAX_GAP_METERS =
   Number.isFinite(configuredPathBoundaryMaxGapMeters) && configuredPathBoundaryMaxGapMeters > 0
     ? configuredPathBoundaryMaxGapMeters
     : 150;
-const SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS = 75;
-const SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS = 1200;
 
 const lastPublishedIds = new Set();
 const lastPublishedState = new Map();
@@ -634,7 +626,6 @@ function clearRoadMatchedPath(target) {
   target.roadMatchConfidence = null;
   target.roadMatchRawConfidence = null;
   target.roadMatchSource = null;
-  clearDisplayGeometry(target);
 }
 
 function getRenderableSegment(segment) {
@@ -1588,14 +1579,11 @@ function deriveSharedDetourEventAssignments(candidates = []) {
   });
 
   const byRoute = new Map();
-  const byPublish = new Map();
-  const byPublishSegment = new Map();
   const bySegment = new Map();
   for (const groupCandidates of grouped.values()) {
     const assignment = makeSharedAssignment(groupCandidates);
     groupCandidates.forEach((candidate) => {
       const routeId = normalizeRouteId(candidate.routeId);
-      const publishId = String(candidate.publishId || '').trim();
       const routeAssignment = byRoute.get(routeId);
       if (
         !routeAssignment ||
@@ -1603,18 +1591,14 @@ function deriveSharedDetourEventAssignments(candidates = []) {
       ) {
         byRoute.set(routeId, assignment);
       }
-      if (publishId) {
-        if (!byPublish.has(publishId)) byPublish.set(publishId, assignment);
-        byPublishSegment.set(`${publishId}:${candidate.segmentIndex ?? 'top'}`, assignment);
-      }
       bySegment.set(`${routeId}:${candidate.segmentIndex ?? 'top'}`, assignment);
     });
   }
 
-  return { byRoute, byPublish, byPublishSegment, bySegment };
+  return { byRoute, bySegment };
 }
 
-function getSharedDetourCandidates(routeId, source = {}, publishId = null) {
+function getSharedDetourCandidates(routeId, source = {}) {
   const normalizedRouteId = normalizeRouteId(routeId || source.routeId);
   const hasSegments = Array.isArray(source?.segments) && source.segments.length > 0;
   const segments = hasSegments ? source.segments : [source];
@@ -1626,7 +1610,6 @@ function getSharedDetourCandidates(routeId, source = {}, publishId = null) {
       (useTopLevel ? source?.detourEventId : null) ||
       null;
     const candidate = {
-      publishId: publishId ? String(publishId) : null,
       routeId: normalizedRouteId,
       segmentIndex: hasSegments ? index : 'top',
       detourEventId: explicitEventId,
@@ -1640,10 +1623,6 @@ function getSharedDetourCandidates(routeId, source = {}, publishId = null) {
       exitPoint: segment?.exitPoint || (useTopLevel ? source?.exitPoint : null),
       confidence: segment?.confidence || source?.confidence || null,
       evidencePointCount: segment?.evidencePointCount ?? source?.evidencePointCount ?? null,
-      shapeId: segment?.shapeId || (useTopLevel ? source?.shapeId : null),
-      boundaryConsensus: segment?.boundaryConsensus || (useTopLevel ? source?.boundaryConsensus : null),
-      coherentTripSignature:
-        segment?.coherentTripSignature || (useTopLevel ? source?.coherentTripSignature : null),
     };
 
     if (!candidate.detourEventId) {
@@ -1673,7 +1652,7 @@ function buildSharedDetourEventAssignmentsForPublish(publishableDetours = {}) {
     const source = hasRenderableGeometry(geo)
       ? { ...(previousSnapshot || {}), ...geo, routeId }
       : { ...(previousSnapshot || {}), routeId };
-    candidates.push(...getSharedDetourCandidates(routeId, source, publishId));
+    candidates.push(...getSharedDetourCandidates(routeId, source));
   });
 
   return deriveSharedDetourEventAssignments(candidates);
@@ -1692,43 +1671,31 @@ function applySharedDetourEventMetadata(target, assignment) {
   return target;
 }
 
-function getPrimarySharedAssignment(publishId, routeId, geo, assignments) {
-  const normalizedPublishId = String(publishId || '').trim();
+function getPrimarySharedAssignment(routeId, geo, assignments) {
   const normalizedRouteId = normalizeRouteId(routeId);
   const segments = Array.isArray(geo?.segments) ? geo.segments : [];
   const primaryIndex = segments.findIndex(getRenderableSegment);
   const selectedIndex = primaryIndex >= 0 ? primaryIndex : 0;
-  return assignments.byPublishSegment.get(`${normalizedPublishId}:${selectedIndex}`) ||
-    assignments.byPublishSegment.get(`${normalizedPublishId}:top`) ||
-    assignments.byPublish.get(normalizedPublishId) ||
-    assignments.bySegment.get(`${normalizedRouteId}:${selectedIndex}`) ||
+  return assignments.bySegment.get(`${normalizedRouteId}:${selectedIndex}`) ||
     assignments.bySegment.get(`${normalizedRouteId}:top`) ||
     assignments.byRoute.get(normalizedRouteId) ||
     null;
 }
 
-function applySharedDetourEventAssignmentsToGeometry(publishId, routeId, geo, assignments) {
+function applySharedDetourEventAssignmentsToGeometry(routeId, geo, assignments) {
   if (!geo || typeof geo !== 'object') return geo;
-  const normalizedPublishId = String(publishId || '').trim();
   const normalizedRouteId = normalizeRouteId(routeId);
   const next = cloneJson(geo);
 
   if (Array.isArray(next.segments)) {
     next.segments = next.segments.map((segment, index) => {
-      const assignment = assignments.byPublishSegment.get(`${normalizedPublishId}:${index}`) ||
-        assignments.byPublish.get(normalizedPublishId) ||
-        assignments.bySegment.get(`${normalizedRouteId}:${index}`) ||
+      const assignment = assignments.bySegment.get(`${normalizedRouteId}:${index}`) ||
         assignments.byRoute.get(normalizedRouteId);
       return assignment ? applySharedDetourEventMetadata({ ...segment }, assignment) : segment;
     });
   }
 
-  const primaryAssignment = getPrimarySharedAssignment(
-    normalizedPublishId,
-    normalizedRouteId,
-    next,
-    assignments
-  );
+  const primaryAssignment = getPrimarySharedAssignment(normalizedRouteId, next, assignments);
   if (primaryAssignment) {
     applySharedDetourEventMetadata(next, primaryAssignment);
   }
@@ -1914,18 +1881,9 @@ function rememberPublishedDetour(publishId, data = {}) {
     currentVehicleCount: normalizeVehicleCount(data.currentVehicleCount ?? data.vehicleCount),
     state: data.state || 'active',
     clearReason: data.clearReason || null,
-    clearProof: cloneJson(data.clearProof) || null,
-    clearanceBlockedReason: data.clearanceBlockedReason || null,
-    blockedClearReason: data.blockedClearReason || null,
     detourVersion: data.detourVersion || null,
     detourModel: data.detourModel || null,
     eventWindow: cloneJson(data.eventWindow) || null,
-    directionId: data.directionId ?? null,
-    progressDirection: Number(data.progressDirection) === -1
-      ? -1
-      : Number(data.progressDirection) === 1
-        ? 1
-        : null,
     handoffSourceRouteId: data.handoffSourceRouteId || null,
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
@@ -1944,17 +1902,6 @@ function rememberPublishedDetour(publishId, data = {}) {
     lastEvidenceAt: data.lastEvidenceAt || null,
     latestGpsEvidenceAt: data.latestGpsEvidenceAt || data.lastEvidenceAt || null,
     geometryLastEvidenceAt: data.geometryLastEvidenceAt || data.lastEvidenceAt || null,
-    staleVisibilityTracking: cloneJson(data.staleVisibilityTracking) || null,
-    riderVisibilityPolicySource: data.riderVisibilityPolicySource || null,
-    riderVisibilityMissedOpportunityCount: normalizeVehicleCount(
-      data.riderVisibilityMissedOpportunityCount
-    ),
-    riderVisibilityActiveServiceAgeMs: data.riderVisibilityActiveServiceAgeMs ?? null,
-    riderVisibilityMaxActiveServiceAgeMs: data.riderVisibilityMaxActiveServiceAgeMs ?? null,
-    riderVisibilityHeadwayMs: data.riderVisibilityHeadwayMs ?? null,
-    riderVisibilityDirectionId: data.riderVisibilityDirectionId ?? null,
-    riderVisibilityPassageTargetAvailable: data.riderVisibilityPassageTargetAvailable === true,
-    riderVisibilityFailSafeReason: data.riderVisibilityFailSafeReason || null,
     detourZone: cloneJson(data.detourZone) || null,
     clearWindow: cloneJson(data.clearWindow) || null,
     clearWindows: cloneJson(data.clearWindows) || [],
@@ -2031,15 +1978,56 @@ async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
   return snapshot.size;
 }
 
+function getHistoryEventRef(db, event, storageConfig) {
+  const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
+  const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}`;
+  return db.collection(storageConfig.historyCollection).doc(docId);
+}
+
 async function writeHistoryEvent(db, event, storageConfig) {
   if (!HISTORY_ENABLED || !event) return;
-  const suffix = Math.random().toString(36).slice(2, 8);
-  const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
-  const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}-${suffix}`;
-  await db.collection(storageConfig.historyCollection).doc(docId).set({
-    ...event,
-    ...(storageConfig.writerMetadata || {}),
-  });
+  await getHistoryEventRef(db, event, storageConfig).set(event);
+}
+
+async function writeActiveDetourWithHistory(db, publishId, doc, event, storageConfig) {
+  const activeRef = db.collection(storageConfig.activeCollection).doc(publishId);
+
+  if (HISTORY_ENABLED && event && typeof db.batch === 'function') {
+    const batch = db.batch();
+    if (batch && typeof batch.set === 'function' && typeof batch.commit === 'function') {
+      batch.set(activeRef, doc, { merge: true });
+      batch.set(getHistoryEventRef(db, event, storageConfig), event);
+      await batch.commit();
+      return;
+    }
+  }
+
+  // Lightweight test doubles may not implement Firestore batches. Production
+  // Admin SDK clients always take the atomic branch above.
+  await activeRef.set(doc, { merge: true });
+  await writeHistoryEvent(db, event, storageConfig);
+}
+
+async function deleteActiveDetourWithHistory(db, publishId, event, storageConfig) {
+  const activeRef = db.collection(storageConfig.activeCollection).doc(publishId);
+
+  if (HISTORY_ENABLED && event && typeof db.batch === 'function') {
+    const batch = db.batch();
+    if (
+      batch &&
+      typeof batch.delete === 'function' &&
+      typeof batch.set === 'function' &&
+      typeof batch.commit === 'function'
+    ) {
+      batch.delete(activeRef);
+      batch.set(getHistoryEventRef(db, event, storageConfig), event);
+      await batch.commit();
+      return;
+    }
+  }
+
+  await activeRef.delete();
+  await writeHistoryEvent(db, event, storageConfig);
 }
 
 async function hydratePublisherState(db, storageConfig) {
@@ -2114,8 +2102,7 @@ function normalizeHistoryDoc(doc) {
 
 async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete', storageConfig) {
   try {
-    await db.collection(storageConfig.activeCollection).doc(publishId).delete();
-    await writeHistoryEvent(db, event, storageConfig);
+    await deleteActiveDetourWithHistory(db, publishId, event, storageConfig);
     lastPublishedIds.delete(publishId);
     lastPublishedState.delete(publishId);
     lastSeenUpdateTime.delete(publishId);
@@ -2128,182 +2115,14 @@ async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete',
   }
 }
 
-function getSharedBoundaryStrength(candidate = {}) {
-  const consensus = candidate.boundaryConsensus || {};
-  const lower = Number(consensus.lowerSignatureCount) || 0;
-  const upper = Number(consensus.upperSignatureCount) || 0;
-  const confirmedSides = Math.min(lower, upper);
-  return (
-    confirmedSides * 1_000_000 +
-    (lower + upper) * 10_000 +
-    Math.round(polylineLengthMeters(candidate.skippedSegmentPolyline)) +
-    (Number(candidate.evidencePointCount) || 0)
-  );
-}
-
-function hasIndependentConsensusBoundary(candidate = {}) {
-  const consensus = candidate.boundaryConsensus || {};
-  return Boolean(
-    candidate.coherentTripSignature &&
-    Number(consensus.lowerSignatureCount) >= 2 &&
-    Number(consensus.upperSignatureCount) >= 2
-  );
-}
-
-function buildShapeSpanFromProjections(shape, firstProjection, secondProjection) {
-  if (!Array.isArray(shape) || !firstProjection || !secondProjection) return [];
-  const lower = firstProjection.progressMeters <= secondProjection.progressMeters
-    ? firstProjection
-    : secondProjection;
-  const upper = lower === firstProjection ? secondProjection : firstProjection;
-  const points = [normalizePoint(lower.projectedPoint)];
-  for (let index = lower.index + 1; index <= upper.index; index += 1) {
-    const point = normalizePoint(shape[index]);
-    if (point) points.push(point);
-  }
-  points.push(normalizePoint(upper.projectedPoint));
-  return normalizePolyline(points);
-}
-
-function addSharedBoundaryPathAnchors(path, entryPoint, exitPoint) {
-  const points = normalizePolyline(path);
-  if (points.length < 2) return points;
-  const entryGap = distanceMeters(entryPoint, points[0]);
-  const exitGap = distanceMeters(points[points.length - 1], exitPoint);
-  if (entryGap > 0 && entryGap <= SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS) {
-    points.unshift(entryPoint);
-  }
-  if (exitGap > 0 && exitGap <= SHARED_BOUNDARY_PATH_ANCHOR_MAX_METERS) {
-    points.push(exitPoint);
-  }
-  return points;
-}
-
-function reconcileSharedEventBoundariesForPublish(publishableDetours = {}, shapes = null) {
-  if (!shapes?.get) return publishableDetours;
-  const candidates = [];
-
-  Object.entries(publishableDetours).forEach(([publishId, detour]) => {
-    const routeId = detourRouteId(publishId, detour);
-    getSharedDetourCandidates(routeId, detour?.geometry || {}).forEach((candidate) => {
-      candidates.push({ ...candidate, publishId, detour });
-    });
-  });
-
-  for (const target of candidates) {
-    if (!target.coherentTripSignature) continue;
-    const source = candidates
-      .filter((candidate) => (
-        candidate.publishId !== target.publishId &&
-        candidate.routeId !== target.routeId &&
-        hasIndependentConsensusBoundary(candidate) &&
-        hasClosedSegmentRelationship(candidate, target) &&
-        getSharedBoundaryStrength(candidate) > getSharedBoundaryStrength(target)
-      ))
-      .sort((a, b) => getSharedBoundaryStrength(b) - getSharedBoundaryStrength(a))[0];
-    if (!source) continue;
-
-    const shapeId = target.shapeId || target.detour?.geometry?.shapeId;
-    const targetShape = shapes.get(shapeId);
-    const sourceEntry = normalizePoint(source.entryPoint);
-    const sourceExit = normalizePoint(source.exitPoint);
-    if (!sourceEntry || !sourceExit || !Array.isArray(targetShape) || targetShape.length < 2) continue;
-
-    const firstProjection = projectOntoPolyline(sourceEntry, targetShape);
-    const secondProjection = projectOntoPolyline(sourceExit, targetShape);
-    if (
-      !firstProjection ||
-      !secondProjection ||
-      firstProjection.distanceMeters > SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS ||
-      secondProjection.distanceMeters > SHARED_BOUNDARY_ROUTE_PROJECTION_MAX_METERS
-    ) {
-      continue;
-    }
-
-    const proposedSpan = Math.abs(firstProjection.progressMeters - secondProjection.progressMeters);
-    const currentSpan = Math.max(1, polylineLengthMeters(target.skippedSegmentPolyline));
-    if (proposedSpan < currentSpan * 0.5 || proposedSpan > currentSpan * 2) continue;
-
-    const projectedFirst = normalizePoint(firstProjection.projectedPoint);
-    const projectedSecond = normalizePoint(secondProjection.projectedPoint);
-    const directDistance = distanceMeters(target.entryPoint, projectedFirst) +
-      distanceMeters(target.exitPoint, projectedSecond);
-    const reverseDistance = distanceMeters(target.entryPoint, projectedSecond) +
-      distanceMeters(target.exitPoint, projectedFirst);
-    const entryPoint = directDistance <= reverseDistance ? projectedFirst : projectedSecond;
-    const exitPoint = directDistance <= reverseDistance ? projectedSecond : projectedFirst;
-    let skippedSegmentPolyline = buildShapeSpanFromProjections(
-      targetShape,
-      firstProjection,
-      secondProjection
-    );
-    if (
-      skippedSegmentPolyline.length >= 2 &&
-      distanceMeters(skippedSegmentPolyline[0], entryPoint) >
-        distanceMeters(skippedSegmentPolyline[skippedSegmentPolyline.length - 1], entryPoint)
-    ) {
-      skippedSegmentPolyline.reverse();
-    }
-
-    const geometry = cloneJson(target.detour.geometry) || {};
-    const segments = Array.isArray(geometry.segments) ? geometry.segments : [geometry];
-    const segmentIndex = target.segmentIndex === 'top' ? 0 : Number(target.segmentIndex);
-    if (!Number.isInteger(segmentIndex) || !segments[segmentIndex]) continue;
-    const existingSegment = segments[segmentIndex];
-    const updatedSegment = {
-      ...existingSegment,
-      entryPoint,
-      exitPoint,
-      skippedSegmentPolyline,
-      inferredDetourPolyline: addSharedBoundaryPathAnchors(
-        existingSegment.inferredDetourPolyline,
-        entryPoint,
-        exitPoint
-      ),
-      likelyDetourPolyline: Array.isArray(existingSegment.likelyDetourPolyline)
-        ? addSharedBoundaryPathAnchors(existingSegment.likelyDetourPolyline, entryPoint, exitPoint)
-        : existingSegment.likelyDetourPolyline || null,
-      startProgressMeters: Math.min(firstProjection.progressMeters, secondProjection.progressMeters),
-      endProgressMeters: Math.max(firstProjection.progressMeters, secondProjection.progressMeters),
-      spanMeters: proposedSpan,
-      sharedBoundaryReconciled: true,
-      sharedBoundarySourceRouteId: source.routeId,
-      sharedBoundaryConsensus: cloneJson(source.boundaryConsensus),
-    };
-    segments[segmentIndex] = updatedSegment;
-    geometry.segments = segments;
-    geometry.shapeId = updatedSegment.shapeId || geometry.shapeId;
-    geometry.entryPoint = entryPoint;
-    geometry.exitPoint = exitPoint;
-    geometry.skippedSegmentPolyline = skippedSegmentPolyline;
-    geometry.inferredDetourPolyline = updatedSegment.inferredDetourPolyline;
-    geometry.likelyDetourPolyline = updatedSegment.likelyDetourPolyline;
-    geometry.startProgressMeters = updatedSegment.startProgressMeters;
-    geometry.endProgressMeters = updatedSegment.endProgressMeters;
-    geometry.sharedBoundaryReconciled = true;
-    geometry.sharedBoundarySourceRouteId = source.routeId;
-    target.detour.geometry = geometry;
-    publishableDetours[target.publishId] = target.detour;
-  }
-
-  return publishableDetours;
-}
-
 function getDetourPathBoundaryAssessment(segment = {}) {
   const path = normalizePolyline(
     Array.isArray(segment.likelyDetourPolyline) && segment.likelyDetourPolyline.length >= 2
       ? segment.likelyDetourPolyline
       : segment.inferredDetourPolyline
   );
-  const usesRefinedDisplayBoundary = segment.displayBoundaryRefined === true;
-  const entryPoint = normalizePoint(
-    usesRefinedDisplayBoundary ? segment.displayEntryPoint : segment.entryPoint
-  );
-  const exitPoint = normalizePoint(
-    usesRefinedDisplayBoundary
-      ? segment.displayExitPoint
-      : (segment.serviceRejoinPoint || segment.exitPoint)
-  );
+  const entryPoint = normalizePoint(segment.entryPoint);
+  const exitPoint = normalizePoint(segment.serviceRejoinPoint || segment.exitPoint);
   if (path.length < 2 || !entryPoint || !exitPoint) return null;
 
   const entryGapMeters = distancePointToPolylineMeters(entryPoint, path);
@@ -2341,78 +2160,11 @@ function suppressDisconnectedDetourPath(segment = {}) {
   return true;
 }
 
-function hasNormalRouteClearReason(previousSnapshot) {
+function hasNormalRouteClearProof(previousSnapshot) {
   return (
     previousSnapshot?.clearReason === 'normal-route-observed' ||
     previousSnapshot?.clearReason === 'obsolete-shape-normal-route-observed'
   );
-}
-
-function hasAuditableGpsProofRecord(proof = {}) {
-  if (!proof || proof.evidenceType !== 'normal-route-gps') return false;
-  if (!String(proof.method || '').trim()) return false;
-  if (!Number.isFinite(Number(proof.observedAt)) || Number(proof.observedAt) <= 0) return false;
-  if (!Number.isFinite(Number(proof.sampleCount)) || Number(proof.sampleCount) < 1) return false;
-  if (!Number.isFinite(Number(proof.sourceCount)) || Number(proof.sourceCount) < 1) return false;
-
-  const segmentProofs = Array.isArray(proof.segments) ? proof.segments.filter(Boolean) : [];
-  if (segmentProofs.length > 0) {
-    return segmentProofs.every(hasAuditableGpsProofRecord);
-  }
-
-  if (!String(proof.shapeId || '').trim()) return false;
-  if (proof.method === 'obsolete-shape-all-current-vehicles-on-route') {
-    const requiredGraceMs = Number(proof.requiredGraceMs);
-    const observedGraceMs = Number(proof.observedGraceMs);
-    return Boolean(
-      proof.passed === true &&
-      proof.allCurrentVehiclesOnRoute === true &&
-      Number.isFinite(requiredGraceMs) &&
-      requiredGraceMs > 0 &&
-      Number.isFinite(observedGraceMs) &&
-      observedGraceMs >= requiredGraceMs
-    );
-  }
-  const coverageRatio = Number(proof.coverageRatio);
-  const requiredCoverageRatio = Number(proof.requiredCoverageRatio);
-  const movementMeters = Number(proof.movementMeters);
-  const requiredMovementMeters = Number(proof.requiredMovementMeters);
-  const coreSampleCount = Number(proof.coreSampleCount);
-  const maxProgressGapMeters = Number(proof.maxProgressGapMeters);
-  const maxAllowedProgressGapMeters = Number(proof.maxAllowedProgressGapMeters);
-  return Boolean(
-    proof.passed === true &&
-    proof.coveragePassed === true &&
-    proof.movementPassed === true &&
-    proof.coreCoveragePassed === true &&
-    proof.progressGapPassed === true &&
-    Number.isFinite(coverageRatio) &&
-    Number.isFinite(requiredCoverageRatio) &&
-    requiredCoverageRatio > 0 &&
-    requiredCoverageRatio <= 1 &&
-    coverageRatio >= requiredCoverageRatio &&
-    Number.isFinite(movementMeters) &&
-    Number.isFinite(requiredMovementMeters) &&
-    requiredMovementMeters > 0 &&
-    movementMeters >= requiredMovementMeters &&
-    Number.isFinite(coreSampleCount) &&
-    coreSampleCount > 0 &&
-    Number.isFinite(maxProgressGapMeters) &&
-    Number.isFinite(maxAllowedProgressGapMeters) &&
-    maxAllowedProgressGapMeters > 0 &&
-    maxProgressGapMeters <= maxAllowedProgressGapMeters
-  );
-}
-
-function hasAuditableNormalRouteClearProof(previousSnapshot) {
-  return hasNormalRouteClearReason(previousSnapshot) &&
-    hasAuditableGpsProofRecord(previousSnapshot?.clearProof);
-}
-
-// A normal-route clear reason is only actionable when its evidence is
-// structured and auditable.
-function hasNormalRouteClearProof(previousSnapshot) {
-  return hasAuditableNormalRouteClearProof(previousSnapshot);
 }
 
 function hasCollectionEntries(collection) {
@@ -2724,35 +2476,7 @@ function assignSnapshotDate(doc, key, valueMs) {
   }
 }
 
-function applyStaleVisibilityDiagnostics(doc, decision = {}) {
-  doc.riderVisibilityPolicySource = decision.policySource || null;
-  doc.riderVisibilityMissedOpportunityCount = Number.isFinite(decision.missedOpportunityCount)
-    ? decision.missedOpportunityCount
-    : 0;
-  doc.riderVisibilityActiveServiceAgeMs = Number.isFinite(decision.activeServiceAgeMs)
-    ? decision.activeServiceAgeMs
-    : null;
-  doc.riderVisibilityMaxActiveServiceAgeMs = Number.isFinite(decision.maxActiveServiceAgeMs)
-    ? decision.maxActiveServiceAgeMs
-    : null;
-  doc.riderVisibilityHeadwayMs = Number.isFinite(decision.headwayMs)
-    ? decision.headwayMs
-    : null;
-  doc.riderVisibilityDirectionId = decision.directionId ?? null;
-  doc.riderVisibilityPassageTargetAvailable = decision.passageTargetAvailable === true;
-  doc.riderVisibilityFailSafeReason = decision.failSafeReason || null;
-  if (decision.staleVisibilityTracking) {
-    doc.staleVisibilityTracking = cloneJson(decision.staleVisibilityTracking);
-  }
-}
-
-function buildRetainedAbsentDetourDoc(
-  routeId,
-  previousSnapshot,
-  now,
-  publishId = null,
-  context = {}
-) {
+function buildRetainedAbsentDetourDoc(routeId, previousSnapshot, now, publishId = null) {
   const vehicleCount = normalizeVehicleCount(previousSnapshot?.vehicleCount);
   const uniqueVehicleCount = normalizeVehicleCount(
     previousSnapshot?.uniqueVehicleCount ?? previousSnapshot?.vehicleCount
@@ -2772,9 +2496,6 @@ function buildRetainedAbsentDetourDoc(
     currentVehicleCount: 0,
     state: previousSnapshot?.state || 'active',
     clearReason: previousSnapshot?.clearReason || null,
-    clearProof: cloneJson(previousSnapshot?.clearProof) || null,
-    clearanceBlockedReason: previousSnapshot?.clearanceBlockedReason || null,
-    blockedClearReason: previousSnapshot?.blockedClearReason || null,
     isPersistent: Boolean(previousSnapshot?.isPersistent),
     handoffSourceRouteId: previousSnapshot?.handoffSourceRouteId || null,
     latestGpsEvidenceAt: previousSnapshot?.latestGpsEvidenceAt ?? null,
@@ -2802,16 +2523,11 @@ function buildRetainedAbsentDetourDoc(
     routeId,
     detour: detourForVisibility,
     previousSnapshot,
-    vehicles: context.vehicles,
-    scheduleIndex: context.scheduleIndex,
-    shapes: context.shapes,
-    tripMapping: context.tripMapping,
     now,
   });
   doc.riderVisible = riderVisibility.riderVisible !== false;
   doc.riderVisibilityReason = riderVisibility.reason || null;
   doc.staleForReview = Boolean(riderVisibility.staleForReview);
-  applyStaleVisibilityDiagnostics(doc, riderVisibility);
 
   if (doc.riderVisible !== false && !hasTrustworthyRiderGeometry(previousSnapshot)) {
     doc.riderVisible = false;
@@ -2822,25 +2538,8 @@ function buildRetainedAbsentDetourDoc(
     doc.riderVisibilityReason = 'stale-mixed-evidence';
   }
   applyRiderVisibilityGuard(doc, previousSnapshot);
-    attachRiderAlertVisibility(doc, {
-    now,
-    geometry: previousSnapshot,
-  });
+  attachRiderAlertVisibility(doc);
 
-  return doc;
-}
-
-function blockUnauditableV2Clearance(doc, previousSnapshot, now) {
-  doc.state = 'active';
-  doc.blockedClearReason = previousSnapshot?.clearReason || null;
-  doc.clearReason = null;
-  doc.clearanceBlockedReason = 'missing-clear-proof';
-  doc.clearanceBlockedAt = now;
-  doc.riderVisible = false;
-  doc.riderVisibilityReason = 'clearance-blocked-missing-proof';
-  doc.alertVisible = false;
-  doc.alertVisibilityReason = 'clearance-blocked-missing-proof';
-  doc.staleForReview = true;
   return doc;
 }
 
@@ -2880,29 +2579,8 @@ function getBaselineAutoUpdatedRouteIds(options = {}) {
   return ids;
 }
 
-function getBaselineReviewRequiredRouteIds(options = {}) {
-  const ids = new Set();
-  (options.baselineReviewRequiredRouteIds || []).forEach((routeId) => {
-    if (routeId != null && String(routeId).trim()) {
-      ids.add(String(routeId).trim());
-    }
-  });
-  return ids;
-}
-
 function applyBaselineSafetySuppression(doc, routeId, baselineRouteIds = {}) {
   const normalizedRouteId = String(routeId);
-  // Active records are merge-written. Always reset route-scoped baseline
-  // markers so an approved or otherwise resolved review cannot leave stale
-  // operational flags on the Firestore document.
-  doc.baselineReviewRequired = false;
-  doc.baselineUpdatePending = false;
-  doc.baselineDiverged = false;
-  if (baselineRouteIds.reviewRequired?.has(normalizedRouteId)) {
-    doc.baselineReviewRequired = true;
-    doc.baselineDiverged = true;
-    return doc;
-  }
   if (baselineRouteIds.pending?.has(normalizedRouteId)) {
     doc.riderVisible = false;
     doc.riderVisibilityReason = 'baseline-update-pending';
@@ -2925,26 +2603,21 @@ async function publishDetours(activeDetours, options = {}) {
   const db = getDb();
   if (!db) {
     console.warn('[detourPublisher] Firestore not configured — skipping publish');
-    return { staleAutoClearedRouteIds: [], serviceRestorationEvents: [] };
+    return { staleAutoClearedRouteIds: [] };
   }
   const storageConfig = resolvePublisherStorageConfig(options.storageConfig);
-  storageConfig.writerMetadata = options.writerMetadata ||
-    buildDetourWriterMetadata(process.env, storageConfig);
   await hydratePublisherState(db, storageConfig);
 
   const now = options.now || Date.now();
-  const serviceRestorationEvents = [];
   const vehicles = Array.isArray(options.vehicles) ? options.vehicles : [];
   const scheduleIndex = options.scheduleIndex || options.gtfsData?.scheduleIndex || null;
   const baselineDivergedRouteIds = getBaselineDivergedRouteIds(options);
   const baselinePendingRouteIds = getBaselinePendingRouteIds(options);
   const baselineAutoUpdatedRouteIds = getBaselineAutoUpdatedRouteIds(options);
-  const baselineReviewRequiredRouteIds = getBaselineReviewRequiredRouteIds(options);
   const baselineRouteIds = {
     diverged: baselineDivergedRouteIds,
     pending: baselinePendingRouteIds,
     autoUpdated: baselineAutoUpdatedRouteIds,
-    reviewRequired: baselineReviewRequiredRouteIds,
   };
   const gtfsData = options.gtfsData || {};
   const noticeStopImpacts = Array.isArray(options.noticeStopImpacts)
@@ -2975,10 +2648,6 @@ async function publishDetours(activeDetours, options = {}) {
     }
     return true;
   }));
-  reconcileSharedEventBoundariesForPublish(
-    publishableDetours,
-    options.shapes || options.gtfsData?.shapes || null
-  );
   const currentIds = new Set([
     ...Object.keys(publishableDetours),
     ...stalePublishSuppressedIds,
@@ -3001,7 +2670,7 @@ async function publishDetours(activeDetours, options = {}) {
     console.warn(
       `[detourPublisher] Suppressing activeDetours deletion: ${options.suppressDeleteReason || 'unknown'}`
     );
-    return { staleAutoClearedRouteIds: [], serviceRestorationEvents };
+    return { staleAutoClearedRouteIds: [] };
   }
 
   const removedIds = [...lastPublishedIds].filter(id => !currentIds.has(id));
@@ -3043,7 +2712,7 @@ async function publishDetours(activeDetours, options = {}) {
       continue;
     }
     if (
-      hasAuditableNormalRouteClearProof(previous) &&
+      hasNormalRouteClearProof(previous) &&
       isObsoleteShapeSnapshot(previous, { shapes: options.shapes, gtfsData })
     ) {
       const event = {
@@ -3051,7 +2720,6 @@ async function publishDetours(activeDetours, options = {}) {
         clearReason: 'obsolete-shape-normal-route-observed',
       };
       await deletePublishedDetour(db, publishId, event, 'delete obsolete-shape detour', storageConfig);
-      serviceRestorationEvents.push(event);
       continue;
     }
     const supersedingGpsDetour = getSupersedingGpsDetour(routeId, previous, publishableDetours);
@@ -3066,32 +2734,14 @@ async function publishDetours(activeDetours, options = {}) {
       await deletePublishedDetour(db, publishId, event, 'delete superseded detour path', storageConfig);
       continue;
     }
-    const isV2NormalRouteClear = (
-      storageConfig.detourVersion === 'v2' ||
-      String(previous?.detourVersion || '').toLowerCase().startsWith('v2')
-    ) && hasNormalRouteClearReason(previous);
-    if (!hasNormalRouteClearReason(previous) || (
-      isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)
-    )) {
-      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId, {
-        vehicles,
-        scheduleIndex,
-        shapes: options.shapes || options.gtfsData?.shapes || null,
-        tripMapping: options.gtfsData?.tripMapping || null,
-      });
-      if (isV2NormalRouteClear && !hasAuditableNormalRouteClearProof(previous)) {
-        blockUnauditableV2Clearance(retainedDoc, previous, now);
-      }
+    if (!hasNormalRouteClearProof(previous)) {
+      const retainedDoc = buildRetainedAbsentDetourDoc(routeId, previous, now, publishId);
       applyBaselineSafetySuppression(retainedDoc, routeId, baselineRouteIds);
       attachRiderPublishGates(retainedDoc);
-      if (retainedDoc.clearanceBlockedReason === 'missing-clear-proof') {
-        blockUnauditableV2Clearance(retainedDoc, previous, now);
-      }
-      Object.assign(retainedDoc, storageConfig.writerMetadata || {});
       try {
-        await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
-        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previous, currentSnapshot, now), storageConfig);
+        const event = buildUpdatedEvent(routeId, previous, currentSnapshot, now);
+        await writeActiveDetourWithHistory(db, publishId, retainedDoc, event, storageConfig);
         lastPublishedIds.add(publishId);
         lastPublishedState.set(publishId, currentSnapshot);
         lastSeenUpdateTime.set(publishId, now);
@@ -3103,9 +2753,6 @@ async function publishDetours(activeDetours, options = {}) {
     }
     const event = buildClearedEvent(routeId, previous, now);
     await deletePublishedDetour(db, publishId, event, 'delete', storageConfig);
-    if (hasAuditableNormalRouteClearProof(previous)) {
-      serviceRestorationEvents.push(event);
-    }
   }
 
   const sharedEventAssignments = buildSharedDetourEventAssignmentsForPublish(publishableDetours);
@@ -3136,15 +2783,11 @@ async function publishDetours(activeDetours, options = {}) {
         : normalizeVehicleCount(detour.currentVehicleCount ?? 0),
       state: detour.state || 'active',
       clearReason: detour.clearReason || null,
-      clearProof: cloneJson(detour.clearProof) || null,
       isPersistent: Boolean(detour.isPersistent),
       handoffSourceRouteId: detour.handoffSourceRouteId || null,
       latestGpsEvidenceAt: detour.latestGpsEvidenceAt ?? null,
       geometryLastEvidenceAt: detour.geometryLastEvidenceAt ?? detour.geometry?.lastEvidenceAt ?? null,
-      lastConfirmedRefreshAt: detour.lastConfirmedRefreshAt ?? null,
-      confirmedRefreshCount: Number(detour.confirmedRefreshCount || 0),
     };
-    Object.assign(doc, storageConfig.writerMetadata);
 
     if (shouldUpdateLastSeen) {
       doc.lastSeenAt = toDate(detour.lastSeenAt, now);
@@ -3233,21 +2876,11 @@ async function publishDetours(activeDetours, options = {}) {
       }
     }
 
-    const sharedAssignment = getPrimarySharedAssignment(
-      publishId,
-      routeId,
-      geo,
-      sharedEventAssignments
-    ) ||
-      sharedEventAssignments.byPublish.get(String(publishId)) ||
+    const sharedAssignment = getPrimarySharedAssignment(routeId, geo, sharedEventAssignments) ||
+      sharedEventAssignments.byRoute.get(normalizeRouteId(routeId)) ||
       null;
     if (geo) {
-      geo = applySharedDetourEventAssignmentsToGeometry(
-        publishId,
-        routeId,
-        geo,
-        sharedEventAssignments
-      );
+      geo = applySharedDetourEventAssignmentsToGeometry(routeId, geo, sharedEventAssignments);
       const eventWindowSegmentMetadataNeedsWrite =
         hasEventWindowSegmentSharedMetadataMismatch(geo, sharedAssignment, detour);
       geo = alignEventWindowSegmentSharedMetadata(geo, sharedAssignment, detour);
@@ -3289,14 +2922,11 @@ async function publishDetours(activeDetours, options = {}) {
       previousSnapshot,
       vehicles,
       scheduleIndex,
-      shapes: options.shapes || options.gtfsData?.shapes || null,
-      tripMapping: options.gtfsData?.tripMapping || null,
       now,
     });
     doc.riderVisible = riderVisibility.riderVisible !== false;
     doc.riderVisibilityReason = riderVisibility.reason || null;
     doc.staleForReview = Boolean(riderVisibility.staleForReview);
-    applyStaleVisibilityDiagnostics(doc, riderVisibility);
 
     if (shouldClearSuppressedGeometry(geo, previousSnapshot)) {
       doc.riderVisible = false;
@@ -3315,10 +2945,7 @@ async function publishDetours(activeDetours, options = {}) {
     }
     applyRiderVisibilityGuard(doc, geo);
     applyBaselineSafetySuppression(doc, routeId, baselineRouteIds);
-    attachRiderAlertVisibility(doc, {
-      now,
-      geometry: geo,
-    });
+    attachRiderAlertVisibility(doc);
 
     if (writeGeo && geo) {
       doc.shapeId = geo.shapeId || null;
@@ -3338,12 +2965,6 @@ async function publishDetours(activeDetours, options = {}) {
       doc.detourEventId = geo.detourEventId || null;
       doc.entryPoint = geo.entryPoint || null;
       doc.exitPoint = geo.exitPoint || null;
-      doc.progressDirection = Number(geo.progressDirection) === -1
-        ? -1
-        : Number(geo.progressDirection) === 1
-          ? 1
-          : null;
-      copyRefinedDisplayGeometry(doc, geo);
       doc.noticeTemporaryStops = Array.isArray(geo.noticeTemporaryStops) ? geo.noticeTemporaryStops : [];
       doc.noticeTemporaryStopIds = Array.isArray(geo.noticeTemporaryStopIds) ? geo.noticeTemporaryStopIds : [];
       doc.noticeTemporaryStopCodes = Array.isArray(geo.noticeTemporaryStopCodes) ? geo.noticeTemporaryStopCodes : [];
@@ -3354,9 +2975,6 @@ async function publishDetours(activeDetours, options = {}) {
       doc.noticeStopImpactSourceNewsIds = Array.isArray(geo.noticeStopImpactSourceNewsIds)
         ? geo.noticeStopImpactSourceNewsIds
         : [];
-      doc.uncertainStops = Array.isArray(geo.uncertainStops) ? geo.uncertainStops : [];
-      doc.uncertainStopIds = Array.isArray(geo.uncertainStopIds) ? geo.uncertainStopIds : [];
-      doc.uncertainStopCodes = Array.isArray(geo.uncertainStopCodes) ? geo.uncertainStopCodes : [];
       doc.confidence = geo.confidence || null;
       doc.evidencePointCount = geo.evidencePointCount ?? null;
       doc.lastEvidenceAt = geo.lastEvidenceAt ?? null;
@@ -3381,17 +2999,11 @@ async function publishDetours(activeDetours, options = {}) {
     });
 
     try {
-      await db.collection(storageConfig.activeCollection).doc(publishId).set(doc, { merge: true });
       const currentSnapshot = makeSnapshot(doc, previousSnapshot);
-      if (isNew) {
-        await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now), storageConfig);
-      } else {
-        await writeHistoryEvent(
-          db,
-          buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now),
-          storageConfig
-        );
-      }
+      const event = isNew
+        ? buildDetectedEvent(routeId, currentSnapshot, now)
+        : buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now);
+      await writeActiveDetourWithHistory(db, publishId, doc, event, storageConfig);
       lastPublishedIds.add(publishId);
       lastPublishedState.set(publishId, currentSnapshot);
       if (shouldUpdateLastSeen) {
@@ -3440,7 +3052,6 @@ async function publishDetours(activeDetours, options = {}) {
   await pruneHistoryIfNeeded(db, now, storageConfig);
   return {
     staleAutoClearedRouteIds: [],
-    serviceRestorationEvents,
   };
 }
 
@@ -3515,12 +3126,10 @@ module.exports = {
   mergeNoticeStopImpactsIntoGeometry,
   hasNoticeStopImpactWriteDelta,
   hasNormalRouteClearProof,
-  hasAuditableNormalRouteClearProof,
   isLegacyRouteScopedSnapshot,
   hasEventWindowDetourForRoute,
   getEquivalentCurrentDetour,
   deriveSharedDetourEventAssignments,
-  reconcileSharedEventBoundariesForPublish,
   alignEventWindowSegmentSharedMetadata,
   hasEventWindowSegmentSharedMetadataMismatch,
   makeSnapshot,

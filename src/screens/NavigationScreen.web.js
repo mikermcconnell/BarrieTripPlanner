@@ -30,7 +30,7 @@ import TransitStopGuideCard from '../components/navigation/TransitStopGuideCard'
 import { useNavigationLocation } from '../hooks/useNavigationLocation';
 import { useNavigationTripViewModel } from '../hooks/useNavigationTripViewModel';
 import { useBusProximity } from '../hooks/useBusProximity';
-import { useStepProgress } from '../hooks/useStepProgress';
+import { useStepProgress, buildStepProgressPresentation } from '../hooks/useStepProgress';
 import { buildWalkPaceStatus } from '../utils/walkPaceStatus';
 import { useAutoBoardBus } from '../hooks/useAutoBoardBus';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
@@ -324,8 +324,7 @@ const NavigationScreen = ({ route }) => {
     currentStepIndex,
     currentWalkingStep,
     totalLegs,
-    navigationState,
-    instructionText,
+    legStatus,
     distanceToDestination,
     isNavigationComplete,
     isUserOnBoard,
@@ -368,6 +367,15 @@ const NavigationScreen = ({ route }) => {
     !!currentTransitLeg,
     userLocation,
     isUserOnBoard
+  );
+  const { navigationState, instructionText } = useMemo(
+    () => buildStepProgressPresentation({
+      currentLeg,
+      legStatus,
+      transitStatus,
+      busProximity,
+    }),
+    [currentLeg, legStatus, transitStatus, busProximity]
   );
 
   useAutoBoardBus({

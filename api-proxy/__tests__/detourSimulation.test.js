@@ -96,7 +96,7 @@ describe('detourSimulation', () => {
     expect(result.body.enabled).toBe(false);
   });
 
-  test('create writes a simulated activeDetours document', async () => {
+  test('create writes a simulated V2 active-detour event by default', async () => {
     const db = makeDbMock();
     const ops = createDetourSimulationOps({
       env: makeLegacySimulationEnv(),
@@ -115,8 +115,8 @@ describe('detourSimulation', () => {
     }));
 
     expect(db._writes).toHaveLength(1);
-    expect(db._writes[0].collectionName).toBe('activeDetours');
-    expect(db._writes[0].docId).toBe('1');
+    expect(db._writes[0].collectionName).toBe('activeDetourEventsV2');
+    expect(db._writes[0].docId).toBe('simulated:1');
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '1',
       simulated: true,
@@ -172,7 +172,7 @@ describe('detourSimulation', () => {
       routeIds: ['11'],
     }));
     expect(db._writes).toHaveLength(1);
-    expect(db._writes.map((write) => write.docId)).toEqual(['11']);
+    expect(db._writes.map((write) => write.docId)).toEqual(['simulated:11']);
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '11',
       confidence: 'high',
@@ -223,7 +223,7 @@ describe('detourSimulation', () => {
       segmentCount: 2,
     }));
     expect(db._writes).toHaveLength(2);
-    expect(db._writes.map((write) => write.docId)).toEqual(['12A', '12B']);
+    expect(db._writes.map((write) => write.docId)).toEqual(['simulated:12A', 'simulated:12B']);
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '12A',
       confidence: 'high',
@@ -288,7 +288,7 @@ describe('detourSimulation', () => {
       segmentCount: 2,
     }));
     expect(db._writes).toHaveLength(2);
-    expect(db._writes.map((write) => write.docId)).toEqual(['2A', '2B']);
+    expect(db._writes.map((write) => write.docId)).toEqual(['simulated:2A', 'simulated:2B']);
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '2A',
       confidence: 'high',
@@ -370,7 +370,7 @@ describe('detourSimulation', () => {
       segmentCount: 2,
     }));
     expect(db._writes).toHaveLength(2);
-    expect(db._writes.map((write) => write.docId)).toEqual(['7A', '7B']);
+    expect(db._writes.map((write) => write.docId)).toEqual(['simulated:7A', 'simulated:7B']);
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '7A',
       confidence: 'high',
@@ -473,7 +473,7 @@ describe('detourSimulation', () => {
       segmentCount: 1,
     }));
     expect(db._writes).toHaveLength(1);
-    expect(db._writes[0].docId).toBe('8A');
+    expect(db._writes[0].docId).toBe('simulated:8A');
     expect(db._writes[0].data).toEqual(expect.objectContaining({
       routeId: '8A',
       confidence: 'high',
@@ -709,7 +709,7 @@ describe('detourSimulation', () => {
 
     expect(result.status).toBe(200);
     expect(db._deletes).toEqual([
-      { collectionName: 'activeDetours', docId: '1' },
+      { collectionName: 'activeDetourEventsV2', docId: 'simulated:1' },
     ]);
   });
 });

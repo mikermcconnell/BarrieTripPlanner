@@ -1,13 +1,26 @@
-const { buildDetourStorageConfig } = require('../detour/storageConfig');
+const {
+  buildDetourStorageConfig,
+  resolveDetourStorageConfig,
+} = require('../detour/storageConfig');
 
 describe('detour storage config', () => {
-  test('defaults to the production V2 collection and runtime names', () => {
+  test('defaults to the rider-client V2 collection and runtime names', () => {
     expect(buildDetourStorageConfig({})).toEqual({
       detourVersion: 'v2',
       activeCollection: 'activeDetourEventsV2',
       historyCollection: 'detourEventHistoryV2',
       runtimeStateCollection: 'systemState',
       runtimeStateDoc: 'detourRuntimeV2',
+    });
+  });
+
+  test('keeps V1 available only when explicitly selected', () => {
+    expect(buildDetourStorageConfig({ DETOUR_DETECTOR_VERSION: 'v1' })).toEqual({
+      detourVersion: 'v1',
+      activeCollection: 'activeDetours',
+      historyCollection: 'detourHistory',
+      runtimeStateCollection: 'systemState',
+      runtimeStateDoc: 'detourRuntime',
     });
   });
 
@@ -34,6 +47,21 @@ describe('detour storage config', () => {
       historyCollection: 'labHistory',
       runtimeStateCollection: 'labState',
       runtimeStateDoc: 'labRuntime',
+    });
+  });
+
+  test('rejects detector version typos instead of silently selecting another generation', () => {
+    expect(() => buildDetourStorageConfig({ DETOUR_DETECTOR_VERSION: 'V22' }))
+      .toThrow(/Unsupported DETOUR_DETECTOR_VERSION/);
+  });
+
+  test('uses the explicitly requested version defaults when resolving a partial config', () => {
+    expect(resolveDetourStorageConfig({ detourVersion: 'v1' }, {})).toEqual({
+      detourVersion: 'v1',
+      activeCollection: 'activeDetours',
+      historyCollection: 'detourHistory',
+      runtimeStateCollection: 'systemState',
+      runtimeStateDoc: 'detourRuntime',
     });
   });
 });

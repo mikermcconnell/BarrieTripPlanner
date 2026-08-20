@@ -309,6 +309,92 @@ describe('tripDelayService', () => {
     expect(updated[1].isRecommended).toBe(false);
   });
 
+  test('uses separate boarding departure and alighting arrival predictions', async () => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(0));
+    const itinerary = makeItinerary({
+      id: 'different-stop-delays',
+      startMin: 10,
+      endMin: 30,
+      tripId: 'per-stop-trip',
+    });
+    const updates = [{
+      tripUpdate: {
+        tripId: 'per-stop-trip',
+        stopTimeUpdates: [
+          { stopId: 'per-stop-trip-from', departure: { delay: 2 * 60 } },
+          { stopId: 'per-stop-trip-to', arrival: { delay: 10 * 60 } },
+        ],
+      },
+    }];
+
+    const updated = await applyDelaysToItinerary(itinerary, updates);
+
+    expect(updated.legs[0].startTime).toBe(minutes(12));
+    expect(updated.legs[0].endTime).toBe(minutes(40));
+    expect(updated.legs[0].delaySeconds).toBe(2 * 60);
+    expect(updated.legs[0].arrivalDelaySeconds).toBe(10 * 60);
+    expect(updated.arrivalDelaySeconds).toBe(10 * 60);
+  });
+
+  test('derives per-stop delays from absolute realtime event times', async () => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(0));
+    const itinerary = makeItinerary({ id: 'absolute-times', startMin: 10, endMin: 30, tripId: 'absolute-trip' });
+    const updates = [{
+      tripUpdate: {
+        tripId: 'absolute-trip',
+        stopTimeUpdates: [
+          { stopId: 'absolute-trip-from', departure: { time: minutes(13) / 1000 } },
+          { stopId: 'absolute-trip-to', arrival: { time: minutes(35) / 1000 } },
+        ],
+      },
+    }];
+
+    const updated = await applyDelaysToItinerary(itinerary, updates);
+
+    expect(updated.legs[0].startTime).toBe(minutes(13));
+    expect(updated.legs[0].endTime).toBe(minutes(35));
+    expect(updated.legs[0].delaySeconds).toBe(3 * 60);
+    expect(updated.legs[0].arrivalDelaySeconds).toBe(5 * 60);
+  });
+
+  test('removes canceled options when a viable itinerary remains', async () => {
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(0));
+    fetchTripUpdates.mockResolvedValue([{
+      tripUpdate: {
+        tripId: 'canceled-trip',
+        scheduleRelationship: 'CANCELED',
+        stopTimeUpdates: [],
+      },
+    }]);
+    const canceled = makeItinerary({ id: 'canceled', startMin: 10, endMin: 25, tripId: 'canceled-trip' });
+    const viable = makeItinerary({ id: 'viable', startMin: 12, endMin: 30, tripId: 'viable-trip' });
+
+    const updated = await applyDelaysToItineraries([canceled, viable]);
+
+    expect(updated.map((item) => item.id)).toEqual(['viable']);
+    expect(updated[0].isRecommended).toBe(true);
+  });
+
+  test('keeps an explicit non-navigable explanation when every option is disrupted', async () => {
+    fetchTripUpdates.mockResolvedValue([{
+      tripUpdate: {
+        tripId: 'skipped-trip',
+        stopTimeUpdates: [{
+          stopId: 'skipped-trip-to',
+          scheduleRelationship: 'SKIPPED',
+        }],
+      },
+    }]);
+    const skipped = makeItinerary({ id: 'skipped', startMin: 12, endMin: 30, tripId: 'skipped-trip' });
+
+    const updated = await applyDelaysToItineraries([skipped]);
+
+    expect(updated[0].hasRealtimeServiceDisruption).toBe(true);
+    expect(updated[0].realtimeServiceDisruption.type).toBe('stop_skipped');
+    expect(updated[0].labels).toContain('Stop skipped');
+    expect(updated[0].isRecommended).toBe(false);
+  });
+
   test('formats realtime status as on time, late, or early', () => {
     expect(formatDelay(0)).toEqual({
       text: 'On time',

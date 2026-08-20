@@ -151,6 +151,8 @@ const TripSearchHeaderWeb = ({
   showToSuggestions,
   isTypingFrom = false,
   isTypingTo = false,
+  fromSearchError = null,
+  toSearchError = null,
   onSwap,
   onClose,
   onUseCurrentLocation,
@@ -410,6 +412,12 @@ const TripSearchHeaderWeb = ({
       </View>
     )}
 
+    {fromSearchError && (
+      <View style={styles.searchError} accessibilityRole="alert">
+        <Text style={styles.searchErrorText}>{fromSearchError}</Text>
+      </View>
+    )}
+
     {/* To Field */}
     <View style={styles.tripInputRow}>
       <View style={styles.tripInputDot}>
@@ -462,6 +470,12 @@ const TripSearchHeaderWeb = ({
       <View style={styles.typingIndicator}>
         <ActivityIndicator size="small" color={COLORS.primary} />
         <Text style={styles.typingText}>Searching...</Text>
+      </View>
+    )}
+
+    {toSearchError && (
+      <View style={styles.searchError} accessibilityRole="alert">
+        <Text style={styles.searchErrorText}>{toSearchError}</Text>
       </View>
     )}
 
@@ -579,7 +593,7 @@ const TripSearchHeaderWeb = ({
           />
         )}
 
-        {timeMode !== 'now' && onSearch && (
+        {onSearch && (
           <TouchableOpacity
             style={[styles.searchBtn, isLoading && styles.searchBtnDisabled]}
             onPress={onSearch}
@@ -998,6 +1012,14 @@ const styles = StyleSheet.create({
   typingText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+  },
+  searchError: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
+  },
+  searchErrorText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
   },
 });
 

@@ -75,6 +75,7 @@ const TripBottomSheet = ({
   savedTrips = [],
   onSelectSavedTrip,
   onSaveCurrentTrip,
+  saveCurrentTripLabel = 'Save this route',
   repeatTripSuggestion = null,
 }) => {
   // Match native sheet sizing: 'peek' (10%), 'default' (38%), 'expanded' (85%)
@@ -247,10 +248,10 @@ const TripBottomSheet = ({
               style={styles.saveTripButton}
               onPress={onSaveCurrentTrip}
               accessibilityRole="button"
-            accessibilityLabel="Save this route"
+            accessibilityLabel={saveCurrentTripLabel}
           >
             <Icon name="Star" size={14} color={COLORS.primary} />
-            <Text style={styles.saveTripButtonText}>Save this route</Text>
+            <Text style={styles.saveTripButtonText}>{saveCurrentTripLabel}</Text>
           </TouchableOpacity>
           )}
           <TouchableOpacity

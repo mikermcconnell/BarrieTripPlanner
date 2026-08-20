@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #172b4d;
+  background: #f4f5f7;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(100%, 640px); min-height: 100vh; margin: 0 auto; padding: 24px 18px 48px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 0; font-size: 1.6rem; }
+.eyebrow { margin-bottom: 2px; color: #6b778c; font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.brand-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; color: white; background: #0c8ce5; font-weight: 800; }
+.card { padding: 24px; border-radius: 20px; background: #fff; box-shadow: 0 8px 24px rgb(23 43 77 / 9%); }
+.status-card { min-height: 180px; display: grid; place-items: center; text-align: center; }
+.spinner { width: 34px; height: 34px; border: 4px solid #d9efff; border-top-color: #0c8ce5; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.live { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px; color: #2e7d32; background: #e8f5e9; font-size: .86rem; font-weight: 700; }
+.live span { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; }
+.trip-card h2 { margin-bottom: 24px; font-size: 1.45rem; }
+.point { display: flex; align-items: center; gap: 12px; }
+.point-dot { width: 15px; height: 15px; flex: 0 0 auto; border: 4px solid #0c8ce5; border-radius: 50%; }
+.point-dot.destination { background: #0c8ce5; }
+.point small { display: block; margin-bottom: 3px; color: #6b778c; }
+.point strong { display: block; font-size: 1.05rem; }
+.route-line { width: 3px; height: 32px; margin: 4px 0 4px 6px; background: #0c8ce5; }
+.meta { margin: 22px 0 0; color: #6b778c; font-size: .86rem; }
+.explanation { margin: 20px 2px; color: #505f79; line-height: 1.5; }
+.primary-button, .secondary-button { display: flex; width: 100%; min-height: 50px; align-items: center; justify-content: center; border-radius: 14px; font: inherit; font-weight: 800; text-decoration: none; cursor: pointer; }
+.primary-button { color: #fff; background: #0c8ce5; }
+.secondary-button { margin-top: 10px; border: 1px solid #dfe1e6; color: #0c8ce5; background: #fff; }
+.copy-status { min-height: 22px; margin: 8px 0 0; color: #2e7d32; text-align: center; font-size: .9rem; }
+footer { margin-top: 28px; color: #6b778c; font-size: .84rem; line-height: 1.5; text-align: center; }
+[hidden] { display: none !important; }

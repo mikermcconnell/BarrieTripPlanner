@@ -21,6 +21,96 @@ const getWalkingDestinationLabel = (leg) => {
   return leg?.to?.name || 'your stop';
 };
 
+export const buildStepProgressPresentation = ({
+  currentLeg,
+  legStatus,
+  transitStatus,
+  busProximity,
+}) => {
+  if (!currentLeg) {
+    return {
+      navigationState: { type: 'complete', label: 'Trip Complete' },
+      instructionText: 'You have arrived!',
+    };
+  }
+
+  const isWalking = currentLeg.mode === 'WALK';
+  const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
+  const destinationName = currentLeg.to?.name || 'your stop';
+  const routeName = currentLeg.route?.shortName || 'Bus';
+
+  if (isWalking) {
+    const destinationLabel = getWalkingDestinationLabel(currentLeg);
+    return {
+      navigationState: {
+        type: 'walking',
+        label: `${legStatus === 'not_started' ? 'Walk' : 'Walking'} to ${destinationLabel}`,
+      },
+      instructionText: `Walk to ${destinationLabel}`,
+    };
+  }
+
+  if (isTransit) {
+    if (transitStatus === 'on_board') {
+      const stopsLeft = busProximity?.stopsUntilAlighting;
+      if (busProximity?.shouldGetOff) {
+        return {
+          navigationState: { type: 'alighting', label: 'Get off now!' },
+          instructionText: `Get off at ${destinationName}!`,
+        };
+      }
+      if (busProximity?.nearAlightingStop) {
+        return {
+          navigationState: { type: 'alighting_soon', label: 'Your stop is next!' },
+          instructionText: `Next stop: ${destinationName}`,
+        };
+      }
+      return {
+        navigationState: {
+          type: 'transit',
+          label: `Riding to ${destinationName}`,
+          stopsRemaining: stopsLeft ?? (currentLeg.intermediateStops?.length || 0),
+        },
+        instructionText: typeof stopsLeft === 'number' && stopsLeft > 0
+          ? `${stopsLeft} stop${stopsLeft !== 1 ? 's' : ''} until ${destinationName}`
+          : `Riding to ${destinationName}`,
+      };
+    }
+
+    if (transitStatus === 'boarding' || busProximity?.hasArrived) {
+      return {
+        navigationState: { type: 'boarding', label: `Board ${routeName}` },
+        instructionText: 'Board your bus now',
+      };
+    }
+
+    const stopsAway = busProximity?.stopsAway;
+    return {
+      navigationState: { type: 'waiting', label: `Wait for ${routeName}` },
+      instructionText: typeof stopsAway === 'number' && stopsAway > 0
+        ? `Bus is ${stopsAway} stop${stopsAway !== 1 ? 's' : ''} away`
+        : busProximity?.isTracking
+          ? 'Bus is approaching...'
+          : 'Waiting for your bus',
+    };
+  }
+
+  if (currentLeg.isOnDemand) {
+    return {
+      navigationState: {
+        type: 'on_demand',
+        label: `On-demand to ${currentLeg.to?.name || 'hub stop'}`,
+      },
+      instructionText: `Head to ${destinationName}`,
+    };
+  }
+
+  return {
+    navigationState: { type: 'unknown', label: 'Continue' },
+    instructionText: currentLeg.to?.name ? `Head to ${currentLeg.to.name}` : 'Continue',
+  };
+};
+
 export const useStepProgress = (itinerary, userLocation, busProximity) => {
   const [currentLegIndex, setCurrentLegIndex] = useState(0);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -112,104 +202,10 @@ export const useStepProgress = (itinerary, userLocation, busProximity) => {
 
   const hasReliableWalkingArrival = walkingArrivalEvidenceHits >= WALK_ARRIVAL_REQUIRED_HITS;
 
-  // Navigation state for UI
-  const navigationState = useMemo(() => {
-    if (!currentLeg) {
-      return { type: 'complete', label: 'Trip Complete' };
-    }
-
-    const isWalking = currentLeg.mode === 'WALK';
-    const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
-
-    if (isWalking) {
-      if (legStatus === 'not_started') {
-        return { type: 'walking', label: `Walk to ${getWalkingDestinationLabel(currentLeg)}` };
-      }
-      return { type: 'walking', label: `Walking to ${getWalkingDestinationLabel(currentLeg)}` };
-    }
-
-    if (isTransit) {
-      // Check transit sub-status
-      if (transitStatus === 'on_board') {
-        // User is riding the bus
-        const stopsLeft = busProximity?.stopsUntilAlighting;
-        if (busProximity?.shouldGetOff) {
-          return { type: 'alighting', label: 'Get off now!' };
-        }
-        if (busProximity?.nearAlightingStop) {
-          return { type: 'alighting_soon', label: 'Your stop is next!' };
-        }
-        return {
-          type: 'transit',
-          label: `Riding to ${currentLeg.to.name}`,
-          stopsRemaining: stopsLeft ?? (currentLeg.intermediateStops?.length || 0),
-        };
-      }
-
-      if (transitStatus === 'boarding') {
-        return { type: 'boarding', label: `Board ${currentLeg.route?.shortName || 'Bus'}` };
-      }
-
-      // Waiting for bus
-      if (!busProximity?.hasArrived) {
-        return { type: 'waiting', label: `Wait for ${currentLeg.route?.shortName || 'Bus'}` };
-      }
-      return { type: 'boarding', label: `Board ${currentLeg.route?.shortName || 'Bus'}` };
-    }
-
-    if (currentLeg.isOnDemand) {
-      return {
-        type: 'on_demand',
-        label: `On-demand to ${currentLeg.to?.name || 'hub stop'}`,
-      };
-    }
-
-    return { type: 'unknown', label: 'Continue' };
-  }, [currentLeg, legStatus, transitStatus, busProximity]);
-
-  // Get instruction text based on current state
-  const instructionText = useMemo(() => {
-    if (!currentLeg) return 'You have arrived!';
-
-    const isWalking = currentLeg.mode === 'WALK';
-    const isTransit = currentLeg.mode === 'BUS' || currentLeg.mode === 'TRANSIT';
-
-    if (isWalking) {
-      return `Walk to ${getWalkingDestinationLabel(currentLeg)}`;
-    }
-
-    if (isTransit) {
-      // On board the bus
-      if (transitStatus === 'on_board') {
-        if (busProximity?.shouldGetOff) {
-          return `Get off at ${currentLeg.to.name}!`;
-        }
-        if (busProximity?.nearAlightingStop) {
-          return `Next stop: ${currentLeg.to.name}`;
-        }
-        const stopsLeft = busProximity?.stopsUntilAlighting;
-        if (typeof stopsLeft === 'number' && stopsLeft > 0) {
-          return `${stopsLeft} stop${stopsLeft !== 1 ? 's' : ''} until ${currentLeg.to.name}`;
-        }
-        return `Riding to ${currentLeg.to.name}`;
-      }
-
-      // Waiting for bus
-      if (!busProximity?.hasArrived) {
-        const stopsAway = busProximity?.stopsAway;
-        if (typeof stopsAway === 'number' && stopsAway > 0) {
-          return `Bus is ${stopsAway} stop${stopsAway !== 1 ? 's' : ''} away`;
-        }
-        if (busProximity?.isTracking) {
-          return 'Bus is approaching...';
-        }
-        return 'Waiting for your bus';
-      }
-      return 'Board your bus now';
-    }
-
-    return currentLeg.to?.name ? `Head to ${currentLeg.to.name}` : 'Continue';
-  }, [currentLeg, busProximity, transitStatus]);
+  const { navigationState, instructionText } = useMemo(
+    () => buildStepProgressPresentation({ currentLeg, legStatus, transitStatus, busProximity }),
+    [currentLeg, legStatus, transitStatus, busProximity]
+  );
 
   // Start navigation (marks first leg as in progress)
   const startNavigation = useCallback(() => {

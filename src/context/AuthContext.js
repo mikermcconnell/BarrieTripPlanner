@@ -28,6 +28,7 @@ const STORAGE_KEYS = {
   TRIP_HISTORY: '@barrie_transit_history',
   SAVED_PLACES: '@barrie_transit_saved_places',
   SAVED_TRIPS: '@barrie_transit_saved_trips',
+  LOCAL_SAVED_TRIPS: '@barrie_transit_local_saved_trips',
 };
 
 export const AuthProvider = ({ children }) => {
@@ -204,13 +205,15 @@ export const AuthProvider = ({ children }) => {
   // Load cached data for offline mode
   const loadCachedData = async () => {
     try {
-      const [favoritesData, historyData] = await Promise.all([
+      const [favoritesData, historyData, localSavedTripsData] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.FAVORITES),
         AsyncStorage.getItem(STORAGE_KEYS.TRIP_HISTORY),
+        AsyncStorage.getItem(STORAGE_KEYS.LOCAL_SAVED_TRIPS),
       ]);
 
       if (favoritesData) setFavorites(JSON.parse(favoritesData));
       if (historyData) setTripHistory(JSON.parse(historyData));
+      setSavedTrips(localSavedTripsData ? JSON.parse(localSavedTripsData) : []);
     } catch (error) {
       logger.error('Error loading cached data:', error);
     }
@@ -493,31 +496,58 @@ export const AuthProvider = ({ children }) => {
   const addSavedTrip = useCallback(
     async (trip) => {
       if (!user) {
-        return { success: false, error: 'Sign in to save trips' };
+        const now = new Date().toISOString();
+        const existing = savedTrips.find((savedTrip) => savedTrip.id === trip.id);
+        const updatedTrip = {
+          ...existing,
+          ...trip,
+          createdAt: existing?.createdAt || trip.createdAt || now,
+          updatedAt: now,
+        };
+        const updatedTrips = [
+          updatedTrip,
+          ...savedTrips.filter((savedTrip) => savedTrip.id !== trip.id),
+        ];
+        setSavedTrips(updatedTrips);
+        await AsyncStorage.setItem(STORAGE_KEYS.LOCAL_SAVED_TRIPS, JSON.stringify(updatedTrips));
+        try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_trip_added', { storage: 'local' }); } catch {}
+        return { success: true, storage: 'local' };
       }
       try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_trip_added', {}); } catch {}
       return await savedTransitFirestoreService.addSavedTrip(user.uid, trip);
     },
-    [user]
+    [user, savedTrips]
   );
 
   const removeSavedTrip = useCallback(
     async (tripId) => {
       if (!user) {
-        return { success: false, error: 'Sign in to manage saved trips' };
+        const updatedTrips = savedTrips.filter((trip) => trip.id !== tripId);
+        setSavedTrips(updatedTrips);
+        await AsyncStorage.setItem(STORAGE_KEYS.LOCAL_SAVED_TRIPS, JSON.stringify(updatedTrips));
+        return { success: true, storage: 'local' };
       }
       return await savedTransitFirestoreService.removeSavedTrip(user.uid, tripId);
     },
-    [user]
+    [user, savedTrips]
   );
 
   const touchSavedTrip = useCallback(
     async (tripId) => {
-      if (!user || !tripId) return { success: false, error: 'Not authenticated' };
+      if (!tripId) return { success: false, error: 'Missing trip' };
+      if (!user) {
+        const now = new Date().toISOString();
+        const updatedTrips = savedTrips.map((trip) => trip.id === tripId
+          ? { ...trip, lastUsedAt: now, updatedAt: now, useCount: (Number(trip.useCount) || 0) + 1 }
+          : trip);
+        setSavedTrips(updatedTrips);
+        await AsyncStorage.setItem(STORAGE_KEYS.LOCAL_SAVED_TRIPS, JSON.stringify(updatedTrips));
+        return { success: true, storage: 'local' };
+      }
       try { const { trackEvent } = require('../services/analyticsService'); trackEvent('saved_trip_used', {}); } catch {}
       return await savedTransitFirestoreService.touchSavedTrip(user.uid, tripId);
     },
-    [user]
+    [user, savedTrips]
   );
 
   // ==================== SETTINGS ====================
@@ -556,9 +586,10 @@ export const AuthProvider = ({ children }) => {
 
     try {
       // Get local data
-      const [localFavorites, localHistory] = await Promise.all([
+      const [localFavorites, localHistory, localSavedTrips] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.FAVORITES),
         AsyncStorage.getItem(STORAGE_KEYS.TRIP_HISTORY),
+        AsyncStorage.getItem(STORAGE_KEYS.LOCAL_SAVED_TRIPS),
       ]);
 
       // Sync favorites if they exist locally
@@ -574,6 +605,13 @@ export const AuthProvider = ({ children }) => {
         const parsed = JSON.parse(localHistory);
         if (parsed.length > 0) {
           await tripHistoryFirestoreService.syncHistoryToFirestore(user.uid, parsed);
+        }
+      }
+
+      if (localSavedTrips) {
+        const parsed = JSON.parse(localSavedTrips);
+        for (const trip of parsed) {
+          await savedTransitFirestoreService.addSavedTrip(user.uid, trip);
         }
       }
 

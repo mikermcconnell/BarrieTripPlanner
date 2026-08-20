@@ -12,6 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { sharedTripFirestoreService } from '../services/firebase/sharedTripFirestoreService';
+import { shareTrip } from '../utils/shareUtils';
 
 const FavoritesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -26,35 +28,9 @@ const FavoritesScreen = ({ navigation }) => {
     removeSavedTrip,
     touchSavedPlace,
     touchSavedTrip,
-    isAuthenticated,
   } = useAuth();
-  const [activeTab, setActiveTab] = useState('places');
-
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Transit</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>⭐</Text>
-          <Text style={styles.emptyText}>Sign in to save My Transit</Text>
-          <Text style={styles.emptySubtext}>Your places, trips, stops, and routes will be saved here</Text>
-          <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => navigation.navigate('SignIn')}
-          >
-            <Text style={styles.signInButtonText}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const [activeTab, setActiveTab] = useState('trips');
+  const [sharingTripId, setSharingTripId] = useState(null);
 
   const renderStopItem = ({ item }) => (
     <View style={styles.favoriteItem}>
@@ -92,6 +68,25 @@ const FavoritesScreen = ({ navigation }) => {
       screen: 'MapMain',
       params: { savedTripToPlan: trip },
     });
+  };
+
+  const handleShareTrip = async (trip) => {
+    if (sharingTripId) return;
+    setSharingTripId(trip.id);
+    const created = await sharedTripFirestoreService.createSharedTrip(trip);
+    if (!created.success) {
+      setSharingTripId(null);
+      Alert.alert('Could not share trip', created.error || 'Please try again.');
+      return;
+    }
+
+    const shared = await shareTrip(trip, created.shareId);
+    setSharingTripId(null);
+    if (shared.copied) {
+      Alert.alert('Edit link copied', 'Anyone with this link can view and update the shared trip.');
+    } else if (!shared.success && !shared.cancelled) {
+      Alert.alert('Trip link created', shared.link);
+    }
   };
 
   const useSavedPlace = (place) => {
@@ -144,6 +139,15 @@ const FavoritesScreen = ({ navigation }) => {
           {item.from?.name || 'Start'} → {item.to?.name || 'Destination'}
         </Text>
       </View>
+      <TouchableOpacity
+        style={styles.useButton}
+        disabled={sharingTripId === item.id}
+        onPress={() => handleShareTrip(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`Share ${item.name || 'saved trip'}`}
+      >
+        <Text style={styles.useButtonText}>{sharingTripId === item.id ? 'Sharing…' : 'Share'}</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.useButton} onPress={() => planSavedTrip(item)}>
         <Text style={styles.useButtonText}>Plan</Text>
       </TouchableOpacity>

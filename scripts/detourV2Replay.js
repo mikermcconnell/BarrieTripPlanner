@@ -1,5 +1,11 @@
 const { createDetourV2Detector } = require('../api-proxy/detourV2/detector');
 
+function createReplayDetector(config = {}) {
+  // Replay evidence carries its own deterministic timestamps and must not
+  // change outcome based on the wall-clock hour when CI or an operator runs it.
+  return createDetourV2Detector({ ...config, enforceServiceHours: false });
+}
+
 function buildReplayMaps(fixture = {}) {
   const route = fixture.baseline || fixture.baselineRoute10;
   const mappingEntries = route?.routeShapeMapping
@@ -38,7 +44,7 @@ function summarizeReplay(eventId, detour) {
 
 function replayDetourV2Fixture(fixture = {}) {
   const { shapes, routeShapeMapping } = buildReplayMaps(fixture);
-  const detector = createDetourV2Detector();
+  const detector = createReplayDetector();
   detector.hydrateRuntimeState(fixture.runtimeState || fixture.runtimeRoute10 || {});
   if (fixture.activeDetourEvent) {
     const activeEventId = fixture.activeDetourEvent.eventId || fixture.expected?.eventId;
@@ -106,14 +112,14 @@ function replaySyntheticDetourTrace(fixture = {}) {
 
   const { shapes, routeShapeMapping } = buildReplayMaps(fixture);
   const startTimeMs = Number(fixture.startTimeMs || Date.parse('2026-07-13T14:00:00Z'));
-  let detector = createDetourV2Detector(fixture.detectorConfig || {});
+  let detector = createReplayDetector(fixture.detectorConfig || {});
   const timeline = [];
   let restartCount = 0;
 
   fixture.ticks.forEach((tick, tickIndex) => {
     if (tick?.restart === true) {
       const snapshot = detector.serializeDetectorRuntimeState();
-      detector = createDetourV2Detector(fixture.detectorConfig || {});
+      detector = createReplayDetector(fixture.detectorConfig || {});
       detector.hydrateRuntimeState(snapshot);
       restartCount += 1;
     }

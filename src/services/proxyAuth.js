@@ -2,12 +2,12 @@ const CLIENT_ID = 'barrie-transit-app';
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 const IS_TEST = process.env.NODE_ENV === 'test';
 
-async function getFirebaseIdToken(forceRefresh = false) {
+export async function ensureFirebaseUser() {
   let firebaseAuth = null;
   try {
     ({ auth: firebaseAuth } = require('../config/firebase'));
   } catch {
-    return '';
+    return null;
   }
 
   let currentUser = firebaseAuth?.currentUser;
@@ -17,9 +17,15 @@ async function getFirebaseIdToken(forceRefresh = false) {
       const credential = await signInAnonymously(firebaseAuth);
       currentUser = credential?.user || firebaseAuth?.currentUser;
     } catch {
-      return '';
+      return null;
     }
   }
+
+  return currentUser || null;
+}
+
+async function getFirebaseIdToken(forceRefresh = false) {
+  const currentUser = await ensureFirebaseUser();
 
   if (!currentUser || typeof currentUser.getIdToken !== 'function') {
     return '';
