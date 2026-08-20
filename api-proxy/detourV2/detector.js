@@ -21,11 +21,17 @@ const {
   windowsOverlapOrNear,
 } = require('./eventWindows');
 const { applyRiderVisibilityGuard } = require('../detour/riderVisibilityGuard');
+const { getMajorTerminalRouteEdge } = require('../detour/stopImpacts');
 const {
   countConfirmingEvidenceGroups,
   makeEvidenceIdentity,
 } = require('../detour/evidenceIdentity');
 const { estimateRouteHeadwayMs } = require('../detour/routeSchedule');
+const {
+  createConfirmedEventRefresh,
+  normalizeDirection,
+  normalizeDirectionMode,
+} = require('./confirmedEventRefresh');
 const {
   CONSECUTIVE_READINGS_REQUIRED,
   DEFAULT_MIN_VEHICLES_FOR_DETOUR,
@@ -111,6 +117,26 @@ const MAX_INFERRED_HANDOFF_GAP_METERS = positiveNumber(
   process.env.DETOUR_V2_MAX_INFERRED_HANDOFF_GAP_METERS,
   150
 );
+const TRANSITION_SAMPLE_MAX_GAP_MS = positiveNumber(
+  process.env.DETOUR_V2_TRANSITION_SAMPLE_MAX_GAP_MS,
+  10 * 60 * 1000
+);
+const MIN_BOUNDARY_TRANSITION_SIGNATURES = positiveInteger(
+  process.env.DETOUR_V2_MIN_BOUNDARY_TRANSITION_SIGNATURES,
+  2
+);
+const BOUNDARY_CONSENSUS_MAX_SPREAD_METERS = positiveNumber(
+  process.env.DETOUR_V2_BOUNDARY_CONSENSUS_MAX_SPREAD_METERS,
+  250
+);
+const COMPLETE_TRANSITION_MAX_BOUNDARY_SPREAD_METERS = positiveNumber(
+  process.env.DETOUR_V2_COMPLETE_TRANSITION_MAX_BOUNDARY_SPREAD_METERS,
+  350
+);
+const EQUIVALENT_SHAPE_OFF_ROUTE_POINT_MAX_DISTANCE_METERS = positiveNumber(
+  process.env.DETOUR_V2_EQUIVALENT_SHAPE_OFF_ROUTE_POINT_MAX_DISTANCE_METERS,
+  250
+);
 const PRESERVED_VISIBILITY_MAX_POINT_GAP_METERS = 350;
 const PRESERVED_VISIBILITY_MAX_AVERAGE_GAP_METERS = 250;
 const CONFIGURED_CORRIDOR_OUTLIER_DISTANCE_METERS = positiveNumber(
@@ -152,6 +178,22 @@ const MARGINAL_OFF_ROUTE_RESET_GRACE_METERS = positiveNumber(
   process.env.DETOUR_CLEAR_RESET_OFF_ROUTE_GRACE_METERS,
   15
 );
+const CONFIRMED_REFRESH_THRESHOLD_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIRMED_REFRESH_THRESHOLD_METERS,
+  25
+);
+const CONFIRMED_REFRESH_PATH_PROXIMITY_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIRMED_REFRESH_PATH_PROXIMITY_METERS,
+  60
+);
+const CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS,
+  75
+);
+const CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS = positiveNumber(
+  process.env.DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS,
+  75
+);
 const OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS = positiveNumber(
   process.env.DETOUR_OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS,
   45 * 60 * 1000
@@ -165,6 +207,8 @@ const CLEAR_TRACK_MAX_TIME_GAP_MS = positiveNumber(
   15 * 60 * 1000
 );
 const MAX_SEEN_SAMPLES = 10_000;
+const MAX_SERVICE_TRACE_SAMPLES = 200;
+const MAX_TRANSITION_OBSERVATION_STATES = 500;
 const ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS = positiveNumber(
   process.env.DETOUR_ROUTE_400_STALE_SPARSE_EVIDENCE_MAX_AGE_MS,
   24 * 60 * 60 * 1000
@@ -374,6 +418,7 @@ function normalizeClearTrackSample(sample = {}) {
     timestampMs,
     shapeId: sample.shapeId ? String(sample.shapeId) : null,
     vehicleId: sample.vehicleId ? String(sample.vehicleId) : null,
+    tripId: sample.tripId ? String(sample.tripId) : null,
     signature: sample.signature ? String(sample.signature) : null,
   };
 }
@@ -424,7 +469,7 @@ function getClearWindowMinCoverageRatio(clearWindow = {}) {
   if (!Number.isFinite(stored) || stored <= 0) {
     return CLEAR_WINDOW_MIN_COVERAGE_RATIO;
   }
-  return Math.min(stored, CLEAR_WINDOW_MIN_COVERAGE_RATIO);
+  return Math.min(1, Math.max(stored, CLEAR_WINDOW_MIN_COVERAGE_RATIO));
 }
 
 function isTinyRouteEdgeClearWindow(clearWindow = {}) {
@@ -649,6 +694,327 @@ function isPublishableGeometryStats(stats) {
     stats.spanMeters >= MIN_SAFE_SPAN_METERS;
 }
 
+function splitTraceIntoCoherentRuns(points = []) {
+  const ordered = points
+    .filter((point) => point?.coordinate && Number.isFinite(Number(point.timestampMs)))
+    .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+  const runs = [];
+  let current = [];
+
+  for (const point of ordered) {
+    const previous = current[current.length - 1];
+    if (
+      previous &&
+      Number(point.timestampMs) - Number(previous.timestampMs) > SPARSE_TRACE_MAX_TIME_GAP_MS
+    ) {
+      if (current.length > 0) runs.push(current);
+      current = [];
+    }
+    current.push(point);
+  }
+  if (current.length > 0) runs.push(current);
+  return runs;
+}
+
+function getTraceDirection(points = []) {
+  const progresses = points
+    .map((point) => Number(point?.progressMeters))
+    .filter(Number.isFinite);
+  if (progresses.length < 2) return 1;
+  return progresses[progresses.length - 1] >= progresses[0] ? 1 : -1;
+}
+
+function getConfirmedTraceDirection(trace) {
+  if (!trace || Number(trace.spanMeters) < CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS) return null;
+  return normalizeDirection(trace.direction);
+}
+
+function selectCoherentTripTrace(points = []) {
+  const bySignature = new Map();
+  for (const point of points) {
+    const signature = String(point?.signature || '').trim();
+    if (!signature || !point?.coordinate) continue;
+    const signaturePoints = bySignature.get(signature) || [];
+    signaturePoints.push(point);
+    bySignature.set(signature, signaturePoints);
+  }
+
+  const traces = [];
+  for (const [signature, signaturePoints] of bySignature.entries()) {
+    for (const run of splitTraceIntoCoherentRuns(signaturePoints)) {
+      if (run.length < 2) continue;
+      const stats = getPointStats(run);
+      traces.push({
+        signature,
+        points: run,
+        direction: getTraceDirection(run),
+        pointCount: run.length,
+        spanMeters: Math.abs(stats.spanMeters || 0),
+        lastEvidenceAt: stats.lastEvidenceAt || 0,
+      });
+    }
+  }
+
+  return traces.sort((a, b) => (
+    b.pointCount - a.pointCount ||
+    b.spanMeters - a.spanMeters ||
+    b.lastEvidenceAt - a.lastEvidenceAt
+  ))[0] || null;
+}
+
+function median(values = []) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function selectBoundaryConsensus(
+  samples = [],
+  maxSpreadMeters = BOUNDARY_CONSENSUS_MAX_SPREAD_METERS
+) {
+  const sorted = samples
+    .filter((sample) => Number.isFinite(Number(sample?.progressMeters)))
+    .sort((a, b) => Number(a.progressMeters) - Number(b.progressMeters));
+  let best = null;
+
+  for (let start = 0; start < sorted.length; start += 1) {
+    const cluster = [];
+    for (let index = start; index < sorted.length; index += 1) {
+      if (
+        Number(sorted[index].progressMeters) - Number(sorted[start].progressMeters) >
+        maxSpreadMeters
+      ) {
+        break;
+      }
+      cluster.push(sorted[index]);
+    }
+    const signatureCount = new Set(cluster.map((sample) => sample.signature).filter(Boolean)).size;
+    if (signatureCount < MIN_BOUNDARY_TRANSITION_SIGNATURES) continue;
+    const candidate = {
+      samples: cluster,
+      signatureCount,
+      progressMeters: median(cluster.map((sample) => sample.progressMeters)),
+      newestAt: Math.max(...cluster.map((sample) => Number(sample.timestampMs) || 0)),
+    };
+    if (
+      !best ||
+      candidate.signatureCount > best.signatureCount ||
+      (candidate.signatureCount === best.signatureCount && candidate.samples.length > best.samples.length) ||
+      (candidate.signatureCount === best.signatureCount &&
+        candidate.samples.length === best.samples.length && candidate.newestAt > best.newestAt)
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function getCompleteTransitionEvidence(candidate, {
+  offRouteThresholdMeters = DEFAULT_OFF_ROUTE_THRESHOLD_METERS,
+} = {}) {
+  const pointsBySignature = new Map();
+  for (const point of candidate?.points || []) {
+    const signature = String(point?.signature || '').trim();
+    if (!signature || !point?.coordinate || !Number.isFinite(Number(point?.timestampMs))) continue;
+    const points = pointsBySignature.get(signature) || [];
+    points.push(point);
+    pointsBySignature.set(signature, points);
+  }
+
+  const boundariesBySignature = new Map();
+  for (const sample of candidate?.boundarySamples || []) {
+    const signature = String(sample?.signature || '').trim();
+    if (!signature || !sample?.coordinate || !Number.isFinite(Number(sample?.timestampMs))) continue;
+    const samples = boundariesBySignature.get(signature) || [];
+    samples.push(sample);
+    boundariesBySignature.set(signature, samples);
+  }
+
+  const strongThreshold = Number(offRouteThresholdMeters) + MARGINAL_OFF_ROUTE_RESET_GRACE_METERS;
+  const transitionsByDirection = new Map();
+  for (const [signature, rawPoints] of pointsBySignature.entries()) {
+    const points = [...rawPoints].sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const samples = boundariesBySignature.get(signature) || [];
+    const entries = samples
+      .filter((sample) => (
+        sample.kind === 'entry' &&
+        Number(sample.timestampMs) <= Number(firstPoint.timestampMs) &&
+        Number(firstPoint.timestampMs) - Number(sample.timestampMs) <= TRANSITION_SAMPLE_MAX_GAP_MS
+      ))
+      .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+    const exits = samples
+      .filter((sample) => (
+        sample.kind === 'exit' &&
+        Number(sample.timestampMs) >= Number(lastPoint.timestampMs) &&
+        Number(sample.timestampMs) - Number(lastPoint.timestampMs) <= TRANSITION_SAMPLE_MAX_GAP_MS
+      ))
+      .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs));
+    const entry = entries.at(-1) || null;
+    const exit = exits[0] || null;
+    if (!entry || !exit) continue;
+
+    const entryProgress = Number(entry.progressMeters);
+    const exitProgress = Number(exit.progressMeters);
+    if (!Number.isFinite(entryProgress) || !Number.isFinite(exitProgress)) continue;
+    if (Math.abs(exitProgress - entryProgress) < MIN_SAFE_SPAN_METERS) continue;
+    if (!points.some((point) => Number(point.distanceMeters) > strongThreshold)) continue;
+
+    const direction = exitProgress >= entryProgress ? 1 : -1;
+    const transitions = transitionsByDirection.get(direction) || [];
+    transitions.push({ signature, points, entry, exit, direction });
+    transitionsByDirection.set(direction, transitions);
+  }
+
+  const transitions = [...transitionsByDirection.values()]
+    .sort((a, b) => b.length - a.length)[0] || [];
+  if (transitions.length < MIN_UNIQUE_SIGNATURES) return null;
+
+  const entryConsensus = selectBoundaryConsensus(
+    transitions.map((transition) => transition.entry),
+    COMPLETE_TRANSITION_MAX_BOUNDARY_SPREAD_METERS
+  );
+  const exitConsensus = selectBoundaryConsensus(
+    transitions.map((transition) => transition.exit),
+    COMPLETE_TRANSITION_MAX_BOUNDARY_SPREAD_METERS
+  );
+  if (!entryConsensus || !exitConsensus) return null;
+  const entryConsensusSignatures = new Set(
+    entryConsensus.samples.map((sample) => sample.signature).filter(Boolean)
+  );
+  const sharedConsensusSignatureCount = new Set(
+    exitConsensus.samples
+      .map((sample) => sample.signature)
+      .filter((signature) => signature && entryConsensusSignatures.has(signature))
+  ).size;
+  if (sharedConsensusSignatureCount < MIN_UNIQUE_SIGNATURES) return null;
+
+  const sharedStartProgress = Math.max(...transitions.map((transition) => (
+    Math.min(Number(transition.entry.progressMeters), Number(transition.exit.progressMeters))
+  )));
+  const sharedEndProgress = Math.min(...transitions.map((transition) => (
+    Math.max(Number(transition.entry.progressMeters), Number(transition.exit.progressMeters))
+  )));
+  if (sharedEndProgress - sharedStartProgress < MIN_SAFE_SPAN_METERS) return null;
+
+  const representative = [...transitions].sort((a, b) => (
+    b.points.length - a.points.length ||
+    Number(b.exit.timestampMs) - Number(a.exit.timestampMs)
+  ))[0];
+  const toTracePoint = (sample) => ({
+    signature: representative.signature,
+    coordinate: normalizeCoordinate(sample.observedCoordinate || sample.coordinate),
+    progressMeters: Number(sample.progressMeters),
+    timestampMs: Number(sample.timestampMs),
+  });
+  const tracePoints = [
+    toTracePoint(representative.entry),
+    ...representative.points,
+    toTracePoint(representative.exit),
+  ].filter((point) => point.coordinate);
+
+  return {
+    signatureCount: transitions.length,
+    direction: representative.direction,
+    entryConsensus,
+    exitConsensus,
+    sharedStartProgress,
+    sharedEndProgress,
+    trace: {
+      signature: representative.signature,
+      points: tracePoints,
+      direction: representative.direction,
+      pointCount: tracePoints.length,
+      spanMeters: Math.abs(
+        Number(representative.exit.progressMeters) - Number(representative.entry.progressMeters)
+      ),
+      lastEvidenceAt: Number(representative.exit.timestampMs),
+    },
+  };
+}
+
+function applyConsensusTransitionBoundaries(candidate, polyline, geometryEvidence) {
+  if (!geometryEvidence || !Array.isArray(polyline) || polyline.length < 2) return geometryEvidence;
+  const completeTransitionEvidence = getCompleteTransitionEvidence(candidate);
+  const trace = selectCoherentTripTrace(geometryEvidence.points || []) ||
+    completeTransitionEvidence?.trace ||
+    null;
+  const evidenceSignatures = new Set(
+    (geometryEvidence.points || []).map((point) => point?.signature).filter(Boolean)
+  );
+  const minProgress = Number(geometryEvidence.minProgressMeters);
+  const maxProgress = Number(geometryEvidence.maxProgressMeters);
+  if (!Number.isFinite(minProgress) || !Number.isFinite(maxProgress)) {
+    return {
+      ...geometryEvidence,
+      inferredPathPoints: trace?.points || [],
+      coherentTripSignature: trace?.signature || null,
+      progressSortDirection: trace?.direction || 1,
+      confirmedProgressDirection: getConfirmedTraceDirection(trace),
+    };
+  }
+
+  const sideSamples = { lower: [], upper: [] };
+  for (const sample of candidate?.boundarySamples || []) {
+    if (!evidenceSignatures.has(sample?.signature)) continue;
+    const progress = Number(sample?.progressMeters);
+    if (!Number.isFinite(progress)) continue;
+    const lowerDistance = Math.abs(progress - minProgress);
+    const upperDistance = Math.abs(progress - maxProgress);
+    sideSamples[lowerDistance <= upperDistance ? 'lower' : 'upper'].push(sample);
+  }
+
+  let lowerConsensus = selectBoundaryConsensus(sideSamples.lower);
+  let upperConsensus = selectBoundaryConsensus(sideSamples.upper);
+  if (completeTransitionEvidence) {
+    if (completeTransitionEvidence.direction >= 0) {
+      lowerConsensus = completeTransitionEvidence.entryConsensus;
+      upperConsensus = completeTransitionEvidence.exitConsensus;
+    } else {
+      lowerConsensus = completeTransitionEvidence.exitConsensus;
+      upperConsensus = completeTransitionEvidence.entryConsensus;
+    }
+  }
+  const nextMinProgress = lowerConsensus?.progressMeters ?? minProgress;
+  const nextMaxProgress = upperConsensus?.progressMeters ?? maxProgress;
+  if (nextMaxProgress <= nextMinProgress) {
+    return {
+      ...geometryEvidence,
+      inferredPathPoints: trace?.points || [],
+      coherentTripSignature: trace?.signature || null,
+      progressSortDirection: trace?.direction || 1,
+      confirmedProgressDirection: getConfirmedTraceDirection(trace),
+    };
+  }
+
+  const cumulative = buildCumulativeDistances(polyline);
+  const lowerPoint = getPointAtProgress(polyline, cumulative, nextMinProgress);
+  const upperPoint = getPointAtProgress(polyline, cumulative, nextMaxProgress);
+  const direction = trace?.direction || 1;
+  return {
+    ...geometryEvidence,
+    minProgressMeters: nextMinProgress,
+    maxProgressMeters: nextMaxProgress,
+    spanMeters: nextMaxProgress - nextMinProgress,
+    entryPoint: direction >= 0 ? lowerPoint : upperPoint,
+    exitPoint: direction >= 0 ? upperPoint : lowerPoint,
+    progressSortDirection: direction,
+    confirmedProgressDirection: getConfirmedTraceDirection(trace),
+    inferredPathPoints: trace?.points || [],
+    coherentTripSignature: trace?.signature || null,
+    boundaryConsensus: {
+      lowerSignatureCount: lowerConsensus?.signatureCount || 0,
+      upperSignatureCount: upperConsensus?.signatureCount || 0,
+      lowerProgressMeters: lowerConsensus?.progressMeters ?? null,
+      upperProgressMeters: upperConsensus?.progressMeters ?? null,
+    },
+  };
+}
+
 function selectRecentCoherentEvidence(candidate, allStats) {
   const points = (candidate.points || [])
     .filter((point) => Number.isFinite(Number(point?.timestampMs)));
@@ -839,6 +1205,7 @@ function selectConfiguredCorridorEvidence(candidate, polyline, corridor) {
       corridor.exitPoint
     ),
     progressSortDirection: direction,
+    confirmedProgressDirection: direction,
     gpsSupersedesPreviousPath: true,
     configuredCorridorLabel: corridor.label || null,
     configuredCorridor: true,
@@ -870,7 +1237,9 @@ function selectGeometryEvidenceSegments(candidate, polyline, detectorConfig) {
 
   const allStats = getPointStats(candidate.points || []);
   const recentCoherentStats = selectRecentCoherentEvidence(candidate, allStats);
-  if (recentCoherentStats) return [recentCoherentStats];
+  if (recentCoherentStats) {
+    return [applyConsensusTransitionBoundaries(candidate, polyline, recentCoherentStats)];
+  }
 
   const clusterStats = splitPointsByProgress(candidate.points || [])
     .map(getPointStats);
@@ -878,22 +1247,30 @@ function selectGeometryEvidenceSegments(candidate, polyline, detectorConfig) {
     .filter(isPublishableGeometryStats)
     .sort((a, b) => a.minProgressMeters - b.minProgressMeters);
 
-  if (validClusters.length > 0) return validClusters;
+  if (validClusters.length > 0) {
+    return validClusters.map((stats) => (
+      applyConsensusTransitionBoundaries(candidate, polyline, stats)
+    ));
+  }
 
   if (clusterStats.length > 1) {
     if (
       isPublishableGeometryStats(allStats) &&
       hasSparseForwardTraceBridge(candidate.points || [])
     ) {
-      return [{
+      return [applyConsensusTransitionBoundaries(candidate, polyline, {
         ...allStats,
         sparseForwardTraceBridge: true,
-      }];
+      })];
     }
-    return [clusterStats.sort(compareGeometryStatsByQuality)[0]];
+    return [applyConsensusTransitionBoundaries(
+      candidate,
+      polyline,
+      clusterStats.sort(compareGeometryStatsByQuality)[0]
+    )];
   }
 
-  return [allStats];
+  return [applyConsensusTransitionBoundaries(candidate, polyline, allStats)];
 }
 
 function selectGeometryEvidence(candidate, polyline, detectorConfig) {
@@ -921,6 +1298,9 @@ function buildInferredDetourPolyline(points = [], progressSortDirection = 1) {
   const sorted = points
     .filter((point) => point?.coordinate && Number.isFinite(point.progressMeters))
     .sort((a, b) => {
+      if (Number.isFinite(Number(a.timestampMs)) && Number.isFinite(Number(b.timestampMs))) {
+        return Number(a.timestampMs) - Number(b.timestampMs);
+      }
       if (a.progressMeters !== b.progressMeters) {
         return (a.progressMeters - b.progressMeters) * progressSortDirection;
       }
@@ -987,8 +1367,8 @@ function getPolylineGapStats(polyline = []) {
   };
 }
 
-function getInferredDetourPathSafety(polyline = []) {
-  if (!Array.isArray(polyline) || polyline.length < MIN_OFF_ROUTE_POINTS) {
+function getInferredDetourPathSafety(polyline = [], { minPoints = MIN_OFF_ROUTE_POINTS } = {}) {
+  if (!Array.isArray(polyline) || polyline.length < minPoints) {
     return {
       safe: false,
       reason: 'insufficient-inferred-points',
@@ -1021,7 +1401,52 @@ function makeCandidate(routeId, shapeId) {
     firstSeenAt: null,
     lastSeenAt: null,
     triggerVehicleId: null,
+    boundarySamples: [],
+    serviceTraceSamples: [],
   };
+}
+
+function addConsensusBoundaryAnchors(polyline = [], geometryEvidence = {}) {
+  const path = normalizePolyline(polyline);
+  if (path.length < 2) return path;
+  const consensus = geometryEvidence.boundaryConsensus || {};
+  const entryConfirmed = (geometryEvidence.progressSortDirection || 1) >= 0
+    ? Number(consensus.lowerSignatureCount) >= MIN_BOUNDARY_TRANSITION_SIGNATURES
+    : Number(consensus.upperSignatureCount) >= MIN_BOUNDARY_TRANSITION_SIGNATURES;
+  const exitConfirmed = (geometryEvidence.progressSortDirection || 1) >= 0
+    ? Number(consensus.upperSignatureCount) >= MIN_BOUNDARY_TRANSITION_SIGNATURES
+    : Number(consensus.lowerSignatureCount) >= MIN_BOUNDARY_TRANSITION_SIGNATURES;
+  const entry = normalizeCoordinate(geometryEvidence.entryPoint);
+  const exit = normalizeCoordinate(geometryEvidence.exitPoint);
+
+  if (entryConfirmed && entry && coordinateDistanceMeters(entry, path[0]) > 0) {
+    path.unshift(entry);
+  }
+  if (exitConfirmed && exit && coordinateDistanceMeters(path[path.length - 1], exit) > 0) {
+    path.push(exit);
+  }
+  return path;
+}
+
+function getBoundarySampleKey(sample = {}) {
+  return [
+    sample.kind,
+    sample.signature,
+    sample.timestampMs,
+    Number.isFinite(Number(sample.progressMeters)) ? Number(sample.progressMeters).toFixed(2) : '',
+  ].join('|');
+}
+
+function addBoundarySampleToCandidate(candidate, sample) {
+  if (!candidate || !sample?.kind || !sample?.signature) return false;
+  if (!Number.isFinite(Number(sample.progressMeters)) || !sample.coordinate) return false;
+  const key = getBoundarySampleKey(sample);
+  const existingKeys = new Set((candidate.boundarySamples || []).map(getBoundarySampleKey));
+  if (existingKeys.has(key)) return false;
+  candidate.boundarySamples = [...(candidate.boundarySamples || []), cloneJson(sample)]
+    .sort((a, b) => Number(a.timestampMs || 0) - Number(b.timestampMs || 0))
+    .slice(-100);
+  return true;
 }
 
 function addPointToCandidate(candidate, point) {
@@ -1037,9 +1462,58 @@ function addPointToCandidate(candidate, point) {
   candidate.triggerVehicleId = candidate.triggerVehicleId || point.vehicleId;
 }
 
+function getServiceTraceSampleKey(sample = {}) {
+  return [
+    sample.signature || sample.tripId || sample.vehicleId,
+    sample.timestampMs,
+    sample.kind,
+    Number.isFinite(Number(sample.progressMeters)) ? Number(sample.progressMeters).toFixed(2) : '',
+  ].map((part) => String(part ?? '')).join('|');
+}
+
+function normalizeServiceTraceSample(sample = {}, { kind = null, onRoute = null } = {}) {
+  const coordinate = normalizeCoordinate(sample.coordinate || sample.observedCoordinate);
+  const progressMeters = Number(sample.progressMeters);
+  const timestampMs = Number(sample.timestampMs);
+  if (!coordinate || !Number.isFinite(progressMeters) || !Number.isFinite(timestampMs)) return null;
+  return {
+    routeId: sample.routeId || null,
+    shapeId: sample.shapeId || null,
+    vehicleId: sample.vehicleId || null,
+    tripId: sample.tripId || null,
+    signature: sample.signature || sample.tripId || sample.vehicleId || null,
+    coordinate,
+    latitude: coordinate.latitude,
+    longitude: coordinate.longitude,
+    projectedPoint: normalizeCoordinate(sample.projectedPoint),
+    progressMeters,
+    distanceMeters: Number.isFinite(Number(sample.distanceMeters)) ? Number(sample.distanceMeters) : 0,
+    timestampMs,
+    kind: kind || sample.kind || null,
+    onRoute: onRoute == null ? sample.onRoute !== false : onRoute === true,
+  };
+}
+
+function addServiceTraceSamplesToCandidate(candidate, samples = []) {
+  if (!candidate) return;
+  const existing = candidate.serviceTraceSamples || [];
+  const byKey = new Map(existing.map((sample) => [getServiceTraceSampleKey(sample), sample]));
+  for (const sample of samples) {
+    const normalized = normalizeServiceTraceSample(sample, {
+      kind: sample?.kind,
+      onRoute: sample?.onRoute,
+    });
+    if (normalized) byKey.set(getServiceTraceSampleKey(normalized), normalized);
+  }
+  candidate.serviceTraceSamples = [...byKey.values()]
+    .sort((a, b) => Number(a.timestampMs) - Number(b.timestampMs))
+    .slice(-MAX_SERVICE_TRACE_SAMPLES);
+}
+
 function hasEnoughEvidence(candidate) {
-  return candidate.points.length >= MIN_OFF_ROUTE_POINTS &&
+  const traditionalEvidence = candidate.points.length >= MIN_OFF_ROUTE_POINTS &&
     getPointStats(candidate.points || []).signatureCount >= MIN_UNIQUE_SIGNATURES;
+  return traditionalEvidence || Boolean(getCompleteTransitionEvidence(candidate));
 }
 
 function getCandidateConfirmationTiming(routeId, scheduleIndex, referenceTimeMs, {
@@ -1146,14 +1620,34 @@ function hasStrongOffRoutePoint(candidate, offRouteThresholdMeters = DEFAULT_OFF
 function hasEnoughConfirmingEvidence(candidate, {
   offRouteThresholdMeters = DEFAULT_OFF_ROUTE_THRESHOLD_METERS,
   shapeLengthMeters = null,
+  stopImpactData = null,
 } = {}) {
   if (!hasEnoughEvidence(candidate)) return false;
+  const completeTransitionEvidence = getCompleteTransitionEvidence(candidate, {
+    offRouteThresholdMeters,
+  });
+  if (
+    candidate.points.length < MIN_OFF_ROUTE_POINTS &&
+    !completeTransitionEvidence
+  ) {
+    return false;
+  }
   if (
     isTinyRouteEdgeEventWindow(candidate?.eventWindow, shapeLengthMeters) &&
     !hasStrongOffRoutePoint(candidate, offRouteThresholdMeters)
   ) {
     return false;
   }
+  const majorTerminalRouteEdge = getMajorTerminalRouteEdge({
+    routeId: candidate?.routeId,
+    shapeId: candidate?.shapeId,
+    eventWindow: candidate?.eventWindow,
+    shapeLengthMeters,
+    stopImpactData,
+    maxSourceSpanMeters: TINY_DETOUR_SOURCE_SPAN_METERS,
+    edgePaddingMeters: TINY_DETOUR_SOURCE_PADDING_METERS,
+  });
+  if (majorTerminalRouteEdge && !completeTransitionEvidence) return false;
   return true;
 }
 
@@ -1219,7 +1713,11 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
   const spanMeters = hasSafeProgress ? endProgress - startProgress : 0;
   const skippedSegmentPolyline = geometryEvidence.skippedSegmentPolyline || (
     hasSafeProgress && Array.isArray(polyline) && polyline.length >= 2
-      ? getShapeSpan(polyline, startProgress, endProgress)
+      ? (() => {
+        const span = getShapeSpan(polyline, startProgress, endProgress);
+        if ((geometryEvidence.progressSortDirection || 1) < 0) span.reverse();
+        return span;
+      })()
       : []
   );
   const hasConfiguredDetourPolyline =
@@ -1228,7 +1726,7 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
   let inferredDetourPolyline = hasConfiguredDetourPolyline
     ? cloneJson(geometryEvidence.configuredDetourPolyline)
     : buildInferredDetourPolyline(
-      geometryEvidence.points,
+      geometryEvidence.inferredPathPoints || geometryEvidence.points,
       geometryEvidence.progressSortDirection || 1
     );
   const entryPoint = geometryEvidence.entryPoint || skippedSegmentPolyline[0] || null;
@@ -1236,6 +1734,7 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
     skippedSegmentPolyline[skippedSegmentPolyline.length - 1] ||
     null;
   if (
+    geometryEvidence.configuredCorridor === true &&
     geometryEvidence.entryPoint &&
     geometryEvidence.exitPoint &&
     inferredDetourPolyline.length >= 2
@@ -1245,8 +1744,10 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
   }
   if (!hasConfiguredDetourPolyline) {
     inferredDetourPolyline = removeConfiguredCorridorOutliers(inferredDetourPolyline, geometryEvidence);
+    inferredDetourPolyline = addConsensusBoundaryAnchors(inferredDetourPolyline, geometryEvidence);
   }
   if (
+    geometryEvidence.configuredCorridor === true &&
     geometryEvidence.entryPoint &&
     geometryEvidence.exitPoint &&
     inferredDetourPolyline.length >= 2
@@ -1256,7 +1757,9 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
   }
   // Handoffs are presentation continuity only. Assess the GPS/configured path
   // before adding anchors so this cannot make weak evidence pass the trust gate.
-  const inferredDetourPathSafety = getInferredDetourPathSafety(inferredDetourPolyline);
+  const inferredDetourPathSafety = getInferredDetourPathSafety(inferredDetourPolyline, {
+    minPoints: geometryEvidence.coherentTripSignature ? 2 : MIN_OFF_ROUTE_POINTS,
+  });
   const inferredPathHandoff = stitchSafeInferredPathHandoffs(
     inferredDetourPolyline,
     entryPoint,
@@ -1331,6 +1834,9 @@ function buildGeometrySegment(candidate, polyline, geometryEvidence, shapeLength
         : null,
       maxGapMeters: MAX_INFERRED_HANDOFF_GAP_METERS,
     },
+    coherentTripSignature: geometryEvidence.coherentTripSignature || null,
+    boundaryConsensus: cloneJson(geometryEvidence.boundaryConsensus) || null,
+    progressDirection: normalizeDirection(geometryEvidence.confirmedProgressDirection),
   };
 }
 
@@ -1368,6 +1874,7 @@ function buildGeometry(candidate, shapes, detectorConfig = {}) {
     lastEvidenceAt,
     startProgressMeters: primarySegment?.startProgressMeters ?? null,
     endProgressMeters: primarySegment?.endProgressMeters ?? null,
+    progressDirection: normalizeDirection(primarySegment?.progressDirection),
     gpsSupersedesPreviousPath: segments.some((segment) => segment.gpsSupersedesPreviousPath === true),
     staleMixedEvidence: segments.some((segment) => segment.staleMixedEvidence === true),
     configuredCorridor: segments.some((segment) => segment.configuredCorridor === true),
@@ -1505,6 +2012,57 @@ function getDetourProgressBounds(detour = {}) {
     if (bounds) return bounds;
   }
   return null;
+}
+
+function resolveDetourProgressDirection(detour = {}, { shapes } = {}) {
+  const geometry = detour.geometry || {};
+  const shapeId = getShapeIdFromDetour(detour);
+  const segments = Array.isArray(geometry.segments) ? geometry.segments : [];
+  const segment = segments.find((item) => !shapeId || item?.shapeId === shapeId) || segments[0] || null;
+  const storedDirection = normalizeDirection(
+    segment?.progressDirection ?? geometry.progressDirection ?? detour.progressDirection
+  );
+  if (storedDirection) return storedDirection;
+
+  const polyline = shapeId && typeof shapes?.get === 'function' ? shapes.get(shapeId) : null;
+  const entryPoint = segment?.entryPoint || geometry.entryPoint || detour.entryPoint;
+  const exitPoint = segment?.exitPoint || geometry.exitPoint || detour.exitPoint;
+  if (!Array.isArray(polyline) || polyline.length < 2 || !entryPoint || !exitPoint) return null;
+
+  const entryProjection = projectOntoPolyline(entryPoint, polyline);
+  const exitProjection = projectOntoPolyline(exitPoint, polyline);
+  if (
+    !entryProjection ||
+    !exitProjection ||
+    entryProjection.distanceMeters > CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS ||
+    exitProjection.distanceMeters > CONFIRMED_REFRESH_DIRECTION_PROJECTION_MAX_METERS
+  ) {
+    return null;
+  }
+
+  const entryProgress = Number(entryProjection.progressMeters);
+  const exitProgress = Number(exitProjection.progressMeters);
+  if (
+    !Number.isFinite(entryProgress) ||
+    !Number.isFinite(exitProgress) ||
+    Math.abs(exitProgress - entryProgress) < CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS
+  ) {
+    return null;
+  }
+
+  const bounds = getDetourProgressBounds(detour);
+  if (
+    bounds &&
+    (
+      entryProgress < bounds.start - TRACE_REVERSAL_TOLERANCE_METERS ||
+      entryProgress > bounds.end + TRACE_REVERSAL_TOLERANCE_METERS ||
+      exitProgress < bounds.start - TRACE_REVERSAL_TOLERANCE_METERS ||
+      exitProgress > bounds.end + TRACE_REVERSAL_TOLERANCE_METERS
+    )
+  ) {
+    return null;
+  }
+  return normalizeDirection(exitProgress - entryProgress);
 }
 
 function getCandidateProgressBounds(candidate = {}) {
@@ -1676,7 +2234,13 @@ function hasTrustedVisibleGeometry(detour = {}) {
     geometry.geometryGate?.passed === true;
 }
 
-function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehicleIds = new Set()) {
+function buildDetour(
+  candidate,
+  shapes,
+  detectorConfig = {},
+  currentOffRouteVehicleIds = new Set(),
+  stopImpactData = null
+) {
   const geometry = buildGeometry(candidate, shapes, detectorConfig);
   const confirmingSignatureCount = getPointStats(candidate.points || []).signatureCount;
   const currentVehicleIds = new Set(currentOffRouteVehicleIds || []);
@@ -1703,10 +2267,27 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
       route400StaleSparseEvidence,
     });
   const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
-  const eventClearWindow = buildClearWindowForEvent(candidate.eventWindow, {
+  const majorTerminalRouteEdge = getMajorTerminalRouteEdge({
+    routeId: candidate.routeId,
+    shapeId: candidate.shapeId,
+    eventWindow: candidate.eventWindow,
+    shapeLengthMeters,
+    stopImpactData,
+    maxSourceSpanMeters: TINY_DETOUR_SOURCE_SPAN_METERS,
+    edgePaddingMeters: TINY_DETOUR_SOURCE_PADDING_METERS,
+  });
+  const protectTerminalClearWindow = (clearWindow) => clearWindow && majorTerminalRouteEdge
+    ? {
+      ...clearWindow,
+      majorTerminalRouteEdge: majorTerminalRouteEdge.edge,
+      majorTerminalStopId: majorTerminalRouteEdge.stopId,
+      requiresCompleteTransitions: true,
+    }
+    : clearWindow;
+  const eventClearWindow = protectTerminalClearWindow(buildClearWindowForEvent(candidate.eventWindow, {
     shapeLengthMeters,
     quality: riderVisible ? 'normal' : 'weak',
-  });
+  }));
   const detourZone = {
     startProgressMeters: Number.isFinite(geometry.startProgressMeters)
       ? geometry.startProgressMeters
@@ -1720,7 +2301,16 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     ? geometry.segments
       .map((segment) => segment?.clearWindow)
       .filter(Boolean)
+      .map(protectTerminalClearWindow)
     : [];
+  if (majorTerminalRouteEdge && Array.isArray(geometry.segments)) {
+    geometry.segments = geometry.segments.map((segment) => ({
+      ...segment,
+      clearWindow: protectTerminalClearWindow(segment?.clearWindow),
+      majorTerminalRouteEdge: majorTerminalRouteEdge.edge,
+      majorTerminalStopId: majorTerminalRouteEdge.stopId,
+    }));
+  }
   const detourSpanMeters = Number.isFinite(detourZone.startProgressMeters) && Number.isFinite(detourZone.endProgressMeters)
     ? Math.abs(detourZone.endProgressMeters - detourZone.startProgressMeters)
     : 0;
@@ -1733,6 +2323,9 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     detourVersion: 'v2',
     detourModel: 'event-window',
     eventWindow: freezeEventWindow(candidate.eventWindow),
+    majorTerminalRouteEdge: majorTerminalRouteEdge?.edge || null,
+    majorTerminalStopId: majorTerminalRouteEdge?.stopId || null,
+    serviceTraceSamples: cloneJson(candidate.serviceTraceSamples) || [],
     detectedAt: new Date(candidate.firstSeenAt),
     lastSeenAt: new Date(candidate.lastSeenAt),
     triggerVehicleId: candidate.triggerVehicleId,
@@ -1750,8 +2343,8 @@ function buildDetour(candidate, shapes, detectorConfig = {}, currentOffRouteVehi
     geometry,
     detourZone,
     clearWindow: riderVisible
-      ? (clearWindows[0] || eventClearWindow || buildClearWindow(detourZone, shapeLengthMeters))
-      : (hiddenClearWindow || clearWindows[0] || buildClearWindow(detourZone, shapeLengthMeters)),
+      ? protectTerminalClearWindow(clearWindows[0] || eventClearWindow || buildClearWindow(detourZone, shapeLengthMeters))
+      : protectTerminalClearWindow(hiddenClearWindow || clearWindows[0] || buildClearWindow(detourZone, shapeLengthMeters)),
     clearWindows: riderVisible
       ? (clearWindows.length > 0 ? clearWindows : [eventClearWindow].filter(Boolean))
       : [hiddenClearWindow || clearWindows[0]].filter(Boolean),
@@ -1773,6 +2366,8 @@ function snapshotDetour(detour) {
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
+    clearProof: cloneJson(detour.clearProof) || null,
+    serviceTraceSamples: cloneJson(detour.serviceTraceSamples) || [],
   };
 }
 
@@ -1788,6 +2383,8 @@ function serializeDetour(detour) {
     clearWindow: cloneJson(detour.clearWindow),
     clearWindows: cloneJson(detour.clearWindows),
     clearedSegments: cloneJson(detour.clearedSegments) || [],
+    clearProof: cloneJson(detour.clearProof) || null,
+    serviceTraceSamples: cloneJson(detour.serviceTraceSamples) || [],
   };
 }
 
@@ -1908,6 +2505,7 @@ function restoreDetour(eventIdOrRouteId, data = {}) {
     clearWindow: cloneJson(data.clearWindow) || clearWindows[0] || buildClearWindow(data.detourZone),
     clearWindows,
     clearedSegments: cloneJson(data.clearedSegments) || [],
+    serviceTraceSamples: cloneJson(data.serviceTraceSamples) || [],
   };
 }
 
@@ -1938,6 +2536,10 @@ function createDetourV2Detector(config = {}) {
       CANDIDATE_EVIDENCE_TTL_MS
     ),
   };
+  const confirmedRefreshDirectionMode = normalizeDirectionMode(
+    config.confirmedRefreshDirectionMode ??
+      process.env.DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_MODE
+  );
   const enforceServiceHours = config.enforceServiceHours !== false;
 
   let tickId = 0;
@@ -1952,6 +2554,103 @@ function createDetourV2Detector(config = {}) {
   const clearTracksByEvent = new Map();
   const pendingClearsByEvent = new Map();
   const projectionDiagnostics = new Map();
+  const transitionObservationState = new Map();
+
+  function transitionObservationKey(routeId, signature) {
+    return `${normalizeRouteId(routeId)}|${String(signature || '').trim()}`;
+  }
+
+  function makeTransitionBoundarySample(kind, sample = {}) {
+    const coordinate = normalizeCoordinate(sample.projectedPoint || sample.coordinate);
+    if (!coordinate || !Number.isFinite(Number(sample.progressMeters))) return null;
+    return {
+      kind,
+      routeId: sample.routeId || null,
+      shapeId: sample.shapeId || null,
+      vehicleId: sample.vehicleId || null,
+      tripId: sample.tripId || null,
+      signature: sample.signature || null,
+      identitySource: sample.identitySource || null,
+      coordinate,
+      observedCoordinate: normalizeCoordinate(sample.coordinate),
+      progressMeters: Number(sample.progressMeters),
+      timestampMs: Number(sample.timestampMs),
+    };
+  }
+
+  function findTransitionCandidatesForRun(
+    routeId,
+    shapeId,
+    signature,
+    runStartedAt,
+    timestampMs
+  ) {
+    const matches = [];
+    for (const candidate of eventCandidates.values()) {
+      if (candidate.routeId !== routeId || candidate.shapeId !== shapeId) continue;
+      const signatureTimestamps = (candidate.points || [])
+        .filter((point) => String(point?.signature || '') === String(signature || ''))
+        .map((point) => Number(point?.timestampMs))
+        .filter((value) => (
+          Number.isFinite(value) &&
+          value >= Number(runStartedAt || 0) &&
+          value <= timestampMs &&
+          timestampMs - value <= TRANSITION_SAMPLE_MAX_GAP_MS
+        ));
+      if (signatureTimestamps.length > 0) matches.push(candidate);
+    }
+    return matches;
+  }
+
+  function propagateBoundarySamplesAcrossContinuousRuns() {
+    const candidates = [...eventCandidates.values()];
+    for (const source of candidates) {
+      for (const boundarySample of source.boundarySamples || []) {
+        const boundaryTimestamp = Number(boundarySample?.timestampMs);
+        const boundaryProgress = Number(boundarySample?.progressMeters);
+        if (!Number.isFinite(boundaryTimestamp) || !Number.isFinite(boundaryProgress)) continue;
+
+        for (const target of candidates) {
+          if (
+            target === source ||
+            target.routeId !== source.routeId ||
+            target.shapeId !== source.shapeId
+          ) {
+            continue;
+          }
+          const sameRunPoint = (target.points || []).find((point) => (
+            String(point?.signature || '') === String(boundarySample.signature || '') &&
+            Number.isFinite(Number(point?.timestampMs)) &&
+            Math.abs(Number(point.timestampMs) - boundaryTimestamp) <= TRANSITION_SAMPLE_MAX_GAP_MS &&
+            Number.isFinite(Number(point?.progressMeters)) &&
+            Math.abs(Number(point.progressMeters) - boundaryProgress) <= GEOMETRY_CLUSTER_GAP_METERS
+          ));
+          if (sameRunPoint) addBoundarySampleToCandidate(target, boundarySample);
+        }
+      }
+    }
+  }
+
+  function setTransitionObservation(key, value) {
+    transitionObservationState.set(key, value);
+    while (transitionObservationState.size > MAX_TRANSITION_OBSERVATION_STATES) {
+      transitionObservationState.delete(transitionObservationState.keys().next().value);
+    }
+  }
+
+  function pruneTransitionObservations(referenceTimeMs) {
+    if (!Number.isFinite(referenceTimeMs)) return;
+    const cutoffMs = referenceTimeMs - TRANSITION_SAMPLE_MAX_GAP_MS * 2;
+    for (const [key, state] of transitionObservationState.entries()) {
+      const newestStateTimestamp = Math.max(
+        Number(state?.lastOffRouteAt) || 0,
+        Number(state?.lastOnRouteSample?.timestampMs) || 0,
+        Number(state?.lastDeadbandAt) || 0,
+        Number(state?.lastConfirmedRefreshMarginalAt) || 0
+      );
+      if (newestStateTimestamp < cutoffMs) transitionObservationState.delete(key);
+    }
+  }
 
   function getKnownTerminalCirculationObservation(
     tripData,
@@ -2013,6 +2712,7 @@ function createDetourV2Detector(config = {}) {
       onRouteClear: 0,
       deadband: 0,
       offRoute: 0,
+      confirmedRefresh: 0,
       ignoredRouteEdge: 0,
       knownTerminalCirculation: 0,
       noProjection: 0,
@@ -2029,6 +2729,7 @@ function createDetourV2Detector(config = {}) {
         onRouteClear: summary.onRouteClear || 0,
         deadband: summary.deadband || 0,
         offRoute: summary.offRoute || 0,
+        confirmedRefresh: summary.confirmedRefresh || 0,
         ignoredRouteEdge: summary.ignoredRouteEdge || 0,
         knownTerminalCirculation: summary.knownTerminalCirculation || 0,
         noProjection: summary.noProjection || 0,
@@ -2048,6 +2749,7 @@ function createDetourV2Detector(config = {}) {
 
   function buildCandidateEvidenceSummary(eventId, candidate, currentVehicleCount = 0) {
     const pointStats = getPointStats(candidate.points || []);
+    const completeTransitionEvidence = getCompleteTransitionEvidence(candidate);
     return {
       eventId,
       routeId: candidate.routeId,
@@ -2056,6 +2758,8 @@ function createDetourV2Detector(config = {}) {
       uniqueSignatureCount: candidate.signatures.size,
       confirmingSignatureCount: pointStats.signatureCount,
       requiredConfirmingSignatureCount: MIN_UNIQUE_SIGNATURES,
+      completeTransitionConfirmation: Boolean(completeTransitionEvidence),
+      completeTransitionSignatureCount: completeTransitionEvidence?.signatureCount || 0,
       currentOffRouteVehicleCount: currentVehicleCount,
       oldestMs: candidate.firstSeenAt,
       newestMs: candidate.lastSeenAt,
@@ -2101,6 +2805,18 @@ function createDetourV2Detector(config = {}) {
 
     detour.state = 'clear-pending';
     detour.clearReason = 'obsolete-shape-normal-route-observed';
+    detour.clearProof = {
+      evidenceType: 'normal-route-gps',
+      method: 'obsolete-shape-all-current-vehicles-on-route',
+      observedAt: newestSampleMs,
+      sampleCount: Number(summary.total || 0),
+      sourceCount: Number(summary.total || 0),
+      shapeId: activeShapeId,
+      allCurrentVehiclesOnRoute: true,
+      requiredGraceMs: OBSOLETE_SHAPE_GLOBAL_CLEAR_GRACE_MS,
+      observedGraceMs: newestSampleMs - latestEvidenceMs,
+      passed: true,
+    };
     detour.clearPendingTick = currentTickId;
     detour.vehiclesOffRoute = new Set();
     detour.currentVehicleCount = 0;
@@ -2120,6 +2836,7 @@ function createDetourV2Detector(config = {}) {
     clearTracksByEvent.clear();
     pendingClearsByEvent.clear();
     projectionDiagnostics.clear();
+    transitionObservationState.clear();
   }
 
   function makeEventCandidate(routeId, shapeId, point, shapes) {
@@ -2261,6 +2978,10 @@ function createDetourV2Detector(config = {}) {
         coordinate: point.coordinate,
       }, { shapeLengthMeters });
     }
+    for (const boundarySample of source.boundarySamples || []) {
+      addBoundarySampleToCandidate(target, boundarySample);
+    }
+    addServiceTraceSamplesToCandidate(target, source.serviceTraceSamples || []);
 
     eventCandidates.delete(sourceEventId);
     refreshProvisionalCandidateEventId(target);
@@ -2290,6 +3011,157 @@ function createDetourV2Detector(config = {}) {
       mergeCandidateInto(candidate, other, { shapeLengthMeters, currentOffRouteVehicleIdsByEvent });
     }
     return candidate;
+  }
+
+  function candidatesHaveNearbyOffRouteEvidence(left, right) {
+    for (const leftPoint of left?.points || []) {
+      for (const rightPoint of right?.points || []) {
+        if (
+          coordinateDistanceMeters(leftPoint?.coordinate, rightPoint?.coordinate) <=
+          EQUIVALENT_SHAPE_OFF_ROUTE_POINT_MAX_DISTANCE_METERS
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function reprojectCandidateEvidence(candidate, targetShapeId, shapes) {
+    const targetShape = shapes.get(targetShapeId);
+    if (!Array.isArray(targetShape) || targetShape.length < 2) return null;
+
+    const points = [];
+    for (const point of candidate?.points || []) {
+      const projection = projectOntoPolyline(point.coordinate, targetShape);
+      if (
+        !projection ||
+        !Number.isFinite(projection.progressMeters) ||
+        projection.distanceMeters <= offRouteThresholdMeters
+      ) {
+        return null;
+      }
+      points.push({
+        ...cloneJson(point),
+        shapeId: targetShapeId,
+        projectedPoint: projection.projectedPoint,
+        progressMeters: projection.progressMeters,
+        distanceMeters: projection.distanceMeters,
+      });
+    }
+
+    const boundarySamples = [];
+    for (const sample of candidate?.boundarySamples || []) {
+      const observedCoordinate = normalizeCoordinate(
+        sample.observedCoordinate || sample.coordinate
+      );
+      const projection = projectOntoPolyline(observedCoordinate, targetShape);
+      if (!projection || !Number.isFinite(projection.progressMeters)) return null;
+      boundarySamples.push({
+        ...cloneJson(sample),
+        shapeId: targetShapeId,
+        coordinate: projection.projectedPoint,
+        observedCoordinate,
+        progressMeters: projection.progressMeters,
+      });
+    }
+
+    const serviceTraceSamples = [];
+    for (const sample of candidate?.serviceTraceSamples || []) {
+      const observedCoordinate = normalizeCoordinate(sample.coordinate || sample.observedCoordinate);
+      const projection = projectOntoPolyline(observedCoordinate, targetShape);
+      if (!projection || !Number.isFinite(projection.progressMeters)) continue;
+      serviceTraceSamples.push({
+        ...cloneJson(sample),
+        shapeId: targetShapeId,
+        coordinate: observedCoordinate,
+        projectedPoint: projection.projectedPoint,
+        progressMeters: projection.progressMeters,
+        distanceMeters: projection.distanceMeters,
+      });
+    }
+
+    return { points, boundarySamples, serviceTraceSamples };
+  }
+
+  function coalesceEquivalentRouteShapeCandidates(shapes, currentOffRouteVehicleIdsByEvent) {
+    const candidates = [...eventCandidates.values()];
+    for (let targetIndex = 0; targetIndex < candidates.length; targetIndex += 1) {
+      const target = candidates[targetIndex];
+      if (!eventCandidates.has(target?.eventId)) continue;
+      const targetDetour = activeDetours.get(target.eventId);
+      if (targetDetour?.riderVisible === true) continue;
+
+      for (let sourceIndex = targetIndex + 1; sourceIndex < candidates.length; sourceIndex += 1) {
+        const source = candidates[sourceIndex];
+        if (
+          !source ||
+          !eventCandidates.has(source.eventId) ||
+          source.routeId !== target.routeId ||
+          source.shapeId === target.shapeId
+        ) {
+          continue;
+        }
+        const sourceDetour = activeDetours.get(source.eventId);
+        if (sourceDetour?.riderVisible === true) continue;
+        if (!candidatesHaveNearbyOffRouteEvidence(target, source)) continue;
+
+        const targetNewest = Number(target.lastSeenAt || 0);
+        const sourceNewest = Number(source.lastSeenAt || 0);
+        const confirmationWindowMs = Math.max(
+          Number(target.confirmationWindowMs || 0),
+          Number(source.confirmationWindowMs || 0),
+          CANDIDATE_CONFIRMATION_FALLBACK_WINDOW_MS
+        );
+        if (Math.abs(targetNewest - sourceNewest) > confirmationWindowMs) continue;
+
+        const projectedSource = reprojectCandidateEvidence(source, target.shapeId, shapes);
+        if (!projectedSource) continue;
+        const combinedEvidence = {
+          points: [...(target.points || []), ...projectedSource.points],
+          boundarySamples: [
+            ...(target.boundarySamples || []),
+            ...projectedSource.boundarySamples,
+          ],
+        };
+        if (!getCompleteTransitionEvidence(combinedEvidence, { offRouteThresholdMeters })) {
+          continue;
+        }
+
+        const oldTargetEventId = target.eventId;
+        const sourceEventId = source.eventId;
+        const existingPointKeys = new Set((target.points || []).map(getCandidatePointKey));
+        for (const point of projectedSource.points) {
+          const pointKey = getCandidatePointKey(point);
+          if (existingPointKeys.has(pointKey)) continue;
+          existingPointKeys.add(pointKey);
+          addPointToCandidate(target, point);
+          target.eventWindow = expandProvisionalEventWindow(target.eventWindow, point, {
+            shapeLengthMeters: getShapeLengthMeters(shapes, target.shapeId),
+          });
+        }
+        for (const sample of projectedSource.boundarySamples) {
+          addBoundarySampleToCandidate(target, sample);
+        }
+        addServiceTraceSamplesToCandidate(target, projectedSource.serviceTraceSamples || []);
+
+        eventCandidates.delete(sourceEventId);
+        if (sourceDetour?.riderVisible !== true) activeDetours.delete(sourceEventId);
+        clearTracksByEvent.delete(sourceEventId);
+        pendingClearsByEvent.delete(sourceEventId);
+        refreshProvisionalCandidateEventId(target);
+        mergeCurrentOffRouteVehicleSets(
+          oldTargetEventId,
+          sourceEventId,
+          currentOffRouteVehicleIdsByEvent
+        );
+        mergeCurrentOffRouteVehicleSets(
+          target.eventId,
+          oldTargetEventId,
+          currentOffRouteVehicleIdsByEvent
+        );
+      }
+    }
   }
 
   function makeConfiguredCorridorCandidate(routeId, shapeId, descriptor) {
@@ -2523,6 +3395,8 @@ function createDetourV2Detector(config = {}) {
       routeId: candidate.routeId,
       shapeId: candidate.shapeId,
       points: candidate.points,
+      boundarySamples: cloneJson(candidate.boundarySamples) || [],
+      serviceTraceSamples: cloneJson(candidate.serviceTraceSamples) || [],
       eventWindow: cloneJson(candidate.eventWindow),
       confirmationWindowMs: candidate.confirmationWindowMs || null,
       confirmationHeadwayMs: candidate.confirmationHeadwayMs || null,
@@ -2560,6 +3434,12 @@ function createDetourV2Detector(config = {}) {
     candidate.confirmationHeadwayMs = Number(item.confirmationHeadwayMs) || null;
     candidate.confirmationWindowSource = item.confirmationWindowSource || null;
     candidate.confirmationServiceDate = item.confirmationServiceDate || null;
+    candidate.boundarySamples = Array.isArray(item.boundarySamples)
+      ? cloneJson(item.boundarySamples).slice(-100)
+      : [];
+    candidate.serviceTraceSamples = Array.isArray(item.serviceTraceSamples)
+      ? cloneJson(item.serviceTraceSamples).slice(-MAX_SERVICE_TRACE_SAMPLES)
+      : [];
     return candidate;
   }
 
@@ -2695,6 +3575,7 @@ function createDetourV2Detector(config = {}) {
 
   function isHiddenTinyRouteEdgeClearedByDownstreamTrack(detour, clearWindow, track) {
     if (!isHiddenTinyRouteEdgeDetour(detour, clearWindow)) return false;
+    if (clearWindow?.requiresCompleteTransitions === true) return false;
     const latestEvidenceAt = Number(detour?.latestGpsEvidenceAt || 0);
     const samples = (Array.isArray(track) ? track : [])
       .map(normalizeClearTrackSample)
@@ -2771,15 +3652,6 @@ function createDetourV2Detector(config = {}) {
       forwardRuns.push(...splitForwardClearRuns(clearWindow, track));
     }
     const forwardSamples = forwardRuns.flat();
-    const tinySourceSamples = forwardSamples.filter((sample) => (
-      sampleMatchesTinyClearSource(clearWindow, sample)
-    ));
-    if (
-      tinySourceSamples.length >= 2 &&
-      hasEnoughCollectiveClearSources(tinySourceSamples)
-    ) {
-      return true;
-    }
     const metrics = getClearWindowMetrics(clearWindow, forwardSamples);
     if (
       !metrics ||
@@ -2835,13 +3707,71 @@ function createDetourV2Detector(config = {}) {
     ));
   }
 
-  function markNormalRouteClearPending(detour, currentTickId) {
+  function buildNormalRouteClearProof(clearWindow, samples, method) {
+    const matchingSamples = (Array.isArray(samples) ? samples : [])
+      .map(normalizeClearTrackSample)
+      .filter((sample) => sample && sampleMatchesClearWindow(clearWindow, sample));
+    const timestamps = matchingSamples.map((sample) => Number(sample.timestampMs)).filter(Number.isFinite);
+    const signatures = new Set(matchingSamples.map((sample) => sample.signature).filter(Boolean));
+    const vehicleIds = new Set(matchingSamples.map((sample) => sample.vehicleId).filter(Boolean));
+    const tripIds = new Set(matchingSamples.map((sample) => sample.tripId).filter(Boolean));
+    const metrics = getClearWindowMetrics(clearWindow, matchingSamples);
+    const coverageRatio = metrics?.span > 0 ? metrics.overlapMeters / metrics.span : null;
+    const movementMeters = metrics?.movementMeters ?? null;
+    const maxProgressGapMeters = metrics?.maxProgressGapMeters ?? null;
+    const requiredCoverageRatio = metrics?.minCoverageRatio ?? getClearWindowMinCoverageRatio(clearWindow);
+    const requiredMovementMeters = metrics?.requiredMovement ?? null;
+    const maxAllowedProgressGapMeters = metrics?.maxAllowedProgressGapMeters ?? CLEAR_WINDOW_MAX_PROGRESS_GAP_METERS;
+    const coreSampleCount = metrics?.coreSampleCount ?? 0;
+    const coveragePassed = Number.isFinite(coverageRatio) && coverageRatio >= requiredCoverageRatio;
+    const movementPassed = Number.isFinite(movementMeters) &&
+      Number.isFinite(requiredMovementMeters) &&
+      movementMeters >= requiredMovementMeters;
+    const coreCoveragePassed = coreSampleCount > 0;
+    const progressGapPassed = Number.isFinite(maxProgressGapMeters) &&
+      maxProgressGapMeters <= maxAllowedProgressGapMeters;
+    return {
+      evidenceType: 'normal-route-gps',
+      method,
+      observedAt: timestamps.length > 0 ? Math.max(...timestamps) : null,
+      firstObservedAt: timestamps.length > 0 ? Math.min(...timestamps) : null,
+      sampleCount: matchingSamples.length,
+      sourceCount: signatures.size || vehicleIds.size,
+      vehicleIds: [...vehicleIds].sort(),
+      tripIds: [...tripIds].sort(),
+      shapeId: clearWindow?.shapeId || null,
+      windowStartProgressMeters: Number(clearWindow?.startProgressMeters),
+      windowEndProgressMeters: Number(clearWindow?.endProgressMeters),
+      coverageRatio,
+      requiredCoverageRatio,
+      coveragePassed,
+      movementMeters,
+      requiredMovementMeters,
+      movementPassed,
+      coreSampleCount,
+      coreCoveragePassed,
+      maxProgressGapMeters,
+      maxAllowedProgressGapMeters,
+      progressGapPassed,
+      passed: coveragePassed && movementPassed && coreCoveragePassed && progressGapPassed,
+    };
+  }
+
+  function markNormalRouteClearPending(detour, currentTickId, clearProof = null) {
     detour.state = 'clear-pending';
     detour.clearReason = 'normal-route-observed';
     detour.clearPendingTick = currentTickId;
+    detour.clearProof = cloneJson(clearProof) || null;
   }
 
-  function enqueueSegmentClears(eventId, clearSegments, currentTickId, clearPendingAt) {
+  function enqueueSegmentClears(
+    eventId,
+    clearSegments,
+    currentTickId,
+    clearPendingAt,
+    samples = [],
+    method = 'single-track-traversal'
+  ) {
     if (!eventId || !Array.isArray(clearSegments) || clearSegments.length === 0) return;
     const entries = pendingClearsByEvent.get(eventId) || [];
     for (const item of clearSegments) {
@@ -2849,10 +3779,13 @@ function createDetourV2Detector(config = {}) {
       if (entries.some((entry) => windowsDescribeSameSegment(entry.clearWindow, item.clearWindow))) {
         continue;
       }
+      const clearProof = buildNormalRouteClearProof(item.clearWindow, samples, method);
+      if (clearProof.passed !== true) continue;
       entries.push({
         clearWindow: cloneJson(item.clearWindow),
         segment: cloneJson(item.segment),
         clearReason: 'normal-route-observed',
+        clearProof,
         clearPendingTick: currentTickId,
         clearPendingAt,
       });
@@ -2935,14 +3868,31 @@ function createDetourV2Detector(config = {}) {
           ),
         }
       );
-      candidate.confirmationWindowMs = confirmationTiming.windowMs;
+      const previousConfirmationWindowMs = Number(candidate.confirmationWindowMs || 0);
+      const previousConfirmationServiceDate = candidate.confirmationServiceDate || null;
+      const sameServiceDate = (
+        !previousConfirmationServiceDate ||
+        !confirmationTiming.serviceDate ||
+        previousConfirmationServiceDate === confirmationTiming.serviceDate
+      );
+      candidate.confirmationWindowMs = sameServiceDate
+        ? Math.max(previousConfirmationWindowMs, confirmationTiming.windowMs)
+        : confirmationTiming.windowMs;
       candidate.confirmationHeadwayMs = confirmationTiming.headwayMs;
       candidate.confirmationWindowSource = confirmationTiming.source;
       candidate.confirmationServiceDate = confirmationTiming.serviceDate;
-      const cutoffMs = candidateReferenceTime - confirmationTiming.windowMs;
+      const cutoffMs = candidateReferenceTime - candidate.confirmationWindowMs;
       const retainedPoints = (candidate.points || []).filter((point) => (
         Number.isFinite(Number(point?.timestampMs)) &&
         Number(point.timestampMs) >= cutoffMs
+      ));
+      candidate.boundarySamples = (candidate.boundarySamples || []).filter((sample) => (
+        Number.isFinite(Number(sample?.timestampMs)) &&
+        Number(sample.timestampMs) >= cutoffMs - TRANSITION_SAMPLE_MAX_GAP_MS
+      ));
+      candidate.serviceTraceSamples = (candidate.serviceTraceSamples || []).filter((sample) => (
+        Number.isFinite(Number(sample?.timestampMs)) &&
+        Number(sample.timestampMs) >= cutoffMs - TRANSITION_SAMPLE_MAX_GAP_MS
       ));
       if (retainedPoints.length === (candidate.points || []).length) continue;
 
@@ -3037,6 +3987,7 @@ function createDetourV2Detector(config = {}) {
       ...segmentSnapshot,
       state: 'cleared',
       clearReason: pendingClear.clearReason,
+      clearProof: cloneJson(pendingClear.clearProof) || null,
       clearPendingTick: pendingClear.clearPendingTick,
       clearedAtTick: pendingClear.clearPendingTick,
       clearedAt: pendingClear.clearPendingAt || null,
@@ -3055,6 +4006,11 @@ function createDetourV2Detector(config = {}) {
       if (!pointMatchesProgressWindow(point, clearWindow, candidate.shapeId)) return true;
       const pointTimestamp = Number(point.timestampMs || 0);
       return Number.isFinite(pointTimestamp) && pointTimestamp > Number(clearPendingAt || 0);
+    });
+    candidate.boundarySamples = (candidate.boundarySamples || []).filter((sample) => {
+      if (!pointMatchesProgressWindow(sample, clearWindow, candidate.shapeId)) return true;
+      const sampleTimestamp = Number(sample.timestampMs || 0);
+      return Number.isFinite(sampleTimestamp) && sampleTimestamp > Number(clearPendingAt || 0);
     });
     if (candidate.points.length !== before) {
       rebuildCandidateSummary(candidate);
@@ -3087,7 +4043,17 @@ function createDetourV2Detector(config = {}) {
       pendingClearsByEvent.delete(eventId);
 
       if (applied.length > 0 && (!candidate || !hasEnoughEvidence(candidate))) {
-        markNormalRouteClearPending(detour, currentTickId);
+        const observedAt = applied
+          .map((item) => Number(item.clearProof?.observedAt || item.clearPendingAt || 0))
+          .reduce((max, value) => Math.max(max, value), 0);
+        markNormalRouteClearPending(detour, currentTickId, {
+          evidenceType: 'normal-route-gps',
+          method: 'event-segments-cleared',
+          observedAt: observedAt || null,
+          sampleCount: applied.reduce((sum, item) => sum + Number(item.clearProof?.sampleCount || 0), 0),
+          sourceCount: Math.max(...applied.map((item) => Number(item.clearProof?.sourceCount || 0))),
+          segments: applied.map((item) => cloneJson(item.clearProof)).filter(Boolean),
+        });
       }
     }
   }
@@ -3148,6 +4114,7 @@ function createDetourV2Detector(config = {}) {
       .filter((segment) => !activeWindows.some((window) => (
         windowsDescribeSameSegment(segment?.clearWindow, window)
       )));
+    detour.clearProof = cloneJson(previousDetour.clearProof) || detour.clearProof || null;
     return detour;
   }
 
@@ -3246,7 +4213,14 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        trackClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        track,
+        'single-track-traversal'
+      );
       return;
     }
 
@@ -3257,7 +4231,14 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), sample.timestampMs);
-      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        collectivelyClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        samples,
+        'collective-track-coverage'
+      );
     }
   }
 
@@ -3273,7 +4254,14 @@ function createDetourV2Detector(config = {}) {
           .map((item) => Number(item.timestampMs))
           .filter(Number.isFinite)
           .reduce((max, value) => Math.max(max, value), 0);
-        enqueueSegmentClears(eventId, trackClearedSegments, currentTickId, clearPendingAt);
+        enqueueSegmentClears(
+          eventId,
+          trackClearedSegments,
+          currentTickId,
+          clearPendingAt,
+          track,
+          'restored-single-track-traversal'
+        );
       }
       const collectivelyClearedSegments = getClearableSegmentsFromCollectiveTracks(detour, eventTracks);
       if (collectivelyClearedSegments.length === 0) continue;
@@ -3282,17 +4270,28 @@ function createDetourV2Detector(config = {}) {
         .map((item) => Number(item.timestampMs))
         .filter(Number.isFinite)
         .reduce((max, value) => Math.max(max, value), 0);
-      enqueueSegmentClears(eventId, collectivelyClearedSegments, currentTickId, clearPendingAt);
+      enqueueSegmentClears(
+        eventId,
+        collectivelyClearedSegments,
+        currentTickId,
+        clearPendingAt,
+        samples,
+        'restored-collective-track-coverage'
+      );
     }
   }
 
-  function pruneWeakMarginalActiveDetours(shapes = new Map()) {
+  function pruneWeakMarginalActiveDetours(shapes = new Map(), stopImpactData = null) {
     for (const [eventId, detour] of [...activeDetours.entries()]) {
       if (!detour || detour.riderVisible === true) continue;
       const candidate = eventCandidates.get(eventId);
       if (!candidate || !hasEnoughEvidence(candidate)) continue;
       const shapeLengthMeters = getShapeLengthMeters(shapes, candidate.shapeId);
-      if (hasEnoughConfirmingEvidence(candidate, { offRouteThresholdMeters, shapeLengthMeters })) {
+      if (hasEnoughConfirmingEvidence(candidate, {
+        offRouteThresholdMeters,
+        shapeLengthMeters,
+        stopImpactData,
+      })) {
         continue;
       }
       activeDetours.delete(eventId);
@@ -3301,11 +4300,45 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
-  function trackClearSample(routeId, signature, sample, currentTickId, shapes) {
+  function trackClearSample(
+    routeId,
+    signature,
+    sample,
+    currentTickId,
+    shapes,
+    excludedEventIds = new Set()
+  ) {
     for (const detour of getActiveEventsForRoute(routeId)) {
+      if (excludedEventIds.has(detour.eventId)) continue;
       trackClearSampleForEvent(detour.eventId, detour, signature, sample, currentTickId, shapes);
     }
   }
+
+  const confirmedEventRefresh = createConfirmedEventRefresh({
+    activeDetours,
+    getActiveEventsForRoute,
+    getPathPolylines: getGeometryDetourPathPolylines,
+    getShapeId: getShapeIdFromDetour,
+    getProgressBounds: getDetourProgressBounds,
+    getDistanceToPaths: getMinDistanceToPolylines,
+    resolveProgressDirection: resolveDetourProgressDirection,
+    directionMode: confirmedRefreshDirectionMode,
+    clearNormalRouteEvidence: (eventId) => {
+      // A completed on-route/marginal/on-route traversal outweighs older
+      // normal-route clear proof. Merely arming a refresh does not clear it.
+      clearTracksByEvent.delete(eventId);
+      pendingClearsByEvent.delete(eventId);
+    },
+    rules: {
+      minimumUniqueSignatures: MIN_UNIQUE_SIGNATURES,
+      offRouteThresholdMeters,
+      marginalThresholdMeters: CONFIRMED_REFRESH_THRESHOLD_METERS,
+      pathProximityMeters: CONFIRMED_REFRESH_PATH_PROXIMITY_METERS,
+      minimumTraversalMeters: CONFIRMED_REFRESH_MIN_TRAVERSAL_METERS,
+      reversalToleranceMeters: TRACE_REVERSAL_TOLERANCE_METERS,
+      maximumSampleGapMs: TRANSITION_SAMPLE_MAX_GAP_MS,
+    },
+  });
 
   function refreshActiveDetourHeartbeat(candidate, currentVehicleIds = new Set()) {
     const detour = activeDetours.get(candidate?.eventId);
@@ -3372,7 +4405,9 @@ function createDetourV2Detector(config = {}) {
       .filter(Number.isFinite);
     const scheduleIndex = stopImpactData?.scheduleIndex || null;
     if (sampleTimes.length > 0) {
-      pruneExpiredCandidateEvidence(Math.max(...sampleTimes), shapes, scheduleIndex);
+      const newestSampleTime = Math.max(...sampleTimes);
+      pruneExpiredCandidateEvidence(newestSampleTime, shapes, scheduleIndex);
+      pruneTransitionObservations(newestSampleTime);
     }
 
     for (const vehicle of vehicles) {
@@ -3397,8 +4432,17 @@ function createDetourV2Detector(config = {}) {
       routeSummary.total += 1;
       routeSummary.newestSampleMs = Math.max(routeSummary.newestSampleMs || 0, timestampMs);
 
-      const tripData = getTripData(tripMapping, vehicle.tripId);
-      const tripShapeId = vehicle.tripShapeId || tripData?.shapeId || null;
+      const mappedTrip = vehicle.tripId
+        ? (tripMapping?.get?.(vehicle.tripId) || tripMapping?.[vehicle.tripId] || null)
+        : null;
+      const mappedTripRouteId = normalizeRouteId(mappedTrip?.routeId);
+      const mappedTripShapeId = (
+        mappedTrip?.shapeId &&
+        (!mappedTripRouteId || mappedTripRouteId === routeId)
+      )
+        ? mappedTrip.shapeId
+        : null;
+      const tripShapeId = vehicle.tripShapeId || mappedTripShapeId || null;
       const projection = projectCoordinateToRoute(
         routeId,
         coordinate,
@@ -3419,7 +4463,7 @@ function createDetourV2Detector(config = {}) {
 
       const shapeLengthMeters = getShapeLengthMeters(shapes, projection.shapeId);
       const knownTerminalCirculation = getKnownTerminalCirculationObservation(
-        tripData,
+        mappedTrip,
         coordinate,
         projection,
         shapeLengthMeters
@@ -3456,6 +4500,11 @@ function createDetourV2Detector(config = {}) {
         vehicleId: id,
         tripId: vehicle.tripId || null,
         tripShapeId,
+        projectionSource: vehicle.tripShapeId
+          ? 'vehicle-trip-shape'
+          : mappedTripShapeId
+            ? 'gtfs-trip-mapping'
+            : 'nearest-route-shape',
         shapeId: projection.shapeId,
         distanceMeters: projection.distanceMeters,
         progressMeters: projection.progressMeters,
@@ -3465,6 +4514,60 @@ function createDetourV2Detector(config = {}) {
       });
 
       if (knownTerminalCirculation || ignoredRouteEdgeObservation) continue;
+
+      const transitionKey = transitionObservationKey(routeId, signature);
+      const previousTransitionState = transitionObservationState.get(transitionKey) || {};
+      const projectedSample = {
+        routeId,
+        shapeId: projection.shapeId,
+        vehicleId: id,
+        tripId: vehicle.tripId || null,
+        signature,
+        identitySource: identity.source,
+        coordinate,
+        projectedPoint: projection.projectedPoint,
+        progressMeters: projection.progressMeters,
+        distanceMeters: projection.distanceMeters,
+        timestampMs,
+      };
+
+      const confirmedRefreshEvents = confirmedEventRefresh.findMatches(
+        routeId,
+        projectedSample,
+        projection.distanceMeters
+      );
+      if (confirmedRefreshEvents.length > 0) {
+        const pendingConfirmedRefreshes = confirmedEventRefresh.arm(
+          previousTransitionState,
+          projectedSample,
+          confirmedRefreshEvents,
+          { shapes }
+        );
+        if (pendingConfirmedRefreshes.length > 0) {
+          if (classification === 'on-route-clear') {
+            routeSummary.onRouteClear = Math.max(0, routeSummary.onRouteClear - 1);
+          } else if (classification === 'deadband') {
+            routeSummary.deadband = Math.max(0, routeSummary.deadband - 1);
+          }
+          routeSummary.confirmedRefresh += 1;
+          projectionDiagnostics.set(id, {
+            ...projectionDiagnostics.get(id),
+            classification: 'confirmed-detour-refresh-pending',
+            confirmedRefreshEventIds: pendingConfirmedRefreshes.map((item) => item.eventId),
+          });
+          for (const detour of confirmedRefreshEvents) {
+            const currentEventVehicleIds = currentOffRouteVehicleIdsByEvent.get(detour.eventId) || new Set();
+            currentEventVehicleIds.add(id);
+            currentOffRouteVehicleIdsByEvent.set(detour.eventId, currentEventVehicleIds);
+          }
+          setTransitionObservation(transitionKey, {
+            ...previousTransitionState,
+            pendingConfirmedRefreshes,
+            lastConfirmedRefreshMarginalAt: timestampMs,
+          });
+          continue;
+        }
+      }
 
       if (projection.distanceMeters > offRouteThresholdMeters) {
         const offRoutePoints = offRoutePointsThisTickByRoute.get(routeId) || [];
@@ -3488,8 +4591,27 @@ function createDetourV2Detector(config = {}) {
           ...offRoutePoint,
           coordinate,
         }, shapes);
-        if (!candidate) continue;
-        addPointToCandidate(candidate, {
+        if (!candidate) {
+          setTransitionObservation(transitionKey, {
+            ...previousTransitionState,
+            offRouteActive: true,
+            lastOffRouteAt: timestampMs,
+            lastOffRouteShapeId: projection.shapeId,
+          });
+          continue;
+        }
+        const entrySource = previousTransitionState.lastOnRouteSample;
+        let activeEntryBoundary = previousTransitionState.activeEntryBoundarySample || null;
+        if (
+          previousTransitionState.offRouteActive !== true &&
+          entrySource &&
+          entrySource.shapeId === projection.shapeId &&
+          timestampMs - Number(entrySource.timestampMs) <= TRANSITION_SAMPLE_MAX_GAP_MS
+        ) {
+          activeEntryBoundary = makeTransitionBoundarySample('entry', entrySource);
+        }
+        if (activeEntryBoundary) addBoundarySampleToCandidate(candidate, activeEntryBoundary);
+        const offRouteCandidatePoint = {
           vehicleId: id,
           signature,
           identitySource: identity.source,
@@ -3500,7 +4622,15 @@ function createDetourV2Detector(config = {}) {
           distanceMeters: projection.distanceMeters,
           shapeId: projection.shapeId,
           timestampMs,
-        });
+        };
+        addPointToCandidate(candidate, offRouteCandidatePoint);
+        addServiceTraceSamplesToCandidate(candidate, [
+          ...(previousTransitionState.serviceTraceSamples || []),
+          normalizeServiceTraceSample(offRouteCandidatePoint, {
+            kind: 'off-route',
+            onRoute: false,
+          }),
+        ]);
         // Re-prune after insertion so replayed or out-of-order batches cannot
         // combine old trips with a current bus inside the same detector tick.
         pruneExpiredCandidateEvidence(timestampMs, shapes, scheduleIndex);
@@ -3519,17 +4649,29 @@ function createDetourV2Detector(config = {}) {
         currentEventOffRouteVehicleIds.add(id);
         currentOffRouteVehicleIdsByEvent.set(candidate.eventId, currentEventOffRouteVehicleIds);
         refreshActiveDetourHeartbeat(candidate, currentEventOffRouteVehicleIds);
+        setTransitionObservation(transitionKey, {
+          ...previousTransitionState,
+          offRouteActive: true,
+          offRouteRunStartedAt: previousTransitionState.offRouteActive === true
+            ? previousTransitionState.offRouteRunStartedAt
+            : timestampMs,
+          lastOffRouteAt: timestampMs,
+          lastOffRouteShapeId: projection.shapeId,
+          activeEntryBoundarySample: activeEntryBoundary,
+        });
 
         if (hasEnoughConfirmingEvidence(candidate, {
           offRouteThresholdMeters,
           shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
+          stopImpactData,
         })) {
           const previousDetour = activeDetours.get(candidate.eventId);
           const detour = buildDetour(
             candidate,
             shapes,
             config,
-            currentOffRouteVehicleIdsByEvent.get(candidate.eventId)
+            currentOffRouteVehicleIdsByEvent.get(candidate.eventId),
+            stopImpactData
           );
           applyGpsPathSupersede(candidate, detour);
           if (previousDetour) {
@@ -3538,6 +4680,67 @@ function createDetourV2Detector(config = {}) {
           activeDetours.set(detour.eventId, detour);
         }
       } else if (projection.distanceMeters <= onRouteClearThresholdMeters) {
+        const confirmedRefreshResult = confirmedEventRefresh.finalize(
+          previousTransitionState,
+          projectedSample,
+          { shapes }
+        );
+        const refreshedEventIds = confirmedRefreshResult.refreshedEventIds;
+        const rejectedRefreshes = confirmedRefreshResult.decisions.filter(
+          (decision) => decision.refreshed === false
+        );
+        if (rejectedRefreshes.length > 0) {
+          projectionDiagnostics.set(id, {
+            ...projectionDiagnostics.get(id),
+            confirmedRefreshRejectedEventIds: rejectedRefreshes.map((item) => item.eventId),
+            confirmedRefreshRejectedReasons: rejectedRefreshes.map((item) => item.reason),
+          });
+        }
+        if (
+          previousTransitionState.offRouteActive === true &&
+          timestampMs - Number(previousTransitionState.lastOffRouteAt || 0) <=
+            TRANSITION_SAMPLE_MAX_GAP_MS
+        ) {
+          const transitionCandidates = findTransitionCandidatesForRun(
+            routeId,
+            previousTransitionState.lastOffRouteShapeId || projection.shapeId,
+            signature,
+            previousTransitionState.offRouteRunStartedAt,
+            timestampMs
+          );
+          const exitBoundary = makeTransitionBoundarySample('exit', projectedSample);
+          if (exitBoundary) {
+            transitionCandidates.forEach((candidate) => {
+              addBoundarySampleToCandidate(candidate, exitBoundary);
+              addServiceTraceSamplesToCandidate(candidate, [
+                normalizeServiceTraceSample(projectedSample, {
+                  kind: 'on-route-exit',
+                  onRoute: true,
+                }),
+              ]);
+            });
+          }
+        }
+        const onRouteServiceTrace = [
+          ...(previousTransitionState.offRouteActive === true
+            ? []
+            : (previousTransitionState.serviceTraceSamples || [])),
+          normalizeServiceTraceSample(projectedSample, {
+            kind: previousTransitionState.offRouteActive === true
+              ? 'on-route-exit'
+              : 'on-route',
+            onRoute: true,
+          }),
+        ].filter(Boolean).slice(-MAX_SERVICE_TRACE_SAMPLES);
+        setTransitionObservation(transitionKey, {
+          offRouteActive: false,
+          offRouteRunStartedAt: null,
+          lastOffRouteAt: null,
+          lastOffRouteShapeId: null,
+          activeEntryBoundarySample: null,
+          lastOnRouteSample: projectedSample,
+          serviceTraceSamples: onRouteServiceTrace,
+        });
         trackClearSample(routeId, clearSignature, {
           progressMeters: projection.progressMeters,
           timestampMs,
@@ -3546,13 +4749,20 @@ function createDetourV2Detector(config = {}) {
           tripId: vehicle.tripId || null,
           identitySource: identity.source,
           coordinate,
-        }, tickId, shapes);
+        }, tickId, shapes, refreshedEventIds);
+      } else {
+        setTransitionObservation(transitionKey, {
+          ...previousTransitionState,
+          lastDeadbandAt: timestampMs,
+        });
       }
     }
 
+    propagateBoundarySamplesAcrossContinuousRuns();
     coalesceConfiguredCorridorCandidates(shapes, currentOffRouteVehicleIdsByEvent);
+    coalesceEquivalentRouteShapeCandidates(shapes, currentOffRouteVehicleIdsByEvent);
 
-    pruneWeakMarginalActiveDetours(shapes);
+    pruneWeakMarginalActiveDetours(shapes, stopImpactData);
     enqueueRestoredCollectiveClears(tickId);
     applyPendingSegmentClears(tickId, offRoutePointsThisTickByRoute);
 
@@ -3560,6 +4770,7 @@ function createDetourV2Detector(config = {}) {
       if (!hasEnoughConfirmingEvidence(candidate, {
         offRouteThresholdMeters,
         shapeLengthMeters: getShapeLengthMeters(shapes, candidate.shapeId),
+        stopImpactData,
       })) continue;
       const previousDetour = activeDetours.get(eventId);
       if (previousDetour?.state === 'clear-pending') continue;
@@ -3567,7 +4778,8 @@ function createDetourV2Detector(config = {}) {
         candidate,
         shapes,
         config,
-        currentOffRouteVehicleIdsByEvent.get(eventId)
+        currentOffRouteVehicleIdsByEvent.get(eventId),
+        stopImpactData
       );
       applyGpsPathSupersede(candidate, detour);
       if (previousDetour) {
@@ -3697,6 +4909,7 @@ function createDetourV2Detector(config = {}) {
       ),
       candidateEvidence,
       routeProjectionSummaries: lastRouteProjectionSummaries,
+      confirmedRefreshDirection: confirmedEventRefresh.getDirectionStats(),
     };
   }
 
@@ -3739,6 +4952,7 @@ function createDetourV2Detector(config = {}) {
       candidateEvidence: getState().candidateEvidence[route] || null,
       snapshot: (lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) ? serializeDetour(lastReportedDetours[route] || detoursForRouteSnapshot(route)[0]) : null,
       projectionSummary: lastRouteProjectionSummaries[route] || null,
+      confirmedRefreshDirection: confirmedEventRefresh.getDirectionStats(route),
       projectionDiagnostics: [...projectionDiagnostics.values()]
         .filter((diagnostic) => diagnostic.routeId === route),
     };
@@ -3850,6 +5064,10 @@ function createDetourV2Detector(config = {}) {
       activeDetours: activeDetoursByRoute,
       clearTracksByEvent: serializeClearTracksByEvent(),
       clearTracks: serializeLegacyClearTracksByRoute(),
+      transitionObservationState: Object.fromEntries(
+        [...transitionObservationState.entries()].map(([key, value]) => [key, cloneJson(value)])
+      ),
+      confirmedRefreshDirection: confirmedEventRefresh.serializeDirectionStats(),
       seenSamples: [...seenSamples].slice(-500),
     };
   }
@@ -3857,6 +5075,11 @@ function createDetourV2Detector(config = {}) {
   function hydrateRuntimeState(snapshot = {}) {
     clearVehicleState();
     (snapshot.seenSamples || []).forEach((key) => seenSamples.add(key));
+    Object.entries(snapshot.transitionObservationState || {}).forEach(([key, value]) => {
+      if (key && value && typeof value === 'object') {
+        setTransitionObservation(key, cloneJson(value));
+      }
+    });
     const candidateItems = snapshot.eventCandidates && typeof snapshot.eventCandidates === 'object'
       ? Object.values(snapshot.eventCandidates)
       : (Array.isArray(snapshot.candidates) ? snapshot.candidates : Object.values(snapshot.candidates || {}));
@@ -3884,6 +5107,7 @@ function createDetourV2Detector(config = {}) {
     } else {
       hydrateClearTracks(snapshot.clearTracks || {}, { eventKeyed: false });
     }
+    confirmedEventRefresh.hydrateDirectionStats(snapshot.confirmedRefreshDirection || {});
     pruneSupersededLegacyRouteDetours();
   }
 
@@ -3994,6 +5218,10 @@ function createDetourV2Detector(config = {}) {
           deleted = true;
         }
       }
+      const transitionPrefix = `${normalizeRouteId(routeId)}|`;
+      for (const key of [...transitionObservationState.keys()]) {
+        if (key.startsWith(transitionPrefix)) transitionObservationState.delete(key);
+      }
       return deleted;
     },
   };
@@ -4002,8 +5230,11 @@ function createDetourV2Detector(config = {}) {
 module.exports = {
   createDetourV2Detector,
   _test: {
+    applyConsensusTransitionBoundaries,
     getRiderVisibilityReason,
     getCandidateConfirmationTiming,
+    resolveDetourProgressDirection,
+    selectCoherentTripTrace,
     stitchSafeInferredPathHandoffs,
   },
 };
