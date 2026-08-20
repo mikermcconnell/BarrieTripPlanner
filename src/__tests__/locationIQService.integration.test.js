@@ -27,6 +27,9 @@ const loadLocationService = ({
   }));
 
   jest.doMock('../services/localGeocodingService', () => localMocks);
+  jest.doMock('../utils/localLandmarkSearch', () => ({
+    findMatchingLocalLandmarks: jest.fn(() => []),
+  }));
   jest.doMock('../utils/retryFetch', () => ({ retryFetch: retryFetchMock }));
   jest.doMock('../services/proxyAuth', () => ({
     getApiProxyRequestOptions: getApiProxyRequestOptionsMock,
