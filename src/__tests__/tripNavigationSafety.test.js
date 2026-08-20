@@ -69,4 +69,16 @@ describe('trip navigation safety', () => {
       ],
     })).toBeNull();
   });
+
+  test('blocks navigation for canceled trips and skipped required stops', () => {
+    expect(getItineraryNavigationBlock({
+      ...baseItinerary,
+      realtimeServiceDisruption: { type: 'trip_cancelled' },
+    })).toEqual(expect.objectContaining({ code: 'CANCELLED_TRIP' }));
+
+    expect(getItineraryNavigationBlock({
+      ...baseItinerary,
+      realtimeServiceDisruption: { type: 'stop_skipped' },
+    })).toEqual(expect.objectContaining({ code: 'SKIPPED_STOP' }));
+  });
 });

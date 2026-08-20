@@ -2031,15 +2031,59 @@ async function refreshPublishedDetoursFromFirestore(db, storageConfig) {
   return snapshot.size;
 }
 
+function getHistoryEventRef(db, event, storageConfig) {
+  const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
+  const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}`;
+  return db.collection(storageConfig.historyCollection).doc(docId);
+}
+
 async function writeHistoryEvent(db, event, storageConfig) {
   if (!HISTORY_ENABLED || !event) return;
-  const suffix = Math.random().toString(36).slice(2, 8);
-  const safeEventId = String(event.eventId || event.detourEventId || event.routeId || 'event').replace(/[\\/]/g, '-');
-  const docId = `${event.occurredAt}-${safeEventId}-${event.eventType}-${suffix}`;
-  await db.collection(storageConfig.historyCollection).doc(docId).set({
+  await getHistoryEventRef(db, event, storageConfig).set({
     ...event,
     ...(storageConfig.writerMetadata || {}),
   });
+}
+
+async function writeActiveDetourWithHistory(db, publishId, doc, event, storageConfig) {
+  const activeRef = db.collection(storageConfig.activeCollection).doc(publishId);
+  const historyEvent = event ? { ...event, ...(storageConfig.writerMetadata || {}) } : null;
+
+  if (HISTORY_ENABLED && historyEvent && typeof db.batch === 'function') {
+    const batch = db.batch();
+    if (batch && typeof batch.set === 'function' && typeof batch.commit === 'function') {
+      batch.set(activeRef, doc, { merge: true });
+      batch.set(getHistoryEventRef(db, historyEvent, storageConfig), historyEvent);
+      await batch.commit();
+      return;
+    }
+  }
+
+  await activeRef.set(doc, { merge: true });
+  await writeHistoryEvent(db, event, storageConfig);
+}
+
+async function deleteActiveDetourWithHistory(db, publishId, event, storageConfig) {
+  const activeRef = db.collection(storageConfig.activeCollection).doc(publishId);
+  const historyEvent = event ? { ...event, ...(storageConfig.writerMetadata || {}) } : null;
+
+  if (HISTORY_ENABLED && historyEvent && typeof db.batch === 'function') {
+    const batch = db.batch();
+    if (
+      batch &&
+      typeof batch.delete === 'function' &&
+      typeof batch.set === 'function' &&
+      typeof batch.commit === 'function'
+    ) {
+      batch.delete(activeRef);
+      batch.set(getHistoryEventRef(db, historyEvent, storageConfig), historyEvent);
+      await batch.commit();
+      return;
+    }
+  }
+
+  await activeRef.delete();
+  await writeHistoryEvent(db, event, storageConfig);
 }
 
 async function hydratePublisherState(db, storageConfig) {
@@ -2114,8 +2158,7 @@ function normalizeHistoryDoc(doc) {
 
 async function deletePublishedDetour(db, publishId, event, logPrefix = 'delete', storageConfig) {
   try {
-    await db.collection(storageConfig.activeCollection).doc(publishId).delete();
-    await writeHistoryEvent(db, event, storageConfig);
+    await deleteActiveDetourWithHistory(db, publishId, event, storageConfig);
     lastPublishedIds.delete(publishId);
     lastPublishedState.delete(publishId);
     lastSeenUpdateTime.delete(publishId);
@@ -3089,9 +3132,9 @@ async function publishDetours(activeDetours, options = {}) {
       }
       Object.assign(retainedDoc, storageConfig.writerMetadata || {});
       try {
-        await db.collection(storageConfig.activeCollection).doc(publishId).set(retainedDoc, { merge: true });
         const currentSnapshot = makeSnapshot(retainedDoc, previous);
-        await writeHistoryEvent(db, buildUpdatedEvent(routeId, previous, currentSnapshot, now), storageConfig);
+        const event = buildUpdatedEvent(routeId, previous, currentSnapshot, now);
+        await writeActiveDetourWithHistory(db, publishId, retainedDoc, event, storageConfig);
         lastPublishedIds.add(publishId);
         lastPublishedState.set(publishId, currentSnapshot);
         lastSeenUpdateTime.set(publishId, now);
@@ -3381,17 +3424,11 @@ async function publishDetours(activeDetours, options = {}) {
     });
 
     try {
-      await db.collection(storageConfig.activeCollection).doc(publishId).set(doc, { merge: true });
       const currentSnapshot = makeSnapshot(doc, previousSnapshot);
-      if (isNew) {
-        await writeHistoryEvent(db, buildDetectedEvent(routeId, currentSnapshot, now), storageConfig);
-      } else {
-        await writeHistoryEvent(
-          db,
-          buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now),
-          storageConfig
-        );
-      }
+      const event = isNew
+        ? buildDetectedEvent(routeId, currentSnapshot, now)
+        : buildUpdatedEvent(routeId, previousSnapshot, currentSnapshot, now);
+      await writeActiveDetourWithHistory(db, publishId, doc, event, storageConfig);
       lastPublishedIds.add(publishId);
       lastPublishedState.set(publishId, currentSnapshot);
       if (shouldUpdateLastSeen) {

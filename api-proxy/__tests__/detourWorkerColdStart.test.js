@@ -480,13 +480,14 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     }
   });
 
-  test('hydrates missing active snapshots even when runtime already has other routes', async () => {
+  test('does not suppress a legitimate clear when the active snapshot read was non-empty', async () => {
     const detectorState = { detours: { '12B': { state: 'active' } }, detourStates: { '12B': 'active' } };
     const loadActiveDetourSnapshots = jest.fn().mockResolvedValue({
       '12A': { routeId: '12A' },
       '12B': { routeId: '12B' },
     });
-    const hydrateActiveDetourSnapshots = jest.fn(() => 1);
+    const hydrateActiveDetourSnapshots = jest.fn(() => 0);
+    const publishDetours = jest.fn().mockResolvedValue();
 
     jest.doMock('../gtfsLoader', () => ({
       getStaticData: jest.fn().mockResolvedValue({
@@ -511,19 +512,19 @@ describe('detourWorker cold-start active snapshot fallback', () => {
     }));
 
     jest.doMock('../detourDetector', () => ({
-      processVehicles: jest.fn(() => ({ '12B': { routeId: '12B', state: 'active' } })),
+      processVehicles: jest.fn(() => ({})),
       getState: jest.fn(() => detectorState),
       hydratePersistentDetours: jest.fn(),
       hydratePersistentDetourGeometries: jest.fn(),
       getPersistentDetours: jest.fn(() => ({})),
       getPersistentDetourGeometries: jest.fn(() => ({})),
-      serializeDetectorRuntimeState: jest.fn(() => ({ routes: [{ routeId: '12B' }] })),
+      serializeDetectorRuntimeState: jest.fn(() => ({ routes: [] })),
       hydrateRuntimeState: jest.fn(),
       hydrateActiveDetourSnapshots,
     }));
 
     jest.doMock('../detourPublisher', () => ({
-      publishDetours: jest.fn().mockResolvedValue(),
+      publishDetours,
     }));
 
     jest.doMock('../persistentDetourStore', () => ({
@@ -545,7 +546,8 @@ describe('detourWorker cold-start active snapshot fallback', () => {
 
     await expect(worker.runTick({ source: 'test' })).resolves.toMatchObject({
       ok: true,
-      activeSnapshotHydration: { attempted: true, snapshotCount: 2, hydratedCount: 1 },
+      detourCount: 0,
+      activeSnapshotHydration: { attempted: true, snapshotCount: 2, hydratedCount: 0 },
     });
 
     expect(loadActiveDetourSnapshots).toHaveBeenCalledTimes(1);
@@ -553,6 +555,9 @@ describe('detourWorker cold-start active snapshot fallback', () => {
       '12A': { routeId: '12A' },
       '12B': { routeId: '12B' },
     });
+    expect(publishDetours.mock.calls[0][1]).toEqual(expect.objectContaining({
+      suppressDeletesWhenEmpty: false,
+    }));
   });
 
   test('passes V2 storage config through runtime, hydration, and publish paths', async () => {

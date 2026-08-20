@@ -61,6 +61,7 @@ export const recalculateNavigationItinerary = async ({
     arriveBy: false,
     routingData,
     enrichWalking: false,
+    useCache: false,
     onDemandZones,
     stops,
   });

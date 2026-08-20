@@ -1725,6 +1725,8 @@ const HomeScreen = ({ route }) => {
     hasSearched: hasTripSearched,
     isTypingFrom,
     isTypingTo,
+    fromSearchError,
+    toSearchError,
     fromSuggestions,
     toSuggestions,
     timeMode,
@@ -3374,6 +3376,8 @@ const HomeScreen = ({ route }) => {
             isLoading={isTripLoading}
             isTypingFrom={isTypingFrom}
             isTypingTo={isTypingTo}
+            fromSearchError={fromSearchError}
+            toSearchError={toSearchError}
             fromSuggestions={fromSuggestions}
             toSuggestions={toSuggestions}
             savedPlaces={rankedSavedPlaces}

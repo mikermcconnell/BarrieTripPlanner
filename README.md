@@ -289,7 +289,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
    - `DETOUR_BURST_SAMPLING_ENABLED=false` for normal scheduled production; burst sampling is diagnostic only
-   - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000` and `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000` keep compact backend memory for low-frequency route confirmation
+   - `DETOUR_DETECTOR_VERSION=v2`, `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`, and the headway-aware candidate defaults (`2700000` fallback, `1.25` headway multiplier, `600000` buffer, `5400000` cap) keep event-scoped storage and bounded backend memory for low-frequency route confirmation
    - `BASELINE_AUTO_INIT=false` (prevents seeding the baseline from live GTFS during an active detour)
    - `DETOUR_REQUIRE_SAFE_BASELINE=true` (blocks detection until a trusted baseline is loaded)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)

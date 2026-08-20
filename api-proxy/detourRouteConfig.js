@@ -1,18 +1,6 @@
 'use strict';
 
 const DEFAULT_ROUTE_DETECTOR_OVERRIDES = Object.freeze({
-  // Route 8A buses use the Downtown Hub street loop before joining the
-  // scheduled outbound shape on Maple. Treat that operator-confirmed terminal
-  // circulation as normal service, not as closure evidence.
-  '8A': Object.freeze({
-    ignoredRouteEdgeAreas: Object.freeze([Object.freeze({
-      label: 'Downtown Hub terminal egress',
-      edge: 'start',
-      center: Object.freeze({ latitude: 44.387753, longitude: -79.690237 }),
-      radiusMeters: 200,
-      maxProgressMeters: 250,
-    })]),
-  }),
   // Route 12 downtown geometry can have close entry/exit anchors. Keep the
   // anchor tolerance narrow; route-family projection is handled globally only
   // after a confirmed physical closure segment has renderable boundaries.
@@ -23,6 +11,28 @@ const DEFAULT_ROUTE_DETECTOR_OVERRIDES = Object.freeze({
     staleEntryAnchorMaxGapMeters: 150,
   }),
 });
+
+// GTFS shapes can begin at a terminal platform without describing the street
+// circulation buses must use before rejoining the public route. Match these
+// operator-confirmed paths by terminal stop and route edge, rather than by
+// route ID, so every present and future route using the same movement inherits
+// the protection without hiding unrelated movement near the terminal.
+const DEFAULT_KNOWN_TERMINAL_CIRCULATIONS = Object.freeze([Object.freeze({
+  id: 'downtown-hub-stop-2-egress',
+  label: 'Downtown Hub Stop 2 terminal egress',
+  edge: 'start',
+  terminalStopIds: Object.freeze(['2']),
+  maxProgressMeters: 250,
+  maxDistanceMeters: 55,
+  polyline: Object.freeze([
+    Object.freeze({ latitude: 44.387753, longitude: -79.690237 }),
+    Object.freeze({ latitude: 44.387468, longitude: -79.690149 }),
+    Object.freeze({ latitude: 44.386841, longitude: -79.691031 }),
+    Object.freeze({ latitude: 44.387562, longitude: -79.691660 }),
+    Object.freeze({ latitude: 44.388332, longitude: -79.692333 }),
+    Object.freeze({ latitude: 44.388681, longitude: -79.691155 }),
+  ]),
+})]);
 
 function normalizePositiveNumber(value) {
   const parsed = Number.parseFloat(value);
@@ -121,6 +131,62 @@ function normalizeIgnoredRouteEdgeAreas(value) {
   if (!Array.isArray(value)) return null;
   const areas = value.map(normalizeIgnoredRouteEdgeArea).filter(Boolean);
   return areas.length > 0 ? areas : null;
+}
+
+function normalizeKnownTerminalCirculation(rawCirculation) {
+  if (!rawCirculation || typeof rawCirculation !== 'object' || rawCirculation.enabled === false) {
+    return null;
+  }
+
+  const id = String(rawCirculation.id || '').trim();
+  const edge = String(rawCirculation.edge || '').trim().toLowerCase();
+  const terminalStopIds = [...new Set(
+    (Array.isArray(rawCirculation.terminalStopIds) ? rawCirculation.terminalStopIds : [])
+      .map((stopId) => String(stopId || '').trim())
+      .filter(Boolean)
+  )];
+  const polyline = normalizeCoordinateList(
+    rawCirculation.polyline || rawCirculation.pathPolyline || rawCirculation.path
+  );
+  const maxProgressMeters = normalizePositiveNumber(rawCirculation.maxProgressMeters);
+  const maxDistanceMeters = normalizePositiveNumber(rawCirculation.maxDistanceMeters);
+
+  if (
+    !id ||
+    (edge !== 'start' && edge !== 'end') ||
+    terminalStopIds.length === 0 ||
+    !polyline ||
+    maxProgressMeters == null ||
+    maxDistanceMeters == null
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    enabled: true,
+    edge,
+    terminalStopIds,
+    polyline,
+    maxProgressMeters,
+    maxDistanceMeters,
+    ...(typeof rawCirculation.label === 'string' && rawCirculation.label.trim()
+      ? { label: rawCirculation.label.trim() }
+      : {}),
+  };
+}
+
+function parseEnvTerminalCirculations(rawJson) {
+  if (!rawJson) return [];
+
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeKnownTerminalCirculation).filter(Boolean);
+  } catch (error) {
+    console.warn('[detourRouteConfig] Failed to parse DETOUR_TERMINAL_CIRCULATIONS_JSON:', error.message);
+    return [];
+  }
 }
 
 function normalizeRouteOverride(rawOverride) {
@@ -242,6 +308,10 @@ function parseEnvRouteOverrides(rawJson) {
 }
 
 const ENV_ROUTE_DETECTOR_OVERRIDES = parseEnvRouteOverrides(process.env.DETOUR_ROUTE_OVERRIDES_JSON);
+const KNOWN_TERMINAL_CIRCULATIONS = Object.freeze([
+  ...DEFAULT_KNOWN_TERMINAL_CIRCULATIONS.map(normalizeKnownTerminalCirculation).filter(Boolean),
+  ...parseEnvTerminalCirculations(process.env.DETOUR_TERMINAL_CIRCULATIONS_JSON),
+].map(Object.freeze));
 
 function getRouteOverride(overrides, routeId) {
   if (!routeId) return {};
@@ -273,8 +343,11 @@ function getRouteDetectorConfig(routeId, defaults) {
 
 module.exports = {
   DEFAULT_ROUTE_DETECTOR_OVERRIDES,
+  DEFAULT_KNOWN_TERMINAL_CIRCULATIONS,
+  KNOWN_TERMINAL_CIRCULATIONS,
   ROUTE_DETECTOR_OVERRIDES,
   getRouteDetectorConfig,
   normalizeConfiguredDetourCorridor,
   normalizeIgnoredRouteEdgeArea,
+  normalizeKnownTerminalCirculation,
 };

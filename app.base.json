@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 18,
+      "versionCode": 19,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",

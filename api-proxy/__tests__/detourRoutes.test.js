@@ -1,3 +1,5 @@
+process.env.DETOUR_DETECTOR_VERSION = 'v1';
+
 const express = require('express');
 const request = require('supertest');
 const { registerDetourRoutes } = require('../routes/detourRoutes');
@@ -356,4 +358,3 @@ describe('detourRoutes', () => {
     });
   });
 });
-

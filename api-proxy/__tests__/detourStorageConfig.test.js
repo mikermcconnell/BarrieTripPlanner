@@ -1,4 +1,7 @@
-const { buildDetourStorageConfig } = require('../detour/storageConfig');
+const {
+  buildDetourStorageConfig,
+  resolveDetourStorageConfig,
+} = require('../detour/storageConfig');
 
 describe('detour storage config', () => {
   test('defaults to the production V2 collection and runtime names', () => {
@@ -34,6 +37,21 @@ describe('detour storage config', () => {
       historyCollection: 'labHistory',
       runtimeStateCollection: 'labState',
       runtimeStateDoc: 'labRuntime',
+    });
+  });
+
+  test('rejects detector version typos instead of silently selecting another generation', () => {
+    expect(() => buildDetourStorageConfig({ DETOUR_DETECTOR_VERSION: 'V22' }))
+      .toThrow(/Unsupported DETOUR_DETECTOR_VERSION/);
+  });
+
+  test('uses the explicitly requested version defaults when resolving a partial config', () => {
+    expect(resolveDetourStorageConfig({ detourVersion: 'v1' }, {})).toEqual({
+      detourVersion: 'v1',
+      activeCollection: 'activeDetours',
+      historyCollection: 'detourHistory',
+      runtimeStateCollection: 'systemState',
+      runtimeStateDoc: 'detourRuntime',
     });
   });
 });

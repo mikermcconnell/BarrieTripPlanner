@@ -1157,6 +1157,87 @@ describe('trip planner service regressions', () => {
 
     expect(retryFetchMock).toHaveBeenCalledTimes(2);
   });
+
+  test('successful enriched local routing still includes the walking-only option', async () => {
+    const localPlan = makeOtpPlanResponse().plan;
+    const enrichTripPlanWithWalkingMock = jest.fn(async (tripPlan) => tripPlan);
+    const { planTripAuto } = loadTripService({
+      planTripLocalMock: jest.fn(async () => localPlan),
+      enrichTripPlanWithWalkingMock,
+    });
+
+    const result = await planTripAuto({
+      fromLat: 44.38,
+      fromLon: -79.69,
+      toLat: 44.39,
+      toLon: -79.68,
+      date: new Date('2026-03-06T10:00:00Z'),
+      time: new Date('2026-03-06T10:00:00Z'),
+      routingData: { routesByStop: new Map() },
+      onDemandZones: {},
+      stops: [],
+    });
+
+    expect(enrichTripPlanWithWalkingMock.mock.calls[0][0].itineraries).toEqual(
+      expect.arrayContaining([expect.objectContaining({ isWalkingOnly: true })])
+    );
+    expect(result.itineraries).toEqual(
+      expect.arrayContaining([expect.objectContaining({ isWalkingOnly: true })])
+    );
+  });
+
+  test('cache does not alias distinct requested minutes', async () => {
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse(),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+    const baseParams = {
+      fromLat: 44.381,
+      fromLon: -79.691,
+      toLat: 44.391,
+      toLon: -79.681,
+      onDemandZones: {},
+      stops: [],
+    };
+
+    await planTripAuto({
+      ...baseParams,
+      date: new Date('2026-03-06T10:00:00Z'),
+      time: new Date('2026-03-06T10:00:00Z'),
+    });
+    await planTripAuto({
+      ...baseParams,
+      date: new Date('2026-03-06T10:04:00Z'),
+      time: new Date('2026-03-06T10:04:00Z'),
+    });
+
+    expect(retryFetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('useCache false bypasses otherwise identical trip results', async () => {
+    const retryFetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => makeOtpPlanResponse(),
+    }));
+    const { planTripAuto } = loadTripService({ retryFetchMock });
+    const params = {
+      fromLat: 44.382,
+      fromLon: -79.692,
+      toLat: 44.392,
+      toLon: -79.682,
+      date: new Date('2026-03-06T10:00:00Z'),
+      time: new Date('2026-03-06T10:00:00Z'),
+      onDemandZones: {},
+      stops: [],
+      useCache: false,
+    };
+
+    await planTripAuto(params);
+    await planTripAuto(params);
+
+    expect(retryFetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('useTripPlanner regressions', () => {
@@ -1179,6 +1260,7 @@ describe('useTripPlanner regressions', () => {
 
     expect(planTripAutoMock).toHaveBeenCalledWith(expect.objectContaining({
       enrichWalking: true,
+      useCache: false,
     }));
 
     unmount();
@@ -1585,6 +1667,70 @@ describe('useTripPlanner regressions', () => {
     unmount();
   });
 
+  test('time changes invalidate displayed trips and only scheduled searches use cache', async () => {
+    const itinerary = {
+      id: 'time-sensitive-trip',
+      duration: 600,
+      startTime: Date.now() + 30 * 60 * 1000,
+      endTime: Date.now() + 40 * 60 * 1000,
+      walkDistance: 0,
+      walkTime: 0,
+      transitTime: 600,
+      waitingTime: 0,
+      transfers: 0,
+      legs: [],
+    };
+    const planTripAutoMock = jest.fn(async () => ({ itineraries: [itinerary] }));
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
+    const from = { lat: 44.38, lon: -79.69 };
+    const to = { lat: 44.39, lon: -79.68 };
+
+    await act(async () => {
+      await getHook().searchTrips(from, to);
+    });
+    expect(getHook().state.itineraries).toHaveLength(1);
+    expect(planTripAutoMock).toHaveBeenLastCalledWith(expect.objectContaining({ useCache: false }));
+
+    act(() => getHook().setTimeMode('departAt'));
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.hasSearched).toBe(false);
+
+    act(() => getHook().setSelectedTime(new Date(Date.now() + 60 * 60 * 1000)));
+    await act(async () => {
+      await getHook().searchTrips(from, to);
+    });
+    expect(planTripAutoMock).toHaveBeenLastCalledWith(expect.objectContaining({ useCache: true }));
+    expect(getHook().state.itineraries).toHaveLength(1);
+
+    act(() => getHook().setTimeMode('now'));
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.hasSearched).toBe(false);
+
+    unmount();
+  });
+
+  test('address lookup failures produce a visible field error', async () => {
+    jest.useFakeTimers();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      autocompleteAddressMock: jest.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    });
+
+    await act(async () => {
+      getHook().searchFromAddress('Georgian College');
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getHook().state.fromSearchError).toBe('Check your connection, then try again.');
+    expect(getHook().state.isTypingFrom).toBe(false);
+
+    unmount();
+    jest.useRealTimers();
+  });
+
   test('stale trip results are ignored after reset', async () => {
     const deferred = createDeferred();
     const { getHook, act, unmount } = loadUseTripPlanner({
@@ -1736,6 +1882,34 @@ describe('web trip planner regressions', () => {
   afterEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+  });
+
+  test('native and web headers keep the Search action available for current-time trips', () => {
+    const native = loadTripSearchHeaderNative({ timeMode: 'now' });
+    expect(native.root.findAll(
+      (node) => node.props.accessibilityLabel === 'Search trips'
+    )).toHaveLength(1);
+    native.unmount();
+
+    const web = loadTripSearchHeaderWeb({ timeMode: 'now' });
+    expect(web.root.findAll(
+      (node) => node.props.accessibilityLabel === 'Search trips'
+    )).toHaveLength(1);
+    web.unmount();
+  });
+
+  test('web header exposes address search failures as alerts', () => {
+    const { root, unmount } = loadTripSearchHeaderWeb({
+      fromSearchError: 'Check your connection, then try again.',
+    });
+
+    const alerts = root.findAll((node) => node.props.accessibilityRole === 'alert');
+    expect(alerts).toHaveLength(1);
+    expect(root.findAll(
+      (node) => node.children?.includes('Check your connection, then try again.')
+    )).toHaveLength(1);
+
+    unmount();
   });
 
   test('web search header supports keyboard selection for origin suggestions', () => {

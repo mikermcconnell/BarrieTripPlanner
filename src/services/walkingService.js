@@ -23,6 +23,34 @@ const RATE_LIMIT_DELAY_MS = 550; // ~2 req/sec to stay within LocationIQ free ti
 
 let lastRequestTime = 0;
 
+const isWalkingOnlyItinerary = (itinerary) => (
+  itinerary?.isWalkingOnly ||
+  (
+    Array.isArray(itinerary?.legs) &&
+    itinerary.legs.length === 1 &&
+    String(itinerary.legs[0]?.mode).toUpperCase() === 'WALK'
+  )
+);
+
+const placeNonRecommendedWalkingAfterTransit = (itineraries = []) => {
+  const nonRecommendedWalking = itineraries.filter((itinerary) => (
+    isWalkingOnlyItinerary(itinerary) && itinerary.recommendationEligible === false
+  ));
+
+  if (nonRecommendedWalking.length === 0) {
+    return itineraries;
+  }
+
+  const otherItineraries = itineraries.filter((itinerary) => (
+    !isWalkingOnlyItinerary(itinerary) || itinerary.recommendationEligible !== false
+  ));
+  const hasTransit = otherItineraries.some((itinerary) => !isWalkingOnlyItinerary(itinerary));
+
+  return hasTransit
+    ? [...otherItineraries, ...nonRecommendedWalking]
+    : itineraries;
+};
+
 /**
  * Wait if needed to respect LocationIQ rate limits
  */
@@ -582,6 +610,7 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
       (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
     ));
   }
+  finalItineraries = placeNonRecommendedWalkingAfterTransit(finalItineraries);
 
   // Add recommendation labels
   if (finalItineraries.length > 0) {
@@ -592,14 +621,22 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
       it.walkDistance < best.walkDistance ? it : best, finalItineraries[0]);
     const fewestTransfers = finalItineraries.reduce((best, it) =>
       it.transfers < best.transfers ? it : best, finalItineraries[0]);
-    const recommendedOption = finalItineraries[0]; // Already sorted by rider cost
+    const recommendedOption = finalItineraries.find((itinerary) => (
+      itinerary.recommendationEligible !== false
+    ));
 
     // Assign labels (priority: recommended > fastest > least walking)
     finalItineraries = finalItineraries.map((it) => {
       const labels = [];
 
-      // "Recommended" = best rider-cost option AND leaves soon AND reasonable walk
-      if (it === recommendedOption && !it.isTomorrow && !it.hasLongWait && !it.hasHighWalk) {
+      // "Recommended" = best eligible rider-cost option that leaves soon.
+      // A walking-only trip may still be the best choice when its distance is high.
+      if (
+        it === recommendedOption &&
+        !it.isTomorrow &&
+        !it.hasLongWait &&
+        (!it.hasHighWalk || isWalkingOnlyItinerary(it))
+      ) {
         labels.push('Recommended');
       } else if (it === fastest && !labels.includes('Recommended')) {
         labels.push('Fastest');

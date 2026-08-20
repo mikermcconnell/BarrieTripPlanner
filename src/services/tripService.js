@@ -836,8 +836,9 @@ export const planTripWithLocalRouter = async ({
 
     // Optionally enrich with real walking directions
     if (enrichWalking) {
+      const resultWithMetadata = addBasicMetadata(result, tripParams, { includeWalkingOnly });
       try {
-        const enrichedResult = await enrichTripPlanWithWalking(result);
+        const enrichedResult = await enrichTripPlanWithWalking(resultWithMetadata);
         // Check if enrichment filtered out all itineraries
         if (!enrichedResult.itineraries || enrichedResult.itineraries.length === 0) {
           throw new TripPlanningError(
@@ -845,7 +846,10 @@ export const planTripWithLocalRouter = async ({
             'No reasonable transit routes found within 2 hours'
           );
         }
-        return enrichedResult;
+        return withRoutingDiagnostics(enrichedResult, buildRoutingDiagnostics({
+          source: 'local_router',
+          walkingEnrichment: 'trip_enrichment',
+        }));
       } catch (walkingError) {
         // Re-throw TripPlanningError (from our check above)
         if (walkingError instanceof TripPlanningError) {
@@ -853,7 +857,10 @@ export const planTripWithLocalRouter = async ({
         }
         logger.warn('Walking enrichment failed, using estimates:', walkingError);
         // Still add basic metadata even without walking enrichment
-        return addBasicMetadata(result, tripParams, { includeWalkingOnly });
+        return withRoutingDiagnostics(resultWithMetadata, buildRoutingDiagnostics({
+          source: 'local_router',
+          walkingEnrichment: 'estimated',
+        }));
       }
     }
 
@@ -930,13 +937,13 @@ function getTripCacheKey({
   arriveBy = false,
   enrichWalking = true,
 }) {
-  const timeRounded = Math.floor(requestedTimeMs / TRIP_CACHE_TTL_MS);
+  const requestedMinute = Math.floor(requestedTimeMs / (60 * 1000));
   return [
     fromLat.toFixed(4),
     fromLon.toFixed(4),
     toLat.toFixed(4),
     toLon.toFixed(4),
-    timeRounded,
+    requestedMinute,
     arriveBy ? 'arrive' : 'depart',
     enrichWalking === false ? 'walk-deferred' : 'walk-enriched',
   ].join(',');
@@ -1140,7 +1147,7 @@ export const planTripAuto = async (params) => {
     }
   }
 
-  const shouldUseCache = !zoneTrip;
+  const shouldUseCache = !zoneTrip && params.useCache !== false;
   const cacheKey = shouldUseCache
     ? getTripCacheKey({
         fromLat: routingParams.fromLat,

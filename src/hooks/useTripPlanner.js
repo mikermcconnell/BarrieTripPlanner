@@ -14,6 +14,7 @@ import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../s
 import { validateTripDateTime, validateTripInputs } from '../utils/tripValidation';
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
 import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 import logger from '../utils/logger';
 
 // ─── Action Types ─────────────────────────────────────────────────
@@ -37,6 +38,8 @@ const SET_TIME_MODE = 'SET_TIME_MODE';
 const SET_DEPARTURE_TIME = 'SET_DEPARTURE_TIME';
 const SET_FROM_TYPING = 'SET_FROM_TYPING';
 const SET_TO_TYPING = 'SET_TO_TYPING';
+const SET_FROM_SEARCH_ERROR = 'SET_FROM_SEARCH_ERROR';
+const SET_TO_SEARCH_ERROR = 'SET_TO_SEARCH_ERROR';
 const CLEAR_RESULTS = 'CLEAR_RESULTS';
 const SET_FROM_USES_CURRENT_LOCATION = 'SET_FROM_USES_CURRENT_LOCATION';
 const CURRENT_LOCATION_START = 'CURRENT_LOCATION_START';
@@ -63,6 +66,8 @@ const initialState = {
   showToSuggestions: false,
   isTypingFrom: false,
   isTypingTo: false,
+  fromSearchError: null,
+  toSearchError: null,
   timeMode: 'now',          // 'now' | 'departAt' | 'arriveBy'
   selectedTime: null,       // Date object or null (null = use current time)
 };
@@ -92,9 +97,9 @@ function tripReducer(state, action) {
     case SET_TO:
       return { ...state, to: action.payload };
     case SET_FROM_TEXT:
-      return { ...state, fromText: action.payload };
+      return { ...state, fromText: action.payload, fromSearchError: null };
     case SET_TO_TEXT:
-      return { ...state, toText: action.payload };
+      return { ...state, toText: action.payload, toSearchError: null };
     case SWAP:
       return {
         ...state,
@@ -103,6 +108,8 @@ function tripReducer(state, action) {
         fromUsesCurrentLocation: false,
         fromText: state.toText,
         toText: state.fromText,
+        fromSearchError: state.toSearchError,
+        toSearchError: state.fromSearchError,
       };
     case SEARCH_START:
       return {
@@ -153,17 +160,21 @@ function tripReducer(state, action) {
       };
     }
     case SET_TIME_MODE:
-      return {
+      return clearResults({
         ...state,
         timeMode: action.payload,
         selectedTime: action.payload === 'now' ? null : (state.selectedTime || new Date()),
-      };
+      });
     case SET_DEPARTURE_TIME:
-      return { ...state, selectedTime: action.payload };
+      return clearResults({ ...state, selectedTime: action.payload });
     case SET_FROM_TYPING:
       return { ...state, isTypingFrom: action.payload };
     case SET_TO_TYPING:
       return { ...state, isTypingTo: action.payload };
+    case SET_FROM_SEARCH_ERROR:
+      return { ...state, fromSearchError: action.payload };
+    case SET_TO_SEARCH_ERROR:
+      return { ...state, toSearchError: action.payload };
     case CLEAR_RESULTS:
       return clearResults(state);
     case CURRENT_LOCATION_START:
@@ -308,6 +319,7 @@ export const useTripPlanner = ({
         enrichWalking: true, // Fetch walking geometry for the preview map; navigation can reuse it
         onDemandZones,
         stops,
+        useCache: state.timeMode !== 'now',
       });
 
       if (requestSeq !== tripSearchSeqRef.current) return;
@@ -433,7 +445,14 @@ export const useTripPlanner = ({
         dispatch({ type: SET_FROM_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: sorted.length > 0 });
         dispatch({ type: SET_FROM_TYPING, payload: false });
-      } catch {
+      } catch (error) {
+        if (requestSeq !== fromRequestSeqRef.current) return;
+        dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
+        dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
+        dispatch({
+          type: SET_FROM_SEARCH_ERROR,
+          payload: getUserFacingErrorMessage(error, 'Address search is unavailable. Please try again.'),
+        });
         dispatch({ type: SET_FROM_TYPING, payload: false });
       }
     }, 300);
@@ -464,7 +483,14 @@ export const useTripPlanner = ({
         dispatch({ type: SET_TO_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_TO_SUGGESTIONS, payload: sorted.length > 0 });
         dispatch({ type: SET_TO_TYPING, payload: false });
-      } catch {
+      } catch (error) {
+        if (requestSeq !== toRequestSeqRef.current) return;
+        dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
+        dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });
+        dispatch({
+          type: SET_TO_SEARCH_ERROR,
+          payload: getUserFacingErrorMessage(error, 'Address search is unavailable. Please try again.'),
+        });
         dispatch({ type: SET_TO_TYPING, payload: false });
       }
     }, 300);
@@ -574,12 +600,14 @@ export const useTripPlanner = ({
 
   // ─── Time mode control ──────────────────────────────────────
   const setTimeMode = useCallback((mode) => {
+    invalidateTripSearches();
     dispatch({ type: SET_TIME_MODE, payload: mode });
-  }, []);
+  }, [invalidateTripSearches]);
 
   const setSelectedTime = useCallback((time) => {
+    invalidateTripSearches();
     dispatch({ type: SET_DEPARTURE_TIME, payload: time });
-  }, []);
+  }, [invalidateTripSearches]);
 
   // ─── Mode control ───────────────────────────────────────────
   const enterPlanningMode = useCallback(() => {

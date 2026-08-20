@@ -1,12 +1,30 @@
 import { GTFS_URLS } from '../config/constants';
-import { decodeVarint, skipField, decodeString, decodeSignedVarint } from '../utils/protobufDecoder';
+import { decodeVarint, decodeInt32Varint, skipField, decodeString } from '../utils/protobufDecoder';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
 import { haversineDistance as calculateDistance } from '../utils/geometryUtils';
 
 /**
  * Parse GTFS-RT TripUpdates feed
  */
-const parseTripUpdates = (buffer) => {
+const TRIP_SCHEDULE_RELATIONSHIPS = {
+  0: 'SCHEDULED',
+  1: 'ADDED',
+  2: 'UNSCHEDULED',
+  3: 'CANCELED',
+  5: 'REPLACEMENT',
+  6: 'DUPLICATED',
+  7: 'DELETED',
+  8: 'NEW',
+};
+
+const STOP_SCHEDULE_RELATIONSHIPS = {
+  0: 'SCHEDULED',
+  1: 'SKIPPED',
+  2: 'NO_DATA',
+  3: 'UNSCHEDULED',
+};
+
+export const parseTripUpdates = (buffer) => {
   const updates = [];
   let offset = 0;
   const view = new Uint8Array(buffer);
@@ -72,6 +90,7 @@ const parseTripUpdate = (buffer) => {
   const update = {
     tripId: null,
     routeId: null,
+    scheduleRelationship: 'SCHEDULED',
     stopTimeUpdates: [],
   };
 
@@ -88,6 +107,7 @@ const parseTripUpdate = (buffer) => {
       const trip = parseTripDescriptor(buffer.slice(offset, offset + length));
       update.tripId = trip.tripId;
       update.routeId = trip.routeId;
+      update.scheduleRelationship = trip.scheduleRelationship;
       offset += length;
     } else if (fieldNumber === 2 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
@@ -108,7 +128,7 @@ const parseTripUpdate = (buffer) => {
  */
 const parseTripDescriptor = (buffer) => {
   let offset = 0;
-  const trip = { tripId: null, routeId: null };
+  const trip = { tripId: null, routeId: null, scheduleRelationship: 'SCHEDULED' };
 
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
@@ -121,6 +141,10 @@ const parseTripDescriptor = (buffer) => {
       const { value, newOffset } = decodeString(buffer, offset);
       trip.tripId = value;
       offset = newOffset;
+    } else if (fieldNumber === 4 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      trip.scheduleRelationship = TRIP_SCHEDULE_RELATIONSHIPS[value] || value;
+      offset += bytesRead;
     } else if (fieldNumber === 5 && wireType === 2) {
       const { value, newOffset } = decodeString(buffer, offset);
       trip.routeId = value;
@@ -143,6 +167,7 @@ const parseStopTimeUpdate = (buffer) => {
     stopId: null,
     arrival: null,
     departure: null,
+    scheduleRelationship: 'SCHEDULED',
   };
 
   while (offset < buffer.length) {
@@ -170,6 +195,10 @@ const parseStopTimeUpdate = (buffer) => {
       offset += lenBytes;
       stopTime.departure = parseStopTimeEvent(buffer.slice(offset, offset + length));
       offset += length;
+    } else if (fieldNumber === 5 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      stopTime.scheduleRelationship = STOP_SCHEDULE_RELATIONSHIPS[value] || value;
+      offset += bytesRead;
     } else {
       offset = skipField(buffer, offset, wireType);
     }
@@ -193,8 +222,8 @@ const parseStopTimeEvent = (buffer) => {
     const wireType = fieldTag & 0x7;
 
     if (fieldNumber === 1 && wireType === 0) {
-      const { value, bytesRead } = decodeVarint(buffer, offset);
-      event.delay = decodeSignedVarint(value);
+      const { value, bytesRead } = decodeInt32Varint(buffer, offset);
+      event.delay = value;
       offset += bytesRead;
     } else if (fieldNumber === 2 && wireType === 0) {
       const { value, bytesRead } = decodeVarint(buffer, offset);
@@ -235,27 +264,36 @@ export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => 
   tripUpdates.forEach((entity) => {
     const update = entity.tripUpdate;
     if (!update) return;
+    if (['CANCELED', 'DELETED'].includes(update.scheduleRelationship)) return;
 
     update.stopTimeUpdates.forEach((stopTime) => {
       if (stopTime.stopId !== stopId) return;
+      if (stopTime.scheduleRelationship === 'SKIPPED') return;
 
       const arrivalTime = stopTime.arrival?.time || stopTime.departure?.time;
       if (!arrivalTime || arrivalTime < now) return;
 
+      const hasTripMapping = Object.prototype.hasOwnProperty.call(tripMapping, update.tripId);
       const tripInfo = tripMapping[update.tripId] || {};
       const route = routes.find((r) => r.id === (update.routeId || tripInfo.routeId));
+      const headsign = String(tripInfo.headsign || '').trim();
 
       arrivals.push({
         tripId: update.tripId,
         routeId: update.routeId || tripInfo.routeId,
         routeShortName: route?.shortName || update.routeId || '?',
         routeColor: route?.color,
-        headsign: tripInfo.headsign,
+        headsign,
+        destinationStatus: headsign
+          ? 'available'
+          : hasTripMapping
+            ? 'headsign-missing'
+            : 'trip-unmatched',
         stopId: stopTime.stopId,
         stopSequence: stopTime.stopSequence,
         arrivalTime,
         departureTime: stopTime.departure?.time,
-        delay: stopTime.arrival?.delay || stopTime.departure?.delay || 0,
+        delay: stopTime.arrival?.delay ?? stopTime.departure?.delay ?? 0,
         minutesAway: Math.max(0, Math.round((arrivalTime - now) / 60)),
         isRealtime: true,
       });

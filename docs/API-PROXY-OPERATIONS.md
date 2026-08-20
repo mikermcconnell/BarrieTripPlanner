@@ -454,7 +454,7 @@ If Firebase Admin credentials are missing, run-once ticks still execute, but run
 6. verify:
    - `GET /api/health`
    - `GET /api/detour-status`
-     - confirm `vehicleFeed.freshness.status` is not `stale` before judging detour detection output; a stale feed can legitimately produce `0` usable vehicles
+     - confirm `vehicleFeed.freshness.status` is `fresh` before judging detour detection output; stale, missing-timestamp (`unknown`), or future-dated (`future`) feeds can legitimately produce `0` usable vehicles
    - `GET /api/detour-rollout-health`
    - `POST /api/detour-run-once` with scheduler auth or a detour-admin Firebase token (for manual/scheduled mode)
 7. for production detour rollout, confirm `detour-rollout-health.launchReadiness.status` is at least `pilot_ready_with_cautions` and review every failed warning before enabling the rider feature flag
@@ -503,6 +503,7 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 
 - `DETOUR_WORKER_ENABLED=true`
 - `DETOUR_WORKER_MODE=scheduled`
+- `DETOUR_DETECTOR_VERSION=v2`
 - `DETOUR_BURST_SAMPLING_ENABLED=false`
 - `DETOUR_OFFSET_SAMPLING_ENABLED=true` for 30-second offset sampling through Cloud Tasks
 - `DETOUR_OFFSET_SAMPLE_DELAY_SECONDS=30`
@@ -511,6 +512,7 @@ If deploying through Firebase Functions Gen 2, keep `memory: "512MiB"`, `timeout
 - `DETOUR_OFFSET_TASK_LOCATION=us-central1`
 - `DETOUR_OFFSET_TASK_TARGET_URL=https://YOUR_CLOUD_RUN_URL/api/detour-run-once`
 - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`
+- `DETOUR_VEHICLE_MAX_FUTURE_SKEW_SECONDS=120`
 - `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=2700000`
 - `DETOUR_CANDIDATE_CONFIRMATION_HEADWAY_MULTIPLIER=1.25`
 - `DETOUR_CANDIDATE_CONFIRMATION_BUFFER_MS=600000`

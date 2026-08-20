@@ -185,6 +185,17 @@ async function ensurePersistentDetoursHydrated({ force = false } = {}) {
   persistentDetoursHydrated = true;
 }
 
+function countRuntimeSnapshotActiveDetours(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return 0;
+  if (snapshot.activeEvents && typeof snapshot.activeEvents === 'object') {
+    return Object.keys(snapshot.activeEvents).length;
+  }
+  if (snapshot.activeDetours && typeof snapshot.activeDetours === 'object') {
+    return Object.keys(snapshot.activeDetours).length;
+  }
+  return Array.isArray(snapshot.routes) ? snapshot.routes.length : 0;
+}
+
 async function ensureRuntimeStateHydrated({ force = false } = {}) {
   if (runtimeStateHydrated && !force) {
     const activeRouteCount = Object.keys(getState().detours || {}).length;
@@ -201,7 +212,7 @@ async function ensureRuntimeStateHydrated({ force = false } = {}) {
     hydrateRuntimeState(snapshot);
   }
   runtimeStateHydrated = true;
-  const snapshotRouteCount = Array.isArray(snapshot?.routes) ? snapshot.routes.length : 0;
+  const snapshotRouteCount = countRuntimeSnapshotActiveDetours(snapshot);
   const activeRouteCount = Object.keys(getState().detours || {}).length;
   return {
     attempted: true,
@@ -331,13 +342,20 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     const tripObj = Object.fromEntries(data.tripMapping);
     const fetchedVehicles = await fetchVehicles(tripObj);
     const vehicleFeedStatus = getVehicleFeedStatus();
-    if (vehicleFeedStatus.freshness?.stale) {
+    if (
+      vehicleFeedStatus.positionedVehicleCount > 0 &&
+      vehicleFeedStatus.freshness?.status !== 'fresh'
+    ) {
+      const newestAgeLabel = Number.isFinite(vehicleFeedStatus.freshness?.newestAgeMs)
+        ? `${Math.round(vehicleFeedStatus.freshness.newestAgeMs / 1000)}s`
+        : 'unknown';
       console.warn(
-        '[detourWorker] Vehicle feed stale: ' +
+        '[detourWorker] Vehicle feed unusable or stale: ' +
         `${vehicleFeedStatus.positionedVehicleCount} positioned vehicles, ` +
         `${vehicleFeedStatus.usableVehicleCount} usable, ` +
-        `${vehicleFeedStatus.staleFilteredCount} filtered as stale, ` +
-        `newest age ${Math.round(vehicleFeedStatus.freshness.newestAgeMs / 1000)}s`
+        `${vehicleFeedStatus.staleFilteredCount} filtered, ` +
+        `freshness ${vehicleFeedStatus.freshness?.status || 'unknown'}, ` +
+        `newest age ${newestAgeLabel}`
       );
     }
     const vehicles = vehicleSampleFreshness.filterFreshSamples(fetchedVehicles, { now: Date.now() });
@@ -396,6 +414,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       const suppressDeletesWhenEmpty =
         runtimeHydration?.needsActiveSnapshotFallback === true &&
         activeSnapshotHydration.attempted === true &&
+        activeSnapshotHydration.snapshotCount === 0 &&
         activeSnapshotHydration.hydratedCount === 0 &&
         Object.keys(activeDetours).length === 0;
       const publishResult = await publishDetours(activeDetours, {

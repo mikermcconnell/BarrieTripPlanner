@@ -9,20 +9,39 @@
  * @param {number} offset - Starting offset
  * @returns {Object} { value, bytesRead }
  */
-export const decodeVarint = (buffer, offset) => {
-  let result = 0;
-  let shift = 0;
+export const decodeVarintBigInt = (buffer, offset = 0) => {
+  let result = 0n;
+  let shift = 0n;
   let bytesRead = 0;
 
   while (offset + bytesRead < buffer.length) {
     const byte = buffer[offset + bytesRead];
-    result |= (byte & 0x7f) << shift;
+    result |= BigInt(byte & 0x7f) << shift;
     bytesRead++;
-    if ((byte & 0x80) === 0) break;
-    shift += 7;
+    if ((byte & 0x80) === 0) {
+      return { value: result, bytesRead };
+    }
+    shift += 7n;
+    if (shift > 70n) {
+      throw new Error('Varint too long');
+    }
   }
 
-  return { value: result, bytesRead };
+  throw new Error('Unexpected end of buffer while reading varint');
+};
+
+export const decodeVarint = (buffer, offset = 0) => {
+  const decoded = decodeVarintBigInt(buffer, offset);
+  return { value: Number(decoded.value), bytesRead: decoded.bytesRead };
+};
+
+/** Decode protobuf int32 values, including ten-byte negative varints. */
+export const decodeInt32Varint = (buffer, offset = 0) => {
+  const decoded = decodeVarintBigInt(buffer, offset);
+  return {
+    value: Number(BigInt.asIntN(32, decoded.value)),
+    bytesRead: decoded.bytesRead,
+  };
 };
 
 /**
