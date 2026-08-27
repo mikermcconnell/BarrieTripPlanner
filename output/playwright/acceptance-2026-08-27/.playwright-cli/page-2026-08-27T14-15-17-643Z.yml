@@ -1,0 +1,163 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [selected] [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]
+  - generic [ref=e308]:
+    - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e310]:
+      - generic:
+        - region "Map" [ref=e311]
+        - img "Barrie Allandale Hub bus hub" [ref=e619]:
+          - generic: Barrie Allandale Hub
+        - img "Downtown Hub bus hub" [ref=e620]:
+          - generic: Downtown Hub
+        - img "Park Place bus hub" [ref=e621]:
+          - generic: Park Place
+        - img "Georgian College bus hub" [ref=e622]:
+          - generic: Georgian College
+        - img "Barrie South GO bus hub" [ref=e623]:
+          - generic: Barrie South GO
+        - img "Bus hub" [ref=e624]
+        - img "Bus hub" [ref=e625]
+        - img "Bus hub" [ref=e626]
+        - generic [ref=e1501]: 7A
+        - generic [ref=e1530]:
+          - generic [ref=e1531]: "#2 - Downtown Hub"
+          - generic [ref=e1532]: 14 m walk from start
+        - generic [ref=e1538]:
+          - generic [ref=e1539]: "#331 - Georgian College"
+          - generic [ref=e1540]: 375 m walk to destination
+        - generic [ref=e1546]:
+          - generic [ref=e1547]: Board Route 7A
+          - generic [ref=e1548]: "#2 - Downtown Hub"
+        - generic [ref=e1551]:
+          - generic [ref=e1552]: Exit Route 7A
+          - generic [ref=e1553]: "#331 - Georgian College"
+        - img "Route 7A bus 1703" [ref=e1554]:
+          - generic [ref=e1555]: 7A
+        - img "Route 7A bus 2203" [ref=e1560]:
+          - generic [ref=e1561]: 7A
+      - group [ref=e627]:
+        - generic "Toggle attribution" [ref=e628] [cursor=pointer]
+        - generic [ref=e629]:
+          - text: © OpenStreetMap contributors © CARTO |
+          - link "MapLibre" [ref=e630] [cursor=pointer]:
+            - /url: https://maplibre.org/
+    - generic [ref=e1312]:
+      - generic [ref=e1313]:
+        - generic [ref=e1314]:
+          - generic [ref=e1315]: Trip planned
+          - generic [ref=e1316]: Current time
+        - button "Close trip planner" [ref=e1566] [cursor=pointer]
+      - generic [ref=e1569]:
+        - generic [ref=e1574]:
+          - generic [ref=e1575]: Downtown Hub
+          - generic [ref=e1576]: Georgian College
+        - button "Edit trip search" [ref=e1577] [cursor=pointer]:
+          - generic [ref=e1578]: Edit
+    - generic [ref=e1346]:
+      - button "Trip results panel, expand" [ref=e1347] [cursor=pointer]
+      - generic [ref=e1352]:
+        - generic [ref=e1353]:
+          - generic [ref=e1579]: 3 routes found
+          - generic [ref=e1356]: Choose a route to preview on the map
+          - button "Save this route" [ref=e1580] [cursor=pointer]
+          - button "Show trip map key" [ref=e1607] [cursor=pointer]:
+            - generic [ref=e1608]: ⓘ
+            - generic [ref=e1609]: Map key
+            - generic [ref=e1610]: ⌄
+        - generic [ref=e1612]:
+          - 'generic "Trip option: 18 min, depart 10:16 AM, arrive 10:35 AM, 1 bus, 389m walking" [ref=e1613]':
+            - generic [ref=e1614]: ⭐ Recommended
+            - generic [ref=e1617]:
+              - generic [ref=e1618]:
+                - generic [ref=e1619]:
+                  - generic [ref=e1620]: 18 min
+                  - 'generic "Delay status: +1 min late" [ref=e1621]': +1 min late
+                - generic [ref=e1624]: Depart in 1 min
+              - generic [ref=e1625]:
+                - generic [ref=e1626]:
+                  - generic [ref=e1627]: Depart
+                  - generic [ref=e1628]: 10:16 AM
+                - generic [ref=e1630]:
+                  - generic [ref=e1631]: Arrive
+                  - generic [ref=e1632]: 10:35 AM
+              - generic [ref=e1633]:
+                - generic [ref=e1634]:
+                  - generic "Person walking" [ref=e1636]
+                  - generic [ref=e1638]: 1 min
+                - generic [ref=e1640]:
+                  - generic [ref=e1641]: 7A
+                  - generic [ref=e1643]: 13 min
+                - generic [ref=e1645]:
+                  - generic "Person walking" [ref=e1647]
+                  - generic [ref=e1649]: 5 min
+            - generic [ref=e1650]: "Why this route: best live option right now."
+            - generic [ref=e1652]:
+              - generic [ref=e1653]: 389m (5 min) walk
+              - generic [ref=e1656]:
+                - button "View trip details" [ref=e1657] [cursor=pointer]:
+                  - generic [ref=e1658]: Details
+                - button "Start navigation" [ref=e1659] [cursor=pointer]:
+                  - generic [ref=e1660]: Go
+          - 'button "Trip option: 28 min, depart 10:20 AM, arrive 10:49 AM, 1 bus, 146m walking" [ref=e1661] [cursor=pointer]':
+            - generic [ref=e1662]:
+              - generic [ref=e1663]:
+                - generic [ref=e1664]:
+                  - generic [ref=e1665]: 28 min
+                  - 'generic "Delay status: On time" [ref=e1666]': On time
+                - generic [ref=e1669]: Depart in 6 min
+              - generic [ref=e1670]:
+                - generic [ref=e1671]:
+                  - generic [ref=e1672]: Depart
+                  - generic [ref=e1673]: 10:20 AM
+                - generic [ref=e1675]:
+                  - generic [ref=e1676]: Arrive
+                  - generic [ref=e1677]: 10:49 AM
+              - generic [ref=e1678]:
+                - generic [ref=e1679]:
+                  - generic "Person walking" [ref=e1681]
+                  - generic [ref=e1683]: 1 min
+                - generic [ref=e1685]:
+                  - generic [ref=e1686]: "100"
+                  - generic [ref=e1688]: 27 min
+                - generic [ref=e1690]:
+                  - generic "Person walking" [ref=e1692]
+                  - generic [ref=e1694]: 2 min
+            - generic [ref=e1695]:
+              - generic [ref=e1696]: 146m (2 min) walk
+              - generic: Select
+          - 'button "Trip option: 31 min, depart 10:20 AM, arrive 10:52 AM, 1 bus, 818m walking" [ref=e1699] [cursor=pointer]':
+            - generic [ref=e1700]:
+              - generic [ref=e1701]:
+                - generic [ref=e1702]:
+                  - generic [ref=e1703]: 31 min
+                  - 'generic "Delay status: On time" [ref=e1704]': On time
+                - generic [ref=e1707]: Depart in 6 min
+              - generic [ref=e1708]:
+                - generic [ref=e1709]:
+                  - generic [ref=e1710]: Depart
+                  - generic [ref=e1711]: 10:20 AM
+                - generic [ref=e1713]:
+                  - generic [ref=e1714]: Arrive
+                  - generic [ref=e1715]: 10:52 AM
+              - generic [ref=e1716]:
+                - generic [ref=e1717]:
+                  - generic "Person walking" [ref=e1719]
+                  - generic [ref=e1721]: 1 min
+                - generic [ref=e1723]:
+                  - generic [ref=e1724]: 8A
+                  - generic [ref=e1726]: 20 min
+                - generic [ref=e1728]:
+                  - generic "Person walking" [ref=e1730]
+                  - generic [ref=e1732]: 11 min
+            - generic [ref=e1733]: "Route is currently on detour · Planned detour notice: Route 8B-SB is on detour from July 6 to September 4 due to a road closure on Shanty Bay."
+            - generic [ref=e1735]:
+              - generic [ref=e1736]: 818m (11 min) walk
+              - generic: Select
+          - generic [ref=e1741]:
+            - generic [ref=e1742]:
+              - generic [ref=e1743]: "🎫 Adult fare: $3.50"
+              - generic [ref=e1744]: Valid for 90 minutes — transfers included
+            - button "Buy fare on HotSpot app" [ref=e1745] [cursor=pointer]:
+              - generic [ref=e1746]: Buy on HotSpot →

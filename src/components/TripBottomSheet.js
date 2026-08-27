@@ -58,6 +58,7 @@ const TripBottomSheet = ({
   onViewDetails,
   onStartNavigation,
   isLoading,
+  loadingStage = null,
   error,
   hasSearched,
   onRetry,
@@ -86,7 +87,9 @@ const TripBottomSheet = ({
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingTitle}>Finding your best route…</Text>
-          <Text style={styles.loadingSubtext}>Checking live buses and walking time.</Text>
+          <Text style={styles.loadingSubtext} accessibilityLiveRegion="polite">
+            {loadingStage || 'Checking schedules and live buses.'}
+          </Text>
         </View>
       );
     }

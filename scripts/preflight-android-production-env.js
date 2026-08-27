@@ -93,6 +93,34 @@ function cleanUrl(value) {
   return hasValue(value) ? value.trim().replace(/\/+$/, '') : '';
 }
 
+function getSentryProductionErrors(env) {
+  const errors = [];
+  const dsn = hasValue(env.EXPO_PUBLIC_SENTRY_DSN) ? env.EXPO_PUBLIC_SENTRY_DSN.trim() : '';
+
+  if (!dsn) {
+    errors.push('Missing EXPO_PUBLIC_SENTRY_DSN');
+  } else {
+    try {
+      const parsedDsn = new URL(dsn);
+      if (parsedDsn.protocol !== 'https:' || !parsedDsn.username || parsedDsn.pathname === '/') {
+        errors.push('EXPO_PUBLIC_SENTRY_DSN is not a valid HTTPS Sentry client DSN');
+      }
+    } catch {
+      errors.push('EXPO_PUBLIC_SENTRY_DSN is not a valid URL');
+    }
+  }
+
+  if (!hasValue(env.SENTRY_AUTH_TOKEN)) {
+    errors.push('Missing SENTRY_AUTH_TOKEN for production source-map upload');
+  }
+
+  if (String(env.SENTRY_DISABLE_AUTO_UPLOAD).trim().toLowerCase() === 'true') {
+    errors.push('SENTRY_DISABLE_AUTO_UPLOAD must not be true for production builds');
+  }
+
+  return errors;
+}
+
 function main() {
   const { profile, allowAutoDetours } = parseArgs(process.argv);
   const strictProductionProfile = profile === 'production' || profile === 'production-apk';
@@ -131,6 +159,8 @@ function main() {
   for (const name of required) {
     if (!hasValue(env[name])) errors.push(`Missing ${name}`);
   }
+
+  errors.push(...getSentryProductionErrors(env));
 
   if (!googleServicesPath && process.env.EAS_BUILD !== 'true') {
     errors.push('Missing google-services.json for local Android build checks');
@@ -179,6 +209,8 @@ function main() {
   console.log(`- Firebase project: ${env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'missing'}`);
   console.log(`- Google web client ID: ${hasValue(env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) ? 'present' : 'missing'}`);
   console.log(`- Google services file: ${googleServicesPath ? path.relative(projectRoot, googleServicesPath) : 'EAS secret or missing locally'}`);
+  console.log(`- Sentry DSN: ${hasValue(env.EXPO_PUBLIC_SENTRY_DSN) ? 'present' : 'missing'}`);
+  console.log(`- Sentry source-map token: ${hasValue(env.SENTRY_AUTH_TOKEN) ? 'present' : 'missing'}`);
 
   for (const warning of warnings) console.warn(`Warning: ${warning}`);
 
@@ -191,4 +223,8 @@ function main() {
   console.log('Preflight passed.');
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { getSentryProductionErrors };

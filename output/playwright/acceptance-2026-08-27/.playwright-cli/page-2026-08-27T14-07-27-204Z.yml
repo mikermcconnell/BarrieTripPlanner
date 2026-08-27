@@ -1,0 +1,143 @@
+- generic [ref=e3]:
+  - generic [ref=e38]:
+    - tablist [ref=e40]:
+      - tab "Map" [selected] [ref=e42] [cursor=pointer]
+      - tab "Search" [ref=e159] [cursor=pointer]
+      - tab "Profile" [ref=e264] [cursor=pointer]
+    - generic [ref=e308]:
+      - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e539]:
+        - generic:
+          - region "Map" [ref=e540]
+          - button ", stop 364, stop closure reported" [ref=e541] [cursor=pointer]:
+            - generic [ref=e542]: "364"
+          - button ", stop 365, stop closure reported" [ref=e546] [cursor=pointer]:
+            - generic [ref=e547]: "365"
+          - button ", stop 366, stop closure reported" [ref=e551] [cursor=pointer]:
+            - generic [ref=e552]: "366"
+          - button ", stop 367, stop closure reported" [ref=e556] [cursor=pointer]:
+            - generic [ref=e557]: "367"
+          - button ", stop 744, stop closure reported" [ref=e561] [cursor=pointer]:
+            - generic [ref=e562]: "744"
+          - button ", stop 745, stop closure reported" [ref=e566] [cursor=pointer]:
+            - generic [ref=e567]: "745"
+          - button ", stop 746, stop closure reported" [ref=e571] [cursor=pointer]:
+            - generic [ref=e572]: "746"
+          - button ", stop 747, stop closure reported" [ref=e576] [cursor=pointer]:
+            - generic [ref=e577]: "747"
+          - button ", stop 805, stop closure reported" [ref=e581] [cursor=pointer]:
+            - generic [ref=e582]: "805"
+          - button ", stop 808, stop closure reported" [ref=e586] [cursor=pointer]:
+            - generic [ref=e587]: "808"
+          - button ", stop 809, stop closure reported" [ref=e591] [cursor=pointer]:
+            - generic [ref=e592]: "809"
+          - button ", stop 812, stop closure reported" [ref=e596] [cursor=pointer]:
+            - generic [ref=e597]: "812"
+          - button ", stop 880, stop closure reported" [ref=e601] [cursor=pointer]:
+            - generic [ref=e602]: "880"
+          - button ", stop 881, stop closure reported" [ref=e606] [cursor=pointer]:
+            - generic [ref=e607]: "881"
+          - button ", stop 977, stop closure reported" [ref=e611] [cursor=pointer]:
+            - generic [ref=e612]: "977"
+          - button ", stop 978, stop closure reported" [ref=e616] [cursor=pointer]:
+            - generic [ref=e617]: "978"
+          - button ", stop 979, stop closure reported" [ref=e621] [cursor=pointer]:
+            - generic [ref=e622]: "979"
+          - button ", stop 986, stop closure reported" [ref=e626] [cursor=pointer]:
+            - generic [ref=e627]: "986"
+          - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e631] [cursor=pointer]:
+            - generic [ref=e632]: "510"
+          - button ", stop 336, stop closure reported" [ref=e636] [cursor=pointer]:
+            - generic [ref=e637]: "336"
+          - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e641] [cursor=pointer]:
+            - generic [ref=e642]: "265"
+          - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e652] [cursor=pointer]:
+            - generic "Stop 959. Not served by Route 8B during this detour" [ref=e653]: "959"
+          - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e657] [cursor=pointer]:
+            - generic "Stop 142. Not served by Route 8B during this detour" [ref=e658]: "142"
+          - img "Barrie Allandale Hub bus hub" [ref=e662]:
+            - generic: Barrie Allandale Hub
+          - img "Downtown Hub bus hub" [ref=e663]:
+            - generic: Downtown Hub
+          - img "Park Place bus hub" [ref=e664]:
+            - generic: Park Place
+          - img "Georgian College bus hub" [ref=e665]:
+            - generic: Georgian College
+          - img "Barrie South GO bus hub" [ref=e666]:
+            - generic: Barrie South GO
+          - img "Bus hub" [ref=e667]
+          - img "Bus hub" [ref=e668]
+          - img "Bus hub" [ref=e669]
+        - group [ref=e670]:
+          - generic "Toggle attribution" [ref=e671] [cursor=pointer]
+          - generic [ref=e672]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link "MapLibre" [ref=e673] [cursor=pointer]:
+              - /url: https://maplibre.org/
+      - generic [ref=e676]:
+        - textbox "Where to?" [ref=e680]
+        - generic "Transit status live" [ref=e683]: LIVE
+      - button "Expand detour list" [ref=e688] [cursor=pointer]:
+        - generic [ref=e721]: "Active detours: 2 locations"
+        - generic [ref=e723]:
+          - generic [ref=e724]: 12B
+          - generic [ref=e726]: 8B
+        - generic [ref=e728]: ▼
+      - 'button "4 official detour notices: Mapleview Detour and Shuttle" [ref=e729] [cursor=pointer]':
+        - generic [ref=e730]: i
+        - generic [ref=e732]:
+          - generic [ref=e733]: 4 official detour notices
+          - generic [ref=e734]: Mapleview Detour and Shuttle
+          - generic [ref=e735]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e736]:
+          - generic [ref=e737]: 12B
+          - generic [ref=e739]: "15"
+        - button "Hide planned detour notice" [ref=e741]:
+          - generic [ref=e742]: ×
+      - generic [ref=e743] [cursor=pointer]:
+        - button "Learn how the Auto Detour Detector works" [ref=e744]:
+          - generic [ref=e749]:
+            - generic [ref=e750]: LIVE MAP FEATURE
+            - generic [ref=e751]: Auto Detour Detector
+            - generic [ref=e752]: See how it works
+          - generic [ref=e753]: ›
+        - button "Minimize Auto Detour Detector button" [ref=e754]:
+          - generic [ref=e755]: −
+      - button "Center on my location" [ref=e756] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button "Open map options" [ref=e759] [cursor=pointer]:
+        - generic [ref=e805]: Map options
+        - generic [ref=e806]: "2"
+  - generic [ref=e811]:
+    - generic [ref=e812]: MyBarrie Transit
+    - generic [ref=e816]: AUTOMATIC DETOUR DETECTION
+    - heading "See likely detours. Avoid skipped stops." [level=1] [ref=e819]
+    - generic [ref=e820]: Powered by live bus movement.
+    - region "Likely detour detected. Route change identified from live bus movement." [ref=e824]:
+      - generic [ref=e825]: "!"
+      - generic [ref=e827]:
+        - generic [ref=e828]: Likely detour detected
+        - generic [ref=e829]: Route change identified from live bus movement
+      - generic [ref=e830]: LIVE
+    - generic [ref=e833]:
+      - generic [ref=e834]: Loading routes, stops, and schedules...
+      - progressbar "Loading routes, stops, and schedules..." [ref=e835]:
+        - generic [ref=e838]: 55%

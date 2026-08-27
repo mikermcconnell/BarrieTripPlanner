@@ -408,6 +408,58 @@ export const buildRoutingData = (gtfsData) => {
 };
 
 /**
+ * Build the same routing package while yielding between the expensive index
+ * phases. The individual indexes remain deterministic, but Android gets an
+ * opportunity to paint loading/error UI and run watchdog timers throughout
+ * a cold routing build.
+ */
+export const buildRoutingDataAsync = async (
+  gtfsData,
+  {
+    onProgress,
+    yieldControl = () => new Promise((resolve) => setTimeout(resolve, 0)),
+  } = {}
+) => {
+  const { stops, trips, stopTimes, calendar, calendarDates } = gtfsData;
+  const progress = async (message) => {
+    onProgress?.(message);
+    await yieldControl();
+  };
+
+  await progress('Indexing scheduled departures');
+  const stopDepartures = buildStopDeparturesIndex(stopTimes, trips);
+
+  await progress('Linking route patterns');
+  const { routeStopSequences, routePatternTripIds } = buildRouteStopSequenceData(stopTimes, trips);
+
+  await progress('Preparing nearby transfers');
+  const transfers = buildTransferGraph(stops);
+  const tripIndex = buildTripIndex(trips);
+  const stopIndex = buildStopIndex(stops);
+  const stopRoutes = buildStopRoutesIndex(stopDepartures);
+  const serviceCalendar = buildServiceCalendar(calendar, calendarDates);
+
+  await progress('Finalizing the trip planner');
+  const stopTimesIndex = buildStopTimesIndex(stopTimes);
+  await yieldControl();
+
+  return {
+    stopDepartures,
+    routeStopSequences,
+    transfers,
+    tripIndex,
+    stopIndex,
+    stopRoutes,
+    serviceCalendar,
+    stopTimesIndex,
+    routePatternTripIds,
+    stops,
+    trips,
+    stopTimes,
+  };
+};
+
+/**
  * Get departures from a stop after a given time
  *
  * @param {Object} stopDepartures - Stop departures index

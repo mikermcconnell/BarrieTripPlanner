@@ -1,0 +1,15 @@
+- generic [ref=e7]:
+  - generic [ref=e8]: MyBarrie Transit
+  - generic [ref=e12]: AUTOMATIC DETOUR DETECTION
+  - heading "See likely detours. Avoid skipped stops." [level=1] [ref=e15]
+  - generic [ref=e16]: Powered by live bus movement.
+  - region "Likely detour detected. Route change identified from live bus movement." [ref=e20]:
+    - generic [ref=e21]: "!"
+    - generic [ref=e23]:
+      - generic [ref=e24]: Likely detour detected
+      - generic [ref=e25]: Route change identified from live bus movement
+    - generic [ref=e26]: LIVE
+  - generic [ref=e29]:
+    - generic [ref=e30]: Loading routes, stops, and schedules...
+    - progressbar "Loading routes, stops, and schedules..." [ref=e31]:
+      - generic [ref=e34]: 55%

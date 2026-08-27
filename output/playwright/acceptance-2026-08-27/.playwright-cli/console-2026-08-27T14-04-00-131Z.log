@@ -1,0 +1,214 @@
+[    8677ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:19025
+[    8718ms] [WARNING] "shadow*" style props are deprecated. Use "boxShadow". @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[    8724ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4744
+[    8744ms] [WARNING] props.pointerEvents is deprecated. Use style.pointerEvents @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[    8812ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false collapsable collapsable collapsable @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[    8817ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false accessible accessible false accessible accessible accessible @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[   28430ms] [WARNING] [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. @ :257739
+[   28692ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 127, percent: 55, ready: false} @ :53378
+[   28699ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[   28761ms] [INFO] [startup] phase {phase: ready, elapsedMs: 195, percent: 100, ready: true} @ :53378
+[   28762ms] [INFO] [startup] ready {elapsedMs: 196, routes: 0, stops: 0} @ :53396
+[   28762ms] [WARNING] Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:36603
+[   28763ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[   28822ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 256, percent: 55, ready: false} @ :53378
+[   28822ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[   31140ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[   31140ms] [WARNING] All CORS proxies failed on web. Start the local proxy with "npm run web:dev" or configure EXPO_PUBLIC_CORS_PROXY_URL. @ :138142
+[   31140ms] [WARNING] GTFS download attempt 1 failed, retrying in 2000ms... @ :126002
+[   32322ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   32599ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   35385ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[   35385ms] [WARNING] All CORS proxies failed on web. Start the local proxy with "npm run web:dev" or configure EXPO_PUBLIC_CORS_PROXY_URL. @ :138142
+[   35385ms] [WARNING] GTFS download attempt 2 failed, retrying in 4000ms... @ :126002
+[   35519ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   35520ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253260:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253199:22)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125377:28) @ :125381
+[   35577ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[   35658ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   35659ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253260:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253199:22)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125377:28) @ :125381
+[   41406ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[   41406ms] [WARNING] All CORS proxies failed on web. Start the local proxy with "npm run web:dev" or configure EXPO_PUBLIC_CORS_PROXY_URL. @ :138142
+[   41406ms] [ERROR] Error downloading GTFS ZIP: Error: Unable to fetch web data: no working CORS proxy (1 attempted). Start the local proxy with "npm run web:dev" or set EXPO_PUBLIC_CORS_PROXY_URL. Cause: Failed to fetch
+    at buildWebProxyError (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138038:12)
+    at fetchWithCORS (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138146:13)
+    at async fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125995:24)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[   41407ms] [ERROR] Error fetching all static data: Error: Unable to fetch web data: no working CORS proxy (1 attempted). Start the local proxy with "npm run web:dev" or set EXPO_PUBLIC_CORS_PROXY_URL. Cause: Failed to fetch
+    at buildWebProxyError (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138038:12)
+    at fetchWithCORS (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138146:13)
+    at async fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125995:24)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[   41407ms] [ERROR] Failed to load static data: Error: Unable to fetch web data: no working CORS proxy (1 attempted). Start the local proxy with "npm run web:dev" or set EXPO_PUBLIC_CORS_PROXY_URL. Cause: Failed to fetch
+    at buildWebProxyError (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138038:12)
+    at fetchWithCORS (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:138146:13)
+    at async fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125995:24)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[   41458ms] [INFO] [startup] phase {phase: ready, elapsedMs: 12893, percent: 100, ready: true} @ :53378
+[   41459ms] [INFO] [startup] ready {elapsedMs: 12893, routes: 0, stops: 0} @ :53396
+[   41459ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[   88855ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[   91167ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   94000ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3001/api/health:0
+[   94000ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253260:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253199:22)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125377:28) @ :125381
+[   94028ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[  148845ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[  149165ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[  156885ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 128319, percent: 55, ready: false} @ :53378
+[  156885ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  157085ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[  157104ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[  157122ms] [ERROR] Failed to load resource: the server responded with a status of 502 (Bad Gateway) @ http://127.0.0.1:3001/proxy?url=https%3A%2F%2Fwww.myridebarrie.ca%2Fgtfs%2FGoogle_transit.zip:0
+[  157122ms] [ERROR] Error downloading GTFS ZIP: Error: HTTP error! status: 502
+    at fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125997:25)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[  157122ms] [ERROR] Error fetching all static data: Error: HTTP error! status: 502
+    at fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125997:25)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[  157123ms] [ERROR] Failed to load static data: Error: HTTP error! status: 502
+    at fetchZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125997:25)
+    at async downloadGTFSZip (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126050:29)
+    at async fetchAllStaticData (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:126353:21)
+    at async eval (eval at <anonymous> (http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125163:22) @ :138223
+[  157179ms] [INFO] [startup] phase {phase: ready, elapsedMs: 128613, percent: 100, ready: true} @ :53378
+[  157179ms] [INFO] [startup] ready {elapsedMs: 128614, routes: 0, stops: 0} @ :53396
+[  157180ms] [ERROR] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :138223
+[  204266ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 175700, percent: 55, ready: false} @ :53378
+[  204266ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  206744ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  ...
+    <EnsureSingleNavigator>
+      <StaticContainer name="MapMain" render={function HomeScreenWebShell} navigation={{...}} ...>
+        <HomeScreenWebShell navigation={{...}} route={{name:"MapMain", ...}}>
+          <HomeScreen navigation={{...}} route={{name:"MapMain", ...}}>
+            <View style={{flex:1, ...}} accessibilityElementsHidden={false} importantForAccessibility="auto" ...>
+              <div dir={null} ref={function forwardRef} className="css-view-g...">
+                <div>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <DetourOverlay>
+                <DetourOverlay>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <DetourOverlay>
+                <DetourOverlay>
+                <BusHubOverlay>
+                <MapTapPopup>
+                <View>
+                <SurveyNudgeBanner>
+                <DetourAlertStrip>
+                <UpcomingDetourStrip>
+                <OfficialImpactStrip impacts={[...]} routeColorByRouteId={{10:"#681757", ...}} onDismiss={function} ...>
+                  <View style={[...]} pointerEvents="box-none">
+                    <div dir={null} ref={function forwardRef} className="css-view-g..." style={{top:"230px", ...}}>
+                      <TouchableOpacity style={[...]} activeOpacity={0.84} onPress={function handlePress} ...>
+                        <View accessibilityRole="button" accessibilityLabel="4 official..." ...>
+>                         <button
+>                           onKeyDown={function onKeyDown}
+>                           onClick={function onClick}
+>                           onContextMenu={function onContextMenu}
+>                           dir={null}
+>                           ref={function forwardRef}
+>                           aria-label="4 official detour notices: Mapleview Detour and Shuttle"
+>                           role="button"
+>                           className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor-1loqt..."
+>                           style={{transitionDuration:"0s"}}
+>                           type="button"
+>                         >
+                            <View>
+                            <View>
+                            <View>
+                            <TouchableOpacity style={{width:44,height:44, ...}} onPress={function onPress} ...>
+                              <View accessibilityRole="button" accessibilityLabel="Hide plann..." ...>
+>                               <button
+>                                 onKeyDown={function onKeyDown}
+>                                 onClick={function onClick}
+>                                 onContextMenu={function onContextMenu}
+>                                 dir={null}
+>                                 ref={function forwardRef}
+>                                 aria-label="Hide planned detour notice"
+>                                 role="button"
+>                                 className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor..."
+>                                 style={{transitionDuration:"0s"}}
+>                                 type="button"
+>                               >
+                ...
+                ...
+ @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6857
+[  206745ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6859
+[  206856ms] [INFO] [startup] phase {phase: ready, elapsedMs: 178291, percent: 100, ready: true} @ :53378
+[  206858ms] [INFO] [startup] ready {elapsedMs: 178291, routes: 15, stops: 556} @ :53396
+[  206861ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  207103ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  207737ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  468622ms] [WARNING] [LocalGeocoding] Failed to load address data: The method or property expo-file-system.readAsStringAsync is not available on web, are you sure you've linked all the native dependencies properly? @ :287492

@@ -46,7 +46,8 @@ module.exports = ({ config }) => {
   const resolvedConfig = JSON.parse(JSON.stringify(mergedConfig));
   const googleServicesFile = resolveGoogleServicesFile(resolvedConfig);
   const isEasBuild = process.env.EAS_BUILD === 'true';
-  const isEasProductionBuild = isEasBuild && process.env.EAS_BUILD_PROFILE === 'production';
+  const isEasProductionBuild = isEasBuild
+    && ['production', 'production-apk'].includes(process.env.EAS_BUILD_PROFILE);
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || readGoogleWebClientId(googleServicesFile);
 
   if (hasValue(googleWebClientId) && !hasValue(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)) {
@@ -69,6 +70,22 @@ module.exports = ({ config }) => {
     throw new Error(
       'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production EAS build. Set it as an EAS environment variable or include a web OAuth client in google-services.json.'
     );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_SENTRY_DSN)) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_SENTRY_DSN for production EAS build. Set it in the EAS production environment.'
+    );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.SENTRY_AUTH_TOKEN)) {
+    throw new Error(
+      'Missing SENTRY_AUTH_TOKEN for production EAS build. Set it as a sensitive EAS production environment variable.'
+    );
+  }
+
+  if (isEasProductionBuild && process.env.SENTRY_DISABLE_AUTO_UPLOAD === 'true') {
+    throw new Error('SENTRY_DISABLE_AUTO_UPLOAD must not be true for production EAS builds.');
   }
 
   if (isEasProductionBuild) {

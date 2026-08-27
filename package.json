@@ -31,6 +31,7 @@
     "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "build:release:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Apk",
     "verify:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-readiness.ps1",
+    "verify:sentry": "node scripts/verify-sentry-ingestion.js",
     "prebuild:android:production": "node scripts/preflight-android-production-env.js --profile production",
     "eas:build:android": "npm run prebuild:android:eas && eas build --platform android --profile production --clear-cache",
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",

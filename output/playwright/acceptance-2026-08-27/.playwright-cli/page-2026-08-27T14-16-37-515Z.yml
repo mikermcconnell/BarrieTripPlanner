@@ -1,0 +1,68 @@
+- generic [ref=e2012]:
+  - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e2014]:
+    - region "Map" [ref=e2015]
+    - group [ref=e2016]:
+      - generic "Toggle attribution" [ref=e2017] [cursor=pointer]
+      - generic [ref=e2018]:
+        - text: © OpenStreetMap contributors © CARTO |
+        - link "MapLibre" [ref=e2019] [cursor=pointer]:
+          - /url: https://maplibre.org/
+  - generic [ref=e2021]:
+    - progressbar [ref=e2022]
+    - generic [ref=e2027]: Acquiring GPS signal...
+  - generic [ref=e2029]:
+    - generic [ref=e2030] [cursor=pointer]
+    - generic [ref=e2033]:
+      - generic [ref=e2034]:
+        - generic "Person running late" [ref=e2036]:
+          - img "Person running late" [ref=e2038]
+        - generic [ref=e2039]:
+          - generic [ref=e2040]: WALKING TO
+          - generic [ref=e2041]: Destination
+      - generic [ref=e2042]:
+        - generic [ref=e2043]: ETA
+        - generic [ref=e2044]: ~10:32 AM
+        - generic [ref=e2046]: 17 min
+  - generic [ref=e2048]:
+    - button "Follow my location" [ref=e2049] [cursor=pointer]:
+      - generic [ref=e2124]: Follow
+    - button "Center on my location" [ref=e2125] [cursor=pointer]:
+      - generic [ref=e2187]: My location
+    - button "Show full trip on the map" [ref=e2188] [cursor=pointer]:
+      - generic [ref=e2242]: Full trip
+  - generic:
+    - generic [ref=e2243]:
+      - generic [ref=e2244]:
+        - generic [ref=e2245]:
+          - generic [ref=e2246]: Walk to bus stop
+          - generic [ref=e2248]: "Walk to Stop #2"
+          - generic [ref=e2249]: Downtown Hub
+        - generic [ref=e2250]:
+          - generic [ref=e2251]:
+            - generic [ref=e2252]: 1 min walk
+            - generic [ref=e2253]: 14m
+          - button "Expand walking instructions" [ref=e2254] [cursor=pointer]:
+            - generic [ref=e2255]: Expand
+      - generic [ref=e2256]:
+        - generic "Person running late" [ref=e2257]:
+          - img "Person running late" [ref=e2259]
+        - generic [ref=e2260]:
+          - generic [ref=e2261]: 1 min buffer
+          - generic [ref=e2262]: Bus arrives in 2 min · 1 min walk
+    - generic [ref=e2263]:
+      - generic [ref=e2264] [cursor=pointer]: "Walk to Stop #2"
+      - generic [ref=e2268]:
+        - generic [ref=e2273] [cursor=pointer]:
+          - generic [ref=e2284]:
+            - generic [ref=e2285]: "Walk to Stop #2"
+            - generic [ref=e2286]: 0 min • 14m
+          - generic [ref=e2287]: At stop
+        - generic [ref=e2292]:
+          - generic [ref=e2293]: 7A
+          - generic [ref=e2462]:
+            - generic [ref=e2463]: GROVE to Georgian College
+            - generic [ref=e2464]: 13 min • 10 stops
+        - generic [ref=e2514]:
+          - generic [ref=e2515]: Walk to Destination
+          - generic [ref=e2516]: 3 min • 222m
+        - generic [ref=e2517]: Destination

@@ -1,0 +1,130 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e2863]:
+        - generic [ref=e2865]:
+          - paragraph [ref=e2866]: TripPlan
+          - heading "More" [level=1] [ref=e2867]
+          - paragraph [ref=e2868]: Tools and settings for Dublin, Northern Ireland & England.
+        - generic [ref=e2869]:
+          - generic "Trip tools" [ref=e2870]:
+            - button "Files 25 saved" [ref=e2871]:
+              - generic [ref=e2879]:
+                - text: Files
+                - generic [ref=e2880]: 25 saved
+            - button "Share Invite people" [ref=e2881]:
+              - generic [ref=e2889]:
+                - text: Share
+                - generic [ref=e2890]: Invite people
+            - button "Trips Switch trip" [ref=e2891]:
+              - generic [ref=e2901]:
+                - text: Trips
+                - generic [ref=e2902]: Switch trip
+            - button "Places Add or edit" [ref=e2903]:
+              - generic [ref=e2913]:
+                - text: Places
+                - generic [ref=e2914]: Add or edit
+          - button "Trip settings Dates, destination, and people" [ref=e2915]:
+            - generic [ref=e2921]:
+              - text: Trip settings
+              - generic [ref=e2922]: Dates, destination, and people
+          - generic [ref=e2923]:
+            - text: Search this trip
+            - textbox "Search this trip" [ref=e2925]:
+              - /placeholder: Plans, places, files, notes...
+          - generic [ref=e2926]:
+            - generic [ref=e2927]:
+              - generic [ref=e2928]:
+                - heading "Needs attention" [level=2] [ref=e2929]
+                - paragraph [ref=e2930]: Details that may need a decision.
+              - generic [ref=e2931]: "4"
+            - generic [ref=e2932]:
+              - article [ref=e2933]:
+                - generic [ref=e2934]:
+                  - heading "Georgian Quarter wander missing ticket" [level=3] [ref=e2935]
+                  - paragraph [ref=e2936]: Sat, Sep 5 · Attach a confirmation, ticket, or link
+                - button "Fix" [ref=e2937]
+              - article [ref=e2938]:
+                - generic [ref=e2939]:
+                  - heading "Kilmainham Gaol needs info" [level=3] [ref=e2940]
+                  - paragraph [ref=e2941]: Sun, Sep 6 · Book ahead; guided tour only and sells out weeks in advance.
+                - button "Fix" [ref=e2942]
+              - article [ref=e2943]:
+                - generic [ref=e2944]:
+                  - heading "Guinness Storehouse needs info" [level=3] [ref=e2945]
+                  - paragraph [ref=e2946]: Sun, Sep 6 · Main Sunday morning activity; allow about 2 hours.
+                - button "Fix" [ref=e2947]
+              - article [ref=e2948]:
+                - generic [ref=e2949]:
+                  - heading "Dark Hedges stop missing ticket" [level=3] [ref=e2950]
+                  - paragraph [ref=e2951]: Mon, Sep 7 · Attach a confirmation, ticket, or link
+                - button "Fix" [ref=e2952]
+          - group [ref=e2953]:
+            - generic "Add from text Paste a confirmation or travel note" [ref=e2954] [cursor=pointer]:
+              - generic [ref=e2961]:
+                - generic [ref=e2962]: Add from text
+                - generic [ref=e2963]: Paste a confirmation or travel note
+      - dialog "Share trip" [ref=e2992]:
+        - generic [ref=e2993]:
+          - generic [ref=e2995]:
+            - generic [ref=e2996]:
+              - heading "Share trip" [level=2] [ref=e2997]
+              - paragraph [ref=e2998]: Grant access by email. The app does not send an email automatically.
+            - button "Close" [active] [ref=e2999]
+          - paragraph [ref=e3000]: Only the trip owner can add travelers.
+          - generic [ref=e3001]:
+            - heading "Public editor link" [level=3] [ref=e3002]
+            - paragraph [ref=e3003]: Anyone with this private, unguessable URL can edit the trip without signing in. Forwarding the URL also forwards editing access.
+            - button "Create and copy editor link" [disabled] [ref=e3004]
+          - generic [ref=e3005]:
+            - generic [ref=e3006]:
+              - text: Traveler email
+              - textbox "Traveler email" [disabled] [ref=e3007]:
+                - /placeholder: friend@example.com
+            - generic [ref=e3008]:
+              - text: Role
+              - combobox "Role" [disabled] [ref=e3009]:
+                - option "Viewer" [selected]
+                - option "Editor"
+          - generic [ref=e3010]:
+            - heading "Send them this invite" [level=3] [ref=e3011]
+            - paragraph [ref=e3012]: They need to open the app and sign in with the exact email you granted access to.
+            - paragraph [ref=e3013]: I've shared Dublin, Northern Ireland & England with you in TripPlan. Open this TripPlan app and sign in with brodie2124@gmail.com.
+            - generic [ref=e3014]:
+              - button "Copy invite" [ref=e3015]
+              - button "Open email draft" [disabled] [ref=e3016]
+          - generic [ref=e3017]:
+            - heading "Current access" [level=3] [ref=e3018]
+            - generic [ref=e3019]:
+              - generic [ref=e3020]:
+                - generic [ref=e3021]: michaelryanmcconnell@gmail.com
+                - generic [ref=e3022]: Owner
+              - generic [ref=e3023]:
+                - generic [ref=e3024]: brodie2124@gmail.com
+                - generic [ref=e3025]: Editor
+              - generic [ref=e3027]:
+                - generic [ref=e3028]: alexhall1211@gmail.com
+                - generic [ref=e3029]: Editor
+              - generic [ref=e3031]:
+                - generic [ref=e3032]: chall2124@gmail.com
+                - generic [ref=e3033]: Editor
+              - generic [ref=e3035]:
+                - generic [ref=e3036]: bria7311@gmail.com
+                - generic [ref=e3037]: Editor
+              - generic [ref=e3039]:
+                - generic [ref=e3040]: jcowell17@gmail.com
+                - generic [ref=e3041]: Editor
+              - generic [ref=e3043]:
+                - generic [ref=e3044]: philiphall99@gmail.com
+                - generic [ref=e3045]: Editor
+          - generic [ref=e3047]:
+            - button "Cancel" [ref=e3048]
+            - button "Grant access" [disabled] [ref=e3049]
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

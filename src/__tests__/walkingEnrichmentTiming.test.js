@@ -12,11 +12,41 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(),
 }));
 
+jest.mock('../services/proxyAuth', () => ({
+  getApiProxyRequestOptions: jest.fn(),
+}));
+
 const AsyncStorage = require('@react-native-async-storage/async-storage');
+const { getApiProxyRequestOptions } = require('../services/proxyAuth');
 const {
   enrichTripPlanWithWalking,
+  getWalkingDirections,
   recalculateItineraryAfterWalkingEnrichment,
 } = require('../services/walkingService');
+
+describe('walking directions timeout', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    AsyncStorage.getItem.mockResolvedValue(null);
+  });
+
+  test('falls back to an estimate when proxy authentication stalls', async () => {
+    getApiProxyRequestOptions.mockImplementation(() => new Promise(() => {}));
+
+    const result = await getWalkingDirections(
+      44.38,
+      -79.69,
+      44.39,
+      -79.68,
+      { timeoutMs: 25 }
+    );
+
+    expect(result).toEqual(expect.objectContaining({
+      geometry: null,
+      source: 'estimate',
+    }));
+  });
+});
 
 describe('walking enrichment timing', () => {
   beforeEach(() => {

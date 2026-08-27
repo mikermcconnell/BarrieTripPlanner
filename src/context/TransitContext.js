@@ -5,7 +5,7 @@ import {
   formatVehiclesForMap,
   getLastVehicleFeedStatus,
 } from '../services/realtimeService';
-import { buildRoutingData } from '../services/routingDataService';
+import { buildRoutingDataAsync } from '../services/routingDataService';
 import { fetchServiceAlerts } from '../services/alertService';
 import { REFRESH_INTERVALS, SHAPE_PROCESSING } from '../config/constants';
 import { processShapeForRendering } from '../utils/geometryUtils';
@@ -140,6 +140,7 @@ export const TransitProvider = ({ children }) => {
   // Refs for deferred routing and cache-first strategy
   const gtfsDataRef = useRef(null);
   const gtfsFetchPromiseRef = useRef(null);
+  const gtfsCachePromiseRef = useRef(null);
   const routingDataRef = useRef(null);
   const routingBuildPromiseRef = useRef(null);
 
@@ -206,7 +207,10 @@ export const TransitProvider = ({ children }) => {
     void (async () => {
       try {
         const processed = {};
-        const batchSize = 10;
+
+        // Do not begin recursive polyline simplification in the same turn that
+        // applied fresh GTFS state or resumed a waiting trip search.
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
         for (let i = 0; i < shapeIds.length; i += 1) {
           if (shapeProcessingJobRef.current !== jobId) {
@@ -216,9 +220,9 @@ export const TransitProvider = ({ children }) => {
           const shapeId = shapeIds[i];
           processed[shapeId] = processShapeForRendering(rawShapes[shapeId], options);
 
-          if ((i + 1) % batchSize === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-          }
+          // A single GTFS shape can contain thousands of points. Yield after
+          // every shape rather than treating ten shapes as a safe fixed batch.
+          await new Promise((resolve) => setTimeout(resolve, 0));
         }
 
         if (shapeProcessingJobRef.current === jobId) {
@@ -228,6 +232,29 @@ export const TransitProvider = ({ children }) => {
         logger.error('Failed to process map shapes:', error);
       }
     })();
+  }, []);
+
+  /**
+   * Persist one GTFS snapshot after immediate UI/routing work has had a chance
+   * to finish. Sharing this job prevents startup refresh and first-trip search
+   * from serializing the same large schedule into AsyncStorage twice.
+   */
+  const cacheGTFSDataInBackground = useCallback((data) => {
+    if (!data || gtfsCachePromiseRef.current) {
+      return gtfsCachePromiseRef.current;
+    }
+
+    const cachePromise = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return cacheGTFSData(data);
+    })().finally(() => {
+      if (gtfsCachePromiseRef.current === cachePromise) {
+        gtfsCachePromiseRef.current = null;
+      }
+    });
+
+    gtfsCachePromiseRef.current = cachePromise;
+    return cachePromise;
   }, []);
 
   /**
@@ -297,7 +324,7 @@ export const TransitProvider = ({ children }) => {
           setIsRoutingReady(false);
           setLastRoutingBuildAt(null);
           setRoutingError(null);
-          await cacheGTFSData(data);
+          void cacheGTFSDataInBackground(data);
         } catch (error) {
           // Silent fail — cached data is already displayed
           setLastStaticFailureAt(Date.now());
@@ -330,7 +357,7 @@ export const TransitProvider = ({ children }) => {
       // The map can open as soon as its in-memory data is ready. Persisting
       // the next launch cache is background work and must not hold the screen.
       setIsLoadingStatic(false);
-      void cacheGTFSData(data);
+      void cacheGTFSDataInBackground(data);
     } catch (error) {
       logger.error('Failed to load static data:', error);
       setLastStaticFailureAt(Date.now());
@@ -339,34 +366,45 @@ export const TransitProvider = ({ children }) => {
       gtfsFetchPromiseRef.current = null;
       setIsLoadingStatic(false);
     }
-  }, [applyStaticData, processAndStoreShapes]);
+  }, [applyStaticData, cacheGTFSDataInBackground, processAndStoreShapes]);
 
   /**
    * Lazily build routing data on first trip plan request.
    * Returns the RAPTOR routing structures, fetching fresh GTFS if needed
    * (cache doesn't include stopTimes which are required for routing).
    */
-  const ensureRoutingData = useCallback(async () => {
+  const ensureRoutingData = useCallback(async ({ onProgress } = {}) => {
+    const progress = (message) => onProgress?.(message);
+
     // Already built
-    if (routingDataRef.current) return routingDataRef.current;
+    if (routingDataRef.current) {
+      progress('Transit schedule is ready');
+      return routingDataRef.current;
+    }
 
     // If a build is already in progress, share the same promise
     if (routingBuildPromiseRef.current) {
+      progress('Finishing transit schedule setup');
       return routingBuildPromiseRef.current;
     }
 
     const buildPromise = (async () => {
       setIsBuildingRouting(true);
       setRoutingError(null);
+      progress('Preparing transit schedules');
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       try {
         let data = gtfsDataRef.current;
 
         // Cache doesn't include stopTimes — fetch fresh if needed
         if (!data?.stopTimes) {
+          progress('Downloading the latest transit schedule');
           const existingFetchPromise = gtfsFetchPromiseRef.current;
-          const fetchPromise = existingFetchPromise || fetchAllStaticData();
-          gtfsFetchPromiseRef.current = fetchPromise;
+          const fetchPromise = existingFetchPromise || fetchAllStaticData({ onProgress: progress });
+          if (!existingFetchPromise) {
+            gtfsFetchPromiseRef.current = fetchPromise;
+          }
           try {
             data = await fetchPromise;
           } finally {
@@ -374,13 +412,17 @@ export const TransitProvider = ({ children }) => {
               gtfsFetchPromiseRef.current = null;
             }
           }
-          gtfsDataRef.current = data;
-          applyStaticData(data);
-          processAndStoreShapes(data.shapes);
-          await cacheGTFSData(data);
+          // A startup/background refresh owns applying and caching its result.
+          // Only adopt it here when this search initiated the fetch itself.
+          if (!existingFetchPromise) {
+            gtfsDataRef.current = data;
+            applyStaticData(data);
+            processAndStoreShapes(data.shapes);
+            void cacheGTFSDataInBackground(data);
+          }
         }
 
-        const routing = buildRoutingData(data);
+        const routing = await buildRoutingDataAsync(data, { onProgress: progress });
         routing.routes = data.routes;
         routing.shapes = data.shapes || {};
         routingDataRef.current = routing;
@@ -401,7 +443,7 @@ export const TransitProvider = ({ children }) => {
 
     routingBuildPromiseRef.current = buildPromise;
     return buildPromise;
-  }, [applyStaticData, processAndStoreShapes]);
+  }, [applyStaticData, cacheGTFSDataInBackground, processAndStoreShapes]);
 
   /**
    * Diff new vehicles against previous snapshot to preserve object references

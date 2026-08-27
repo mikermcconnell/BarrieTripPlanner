@@ -3,7 +3,6 @@ const path = require('path');
 
 const env = {
   ...process.env,
-  EXPO_PUBLIC_API_PROXY_URL: 'http://localhost:3001',
   EXPO_PUBLIC_CORS_PROXY_URL: 'http://127.0.0.1:3001/proxy?url=',
   EXPO_PUBLIC_ENABLE_AUTO_DETOURS: 'true',
   EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: 'activeDetourEventsV2',

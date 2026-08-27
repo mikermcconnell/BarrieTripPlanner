@@ -1,0 +1,189 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [selected] [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]
+  - generic [ref=e2805]:
+    - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e2807]:
+      - generic:
+        - region "Map" [ref=e2808]
+        - button ", stop 364, stop closure reported" [ref=e2809] [cursor=pointer]:
+          - generic [ref=e2810]: "364"
+        - button ", stop 365, stop closure reported" [ref=e2814] [cursor=pointer]:
+          - generic [ref=e2815]: "365"
+        - button ", stop 366, stop closure reported" [ref=e2819] [cursor=pointer]:
+          - generic [ref=e2820]: "366"
+        - button ", stop 367, stop closure reported" [ref=e2824] [cursor=pointer]:
+          - generic [ref=e2825]: "367"
+        - button ", stop 744, stop closure reported" [ref=e2829] [cursor=pointer]:
+          - generic [ref=e2830]: "744"
+        - button ", stop 745, stop closure reported" [ref=e2834] [cursor=pointer]:
+          - generic [ref=e2835]: "745"
+        - button ", stop 746, stop closure reported" [ref=e2839] [cursor=pointer]:
+          - generic [ref=e2840]: "746"
+        - button ", stop 747, stop closure reported" [ref=e2844] [cursor=pointer]:
+          - generic [ref=e2845]: "747"
+        - button ", stop 805, stop closure reported" [ref=e2849] [cursor=pointer]:
+          - generic [ref=e2850]: "805"
+        - button ", stop 808, stop closure reported" [ref=e2854] [cursor=pointer]:
+          - generic [ref=e2855]: "808"
+        - button ", stop 809, stop closure reported" [ref=e2859] [cursor=pointer]:
+          - generic [ref=e2860]: "809"
+        - button ", stop 812, stop closure reported" [ref=e2864] [cursor=pointer]:
+          - generic [ref=e2865]: "812"
+        - button ", stop 880, stop closure reported" [ref=e2869] [cursor=pointer]:
+          - generic [ref=e2870]: "880"
+        - button ", stop 881, stop closure reported" [ref=e2874] [cursor=pointer]:
+          - generic [ref=e2875]: "881"
+        - button ", stop 977, stop closure reported" [ref=e2879] [cursor=pointer]:
+          - generic [ref=e2880]: "977"
+        - button ", stop 978, stop closure reported" [ref=e2884] [cursor=pointer]:
+          - generic [ref=e2885]: "978"
+        - button ", stop 979, stop closure reported" [ref=e2889] [cursor=pointer]:
+          - generic [ref=e2890]: "979"
+        - button ", stop 986, stop closure reported" [ref=e2894] [cursor=pointer]:
+          - generic [ref=e2895]: "986"
+        - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e2899] [cursor=pointer]:
+          - generic [ref=e2900]: "510"
+        - button ", stop 336, stop closure reported" [ref=e2904] [cursor=pointer]:
+          - generic [ref=e2905]: "336"
+        - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e2909] [cursor=pointer]:
+          - generic [ref=e2910]: "265"
+        - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e2920] [cursor=pointer]:
+          - generic "Stop 959. Not served by Route 8B during this detour" [ref=e2921]: "959"
+        - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e2925] [cursor=pointer]:
+          - generic "Stop 142. Not served by Route 8B during this detour" [ref=e2926]: "142"
+        - button "Route 8A bus 2102. Next stop Yonge at Mapleview" [ref=e2930] [cursor=pointer]:
+          - generic [ref=e2931]: 8A
+        - button "Route 8A bus 1707. Next stop 130 Bell Farm" [ref=e2936] [cursor=pointer]:
+          - generic [ref=e2937]: 8A
+        - button "Route 100 bus 1705. Next stop Maple at Ross" [ref=e2942] [cursor=pointer]:
+          - generic [ref=e2943]: "100"
+        - button "Route 10 bus 1503. Next stop Victoria Village" [ref=e2948] [cursor=pointer]:
+          - generic [ref=e2949]: "10"
+        - button "Route 7A bus 2203. Next stop Reid Drive" [ref=e2954] [cursor=pointer]:
+          - generic [ref=e2955]: 7A
+        - button "Route 7B bus 1709. Next stop Bothwell Crescent" [ref=e2960] [cursor=pointer]:
+          - generic [ref=e2961]: 7B
+        - button "Route 2B bus 2602. Next stop Dunlop at Parkside" [ref=e2966] [cursor=pointer]:
+          - generic [ref=e2967]: 2B
+        - button "Route 11 bus 2302. Next stop Grove at Cook" [ref=e2972] [cursor=pointer]:
+          - generic [ref=e2973]: "11"
+        - button "Route 12A bus 2603. Next stop Bayview at Mapleview" [ref=e2978] [cursor=pointer]:
+          - generic [ref=e2979]: 12A
+        - button "Route 12B bus 2001. Next stop John Street" [ref=e2984] [cursor=pointer]:
+          - generic [ref=e2985]: 12B
+        - button "Route 400 bus 2206. Next stop Georgian College" [ref=e2990] [cursor=pointer]:
+          - generic [ref=e2991]: "400"
+        - button "Route 101 bus 1103. Next stop Johnson at Mayor" [ref=e2996] [cursor=pointer]:
+          - generic [ref=e2997]: "101"
+        - button "Route 8A bus 1710. Next stop Lakeshore at Centennial" [ref=e3002] [cursor=pointer]:
+          - generic [ref=e3003]: 8A
+        - button "Route 8B bus 2101. Next stop Brock Street" [ref=e3008] [cursor=pointer]:
+          - generic [ref=e3009]: 8B
+        - button "Route 8B bus 1713. Next stop Canadian Tire Plaza" [ref=e3014] [cursor=pointer]:
+          - generic [ref=e3015]: 8B
+        - button "Route 100 bus 2301. Next stop Rolston Drive" [ref=e3020] [cursor=pointer]:
+          - generic [ref=e3021]: "100"
+        - button "Route 2A bus 2303. Next stop Mapleview at Veteran's" [ref=e3026] [cursor=pointer]:
+          - generic [ref=e3027]: 2A
+        - button "Route 8B bus 2201. Next stop Country Lane" [ref=e3032] [cursor=pointer]:
+          - generic [ref=e3033]: 8B
+        - button "Route 8A bus 1502. Next stop Hollyholme Farm Road" [ref=e3038] [cursor=pointer]:
+          - generic [ref=e3039]: 8A
+        - button "Route 8A bus 1701. Next stop Barrie Allandale Transit Terminal Platform 3" [ref=e3044] [cursor=pointer]:
+          - generic [ref=e3045]: 8A
+        - button "Route 10 bus 1101. Next stop Grizzlies Way at Duckworth" [ref=e3050] [cursor=pointer]:
+          - generic [ref=e3051]: "10"
+        - button "Route 7A bus 1703. Next stop Downtown Hub" [ref=e3056] [cursor=pointer]:
+          - generic [ref=e3057]: 7A
+        - button "Route 15B bus 1704. Next stop Yonge at Big Bay Point" [ref=e3062] [cursor=pointer]:
+          - generic [ref=e3063]: 15B
+        - button "Route 7B bus 2103. Next stop Reid Drive" [ref=e3068] [cursor=pointer]:
+          - generic [ref=e3069]: 7B
+        - button "Route 2B bus 1712. Next stop Veteran's at Harvie" [ref=e3074] [cursor=pointer]:
+          - generic [ref=e3075]: 2B
+        - button "Route 11 bus 2002. Next stop Path to Browning Trail" [ref=e3080] [cursor=pointer]:
+          - generic [ref=e3081]: "11"
+        - button "Route 101 bus 1601. Next stop Heather Street" [ref=e3086] [cursor=pointer]:
+          - generic [ref=e3087]: "101"
+        - button "Route 12A bus 1706. Next stop Bayfield at Wellington" [ref=e3092] [cursor=pointer]:
+          - generic [ref=e3093]: 12A
+        - button "Route 8B bus 1102. Next stop Lakeshore at Centennial" [ref=e3098] [cursor=pointer]:
+          - generic [ref=e3099]: 8B
+        - button "Route 400 bus 2601. Next stop Park Place" [ref=e3104] [cursor=pointer]:
+          - generic [ref=e3105]: "400"
+        - button "Route 8B bus 1702. Next stop Georgian College" [ref=e3110] [cursor=pointer]:
+          - generic [ref=e3111]: 8B
+        - img "Barrie Allandale Hub bus hub" [ref=e3116]:
+          - generic: Barrie Allandale Hub
+        - img "Downtown Hub bus hub" [ref=e3117]:
+          - generic: Downtown Hub
+        - img "Park Place bus hub" [ref=e3118]:
+          - generic: Park Place
+        - img "Georgian College bus hub" [ref=e3119]:
+          - generic: Georgian College
+        - img "Barrie South GO bus hub" [ref=e3120]:
+          - generic: Barrie South GO
+        - img "Bus hub" [ref=e3121]
+        - img "Bus hub" [ref=e3122]
+        - img "Bus hub" [ref=e3123]
+      - group [ref=e3124]:
+        - generic "Toggle attribution" [ref=e3125] [cursor=pointer]
+        - generic [ref=e3126]:
+          - text: © OpenStreetMap contributors © CARTO |
+          - link "MapLibre" [ref=e3127] [cursor=pointer]:
+            - /url: https://maplibre.org/
+    - generic [ref=e3130]:
+      - textbox "Where to?" [ref=e3134]
+      - generic "Transit status live" [ref=e3137]: LIVE
+    - button "Expand detour list" [ref=e3142] [cursor=pointer]:
+      - generic [ref=e3175]: "Active detours: 2 locations"
+      - generic [ref=e3177]:
+        - generic [ref=e3178]: 12B
+        - generic [ref=e3180]: 8B
+      - generic [ref=e3182]: ▼
+    - 'button "4 official detour notices: Mapleview Detour and Shuttle" [ref=e3183] [cursor=pointer]':
+      - generic [ref=e3184]: i
+      - generic [ref=e3186]:
+        - generic [ref=e3187]: 4 official detour notices
+        - generic [ref=e3188]: Mapleview Detour and Shuttle
+        - generic [ref=e3189]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+      - generic [ref=e3190]:
+        - generic [ref=e3191]: 12B
+        - generic [ref=e3193]: "15"
+      - button "Hide planned detour notice" [ref=e3195]:
+        - generic [ref=e3196]: ×
+    - generic [ref=e3197] [cursor=pointer]:
+      - button "Learn how the Auto Detour Detector works" [ref=e3198]:
+        - generic [ref=e3203]:
+          - generic [ref=e3204]: LIVE MAP FEATURE
+          - generic [ref=e3205]: Auto Detour Detector
+          - generic [ref=e3206]: See how it works
+        - generic [ref=e3207]: ›
+      - button "Minimize Auto Detour Detector button" [ref=e3208]:
+        - generic [ref=e3209]: −
+    - button "Center on my location" [ref=e3210] [cursor=pointer]
+    - generic:
+      - generic:
+        - generic: Routes
+        - generic: ×
+      - generic: All
+      - generic: "400"
+      - generic: "101"
+      - generic: "100"
+      - generic: 15B
+      - generic: 15A
+      - generic: 12B
+      - generic: 12A
+      - generic: "11"
+      - generic: "10"
+      - generic: 8A
+      - generic: 8B
+      - generic: 7A
+      - generic: 7B
+      - generic: 2A
+      - generic: 2B
+    - button "Open map options" [ref=e3213] [cursor=pointer]:
+      - generic [ref=e3259]: Map options
+      - generic [ref=e3260]: "2"

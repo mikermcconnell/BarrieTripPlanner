@@ -1,0 +1,61 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e198]:
+        - generic [ref=e200]:
+          - generic:
+            - region "Map" [ref=e201]
+            - 'img "Stop 1: Dublin Airport" [ref=e302]':
+              - strong [ref=e304]: "1"
+            - 'img "Stop 2: Dublin lodging area" [ref=e305]':
+              - strong [ref=e307]: "2"
+            - 'img "Stop 3: Georgian Quarter" [ref=e308]':
+              - strong [ref=e310]: "3"
+            - 'img "Stop 4: Kehoe''s" [ref=e311]':
+              - strong [ref=e313]: "4"
+          - generic:
+            - generic [ref=e202]:
+              - button "Zoom in" [ref=e203] [cursor=pointer]
+              - button "Zoom out" [ref=e205] [cursor=pointer]
+            - generic:
+              - button "Toggle attribution" [ref=e208] [cursor=pointer]
+              - link "Mapbox homepage" [ref=e211] [cursor=pointer]:
+                - /url: https://www.mapbox.com/
+        - generic [ref=e213]:
+          - generic [ref=e214]:
+            - generic [ref=e215]:
+              - heading "Map" [level=1] [ref=e216]
+              - paragraph [ref=e217]: 4 places
+            - button "Previous trip day" [disabled] [ref=e218]: ‹
+            - generic [ref=e219] [cursor=pointer]:
+              - generic [ref=e220]: Day 1 · Sat, Sep 5
+              - textbox "Choose trip day" [ref=e221]: 2026-09-05
+            - button "Next trip day" [ref=e222]: ›
+          - generic "Map filters" [ref=e223]:
+            - button "Place" [ref=e224]
+            - button "Day" [ref=e229]
+            - button "Stays" [ref=e239]
+            - button "Food" [ref=e246]
+            - button "Saved" [ref=e251]
+            - button "Activities" [ref=e255]
+            - button "Travel" [ref=e259]
+            - button "All" [ref=e267]
+        - generic "Day 1 · Sat, Sep 5 selected stop" [ref=e276]:
+          - button "Previous stop" [ref=e277]: ‹
+          - 'button "2 3:00 PM Later Check in: Dublin lodging area Dublin lodging area" [ref=e342]':
+            - generic [ref=e279]: "2"
+            - generic [ref=e280]:
+              - generic [ref=e281]:
+                - generic [ref=e282]: 3:00 PM
+                - generic [ref=e283]: Later
+              - generic [ref=e284]: "Check in: Dublin lodging area"
+              - generic [ref=e285]: Dublin lodging area
+          - button "Next stop" [active] [ref=e289]: ›
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

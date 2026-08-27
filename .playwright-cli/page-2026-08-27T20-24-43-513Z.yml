@@ -1,0 +1,71 @@
+- generic [ref=f17e3]:
+  - generic [ref=f17e639]: DSN copied to clipboard
+  - generic [ref=f17e5]:
+    - banner [ref=f17e7]:
+      - generic [ref=f17e8]:
+        - button "Open main menu" [ref=f17e9] [cursor=pointer]
+        - generic [ref=f17e14]:
+          - generic [ref=f17e15]:
+            - button [ref=f17e16] [cursor=pointer]
+            - button [ref=f17e24] [cursor=pointer]
+            - button [ref=f17e29] [cursor=pointer]
+            - button "Command Palette" [ref=f17e35] [cursor=pointer]
+            - button "Help" [ref=f17e40] [cursor=pointer]
+          - button "michaelryanmcconnell@gmail.com" [ref=f17e46] [cursor=pointer]:
+            - img [ref=f17e49]:
+              - generic [ref=f17e51]: M
+    - generic [ref=f17e52]:
+      - banner [ref=f17e53]:
+        - generic:
+          - heading [level=1]
+        - generic [ref=f17e56]:
+          - button "Ask Seer" [ref=f17e57] [cursor=pointer]
+          - button "Give Feedback" [ref=f17e64] [cursor=pointer]
+      - main [ref=f17e69]:
+        - generic [ref=f17e648]:
+          - generic [ref=f17e649]:
+            - heading "Configure React Native SDK" [level=2] [ref=f17e650]
+            - generic [ref=f17e651]:
+              - button "Back to Platform Selection" [ref=f17e652] [cursor=pointer]
+              - button "Full Documentation" [ref=f17e657] [cursor=pointer]
+          - generic [ref=f17e665]:
+            - separator [ref=f17e666]
+            - generic [ref=f17e667]:
+              - generic [ref=f17e668]:
+                - generic [ref=f17e669]:
+                  - heading "Automatic Configuration (Recommended)" [level=4] [ref=f17e670]
+                  - button "Copy instructions" [ref=f17e673] [cursor=pointer]
+                - generic [ref=f17e679]:
+                  - generic [ref=f17e680]:
+                    - text: Add Sentry automatically to your app with the
+                    - link "Sentry wizard" [ref=f17e681] [cursor=pointer]:
+                      - /url: https://docs.sentry.io/platforms/react-native/#install
+                    - text: (call this inside your project directory).
+                  - generic [ref=f17e683]:
+                    - button "Copy snippet" [ref=f17e685] [cursor=pointer]
+                    - code [ref=f17e692]: npx @sentry/wizard@latest -i reactNative --saas --org mike-mcconnell --project barrie-transit-planner
+                  - generic [ref=f17e693]: "The Sentry wizard will automatically patch your project with the following:"
+                  - list [ref=f17e694]:
+                    - listitem [ref=f17e695]: Configure the SDK with your DSN
+                    - listitem [ref=f17e696]: Add source maps upload to your build process
+                    - listitem [ref=f17e697]: Add debug symbols upload to your build process
+              - generic [ref=f17e699] [cursor=pointer]:
+                - heading "Manual Configuration" [level=4] [ref=f17e700]
+                - button "Toggle optional configuration" [ref=f17e701]
+                - button "Copy DSN" [active] [ref=f17e707]
+            - separator [ref=f17e714]
+            - heading "Additional Information" [level=4] [ref=f17e715]
+            - list [ref=f17e716]:
+              - listitem [ref=f17e717]:
+                - link "React Navigation" [ref=f17e718] [cursor=pointer]:
+                  - /url: https://docs.sentry.io/platforms/react-native/tracing/instrumentation/react-navigation/
+                - text: ": Set up automatic instrumentation with React Navigation"
+              - listitem [ref=f17e719]:
+                - link "React Native Navigation" [ref=f17e720] [cursor=pointer]:
+                  - /url: https://docs.sentry.io/platforms/react-native/tracing/instrumentation/react-native-navigation/
+                - text: ": Set up automatic instrumentation with React Native Navigation"
+              - listitem [ref=f17e721]:
+                - link "Expo Router" [ref=f17e722] [cursor=pointer]:
+                  - /url: https://docs.sentry.io/platforms/react-native/tracing/instrumentation/expo-router/
+                - text: ": Set up automatic instrumentation with Expo Router"
+          - button "Take me to Issues" [ref=f17e663] [cursor=pointer]

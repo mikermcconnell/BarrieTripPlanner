@@ -70,22 +70,6 @@ if (!runtimeConfig.proxy.apiBaseUrl && !runtimeConfig.isProductionLike) {
   );
 }
 
-// Initialize Sentry for crash reporting (production only)
-const sentryDsn = runtimeConfig.sentry.dsn;
-if (sentryDsn) {
-  const Sentry = require('@sentry/react-native');
-
-  Sentry.init({
-    dsn: sentryDsn,
-    enabled: !runtimeConfig.isDevelopment,
-    tracesSampleRate: 0.2,
-  });
-
-  if (hasCriticalStartupIssues) {
-    Sentry.captureMessage(`Startup config issues: ${STARTUP_ENV_ISSUES.join(' | ')}`, 'error');
-  }
-}
-
 // Configure notification handler (how notifications appear when app is foregrounded)
 // Only set on native — expo-notifications has limited web support
 if (Platform.OS !== 'web') {

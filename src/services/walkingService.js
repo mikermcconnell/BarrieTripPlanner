@@ -20,6 +20,32 @@ import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 const CACHE_PREFIX = 'walk_directions_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RATE_LIMIT_DELAY_MS = 550; // ~2 req/sec to stay within LocationIQ free tier
+const DEFAULT_WALKING_REQUEST_TIMEOUT_MS = 8000;
+
+const createWalkingTimeoutError = () => {
+  const error = new Error('Walking directions request timed out');
+  error.code = 'WALKING_DIRECTIONS_TIMEOUT';
+  return error;
+};
+
+const runWithWalkingTimeout = (operation, timeoutMs, onTimeout) => {
+  const normalizedTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_WALKING_REQUEST_TIMEOUT_MS;
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      onTimeout?.();
+      reject(createWalkingTimeoutError());
+    }, normalizedTimeoutMs);
+  });
+
+  return Promise.race([
+    Promise.resolve().then(operation),
+    timeoutPromise,
+  ]).finally(() => clearTimeout(timeoutId));
+};
 
 let lastRequestTime = 0;
 
@@ -70,93 +96,141 @@ const waitForRateLimit = async () => {
  * @param {number} fromLon - Starting longitude
  * @param {number} toLat - Ending latitude
  * @param {number} toLon - Ending longitude
+ * @param {Object} [options]
+ * @param {number} [options.timeoutMs] - Maximum time before using estimated directions
  * @returns {Promise<Object>} Walking directions with geometry and steps
  */
-export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
-  // Check cache first
+export const getWalkingDirections = async (
+  fromLat,
+  fromLon,
+  toLat,
+  toLon,
+  { timeoutMs = DEFAULT_WALKING_REQUEST_TIMEOUT_MS } = {}
+) => {
   const cacheKey = generateCacheKey(fromLat, fromLon, toLat, toLon);
-  const cached = await getCachedDirections(cacheKey);
-  if (cached) {
-    return cached;
-  }
+  let requestExpired = false;
+  const abortController = typeof AbortController === 'function'
+    ? new AbortController()
+    : null;
+  const assertRequestActive = () => {
+    if (requestExpired) {
+      throw createWalkingTimeoutError();
+    }
+  };
 
   try {
-    let response;
-    const canUseDirectLocationIQ = Boolean(
-      LOCATIONIQ_CONFIG.ALLOW_DIRECT && LOCATIONIQ_CONFIG.API_KEY
-    );
-
-    if (LOCATIONIQ_CONFIG.PROXY_URL) {
-      // Route through proxy (API key stays server-side)
-      const proxyParams = new URLSearchParams({
-        from: `${fromLat},${fromLon}`,
-        to: `${toLat},${toLon}`,
-      });
-      const proxyUrl = `${LOCATIONIQ_CONFIG.PROXY_URL}/api/walking-directions?${proxyParams}`;
-      const proxyOptions = await getApiProxyRequestOptions(LOCATIONIQ_CONFIG.PROXY_TOKEN || '');
-
-      await waitForRateLimit();
-      response = await fetch(proxyUrl, proxyOptions);
-
-      if (response.status === 429) {
-        logger.warn('Walking directions rate limit hit, retrying after delay...');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        lastRequestTime = Date.now();
-        response = await fetch(proxyUrl, proxyOptions);
+    return await runWithWalkingTimeout(async () => {
+      // Check cache first, but do not let a native storage stall block navigation.
+      const cached = await getCachedDirections(cacheKey);
+      assertRequestActive();
+      if (cached) {
+        return cached;
       }
-    } else if (canUseDirectLocationIQ) {
-      // Direct call (native app or dev without proxy)
-      const url = `${LOCATIONIQ_CONFIG.BASE_URL}/directions/walking/${fromLon},${fromLat};${toLon},${toLat}`;
-      const params = new URLSearchParams({
-        key: LOCATIONIQ_CONFIG.API_KEY,
-        steps: 'true',
-        geometries: 'polyline',
-        overview: 'full',
-      });
 
-      await waitForRateLimit();
-      response = await fetch(`${url}?${params}`);
+      let response;
+      const canUseDirectLocationIQ = Boolean(
+        LOCATIONIQ_CONFIG.ALLOW_DIRECT && LOCATIONIQ_CONFIG.API_KEY
+      );
 
-      if (response.status === 429) {
-        logger.warn('LocationIQ rate limit hit, retrying after delay...');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        lastRequestTime = Date.now();
-        response = await fetch(`${url}?${params}`);
-      }
-    } else {
-      logger.warn('Walking directions proxy is not configured; using estimated walking leg');
-      return getFallbackDirections(fromLat, fromLon, toLat, toLon);
-    }
+      if (LOCATIONIQ_CONFIG.PROXY_URL) {
+        // Route through proxy (API key stays server-side)
+        const proxyParams = new URLSearchParams({
+          from: `${fromLat},${fromLon}`,
+          to: `${toLat},${toLon}`,
+        });
+        const proxyUrl = `${LOCATIONIQ_CONFIG.PROXY_URL}/api/walking-directions?${proxyParams}`;
+        const proxyOptions = await getApiProxyRequestOptions(LOCATIONIQ_CONFIG.PROXY_TOKEN || '');
+        assertRequestActive();
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        logger.warn('LocationIQ rate limit reached for directions (after retry)');
+        await waitForRateLimit();
+        assertRequestActive();
+        response = await fetch(proxyUrl, {
+          ...(proxyOptions || {}),
+          ...(abortController ? { signal: abortController.signal } : {}),
+        });
+
+        if (response.status === 429) {
+          logger.warn('Walking directions rate limit hit, retrying after delay...');
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          assertRequestActive();
+          lastRequestTime = Date.now();
+          response = await fetch(proxyUrl, {
+            ...(proxyOptions || {}),
+            ...(abortController ? { signal: abortController.signal } : {}),
+          });
+        }
+      } else if (canUseDirectLocationIQ) {
+        // Direct call (native app or dev without proxy)
+        const url = `${LOCATIONIQ_CONFIG.BASE_URL}/directions/walking/${fromLon},${fromLat};${toLon},${toLat}`;
+        const params = new URLSearchParams({
+          key: LOCATIONIQ_CONFIG.API_KEY,
+          steps: 'true',
+          geometries: 'polyline',
+          overview: 'full',
+        });
+
+        await waitForRateLimit();
+        assertRequestActive();
+        response = await fetch(`${url}?${params}`, abortController
+          ? { signal: abortController.signal }
+          : undefined);
+
+        if (response.status === 429) {
+          logger.warn('LocationIQ rate limit hit, retrying after delay...');
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          assertRequestActive();
+          lastRequestTime = Date.now();
+          response = await fetch(`${url}?${params}`, abortController
+            ? { signal: abortController.signal }
+            : undefined);
+        }
+      } else {
+        logger.warn('Walking directions proxy is not configured; using estimated walking leg');
         return getFallbackDirections(fromLat, fromLon, toLat, toLon);
       }
-      throw new Error(`Directions API error: ${response.status}`);
-    }
 
-    const data = await response.json();
+      assertRequestActive();
+      if (!response.ok) {
+        if (response.status === 429) {
+          logger.warn('LocationIQ rate limit reached for directions (after retry)');
+          return getFallbackDirections(fromLat, fromLon, toLat, toLon);
+        }
+        throw new Error(`Directions API error: ${response.status}`);
+      }
 
-    if (!data.routes || data.routes.length === 0) {
-      return getFallbackDirections(fromLat, fromLon, toLat, toLon);
-    }
+      const data = await response.json();
+      assertRequestActive();
 
-    const route = data.routes[0];
-    const result = {
-      distance: route.distance, // meters
-      duration: route.duration, // seconds
-      geometry: route.geometry, // encoded polyline
-      steps: formatWalkingSteps(route.legs?.[0]?.steps || []),
-      source: 'locationiq',
-    };
+      if (!data.routes || data.routes.length === 0) {
+        return getFallbackDirections(fromLat, fromLon, toLat, toLon);
+      }
 
-    // Cache the result
-    await cacheDirections(cacheKey, result);
+      const route = data.routes[0];
+      const result = {
+        distance: route.distance, // meters
+        duration: route.duration, // seconds
+        geometry: route.geometry, // encoded polyline
+        steps: formatWalkingSteps(route.legs?.[0]?.steps || []),
+        source: 'locationiq',
+      };
 
-    return result;
+      // Cache the result
+      await cacheDirections(cacheKey, result);
+      assertRequestActive();
+
+      return result;
+    }, timeoutMs, () => {
+      requestExpired = true;
+      abortController?.abort();
+    });
   } catch (error) {
-    logger.error('Walking directions error:', error);
+    if (error?.code === 'WALKING_DIRECTIONS_TIMEOUT') {
+      logger.warn('Walking directions timed out; using estimated walking leg', {
+        timeoutMs,
+      });
+    } else {
+      logger.error('Walking directions error:', error);
+    }
     return getFallbackDirections(fromLat, fromLon, toLat, toLon);
   }
 };

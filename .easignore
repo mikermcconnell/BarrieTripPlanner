@@ -31,6 +31,8 @@ GoogleService-Info.plist
 .git/
 .github/
 .claude/
+.codex/
+.playwright-cli/
 .codex-logs/
 .checkpoints/
 .work-artifacts/
@@ -43,6 +45,7 @@ docs/
 api-proxy/
 marketing-videos/
 outputs/
+output/
 previews/
 src/__tests__/
 src/**/__tests__/

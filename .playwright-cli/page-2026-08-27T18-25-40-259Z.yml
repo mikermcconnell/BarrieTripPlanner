@@ -1,0 +1,246 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e1228]:
+        - generic [ref=e1230]:
+          - paragraph [ref=e1231]: TripPlan
+          - heading "Bookings" [level=1] [ref=e1232]
+          - paragraph [ref=e1233]: See what needs attention and what is already handled.
+        - generic [ref=e1234]:
+          - navigation "Booking status" [ref=e1235]:
+            - button "Needs action 13 items" [pressed] [ref=e1236]:
+              - generic [ref=e1237]: Needs action
+              - generic [ref=e1238]: 13 items
+            - button "Planned 12 items" [ref=e1239]:
+              - generic [ref=e1240]: Planned
+              - generic [ref=e1241]: 12 items
+            - button "Booked 14 items" [ref=e1242]:
+              - generic [ref=e1243]: Booked
+              - generic [ref=e1244]: 14 items
+            - button "Paid 0 items" [ref=e1245]:
+              - generic [ref=e1246]: Paid
+              - generic [ref=e1247]: 0 items
+            - button "Optional 4 items" [ref=e1248]:
+              - generic [ref=e1249]: Optional
+              - generic [ref=e1250]: 4 items
+          - generic [ref=e1251]:
+            - heading "Needs action" [level=2] [ref=e1252]
+            - paragraph [ref=e1253]: Items missing booking details or confirmation.
+          - region "Needs action" [ref=e1254]:
+            - generic [ref=e1255]:
+              - article [ref=e1256]:
+                - generic [ref=e1257]: Press and hold to copy Kilmainham Gaol for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1263]:
+                  - heading "Kilmainham Gaol" [level=3] [ref=e1264]
+                  - paragraph [ref=e1265]: Sun, Sep 6 · 11:00 AM · Activity
+                  - paragraph [ref=e1266]: Kilmainham Gaol
+                - generic [ref=e1267]:
+                  - generic [ref=e1268]:
+                    - text: Status
+                    - combobox "Status" [ref=e1269]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Kilmainham Gaol" [ref=e1270]
+              - article [ref=e1275]:
+                - generic [ref=e1276]: Press and hold to copy Guinness Storehouse for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1282]:
+                  - heading "Guinness Storehouse" [level=3] [ref=e1283]
+                  - paragraph [ref=e1284]: Sun, Sep 6 · 3:00 PM · Activity
+                  - paragraph [ref=e1285]: Guinness Storehouse
+                - generic [ref=e1286]:
+                  - generic [ref=e1287]:
+                    - text: Status
+                    - combobox "Status" [ref=e1288]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Guinness Storehouse" [ref=e1289]
+              - article [ref=e1294]:
+                - generic [ref=e1295]: Press and hold to copy Giant's Causeway clifftop walk for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1301]:
+                  - heading "Giant's Causeway clifftop walk" [level=3] [ref=e1302]
+                  - paragraph [ref=e1303]: Tue, Sep 8 · 8:30 AM · Activity
+                  - paragraph [ref=e1304]: Giant's Causeway
+                - generic [ref=e1305]:
+                  - generic [ref=e1306]:
+                    - text: Status
+                    - combobox "Status" [ref=e1307]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Giant's Causeway clifftop walk" [ref=e1308]
+              - article [ref=e1313]:
+                - generic [ref=e1314]: Press and hold to copy Carrick-a-Rede Rope Bridge for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1320]:
+                  - heading "Carrick-a-Rede Rope Bridge" [level=3] [ref=e1321]
+                  - paragraph [ref=e1322]: Tue, Sep 8 · 2:30 PM · Activity
+                  - paragraph [ref=e1323]: Carrick-a-Rede Rope Bridge
+                - generic [ref=e1324]:
+                  - generic [ref=e1325]:
+                    - text: Status
+                    - combobox "Status" [ref=e1326]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Carrick-a-Rede Rope Bridge" [ref=e1327]
+              - article [ref=e1332]:
+                - generic [ref=e1333]: Press and hold to copy Lost Gardens of Heligan for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1341]:
+                  - heading "Lost Gardens of Heligan" [level=3] [ref=e1342]
+                  - paragraph [ref=e1343]: Thu, Sep 10 · 10:00 AM · Logistics
+                  - paragraph [ref=e1344]: Lost Gardens of Heligan
+                - generic [ref=e1345]:
+                  - generic [ref=e1346]:
+                    - text: Status
+                    - combobox "Status" [ref=e1347]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Lost Gardens of Heligan" [ref=e1348]
+              - article [ref=e1353]:
+                - generic [ref=e1354]: Press and hold to copy St Michael's Mount for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1360]:
+                  - heading "St Michael's Mount" [level=3] [ref=e1361]
+                  - paragraph [ref=e1362]: Fri, Sep 11 · 9:30 AM · Activity
+                  - paragraph [ref=e1363]: St Michael's Mount
+                - generic [ref=e1364]:
+                  - generic [ref=e1365]:
+                    - text: Status
+                    - combobox "Status" [ref=e1366]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for St Michael's Mount" [ref=e1367]
+              - article [ref=e1372]:
+                - generic [ref=e1373]: Press and hold to copy Minack Theatre + Porthcurno for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1379]:
+                  - heading "Minack Theatre + Porthcurno" [level=3] [ref=e1380]
+                  - paragraph [ref=e1381]: Fri, Sep 11 · 3:00 PM · Activity
+                  - paragraph [ref=e1382]: Minack Theatre
+                - generic [ref=e1383]:
+                  - generic [ref=e1384]:
+                    - text: Status
+                    - combobox "Status" [ref=e1385]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Minack Theatre + Porthcurno" [ref=e1386]
+              - article [ref=e1391]:
+                - generic [ref=e1392]: Press and hold to copy Drive Cornwall → Jurassic Coast for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1400]:
+                  - heading "Drive Cornwall → Jurassic Coast" [level=3] [ref=e1401]
+                  - paragraph [ref=e1402]: Sun, Sep 13 · 8:30 AM · Logistics
+                  - paragraph [ref=e1403]: Home in Cornwall
+                - generic [ref=e1404]:
+                  - generic [ref=e1405]:
+                    - text: Status
+                    - combobox "Status" [ref=e1406]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Drive Cornwall → Jurassic Coast" [ref=e1407]
+              - article [ref=e1412]:
+                - generic [ref=e1413]: Press and hold to copy Roman Baths & Bath Abbey for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1419]:
+                  - heading "Roman Baths & Bath Abbey" [level=3] [ref=e1420]
+                  - paragraph [ref=e1421]: Mon, Sep 14 · 9:30 AM · Activity
+                  - paragraph [ref=e1422]: Roman Baths
+                - generic [ref=e1423]:
+                  - generic [ref=e1424]:
+                    - text: Status
+                    - combobox "Status" [ref=e1425]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Roman Baths & Bath Abbey" [ref=e1426]
+              - article [ref=e1431]:
+                - generic [ref=e1432]: Press and hold to copy London day trip from Bath for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1440]:
+                  - heading "London day trip from Bath" [level=3] [ref=e1441]
+                  - paragraph [ref=e1442]: Tue, Sep 15 · 7:30 AM · Logistics
+                  - paragraph [ref=e1443]: London Paddington
+                - generic [ref=e1444]:
+                  - generic [ref=e1445]:
+                    - text: Status
+                    - combobox "Status" [ref=e1446]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for London day trip from Bath" [ref=e1447]
+              - article [ref=e1452]:
+                - generic [ref=e1453]: Press and hold to copy Castle Combe + focused Cotswolds day for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1459]:
+                  - heading "Castle Combe + focused Cotswolds day" [level=3] [ref=e1460]
+                  - paragraph [ref=e1461]: Wed, Sep 16 · 9:00 AM · Activity
+                  - paragraph [ref=e1462]: Castle Combe
+                - generic [ref=e1463]:
+                  - generic [ref=e1464]:
+                    - text: Status
+                    - combobox "Status" [ref=e1465]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Castle Combe + focused Cotswolds day" [ref=e1466]
+              - article [ref=e1471]:
+                - generic [ref=e1472]: Press and hold to copy Westonbirt Arboretum for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1478]:
+                  - heading "Westonbirt Arboretum" [level=3] [ref=e1479]
+                  - paragraph [ref=e1480]: Wed, Sep 16 · 1:30 PM · Activity
+                  - paragraph [ref=e1481]: Westonbirt Arboretum
+                - generic [ref=e1482]:
+                  - generic [ref=e1483]:
+                    - text: Status
+                    - combobox "Status" [ref=e1484]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Westonbirt Arboretum" [ref=e1485]
+              - article [ref=e1490]:
+                - generic [ref=e1491]: Press and hold to copy Travel Bath → London airport for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1499]:
+                  - heading "Travel Bath → London airport" [level=3] [ref=e1500]
+                  - paragraph [ref=e1501]: Fri, Sep 18 · 12:00 PM · Logistics
+                  - paragraph [ref=e1502]: London Heathrow Airport
+                - generic [ref=e1503]:
+                  - generic [ref=e1504]:
+                    - text: Status
+                    - combobox "Status" [ref=e1505]:
+                      - option "Needs action" [selected]
+                      - option "Planned"
+                      - option "Booked"
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Travel Bath → London airport" [ref=e1506]
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [active] [ref=e186]
+        - button [ref=e192]

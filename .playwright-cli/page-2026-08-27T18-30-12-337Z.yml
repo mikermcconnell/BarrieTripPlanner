@@ -1,0 +1,59 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e2265]:
+        - generic [ref=e2266]:
+          - generic [ref=e2267]:
+            - paragraph [ref=e2268]: TripPlan
+            - heading "Docs & Tickets" [level=1] [ref=e2269]
+            - paragraph [ref=e2270]: Find confirmations, tickets, and travel files.
+          - button "Add" [ref=e2272]
+        - generic [ref=e2277]:
+          - generic [ref=e2278]:
+            - generic [ref=e2287]:
+              - heading "25 saved" [level=2] [ref=e2288]
+              - paragraph [ref=e2289]: 1 currently shown
+            - textbox "Search documents" [ref=e2291]:
+              - /placeholder: Search documents...
+              - text: Kilmainham
+          - generic "Document categories" [ref=e2292]:
+            - button "All 25" [pressed] [ref=e2293]
+            - button "Flights 3" [ref=e2294]
+            - button "Stays 4" [ref=e2295]
+            - button "Activities 12" [ref=e2296]
+            - button "Transit 5" [ref=e2297]
+            - button "Emergency 1" [ref=e2298]
+          - generic [ref=e2443]:
+            - heading "Activities 1" [level=2] [ref=e2802]:
+              - text: Activities
+              - generic [ref=e2450]: "1"
+            - article [ref=e2488]:
+              - generic [ref=e2489]: Press and hold to copy Kilmainham Gaol timed entry for a web search. Keyboard users can press Enter or Space.
+              - button [ref=e2490]
+              - button [ref=e2496]:
+                - heading "Kilmainham Gaol timed entry" [level=3] [ref=e2497]
+                - paragraph [ref=e2498]: note · Sun, Sep 6
+              - group [ref=e2499]:
+                - generic "Actions for Kilmainham Gaol timed entry" [ref=e2500] [cursor=pointer]
+      - dialog "View Kilmainham Gaol timed entry" [ref=e2825]:
+        - generic [ref=e2826]:
+          - generic [ref=e2828]:
+            - generic [ref=e2829]:
+              - paragraph [ref=e2830]: Activities · note
+              - heading "Kilmainham Gaol timed entry" [level=2] [ref=e2831]
+              - paragraph [ref=e2832]: Sun, Sep 6
+            - button "Close" [active] [ref=e2833]
+          - paragraph [ref=e2843]: No file or link attached yet.
+          - paragraph [ref=e2844]: Books out weeks ahead.
+          - generic [ref=e2845]:
+            - button "Open" [disabled] [ref=e2846]
+            - button "Download" [disabled] [ref=e2847]
+            - button "Delete document" [ref=e2848]
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

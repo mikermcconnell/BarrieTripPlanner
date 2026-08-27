@@ -1,0 +1,262 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e1228]:
+        - generic [ref=e1230]:
+          - paragraph [ref=e1231]: TripPlan
+          - heading "Bookings" [level=1] [ref=e1232]
+          - paragraph [ref=e1233]: See what needs attention and what is already handled.
+        - generic [ref=e1234]:
+          - navigation "Booking status" [ref=e1235]:
+            - button "Needs action 13 items" [ref=e1236]:
+              - generic [ref=e1237]: Needs action
+              - generic [ref=e1238]: 13 items
+            - button "Planned 12 items" [ref=e1239]:
+              - generic [ref=e1240]: Planned
+              - generic [ref=e1241]: 12 items
+            - button "Booked 14 items" [active] [pressed] [ref=e1242]:
+              - generic [ref=e1243]: Booked
+              - generic [ref=e1244]: 14 items
+            - button "Paid 0 items" [ref=e1245]:
+              - generic [ref=e1246]: Paid
+              - generic [ref=e1247]: 0 items
+            - button "Optional 4 items" [ref=e1248]:
+              - generic [ref=e1249]: Optional
+              - generic [ref=e1250]: 4 items
+          - generic [ref=e1251]:
+            - heading "Booked" [level=2] [ref=e1511]
+            - paragraph [ref=e1253]: Reservations and tickets already secured.
+          - region "Booked" [ref=e1512]:
+            - generic [ref=e1255]:
+              - article [ref=e1513]:
+                - generic [ref=e1514]: Press and hold to copy Arrive in Dublin for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1522]:
+                  - heading "Arrive in Dublin" [level=3] [ref=e1523]
+                  - paragraph [ref=e1524]: Sat, Sep 5 · 10:00 AM · Logistics
+                  - paragraph [ref=e1525]: Dublin Airport
+                - generic [ref=e1526]:
+                  - generic [ref=e1527]:
+                    - text: Status
+                    - combobox "Status" [ref=e1528]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Arrive in Dublin" [ref=e1529]
+              - article [ref=e1534]:
+                - generic [ref=e1535]: "Press and hold to copy Check in: Dublin lodging area for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1544]:
+                  - 'heading "Check in: Dublin lodging area" [level=3] [ref=e1545]'
+                  - paragraph [ref=e1546]: Sat, Sep 5 · 3:00 PM · Logistics
+                  - paragraph [ref=e1547]: Dublin lodging area
+                - generic [ref=e1548]:
+                  - generic [ref=e1549]:
+                    - text: Status
+                    - combobox "Status" [ref=e1550]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Check in: Dublin lodging area" [ref=e1551]'
+              - article [ref=e1556]:
+                - generic [ref=e1557]: "Press and hold to copy Checkout: Dublin lodging area for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1566]:
+                  - 'heading "Checkout: Dublin lodging area" [level=3] [ref=e1567]'
+                  - paragraph [ref=e1568]: Mon, Sep 7 · 10:00 AM · Logistics
+                  - paragraph [ref=e1569]: Dublin lodging area
+                - generic [ref=e1570]:
+                  - generic [ref=e1571]:
+                    - text: Status
+                    - combobox "Status" [ref=e1572]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Checkout: Dublin lodging area" [ref=e1573]'
+              - article [ref=e1578]:
+                - generic [ref=e1579]: Press and hold to copy Pick up Sixt rental car at Dublin Airport for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1587]:
+                  - heading "Pick up Sixt rental car at Dublin Airport" [level=3] [ref=e1588]
+                  - paragraph [ref=e1589]: Mon, Sep 7 · 11:00 AM · Logistics
+                  - paragraph [ref=e1590]: Sixt Dublin Airport rental car
+                - generic [ref=e1591]:
+                  - generic [ref=e1592]:
+                    - text: Status
+                    - combobox "Status" [ref=e1593]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Pick up Sixt rental car at Dublin Airport" [ref=e1594]
+              - article [ref=e1599]:
+                - generic [ref=e1600]: "Press and hold to copy Check in: Causeway Coast lodging area for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1609]:
+                  - 'heading "Check in: Causeway Coast lodging area" [level=3] [ref=e1610]'
+                  - paragraph [ref=e1611]: Mon, Sep 7 · 4:30 PM · Logistics
+                  - paragraph [ref=e1612]: Causeway Coast lodging area
+                - generic [ref=e1613]:
+                  - generic [ref=e1614]:
+                    - text: Status
+                    - combobox "Status" [ref=e1615]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Check in: Causeway Coast lodging area" [ref=e1616]'
+              - article [ref=e1621]:
+                - generic [ref=e1622]: "Press and hold to copy Checkout: Causeway Coast lodging area for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1631]:
+                  - 'heading "Checkout: Causeway Coast lodging area" [level=3] [ref=e1632]'
+                  - paragraph [ref=e1633]: Wed, Sep 9 · 8:00 AM · Logistics
+                  - paragraph [ref=e1634]: Causeway Coast lodging area
+                - generic [ref=e1635]:
+                  - generic [ref=e1636]:
+                    - text: Status
+                    - combobox "Status" [ref=e1637]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Checkout: Causeway Coast lodging area" [ref=e1638]'
+              - article [ref=e1643]:
+                - generic [ref=e1644]: Press and hold to copy Return Sixt rental car at Dublin Airport for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1652]:
+                  - heading "Return Sixt rental car at Dublin Airport" [level=3] [ref=e1653]
+                  - paragraph [ref=e1654]: Wed, Sep 9 · 11:00 AM · Logistics
+                  - paragraph [ref=e1655]: Dublin Airport
+                - generic [ref=e1656]:
+                  - generic [ref=e1657]:
+                    - text: Status
+                    - combobox "Status" [ref=e1658]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Return Sixt rental car at Dublin Airport" [ref=e1659]
+              - article [ref=e1664]:
+                - generic [ref=e1665]: Press and hold to copy Fly Dublin → Newquay for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1673]:
+                  - heading "Fly Dublin → Newquay" [level=3] [ref=e1674]
+                  - paragraph [ref=e1675]: Wed, Sep 9 · 2:20 PM · Logistics
+                  - paragraph [ref=e1676]: Cornwall Airport Newquay
+                - generic [ref=e1677]:
+                  - generic [ref=e1678]:
+                    - text: Status
+                    - combobox "Status" [ref=e1679]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Fly Dublin → Newquay" [ref=e1680]
+              - article [ref=e1685]:
+                - generic [ref=e1686]: Press and hold to copy Pick up Europcar rental car at Newquay Airport for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1694]:
+                  - heading "Pick up Europcar rental car at Newquay Airport" [level=3] [ref=e1695]
+                  - paragraph [ref=e1696]: Wed, Sep 9 · 3:30 PM · Logistics
+                  - paragraph [ref=e1697]: Cornwall Airport Newquay
+                - generic [ref=e1698]:
+                  - generic [ref=e1699]:
+                    - text: Status
+                    - combobox "Status" [ref=e1700]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Pick up Europcar rental car at Newquay Airport" [ref=e1701]
+              - article [ref=e1706]:
+                - generic [ref=e1707]: "Press and hold to copy Check in: Home in Cornwall for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1716]:
+                  - 'heading "Check in: Home in Cornwall" [level=3] [ref=e1717]'
+                  - paragraph [ref=e1718]: Wed, Sep 9 · 6:30 PM · Logistics
+                  - paragraph [ref=e1719]: Home in Cornwall
+                - generic [ref=e1720]:
+                  - generic [ref=e1721]:
+                    - text: Status
+                    - combobox "Status" [ref=e1722]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Check in: Home in Cornwall" [ref=e1723]'
+              - article [ref=e1728]:
+                - generic [ref=e1729]: "Press and hold to copy Check in: Home in Bath for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1738]:
+                  - 'heading "Check in: Home in Bath" [level=3] [ref=e1739]'
+                  - paragraph [ref=e1740]: Sun, Sep 13 · 4:00 PM · Logistics
+                  - paragraph [ref=e1741]: Home in Bath
+                - generic [ref=e1742]:
+                  - generic [ref=e1743]:
+                    - text: Status
+                    - combobox "Status" [ref=e1744]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Check in: Home in Bath" [ref=e1745]'
+              - article [ref=e1750]:
+                - generic [ref=e1751]: "Press and hold to copy Checkout: Home in Bath for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e1760]:
+                  - 'heading "Checkout: Home in Bath" [level=3] [ref=e1761]'
+                  - paragraph [ref=e1762]: Fri, Sep 18 · 11:00 AM · Logistics
+                  - paragraph [ref=e1763]: Home in Bath
+                - generic [ref=e1764]:
+                  - generic [ref=e1765]:
+                    - text: Status
+                    - combobox "Status" [ref=e1766]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - 'button "Edit details for Checkout: Home in Bath" [ref=e1767]'
+              - article [ref=e1772]:
+                - generic [ref=e1773]: Press and hold to copy Return Europcar rental car at London Heathrow for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1781]:
+                  - heading "Return Europcar rental car at London Heathrow" [level=3] [ref=e1782]
+                  - paragraph [ref=e1783]: Fri, Sep 18 · 3:30 PM · Logistics
+                  - paragraph [ref=e1784]: London Heathrow Airport
+                - generic [ref=e1785]:
+                  - generic [ref=e1786]:
+                    - text: Status
+                    - combobox "Status" [ref=e1787]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Return Europcar rental car at London Heathrow" [ref=e1788]
+              - article [ref=e1793]:
+                - generic [ref=e1794]: Press and hold to copy Flight home from London for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e1802]:
+                  - heading "Flight home from London" [level=3] [ref=e1803]
+                  - paragraph [ref=e1804]: Fri, Sep 18 · 5:00 PM · Logistics
+                  - paragraph [ref=e1805]: London Heathrow Airport
+                - generic [ref=e1806]:
+                  - generic [ref=e1807]:
+                    - text: Status
+                    - combobox "Status" [ref=e1808]:
+                      - option "Needs action"
+                      - option "Planned"
+                      - option "Booked" [selected]
+                      - option "Paid"
+                      - option "Optional"
+                  - button "Edit details for Flight home from London" [ref=e1809]
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

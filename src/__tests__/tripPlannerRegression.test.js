@@ -1246,7 +1246,7 @@ describe('useTripPlanner regressions', () => {
     jest.clearAllMocks();
   });
 
-  test('trip preview searches request walking geometry', async () => {
+  test('trip preview searches return estimates without waiting for walking geometry', async () => {
     const planTripAutoMock = jest.fn(async () => ({ itineraries: [] }));
     const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
 
@@ -1259,8 +1259,33 @@ describe('useTripPlanner regressions', () => {
     });
 
     expect(planTripAutoMock).toHaveBeenCalledWith(expect.objectContaining({
-      enrichWalking: true,
+      enrichWalking: false,
       useCache: false,
+    }));
+
+    unmount();
+  });
+
+  test('a stalled trip search times out and clears the loading state', async () => {
+    const planTripAutoMock = jest.fn(() => new Promise(() => {}));
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock,
+      hookOptions: {
+        tripSearchTimeoutMs: 25,
+      },
+    });
+
+    await act(async () => {
+      await getHook().searchTrips(
+        { lat: 44.38, lon: -79.69 },
+        { lat: 44.39, lon: -79.68 }
+      );
+      await flushMicrotasks();
+    });
+
+    expect(getHook().state.isLoading).toBe(false);
+    expect(getHook().state.error).toEqual(expect.objectContaining({
+      code: 'TIMEOUT',
     }));
 
     unmount();

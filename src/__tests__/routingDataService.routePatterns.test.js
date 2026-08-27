@@ -6,6 +6,8 @@ jest.mock('../utils/logger', () => ({
 }));
 
 import {
+  buildRoutingData,
+  buildRoutingDataAsync,
   buildRouteStopSequenceData,
   buildRouteStopSequences,
 } from '../services/routingDataService';
@@ -89,5 +91,61 @@ describe('buildRouteStopSequences route patterns', () => {
     expect(Array.from(routePatternTripIds['8B']['0:1'])).toEqual([
       '8b-short-south-to-allandale',
     ]);
+  });
+});
+
+describe('cooperative routing data build', () => {
+  test('yields between build phases and preserves the synchronous routing package', async () => {
+    const gtfsData = {
+      stops: [
+        { id: 'A', latitude: 44.38, longitude: -79.70 },
+        { id: 'B', latitude: 44.39, longitude: -79.69 },
+      ],
+      trips: [{
+        tripId: 'trip-1',
+        routeId: '1',
+        serviceId: 'weekday',
+        directionId: 0,
+      }],
+      stopTimes: [
+        { tripId: 'trip-1', stopId: 'A', stopSequence: 1, arrivalTime: 28800, departureTime: 28800 },
+        { tripId: 'trip-1', stopId: 'B', stopSequence: 2, arrivalTime: 29400, departureTime: 29400 },
+      ],
+      calendar: [{
+        serviceId: 'weekday',
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
+        saturday: false,
+        sunday: false,
+        startDate: '20260101',
+        endDate: '20261231',
+      }],
+      calendarDates: [],
+    };
+    const stages = [];
+    const yieldControl = jest.fn(async () => {});
+
+    const cooperative = await buildRoutingDataAsync(gtfsData, {
+      onProgress: (stage) => stages.push(stage),
+      yieldControl,
+    });
+    const synchronous = buildRoutingData(gtfsData);
+
+    expect(stages).toEqual([
+      'Indexing scheduled departures',
+      'Linking route patterns',
+      'Preparing nearby transfers',
+      'Finalizing the trip planner',
+    ]);
+    expect(yieldControl).toHaveBeenCalledTimes(5);
+    expect(cooperative.stopDepartures).toEqual(synchronous.stopDepartures);
+    expect(cooperative.routeStopSequences).toEqual(synchronous.routeStopSequences);
+    expect(cooperative.stopTimesIndex).toEqual(synchronous.stopTimesIndex);
+    expect(cooperative.routePatternTripIds['1'][0]).toEqual(
+      synchronous.routePatternTripIds['1'][0]
+    );
   });
 });

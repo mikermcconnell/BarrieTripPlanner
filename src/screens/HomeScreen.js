@@ -1723,6 +1723,7 @@ const HomeScreen = ({ route }) => {
     itineraries,
     selectedIndex: selectedItineraryIndex,
     isLoading: isTripLoading,
+    searchStage: tripSearchStage,
     error: tripError,
     hasSearched: hasTripSearched,
     isTypingFrom,
@@ -3440,6 +3441,7 @@ const HomeScreen = ({ route }) => {
                 onViewDetails={viewTripDetails}
                 onStartNavigation={startNavigationDirect}
                 isLoading={isTripLoading}
+                loadingStage={tripSearchStage}
                 error={tripError}
                 hasSearched={hasTripSearched}
                 recentTrips={recentTrips}

@@ -24,6 +24,7 @@ const SET_FROM_TEXT = 'SET_FROM_TEXT';
 const SET_TO_TEXT = 'SET_TO_TEXT';
 const SWAP = 'SWAP';
 const SEARCH_START = 'SEARCH_START';
+const SEARCH_STAGE = 'SEARCH_STAGE';
 const SEARCH_SUCCESS = 'SEARCH_SUCCESS';
 const SEARCH_ERROR = 'SEARCH_ERROR';
 const SELECT_ITINERARY = 'SELECT_ITINERARY';
@@ -46,6 +47,32 @@ const CURRENT_LOCATION_START = 'CURRENT_LOCATION_START';
 const CURRENT_LOCATION_SUCCESS = 'CURRENT_LOCATION_SUCCESS';
 const CURRENT_LOCATION_ERROR = 'CURRENT_LOCATION_ERROR';
 
+const DEFAULT_TRIP_SEARCH_TIMEOUT_MS = 12000;
+
+const createTripSearchTimeoutError = () => new TripPlanningError(
+  TRIP_ERROR_CODES.TIMEOUT,
+  'Trip planning timed out'
+);
+
+const runWithTripSearchTimeout = (operation, timeoutMs, onTimeout) => {
+  const normalizedTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : DEFAULT_TRIP_SEARCH_TIMEOUT_MS;
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      onTimeout?.();
+      reject(createTripSearchTimeoutError());
+    }, normalizedTimeoutMs);
+  });
+
+  return Promise.race([
+    Promise.resolve().then(operation),
+    timeoutPromise,
+  ]).finally(() => clearTimeout(timeoutId));
+};
+
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
   isTripPlanningMode: false,
@@ -58,6 +85,7 @@ const initialState = {
   itineraries: [],
   selectedIndex: 0,
   isLoading: false,
+  searchStage: null,
   error: null,
   hasSearched: false,
   fromSuggestions: [],
@@ -77,6 +105,7 @@ const clearResults = (state) => ({
   itineraries: [],
   selectedIndex: 0,
   isLoading: false,
+  searchStage: null,
   error: null,
   hasSearched: false,
 });
@@ -115,15 +144,21 @@ function tripReducer(state, action) {
       return {
         ...state,
         isLoading: true,
+        searchStage: 'Preparing transit schedules',
         error: null,
         itineraries: [],
         hasSearched: true,
       };
+    case SEARCH_STAGE:
+      return state.isLoading
+        ? { ...state, searchStage: action.payload }
+        : state;
     case SEARCH_SUCCESS: {
       const sortedItineraries = sortRecommendedItineraryFirst(action.payload);
       return {
         ...state,
         isLoading: false,
+        searchStage: null,
         itineraries: sortedItineraries,
         selectedIndex: 0,
         error: sortedItineraries.length === 0 ? 'No routes found for this trip' : null,
@@ -133,6 +168,7 @@ function tripReducer(state, action) {
       return {
         ...state,
         isLoading: false,
+        searchStage: null,
         error: action.payload,
       };
     case SELECT_ITINERARY:
@@ -154,6 +190,7 @@ function tripReducer(state, action) {
         itineraries: [],
         selectedIndex: 0,
         isLoading: false,
+        searchStage: null,
         isLocatingFrom: false,
         error: action.payload,
         hasSearched: isTripPlanningError,
@@ -231,6 +268,7 @@ function tripReducer(state, action) {
  * @param {Object} [options.activeDetours] - Active detour feed keyed by route
  * @param {Object} [options.detourStopDetailsByRouteId] - Derived skipped/affected stop details keyed by route
  * @param {Array} [options.officialServiceImpacts] - Reviewed official baseline-change notices
+ * @param {number} [options.tripSearchTimeoutMs] - Overall search watchdog duration
  */
 export const useTripPlanner = ({
   ensureRoutingData,
@@ -243,6 +281,7 @@ export const useTripPlanner = ({
   activeDetours = {},
   detourStopDetailsByRouteId = {},
   officialServiceImpacts = [],
+  tripSearchTimeoutMs = DEFAULT_TRIP_SEARCH_TIMEOUT_MS,
 } = {}) => {
   const [state, dispatch] = useReducer(tripReducer, initialState);
   const fromDebounceRef = useRef(null);
@@ -294,49 +333,87 @@ export const useTripPlanner = ({
 
     const requestSeq = ++tripSearchSeqRef.current;
     dispatch({ type: SEARCH_START });
+    const reportSearchStage = (message) => {
+      if (requestSeq === tripSearchSeqRef.current && message) {
+        dispatch({ type: SEARCH_STAGE, payload: message });
+      }
+    };
 
     try {
-      // Lazily build routing data on first trip search
-      let routing = null;
-      if (ensureRoutingData) {
-        try {
-          routing = await ensureRoutingData();
-        } catch {
-          // Continue without local routing — OTP fallback
+      let searchExpired = false;
+      const assertSearchActive = () => {
+        if (searchExpired) {
+          throw createTripSearchTimeoutError();
         }
-      }
+      };
 
-      const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
-      const result = await planTripAuto({
-        fromLat: from.lat,
-        fromLon: from.lon,
-        toLat: to.lat,
-        toLon: to.lon,
-        date: tripTime,
-        time: tripTime,
-        arriveBy: state.timeMode === 'arriveBy',
-        routingData: routing,
-        enrichWalking: true, // Fetch walking geometry for the preview map; navigation can reuse it
-        onDemandZones,
-        stops,
-        useCache: state.timeMode !== 'now',
-      });
+      const { result, finalItineraries: delayAdjustedItineraries } = await runWithTripSearchTimeout(
+        async () => {
+          // Lazily build routing data on first trip search
+          let routing = null;
+          if (ensureRoutingData) {
+            try {
+              routing = await ensureRoutingData({ onProgress: reportSearchStage });
+              assertSearchActive();
+            } catch (error) {
+              if (searchExpired) throw error;
+              // Continue without local routing — OTP fallback
+            }
+          }
+
+          reportSearchStage('Finding route options');
+          if (ensureRoutingData) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            assertSearchActive();
+          }
+
+          const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
+          const plannedResult = await planTripAuto({
+            fromLat: from.lat,
+            fromLon: from.lon,
+            toLat: to.lat,
+            toLon: to.lon,
+            date: tripTime,
+            time: tripTime,
+            arriveBy: state.timeMode === 'arriveBy',
+            routingData: routing,
+            // Return estimates immediately. The selected itinerary is enriched before navigation.
+            enrichWalking: false,
+            onDemandZones,
+            stops,
+            useCache: state.timeMode !== 'now',
+          });
+          assertSearchActive();
+
+          let plannedItineraries = plannedResult.itineraries;
+
+          // Apply real-time delays if the platform provides the function
+          if (applyDelays && plannedItineraries.length > 0) {
+            try {
+              reportSearchStage('Adding live arrival times');
+              plannedItineraries = await applyDelays(plannedItineraries, delayOptions);
+              assertSearchActive();
+            } catch (error) {
+              if (searchExpired) throw error;
+              // Continue without delay info
+            }
+          }
+
+          return {
+            result: plannedResult,
+            finalItineraries: plannedItineraries,
+          };
+        },
+        tripSearchTimeoutMs,
+        () => {
+          searchExpired = true;
+        }
+      );
 
       if (requestSeq !== tripSearchSeqRef.current) return;
 
-      let finalItineraries = result.itineraries;
+      let finalItineraries = delayAdjustedItineraries;
       const routingDiagnostics = result.routingDiagnostics || {};
-
-      // Apply real-time delays if the platform provides the function
-      if (applyDelays && finalItineraries.length > 0) {
-        try {
-          finalItineraries = await applyDelays(finalItineraries, delayOptions);
-        } catch {
-          // Continue without delay info
-        }
-      }
-
-      if (requestSeq !== tripSearchSeqRef.current) return;
 
       finalItineraries = annotateItinerariesWithDetours(
         finalItineraries,
@@ -415,7 +492,7 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
+  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches, tripSearchTimeoutMs]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {

@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 26,
+      "versionCode": 28,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
@@ -89,7 +89,7 @@
       [
         "@sentry/react-native",
         {
-          "organization": "barrie-transit",
+          "organization": "mike-mcconnell",
           "project": "barrie-transit-planner"
         }
       ],

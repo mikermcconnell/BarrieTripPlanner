@@ -7,6 +7,9 @@ import StartupLoadingScreen, {
   STARTUP_BACKGROUND_COLOR,
   STARTUP_IMAGE_ASSETS,
 } from './src/components/StartupLoadingScreen';
+import { initializeSentry, wrapWithSentry } from './src/config/sentry';
+
+initializeSentry();
 
 const STARTUP_EXIT_FADE_MS = 140;
 
@@ -42,7 +45,7 @@ export function shouldShowStartupLoadingPreview() {
   return new URLSearchParams(window.location.search).get('preview') === 'startup-loading';
 }
 
-export default function App() {
+export function App() {
   const [Runtime, setRuntime] = useState(() => LoadedRuntime);
   const [runtimeLoadFailed, setRuntimeLoadFailed] = useState(false);
   const [startupState, setStartupState] = useState(null);
@@ -150,6 +153,8 @@ export default function App() {
     </View>
   );
 }
+
+export default wrapWithSentry(App);
 
 const styles = StyleSheet.create({
   container: {

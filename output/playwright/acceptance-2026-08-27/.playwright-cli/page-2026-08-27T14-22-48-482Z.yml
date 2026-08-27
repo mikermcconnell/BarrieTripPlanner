@@ -1,0 +1,198 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [selected] [ref=e264] [cursor=pointer]
+  - generic [ref=e300]:
+    - generic [ref=e2805]:
+      - generic [ref=e4861]:
+        - region [ref=e4862]
+        - button [ref=e4863] [cursor=pointer]:
+          - generic [ref=e2810]: "364"
+        - button [ref=e4864] [cursor=pointer]:
+          - generic [ref=e2815]: "365"
+        - button [ref=e4865] [cursor=pointer]:
+          - generic [ref=e2820]: "366"
+        - button [ref=e4866] [cursor=pointer]:
+          - generic [ref=e2825]: "367"
+        - button [ref=e4867] [cursor=pointer]:
+          - generic [ref=e2830]: "744"
+        - button [ref=e4868] [cursor=pointer]:
+          - generic [ref=e2835]: "745"
+        - button [ref=e4869] [cursor=pointer]:
+          - generic [ref=e2840]: "746"
+        - button [ref=e4870] [cursor=pointer]:
+          - generic [ref=e2845]: "747"
+        - button [ref=e4871] [cursor=pointer]:
+          - generic [ref=e2850]: "805"
+        - button [ref=e4872] [cursor=pointer]:
+          - generic [ref=e2855]: "808"
+        - button [ref=e4873] [cursor=pointer]:
+          - generic [ref=e2860]: "809"
+        - button [ref=e4874] [cursor=pointer]:
+          - generic [ref=e2865]: "812"
+        - button [ref=e4875] [cursor=pointer]:
+          - generic [ref=e2870]: "880"
+        - button [ref=e4876] [cursor=pointer]:
+          - generic [ref=e2875]: "881"
+        - button [ref=e4877] [cursor=pointer]:
+          - generic [ref=e2880]: "977"
+        - button [ref=e4878] [cursor=pointer]:
+          - generic [ref=e2885]: "978"
+        - button [ref=e4879] [cursor=pointer]:
+          - generic [ref=e2890]: "979"
+        - button [ref=e4880] [cursor=pointer]:
+          - generic [ref=e2895]: "986"
+        - button [ref=e4881] [cursor=pointer]:
+          - generic [ref=e2900]: "510"
+        - button [ref=e4882] [cursor=pointer]:
+          - generic [ref=e2905]: "336"
+        - button [ref=e4883] [cursor=pointer]:
+          - generic [ref=e2910]: "265"
+        - button [ref=e4884] [cursor=pointer]:
+          - generic [ref=e4885]: "959"
+        - button [ref=e4886] [cursor=pointer]:
+          - generic [ref=e4887]: "142"
+        - button [ref=e4888] [cursor=pointer]:
+          - generic [ref=e5997]: "100"
+        - button [ref=e4889] [cursor=pointer]:
+          - generic [ref=e6002]: "400"
+        - button [ref=e4895] [cursor=pointer]:
+          - generic [ref=e6007]: 8B
+        - img [ref=e4896]:
+          - generic: Barrie Allandale Hub
+        - img [ref=e4897]:
+          - generic: Downtown Hub
+        - img [ref=e4898]:
+          - generic: Park Place
+        - img [ref=e4899]:
+          - generic: Georgian College
+        - img [ref=e4900]:
+          - generic: Barrie South GO
+        - button [ref=e4904] [cursor=pointer]:
+          - generic [ref=e6012]: 8B
+        - button [ref=e4910] [cursor=pointer]:
+          - generic [ref=e4053]: 8A
+        - button [ref=e4911] [cursor=pointer]:
+          - generic [ref=e6017]: "400"
+        - button [ref=e4931] [cursor=pointer]:
+          - generic [ref=e6022]: 8A
+        - button [ref=e4979] [cursor=pointer]:
+          - generic [ref=e5874]: 2B
+        - button [ref=e4997] [cursor=pointer]:
+          - generic [ref=e6027]: 12A
+        - button [ref=e5217] [cursor=pointer]:
+          - generic [ref=e5884]: 8B
+        - button [ref=e5235] [cursor=pointer]:
+          - generic [ref=e5889]: 7A
+        - button [ref=e5241] [cursor=pointer]:
+          - generic [ref=e6032]: 7B
+        - button [ref=e5247] [cursor=pointer]:
+          - generic [ref=e5899]: 2B
+        - button [ref=e5253] [cursor=pointer]:
+          - generic [ref=e6037]: "11"
+        - button [ref=e5265] [cursor=pointer]:
+          - generic [ref=e5829]: "101"
+        - button [ref=e5271] [cursor=pointer]:
+          - generic [ref=e5909]: 8B
+        - button [ref=e5295] [cursor=pointer]:
+          - generic [ref=e6042]: "101"
+        - button [ref=e5919] [cursor=pointer]:
+          - generic [ref=e5920]: 8A
+        - button [ref=e5925] [cursor=pointer]:
+          - generic [ref=e6047]: 8A
+        - button [ref=e5931] [cursor=pointer]:
+          - generic [ref=e6052]: "10"
+        - button [ref=e5937] [cursor=pointer]:
+          - generic [ref=e5938]: 12A
+        - button [ref=e5943] [cursor=pointer]:
+          - generic [ref=e5944]: 12B
+        - button [ref=e5949] [cursor=pointer]:
+          - generic [ref=e6057]: "100"
+        - button [ref=e5955] [cursor=pointer]:
+          - generic [ref=e6062]: 2A
+        - button [ref=e5961] [cursor=pointer]:
+          - generic [ref=e6067]: 8A
+        - button [ref=e5967] [cursor=pointer]:
+          - generic [ref=e6072]: "10"
+        - button [ref=e5973] [cursor=pointer]:
+          - generic [ref=e6077]: 7A
+        - button [ref=e5979] [cursor=pointer]:
+          - generic [ref=e5980]: 15B
+        - button [ref=e5985] [cursor=pointer]:
+          - generic [ref=e6082]: 7B
+        - button [ref=e5991] [cursor=pointer]:
+          - generic [ref=e6087]: "11"
+        - group [ref=e3124]:
+          - generic [ref=e5051] [cursor=pointer]
+          - generic [ref=e3126]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link [ref=e5052] [cursor=pointer]:
+              - /url: https://maplibre.org/
+              - text: MapLibre
+      - generic [ref=e3130]:
+        - textbox [ref=e5053]:
+          - /placeholder: Where to?
+        - generic [ref=e3135]: LIVE
+      - button [ref=e5055] [cursor=pointer]:
+        - generic [ref=e3175]: "Active detours: 2 locations"
+        - generic [ref=e3177]:
+          - generic [ref=e3178]: 12B
+          - generic [ref=e3180]: 8B
+        - generic [ref=e3182]: ▼
+      - button [ref=e5056] [cursor=pointer]:
+        - generic [ref=e3184]: i
+        - generic [ref=e3186]:
+          - generic [ref=e3187]: 4 official detour notices
+          - generic [ref=e3188]: Mapleview Detour and Shuttle
+          - generic [ref=e3189]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e3190]:
+          - generic [ref=e3191]: 12B
+          - generic [ref=e3193]: "15"
+        - button [ref=e5057]:
+          - generic [ref=e3196]: ×
+      - generic [ref=e3197] [cursor=pointer]:
+        - button [ref=e5058]:
+          - generic [ref=e3203]:
+            - generic [ref=e3204]: LIVE MAP FEATURE
+            - generic [ref=e3205]: Auto Detour Detector
+            - generic [ref=e3206]: See how it works
+          - generic [ref=e3207]: ›
+        - button [ref=e5059]:
+          - generic [ref=e3209]: −
+      - button [ref=e5060] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button [ref=e5061] [cursor=pointer]:
+        - generic [ref=e3259]: Map options
+        - generic [ref=e3260]: "2"
+    - generic [ref=e6095]:
+      - generic [ref=e6096]:
+        - generic [ref=e6097] [cursor=pointer]: ←
+        - generic [ref=e6099]: Trip History
+        - generic [ref=e6100] [cursor=pointer]: Clear
+      - generic [ref=e6181]:
+        - generic [ref=e6182]: Downtown Hub → Georgian College
+        - generic [ref=e6183]: 18 min • 0 transfers • 389m walk
+        - generic [ref=e6184]: Aug 27, 10:15 AM
+        - generic [ref=e6185]:
+          - generic [ref=e6186] [cursor=pointer]: Re-plan
+          - generic [ref=e6188] [cursor=pointer]: Save trip

@@ -77,6 +77,8 @@ Supporting features:
    - `LOCATIONIQ_API_KEY` (for local `proxy-server.js` / `api-proxy`)
    - `EXPO_PUBLIC_FIREBASE_*`
    - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` for native Google sign-in
+   - `EXPO_PUBLIC_SENTRY_DSN` for production crash/error delivery
+   - `SENTRY_AUTH_TOKEN` as a sensitive EAS production variable for readable source maps
    - Optional fallback OTP backend: `EXPO_PUBLIC_OTP_URL`
    - Keep `EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=false` for production/public builds
    - Keep `EXPO_PUBLIC_API_PROXY_TOKEN` empty for production/public builds
@@ -189,6 +191,10 @@ Run web with the local proxy:
 ```bash
 npm run web:dev
 ```
+
+Web development keeps GTFS traffic on the local CORS proxy and uses the
+configured authenticated API proxy for LocationIQ geocoding. The LocationIQ
+key remains server-side; do not add it as an `EXPO_PUBLIC_*` variable.
 
 If you use a deployed proxy instead, set:
 - `EXPO_PUBLIC_CORS_PROXY_URL`

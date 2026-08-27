@@ -1,0 +1,49 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - generic [ref=f3e6]:
+        - generic [ref=f3e7]: Loading
+        - progressbar [ref=f3e8]
+      - main [ref=f3e15]:
+        - generic [ref=f3e16]:
+          - generic [ref=f3e17]: Sign in with Google
+          - generic [ref=f3e23]:
+            - heading "Sign in" [level=1] [ref=f3e24]
+            - generic [ref=f3e26]:
+              - text: to continue to
+              - button "sentry.io" [ref=f3e27] [cursor=pointer]
+        - generic [ref=f3e30]:
+          - generic [ref=f3e35]:
+            - generic [ref=f3e40]:
+              - textbox "Email or phone" [active] [ref=f3e41]
+              - generic: Email or phone
+            - button "Forgot email?" [ref=f3e45] [cursor=pointer]
+          - generic [ref=f3e48]:
+            - text: Before using this app, you can review sentry.io’s
+            - link "Privacy Policy" [ref=f3e49] [cursor=pointer]:
+              - /url: https://sentry.io/privacy/
+            - text: and
+            - link "Terms of Service" [ref=f3e50] [cursor=pointer]:
+              - /url: https://sentry.io/terms/
+            - text: .
+        - generic [ref=f3e52]:
+          - button "Next" [ref=f3e56]
+          - button "Create account" [ref=f3e64]
+    - contentinfo [ref=f3e71]:
+      - combobox "Change language English (United States)" [ref=f3e75] [cursor=pointer]:
+        - generic: English (United States)
+      - list [ref=f3e77]:
+        - listitem [ref=f3e78]:
+          - link "Open Google Account Help Center (external, opens in a new window)" [ref=f3e79] [cursor=pointer]:
+            - /url: https://support.google.com/accounts?hl=en-US&p=account_iph
+            - text: Help
+        - listitem [ref=f3e80]:
+          - link "Privacy Policy (external, opens in a new window)" [ref=f3e81] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US&privacy=true
+            - text: Privacy
+        - listitem [ref=f3e82]:
+          - link "Google Terms of Service (external, opens in a new window)" [ref=f3e83] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US
+            - text: Terms
+  - iframe [ref=f3e84]:
+    

@@ -1,0 +1,456 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [selected] [ref=e264] [cursor=pointer]
+  - generic [ref=e300]:
+    - generic [ref=e2805]:
+      - generic [ref=e4861]:
+        - region [ref=e4862]
+        - button [ref=e4863] [cursor=pointer]:
+          - generic [ref=e2810]: "364"
+        - button [ref=e4864] [cursor=pointer]:
+          - generic [ref=e2815]: "365"
+        - button [ref=e4865] [cursor=pointer]:
+          - generic [ref=e2820]: "366"
+        - button [ref=e4866] [cursor=pointer]:
+          - generic [ref=e2825]: "367"
+        - button [ref=e4867] [cursor=pointer]:
+          - generic [ref=e2830]: "744"
+        - button [ref=e4868] [cursor=pointer]:
+          - generic [ref=e2835]: "745"
+        - button [ref=e4869] [cursor=pointer]:
+          - generic [ref=e2840]: "746"
+        - button [ref=e4870] [cursor=pointer]:
+          - generic [ref=e2845]: "747"
+        - button [ref=e4871] [cursor=pointer]:
+          - generic [ref=e2850]: "805"
+        - button [ref=e4872] [cursor=pointer]:
+          - generic [ref=e2855]: "808"
+        - button [ref=e4873] [cursor=pointer]:
+          - generic [ref=e2860]: "809"
+        - button [ref=e4874] [cursor=pointer]:
+          - generic [ref=e2865]: "812"
+        - button [ref=e4875] [cursor=pointer]:
+          - generic [ref=e2870]: "880"
+        - button [ref=e4876] [cursor=pointer]:
+          - generic [ref=e2875]: "881"
+        - button [ref=e4877] [cursor=pointer]:
+          - generic [ref=e2880]: "977"
+        - button [ref=e4878] [cursor=pointer]:
+          - generic [ref=e2885]: "978"
+        - button [ref=e4879] [cursor=pointer]:
+          - generic [ref=e2890]: "979"
+        - button [ref=e4880] [cursor=pointer]:
+          - generic [ref=e2895]: "986"
+        - button [ref=e4881] [cursor=pointer]:
+          - generic [ref=e2900]: "510"
+        - button [ref=e4882] [cursor=pointer]:
+          - generic [ref=e2905]: "336"
+        - button [ref=e4883] [cursor=pointer]:
+          - generic [ref=e2910]: "265"
+        - button [ref=e4884] [cursor=pointer]:
+          - generic [ref=e4885]: "959"
+        - button [ref=e4886] [cursor=pointer]:
+          - generic [ref=e4887]: "142"
+        - button [ref=e4888] [cursor=pointer]:
+          - generic [ref=e5157]: "100"
+        - button [ref=e4889] [cursor=pointer]:
+          - generic [ref=e5162]: "400"
+        - button [ref=e4895] [cursor=pointer]:
+          - generic [ref=e3033]: 8B
+        - img [ref=e4896]:
+          - generic: Barrie Allandale Hub
+        - img [ref=e4897]:
+          - generic: Downtown Hub
+        - img [ref=e4898]:
+          - generic: Park Place
+        - img [ref=e4899]:
+          - generic: Georgian College
+        - img [ref=e4900]:
+          - generic: Barrie South GO
+        - button [ref=e4904] [cursor=pointer]:
+          - generic [ref=e5167]: 8B
+        - button [ref=e4910] [cursor=pointer]:
+          - generic [ref=e4053]: 8A
+        - button [ref=e4911] [cursor=pointer]:
+          - generic [ref=e4125]: "400"
+        - button [ref=e4912] [cursor=pointer]:
+          - generic [ref=e5172]: "100"
+        - button [ref=e4918] [cursor=pointer]:
+          - generic [ref=e4538]: 8A
+        - button [ref=e4931] [cursor=pointer]:
+          - generic [ref=e5177]: 8A
+        - button [ref=e4979] [cursor=pointer]:
+          - generic [ref=e5182]: 2B
+        - button [ref=e4997] [cursor=pointer]:
+          - generic [ref=e5187]: 12A
+        - button [ref=e5003] [cursor=pointer]:
+          - generic [ref=e5192]: 8A
+        - button [ref=e5021] [cursor=pointer]:
+          - generic [ref=e5197]: 12A
+        - button [ref=e5033] [cursor=pointer]:
+          - generic [ref=e5202]: 2A
+        - button [ref=e5039] [cursor=pointer]:
+          - generic [ref=e5207]: "10"
+        - button [ref=e5045] [cursor=pointer]:
+          - generic [ref=e5212]: 7B
+        - button [ref=e5217] [cursor=pointer]:
+          - generic [ref=e5218]: 8B
+        - button [ref=e5223] [cursor=pointer]:
+          - generic [ref=e5224]: 8A
+        - button [ref=e5229] [cursor=pointer]:
+          - generic [ref=e5230]: "10"
+        - button [ref=e5235] [cursor=pointer]:
+          - generic [ref=e5236]: 7A
+        - button [ref=e5241] [cursor=pointer]:
+          - generic [ref=e5242]: 7B
+        - button [ref=e5247] [cursor=pointer]:
+          - generic [ref=e5248]: 2B
+        - button [ref=e5253] [cursor=pointer]:
+          - generic [ref=e5254]: "11"
+        - button [ref=e5259] [cursor=pointer]:
+          - generic [ref=e5260]: 12B
+        - button [ref=e5265] [cursor=pointer]:
+          - generic [ref=e5266]: "101"
+        - button [ref=e5271] [cursor=pointer]:
+          - generic [ref=e5272]: 8B
+        - button [ref=e5277] [cursor=pointer]:
+          - generic [ref=e5278]: 7A
+        - button [ref=e5283] [cursor=pointer]:
+          - generic [ref=e5284]: 15B
+        - button [ref=e5289] [cursor=pointer]:
+          - generic [ref=e5290]: "11"
+        - button [ref=e5295] [cursor=pointer]:
+          - generic [ref=e5296]: "101"
+        - group [ref=e3124]:
+          - generic [ref=e5051] [cursor=pointer]
+          - generic [ref=e3126]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link [ref=e5052] [cursor=pointer]:
+              - /url: https://maplibre.org/
+              - text: MapLibre
+      - generic [ref=e3130]:
+        - textbox [ref=e5053]:
+          - /placeholder: Where to?
+        - generic [ref=e3135]: LIVE
+      - button [ref=e5055] [cursor=pointer]:
+        - generic [ref=e3175]: "Active detours: 2 locations"
+        - generic [ref=e3177]:
+          - generic [ref=e3178]: 12B
+          - generic [ref=e3180]: 8B
+        - generic [ref=e3182]: ▼
+      - button [ref=e5056] [cursor=pointer]:
+        - generic [ref=e3184]: i
+        - generic [ref=e3186]:
+          - generic [ref=e3187]: 4 official detour notices
+          - generic [ref=e3188]: Mapleview Detour and Shuttle
+          - generic [ref=e3189]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e3190]:
+          - generic [ref=e3191]: 12B
+          - generic [ref=e3193]: "15"
+        - button [ref=e5057]:
+          - generic [ref=e3196]: ×
+      - generic [ref=e3197] [cursor=pointer]:
+        - button [ref=e5058]:
+          - generic [ref=e3203]:
+            - generic [ref=e3204]: LIVE MAP FEATURE
+            - generic [ref=e3205]: Auto Detour Detector
+            - generic [ref=e3206]: See how it works
+          - generic [ref=e3207]: ›
+        - button [ref=e5059]:
+          - generic [ref=e3209]: −
+      - button [ref=e5060] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button [ref=e5061] [cursor=pointer]:
+        - generic [ref=e3259]: Map options
+        - generic [ref=e3260]: "2"
+    - generic [ref=e5304]:
+      - generic [ref=e5305]:
+        - generic [ref=e5306] [cursor=pointer]: ←
+        - generic [ref=e5308]: Service Alerts
+      - generic [ref=e5310]:
+        - generic [ref=e5311]:
+          - generic [ref=e5312]: Service impacts
+          - generic [ref=e5313]: Detours appear first. Upcoming notices stay here until they begin.
+        - generic [ref=e5314]:
+          - generic [ref=e5315]:
+            - generic [ref=e5316]: Active detours
+            - generic [ref=e5317]: Route-level changes
+          - generic [ref=e5318] [cursor=pointer]:
+            - generic [ref=e5319]:
+              - generic [ref=e5320]:
+                - generic [ref=e5321]: Mapleview Detour and Shuttle
+                - generic [ref=e5322]: Planned detour notice
+              - generic [ref=e5323]: Planned
+            - generic [ref=e5325]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+            - generic [ref=e5326]: Route 12B
+          - generic [ref=e5329] [cursor=pointer]:
+            - generic [ref=e5330]:
+              - generic [ref=e5331]:
+                - generic [ref=e5332]: Shanty Bay Detour - Route 8B-SB
+                - generic [ref=e5333]: Barrie Transit notice
+              - generic [ref=e5334]: Active
+            - generic [ref=e5336]: Route 8B-SB is on detour from July 6 to September 4 due to a road closure on Shanty Bay.
+            - generic [ref=e5337]: Route 8B
+          - generic [ref=e5340] [cursor=pointer]:
+            - generic [ref=e5341]:
+              - generic [ref=e5342]:
+                - generic [ref=e5343]: Mapleview Detour and Shuttle
+                - generic [ref=e5344]: Barrie Transit notice
+              - generic [ref=e5345]: Active
+            - generic [ref=e5347]: Route 12 will be on detour due to a full closure of Mapleview Drive between Chef Lane and Royal Jubilee Drive, beginning June 8 until construction is complete. To help maintain connectivity, a free shuttle service will operate on both sides of the closure, providing access to Barrie South GO Station and Maple Ridge Secondary School.
+            - generic [ref=e5348]:
+              - generic [ref=e5349]: Route 12A
+              - generic [ref=e5351]: Route 12B
+          - generic [ref=e5353] [cursor=pointer]:
+            - generic [ref=e5354]:
+              - generic [ref=e5355]:
+                - generic [ref=e5356]: Farmer's Market Detour - Route 10 and 11 (Saturdays Only)
+                - generic [ref=e5357]: Barrie Transit notice
+              - generic [ref=e5358]: Active
+            - generic [ref=e5360]: Route 10 & 11 will be on detour on Saturdays until 2 pm only from May 2nd to October, due to a full road closure of Mulcaster St between Collier St and Worsley St for the Farmer's Market.
+            - generic [ref=e5361]:
+              - generic [ref=e5362]: Route 10
+              - generic [ref=e5364]: Route 11
+          - generic [ref=e5366] [cursor=pointer]:
+            - generic [ref=e5367]:
+              - generic [ref=e5368]:
+                - generic [ref=e5369]: Route 12B
+                - generic [ref=e5370]: Likely detour path
+              - generic [ref=e5371]: Active
+            - generic [ref=e5373]: Likely using Bayfield Street
+          - generic [ref=e5374] [cursor=pointer]:
+            - generic [ref=e5375]:
+              - generic [ref=e5376]:
+                - generic [ref=e5377]: Route 8B
+                - generic [ref=e5378]: Likely detour path
+              - generic [ref=e5379]: Active
+            - generic [ref=e5381]: Likely using Blake Street
+        - generic [ref=e5382]:
+          - generic [ref=e5383]:
+            - generic [ref=e5384]: Upcoming detours
+            - generic [ref=e5385]: Future route-level notices
+          - generic [ref=e5386] [cursor=pointer]:
+            - generic [ref=e5387]:
+              - generic [ref=e5388]:
+                - generic [ref=e5389]: Georgian College Detour - Routes 8, 100, 101 & 400
+                - generic [ref=e5390]: Starts Sep 2, 2026
+              - generic [ref=e5391]: Upcoming
+            - generic [ref=e5393]: Routes 8, 100, 101 & 400 will be on detour at Georgian College on September 2 from 8 am to 11 am due to an event.
+            - generic [ref=e5394]:
+              - generic [ref=e5395]: Route 8A
+              - generic [ref=e5397]: Route 8B
+              - generic [ref=e5399]: Route 100
+              - generic [ref=e5401]: Route 101
+              - generic [ref=e5403]: Route 400
+        - generic [ref=e5405]:
+          - generic [ref=e5406]:
+            - generic [ref=e5407]: Active stop closures
+            - generic [ref=e5408]: Map marker when matched to a stop
+          - generic [ref=e5409] [cursor=pointer]:
+            - generic [ref=e5410]:
+              - generic [ref=e5411]:
+                - generic [ref=e5412]: Stop 364
+                - generic [ref=e5413]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5414]: Active
+            - generic [ref=e5416]: Stop 364 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5417]: Route TOD-D
+          - generic [ref=e5420] [cursor=pointer]:
+            - generic [ref=e5421]:
+              - generic [ref=e5422]:
+                - generic [ref=e5423]: Stop 365
+                - generic [ref=e5424]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5425]: Active
+            - generic [ref=e5427]: Stop 365 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5428]: Route TOD-D
+          - generic [ref=e5431] [cursor=pointer]:
+            - generic [ref=e5432]:
+              - generic [ref=e5433]:
+                - generic [ref=e5434]: Stop 366
+                - generic [ref=e5435]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5436]: Active
+            - generic [ref=e5438]: Stop 366 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5439]: Route TOD-D
+          - generic [ref=e5442] [cursor=pointer]:
+            - generic [ref=e5443]:
+              - generic [ref=e5444]:
+                - generic [ref=e5445]: Stop 367
+                - generic [ref=e5446]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5447]: Active
+            - generic [ref=e5449]: Stop 367 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5450]: Route TOD-D
+          - generic [ref=e5453] [cursor=pointer]:
+            - generic [ref=e5454]:
+              - generic [ref=e5455]:
+                - generic [ref=e5456]: Stop 744
+                - generic [ref=e5457]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5458]: Active
+            - generic [ref=e5460]: Stop 744 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5461]: Route TOD-D
+          - generic [ref=e5464] [cursor=pointer]:
+            - generic [ref=e5465]:
+              - generic [ref=e5466]:
+                - generic [ref=e5467]: Stop 745
+                - generic [ref=e5468]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5469]: Active
+            - generic [ref=e5471]: Stop 745 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5472]: Route TOD-D
+          - generic [ref=e5475] [cursor=pointer]:
+            - generic [ref=e5476]:
+              - generic [ref=e5477]:
+                - generic [ref=e5478]: Stop 746
+                - generic [ref=e5479]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5480]: Active
+            - generic [ref=e5482]: Stop 746 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5483]: Route TOD-D
+          - generic [ref=e5486] [cursor=pointer]:
+            - generic [ref=e5487]:
+              - generic [ref=e5488]:
+                - generic [ref=e5489]: Stop 747
+                - generic [ref=e5490]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5491]: Active
+            - generic [ref=e5493]: Stop 747 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5494]: Route TOD-D
+          - generic [ref=e5497] [cursor=pointer]:
+            - generic [ref=e5498]:
+              - generic [ref=e5499]:
+                - generic [ref=e5500]: Stop 805
+                - generic [ref=e5501]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5502]: Active
+            - generic [ref=e5504]: Stop 805 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5505]: Route TOD-D
+          - generic [ref=e5508] [cursor=pointer]:
+            - generic [ref=e5509]:
+              - generic [ref=e5510]:
+                - generic [ref=e5511]: Stop 808
+                - generic [ref=e5512]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5513]: Active
+            - generic [ref=e5515]: Stop 808 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5516]: Route TOD-D
+          - generic [ref=e5519] [cursor=pointer]:
+            - generic [ref=e5520]:
+              - generic [ref=e5521]:
+                - generic [ref=e5522]: Stop 809
+                - generic [ref=e5523]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5524]: Active
+            - generic [ref=e5526]: Stop 809 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5527]: Route TOD-D
+          - generic [ref=e5530] [cursor=pointer]:
+            - generic [ref=e5531]:
+              - generic [ref=e5532]:
+                - generic [ref=e5533]: Stop 812
+                - generic [ref=e5534]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5535]: Active
+            - generic [ref=e5537]: Stop 812 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5538]: Route TOD-D
+          - generic [ref=e5541] [cursor=pointer]:
+            - generic [ref=e5542]:
+              - generic [ref=e5543]:
+                - generic [ref=e5544]: Stop 880
+                - generic [ref=e5545]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5546]: Active
+            - generic [ref=e5548]: Stop 880 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5549]: Route TOD-D
+          - generic [ref=e5552] [cursor=pointer]:
+            - generic [ref=e5553]:
+              - generic [ref=e5554]:
+                - generic [ref=e5555]: Stop 881
+                - generic [ref=e5556]: Huronia Watermain Transit ON Demand Zone D Impacts
+              - generic [ref=e5557]: Active
+            - generic [ref=e5559]: Stop 881 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5560]: Route TOD-D
+          - generic [ref=e5563] [cursor=pointer]:
+            - generic [ref=e5564]:
+              - generic [ref=e5565]:
+                - generic [ref=e5566]: Stop 977
+                - generic [ref=e5567]: Huronia/Lockhart Full Closure - Transit ON Demand Zone F
+              - generic [ref=e5568]: Active
+            - generic [ref=e5570]: Stop 977 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+          - generic [ref=e5571] [cursor=pointer]:
+            - generic [ref=e5572]:
+              - generic [ref=e5573]:
+                - generic [ref=e5574]: Stop 978
+                - generic [ref=e5575]: Huronia/Lockhart Full Closure - Transit ON Demand Zone F
+              - generic [ref=e5576]: Active
+            - generic [ref=e5578]: Stop 978 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+          - generic [ref=e5579] [cursor=pointer]:
+            - generic [ref=e5580]:
+              - generic [ref=e5581]:
+                - generic [ref=e5582]: Stop 979
+                - generic [ref=e5583]: Huronia/Lockhart Full Closure - Transit ON Demand Zone F
+              - generic [ref=e5584]: Active
+            - generic [ref=e5586]: Stop 979 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+          - generic [ref=e5587] [cursor=pointer]:
+            - generic [ref=e5588]:
+              - generic [ref=e5589]:
+                - generic [ref=e5590]: Stop 986
+                - generic [ref=e5591]: Huronia/Lockhart Full Closure - Transit ON Demand Zone F
+              - generic [ref=e5592]: Active
+            - generic [ref=e5594]: Stop 986 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+          - generic [ref=e5595] [cursor=pointer]:
+            - generic [ref=e5596]:
+              - generic [ref=e5597]:
+                - generic [ref=e5598]: Stop 510 · Mapleview at Chef
+                - generic [ref=e5599]: Stop 510 Closure Notice - Route 15 (Mapleview Shuttle)
+              - generic [ref=e5600]: Active
+            - generic [ref=e5602]: Mapleview at Chef is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5603]:
+              - generic [ref=e5604]: Route 15A
+              - generic [ref=e5606]: Route 15B
+          - generic [ref=e5608] [cursor=pointer]:
+            - generic [ref=e5609]:
+              - generic [ref=e5610]:
+                - generic [ref=e5611]: Stop 336
+                - generic [ref=e5612]: Stop 336 Closure Notice - Transit ON Demand Zone A
+              - generic [ref=e5613]: Active
+            - generic [ref=e5615]: Stop 336 is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5616]: Route TOD-A
+          - generic [ref=e5619] [cursor=pointer]:
+            - generic [ref=e5620]:
+              - generic [ref=e5621]:
+                - generic [ref=e5622]: Stop 265 · Dunlop at Anne
+                - generic [ref=e5623]: Stop 265 Closure - Route 2B
+              - generic [ref=e5624]: Active
+            - generic [ref=e5626]: Dunlop at Anne is reported closed or scheduled to close. Check the linked Barrie Transit news before travelling.
+            - generic [ref=e5627]: Route 2B
+        - generic [ref=e5630]:
+          - generic [ref=e5631]:
+            - generic [ref=e5632]: Upcoming stop closures
+            - generic [ref=e5633]: Not shown on the map yet
+          - generic [ref=e5634]: No upcoming stop closures found.
+        - generic [ref=e5635]:
+          - generic [ref=e5636]:
+            - generic [ref=e5637]: Latest notices
+            - generic [ref=e5638]: 2 items
+          - generic [ref=e5640] [cursor=pointer]:
+            - generic [ref=e5641]:
+              - generic [ref=e5642]: Labour Day Transit Service - September 7
+              - generic [ref=e5643]: 2026-08-25T12:43:18.3280149+00:00
+            - generic [ref=e5644]: ▶
+          - generic [ref=e5645] [cursor=pointer]:
+            - generic [ref=e5646]:
+              - generic [ref=e5647]:
+                - generic [ref=e5648]: Troubadour Music Festival Shuttle - Sept 12
+                - generic [ref=e5649]: 2026-08-13T14:56:28.577+00:00
+              - generic [ref=e5650]: ▶
+            - generic [ref=e5651]: Route 50
