@@ -43,7 +43,12 @@ import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useTripPreviewViewport } from '../hooks/useTripPreviewViewport';
 import { useDismissedOfficialImpacts } from '../hooks/useDismissedOfficialImpacts';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { fetchTripUpdates } from '../services/arrivalService';
+import {
+  fetchTripUpdates,
+  getTripUpdateEntities,
+  isFreshTripUpdateFeed,
+  isTripUpdateEntityFresh,
+} from '../services/arrivalService';
 import { getVehicleRouteDirectionLabel, getVehicleRouteLabel, resolveVehicleRouteLabel } from '../utils/routeLabel';
 import { projectPointToPolyline } from '../utils/geometryUtils';
 import { buildVehicleSnapShapeCandidates, resolveVehicleSnapPath } from '../utils/vehicleSnapPath';
@@ -153,6 +158,12 @@ import { trackEvent } from '../services/analyticsService';
 import { shouldShowMainMapFloatingControls } from '../utils/homeChromeVisibility';
 import { getHomeNoticeVisibility } from '../utils/homeNoticePriority';
 import { findVehicleById } from '../utils/homeVehicleFeatures';
+import { computeSafeMapBounds, normalizeMapCoordinate } from '../utils/mapCoordinates';
+import {
+  isTripMapPreviewFeatureEnabled,
+  sanitizeTripPreviewVisualization,
+} from '../utils/tripPreviewMapSafety';
+import { applyItineraryAvailabilityPolicy } from '../utils/itineraryAvailabilityPolicy';
 import { getHolidayServiceInfo, getUpcomingHolidayServiceInfo } from '../utils/holidayService';
 import {
   buildSavedPlacePayload,
@@ -178,6 +189,10 @@ const SHOW_DEV_MAP_CONTROLS =
   typeof __DEV__ !== 'undefined' &&
   __DEV__ &&
   process.env.EXPO_PUBLIC_SHOW_DEV_MAP_CONTROLS === 'true';
+const ENABLE_ANDROID_TRIP_MAP_PREVIEW = isTripMapPreviewFeatureEnabled(
+  Platform.OS,
+  process.env.EXPO_PUBLIC_ENABLE_ANDROID_TRIP_MAP_PREVIEW
+);
 const LOCATION_CENTER_ERROR_MESSAGE = 'We could not get your location. Check that location services are on and that Barrie Transit has location permission.';
 
 const MAP_LAYER_INDEX = {
@@ -229,21 +244,6 @@ const getVehicleDirectionBearing = (vehicle, snapPath) => {
   }
 
   return normalizeBearing(projection.bearing);
-};
-
-// Helper: compute bounds from coordinates array [{latitude, longitude}]
-const computeBounds = (coords) => {
-  let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-  coords.forEach(c => {
-    minLat = Math.min(minLat, c.latitude);
-    maxLat = Math.max(maxLat, c.latitude);
-    minLng = Math.min(minLng, c.longitude);
-    maxLng = Math.max(maxLng, c.longitude);
-  });
-  return {
-    ne: [maxLng, maxLat],
-    sw: [minLng, minLat],
-  };
 };
 
 const hasMeaningfulRegionChange = (prevRegion, nextRegion) => {
@@ -1116,6 +1116,7 @@ const HomeMapView = React.memo(({
   handleRegionChange,
   handleMapFrameStart,
   handleMapFrameEnd,
+  handleMapReady,
   isTripPreviewMode,
   displayedShapes,
   isRouteSelected,
@@ -1177,6 +1178,7 @@ const HomeMapView = React.memo(({
     onRegionDidChange={handleRegionChange}
     onWillStartRenderingFrame={handleMapFrameStart}
     onDidFinishRenderingFrame={handleMapFrameEnd}
+    onDidFinishLoadingMap={handleMapReady}
   >
     <MapLibreGL.Camera
       ref={cameraRef}
@@ -1280,20 +1282,22 @@ const HomeMapView = React.memo(({
       />
     ))}
 
-    <HomeMapTripPreviewLayer
-      tripRouteCoordinates={tripRouteCoordinates}
-      tripEndpointMarkers={tripEndpointMarkers}
-      busApproachLines={busApproachLines}
-      intermediateStopMarkers={intermediateStopMarkers}
-      tripMarkers={tripMarkers}
-      boardingAlightingMarkers={boardingAlightingMarkers}
-      transferMarkers={transferMarkers}
-      isTripPreviewMode={isTripPreviewMode}
-      tripVehicles={tripVehicles}
-      getRouteColor={getRouteColor}
-      getRouteLabel={getRouteLabel}
-      getVehicleSnapPath={getVehicleSnapPath}
-    />
+    {isTripPreviewMode && (
+      <HomeMapTripPreviewLayer
+        tripRouteCoordinates={tripRouteCoordinates}
+        tripEndpointMarkers={tripEndpointMarkers}
+        busApproachLines={busApproachLines}
+        intermediateStopMarkers={intermediateStopMarkers}
+        tripMarkers={tripMarkers}
+        boardingAlightingMarkers={boardingAlightingMarkers}
+        transferMarkers={transferMarkers}
+        isTripPreviewMode={isTripPreviewMode}
+        tripVehicles={tripVehicles}
+        getRouteColor={getRouteColor}
+        getRouteLabel={getRouteLabel}
+        getVehicleSnapPath={getVehicleSnapPath}
+      />
+    )}
 
     {mapTapLocation && (
       <MapLibreGL.PointAnnotation
@@ -1354,6 +1358,7 @@ const HomeMapView = React.memo(({
   prev.handleRegionChange === next.handleRegionChange &&
   prev.handleMapFrameStart === next.handleMapFrameStart &&
   prev.handleMapFrameEnd === next.handleMapFrameEnd &&
+  prev.handleMapReady === next.handleMapReady &&
   prev.isTripPreviewMode === next.isTripPreviewMode &&
   prev.displayedShapes === next.displayedShapes &&
   prev.isRouteSelected === next.isRouteSelected &&
@@ -1405,6 +1410,7 @@ const HomeScreen = ({ route }) => {
   const firstRenderStartedAtRef = useRef(getPerfNow());
   const mapRef = useRef(null);
   const cameraRef = useRef(null);
+  const mapNativeReadyRef = useRef(false);
   const pendingLocationCenterRef = useRef(0);
   const locationCenterReleaseTimerRef = useRef(null);
   const mapGestureReleaseTimerRef = useRef(null);
@@ -1493,26 +1499,48 @@ const HomeScreen = ({ route }) => {
   // Wrap mapRef to provide animateToRegion compatibility for hooks
   const compatMapRef = useRef({
     animateToRegion: (region, duration = 500) => {
-      cameraRef.current?.setCamera({
-        centerCoordinate: [region.longitude, region.latitude],
-        zoomLevel: Math.log2(360 / region.latitudeDelta),
-        animationDuration: duration,
-      });
+      const center = normalizeMapCoordinate(region);
+      const latitudeDelta = Number(region?.latitudeDelta);
+      if (!center || !Number.isFinite(latitudeDelta) || latitudeDelta <= 0) return false;
+      try {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [center.longitude, center.latitude],
+          zoomLevel: Math.log2(360 / latitudeDelta),
+          animationDuration: duration,
+        });
+        return Boolean(cameraRef.current);
+      } catch (error) {
+        logger.warn('Map camera animation failed', { message: error?.message });
+        return false;
+      }
     },
     fitToCoordinates: (coords, opts = {}) => {
-      if (!coords || coords.length === 0) return;
-      const bounds = computeBounds(coords);
+      if (!mapNativeReadyRef.current || !cameraRef.current) return false;
+      const bounds = computeSafeMapBounds(coords);
+      if (!bounds) return false;
       const padding = opts.edgePadding || {};
-      cameraRef.current?.setCamera({
-        bounds: { ne: bounds.ne, sw: bounds.sw },
-        padding: {
-          paddingTop: padding.top || 50,
-          paddingRight: padding.right || 50,
-          paddingBottom: padding.bottom || 50,
-          paddingLeft: padding.left || 50,
-        },
-        animationDuration: opts.animated !== false ? 500 : 0,
-      });
+      try {
+        cameraRef.current.setCamera(bounds.center
+          ? {
+              centerCoordinate: [bounds.center.longitude, bounds.center.latitude],
+              zoomLevel: 15,
+              animationDuration: opts.animated !== false ? 500 : 0,
+            }
+          : {
+              bounds: { ne: bounds.ne, sw: bounds.sw },
+              padding: {
+                paddingTop: padding.top || 50,
+                paddingRight: padding.right || 50,
+                paddingBottom: padding.bottom || 50,
+                paddingLeft: padding.left || 50,
+              },
+              animationDuration: opts.animated !== false ? 500 : 0,
+            });
+        return true;
+      } catch (error) {
+        logger.warn('Trip map preview camera fit failed', { message: error?.message });
+        return false;
+      }
     },
   });
 
@@ -1568,6 +1596,7 @@ const HomeScreen = ({ route }) => {
   const [dismissedUpcomingDetourSignature, setDismissedUpcomingDetourSignature] = useState(null);
   const [secondaryChromeReady, setSecondaryChromeReady] = useState(false);
   const [mapReadyToMount, setMapReadyToMount] = useState(false);
+  const [mapIsReady, setMapIsReady] = useState(false);
   const [savedPlacePicker, setSavedPlacePicker] = useState(null);
   const [holidayDetailsVisible, setHolidayDetailsVisible] = useState(false);
   const [holidayDetailsDate, setHolidayDetailsDate] = useState(null);
@@ -1588,6 +1617,11 @@ const HomeScreen = ({ route }) => {
     }, 0);
 
     return () => clearTimeout(timer);
+  }, []);
+
+  const handleMapReady = useCallback(() => {
+    mapNativeReadyRef.current = true;
+    setMapIsReady(true);
   }, []);
 
   useEffect(() => () => {
@@ -1806,27 +1840,9 @@ const HomeScreen = ({ route }) => {
     startupVariant: startupProgress?.variant,
   });
 
-  const {
-    tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
-  } = useTripVisualization({
-    isTripPlanningMode,
-    itineraries,
-    selectedItineraryIndex,
-    vehicles,
-    shapes,
-    routeShapeMapping,
-    tripMapping,
-    tripFrom: tripFromLocation,
-    tripTo: tripToLocation,
-  });
-  const busApproachViewportCoordinates = useMemo(() => (
-    busApproachLines.flatMap((line) => (Array.isArray(line?.coordinates) ? line.coordinates : []))
-  ), [busApproachLines]);
-
-  const itinerariesWithStopClosureNotices = useMemo(() => {
+  const annotatedItineraries = useMemo(() => {
     const detourAwareItineraries = annotateItinerariesWithDetours(
-      itineraries,
+      itineraries.map((itinerary, plannerIndex) => ({ ...itinerary, plannerIndex })),
       detoursEnabled ? activeDetours : {},
       detourStopDetailsByRouteId,
       visibleOfficialServiceImpacts
@@ -1840,10 +1856,43 @@ const HomeScreen = ({ route }) => {
     transitNewsImpacts,
     visibleOfficialServiceImpacts,
   ]);
+  const itineraryAvailability = useMemo(
+    () => applyItineraryAvailabilityPolicy(annotatedItineraries),
+    [annotatedItineraries]
+  );
+  const itinerariesWithStopClosureNotices = itineraryAvailability.itineraries;
+  const displaySelectedItineraryIndex = Math.max(0, itinerariesWithStopClosureNotices.findIndex(
+    (itinerary) => itinerary.plannerIndex === selectedItineraryIndex
+  ));
   const selectedItinerary = isTripPlanningMode
-    ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
+    ? itinerariesWithStopClosureNotices[displaySelectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
+  const tripVisualization = useTripVisualization({
+    isTripPlanningMode,
+    itineraries: itinerariesWithStopClosureNotices,
+    selectedItineraryIndex: displaySelectedItineraryIndex,
+    vehicles,
+    shapes,
+    routeShapeMapping,
+    tripMapping,
+    tripFrom: tripFromLocation,
+    tripTo: tripToLocation,
+  });
+  const {
+    tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
+    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
+  } = useMemo(
+    () => sanitizeTripPreviewVisualization(tripVisualization),
+    [tripVisualization]
+  );
+  const busApproachViewportCoordinates = useMemo(() => (
+    busApproachLines.flatMap((line) => (Array.isArray(line?.coordinates) ? line.coordinates : []))
+  ), [busApproachLines]);
   const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
+  const isTripMapPreviewEnabled =
+    isTripPreviewMode && ENABLE_ANDROID_TRIP_MAP_PREVIEW && mapIsReady;
+  const isTripMapPreviewUnavailable =
+    isTripPreviewMode && Platform.OS === 'android' && !ENABLE_ANDROID_TRIP_MAP_PREVIEW;
   const shouldCompactTripSearchHeader =
     hasTripSearched && !isTripLoading && itinerariesWithStopClosureNotices.length > 0;
 
@@ -2036,7 +2085,7 @@ const HomeScreen = ({ route }) => {
     const payload = buildSavedTripPayload({
       from: { ...tripFromLocation, name: tripFromText || 'Start' },
       to: { ...tripToLocation, name: tripToText || 'Destination' },
-      itinerary: itineraries?.[selectedItineraryIndex] || itineraries?.[0] || null,
+      itinerary: selectedItinerary,
     });
     if (!payload) {
       Alert.alert('Trip not ready', 'Choose a valid origin and destination before saving this trip.');
@@ -2065,7 +2114,7 @@ const HomeScreen = ({ route }) => {
 
     const result = await addSavedTrip(payload);
     Alert.alert(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
-  }, [sharedTripEdit, tripFromLocation, tripFromText, tripToLocation, tripToText, itineraries, selectedItineraryIndex, addSavedTrip, navigation]);
+  }, [sharedTripEdit, tripFromLocation, tripFromText, tripToLocation, tripToText, selectedItinerary, addSavedTrip, navigation]);
 
   const handleSavePlace = useCallback(async (location, text, label = 'Saved place', labelType = 'custom') => {
     if (!isAuthenticated) {
@@ -2327,8 +2376,21 @@ const HomeScreen = ({ route }) => {
       const requestId = ++latestRequest;
       try {
         const updates = await fetchTripUpdates();
-        const tripUpdate = updates.find(
-          (entity) => String(entity?.tripUpdate?.tripId) === String(selectedVehicle.tripId)
+        const tripUpdate = (isFreshTripUpdateFeed(updates) ? getTripUpdateEntities(updates) : []).find(
+          (entity) => (
+            isTripUpdateEntityFresh(entity, updates) &&
+            String(entity?.tripUpdate?.tripId) === String(selectedVehicle.tripId) &&
+            (
+              !entity?.tripUpdate?.startDate ||
+              !selectedVehicle.startDate ||
+              String(entity.tripUpdate.startDate) === String(selectedVehicle.startDate)
+            ) &&
+            (
+              !entity?.tripUpdate?.startTime ||
+              !selectedVehicle.startTime ||
+              String(entity.tripUpdate.startTime) === String(selectedVehicle.startTime)
+            )
+          )
         )?.tripUpdate || null;
         if (active && requestId === latestRequest) setSelectedVehicleTripUpdate(tripUpdate);
       } catch (error) {
@@ -2343,7 +2405,7 @@ const HomeScreen = ({ route }) => {
       active = false;
       clearInterval(refreshInterval);
     };
-  }, [selectedVehicle?.tripId]);
+  }, [selectedVehicle?.tripId, selectedVehicle?.startDate, selectedVehicle?.startTime]);
   const selectedVehicleCluster = useMemo(() => {
     const selectedIds = new Set(selectedVehicleClusterIds.map(String));
     return mapDisplayedVehicles.filter((vehicle) => selectedIds.has(String(vehicle.id)));
@@ -3001,14 +3063,14 @@ const HomeScreen = ({ route }) => {
 
   useEffect(() => {
     const decision = shouldAutoFitTripPreview({
-      isTripPreviewMode,
+      isTripPreviewMode: isTripMapPreviewEnabled,
       selectedItinerary,
-      selectedItineraryIndex,
+      selectedItineraryIndex: displaySelectedItineraryIndex,
       lastFitKey: tripPreviewFitKeyRef.current,
       userHasMovedMap: tripPreviewUserMovedMapRef.current,
     });
 
-    if (!isTripPreviewMode || !selectedItinerary || !decision.fitKey) {
+    if (!isTripMapPreviewEnabled || !selectedItinerary || !decision.fitKey) {
       tripPreviewFitKeyRef.current = null;
       tripPreviewUserMovedMapRef.current = false;
       return;
@@ -3016,15 +3078,16 @@ const HomeScreen = ({ route }) => {
 
     if (!decision.shouldFit) return;
 
-    fitMapToItinerary(selectedItinerary, busApproachViewportCoordinates);
-    tripPreviewFitKeyRef.current = decision.fitKey;
-    tripPreviewUserMovedMapRef.current = false;
+    if (fitMapToItinerary(selectedItinerary, busApproachViewportCoordinates)) {
+      tripPreviewFitKeyRef.current = decision.fitKey;
+      tripPreviewUserMovedMapRef.current = false;
+    }
   }, [
     busApproachViewportCoordinates,
     fitMapToItinerary,
-    isTripPreviewMode,
+    isTripMapPreviewEnabled,
     selectedItinerary,
-    selectedItineraryIndex,
+    displaySelectedItineraryIndex,
   ]);
 
   const routeLineLabelMarkers = useMemo(() => [], []);
@@ -3058,7 +3121,8 @@ const HomeScreen = ({ route }) => {
           handleRegionChange={handleRegionChange}
           handleMapFrameStart={PERF_DEBUG ? handleMapFrameStart : undefined}
           handleMapFrameEnd={PERF_DEBUG ? handleMapFrameEnd : undefined}
-          isTripPreviewMode={isTripPreviewMode}
+          handleMapReady={handleMapReady}
+          isTripPreviewMode={isTripMapPreviewEnabled}
           displayedShapes={displayedShapes}
           isRouteSelected={isRouteSelected}
           hasSelection={hasSelection}
@@ -3436,8 +3500,11 @@ const HomeScreen = ({ route }) => {
             <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
               <TripBottomSheet
                 itineraries={itinerariesWithStopClosureNotices}
-                selectedIndex={selectedItineraryIndex}
-                onSelectItinerary={setSelectedItineraryIndex}
+                selectedIndex={displaySelectedItineraryIndex}
+                onSelectItinerary={(displayIndex) => {
+                  const plannerIndex = itinerariesWithStopClosureNotices[displayIndex]?.plannerIndex;
+                  setSelectedItineraryIndex(plannerIndex ?? displayIndex);
+                }}
                 onViewDetails={viewTripDetails}
                 onStartNavigation={startNavigationDirect}
                 isLoading={isTripLoading}
@@ -3456,6 +3523,8 @@ const HomeScreen = ({ route }) => {
                     searchTrips(tripFromLocation, tripToLocation);
                   }
                 }}
+                mapPreviewUnavailable={isTripMapPreviewUnavailable}
+                allTripsBlocked={itineraryAvailability.allBlocked}
               />
             </SheetErrorBoundary>
           )}

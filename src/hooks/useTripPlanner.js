@@ -16,6 +16,11 @@ import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
 import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
 import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 import logger from '../utils/logger';
+import {
+  getAgencyWallClockPickerDate,
+  isCurrentAgencyServiceDate,
+  pickerDateToAgencyInstant,
+} from '../utils/serviceTime';
 
 // ─── Action Types ─────────────────────────────────────────────────
 const SET_FROM = 'SET_FROM';
@@ -200,7 +205,9 @@ function tripReducer(state, action) {
       return clearResults({
         ...state,
         timeMode: action.payload,
-        selectedTime: action.payload === 'now' ? null : (state.selectedTime || new Date()),
+        selectedTime: action.payload === 'now'
+          ? null
+          : (state.selectedTime || getAgencyWallClockPickerDate() || new Date()),
       });
     case SET_DEPARTURE_TIME:
       return clearResults({ ...state, selectedTime: action.payload });
@@ -315,9 +322,12 @@ export const useTripPlanner = ({
       return;
     }
 
+    const selectedAgencyTime = state.timeMode === 'now'
+      ? null
+      : pickerDateToAgencyInstant(state.selectedTime);
     const timeValidation = validateTripDateTime({
       timeMode: state.timeMode,
-      selectedTime: state.selectedTime,
+      selectedTime: selectedAgencyTime,
     });
     if (!timeValidation.valid) {
       invalidateTripSearches();
@@ -367,7 +377,9 @@ export const useTripPlanner = ({
             assertSearchActive();
           }
 
-          const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
+          const tripTime = state.timeMode === 'now'
+            ? new Date()
+            : (selectedAgencyTime || new Date());
           const plannedResult = await planTripAuto({
             fromLat: from.lat,
             fromLon: from.lon,
@@ -388,7 +400,11 @@ export const useTripPlanner = ({
           let plannedItineraries = plannedResult.itineraries;
 
           // Apply real-time delays if the platform provides the function
-          if (applyDelays && plannedItineraries.length > 0) {
+          if (
+            applyDelays &&
+            plannedItineraries.length > 0 &&
+            isCurrentAgencyServiceDate(tripTime)
+          ) {
             try {
               reportSearchStage('Adding live arrival times');
               plannedItineraries = await applyDelays(plannedItineraries, delayOptions);
@@ -397,6 +413,12 @@ export const useTripPlanner = ({
               if (searchExpired) throw error;
               // Continue without delay info
             }
+          } else if (plannedItineraries.length > 0) {
+            plannedItineraries = plannedItineraries.map((itinerary) => ({
+              ...itinerary,
+              realtimeStatus: 'scheduled',
+              hasRealtimeInfo: false,
+            }));
           }
 
           return {

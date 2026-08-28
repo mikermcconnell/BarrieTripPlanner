@@ -16,6 +16,7 @@ import { haversineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
 import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
+import { normalizeServiceDate } from '../utils/serviceTime';
 
 const CACHE_PREFIX = 'walk_directions_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -623,11 +624,11 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
     const minutesUntilDeparture = Math.max(0, Math.round((departureTime - now) / 60000));
 
     // Check if trip is tomorrow (departure is after midnight relative to now)
-    const nowDate = new Date(now);
-    const departureDate = new Date(departureTime);
-    const isTomorrow = departureDate.getDate() !== nowDate.getDate() ||
-                       departureDate.getMonth() !== nowDate.getMonth() ||
-                       departureDate.getFullYear() !== nowDate.getFullYear();
+    const currentServiceDate = normalizeServiceDate(now);
+    const departureServiceDate = normalizeServiceDate(departureTime);
+    const isTomorrow = Boolean(
+      currentServiceDate && departureServiceDate && departureServiceDate > currentServiceDate
+    );
 
     // Check for high walking distance
     const hasHighWalk = itinerary.walkDistance > highWalkThreshold;

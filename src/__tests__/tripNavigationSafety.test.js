@@ -70,6 +70,70 @@ describe('trip navigation safety', () => {
     })).toBeNull();
   });
 
+  test('blocks a same-stop transfer with only 30 seconds to change buses', () => {
+    expect(getItineraryNavigationBlock({
+      legs: [
+        { mode: 'BUS', startTime: 0, endTime: 10 * 60 * 1000, tripId: 'a' },
+        { mode: 'BUS', startTime: 10.5 * 60 * 1000, endTime: 20 * 60 * 1000, tripId: 'b' },
+      ],
+    })?.code).toBe('IMPOSSIBLE_TRANSFER');
+  });
+
+  test('accepts a same-stop transfer with exactly the minimum 60-second buffer', () => {
+    expect(getItineraryNavigationBlock({
+      legs: [
+        { mode: 'BUS', startTime: 0, endTime: 10 * 60 * 1000, tripId: 'a' },
+        { mode: 'BUS', startTime: 11 * 60 * 1000, endTime: 20 * 60 * 1000, tripId: 'b' },
+      ],
+    })).toBeNull();
+  });
+
+  test('requires both transfer walking time and the 60-second interchange buffer', () => {
+    expect(getItineraryNavigationBlock({
+      legs: [
+        { mode: 'BUS', startTime: 0, endTime: 10 * 60 * 1000, tripId: 'a' },
+        { mode: 'WALK', duration: 3 * 60 },
+        { mode: 'BUS', startTime: 14 * 60 * 1000 - 1000, endTime: 20 * 60 * 1000, tripId: 'b' },
+      ],
+    })?.code).toBe('IMPOSSIBLE_TRANSFER');
+
+    expect(getItineraryNavigationBlock({
+      legs: [
+        { mode: 'BUS', startTime: 0, endTime: 10 * 60 * 1000, tripId: 'a' },
+        { mode: 'WALK', duration: 3 * 60 },
+        { mode: 'BUS', startTime: 14 * 60 * 1000, endTime: 20 * 60 * 1000, tripId: 'b' },
+      ],
+    })).toBeNull();
+  });
+
+  test('does not add an interchange buffer to a verified same-vehicle continuation', () => {
+    const sharedStop = { stopId: '725', name: 'Barrie South GO' };
+    expect(getItineraryNavigationBlock({
+      legs: [
+        {
+          mode: 'BUS',
+          startTime: 0,
+          endTime: 10 * 60 * 1000,
+          tripId: 'route-8-south',
+          blockId: 'block-8',
+          directionId: 1,
+          route: { shortName: '8A' },
+          to: sharedStop,
+        },
+        {
+          mode: 'BUS',
+          startTime: 10.5 * 60 * 1000,
+          endTime: 20 * 60 * 1000,
+          tripId: 'route-8-north',
+          blockId: 'block-8',
+          directionId: 0,
+          route: { shortName: '8B' },
+          from: sharedStop,
+        },
+      ],
+    })).toBeNull();
+  });
+
   test('blocks navigation for canceled trips and skipped required stops', () => {
     expect(getItineraryNavigationBlock({
       ...baseItinerary,

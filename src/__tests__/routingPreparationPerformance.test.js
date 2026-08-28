@@ -8,7 +8,7 @@ describe('Android routing preparation responsiveness', () => {
       'utf8'
     );
     const start = source.indexOf('const processAndStoreShapes = useCallback');
-    const end = source.indexOf('/**\n   * Persist one GTFS snapshot', start);
+    const end = source.indexOf('const cacheGTFSDataInBackground', start);
     const shapeProcessingSource = source.slice(start, end);
 
     expect(start).toBeGreaterThanOrEqual(0);

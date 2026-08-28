@@ -77,6 +77,7 @@ const TripBottomSheet = ({
   onSaveCurrentTrip,
   saveCurrentTripLabel = 'Save this route',
   repeatTripSuggestion = null,
+  allTripsBlocked = false,
 }) => {
   // Match native sheet sizing: 'peek' (10%), 'default' (38%), 'expanded' (85%)
   const [sheetState, setSheetState] = useState('default');
@@ -272,6 +273,17 @@ const TripBottomSheet = ({
           />
         </View>
         <ScrollView style={styles.resultsList} contentContainerStyle={styles.resultsContent}>
+          {allTripsBlocked && (
+            <View style={styles.blockedTripsNotice} accessibilityRole="alert">
+              <Icon name="TriangleAlert" size={18} color={COLORS.error} />
+              <View style={styles.blockedTripsNoticeText}>
+                <Text style={styles.blockedTripsNoticeTitle}>No currently usable trip</Text>
+                <Text style={styles.blockedTripsNoticeDetail}>
+                  Every option has a closure, cancellation, or connection problem. Re-plan before travelling.
+                </Text>
+              </View>
+            </View>
+          )}
           {itineraries.map((itinerary, index) => (
             <TripResultCard
               key={getItineraryKey(itinerary, index)}
@@ -460,6 +472,30 @@ const styles = StyleSheet.create({
   resultsSubtitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  blockedTripsNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    margin: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.error + '55',
+    backgroundColor: COLORS.error + '10',
+  },
+  blockedTripsNoticeText: {
+    flex: 1,
+  },
+  blockedTripsNoticeTitle: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  blockedTripsNoticeDetail: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
     marginTop: 2,
   },
   repeatTripPrompt: {

@@ -24,8 +24,114 @@ const STOP_SCHEDULE_RELATIONSHIPS = {
   3: 'UNSCHEDULED',
 };
 
-export const parseTripUpdates = (buffer) => {
+const FEED_INCREMENTALITY = {
+  0: 'FULL_DATASET',
+  1: 'DIFFERENTIAL',
+};
+
+export const DEFAULT_TRIP_UPDATE_STALE_MS = 5 * 60 * 1000;
+const DEFAULT_FUTURE_SKEW_MS = 2 * 60 * 1000;
+
+const parseFeedHeader = (buffer) => {
+  let offset = 0;
+  const header = {
+    gtfsRealtimeVersion: null,
+    incrementality: 'FULL_DATASET',
+    timestamp: null,
+    feedVersion: null,
+  };
+
+  while (offset < buffer.length) {
+    const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
+    offset += tagBytes;
+    const fieldNumber = fieldTag >> 3;
+    const wireType = fieldTag & 0x7;
+
+    if (fieldNumber === 1 && wireType === 2) {
+      const { value, newOffset } = decodeString(buffer, offset);
+      header.gtfsRealtimeVersion = value;
+      offset = newOffset;
+    } else if (fieldNumber === 2 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      header.incrementality = FEED_INCREMENTALITY[value] || value;
+      offset += bytesRead;
+    } else if (fieldNumber === 3 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      header.timestamp = value;
+      offset += bytesRead;
+    } else if (fieldNumber === 4 && wireType === 2) {
+      const { value, newOffset } = decodeString(buffer, offset);
+      header.feedVersion = value;
+      offset = newOffset;
+    } else {
+      offset = skipField(buffer, offset, wireType);
+    }
+  }
+
+  return header;
+};
+
+const getFeedFreshness = ({ headerTimestamp, updates, nowMs, staleThresholdMs, futureSkewMs }) => {
+  const updateTimestamps = updates
+    .map((entity) => Number(entity?.tripUpdate?.timestamp))
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
+  const newestUpdateTimestamp = updateTimestamps.length > 0
+    ? Math.max(...updateTimestamps)
+    : null;
+  const referenceTimestamp = Number.isFinite(Number(headerTimestamp)) && Number(headerTimestamp) > 0
+    ? Number(headerTimestamp)
+    : newestUpdateTimestamp;
+
+  if (!referenceTimestamp) {
+    return { status: 'unknown', newestUpdateTimestamp, ageMs: null };
+  }
+
+  const ageMs = nowMs - referenceTimestamp * 1000;
+  if (ageMs < -futureSkewMs) {
+    return { status: 'unknown', newestUpdateTimestamp, ageMs };
+  }
+  return {
+    status: ageMs > staleThresholdMs ? 'stale' : 'fresh',
+    newestUpdateTimestamp,
+    ageMs: Math.max(0, ageMs),
+  };
+};
+
+export const getTripUpdateEntities = (feed) => (
+  Array.isArray(feed) ? feed : (Array.isArray(feed?.updates) ? feed.updates : [])
+);
+
+export const isFreshTripUpdateFeed = (feed) => (
+  Array.isArray(feed) || feed?.status === 'fresh'
+);
+
+export const isTripUpdateEntityFresh = (entity, feed, {
+  staleThresholdMs = DEFAULT_TRIP_UPDATE_STALE_MS,
+  futureSkewMs = DEFAULT_FUTURE_SKEW_MS,
+} = {}) => {
+  if (!isFreshTripUpdateFeed(feed)) return false;
+  if (Array.isArray(feed)) return true;
+
+  const updateTimestamp = Number(entity?.tripUpdate?.timestamp);
+  if (!Number.isFinite(updateTimestamp) || updateTimestamp <= 0) {
+    // The fresh feed header is the best available freshness signal when the
+    // optional per-update timestamp is absent.
+    return true;
+  }
+
+  const checkedAt = Number(feed?.checkedAt);
+  const referenceTime = Number.isFinite(checkedAt) ? checkedAt : Date.now();
+  const ageMs = referenceTime - updateTimestamp * 1000;
+  return ageMs >= -futureSkewMs && ageMs <= staleThresholdMs;
+};
+
+export const parseTripUpdates = (buffer, {
+  nowMs = Date.now(),
+  staleThresholdMs = DEFAULT_TRIP_UPDATE_STALE_MS,
+  futureSkewMs = DEFAULT_FUTURE_SKEW_MS,
+} = {}) => {
   const updates = [];
+  let header = null;
   let offset = 0;
   const view = new Uint8Array(buffer);
 
@@ -36,7 +142,12 @@ export const parseTripUpdates = (buffer) => {
     const fieldNumber = fieldTag >> 3;
     const wireType = fieldTag & 0x7;
 
-    if (fieldNumber === 2 && wireType === 2) {
+    if (fieldNumber === 1 && wireType === 2) {
+      const { value: length, bytesRead: lenBytes } = decodeVarint(view, offset);
+      offset += lenBytes;
+      header = parseFeedHeader(view.slice(offset, offset + length));
+      offset += length;
+    } else if (fieldNumber === 2 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(view, offset);
       offset += lenBytes;
       const entityData = view.slice(offset, offset + length);
@@ -48,7 +159,24 @@ export const parseTripUpdates = (buffer) => {
     }
   }
 
-  return updates;
+  const freshness = getFeedFreshness({
+    headerTimestamp: header?.timestamp,
+    updates,
+    nowMs,
+    staleThresholdMs,
+    futureSkewMs,
+  });
+
+  return {
+    updates,
+    status: freshness.status,
+    headerTimestamp: header?.timestamp ?? null,
+    newestUpdateTimestamp: freshness.newestUpdateTimestamp,
+    ageMs: freshness.ageMs,
+    incrementality: header?.incrementality || 'FULL_DATASET',
+    gtfsRealtimeVersion: header?.gtfsRealtimeVersion || null,
+    checkedAt: nowMs,
+  };
 };
 
 /**
@@ -56,7 +184,7 @@ export const parseTripUpdates = (buffer) => {
  */
 const parseEntity = (buffer) => {
   let offset = 0;
-  const entity = { id: '', tripUpdate: null };
+  const entity = { id: '', isDeleted: false, tripUpdate: null };
 
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
@@ -69,6 +197,10 @@ const parseEntity = (buffer) => {
       const { value, newOffset } = decodeString(buffer, offset);
       entity.id = value;
       offset = newOffset;
+    } else if (fieldNumber === 2 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      entity.isDeleted = Boolean(value);
+      offset += bytesRead;
     } else if (fieldNumber === 3 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
       offset += lenBytes;
@@ -79,7 +211,7 @@ const parseEntity = (buffer) => {
     }
   }
 
-  return entity.tripUpdate ? entity : null;
+  return entity.tripUpdate || entity.isDeleted ? entity : null;
 };
 
 /**
@@ -91,6 +223,9 @@ const parseTripUpdate = (buffer) => {
     tripId: null,
     routeId: null,
     scheduleRelationship: 'SCHEDULED',
+    startDate: null,
+    startTime: null,
+    timestamp: null,
     stopTimeUpdates: [],
   };
 
@@ -108,6 +243,8 @@ const parseTripUpdate = (buffer) => {
       update.tripId = trip.tripId;
       update.routeId = trip.routeId;
       update.scheduleRelationship = trip.scheduleRelationship;
+      update.startDate = trip.startDate;
+      update.startTime = trip.startTime;
       offset += length;
     } else if (fieldNumber === 2 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
@@ -115,6 +252,10 @@ const parseTripUpdate = (buffer) => {
       const stopTime = parseStopTimeUpdate(buffer.slice(offset, offset + length));
       if (stopTime) update.stopTimeUpdates.push(stopTime);
       offset += length;
+    } else if (fieldNumber === 4 && wireType === 0) {
+      const { value, bytesRead } = decodeVarint(buffer, offset);
+      update.timestamp = value;
+      offset += bytesRead;
     } else {
       offset = skipField(buffer, offset, wireType);
     }
@@ -128,7 +269,13 @@ const parseTripUpdate = (buffer) => {
  */
 const parseTripDescriptor = (buffer) => {
   let offset = 0;
-  const trip = { tripId: null, routeId: null, scheduleRelationship: 'SCHEDULED' };
+  const trip = {
+    tripId: null,
+    routeId: null,
+    startTime: null,
+    startDate: null,
+    scheduleRelationship: 'SCHEDULED',
+  };
 
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
@@ -140,6 +287,14 @@ const parseTripDescriptor = (buffer) => {
     if (fieldNumber === 1 && wireType === 2) {
       const { value, newOffset } = decodeString(buffer, offset);
       trip.tripId = value;
+      offset = newOffset;
+    } else if (fieldNumber === 2 && wireType === 2) {
+      const { value, newOffset } = decodeString(buffer, offset);
+      trip.startTime = value;
+      offset = newOffset;
+    } else if (fieldNumber === 3 && wireType === 2) {
+      const { value, newOffset } = decodeString(buffer, offset);
+      trip.startDate = value;
       offset = newOffset;
     } else if (fieldNumber === 4 && wireType === 0) {
       const { value, bytesRead } = decodeVarint(buffer, offset);
@@ -250,7 +405,17 @@ export const fetchTripUpdates = async () => {
     return parseTripUpdates(buffer);
   } catch (error) {
     console.error('Error fetching trip updates:', error);
-    throw error;
+    return {
+      updates: [],
+      status: 'unavailable',
+      headerTimestamp: null,
+      newestUpdateTimestamp: null,
+      ageMs: null,
+      incrementality: null,
+      gtfsRealtimeVersion: null,
+      checkedAt: Date.now(),
+      error: error?.message || String(error),
+    };
   }
 };
 
@@ -261,7 +426,11 @@ export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => 
   const arrivals = [];
   const now = Math.floor(Date.now() / 1000);
 
-  tripUpdates.forEach((entity) => {
+  if (!isFreshTripUpdateFeed(tripUpdates)) return arrivals;
+
+  getTripUpdateEntities(tripUpdates).forEach((entity) => {
+    if (entity?.isDeleted) return;
+    if (!isTripUpdateEntityFresh(entity, tripUpdates)) return;
     const update = entity.tripUpdate;
     if (!update) return;
     if (['CANCELED', 'DELETED'].includes(update.scheduleRelationship)) return;

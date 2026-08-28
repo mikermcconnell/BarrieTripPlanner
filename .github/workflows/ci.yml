@@ -7,44 +7,103 @@ on:
       - main
       - master
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  app-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install api-proxy dependencies
-        run: npm --prefix api-proxy ci
-
-      - name: Validate Expo project health
-        run: npx expo-doctor
-
-      - name: Generate Android project for configuration tests
-        run: npx expo prebuild --platform android --no-install
-
+      - run: npm ci
+      - run: npm --prefix api-proxy ci
       - name: Run app test suite
         run: npm test -- --runInBand
 
+  android-release-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - run: npm ci
+      - name: Validate Expo project health
+        run: npx expo-doctor
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Verify generated Android release safeguards
+        run: npx jest --runInBand src/__tests__/productionReadinessConfig.test.js
+      - name: Build release APK
+        working-directory: android
+        env:
+          # This job verifies that the native release compiles. Production EAS
+          # builds perform the authenticated source-map upload.
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  quality-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Score deterministic detour quality corpus
         run: npm run score:detour-quality
-
       - name: Run platform parity check
         run: npm run check:parity
 
+  app-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Audit root production dependencies
         run: node scripts/audit-production.js .
 
+  api-tests-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api-proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api-proxy/package-lock.json
+      - run: npm ci
       - name: Run api-proxy tests
-        run: npm --prefix api-proxy test
-
+        run: npm test
       - name: Audit api-proxy production dependencies
+        working-directory: .
         run: node scripts/audit-production.js api-proxy

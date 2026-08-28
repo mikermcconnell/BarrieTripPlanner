@@ -43,6 +43,14 @@ export const useStopArrivals = (stop, options = {}) => {
     try {
       const tripUpdates = await fetchTripUpdates();
       if (requestSeq !== requestSeqRef.current) return;
+      if (tripUpdates?.status === 'unavailable') {
+        throw new Error('Live arrival information is unavailable');
+      }
+      if (tripUpdates?.status === 'stale' || tripUpdates?.status === 'unknown') {
+        setArrivals([]);
+        setError('Live arrival information is stale');
+        return;
+      }
       const resolvedArrivals = getArrivalsForStop(tripUpdates, stop.id, routes, tripMapping);
       const unresolvedArrivals = resolvedArrivals.filter(
         (arrival) => arrival.destinationStatus !== 'available'

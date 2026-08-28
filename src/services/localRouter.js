@@ -20,6 +20,7 @@ import { haversineDistance } from '../utils/geometryUtils';
 import { getActiveServicesForDate, formatGTFSDate } from './calendarService';
 import { buildItinerary } from './itineraryBuilder';
 import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
+import { addServiceDays, getAgencySecondsSinceMidnight } from '../utils/serviceTime';
 
 const SECONDS_PER_DAY = 24 * 3600;
 const SERVICE_DAY_ROLLOVER_WINDOW_SECONDS = 6 * 3600;
@@ -36,17 +37,12 @@ const getCandidatePoolSize = () => Math.max(
  * @returns {number} Seconds since midnight
  */
 const dateToSeconds = (date) => {
-  return date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
-};
-
-const addDays = (date, days) => {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
+  return getAgencySecondsSinceMidnight(date);
 };
 
 const buildServiceDaySearchContexts = (serviceCalendar, date, time) => {
   const requestedTime = dateToSeconds(time);
+  const requestedServiceDate = formatGTFSDate(date);
   const contexts = [];
   const seen = new Set();
 
@@ -54,21 +50,22 @@ const buildServiceDaySearchContexts = (serviceCalendar, date, time) => {
     const activeServices = getActiveServicesForDate(serviceCalendar, serviceDate);
     if (activeServices.size === 0) return;
 
-    const key = `${formatGTFSDate(serviceDate)}:${searchTime}`;
+    const normalizedServiceDate = formatGTFSDate(serviceDate);
+    const key = `${normalizedServiceDate}:${searchTime}`;
     if (seen.has(key)) return;
     seen.add(key);
 
     contexts.push({
       activeServices,
       searchTime,
-      serviceDate,
+      serviceDate: normalizedServiceDate,
     });
   };
 
-  addContext(date, requestedTime);
+  addContext(requestedServiceDate, requestedTime);
 
   if (requestedTime < SERVICE_DAY_ROLLOVER_WINDOW_SECONDS) {
-    addContext(addDays(date, -1), requestedTime + SECONDS_PER_DAY);
+    addContext(addServiceDays(requestedServiceDate, -1), requestedTime + SECONDS_PER_DAY);
   }
 
   return contexts;
@@ -242,26 +239,26 @@ export const planTripLocal = async ({
 
   if (arriveBy) {
     raptorResults = deduplicateResults(
-      searchContexts.flatMap(({ searchTime, activeServices }) => (
+      searchContexts.flatMap(({ searchTime, activeServices, serviceDate }) => (
         raptorReverse(
           routingData,
           originStops,
           destStops,
           searchTime,
           activeServices
-        )
+        ).map((result) => ({ ...result, serviceDate }))
       ))
     );
   } else {
     raptorResults = deduplicateResults(
-      searchContexts.flatMap(({ searchTime, activeServices }) => (
+      searchContexts.flatMap(({ searchTime, activeServices, serviceDate }) => (
         collectForwardResultsForContext(
           routingData,
           originStops,
           destStops,
           searchTime,
           activeServices
-        )
+        ).map((result) => ({ ...result, serviceDate }))
       ))
     );
   }
@@ -297,6 +294,7 @@ export const planTripLocal = async ({
       toLat,
       toLon,
       date,
+      serviceDate: result.serviceDate,
       arriveBy,
     })
   ));
@@ -420,15 +418,24 @@ const raptorForward = (
             if (currentTime > maxDepartureTime) continue;
 
             // Find next departure (skipping already-found trips for diversity)
+            const priorLabel = labels[round - 1]?.get(stopId);
+            const boardingReadyTime = currentTime + (
+              priorLabel?.type === 'TRANSIT' ? ROUTING_CONFIG.MIN_TRANSFER_TIME : 0
+            );
             const departure = getNextDepartureForRouteDirection(
               stopDepartures,
               stopId,
               routeId,
               directionId,
-              currentTime,
+              boardingReadyTime,
               activeServices,
               excludeTrips,
-              eligibleTripIds
+              eligibleTripIds,
+              {
+                previousTripId: priorLabel?.type === 'TRANSIT' ? priorLabel.tripId : null,
+                unbufferedTime: currentTime,
+                tripIndex,
+              }
             );
 
             if (departure && departure.departureTime <= maxDepartureTime) {
@@ -590,13 +597,28 @@ const getNextDepartureForRouteDirection = (
   afterTime,
   activeServices,
   excludeTrips = null,
-  eligibleTripIds = null
+  eligibleTripIds = null,
+  continuationContext = null
 ) => {
   const departures = stopDepartures[stopId] || [];
 
   for (const dep of departures) {
+    const previousTripId = continuationContext?.previousTripId;
+    const previousBlockId = previousTripId
+      ? String(continuationContext?.tripIndex?.[previousTripId]?.blockId || '').trim()
+      : '';
+    const nextBlockId = String(continuationContext?.tripIndex?.[dep.tripId]?.blockId || '').trim();
+    const isVerifiedBlockContinuation = Boolean(
+      previousTripId &&
+      String(dep.tripId) !== String(previousTripId) &&
+      previousBlockId &&
+      nextBlockId === previousBlockId
+    );
+    const eligibleAfterTime = isVerifiedBlockContinuation
+      ? continuationContext.unbufferedTime
+      : afterTime;
     if (
-      dep.departureTime >= afterTime &&
+      dep.departureTime >= eligibleAfterTime &&
       dep.routeId === routeId &&
       dep.directionId === directionId &&
       activeServices.has(dep.serviceId) &&
@@ -709,7 +731,7 @@ const deduplicateResults = (results) => {
 
   results.forEach((result) => {
     // Create signature based on trip IDs — same physical bus = same trip
-    const signature = result.path
+    const signature = `${result.serviceDate || 'service-date-unknown'}:` + result.path
       .filter((p) => p.type === 'TRANSIT')
       .map((p) => p.tripId)
       .join('|');

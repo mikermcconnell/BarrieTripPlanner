@@ -27,8 +27,11 @@ export const useTripPreviewViewport = ({
       options.animated = animated;
     }
 
-    fitToCoordinates(coordinates, options);
-    return true;
+    try {
+      return fitToCoordinates(coordinates, options) !== false;
+    } catch (_error) {
+      return false;
+    }
   }, [animated, edgePadding, fitToCoordinates]);
 
   useEffect(() => {

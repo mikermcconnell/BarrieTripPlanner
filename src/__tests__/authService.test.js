@@ -14,6 +14,7 @@ const loadAuthService = ({
   const createUser = jest.fn().mockResolvedValue(undefined);
   const updateLastLogin = jest.fn().mockResolvedValue(undefined);
   const nativeConfigure = jest.fn();
+  const loggerError = jest.fn();
   const nativeSignIn = nativeGoogleSignInError
     ? jest.fn().mockRejectedValue(nativeGoogleSignInError)
     : jest.fn().mockResolvedValue(nativeGoogleSignInResult);
@@ -57,7 +58,7 @@ const loadAuthService = ({
       warn: jest.fn(),
       info: jest.fn(),
       debug: jest.fn(),
-      error: jest.fn(),
+      error: loggerError,
     },
   }));
 
@@ -87,6 +88,7 @@ const loadAuthService = ({
     updateLastLogin,
     nativeConfigure,
     nativeSignIn,
+    loggerError,
   };
 };
 
@@ -191,8 +193,38 @@ describe('authService.signInWithGoogle', () => {
     expect(result).toEqual({ success: false, error: null });
   });
 
+  test.each([
+    'SIGN_IN_CANCELLED',
+    '12501',
+  ])('does not report thrown native Google cancellation code %s', async (code) => {
+    const cancellation = { code, message: 'The user cancelled Google sign-in.' };
+    const { authService, loggerError } = loadAuthService({
+      os: 'android',
+      nativeGoogleSignInError: cancellation,
+    });
+
+    const result = await authService.signInWithGoogle();
+
+    expect(result).toEqual({ success: false, error: null });
+    expect(loggerError).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'auth/popup-closed-by-user',
+    'auth/cancelled-popup-request',
+  ])('does not report expected web Google cancellation code %s', async (code) => {
+    const cancellation = { code, message: 'Google popup closed.' };
+    const { authService, signInWithPopup, loggerError } = loadAuthService({ os: 'web' });
+    signInWithPopup.mockRejectedValue(cancellation);
+
+    const result = await authService.signInWithGoogle();
+
+    expect(result).toEqual({ success: false, error: null });
+    expect(loggerError).not.toHaveBeenCalled();
+  });
+
   test('returns actionable native setup message for Google developer errors', async () => {
-    const { authService } = loadAuthService({
+    const { authService, loggerError } = loadAuthService({
       os: 'android',
       nativeGoogleSignInError: {
         code: 'DEVELOPER_ERROR',
@@ -206,5 +238,9 @@ describe('authService.signInWithGoogle', () => {
     expect(result.error).toMatch(/Google sign-in is not configured for this Android build/);
     expect(result.error).toMatch(/SHA-1/);
     expect(result.error).not.toMatch(/unexpected error/i);
+    expect(loggerError).toHaveBeenCalledWith(
+      'Google sign in error:',
+      expect.objectContaining({ code: 'DEVELOPER_ERROR' })
+    );
   });
 });

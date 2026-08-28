@@ -11,6 +11,11 @@ import {
   sortRecommendedItineraryFirst,
 } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
+import {
+  AGENCY_TIME_ZONE,
+  getAgencyDateTimeParts,
+  normalizeServiceDate,
+} from '../utils/serviceTime';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
   ...tripPlan,
@@ -180,11 +185,11 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
     const departureTime = itinerary.startTime;
     const minutesUntilDeparture = Math.max(0, Math.round((departureTime - now) / 60000));
 
-    const nowDate = new Date(now);
-    const departureDate = new Date(departureTime);
-    const isTomorrow = departureDate.getDate() !== nowDate.getDate() ||
-                       departureDate.getMonth() !== nowDate.getMonth() ||
-                       departureDate.getFullYear() !== nowDate.getFullYear();
+    const currentServiceDate = normalizeServiceDate(now);
+    const departureServiceDate = normalizeServiceDate(departureTime);
+    const isTomorrow = Boolean(
+      currentServiceDate && departureServiceDate && departureServiceDate > currentServiceDate
+    );
 
     const hasHighWalk = itinerary.walkDistance > highWalkThreshold;
     const hasExcessiveDuration = itinerary.duration > maxTripDuration;
@@ -528,16 +533,18 @@ export const planTrip = async ({
  * Format date for OTP API (YYYY-MM-DD)
  */
 const formatDate = (date) => {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const parts = getAgencyDateTimeParts(date);
+  if (!parts) return '';
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 };
 
 /**
  * Format time for OTP API (HH:MM)
  */
 const formatTime = (time) => {
-  const t = new Date(time);
-  return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  const parts = getAgencyDateTimeParts(time);
+  if (!parts) return '';
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
 };
 
 /**
@@ -1362,5 +1369,9 @@ export const formatDistance = (meters) => {
  */
 export const formatTimeFromTimestamp = (timestamp) => {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: AGENCY_TIME_ZONE,
+  });
 };

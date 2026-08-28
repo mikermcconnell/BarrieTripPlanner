@@ -10,6 +10,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { COLORS, SPACING, SHADOWS, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { getDistanceFromBarrie } from '../services/locationIQService';
 import { findMatchingSavedPlaces, getSavedPlaceIconName } from '../utils/savedTransitUtils';
+import { getAgencyWallClockPickerDate } from '../utils/serviceTime';
 import TripPlanningLoadingDots from './TripPlanningLoadingDots';
 
 const getSuggestionKey = (item, index) => [
@@ -570,7 +571,7 @@ const TripSearchHeaderWeb = ({
           <input
             type="datetime-local"
             value={selectedTime ? formatDateTimeLocal(selectedTime) : ''}
-            min={formatDateTimeLocal(new Date())}
+            min={formatDateTimeLocal(getAgencyWallClockPickerDate() || new Date())}
             onChange={(e) => {
               if (onSelectedTimeChange && e.target.value) {
                 onSelectedTimeChange(new Date(e.target.value));

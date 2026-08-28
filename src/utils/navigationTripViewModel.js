@@ -1,3 +1,5 @@
+import { AGENCY_TIME_ZONE } from './serviceTime';
+
 const isTransitMode = (leg) => leg?.mode === 'BUS' || leg?.mode === 'TRANSIT';
 
 const formatStopLabel = (stop) => {
@@ -11,7 +13,11 @@ const formatStopLabel = (stop) => {
 
 const formatLegTime = (value) => {
   if (!value) return null;
-  return new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return new Date(value).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: AGENCY_TIME_ZONE,
+  });
 };
 
 export const findNextTransitLeg = (legs, currentLegIndex) => {

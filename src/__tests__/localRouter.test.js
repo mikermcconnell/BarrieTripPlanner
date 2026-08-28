@@ -181,21 +181,24 @@ jest.mock('../services/routingDataService', () => ({
 // Mock calendarService
 jest.mock('../services/calendarService', () => ({
   getActiveServicesForDate: (...args) => mockGetActiveServicesForDate(...args),
-  formatGTFSDate: jest.fn(),
+  formatGTFSDate: jest.fn((value) => {
+    if (typeof value === 'string') return value;
+    return value.toISOString().slice(0, 10).replaceAll('-', '');
+  }),
 }));
 
 // Mock itineraryBuilder — return a simplified itinerary with key fields
 jest.mock('../services/itineraryBuilder', () => ({
   buildItinerary: (result, routingData, opts) => {
+    const { serviceDateTimeToTimestamp } = jest.requireActual('../utils/serviceTime');
     const transitLegs = result.path.filter((p) => p.type === 'TRANSIT');
     const tripIds = transitLegs.map((t) => t.tripId);
     const boardingTimes = transitLegs.map((t) => t.boardingTime);
     const startSeconds = Math.min(...boardingTimes);
     const endSeconds = result.arrivalTime;
-    const baseTime = new Date(opts.date);
-    baseTime.setHours(0, 0, 0, 0);
-    const startTime = baseTime.getTime() + startSeconds * 1000;
-    const endTime = baseTime.getTime() + endSeconds * 1000;
+    const baseTimestamp = serviceDateTimeToTimestamp(opts.serviceDate, 0);
+    const startTime = baseTimestamp + startSeconds * 1000;
+    const endTime = baseTimestamp + endSeconds * 1000;
     return {
       id: `itin-${tripIds.join('-')}`,
       tripIds,
@@ -208,15 +211,17 @@ jest.mock('../services/itineraryBuilder', () => ({
       arrivalTime: result.arrivalTime,
       walkToDestSeconds: result.walkToDestSeconds,
       destinationStopId: result.destinationStopId,
+      serviceDate: opts.serviceDate,
       legs: result.path.map((segment) => (
         segment.type === 'TRANSIT'
           ? {
               mode: 'BUS',
-              startTime: baseTime.getTime() + segment.boardingTime * 1000,
-              endTime: baseTime.getTime() + segment.alightingTime * 1000,
+              startTime: baseTimestamp + segment.boardingTime * 1000,
+              endTime: baseTimestamp + segment.alightingTime * 1000,
               duration: segment.alightingTime - segment.boardingTime,
               tripId: segment.tripId,
               routeId: segment.routeId,
+              serviceDate: opts.serviceDate,
             }
           : segment
       )),
@@ -481,8 +486,7 @@ describe('localRouter — edge cases', () => {
     };
 
     mockGetActiveServicesForDate.mockImplementation((_calendar, date) => {
-      const isoDate = date.toISOString().slice(0, 10);
-      if (isoDate === '2025-06-10') {
+      if (date === '20250610') {
         return new Set(['night']);
       }
       return new Set();
@@ -502,6 +506,125 @@ describe('localRouter — edge cases', () => {
     expect(result.itineraries).toHaveLength(1);
     expect(result.itineraries[0].tripIds).toContain('trip-overnight');
     expect(result.itineraries[0].boardingTimes[0]).toBe(89280);
+    expect(result.itineraries[0].serviceDate).toBe('20250610');
+    expect(result.itineraries[0].startTime).toBe(
+      new Date('2025-06-11T04:48:00.000Z').getTime()
+    );
+  });
+
+  test('requires the minimum interchange buffer for a new bus at the same stop', async () => {
+    const stops = {
+      O: makeStop('O', 44.389, -79.700, 'Origin'),
+      X: makeStop('X', 44.394, -79.690, 'Transfer stop'),
+      D: makeStop('D', 44.400, -79.680, 'Destination'),
+    };
+    const tripIndex = {
+      first: { routeId: '1', directionId: 0, serviceId: 'weekday', headsign: 'Transfer' },
+      impossible: { routeId: '2', directionId: 0, serviceId: 'weekday', headsign: 'Destination' },
+      valid: { routeId: '2', directionId: 0, serviceId: 'weekday', headsign: 'Destination' },
+    };
+    const stopDepartures = {
+      O: [{ tripId: 'first', routeId: '1', directionId: 0, serviceId: 'weekday', departureTime: 36000, pickupType: 0 }],
+      X: [
+        { tripId: 'first', routeId: '1', directionId: 0, serviceId: 'weekday', departureTime: 36600, pickupType: 0 },
+        { tripId: 'impossible', routeId: '2', directionId: 0, serviceId: 'weekday', departureTime: 36630, pickupType: 0 },
+        { tripId: 'valid', routeId: '2', directionId: 0, serviceId: 'weekday', departureTime: 36660, pickupType: 0 },
+      ],
+      D: [],
+    };
+    const stopTimesIndex = {
+      first_O: { arrivalTime: 36000, departureTime: 36000, stopSequence: 1 },
+      first_X: { arrivalTime: 36600, departureTime: 36600, stopSequence: 2 },
+      impossible_X: { arrivalTime: 36630, departureTime: 36630, stopSequence: 1 },
+      impossible_D: { arrivalTime: 37200, departureTime: 37200, stopSequence: 2 },
+      valid_X: { arrivalTime: 36660, departureTime: 36660, stopSequence: 1 },
+      valid_D: { arrivalTime: 37260, departureTime: 37260, stopSequence: 2 },
+    };
+
+    const result = await planTripLocal({
+      fromLat: 44.389,
+      fromLon: -79.700,
+      toLat: 44.400,
+      toLon: -79.680,
+      date: new Date('2025-06-11T00:00:00'),
+      time: new Date('2025-06-11T09:55:00'),
+      routingData: {
+        stops,
+        stopIndex: stops,
+        stopDepartures,
+        stopTimesIndex,
+        routeStopSequences: {
+          1: { 0: ['O', 'X'] },
+          2: { 0: ['X', 'D'] },
+        },
+        stopRoutes: {
+          O: new Set(['1']),
+          X: new Set(['1', '2']),
+          D: new Set(['2']),
+        },
+        transfers: {},
+        serviceCalendar: {},
+        tripIndex,
+      },
+    });
+
+    expect(result.itineraries[0].tripIds).toEqual(['first', 'valid']);
+    expect(result.itineraries[0].tripIds).not.toContain('impossible');
+  });
+
+  test('allows a verified same-block continuation without an interchange penalty', async () => {
+    const stops = {
+      O: makeStop('O', 44.389, -79.700, 'Origin'),
+      X: makeStop('X', 44.394, -79.690, 'Through stop'),
+      D: makeStop('D', 44.400, -79.680, 'Destination'),
+    };
+    const tripIndex = {
+      first: { routeId: '8A', directionId: 1, serviceId: 'weekday', blockId: 'block-8', headsign: 'South' },
+      continuation: { routeId: '8B', directionId: 0, serviceId: 'weekday', blockId: 'block-8', headsign: 'North' },
+    };
+    const stopDepartures = {
+      O: [{ tripId: 'first', routeId: '8A', directionId: 1, serviceId: 'weekday', departureTime: 36000, pickupType: 0 }],
+      X: [
+        { tripId: 'first', routeId: '8A', directionId: 1, serviceId: 'weekday', departureTime: 36600, pickupType: 0 },
+        { tripId: 'continuation', routeId: '8B', directionId: 0, serviceId: 'weekday', departureTime: 36630, pickupType: 0 },
+      ],
+      D: [],
+    };
+    const stopTimesIndex = {
+      first_O: { arrivalTime: 36000, departureTime: 36000, stopSequence: 1 },
+      first_X: { arrivalTime: 36600, departureTime: 36600, stopSequence: 2 },
+      continuation_X: { arrivalTime: 36630, departureTime: 36630, stopSequence: 1 },
+      continuation_D: { arrivalTime: 37200, departureTime: 37200, stopSequence: 2 },
+    };
+
+    const result = await planTripLocal({
+      fromLat: 44.389,
+      fromLon: -79.700,
+      toLat: 44.400,
+      toLon: -79.680,
+      date: new Date('2025-06-11T00:00:00'),
+      time: new Date('2025-06-11T09:55:00'),
+      routingData: {
+        stops,
+        stopIndex: stops,
+        stopDepartures,
+        stopTimesIndex,
+        routeStopSequences: {
+          '8A': { 1: ['O', 'X'] },
+          '8B': { 0: ['X', 'D'] },
+        },
+        stopRoutes: {
+          O: new Set(['8A']),
+          X: new Set(['8A', '8B']),
+          D: new Set(['8B']),
+        },
+        transfers: {},
+        serviceCalendar: {},
+        tripIndex,
+      },
+    });
+
+    expect(result.itineraries[0].tripIds).toEqual(['first', 'continuation']);
   });
 
   test('keeps a rider-best direct candidate discovered after the first three arrivals', async () => {

@@ -4,6 +4,7 @@ import { buildTransitLegGeometry } from './buildTransitLegGeometry';
 import { calculateLegDistance } from './calculateLegDistance';
 import { getIntermediateStops } from './getIntermediateStops';
 import { mergeTransitLegs } from './mergeTransitLegs';
+import { normalizeServiceDate, serviceDateTimeToTimestamp } from '../../utils/serviceTime';
 
 const buildWalkLeg = ({ startTime, endTime, duration, distance, from, to }) => {
   const roundedDistance = Math.round(distance);
@@ -44,6 +45,7 @@ const buildTransitLeg = ({
   tripId,
   directionId,
   blockId,
+  serviceDate,
   intermediateStops,
   shapes,
   tripIndex,
@@ -64,6 +66,7 @@ const buildTransitLeg = ({
   tripId,
   directionId,
   blockId,
+  serviceDate,
   intermediateStops,
   legGeometry: buildTransitLegGeometry({ tripId, tripIndex, shapes, from, to, intermediateStops }),
   steps: null,
@@ -114,16 +117,15 @@ const getRouteInfo = (routingData, routeId) => {
 export const buildItinerary = (result, routingData, tripInfo) => {
   const { path, arrivalTime, walkToDestSeconds, destinationStopId } = result;
   const { stopIndex, tripIndex } = routingData;
-  const { fromLat, fromLon, toLat, toLon, date, arriveBy = false } = tripInfo;
+  const { fromLat, fromLon, toLat, toLon, date, serviceDate, arriveBy = false } = tripInfo;
 
   const legs = [];
   let totalWalkTime = 0;
   let totalWaitTime = 0;
   let totalWalkDistance = 0;
 
-  const baseTime = new Date(date);
-  baseTime.setHours(0, 0, 0, 0);
-  const baseTimestamp = baseTime.getTime();
+  const itineraryServiceDate = normalizeServiceDate(serviceDate || date);
+  const baseTimestamp = serviceDateTimeToTimestamp(itineraryServiceDate, 0);
 
   let lastEndTime = null;
 
@@ -222,6 +224,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         tripId: segment.tripId,
         directionId: segment.directionId ?? trip?.directionId,
         blockId: trip?.blockId || segment.blockId || null,
+        serviceDate: itineraryServiceDate,
         intermediateStops,
         shapes: routingData.shapes,
         tripIndex,
@@ -323,6 +326,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
     walkDistance: Math.round(totalWalkDistance),
     transfers: recalcTransfers,
     arriveBy,
+    serviceDate: itineraryServiceDate,
     legs: mergedLegs,
   };
 };

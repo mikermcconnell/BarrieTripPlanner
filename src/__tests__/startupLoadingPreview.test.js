@@ -176,8 +176,10 @@ describe('startup loading preview', () => {
     expect(appSource).toContain('STARTUP_EXIT_FADE_MS = 140');
     expect(appSource).not.toContain('STARTUP_IMAGE_PRELOAD_MAX_MS');
     expect(appSource).toContain('SplashScreen.preventAutoHideAsync()');
+    const appComponentDeclaration = appSource.indexOf('export function App()');
+    expect(appComponentDeclaration).toBeGreaterThan(-1);
     expect(appSource.indexOf('SplashScreen.preventAutoHideAsync()')).toBeLessThan(
-      appSource.indexOf('export default function App()')
+      appComponentDeclaration
     );
     expect(appSource).toContain('Asset.loadAsync(STARTUP_IMAGE_ASSETS)');
     expect(appSource).toContain('preferPreloadedImages={startupImagesReady}');

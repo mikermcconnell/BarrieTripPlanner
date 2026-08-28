@@ -13,6 +13,7 @@ import {
   buildBusApproachLine,
   buildRoutePathsByRouteId,
 } from '../utils/navigationBusPreview';
+import { isCurrentAgencyServiceDate, normalizeServiceDate } from '../utils/serviceTime';
 
 const BOARDING_PROGRESS_TOLERANCE_METERS = 80;
 const CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS = 60;
@@ -633,19 +634,33 @@ export const selectTripPreviewVehicles = ({
 }) => {
   if (!selectedItinerary || vehicles.length === 0) return [];
 
+  const serviceDate = normalizeServiceDate(
+    selectedItinerary.serviceDate ||
+    (selectedItinerary.legs || []).find((leg) => leg?.tripId)?.serviceDate
+  );
+  const operatingDate = normalizeServiceDate(
+    selectedItinerary.scheduledStartTime ?? selectedItinerary.startTime
+  );
+  if (operatingDate && !isCurrentAgencyServiceDate(operatingDate)) return [];
+  const eligibleVehicles = vehicles.filter((vehicle) => {
+    const vehicleServiceDate = normalizeServiceDate(vehicle?.startDate);
+    return !serviceDate || !vehicleServiceDate || vehicleServiceDate === serviceDate;
+  });
+  if (eligibleVehicles.length === 0) return [];
+
   const transitLegs = getTransitLegs(selectedItinerary);
   const tripIds = new Set(transitLegs.flatMap(getLegTripIds).filter(Boolean));
   const firstTransitLeg = transitLegs[0];
 
   if (tripIds.size > 0) {
-    const byTripId = vehicles.filter((vehicle) => tripIds.has(vehicle.tripId));
+    const byTripId = eligibleVehicles.filter((vehicle) => tripIds.has(vehicle.tripId));
     if (byTripId.length > 0) {
       const firstLegTripIds = new Set(getLegTripIds(firstTransitLeg).filter(Boolean));
       const hasFirstLegExactMatch = byTripId.some((vehicle) => firstLegTripIds.has(vehicle.tripId));
 
       const { vehicles: firstLegFallbackVehicles } = selectRouteFallbackVehiclesForLeg({
         leg: firstTransitLeg,
-        vehicles,
+        vehicles: eligibleVehicles,
         shapes,
         tripMapping,
       });
@@ -667,7 +682,7 @@ export const selectTripPreviewVehicles = ({
     hasEvaluatedCandidates,
   } = selectRouteFallbackVehiclesForLeg({
     leg: firstTransitLeg,
-    vehicles,
+    vehicles: eligibleVehicles,
     shapes,
     tripMapping,
   });
@@ -680,7 +695,7 @@ export const selectTripPreviewVehicles = ({
   }
 
   const firstRouteId = normalizeRouteKey(getLegRouteId(firstTransitLeg));
-  return vehicles.filter((vehicle) => firstRouteId && firstRouteId === normalizeRouteKey(vehicle.routeId));
+  return eligibleVehicles.filter((vehicle) => firstRouteId && firstRouteId === normalizeRouteKey(vehicle.routeId));
 };
 
 const getApproachProgressMatch = ({

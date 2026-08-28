@@ -2,7 +2,12 @@ jest.mock('../utils/fetchWithCORS', () => ({
   fetchWithCORS: jest.fn(),
 }));
 
-const { parseTripUpdates, getArrivalsForStop, getNearbyStops } = require('../services/arrivalService');
+const {
+  parseTripUpdates,
+  getArrivalsForStop,
+  getNearbyStops,
+  isTripUpdateEntityFresh,
+} = require('../services/arrivalService');
 
 const encodeVarint = (input) => {
   let value = BigInt(input);
@@ -26,9 +31,21 @@ const fieldMessage = (field, data) => Buffer.concat([
   encodeVarint(data.length),
   data,
 ]);
-const buildTripUpdateFeed = ({ tripRelationship = 0, stopRelationship = 0 } = {}) => {
+const buildTripUpdateFeed = ({
+  tripRelationship = 0,
+  stopRelationship = 0,
+  headerTimestamp = Math.floor(Date.now() / 1000),
+  updateTimestamp = headerTimestamp,
+} = {}) => {
+  const header = Buffer.concat([
+    fieldString(1, '2.0'),
+    fieldVarint(2, 0),
+    fieldVarint(3, headerTimestamp),
+  ]);
   const descriptor = Buffer.concat([
     fieldString(1, 'trip-raw'),
+    fieldString(2, '08:00:00'),
+    fieldString(3, '20260408'),
     fieldVarint(4, tripRelationship),
     fieldString(5, '8A'),
   ]);
@@ -41,8 +58,12 @@ const buildTripUpdateFeed = ({ tripRelationship = 0, stopRelationship = 0 } = {}
     fieldString(4, 'STOP-RAW'),
     fieldVarint(5, stopRelationship),
   ]);
-  const tripUpdate = Buffer.concat([fieldMessage(1, descriptor), fieldMessage(2, stopUpdate)]);
-  return fieldMessage(2, fieldMessage(3, tripUpdate));
+  const tripUpdate = Buffer.concat([
+    fieldMessage(1, descriptor),
+    fieldMessage(2, stopUpdate),
+    fieldVarint(4, updateTimestamp),
+  ]);
+  return Buffer.concat([fieldMessage(1, header), fieldMessage(2, fieldMessage(3, tripUpdate))]);
 };
 
 describe('arrivalService', () => {
@@ -184,20 +205,52 @@ describe('arrivalService', () => {
   });
 
   test('decodes positive and negative GTFS-Realtime int32 delays without zigzag corruption', () => {
-    const [entity] = parseTripUpdates(buildTripUpdateFeed());
+    const feed = parseTripUpdates(buildTripUpdateFeed());
+    const [entity] = feed.updates;
     const [stopUpdate] = entity.tripUpdate.stopTimeUpdates;
 
     expect(stopUpdate.arrival).toEqual({ delay: 301, time: 1775664300 });
     expect(stopUpdate.departure).toEqual({ delay: -180, time: 1775664360 });
+    expect(entity.tripUpdate).toEqual(expect.objectContaining({
+      startDate: '20260408',
+      startTime: '08:00:00',
+      timestamp: Math.floor(Date.now() / 1000),
+    }));
+    expect(feed).toEqual(expect.objectContaining({
+      status: 'fresh',
+      headerTimestamp: Math.floor(Date.now() / 1000),
+      incrementality: 'FULL_DATASET',
+    }));
   });
 
   test('parses and excludes canceled trips and skipped stops from arrivals', () => {
     const canceled = parseTripUpdates(buildTripUpdateFeed({ tripRelationship: 3 }));
     const skipped = parseTripUpdates(buildTripUpdateFeed({ stopRelationship: 1 }));
 
-    expect(canceled[0].tripUpdate.scheduleRelationship).toBe('CANCELED');
-    expect(skipped[0].tripUpdate.stopTimeUpdates[0].scheduleRelationship).toBe('SKIPPED');
+    expect(canceled.updates[0].tripUpdate.scheduleRelationship).toBe('CANCELED');
+    expect(skipped.updates[0].tripUpdate.stopTimeUpdates[0].scheduleRelationship).toBe('SKIPPED');
     expect(getArrivalsForStop(canceled, 'STOP-RAW', [], {})).toEqual([]);
     expect(getArrivalsForStop(skipped, 'STOP-RAW', [], {})).toEqual([]);
+  });
+
+  test('marks old feeds stale and refuses to label their predictions live', () => {
+    const stale = parseTripUpdates(buildTripUpdateFeed({
+      headerTimestamp: Math.floor(Date.now() / 1000) - 10 * 60,
+      updateTimestamp: Math.floor(Date.now() / 1000) - 10 * 60,
+    }));
+
+    expect(stale.status).toBe('stale');
+    expect(stale.ageMs).toBe(10 * 60 * 1000);
+    expect(getArrivalsForStop(stale, 'STOP-RAW', [], {})).toEqual([]);
+  });
+
+  test('rejects an old individual update even when the feed header is fresh', () => {
+    const feed = parseTripUpdates(buildTripUpdateFeed({
+      updateTimestamp: Math.floor(Date.now() / 1000) - 10 * 60,
+    }));
+
+    expect(feed.status).toBe('fresh');
+    expect(isTripUpdateEntityFresh(feed.updates[0], feed)).toBe(false);
+    expect(getArrivalsForStop(feed, 'STOP-RAW', [], {})).toEqual([]);
   });
 });

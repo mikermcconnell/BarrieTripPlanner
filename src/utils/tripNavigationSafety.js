@@ -6,6 +6,7 @@ import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { annotateItinerariesWithDetours } from './tripDetourImpacts';
 import { annotateItinerariesWithStopClosures } from './stopClosureTripWarnings';
 import { getActiveOfficialServiceImpacts } from './officialServiceImpacts';
+import { ROUTING_CONFIG } from '../config/constants';
 
 const BLOCKED_DETOUR_SCOPES = new Set([
   'boarding_stop',
@@ -46,7 +47,10 @@ const hasImpossibleTransfer = (itinerary) => {
     if (previousEnd == null || nextStart == null) continue;
 
     const availableSeconds = Math.round((nextStart - previousEnd) / 1000);
-    if (getTransferWalkSeconds(legs, previous.index, next.index) > availableSeconds) {
+    const requiredConnectionSeconds =
+      getTransferWalkSeconds(legs, previous.index, next.index) +
+      (ROUTING_CONFIG.MIN_TRANSFER_TIME || 0);
+    if (requiredConnectionSeconds > availableSeconds) {
       return true;
     }
   }

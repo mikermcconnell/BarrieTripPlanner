@@ -19,6 +19,7 @@ const {
   formatDuration,
   formatDistance,
   formatMinutes,
+  formatTimeFromTimestamp,
 } = require('../services/tripService');
 
 describe('tripService configuration and format helpers', () => {
@@ -43,5 +44,9 @@ describe('tripService configuration and format helpers', () => {
     expect(formatDistance(250)).toBe('250m');
     expect(formatDistance(1500)).toBe('1.5km');
     expect(formatDistance(-1)).toBe('0m');
+  });
+
+  test('formats transit times in the Barrie agency timezone', () => {
+    expect(formatTimeFromTimestamp(new Date('2026-07-14T13:30:00Z').getTime())).toMatch(/09:30/);
   });
 });
