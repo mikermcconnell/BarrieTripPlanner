@@ -49,6 +49,7 @@ const PUBLIC_ENV = {
   EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ: process.env.EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ,
   EXPO_PUBLIC_API_PROXY_TOKEN: process.env.EXPO_PUBLIC_API_PROXY_TOKEN,
   EXPO_PUBLIC_CORS_PROXY_TOKEN: process.env.EXPO_PUBLIC_CORS_PROXY_TOKEN,
+  EXPO_PUBLIC_CARTO_BASEMAP_KEY: process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY,
 };
 
 const readEnv = (name) => {
@@ -144,6 +145,9 @@ const runtimeConfig = {
   proxy: {
     apiBaseUrl: readEnv('EXPO_PUBLIC_API_PROXY_URL'),
     corsBaseUrl: readEnv('EXPO_PUBLIC_CORS_PROXY_URL'),
+  },
+  basemap: {
+    cartoApiKey: readEnv('EXPO_PUBLIC_CARTO_BASEMAP_KEY'),
   },
   detours: {
     enabledByDefault: hasPublicEnvValue('EXPO_PUBLIC_ENABLE_AUTO_DETOURS')

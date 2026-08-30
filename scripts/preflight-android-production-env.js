@@ -154,6 +154,7 @@ function main() {
     'EXPO_PUBLIC_FIREBASE_APP_ID',
     'EXPO_PUBLIC_API_PROXY_URL',
     'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
+    'EXPO_PUBLIC_CARTO_BASEMAP_KEY',
   ];
 
   for (const name of required) {
@@ -208,6 +209,7 @@ function main() {
   console.log(`- API proxy: ${proxyUrl || 'missing'}`);
   console.log(`- Firebase project: ${env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'missing'}`);
   console.log(`- Google web client ID: ${hasValue(env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) ? 'present' : 'missing'}`);
+  console.log(`- CARTO basemap key: ${hasValue(env.EXPO_PUBLIC_CARTO_BASEMAP_KEY) ? 'present' : 'missing'}`);
   console.log(`- Google services file: ${googleServicesPath ? path.relative(projectRoot, googleServicesPath) : 'EAS secret or missing locally'}`);
   console.log(`- Sentry DSN: ${hasValue(env.EXPO_PUBLIC_SENTRY_DSN) ? 'present' : 'missing'}`);
   console.log(`- Sentry source-map token: ${hasValue(env.SENTRY_AUTH_TOKEN) ? 'present' : 'missing'}`);

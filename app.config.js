@@ -78,6 +78,12 @@ module.exports = ({ config }) => {
     );
   }
 
+  if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY)) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_CARTO_BASEMAP_KEY for production EAS build. Set it in the EAS production environment.'
+    );
+  }
+
   if (isEasProductionBuild && !hasValue(process.env.SENTRY_AUTH_TOKEN)) {
     throw new Error(
       'Missing SENTRY_AUTH_TOKEN for production EAS build. Set it as a sensitive EAS production environment variable.'
@@ -140,6 +146,7 @@ module.exports = ({ config }) => {
       EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       EXPO_PUBLIC_API_PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL,
+      EXPO_PUBLIC_CARTO_BASEMAP_KEY: process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY,
       EXPO_PUBLIC_ENABLE_AUTO_DETOURS: process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS,
       EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: process.env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION,
     },

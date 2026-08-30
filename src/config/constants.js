@@ -9,6 +9,10 @@ const readPublicEnv = (value, fallback = '') => {
 };
 
 const LEGAL_SITE_URL = 'https://barrie-transit-trip-plan-cc84e.web.app';
+const CARTO_BASEMAP_API_KEY = runtimeConfig.basemap?.cartoApiKey || '';
+const CARTO_BASEMAP_QUERY = CARTO_BASEMAP_API_KEY
+  ? `?key=${encodeURIComponent(CARTO_BASEMAP_API_KEY)}`
+  : '';
 
 // Barrie Transit GTFS Data URLs
 // Source: https://www.transit.land/feeds/f-dpzk-barrietransit
@@ -22,8 +26,8 @@ export const GTFS_URLS = {
   SERVICE_ALERTS: 'https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb',
 };
 
-// MapLibre style — muted light basemap (CartoDB Positron)
-// Free, no API key required, clean desaturated look
+// MapLibre style — muted light basemap (CARTO Positron).
+// CARTO requires a per-project key for production basemap requests.
 export const OSM_MAP_STYLE = {
   version: 8,
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -31,9 +35,9 @@ export const OSM_MAP_STYLE = {
     'carto-light': {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+        `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png${CARTO_BASEMAP_QUERY}`,
+        `https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png${CARTO_BASEMAP_QUERY}`,
+        `https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png${CARTO_BASEMAP_QUERY}`,
       ],
       tileSize: 256,
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
