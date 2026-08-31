@@ -11,10 +11,10 @@ describe('production release safeguards', () => {
     expect(new Set(Object.values(allowlist.advisories).map((entry) => entry.package))).toEqual(new Set(['image-size']));
   });
 
-  test('production keeps auto-detours off until rollout health is ready', () => {
+  test('production enables auto-detours with explicit rollout approval', () => {
     const eas = JSON.parse(read('eas.json'));
-    expect(eas.build.production.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS).toBe('false');
-    expect(eas.build.production.env.EXPO_PUBLIC_AUTO_DETOURS_APPROVED).toBe('false');
+    expect(eas.build.production.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS).toBe('true');
+    expect(eas.build.production.env.EXPO_PUBLIC_AUTO_DETOURS_APPROVED).toBe('true');
   });
 
   test('keeps one monotonic production release identity', () => {
