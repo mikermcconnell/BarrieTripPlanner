@@ -567,6 +567,9 @@ Instead:
   - configured active detour collection, usually `activeDetours` or V2 event `activeDetourEventsV2`
   - configured history collection, usually `detourHistory` or V2 event `detourEventHistoryV2`
   - configured runtime doc, usually `systemState/detourRuntime` or lab `systemState/detourRuntimeV2`
+    - includes the latest successful worker tick so rollout health remains accurate on cold instances
+  - baseline adoption timer doc, `systemState/baselineAutoUpdate`
+    - keeps the GTFS stability window intact across Cloud Run instance recycling
 - resume scheduler briefly and confirm repeated ticks advance state
 
 ## Rollback Notes

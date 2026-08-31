@@ -543,7 +543,9 @@ function createDetourOps({
       return { enabled: false, message: 'Detour worker is not enabled' };
     }
 
-    const status = detourWorker.getStatus();
+    let status = typeof detourWorker.getStatusWithPersistedHealth === 'function'
+      ? await detourWorker.getStatusWithPersistedHealth()
+      : detourWorker.getStatus();
     const rolloutWindowMs = parsePositiveInt(env.DETOUR_ROLLOUT_WINDOW_MS, DEFAULT_ROLLOUT_WINDOW_MS);
     const falsePositiveWindowMs = parsePositiveInt(
       env.DETOUR_FALSE_POSITIVE_WINDOW_MS,
@@ -587,6 +589,11 @@ function createDetourOps({
     try {
       const baselineWithDivergence = await getBaselineStatusWithDivergence();
       baselineDivergence = baselineWithDivergence?.divergence || null;
+      const { divergence: _divergence, ...hydratedBaselineStatus } = baselineWithDivergence || {};
+      status = {
+        ...status,
+        baseline: { ...(status.baseline || {}), ...hydratedBaselineStatus },
+      };
     } catch (err) {
       baselineDivergence = { error: err.message || 'Could not compare baseline with live GTFS' };
     }

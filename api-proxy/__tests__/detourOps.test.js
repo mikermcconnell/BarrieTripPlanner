@@ -13,6 +13,45 @@ describe('detourOps rollout health', () => {
     jest.dontMock('../detourV2/workerAdapter');
   });
 
+  test('uses persisted worker health and hydrated baseline on a cold instance', async () => {
+    const now = Date.parse('2026-08-31T12:00:00Z');
+    const getStatusWithPersistedHealth = jest.fn().mockResolvedValue({
+      running: false,
+      mode: 'scheduled',
+      tickCount: 42,
+      lastSuccessfulTick: new Date(now - 60 * 1000).toISOString(),
+      consecutiveFailureCount: 0,
+      activeDetours: {},
+      baseline: { loaded: false, readyForDetours: false },
+      errors: { publishFailures: 0 },
+    });
+    const ops = createDetourOps({
+      detourWorker: {
+        getStatus: () => ({ tickCount: 0, lastSuccessfulTick: null }),
+        getStatusWithPersistedHealth,
+      },
+      queryDetourHistory: jest.fn().mockResolvedValue([]),
+      queryReviewedDetectionQuality: jest.fn().mockResolvedValue({ ready: true }),
+      getBaselineStatusWithDivergence: jest.fn().mockResolvedValue({
+        loaded: true,
+        readyForDetours: true,
+        source: 'firestore',
+        divergence: { hasChanges: false },
+      }),
+      now: () => now,
+      env: { DETOUR_WORKER_ENABLED: 'true' },
+    });
+
+    const result = await ops.getRolloutHealth();
+
+    expect(getStatusWithPersistedHealth).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      tickCount: 42,
+      baseline: { loaded: true, readyForDetours: true, source: 'firestore' },
+      launchReadiness: { status: 'pilot_ready' },
+    });
+  });
+
   test('enqueues one delayed offset sample after a primary scheduled run', async () => {
     const runTick = jest.fn().mockResolvedValue({
       ok: true,
@@ -612,4 +651,3 @@ describe('detourOps rollout health', () => {
     }));
   });
 });
-

@@ -215,6 +215,22 @@ describe('baselineManager', () => {
     );
   });
 
+  test('setBaselineRoutes removes a retired route and only its orphaned shapes', async () => {
+    const initialData = makeLiveData({ '8A': ['shared', 'only-8a'], KP1: ['shared', 'only-kp1'] });
+    await baselineManager.setBaseline(initialData);
+
+    const currentData = makeLiveData({ '8A': ['shared', 'only-8a'] });
+    const result = await baselineManager.setBaselineRoutes(currentData, ['KP1']);
+
+    expect(result).toEqual({ updatedRouteIds: [], removedRouteIds: ['KP1'] });
+    const baseline = await baselineManager.getBaselineData(currentData);
+    expect(baseline.routeShapeMapping.has('KP1')).toBe(false);
+    expect(baseline.shapes.has('only-kp1')).toBe(false);
+    expect(baseline.shapes.has('shared')).toBe(true);
+    expect(mockDocDelete).toHaveBeenCalled();
+    expect(baselineManager.getBaselineStatus()).toMatchObject({ routeCount: 1, shapeCount: 2 });
+  });
+
   test('logShapeDivergence detects added and removed shapes', async () => {
     const liveDataOld = makeLiveData({ '8A': ['s1', 's2'], '8B': ['s3'] });
     await baselineManager.setBaseline(liveDataOld);

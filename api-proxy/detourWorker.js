@@ -75,6 +75,41 @@ const vehicleSampleFreshness = createVehicleSampleFreshnessTracker();
 const recentEvents = [];
 const recentTickSamples = [];
 
+function buildWorkerHealthSnapshot(overrides = {}) {
+  return {
+    tickCount,
+    lastSuccessfulTick,
+    lastDetourPublishAt,
+    lastTickStartedAt,
+    lastTickFinishedAt,
+    lastTickSource,
+    consecutiveFailureCount,
+    publishFailures,
+    ...overrides,
+  };
+}
+
+function hydrateWorkerHealth(snapshot) {
+  const health = snapshot?.workerHealth;
+  if (!health || typeof health !== 'object') return false;
+  const persistedMs = Date.parse(health.lastSuccessfulTick || '');
+  const localMs = Date.parse(lastSuccessfulTick || '');
+  if (!Number.isFinite(persistedMs) || (Number.isFinite(localMs) && persistedMs <= localMs)) {
+    return false;
+  }
+  tickCount = Number.isFinite(health.tickCount) ? health.tickCount : tickCount;
+  lastSuccessfulTick = health.lastSuccessfulTick;
+  lastDetourPublishAt = health.lastDetourPublishAt || lastDetourPublishAt;
+  lastTickStartedAt = health.lastTickStartedAt || lastTickStartedAt;
+  lastTickFinishedAt = health.lastTickFinishedAt || lastTickFinishedAt;
+  lastTickSource = health.lastTickSource || lastTickSource;
+  consecutiveFailureCount = Number.isFinite(health.consecutiveFailureCount)
+    ? health.consecutiveFailureCount
+    : consecutiveFailureCount;
+  publishFailures = Number.isFinite(health.publishFailures) ? health.publishFailures : publishFailures;
+  return true;
+}
+
 function getWorkerMode() {
   return String(process.env.DETOUR_WORKER_MODE || 'interval').trim().toLowerCase();
 }
@@ -210,6 +245,7 @@ async function ensureRuntimeStateHydrated({ force = false } = {}) {
   const snapshot = await loadDetourRuntimeState({ force, storageConfig: detourStorageConfig });
   if (snapshot) {
     hydrateRuntimeState(snapshot);
+    hydrateWorkerHealth(snapshot);
   }
   runtimeStateHydrated = true;
   const snapshotRouteCount = countRuntimeSnapshotActiveDetours(snapshot);
@@ -410,6 +446,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       baselineDivergence = baselineAutoUpdate.baselineDivergence || baselineDivergence;
     }
 
+    let successfulTickAt = null;
     try {
       const suppressDeletesWhenEmpty =
         runtimeHydration?.needsActiveSnapshotFallback === true &&
@@ -437,10 +474,20 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
       if (detourStorageConfig.detourVersion !== 'v2') {
         await syncPersistentDetours(getPersistentDetours(), getPersistentDetourGeometries());
       }
-      await saveDetourRuntimeState(runtimeStateWithActiveRouteIds(
+      successfulTickAt = new Date().toISOString();
+      const runtimeState = runtimeStateWithActiveRouteIds(
         serializeDetectorRuntimeState(),
         activeDetours
-      ), {
+      );
+      await saveDetourRuntimeState({
+        ...runtimeState,
+        workerHealth: buildWorkerHealthSnapshot({
+          tickCount: tickCount + 1,
+          lastSuccessfulTick: successfulTickAt,
+          lastTickFinishedAt: successfulTickAt,
+          consecutiveFailureCount: 0,
+        }),
+      }, {
         storageConfig: detourStorageConfig,
       });
       try {
@@ -477,7 +524,7 @@ async function runTick({ source = 'manual', forceReloadState = false } = {}) {
     }
 
     tickCount++;
-    lastSuccessfulTick = new Date().toISOString();
+    lastSuccessfulTick = successfulTickAt;
     consecutiveFailureCount = 0;
     const detourCount = Object.keys(activeDetours).length;
     const tickDurationMs = Date.now() - tickStartedAtMs;
@@ -602,11 +649,18 @@ function getStatus() {
   };
 }
 
+async function getStatusWithPersistedHealth() {
+  const snapshot = await loadDetourRuntimeState({ force: true, storageConfig: detourStorageConfig });
+  hydrateWorkerHealth(snapshot);
+  return getStatus();
+}
+
 module.exports = {
   start,
   stop,
   runTick,
   getStatus,
+  getStatusWithPersistedHealth,
   getWorkerMode,
   TICK_INTERVAL,
 };

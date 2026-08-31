@@ -273,7 +273,7 @@ describe('detourWorker cold-start active snapshot fallback', () => {
         baselineReviewRequiredRouteIds: ['8A'],
       }));
       expect(saveDetourRuntimeState).toHaveBeenCalledWith(
-        { routes: [{ routeId: '8A' }, { routeId: '10' }] },
+        expect.objectContaining({ routes: [{ routeId: '8A' }, { routeId: '10' }] }),
         expect.any(Object)
       );
     } finally {
@@ -472,7 +472,7 @@ describe('detourWorker cold-start active snapshot fallback', () => {
         baselineReviewRequiredRouteIds: ['8B'],
       }));
       expect(saveDetourRuntimeState).toHaveBeenCalledWith(
-        { routes: [{ routeId: '8B' }, { routeId: '10' }] },
+        expect.objectContaining({ routes: [{ routeId: '8B' }, { routeId: '10' }] }),
         expect.any(Object)
       );
     } finally {
