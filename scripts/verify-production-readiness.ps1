@@ -29,22 +29,33 @@ if (-not $SkipSourceControlCheck) {
   if ([int]$counts[0] -ne 0 -or [int]$counts[1] -ne 0) {
     throw "Release branch is not synchronized with its upstream branch."
   }
+  $branch = git branch --show-current
+  if ($branch -ne "master") {
+    throw "Production releases must be built from master, not $branch."
+  }
+  $upstream = git rev-parse --abbrev-ref '@{upstream}'
+  if ($upstream -ne "origin/master") {
+    throw "Production master must track origin/master, not $upstream."
+  }
 }
+
+Write-Host "== Release identity =="
+Invoke-CheckedCommand node scripts/verify-release-identity.js
 
 Write-Host "== App and API tests =="
 Invoke-CheckedCommand npm run test:all
 
 Write-Host "== Android production env preflight =="
-Invoke-CheckedCommand npm run prebuild:android:production
+Invoke-CheckedCommand npm run prebuild:android:eas
 
 Write-Host "== Expo Doctor =="
 Invoke-CheckedCommand npx expo-doctor
 
 Write-Host "== Root production audit =="
-Invoke-CheckedCommand npm audit --omit=dev --audit-level=high
+Invoke-CheckedCommand node scripts/verify-production-audit.js
 
 Write-Host "== API proxy production audit =="
-Invoke-CheckedCommand npm --prefix api-proxy audit --omit=dev --audit-level=high
+Invoke-CheckedCommand node scripts/verify-production-audit.js --prefix api-proxy
 
 Write-Host "== Firebase anonymous auth and protected proxy access =="
 $anonymousProxyCheck = @'
@@ -175,18 +186,7 @@ foreach ($legalUrl in $legalUrls) {
 }
 
 Write-Host "== Firestore feedback retention policy =="
-$ttlJson = gcloud firestore fields ttls list `
-  --project=barrie-transit-trip-plan-cc84e `
-  --format=json
-if ($LASTEXITCODE -ne 0) { throw "Could not verify Firestore TTL policies" }
-$ttlFields = $ttlJson | ConvertFrom-Json
-foreach ($collectionGroup in @("appFeedback", "appFeedbackRateLimits")) {
-  $suffix = "/collectionGroups/$collectionGroup/fields/expiresAt"
-  $ttl = $ttlFields | Where-Object { $_.name.EndsWith($suffix) } | Select-Object -First 1
-  if (-not $ttl -or $ttl.ttlConfig.state -ne "ACTIVE") {
-    throw "Firestore TTL is not active for $collectionGroup.expiresAt"
-  }
-}
+Invoke-CheckedCommand node scripts/verify-firestore-ttl.js
 
 $proxyUrl = "https://apiproxy-r7pziiwpua-uc.a.run.app"
 

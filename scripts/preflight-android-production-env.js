@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { getReleaseIdentityErrors } = require('./verify-release-identity');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -144,6 +145,8 @@ function main() {
     console.log(`Android production env preflight skipped for non-production profile: ${profile}`);
     return;
   }
+
+  errors.push(...getReleaseIdentityErrors({ env }));
 
   const required = [
     'EXPO_PUBLIC_FIREBASE_API_KEY',

@@ -38,7 +38,14 @@ function readGoogleWebClientId(googleServicesFile) {
 }
 
 module.exports = ({ config }) => {
-  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || packageJson.version;
+  const configuredAppVersion = String(process.env.EXPO_PUBLIC_APP_VERSION || '').trim();
+  if (configuredAppVersion && configuredAppVersion !== packageJson.version) {
+    throw new Error(
+      `EXPO_PUBLIC_APP_VERSION ${configuredAppVersion} does not match package.json ${packageJson.version}. ` +
+      'Production releases and OTA updates must keep one version identity.'
+    );
+  }
+  const appVersion = packageJson.version;
   const mergedConfig = {
     ...(config || {}),
     ...(appJson?.expo || {}),

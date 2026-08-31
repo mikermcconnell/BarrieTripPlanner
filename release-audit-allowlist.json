@@ -1,0 +1,12 @@
+{
+  "advisories": {
+    "1138808": {
+      "package": "image-size",
+      "reason": "Metro build-time parser only; production builds process repository-controlled assets. Remove when Expo ships a patched Metro dependency."
+    },
+    "1138809": {
+      "package": "image-size",
+      "reason": "Metro build-time parser only; production builds process repository-controlled assets. Remove when Expo ships a patched Metro dependency."
+    }
+  }
+}

@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "`n=== Building signed $artifact with EAS profile $profile ===" -ForegroundColor Cyan
-& eas build --platform android --profile $profile --clear-cache
+& node scripts/run-eas-cli.js build --platform android --profile $profile --clear-cache
 if ($LASTEXITCODE -ne 0) {
     throw "EAS Android build failed with exit code $LASTEXITCODE"
 }

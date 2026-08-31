@@ -370,12 +370,15 @@ My Trips is local-first for signed-out riders. Account sign-in is optional and r
 
 - Before building any Android App Bundle (`.aab`) for Google Play Console, always increment the Android `versionCode`.
 - Keep the Expo config and native Android config in sync: update `android.versionCode` in `app.base.json` and `versionCode` in `android/app/build.gradle`.
+- Keep `package.json`, `app.base.json`, and `release.json` on the same release version. `release.json` must record a version name and Android version code higher than the last known Play production release.
+- Do not use `EXPO_PUBLIC_APP_VERSION` to move a build or OTA update onto another runtime. A mismatched override is rejected by app configuration and the production preflight.
 
 ### Production release gate
 
 - Run `npm run verify:production` from a clean branch that is synchronized with its upstream branch.
+- Production releases must come from clean `master` tracking the exact `origin/master` commit. The gate prints and validates the checked-in release identity before running the broader suite.
 - The gate checks tests, production environment safety, Expo health, dependency severity, live API auth, legal URLs, and feedback-retention TTL policies.
-- Public auto-detours require `EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true`. The production release gate also verifies the live baseline and rollout health before a build can proceed.
+- Public auto-detours require `EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true`. Keep both production flags `false` until the live baseline and rollout-health critical checks pass; the production release gate verifies those checks whenever the feature is enabled.
 - Run `npm run build:release` only after the gate passes. It creates the Google Play AAB through EAS-managed upload signing; a local Gradle release is a smoke-test artifact and must not be uploaded.
 - Static legal pages live in `legal-public/` and Firebase Hosting is configured to deploy only that directory. They identify Mike McMike as the independent operator. Obtain legal review, run `firebase deploy --only hosting`, then verify each public URL. The app contact is `mybarrietransit@outlook.com`; Service Barrie remains the transit-service contact only.
 

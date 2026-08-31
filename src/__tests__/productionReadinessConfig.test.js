@@ -5,10 +5,53 @@ const root = path.resolve(__dirname, '../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('production release safeguards', () => {
-  test('production enables auto-detours only with explicit rollout approval', () => {
+  test('production audit exceptions are limited to Metro image parsing advisories', () => {
+    const allowlist = require('../../release-audit-allowlist.json');
+    expect(Object.keys(allowlist.advisories).sort()).toEqual(['1138808', '1138809']);
+    expect(new Set(Object.values(allowlist.advisories).map((entry) => entry.package))).toEqual(new Set(['image-size']));
+  });
+
+  test('production keeps auto-detours off until rollout health is ready', () => {
     const eas = JSON.parse(read('eas.json'));
-    expect(eas.build.production.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS).toBe('true');
-    expect(eas.build.production.env.EXPO_PUBLIC_AUTO_DETOURS_APPROVED).toBe('true');
+    expect(eas.build.production.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS).toBe('false');
+    expect(eas.build.production.env.EXPO_PUBLIC_AUTO_DETOURS_APPROVED).toBe('false');
+  });
+
+  test('keeps one monotonic production release identity', () => {
+    const packageJson = JSON.parse(read('package.json'));
+    const app = JSON.parse(read('app.base.json')).expo;
+    const eas = JSON.parse(read('eas.json'));
+    const release = JSON.parse(read('release.json'));
+
+    expect(packageJson.version).toBe(release.current.version);
+    expect(app.version).toBe(release.current.version);
+    expect(app.android.versionCode).toBe(release.current.androidVersionCode);
+    expect(release.current.androidVersionCode).toBeGreaterThan(release.previousProduction.androidVersionCode);
+    expect(eas.cli.appVersionSource).toBe('local');
+    expect(eas.build.production.android.buildType).toBe('app-bundle');
+    expect(eas.submit.production.android.track).toBe('production');
+  });
+
+  test('rejects a mismatched app-version override', () => {
+    const { getReleaseIdentityErrors } = require('../../scripts/verify-release-identity');
+    expect(getReleaseIdentityErrors({ env: { EXPO_PUBLIC_APP_VERSION: '1.0.8' } })).toEqual(
+      expect.arrayContaining([expect.stringContaining('disagrees with release version')])
+    );
+  });
+
+  test('runs EAS through the pinned isolated-cache wrapper', () => {
+    const packageJson = JSON.parse(read('package.json'));
+    expect(packageJson.scripts['prebuild:android:eas']).toContain('scripts/run-eas-cli.js');
+    expect(read('scripts/build-release.ps1')).toContain('node scripts/run-eas-cli.js build');
+    expect(read('scripts/run-eas-cli.js')).toContain("'eas-cli@23.1.0'");
+    expect(read('scripts/run-eas-cli.js')).toContain("'bttp-eas-cli-cache'");
+  });
+
+  test('verifies Firestore TTL through pinned Firebase tooling', () => {
+    const script = read('scripts/verify-firestore-ttl.js');
+    expect(script).toContain('firebase-tools@15.28.2');
+    expect(script).toContain("await verifyTtl('appFeedback')");
+    expect(script).toContain("await verifyTtl('appFeedbackRateLimits')");
   });
 
   test('blocks Android permissions that are not needed by the app', () => {
