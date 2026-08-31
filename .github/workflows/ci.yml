@@ -34,16 +34,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-          cache: gradle
       - run: npm ci
       - name: Validate Expo project health
         run: npx expo-doctor
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
       - name: Verify generated Android release safeguards
         run: npx jest --runInBand src/__tests__/productionReadinessConfig.test.js
       - name: Build release APK
