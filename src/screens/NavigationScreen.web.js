@@ -258,9 +258,17 @@ const NavigationScreen = ({ route }) => {
 
   const mapRef = useRef(null);
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview
+  const isFollowModeRef = useRef(false);
+  const initialRegionRef = useRef(null);
+  const handledJumpToLocationTriggerRef = useRef(0);
+  const handledShowOverviewTriggerRef = useRef(0);
   const [isMapReady, setIsMapReady] = useState(false);
   const [jumpToLocationTrigger, setJumpToLocationTrigger] = useState(0);
   const [showOverviewTrigger, setShowOverviewTrigger] = useState(0);
+  const disableFollowMode = useCallback(() => {
+    isFollowModeRef.current = false;
+    setIsFollowMode(false);
+  }, []);
   const [showExitModal, setShowExitModal] = useState(false);
   const [isOffRoute, setIsOffRoute] = useState(false);
   const offRouteTimerRef = useRef(null);
@@ -764,7 +772,7 @@ const NavigationScreen = ({ route }) => {
       missedBusWarningRef.current = false;
       setShowStaleWarning(false);
       setShowMissedBusWarning(false);
-      setIsFollowMode(false);
+      disableFollowMode();
       setItinerary(nextItinerary);
       resetNavigation();
       startNavigation();
@@ -779,6 +787,7 @@ const NavigationScreen = ({ route }) => {
     }
   }, [
     clearOffRouteState,
+    disableFollowMode,
     ensureRoutingData,
     isRecalculatingRoute,
     itinerary,
@@ -809,7 +818,9 @@ const NavigationScreen = ({ route }) => {
   };
 
   const toggleFollowMode = () => {
-    setIsFollowMode(!isFollowMode);
+    const nextFollowMode = !isFollowModeRef.current;
+    isFollowModeRef.current = nextFollowMode;
+    setIsFollowMode(nextFollowMode);
   };
 
   // Jump to current location (one-time, doesn't enable follow mode)
@@ -819,20 +830,20 @@ const NavigationScreen = ({ route }) => {
 
   // Show full trip overview
   const showTripOverview = useCallback(() => {
-    setIsFollowMode(false);
+    disableFollowMode();
     setShowOverviewTrigger(prev => prev + 1);
-  }, []);
+  }, [disableFollowMode]);
 
   const handleMapUserInteraction = useCallback(() => {
-    setIsFollowMode(false);
-  }, []);
+    disableFollowMode();
+  }, [disableFollowMode]);
 
   // Detect touch device for compass button visibility
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
   // Follow the user while follow mode is enabled, without changing the current zoom level.
   useEffect(() => {
-    if (!isMapReady || !isFollowMode || !userLocation) return;
+    if (!isMapReady || !isFollowMode || !isFollowModeRef.current || !userLocation) return;
     const currentRegion = mapRef.current?.getRegion() || MAP_CONFIG.INITIAL_REGION;
     mapRef.current?.animateToRegion(
       buildRegionForLocation(userLocation.latitude, userLocation.longitude, currentRegion),
@@ -842,7 +853,14 @@ const NavigationScreen = ({ route }) => {
 
   // Jump to current location when requested.
   useEffect(() => {
-    if (!isMapReady || !jumpToLocationTrigger || !userLocation) return;
+    if (
+      !isMapReady ||
+      !jumpToLocationTrigger ||
+      handledJumpToLocationTriggerRef.current === jumpToLocationTrigger ||
+      !userLocation
+    ) return;
+
+    handledJumpToLocationTriggerRef.current = jumpToLocationTrigger;
     const currentRegion = mapRef.current?.getRegion() || MAP_CONFIG.INITIAL_REGION;
     mapRef.current?.animateToRegion(
       buildRegionForLocation(userLocation.latitude, userLocation.longitude, currentRegion),
@@ -852,7 +870,14 @@ const NavigationScreen = ({ route }) => {
 
   // Restore the full trip overview when requested.
   useEffect(() => {
-    if (!isMapReady || !showOverviewTrigger || tripViewportCoordinates.length === 0) return;
+    if (
+      !isMapReady ||
+      !showOverviewTrigger ||
+      handledShowOverviewTriggerRef.current === showOverviewTrigger ||
+      tripViewportCoordinates.length === 0
+    ) return;
+
+    handledShowOverviewTriggerRef.current = showOverviewTrigger;
     mapRef.current?.fitToCoordinates(
       tripViewportCoordinates,
       { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 } }
@@ -861,21 +886,27 @@ const NavigationScreen = ({ route }) => {
 
   // Keep north-up / heading-up behavior using the MapLibre map bearing.
   useEffect(() => {
-    if (!isMapReady) return;
+    if (!isMapReady || !isFollowMode || !isFollowModeRef.current) return;
     if (isHeadingUp && isWalkingLeg && isTouchDevice) {
       mapRef.current?.setBearing(-(userLocation?.heading ?? 0));
       return;
     }
     mapRef.current?.setBearing(0);
-  }, [isHeadingUp, isMapReady, isTouchDevice, isWalkingLeg, userLocation?.heading]);
+  }, [isFollowMode, isHeadingUp, isMapReady, isTouchDevice, isWalkingLeg, userLocation?.heading]);
 
-  const initialRegion = useMemo(() => {
+  if (!initialRegionRef.current) {
     const tripStart = itinerary?.legs?.[0]?.from;
     if (Number.isFinite(tripStart?.lat) && Number.isFinite(tripStart?.lon)) {
-      return buildRegionForLocation(tripStart.lat, tripStart.lon, MAP_CONFIG.INITIAL_REGION);
+      initialRegionRef.current = buildRegionForLocation(
+        tripStart.lat,
+        tripStart.lon,
+        MAP_CONFIG.INITIAL_REGION
+      );
+    } else {
+      initialRegionRef.current = MAP_CONFIG.INITIAL_REGION;
     }
-    return MAP_CONFIG.INITIAL_REGION;
-  }, [itinerary]);
+  }
+  const initialRegion = initialRegionRef.current;
 
   return (
     <View style={styles.container}>

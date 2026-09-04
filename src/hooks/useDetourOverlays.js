@@ -380,6 +380,9 @@ export function deriveDetourOverlays({
     const familyPathRenderInfo = buildFamilyPathRenderInfo(familyRouteIds, riderVisibleDetours, focusedRouteId, renderOptions);
     const routePathRenderInfo = familyPathRenderInfo[routeId] || {};
     if (routePathRenderInfo.isDuplicateSharedPath) return;
+    const maskRouteIds = familyRouteIds.filter((familyRouteId) => (
+      familyRouteId === routeId || familyPathRenderInfo[familyRouteId]?.isDuplicateSharedPath
+    ));
 
     const routeLineLabel = familyRouteIds.join('/');
     const familyHasDistinctDetourPaths = getFamilyHasDistinctDetourPaths(familyRouteIds, riderVisibleDetours, renderOptions);
@@ -540,6 +543,10 @@ export function deriveDetourOverlays({
     overlays.push({
       routeId,
       routeIds: familyRouteIds,
+      // routeIds is family-level display metadata. maskRouteIds is the exact
+      // route geometry represented by this overlay, including shared paths
+      // intentionally collapsed to one rendered line.
+      maskRouteIds,
       state: detour.state ?? 'active',
       skippedSegmentPolyline: primaryResolvedSegment.skippedSegmentPolyline ?? null,
       inferredDetourPolyline:

@@ -88,6 +88,7 @@ export const TransitProvider = ({ children }) => {
   // Real-time data
   const [vehicles, setVehicles] = useState([]);
   const [lastVehicleUpdate, setLastVehicleUpdate] = useState(null);
+  const [nextVehicleRefreshAt, setNextVehicleRefreshAt] = useState(null);
   const [vehicleFeedHealth, setVehicleFeedHealth] = useState(null);
 
   // Loading and error states
@@ -525,15 +526,19 @@ export const TransitProvider = ({ children }) => {
    */
   const startVehicleUpdates = useCallback(() => {
     if (vehicleIntervalRef.current) {
-      clearInterval(vehicleIntervalRef.current);
+      clearTimeout(vehicleIntervalRef.current);
     }
 
     void loadVehiclePositions();
-
-    vehicleIntervalRef.current = setInterval(
-      () => loadVehiclePositions({ showLoading: false }),
-      REFRESH_INTERVALS.VEHICLE_POSITIONS
-    );
+    const scheduleNextVehicleUpdate = () => {
+      const nextRefreshAt = Date.now() + REFRESH_INTERVALS.VEHICLE_POSITIONS;
+      setNextVehicleRefreshAt(new Date(nextRefreshAt));
+      vehicleIntervalRef.current = setTimeout(() => {
+        void loadVehiclePositions({ showLoading: false });
+        scheduleNextVehicleUpdate();
+      }, REFRESH_INTERVALS.VEHICLE_POSITIONS);
+    };
+    scheduleNextVehicleUpdate();
   }, [loadVehiclePositions]);
 
   /**
@@ -541,9 +546,10 @@ export const TransitProvider = ({ children }) => {
    */
   const stopVehicleUpdates = useCallback(() => {
     if (vehicleIntervalRef.current) {
-      clearInterval(vehicleIntervalRef.current);
+      clearTimeout(vehicleIntervalRef.current);
       vehicleIntervalRef.current = null;
     }
+    setNextVehicleRefreshAt(null);
   }, []);
 
   /**
@@ -1014,6 +1020,7 @@ export const TransitProvider = ({ children }) => {
   const realtimeValue = useMemo(() => ({
     vehicles,
     lastVehicleUpdate,
+    nextVehicleRefreshAt,
     serviceAlerts,
     hasLoadedServiceAlerts,
     detoursEnabled: effectiveDetoursEnabled,
@@ -1040,6 +1047,7 @@ export const TransitProvider = ({ children }) => {
   }), [
     vehicles,
     lastVehicleUpdate,
+    nextVehicleRefreshAt,
     serviceAlerts,
     hasLoadedServiceAlerts,
     effectiveDetoursEnabled,

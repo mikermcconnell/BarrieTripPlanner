@@ -37,7 +37,7 @@ const formatRouteSummary = (groups) => {
 
 export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes = [] }) => {
   const [expanded, setExpanded] = useState(false);
-  const [dismissedEventIds, setDismissedEventIds] = useState(() => new Set());
+  const [minimizedEventIds, setMinimizedEventIds] = useState(() => new Set());
 
   const toggleExpanded = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -83,20 +83,24 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
 
   useEffect(() => {
     const activeEventIds = new Set(detourEvents.map((event) => event.eventId));
-    setDismissedEventIds((previous) => {
+    setMinimizedEventIds((previous) => {
       const next = new Set([...previous].filter((eventId) => activeEventIds.has(eventId)));
       return next.size === previous.size ? previous : next;
     });
   }, [activeEventIdsKey]);
 
-  const dismiss = useCallback(() => {
+  const minimize = useCallback(() => {
     setExpanded(false);
-    setDismissedEventIds((previous) => {
+    setMinimizedEventIds((previous) => {
       const next = new Set(previous);
       detourEvents.forEach((event) => next.add(event.eventId));
       return next;
     });
   }, [detourEvents]);
+
+  const restore = useCallback(() => {
+    setMinimizedEventIds(new Set());
+  }, []);
 
   const topOffset = alertBannerVisible ? BASE_TOP + ALERT_OFFSET : BASE_TOP;
 
@@ -155,7 +159,11 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
 
   return {
     expanded,
-    dismiss,
+    minimized: detourEvents.length > 0 && detourEvents.every(
+      (event) => minimizedEventIds.has(event.eventId)
+    ),
+    minimize,
+    restore,
     toggleExpanded,
     routeIds,
     detourEvents,
@@ -168,6 +176,6 @@ export const useDetourAlertStrip = ({ activeDetours, alertBannerVisible, routes 
     visibleEvents,
     overflowCount,
     countText,
-    shouldRender: detourEvents.some((event) => !dismissedEventIds.has(event.eventId)),
+    shouldRender: detourEvents.length > 0,
   };
 };

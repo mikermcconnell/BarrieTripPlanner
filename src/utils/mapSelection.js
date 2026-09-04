@@ -1,20 +1,29 @@
 export const DEFAULT_SELECTED_LOCATION_LABEL = 'Selected location';
 
-export const buildSelectedStopParams = (stop) => ({
+let mapFocusRequestSequence = 0;
+
+export const createMapFocusRequestId = () => {
+  mapFocusRequestSequence += 1;
+  return `map-focus-${Date.now()}-${mapFocusRequestSequence}`;
+};
+
+export const buildSelectedStopParams = (stop, focusRequestId = createMapFocusRequestId()) => ({
   selectedStopId: stop?.id,
+  selectedStopFocusRequestId: focusRequestId,
 });
 
 export const buildSelectedRouteParams = (route) => ({
   selectedRouteId: route?.id,
 });
 
-export const buildSelectedAddressParams = (address) => ({
+export const buildSelectedAddressParams = (address, focusRequestId = createMapFocusRequestId()) => ({
   selectedCoordinate: {
     latitude: address?.lat,
     longitude: address?.lon,
   },
   selectedAddressLabel:
     address?.shortName || address?.displayName || DEFAULT_SELECTED_LOCATION_LABEL,
+  selectedAddressFocusRequestId: focusRequestId,
 });
 
 export const normalizeSelectedRouteId = (params) => {

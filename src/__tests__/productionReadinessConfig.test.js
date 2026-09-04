@@ -72,6 +72,14 @@ describe('production release safeguards', () => {
     }
   });
 
+  test('declares Android visibility for secure web and email links', () => {
+    const app = JSON.parse(read('app.base.json')).expo;
+    const manifest = read('android/app/src/main/AndroidManifest.xml');
+    expect(app.plugins).toContain('./plugins/withExternalLinkQueries');
+    expect(manifest).toContain('android:scheme="https"');
+    expect(manifest).toContain('android:scheme="mailto"');
+  });
+
   test('ships the required legal pages from the dedicated hosting directory', () => {
     const firebase = JSON.parse(read('firebase.json'));
     expect(firebase.hosting.public).toBe('legal-public');

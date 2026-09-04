@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -19,6 +20,8 @@ import {
 import { FRIENDLY_FEATURE_FONTS } from '../config/friendlyFeatureFonts';
 import { useSafeBottomPadding } from '../utils/androidNavigationBar';
 
+const MYRIDE_SERVICE_ALERTS_URL = 'https://www.myridebarrie.ca/News/';
+
 const DETECTION_STEPS = [
   {
     symbol: '↗',
@@ -31,22 +34,22 @@ const DETECTION_STEPS = [
     symbol: '✓',
     color: COLORS.ctaGreen,
     tint: COLORS.successSubtle,
-    title: 'Checks that it is real',
-    body: 'More bus trips help confirm the change.',
+    title: 'Confirms the detour',
+    body: 'The app waits for another bus trip to confirm the detour.',
   },
   {
     symbol: '◇',
     color: '#7C3AED',
     tint: '#F3EDFF',
-    title: 'Shows you the detour',
-    body: 'See the likely path and skipped section on the map.',
+    title: 'Detour is shown',
+    body: 'The affected route and stops are displayed on the map based on live bus GPS. The detour shown is an estimate.',
   },
   {
     symbol: '↻',
     color: COLORS.accentDark,
     tint: COLORS.accentSubtle,
-    title: 'Knows when it is over',
-    body: 'The alert leaves when buses return to the usual route.',
+    title: 'Detour removal',
+    body: 'When bus GPS confirms that buses have returned to the regular route, the detour is cleared from the map.',
   },
 ];
 
@@ -132,7 +135,7 @@ const DetourExplainerButton = ({ style }) => {
               <View style={styles.titleWrap}>
                 <Text style={styles.eyebrow}>LIVE MAP FEATURE</Text>
                 <Text style={styles.title}>Meet the Auto Detour Detector</Text>
-                <Text style={styles.subtitle}>It keeps an eye on live bus movement, so you do not have to.</Text>
+                <Text style={styles.subtitle}>It keeps an eye on detours, so you don't have to.</Text>
               </View>
               <TouchableOpacity
                 style={styles.closeButton}
@@ -160,7 +163,7 @@ const DetourExplainerButton = ({ style }) => {
                 <View style={styles.heroCopy}>
                   <Text style={styles.heroTitle}>Built to spot unexpected route changes</Text>
                   <Text style={styles.heroBody}>
-                    When buses start taking a different path, the detector looks for the pattern and brings the likely detour to your map.
+                    When buses start taking a different path, the detector looks for the detour route and displays the estimated detour on your map.
                   </Text>
                 </View>
               </View>
@@ -187,7 +190,18 @@ const DetourExplainerButton = ({ style }) => {
               <View style={styles.noteCard}>
                 <Text style={styles.noteLabel}>Good to know</Text>
                 <Text style={styles.noteText}>
-                  The detector takes a little time to check a new detour, and the path shown is its best estimate. Check Barrie Transit service alerts for planned changes and official updates.
+                  Two bus trips must show the same detour before it appears on the map. Depending on bus frequency, this may take one to two hours. Detour routes and affected stops are estimates. Check{' '}
+                  <Text
+                    style={styles.noteLink}
+                    onPress={() => {
+                      Linking.openURL(MYRIDE_SERVICE_ALERTS_URL).catch(() => {});
+                    }}
+                    accessibilityRole="link"
+                    accessibilityLabel="Open Barrie Transit service alerts"
+                  >
+                    Barrie Transit service alerts
+                  </Text>{' '}
+                  for official updates.
                 </Text>
               </View>
             </ScrollView>
@@ -502,6 +516,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontFamily: FRIENDLY_FEATURE_FONTS.regular,
     lineHeight: 19,
+  },
+  noteLink: {
+    color: COLORS.primaryDark,
+    fontFamily: FRIENDLY_FEATURE_FONTS.bold,
+    textDecorationLine: 'underline',
   },
 });
 

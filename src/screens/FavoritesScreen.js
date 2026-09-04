@@ -14,6 +14,7 @@ import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { sharedTripFirestoreService } from '../services/firebase/sharedTripFirestoreService';
 import { shareTrip } from '../utils/shareUtils';
+import { buildSelectedAddressParams } from '../utils/mapSelection';
 
 const FavoritesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -93,10 +94,12 @@ const FavoritesScreen = ({ navigation }) => {
     touchSavedPlace?.(place.id);
     navigation.getParent()?.navigate('Map', {
       screen: 'MapMain',
-      params: {
-        selectedCoordinate: { latitude: place.lat, longitude: place.lon },
-        selectedAddressLabel: place.name || place.addressText,
-      },
+      params: buildSelectedAddressParams({
+        lat: place.lat,
+        lon: place.lon,
+        shortName: place.name,
+        displayName: place.addressText,
+      }),
     });
   };
 

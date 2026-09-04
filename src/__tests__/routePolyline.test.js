@@ -155,4 +155,20 @@ describe('RoutePolyline', () => {
     );
     expect(labelLayer.props.style.textColor).not.toBe('#D82710');
   });
+
+  test('only sends normalized in-range coordinates to native MapLibre', () => {
+    const inst = render({
+      coordinates: [
+        { latitude: '44.38', longitude: '-79.69' },
+        { latitude: NaN, longitude: -79.68 },
+        { latitude: 44.39, longitude: -190 },
+        { latitude: 44.4, longitude: -79.67 },
+      ],
+    });
+
+    expect(inst.root.findByType('ShapeSource').props.shape.geometry.coordinates).toEqual([
+      [-79.69, 44.38],
+      [-79.67, 44.4],
+    ]);
+  });
 });

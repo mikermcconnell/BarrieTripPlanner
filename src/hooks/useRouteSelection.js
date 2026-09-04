@@ -1,16 +1,11 @@
 /**
  * useRouteSelection Hook
  *
- * Manages route selection state, map zoom/center actions, and
- * auto-zoom behavior for both single-select (web) and multi-select (native) modes.
+ * Manages route selection state without changing the rider's viewport.
  */
 import { useState, useCallback } from 'react';
-import { MAP_CONFIG } from '../config/constants';
 
 export const useRouteSelection = ({
-  routeShapeMapping,
-  shapes,
-  mapRef,
   multiSelect = false,
 }) => {
   const [selectedRoutes, setSelectedRoutes] = useState(new Set());
@@ -18,44 +13,6 @@ export const useRouteSelection = ({
   // Convenience accessor for single-select consumers (web)
   const selectedRoute = selectedRoutes.size > 0 ? [...selectedRoutes][0] : null;
   const hasSelection = selectedRoutes.size > 0;
-
-  // Center map on Barrie default region
-  const centerOnBarrie = useCallback(() => {
-    mapRef.current?.animateToRegion(MAP_CONFIG.INITIAL_REGION, 500);
-  }, []);
-
-  // Zoom to fit all given route IDs on the map
-  const zoomToRoutes = useCallback((routeIds) => {
-    const ids = routeIds instanceof Set ? routeIds : new Set([routeIds]);
-    if (ids.size === 0) return;
-
-    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-    let hasCoords = false;
-
-    ids.forEach(routeId => {
-      const shapeIds = routeShapeMapping[routeId] || [];
-      shapeIds.forEach(shapeId => {
-        const coords = shapes[shapeId] || [];
-        coords.forEach(coord => {
-          minLat = Math.min(minLat, coord.latitude);
-          maxLat = Math.max(maxLat, coord.latitude);
-          minLng = Math.min(minLng, coord.longitude);
-          maxLng = Math.max(maxLng, coord.longitude);
-          hasCoords = true;
-        });
-      });
-    });
-
-    if (hasCoords && minLat < maxLat && minLng < maxLng) {
-      const padding = 0.005;
-      mapRef.current?.animateToRegion({
-        latitude: (minLat + maxLat) / 2,
-        longitude: (minLng + maxLng) / 2,
-        latitudeDelta: (maxLat - minLat) + padding,
-        longitudeDelta: (maxLng - minLng) + padding,
-      }, 500);
-    }
-  }, [routeShapeMapping, shapes]);
 
   // Toggle route selection (no auto-zoom — user controls the camera)
   const handleRouteSelect = useCallback((routeId) => {
@@ -109,8 +66,6 @@ export const useRouteSelection = ({
     selectedRoute,
     hasSelection,
     handleRouteSelect,
-    centerOnBarrie,
-    zoomToRoutes,
     selectRoute,
     selectRoutes,
     isRouteSelected,

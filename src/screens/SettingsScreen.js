@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Platform,
+  Share,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -22,7 +24,18 @@ import { userFirestoreService } from '../services/firebase/userFirestoreService'
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import { APP_CONFIG } from '../config/constants';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
-import { openAppContactEmail, openExternalUrl, openTransitContactEmail } from '../utils/externalLinks';
+import {
+  openAppContactEmail,
+  openDeviceTextSettings,
+  openExternalUrl,
+  openTransitContactPage,
+} from '../utils/externalLinks';
+import {
+  MAP_CAMERA_DIAGNOSTICS_ENABLED,
+  clearMapCameraDiagnostics,
+  formatMapCameraDiagnosticsReport,
+  getMapCameraDiagnosticsSnapshot,
+} from '../utils/mapCameraDiagnostics';
 
 const SettingsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -221,13 +234,51 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const contactBarrieTransit = async () => {
-    const result = await openTransitContactEmail({ body: 'Please describe your Barrie Transit service question.\n' });
-    if (!result.success) Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.TRANSIT_CONTACT_EMAIL}`);
+    const result = await openTransitContactPage();
+    if (!result.success) Alert.alert('Could not open Service Barrie', `${result.error}\n\nEmail ${APP_CONFIG.TRANSIT_CONTACT_EMAIL}`);
   };
 
-  const contactAppSupport = async () => {
+  const emailAppSupport = async () => {
     const result = await openAppContactEmail({ body: 'Please describe the app issue or question.\n' });
     if (!result.success) Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.APP_CONTACT_EMAIL}`);
+  };
+
+  const openTextSizeSettings = async () => {
+    const result = await openDeviceTextSettings();
+    if (result.message) Alert.alert('Change text size', result.message);
+    else if (!result.success) Alert.alert('Change text size', result.error);
+  };
+
+  const clearCameraDiagnostics = () => {
+    clearMapCameraDiagnostics();
+    Alert.alert(
+      'Map diagnostics started',
+      'Return to the map, reproduce the snap-back once, then share the diagnostics from this screen.'
+    );
+  };
+
+  const shareCameraDiagnostics = async () => {
+    const snapshot = getMapCameraDiagnosticsSnapshot();
+    const report = formatMapCameraDiagnosticsReport({
+      appVersion: APP_CONFIG.VERSION,
+      buildNumber: APP_CONFIG.BUILD_NUMBER,
+      platform: Platform.OS,
+      platformVersion: Platform.Version,
+    });
+
+    if (snapshot.eventCount === 0) {
+      Alert.alert('No map diagnostics yet', 'Start diagnostics and reproduce the map problem first.');
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: 'BTTP map camera diagnostics',
+        message: report,
+      });
+    } catch (error) {
+      Alert.alert('Could not share diagnostics', error?.message || 'Please try again.');
+    }
   };
 
   return (
@@ -333,7 +384,32 @@ const SettingsScreen = ({ navigation }) => {
         {renderSection(
           'Accessibility',
           <>
-            {renderInfoRow('🔤', 'Text Size', 'Uses your device text size settings')}
+            {renderActionRow(
+              '🔤',
+              'Text Size',
+              Platform.OS === 'android'
+                ? 'Open your device display settings'
+                : 'View text-size instructions',
+              openTextSizeSettings
+            )}
+          </>
+        )}
+
+        {MAP_CAMERA_DIAGNOSTICS_ENABLED && renderSection(
+          'Map Camera Diagnostics',
+          <>
+            {renderActionRow(
+              '🎯',
+              'Start New Recording',
+              'Clear old events before reproducing the Android snap-back',
+              clearCameraDiagnostics
+            )}
+            {renderActionRow(
+              '📤',
+              'Share Map Diagnostics',
+              'The report contains map coordinates from this recording',
+              shareCameraDiagnostics
+            )}
           </>
         )}
 
@@ -365,25 +441,27 @@ const SettingsScreen = ({ navigation }) => {
             {renderActionRow(
               '📧',
               'Contact App Support',
+              'Send private feedback in the app',
+              () => navigation.navigate('AppFeedback', { source: 'settings' }),
+              false
+            )}
+            {renderActionRow(
+              '✉️',
+              'Email App Support',
               APP_CONFIG.APP_CONTACT_EMAIL,
-              contactAppSupport,
+              emailAppSupport,
               false
             )}
             {renderActionRow(
               '🚌',
               'Contact Barrie Transit',
-              APP_CONFIG.TRANSIT_CONTACT_EMAIL,
+              'Open the Service Barrie website',
               contactBarrieTransit,
               false
             )}
           </>
         )}
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Made with ❤️ for Barrie Transit riders
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -529,15 +607,6 @@ const styles = StyleSheet.create({
   },
   routeChipTextSelected: {
     color: COLORS.white,
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.md,
-  },
-  footerText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.grey500,
   },
 });
 

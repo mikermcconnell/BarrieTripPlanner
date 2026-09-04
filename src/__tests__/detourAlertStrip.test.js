@@ -88,8 +88,47 @@ describe('DetourAlertStrip', () => {
     act(() => inst.unmount());
   });
 
-  test('dismisses the active detour bar until a new detour becomes active', () => {
+  test.each([
+    ['native', DetourAlertStrip],
+    ['web', WebDetourAlertStrip],
+  ])('%s minimizes the active detour bar and restores it from the Detour button', (_platform, Component) => {
     const onPress = jest.fn();
+    let inst;
+
+    act(() => {
+      inst = create(React.createElement(Component, {
+        activeDetours: {
+          '8A': { state: 'active', confidence: 'high' },
+        },
+        routes: [
+          { id: '8A', shortName: '8A' },
+          { id: '10', shortName: '10' },
+        ],
+        onPress,
+      }));
+    });
+
+    const minimizeButton = inst.root.findByProps({ accessibilityLabel: 'Minimize active detour alert' });
+    act(() => {
+      minimizeButton.props.onPress();
+    });
+
+    const restoreButton = inst.root.findByProps({ accessibilityLabel: 'Expand active detour alert' });
+    expect(restoreButton).toBeTruthy();
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'Minimize active detour alert' })).toHaveLength(0);
+    expect(onPress).not.toHaveBeenCalled();
+
+    act(() => {
+      restoreButton.props.onPress();
+    });
+
+    expect(inst.root.findByProps({ accessibilityLabel: 'Minimize active detour alert' })).toBeTruthy();
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'Expand active detour alert' })).toHaveLength(0);
+
+    act(() => inst.unmount());
+  });
+
+  test('restores the full detour bar when a new detour becomes active', () => {
     let inst;
 
     act(() => {
@@ -101,17 +140,13 @@ describe('DetourAlertStrip', () => {
           { id: '8A', shortName: '8A' },
           { id: '10', shortName: '10' },
         ],
-        onPress,
+        onPress: jest.fn(),
       }));
     });
 
-    const dismissButton = inst.root.findByProps({ accessibilityLabel: 'Dismiss active detour alert' });
     act(() => {
-      dismissButton.props.onPress();
+      inst.root.findByProps({ accessibilityLabel: 'Minimize active detour alert' }).props.onPress();
     });
-
-    expect(inst.toJSON()).toBeNull();
-    expect(onPress).not.toHaveBeenCalled();
 
     act(() => {
       inst.update(React.createElement(DetourAlertStrip, {
@@ -123,11 +158,14 @@ describe('DetourAlertStrip', () => {
           { id: '8A', shortName: '8A' },
           { id: '10', shortName: '10' },
         ],
-        onPress,
+        onPress: jest.fn(),
       }));
     });
 
-    expect(inst.toJSON()).not.toBeNull();
+    expect(inst.root.findByProps({ accessibilityLabel: 'Minimize active detour alert' })).toBeTruthy();
+    expect(inst.root.findAllByProps({ accessibilityLabel: 'Expand active detour alert' })).toHaveLength(0);
+
+    act(() => inst.unmount());
   });
 
   test('does not render low-confidence detours', () => {

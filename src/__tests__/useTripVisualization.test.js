@@ -350,6 +350,41 @@ describe('buildTripRouteCoordinates', () => {
       routeLabel: null,
     }));
   });
+
+  test('normalizes numeric strings and drops malformed trip-preview coordinates', () => {
+    const routes = buildTripRouteCoordinates({
+      itinerary: {
+        legs: [
+          {
+            mode: 'BUS',
+            route: { shortName: '8A', color: '#0057B8' },
+            from: { lat: '44.38', lon: '-79.70' },
+            intermediateStops: [
+              { lat: NaN, lon: -79.69 },
+              { lat: 44.39, lon: -79.68 },
+              { lat: 200, lon: -79.67 },
+            ],
+            to: { lat: '44.40', lon: '-79.66' },
+          },
+          {
+            mode: 'BUS',
+            route: { shortName: 'bad' },
+            from: { lat: undefined, lon: -79.7 },
+            to: { lat: Infinity, lon: -79.6 },
+          },
+        ],
+      },
+      decodedLegPolylines: [],
+    });
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0].coordinates).toEqual([
+      { latitude: 44.38, longitude: -79.7 },
+      { latitude: 44.39, longitude: -79.68 },
+      { latitude: 44.4, longitude: -79.66 },
+    ]);
+    expect(routes[0].labelCoordinate).toEqual({ latitude: 44.39, longitude: -79.68 });
+  });
 });
 
 describe('selectTripPreviewVehicles', () => {

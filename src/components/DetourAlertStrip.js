@@ -35,11 +35,40 @@ const DetourAlertStrip = ({
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, dismiss, detourEvents, routeGroups, topOffset, getRouteName,
-    getEventStatusLabel, visibleEvents, overflowCount, countText, shouldRender,
+    expanded, minimized, toggleExpanded, minimize, restore, detourEvents, routeGroups,
+    topOffset, getRouteName, getEventStatusLabel, visibleEvents, overflowCount, countText,
+    shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
+
+  if (minimized) {
+    return (
+      <View
+        style={[
+          styles.container,
+          !inline && { top: topOffset },
+          inline && styles.containerInline,
+          style,
+          styles.minimizedContainer,
+        ]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity
+          style={styles.restoreButton}
+          onPress={restore}
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel="Expand active detour alert"
+          accessibilityHint={countText}
+          hitSlop={4}
+        >
+          <Icon name="Warning" size={14} color={COLORS.warning} />
+          <Text style={styles.restoreButtonText}>Detour</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const handleCollapsedPress = () => {
     if (detourEvents.length === 1) {
@@ -132,12 +161,12 @@ const DetourAlertStrip = ({
           <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.dismissButton}
-          onPress={dismiss}
+          style={styles.bannerMinimizeButton}
+          onPress={minimize}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss active detour alert"
-          accessibilityHint="Hides this alert until a new detour becomes active"
+          accessibilityLabel="Minimize active detour alert"
+          accessibilityHint="Replaces this alert with a small Detour button"
           hitSlop={4}
         >
           <Icon name="X" size={14} color={COLORS.textSecondary} strokeWidth={2.5} />
@@ -258,6 +287,26 @@ const styles = StyleSheet.create({
     right: undefined,
     flex: 1,
   },
+  minimizedContainer: {
+    alignItems: 'flex-end',
+  },
+  restoreButton: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.28)',
+    backgroundColor: 'rgba(255, 248, 236, 0.97)',
+    ...SHADOWS.medium,
+  },
+  restoreButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.semibold,
+  },
 
   // ── Collapsed bar ────────────────────────────────────────────────
   collapsedBar: {
@@ -288,7 +337,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  dismissButton: {
+  bannerMinimizeButton: {
     width: 32,
     height: 32,
     marginLeft: SPACING.xs,

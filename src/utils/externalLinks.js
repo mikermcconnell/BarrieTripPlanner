@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { APP_CONFIG } from '../config/constants';
 
 const ALLOWED_PROTOCOLS = new Set(['https:', 'mailto:']);
@@ -47,4 +47,33 @@ export async function openTransitContactEmail(options) {
 
 export async function openAppContactEmail(options) {
   return openExternalUrl(buildAppContactEmailUrl(options));
+}
+
+export async function openTransitContactPage() {
+  return openExternalUrl(APP_CONFIG.TRANSIT_CONTACT_URL);
+}
+
+export async function openDeviceTextSettings() {
+  try {
+    if (Platform.OS === 'android' && typeof Linking.sendIntent === 'function') {
+      await Linking.sendIntent('android.settings.DISPLAY_SETTINGS');
+      return { success: true };
+    }
+
+    if (Platform.OS === 'ios') {
+      return {
+        success: true,
+        opened: false,
+        message: 'Open Settings, choose Accessibility, then Display & Text Size and Larger Text.',
+      };
+    }
+
+    return {
+      success: true,
+      opened: false,
+      message: 'Use your browser zoom controls or your device accessibility settings to change text size.',
+    };
+  } catch {
+    return { success: false, error: 'Open your device Settings and choose Display or Accessibility to change text size.' };
+  }
 }

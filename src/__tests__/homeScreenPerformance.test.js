@@ -191,7 +191,7 @@ describe('HomeScreen map performance', () => {
     expect(source).toContain('prev.animationActive === next.animationActive');
   });
 
-  test('Android home-fleet path does not resolve a route snap path for every vehicle', () => {
+  test('Android home-fleet resolves route paths once per GPS snapshot', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'screens', 'HomeScreen.js'),
       'utf8'
@@ -204,6 +204,15 @@ describe('HomeScreen map performance', () => {
     expect(androidBranchStart).toBeGreaterThanOrEqual(0);
     expect(androidBranchEnd).toBeGreaterThan(androidBranchStart);
     expect(androidBranchSource).toContain('<HomeMapVehicleLayer');
-    expect(androidBranchSource).not.toContain('getVehicleSnapPath');
+    expect(androidBranchSource).toContain('getVehicleSnapPath={getVehicleSnapPath}');
+
+    const vehicleLayerSource = fs.readFileSync(
+      path.join(__dirname, '..', 'components', 'home-map', 'HomeMapVehicleLayer.js'),
+      'utf8'
+    );
+    expect(vehicleLayerSource).toContain('const motionPathsByVehicleId = useMemo');
+    expect(vehicleLayerSource).toContain('movingVehicleIds.has(String(vehicle.id))');
+    expect(vehicleLayerSource).toContain('BUS_HOME_ANIMATION_MIN_DISTANCE_M');
+    expect(vehicleLayerSource).toContain('motionPathsByVehicleId,');
   });
 });

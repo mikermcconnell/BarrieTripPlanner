@@ -32,11 +32,39 @@ const DetourAlertStrip = ({
   inline = false,
 }) => {
   const {
-    expanded, toggleExpanded, detourEvents, routeGroups, topOffset, getRouteName,
-    getEventStatusLabel, visibleEvents, overflowCount, countText, shouldRender,
+    expanded, minimized, toggleExpanded, minimize, restore, detourEvents, routeGroups,
+    topOffset, getRouteName, getEventStatusLabel, visibleEvents, overflowCount, countText,
+    shouldRender,
   } = useDetourAlertStrip({ activeDetours, alertBannerVisible, routes });
 
   if (!shouldRender) return null;
+
+  if (minimized) {
+    return (
+      <View
+        style={[
+          styles.container,
+          !inline && { top: topOffset },
+          inline && styles.containerInline,
+          style,
+          styles.minimizedContainer,
+        ]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity
+          style={styles.restoreButton}
+          onPress={restore}
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel="Expand active detour alert"
+          accessibilityHint={countText}
+        >
+          <Icon name="Warning" size={14} color={COLORS.warning} />
+          <Text style={styles.restoreButtonText}>Detour</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const handleCollapsedPress = () => {
     if (detourEvents.length === 1) {
@@ -65,42 +93,56 @@ const DetourAlertStrip = ({
       pointerEvents="box-none"
     >
       {/* ── Collapsed bar (always visible) ─────────────────────────── */}
-      <TouchableOpacity
+      <View
         style={[styles.collapsedBar, inline && styles.collapsedBarInline]}
-        onPress={handleCollapsedPress}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={
-          detourEvents.length === 1
-            ? `Open ${detourEvents[0].title} detour details`
-            : expanded ? 'Collapse detour list' : 'Expand detour list'
-        }
-        accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
       >
-        <Icon name="Warning" size={16} color={COLORS.warning} />
-        <View style={styles.collapsedCopy}>
-          <Text style={styles.countText} numberOfLines={1}>
-            {countText}
-          </Text>
-          {detourEvents.length === 1 && detourEvents[0].detailsPending && (
-            <Text style={styles.detailsPendingText}>{DETAILS_PENDING_TEXT}</Text>
-          )}
-        </View>
-        <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
-          {routeGroups.slice(0, 3).map((group) => {
-            const color = getRouteColor(group.firstRouteId, group.familyId);
-            return (
-              <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
-                <Text style={styles.routePillText}>{group.displayName}</Text>
-              </View>
-            );
-          })}
-          {routeGroups.length > 3 && (
-            <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
-          )}
-        </View>
-        <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.collapsedAction}
+          onPress={handleCollapsedPress}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={
+            detourEvents.length === 1
+              ? `Open ${detourEvents[0].title} detour details`
+              : expanded ? 'Collapse detour list' : 'Expand detour list'
+          }
+          accessibilityHint={detourEvents.length === 1 ? 'Shows skipped stops and detour details' : countText}
+        >
+          <Icon name="Warning" size={16} color={COLORS.warning} />
+          <View style={styles.collapsedCopy}>
+            <Text style={styles.countText} numberOfLines={1}>
+              {countText}
+            </Text>
+            {detourEvents.length === 1 && detourEvents[0].detailsPending && (
+              <Text style={styles.detailsPendingText}>{DETAILS_PENDING_TEXT}</Text>
+            )}
+          </View>
+          <View style={[styles.pillsRow, inline && styles.pillsRowInline]}>
+            {routeGroups.slice(0, 3).map((group) => {
+              const color = getRouteColor(group.firstRouteId, group.familyId);
+              return (
+                <View key={group.familyId} style={[styles.routePill, { backgroundColor: color }]}>
+                  <Text style={styles.routePillText}>{group.displayName}</Text>
+                </View>
+              );
+            })}
+            {routeGroups.length > 3 && (
+              <Text style={styles.pillOverflow}>+{routeGroups.length - 3}</Text>
+            )}
+          </View>
+          <Text style={[styles.chevron, expanded && styles.chevronExpanded]}>▼</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.bannerMinimizeButton}
+          onPress={minimize}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Minimize active detour alert"
+          accessibilityHint="Replaces this alert with a small Detour button"
+        >
+          <Icon name="X" size={14} color={COLORS.textSecondary} strokeWidth={2.5} />
+        </TouchableOpacity>
+      </View>
 
       {/* ── Expanded detail panel ───────────────────────────────────── */}
       {expanded && (
@@ -216,6 +258,27 @@ const styles = StyleSheet.create({
     right: undefined,
     flex: 1,
   },
+  minimizedContainer: {
+    alignItems: 'flex-end',
+  },
+  restoreButton: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 153, 31, 0.28)',
+    backgroundColor: 'rgba(255, 248, 236, 0.97)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+    cursor: 'pointer',
+  },
+  restoreButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xs,
+    fontFamily: FONT_FAMILIES.semibold,
+  },
 
   // ── Collapsed bar ────────────────────────────────────────────────
   collapsedBar: {
@@ -226,11 +289,10 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.warning,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
+    paddingLeft: SPACING.md,
+    paddingRight: 2,
+    paddingVertical: SPACING.xs,
     boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-    cursor: 'pointer',
   },
   collapsedBarInline: {
     alignSelf: 'stretch',
@@ -240,6 +302,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 153, 31, 0.18)',
     backgroundColor: 'rgba(255, 248, 236, 0.94)',
     boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+  },
+  collapsedAction: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    cursor: 'pointer',
+  },
+  bannerMinimizeButton: {
+    width: 36,
+    height: 36,
+    marginLeft: SPACING.xs,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
   },
   countText: {
     fontSize: FONT_SIZES.sm,

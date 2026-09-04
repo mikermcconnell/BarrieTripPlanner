@@ -67,13 +67,16 @@ describe('home vehicle marker layout', () => {
     expect(layers.every((layer) => layer.layerIndex == null)).toBe(true);
   });
 
-  test('orders the blue hub square above the complete live-bus icon stack', () => {
+  test('orders hubs above live buses without clearing a mounted native layer anchor', () => {
     const nativeHome = fs.readFileSync(
       path.join(__dirname, '../screens/HomeScreen.js'),
       'utf8'
     );
 
-    expect(nativeHome).toContain(
+    expect(nativeHome).toMatch(
+      /\{!isTripPreviewMode && \([\s\S]*?<BusHubOverlay[\s\S]*?aboveLayerID=\{HOME_MAP_VEHICLE_TOP_LAYER_ID\}[\s\S]*?\/?>[\s\S]*?\)\}/
+    );
+    expect(nativeHome).not.toContain(
       'aboveLayerID={isTripPreviewMode ? undefined : HOME_MAP_VEHICLE_TOP_LAYER_ID}'
     );
   });

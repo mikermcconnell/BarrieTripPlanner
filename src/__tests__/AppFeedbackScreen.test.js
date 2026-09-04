@@ -103,4 +103,21 @@ describe('AppFeedbackScreen', () => {
       expect.any(Array)
     );
   });
+
+  test.each(['settings', 'about'])('preserves the %s entry point when submitting', async (source) => {
+    let instance;
+    await act(async () => {
+      instance = create(React.createElement(AppFeedbackScreen, {
+        navigation: { goBack: mockGoBack },
+        route: { params: { source } },
+      }));
+    });
+    act(() => instance.root.findByType('TextInput').props.onChangeText('Support entry point verification.'));
+    const sendButton = instance.root.findAllByType('TouchableOpacity')
+      .find((node) => collectText(node).includes('Send feedback'));
+
+    await act(async () => sendButton.props.onPress());
+
+    expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({ source }));
+  });
 });

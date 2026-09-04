@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import BusDirectionArrow from './BusDirectionArrow';
+import { normalizeMapCoordinate } from '../utils/mapCoordinates';
 
 const MARKER_SIZE = 44;
 const WRAPPER_SIZE = 88;
@@ -20,8 +21,9 @@ const BusMarkerComponent = ({
   dimmed = false,
 }) => {
   const { latitude, longitude, bearing, scale } = useAnimatedBusPosition(vehicle, { snapPath });
+  const coordinate = normalizeMapCoordinate({ latitude, longitude });
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (!coordinate) {
     return null;
   }
 
@@ -50,7 +52,7 @@ const BusMarkerComponent = ({
   return (
     <MapLibreGL.MarkerView
       id={`bus-${vehicle.id}`}
-      coordinate={[longitude, latitude]}
+      coordinate={[coordinate.longitude, coordinate.latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
       pointerEvents="none"
     >

@@ -28,4 +28,11 @@ describe('profile account navigation', () => {
     expect(navigatorSource).toContain('name="AppFeedbackInbox" getComponent={getAppFeedbackInboxScreen}');
     expect(helpSource).toContain("navigation.navigate('AppFeedback', { source: 'help_support' })");
   });
+
+  test('does not show the former Made with Heart footer on the profile page', () => {
+    const settingsSource = fs.readFileSync(path.join(__dirname, '../screens/SettingsScreen.js'), 'utf8');
+
+    expect(settingsSource).not.toContain('Made with');
+    expect(settingsSource).not.toContain('Barrie Transit riders');
+  });
 });

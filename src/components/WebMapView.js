@@ -141,6 +141,8 @@ const parseDashArray = (dashArray, strokeWidth) => {
   return values.map((value) => value / Math.max(strokeWidth, 1));
 };
 
+const isDirectMapUserInteraction = (event) => Boolean(event?.originalEvent);
+
 let mapLibreScriptPromise = null;
 
 const resolveAssetUri = (assetSource) => {
@@ -1374,6 +1376,7 @@ export const __TEST_ONLY__ = {
   createStopHtml,
   buildLineGeoJson,
   handleWebMapKeyboardPan,
+  isDirectMapUserInteraction,
   isEditableKeyboardTarget,
   mergeMarkerClassNames,
   normalizeMarkerOffset,
@@ -1585,7 +1588,11 @@ const WebMapView = forwardRef(({
         map.stop();
         handleUserInteraction();
       });
-      map.on('zoomstart', handleUserInteraction);
+      map.on('zoomstart', (event) => {
+        if (isDirectMapUserInteraction(event)) {
+          handleUserInteraction();
+        }
+      });
       map.on('click', handleClick);
     };
 

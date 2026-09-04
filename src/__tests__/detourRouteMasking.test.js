@@ -57,7 +57,7 @@ describe('detour route masking', () => {
     ]);
   });
 
-  test('uses same-family closed geometry to mask sibling Route 12 variants', () => {
+  test('does not use family display metadata to mask a sibling route variant', () => {
     const route12BShape = route12Shape.map((point) => ({
       ...point,
       longitude: point.longitude + 0.00008,
@@ -70,6 +70,32 @@ describe('detour route masking', () => {
       },
       detourOverlays: [{
         routeId: '12A',
+        routeIds: ['12A', '12B'],
+        segmentStopDetails: [{
+          skippedSegmentPolyline: closedRoute12Segment,
+        }],
+      }],
+      bufferMeters: 35,
+    });
+
+    expect(segments).toEqual([route12BShape]);
+  });
+
+  test('uses explicit shared mask scope when one overlay represents both route variants', () => {
+    const route12BShape = route12Shape.map((point) => ({
+      ...point,
+      longitude: point.longitude + 0.00008,
+    }));
+
+    const segments = getRouteShapeVisibleSegments({
+      shape: {
+        routeId: '12B',
+        coordinates: route12BShape,
+      },
+      detourOverlays: [{
+        routeId: '12A',
+        routeIds: ['12A', '12B'],
+        maskRouteIds: ['12A', '12B'],
         segmentStopDetails: [{
           skippedSegmentPolyline: closedRoute12Segment,
         }],
@@ -81,6 +107,36 @@ describe('detour route masking', () => {
       route12BShape.slice(0, 3),
       route12BShape.slice(3),
     ]);
+  });
+
+  test('does not apply a direction-specific sibling detour mask to Route 8A', () => {
+    const route8AJohnsonShape = [
+      { latitude: 44.3971, longitude: -79.6570 },
+      { latitude: 44.4014, longitude: -79.6558 },
+      { latitude: 44.4054, longitude: -79.6551 },
+      { latitude: 44.4100, longitude: -79.6542 },
+      { latitude: 44.4153, longitude: -79.6533 },
+    ];
+    const route8BShantyBayClosure = [
+      { latitude: 44.3969, longitude: -79.6567 },
+      { latitude: 44.3950, longitude: -79.6617 },
+    ];
+
+    const segments = getRouteShapeVisibleSegments({
+      shape: {
+        routeId: '8A',
+        coordinates: route8AJohnsonShape,
+      },
+      detourOverlays: [{
+        routeId: '8B',
+        segmentStopDetails: [{
+          skippedSegmentPolyline: route8BShantyBayClosure,
+        }],
+      }],
+      bufferMeters: 35,
+    });
+
+    expect(segments).toEqual([route8AJohnsonShape]);
   });
 
   test('keeps regular route context connected to trimmed detour start and end', () => {

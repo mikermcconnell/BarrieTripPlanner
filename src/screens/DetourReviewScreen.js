@@ -232,7 +232,7 @@ export default function DetourReviewScreen({ navigation }) {
             </View>
           </View>
           <Text style={styles.detailMeta}>{formatTime(detail.detectedAt)} · {detail.confidence} confidence · {detail.maxVehicleCount} vehicles</Text>
-          <DetourReviewMap reviewCase={detail} />
+          <DetourReviewMap key={detail.caseId} reviewCase={detail} />
           <View style={styles.legendRow}>
             <Text style={styles.legendClosed}>━ Closed regular route</Text><Text style={styles.legendDetour}>━ Detour path</Text>
           </View>

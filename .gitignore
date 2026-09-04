@@ -55,6 +55,8 @@ web-dev.stderr.log
 .work-artifacts/
 .superpowers/
 outputs/app-icon-previews/
+.codex-temp/
+.firebase/
 
 # Emulator screenshots
 emulator_*.png

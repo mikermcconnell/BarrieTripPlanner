@@ -283,6 +283,7 @@ const NavigationScreen = ({ route }) => {
 
   // State
   const [isFollowMode, setIsFollowMode] = useState(false); // Start with trip overview, not following
+  const isFollowModeRef = useRef(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [isOffRoute, setIsOffRoute] = useState(false);
   const offRouteTimerRef = useRef(null);
@@ -298,6 +299,10 @@ const NavigationScreen = ({ route }) => {
     latitude: null,
     longitude: null,
   });
+  const disableFollowMode = useCallback(() => {
+    isFollowModeRef.current = false;
+    setIsFollowMode(false);
+  }, []);
 
   const {
     location: rawUserLocation,
@@ -481,7 +486,7 @@ const NavigationScreen = ({ route }) => {
 
   // Center map on user location when in follow mode, without changing the rider's zoom level.
   useEffect(() => {
-    if (isFollowMode && userLocation && cameraRef.current) {
+    if (isFollowMode && isFollowModeRef.current && userLocation && cameraRef.current) {
       const now = Date.now();
       const heading = (isHeadingUp && isWalkingLeg && userLocation.heading != null)
         ? userLocation.heading
@@ -528,7 +533,7 @@ const NavigationScreen = ({ route }) => {
   // When heading-up is toggled off (or leg is no longer walking), snap heading back to north
   useEffect(() => {
     if (!isHeadingUp || !isWalkingLeg) {
-      if (cameraRef.current && isFollowMode) {
+      if (cameraRef.current && isFollowMode && isFollowModeRef.current) {
         cameraRef.current.setCamera({
           heading: 0,
           animationDuration: 300,
@@ -852,7 +857,7 @@ const NavigationScreen = ({ route }) => {
       missedBusWarningRef.current = false;
       setShowStaleWarning(false);
       setShowMissedBusWarning(false);
-      setIsFollowMode(false);
+      disableFollowMode();
       setFollowMode('full-trip');
       setItinerary(nextItinerary);
       resetNavigation();
@@ -871,6 +876,7 @@ const NavigationScreen = ({ route }) => {
     }
   }, [
     clearOffRouteState,
+    disableFollowMode,
     ensureRoutingData,
     isRecalculatingRoute,
     itinerary,
@@ -901,8 +907,10 @@ const NavigationScreen = ({ route }) => {
 
   // Toggle follow mode
   const toggleFollowMode = () => {
-    setIsFollowMode(!isFollowMode);
-    if (!isFollowMode && userLocation) {
+    const nextFollowMode = !isFollowModeRef.current;
+    isFollowModeRef.current = nextFollowMode;
+    setIsFollowMode(nextFollowMode);
+    if (nextFollowMode && userLocation) {
       cameraRef.current?.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
         animationDuration: 500,
@@ -923,7 +931,7 @@ const NavigationScreen = ({ route }) => {
   // Show full trip overview
   const showTripOverview = () => {
     if (tripBounds && cameraRef.current && tripViewportCoordinates.length > 0) {
-      setIsFollowMode(false);
+      disableFollowMode();
       cameraRef.current.setCamera({
         bounds: { ne: tripBounds.ne, sw: tripBounds.sw },
         padding: { paddingTop: 100, paddingRight: 50, paddingBottom: 200, paddingLeft: 50 },
@@ -944,16 +952,16 @@ const NavigationScreen = ({ route }) => {
 
   const handleMapRegionWillChange = useCallback((feature) => {
     if (feature?.properties?.isUserInteraction) {
-      setIsFollowMode(false);
+      disableFollowMode();
     }
-  }, []);
+  }, [disableFollowMode]);
 
   return (
     <View style={styles.container}>
       {/* Map */}
       <View
         style={styles.map}
-        onTouchStart={() => setIsFollowMode(false)}
+        onTouchStart={disableFollowMode}
       >
         <MapLibreGL.MapView
           ref={mapRef}

@@ -139,6 +139,22 @@ describe('app feedback routes', () => {
     );
   });
 
+  test.each(['settings', 'about'])('preserves the %s support entry point', async (source) => {
+    const setup = buildApp();
+
+    const response = await request(setup.app).post('/api/app-feedback').send({
+      ...validFeedback,
+      source,
+    });
+
+    expect(response.status).toBe(201);
+    expect(setup.feedbackNotifier).toHaveBeenCalledWith(
+      expect.objectContaining({ source }),
+      'feedback-new',
+      expect.objectContaining({ env: expect.any(Object) })
+    );
+  });
+
   test('rejects invalid types instead of coercing them to strings', async () => {
     const setup = buildApp();
     expect((await request(setup.app).post('/api/app-feedback').send({ ...validFeedback, category: {} })).status).toBe(400);

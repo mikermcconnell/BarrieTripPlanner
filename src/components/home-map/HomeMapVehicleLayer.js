@@ -10,6 +10,8 @@ import { buildHomeVehicleFeatureCollection } from '../../utils/homeVehicleFeatur
 import { inferHomeVehicleBearings } from '../../utils/homeVehicleInterpolation';
 import { isRouteInSameDetourFamily } from '../../utils/detourVehicleFiltering';
 import { routeIsDetouring } from '../../utils/routeDetourMatching';
+import { haversineDistance } from '../../utils/geometryUtils';
+import { ANIMATION } from '../../config/constants';
 
 const CLUSTER_FILTER = ['has', 'point_count'];
 const VEHICLE_FILTER = ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isActive'], 1]];
@@ -17,9 +19,9 @@ const DIRECTION_FILTER = ['all', VEHICLE_FILTER, ['==', ['get', 'hasBearing'], 1
 
 const HomeMapVehicleLayer = ({
   vehicles = [],
-  cameraRef,
   getRouteColor,
   getRouteLabel,
+  getVehicleSnapPath,
   selectedVehicleId,
   onSelectVehicle,
   onSelectVehicleCluster,
@@ -33,14 +35,51 @@ const HomeMapVehicleLayer = ({
 }) => {
   const sourceRef = useRef(null);
   const previousVehiclesRef = useRef([]);
-  const vehiclesWithBearings = useMemo(() => {
+  const { vehiclesWithBearings, movingVehicleIds } = useMemo(() => {
+    const previousVehicles = previousVehiclesRef.current;
+    const previousById = new Map(previousVehicles.map((vehicle) => [String(vehicle.id), vehicle]));
     const nextVehicles = inferHomeVehicleBearings({
-      fromVehicles: previousVehiclesRef.current,
+      fromVehicles: previousVehicles,
       toVehicles: vehicles,
     });
+    const nextMovingVehicleIds = new Set(nextVehicles
+      .filter((vehicle) => {
+        const previousCoordinate = previousById.get(String(vehicle.id))?.coordinate;
+        const nextCoordinate = vehicle?.coordinate;
+        if (
+          !Number.isFinite(previousCoordinate?.latitude) ||
+          !Number.isFinite(previousCoordinate?.longitude) ||
+          !Number.isFinite(nextCoordinate?.latitude) ||
+          !Number.isFinite(nextCoordinate?.longitude)
+        ) return false;
+
+        return haversineDistance(
+          previousCoordinate.latitude,
+          previousCoordinate.longitude,
+          nextCoordinate.latitude,
+          nextCoordinate.longitude
+        ) >= ANIMATION.BUS_HOME_ANIMATION_MIN_DISTANCE_M;
+      })
+      .map((vehicle) => String(vehicle.id)));
     previousVehiclesRef.current = nextVehicles;
-    return nextVehicles;
+    return {
+      movingVehicleIds: nextMovingVehicleIds,
+      vehiclesWithBearings: nextVehicles,
+    };
   }, [vehicles]);
+  const motionPathsByVehicleId = useMemo(() => {
+    const paths = new Map();
+    if (typeof getVehicleSnapPath !== 'function') return paths;
+
+    vehiclesWithBearings.forEach((vehicle) => {
+      if (!movingVehicleIds.has(String(vehicle.id))) return;
+      const path = getVehicleSnapPath(vehicle);
+      if (Array.isArray(path) && path.length >= 2) {
+        paths.set(String(vehicle.id), path);
+      }
+    });
+    return paths;
+  }, [getVehicleSnapPath, movingVehicleIds, vehiclesWithBearings]);
   const clusteringEnabled = !isDetourView && !hasDetourFocus;
 
   const isVehicleDimmed = useCallback((vehicle) => {
@@ -67,6 +106,7 @@ const HomeMapVehicleLayer = ({
   const animatedShape = useAnimatedHomeVehicleShape(featureCollection, {
     active: animationActive,
     feedIsStale,
+    motionPathsByVehicleId,
   });
 
   const handlePress = useCallback(async (event) => {
@@ -88,14 +128,8 @@ const HomeMapVehicleLayer = ({
           onSelectVehicleCluster(vehicleIds);
           return;
         }
-        const zoom = await sourceRef.current?.getClusterExpansionZoom?.(feature);
-        const centerCoordinate = feature?.geometry?.coordinates;
-        if (Array.isArray(centerCoordinate) && Number.isFinite(zoom)) {
-          cameraRef?.current?.setCamera?.({
-            centerCoordinate,
-            zoomLevel: Math.max(13, zoom),
-            animationDuration: 420,
-          });
+        if (vehicleIds.length === 1) {
+          onSelectVehicle?.(vehicleIds[0]);
         }
       } catch (_) {
         // Cluster expansion is a convenience; leave the map usable if native lookup fails.
@@ -105,7 +139,7 @@ const HomeMapVehicleLayer = ({
 
     const vehicleId = feature?.properties?.id ?? feature?.id;
     if (vehicleId != null) onSelectVehicle?.(String(vehicleId));
-  }, [cameraRef, onSelectVehicle, onSelectVehicleCluster]);
+  }, [onSelectVehicle, onSelectVehicleCluster]);
 
   return (
     <MapLibreGL.Animated.ShapeSource

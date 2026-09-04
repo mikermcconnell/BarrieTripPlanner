@@ -626,6 +626,13 @@ describe('deriveDetourOverlays', () => {
       { routeId: '12A', directionArrowMode: 'forward' },
       { routeId: '12B', directionArrowMode: 'forward' },
     ]);
+    expect(result.map((overlay) => ({
+      routeId: overlay.routeId,
+      maskRouteIds: overlay.maskRouteIds,
+    }))).toEqual([
+      { routeId: '12A', maskRouteIds: ['12A'] },
+      { routeId: '12B', maskRouteIds: ['12B'] },
+    ]);
   });
 
   test('collapses shared branch detour paths to one bidirectional overlay', () => {
@@ -646,6 +653,7 @@ describe('deriveDetourOverlays', () => {
     expect(arrowModes).toEqual([
       { routeId: '12A', directionArrowMode: 'both' },
     ]);
+    expect(result[0].maskRouteIds).toEqual(['12A', '12B']);
   });
 
   test('merged shared branch overlay includes closed stops from both route directions', () => {
@@ -699,6 +707,7 @@ describe('deriveDetourOverlays', () => {
     expect(result[0].routeLineLabel).toBe('12A/12B');
     expect(result[0].familyStopsMerged).toBe(true);
     expect(result[0].routeIds).toEqual(['12A', '12B']);
+    expect(result[0].maskRouteIds).toEqual(['12A', '12B']);
     expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.code)).toEqual([
       '932',
       '933',
@@ -761,6 +770,7 @@ describe('deriveDetourOverlays', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].routeId).toBe('12B');
+    expect(result[0].maskRouteIds).toEqual(['12A', '12B']);
     expect(result[0].familyStopsMerged).toBe(true);
     expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.code)).toEqual(['618', '932']);
     expect(result[0].segmentStopDetails[0].skippedStops.map((stop) => stop.routeId)).toEqual(['12B', '12A']);

@@ -4,7 +4,7 @@ import {
   projectPointToPolyline,
   haversineDistance,
 } from './geometryUtils';
-import { getRouteFamilyId, normalizeRouteId } from './routeDetourMatching';
+import { routeMatchesDetourRoute } from './routeDetourMatching';
 
 const DEFAULT_CLOSED_ROUTE_MASK_BUFFER_METERS = 35;
 const LOOP_ROUTE_ENDPOINT_PROXIMITY_METERS = 30;
@@ -68,23 +68,23 @@ const getOverlayOpenPaths = (overlay) => {
   return paths;
 };
 
-const routeFamiliesMatch = (routeId, detourRouteId) => {
-  const routeKey = normalizeRouteId(routeId);
-  const detourKey = normalizeRouteId(detourRouteId);
-  if (!routeKey || !detourKey) return false;
-  if (routeKey === detourKey) return true;
-  return getRouteFamilyId(routeKey) === getRouteFamilyId(detourKey);
+const routeMatchesOverlay = (routeId, overlay) => {
+  const maskRouteIds = Array.isArray(overlay?.maskRouteIds) && overlay.maskRouteIds.length > 0
+    ? overlay.maskRouteIds
+    : [overlay?.routeId];
+
+  return maskRouteIds.some((maskRouteId) => routeMatchesDetourRoute(routeId, maskRouteId));
 };
 
 export const getClosedDetourPathsForRoute = (routeId, detourOverlays = []) => (
   (Array.isArray(detourOverlays) ? detourOverlays : [])
-    .filter((overlay) => routeFamiliesMatch(routeId, overlay?.routeId))
+    .filter((overlay) => routeMatchesOverlay(routeId, overlay))
     .flatMap(getOverlayClosedPaths)
 );
 
 const getRenderableDetourPathsForRoute = (routeId, detourOverlays = []) => (
   (Array.isArray(detourOverlays) ? detourOverlays : [])
-    .filter((overlay) => routeFamiliesMatch(routeId, overlay?.routeId))
+    .filter((overlay) => routeMatchesOverlay(routeId, overlay))
     .flatMap(getOverlayOpenPaths)
 );
 

@@ -3,21 +3,31 @@ import { StyleSheet, Text, View } from 'react-native';
 import { BORDER_RADIUS, COLORS, FONT_FAMILIES, FONT_SIZES, SPACING } from '../../config/theme';
 import { getSystemHealthChipState } from '../../utils/systemHealthUI';
 import { buildVehicleSelectionLabel } from '../../utils/homeVehiclePresentation';
+import { useGpsRefreshCountdown } from '../../hooks/useGpsRefreshCountdown';
 
-const TransitStatusTray = ({ diagnostics, selectedRouteNames = [], activeVehicleCount = 0 }) => {
+const TransitStatusTray = ({
+  diagnostics,
+  selectedRouteNames = [],
+  activeVehicleCount = 0,
+  nextVehicleRefreshAt = null,
+}) => {
   const display = getSystemHealthChipState(diagnostics);
+  const gpsCountdown = useGpsRefreshCountdown(nextVehicleRefreshAt);
+  const primaryDisplay = display.label === 'LIVE' && gpsCountdown
+    ? { ...display, ...gpsCountdown }
+    : display;
   const selectionLabel = buildVehicleSelectionLabel(selectedRouteNames, activeVehicleCount);
 
   return (
     <View
       accessible
-      accessibilityLabel={selectionLabel ? `${display.accessibilityLabel}. ${selectionLabel}` : display.accessibilityLabel}
+      accessibilityLabel={selectionLabel ? `${primaryDisplay.accessibilityLabel}. ${selectionLabel}` : primaryDisplay.accessibilityLabel}
       style={styles.tray}
     >
-      <View style={[styles.statusSegment, { backgroundColor: display.backgroundColor }]}>
-        <View style={[styles.dot, { backgroundColor: display.dotColor }]} />
-        <Text style={[styles.statusText, { color: display.textColor }]} numberOfLines={1}>
-          {display.label}
+      <View style={[styles.statusSegment, { backgroundColor: primaryDisplay.backgroundColor }]}>
+        <View style={[styles.dot, { backgroundColor: primaryDisplay.dotColor }]} />
+        <Text style={[styles.statusText, { color: primaryDisplay.textColor }]} numberOfLines={1}>
+          {primaryDisplay.label}
         </Text>
       </View>
       {selectionLabel ? (

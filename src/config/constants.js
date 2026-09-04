@@ -240,14 +240,20 @@ export const SHAPE_PROCESSING = {
 // Trip UI Configuration
 // Bus marker animation configuration
 export const ANIMATION = {
-  BUS_POSITION_DURATION_MS: 12000,  // fallback interpolation duration
+  BUS_POSITION_DURATION_MS: 15000,  // fallback interpolation duration
   BUS_POSITION_MIN_DURATION_MS: 2000,
-  BUS_POSITION_MAX_DURATION_MS: 14500,
-  BUS_POSITION_DURATION_RATIO: 0.95, // animate for almost the whole observed feed interval
+  BUS_POSITION_MAX_DURATION_MS: 17000,
+  // Slightly overlap the next expected reading so moving buses do not visibly
+  // stop between otherwise regular GPS updates.
+  BUS_POSITION_DURATION_RATIO: 1.05,
   BUS_ROUTE_SNAP_MAX_DISTANCE_M: 120,
+  BUS_HOME_ROUTE_SNAP_MAX_DISTANCE_M: 45,
+  BUS_HOME_ROUTE_PATH_MAX_POINTS: 8,
+  BUS_HOME_ROUTE_PATH_MAX_RATIO: 3,
+  BUS_HOME_ROUTE_PATH_MAX_EXTRA_M: 150,
+  BUS_HOME_ANIMATION_MIN_DISTANCE_M: 2,
   BUS_BEARING_THRESHOLD_DEG: 2,     // min bearing change to re-render icon (web)
   BUS_BEARING_MIN_SPEED_MPS: 1.5,
-  BUS_PULSE_DURATION_MS: 400,       // scale pulse duration on new position
 };
 
 // UI performance budgets for interaction-heavy screens.

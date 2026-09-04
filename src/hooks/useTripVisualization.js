@@ -14,6 +14,11 @@ import {
   buildRoutePathsByRouteId,
 } from '../utils/navigationBusPreview';
 import { isCurrentAgencyServiceDate, normalizeServiceDate } from '../utils/serviceTime';
+import {
+  isValidMapCoordinate,
+  normalizeMapCoordinate,
+  sanitizeMapCoordinates,
+} from '../utils/mapCoordinates';
 
 const BOARDING_PROGRESS_TOLERANCE_METERS = 80;
 const CLOSED_LOOP_ENDPOINT_TOLERANCE_METERS = 60;
@@ -21,23 +26,29 @@ const PROGRESS_CANDIDATE_TIE_TOLERANCE_METERS = 80;
 
 /** Snap a lat/lon to the nearest point on a decoded polyline */
 const snapToPolyline = (lat, lon, polylineCoords) => {
-  if (!polylineCoords || polylineCoords.length === 0) {
-    return { latitude: lat, longitude: lon };
+  const targetCoordinate = normalizeMapCoordinate({ lat, lon });
+  if (!targetCoordinate) {
+    return null;
   }
-  const idx = findClosestPointIndex(polylineCoords, lat, lon);
-  return polylineCoords[idx];
+
+  const validPolyline = sanitizeMapCoordinates(polylineCoords);
+  if (validPolyline.length === 0) {
+    return targetCoordinate;
+  }
+
+  const idx = findClosestPointIndex(
+    validPolyline,
+    targetCoordinate.latitude,
+    targetCoordinate.longitude
+  );
+  return validPolyline[idx] ?? targetCoordinate;
 };
 
-const hasCoordinate = (point) =>
-  Number.isFinite(point?.lat) && Number.isFinite(point?.lon);
+const hasCoordinate = (point) => isValidMapCoordinate(point);
 
-const hasMarkerCoordinate = (point) =>
-  Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude);
+const hasMarkerCoordinate = (point) => isValidMapCoordinate(point);
 
-const toMarkerCoordinate = (point) => ({
-  latitude: point.lat,
-  longitude: point.lon,
-});
+const toMarkerCoordinate = (point) => normalizeMapCoordinate(point);
 
 const estimateWalkDistance = (fromPoint, toPoint) => {
   if (!hasCoordinate(fromPoint) || !hasCoordinate(toPoint)) {
@@ -255,28 +266,21 @@ export const buildTripRouteCoordinates = ({
   const routes = [];
   itinerary.legs.forEach((leg, index) => {
     const decoded = decodedLegPolylines[index];
-    const coords = [];
+    let coords = [];
 
     if (decoded && decoded.length > 0) {
-      coords.push(...decoded);
+      coords = sanitizeMapCoordinates(decoded);
     } else if (leg.mode !== 'WALK' && leg.intermediateStops && leg.intermediateStops.length > 0) {
-      if (leg.from) {
-        coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      }
-      leg.intermediateStops.forEach((stop) => {
-        if (stop.lat && stop.lon) {
-          coords.push({ latitude: stop.lat, longitude: stop.lon });
-        }
-      });
-      if (leg.to) {
-        coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
-      }
+      coords = sanitizeMapCoordinates([
+        leg.from,
+        ...leg.intermediateStops,
+        leg.to,
+      ]);
     } else if (!isWalkMapLeg(leg) && leg.from && leg.to) {
-      coords.push({ latitude: leg.from.lat, longitude: leg.from.lon });
-      coords.push({ latitude: leg.to.lat, longitude: leg.to.lon });
+      coords = sanitizeMapCoordinates([leg.from, leg.to]);
     }
 
-    if (coords.length > 0) {
+    if (coords.length >= 2) {
       const isWalk = leg.mode === 'WALK';
       const isOnDemand = isOnDemandMapLeg(leg);
       const isTransferWalk = isWalkBetweenTransit(itinerary.legs, index);
@@ -632,7 +636,10 @@ export const selectTripPreviewVehicles = ({
   shapes = {},
   tripMapping = {},
 }) => {
-  if (!selectedItinerary || vehicles.length === 0) return [];
+  const mappableVehicles = Array.isArray(vehicles)
+    ? vehicles.filter((vehicle) => isValidMapCoordinate(vehicle?.coordinate))
+    : [];
+  if (!selectedItinerary || mappableVehicles.length === 0) return [];
 
   const serviceDate = normalizeServiceDate(
     selectedItinerary.serviceDate ||
@@ -642,7 +649,7 @@ export const selectTripPreviewVehicles = ({
     selectedItinerary.scheduledStartTime ?? selectedItinerary.startTime
   );
   if (operatingDate && !isCurrentAgencyServiceDate(operatingDate)) return [];
-  const eligibleVehicles = vehicles.filter((vehicle) => {
+  const eligibleVehicles = mappableVehicles.filter((vehicle) => {
     const vehicleServiceDate = normalizeServiceDate(vehicle?.startDate);
     return !serviceDate || !vehicleServiceDate || vehicleServiceDate === serviceDate;
   });
@@ -803,8 +810,14 @@ export const buildBusApproachLines = ({
     return [];
   }
 
+  const coordinates = sanitizeMapCoordinates(line.coordinates);
+  if (coordinates.length < 2) {
+    return [];
+  }
+
   return [{
     ...line,
+    coordinates,
     id: `bus-approach-${firstTransitLeg.tripId || getLegRouteId(firstTransitLeg) || 'first-leg'}`,
   }];
 };
@@ -829,8 +842,8 @@ export const useTripVisualization = ({
   const decodedLegPolylines = useMemo(() => {
     if (!selectedItinerary) return [];
     return selectedItinerary.legs.map((leg) => {
-      if (leg.legGeometry?.points) {
-        return decodePolyline(leg.legGeometry.points);
+      if (typeof leg.legGeometry?.points === 'string') {
+        return sanitizeMapCoordinates(decodePolyline(leg.legGeometry.points));
       }
       return [];
     });
@@ -872,10 +885,11 @@ export const useTripVisualization = ({
       const polyline = decodedLegPolylines[legIndex];
 
       leg.intermediateStops.forEach((stop, stopIndex) => {
-        if (stop.lat && stop.lon) {
+        const coordinate = snapToPolyline(stop?.lat, stop?.lon, polyline);
+        if (coordinate) {
           stopMarkers.push({
             id: `stop-${legIndex}-${stopIndex}`,
-            coordinate: snapToPolyline(stop.lat, stop.lon, polyline),
+            coordinate,
             name: stop.name,
             color: leg.route?.color || COLORS.primary,
           });
@@ -898,10 +912,11 @@ export const useTripVisualization = ({
       const routeName = leg.route?.shortName || '';
       const polyline = decodedLegPolylines[legIndex];
 
-      if (leg.from && leg.from.lat && leg.from.lon) {
+      const boardingCoordinate = snapToPolyline(leg.from?.lat, leg.from?.lon, polyline);
+      if (boardingCoordinate) {
         markers.push({
           id: `boarding-${legIndex}`,
-          coordinate: snapToPolyline(leg.from.lat, leg.from.lon, polyline),
+          coordinate: boardingCoordinate,
           type: 'boarding',
           stopName: leg.from.name,
           stopCode: leg.from.stopCode || leg.from.stopId,
@@ -910,10 +925,11 @@ export const useTripVisualization = ({
         });
       }
 
-      if (leg.to && leg.to.lat && leg.to.lon) {
+      const alightingCoordinate = snapToPolyline(leg.to?.lat, leg.to?.lon, polyline);
+      if (alightingCoordinate) {
         markers.push({
           id: `alighting-${legIndex}`,
-          coordinate: snapToPolyline(leg.to.lat, leg.to.lon, polyline),
+          coordinate: alightingCoordinate,
           type: 'alighting',
           stopName: leg.to.name,
           stopCode: leg.to.stopCode || leg.to.stopId,

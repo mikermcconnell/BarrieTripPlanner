@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { formatDetourStartedAt, formatDetourTime, getConfidenceChip } from '../u
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { findRouteDetourNotice, getNoticeEndText } from '../utils/noticeTimingUtils';
 import { hasRiderDetourMapGeometry } from '../utils/detourVisibility';
+import { recordMapCameraDiagnostic } from '../utils/mapCameraDiagnostics';
 
 const getDetourTitle = (routeId, state) => {
   const statusLabel = state === 'clear-pending' ? 'Detour Clearing' : 'Detour Active';
@@ -41,13 +42,18 @@ const DetourDetailsSheet = ({
   const bottomSheetRef = useRef(null);
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const snapPoints = useMemo(() => [COMPACT_SNAP_POINT, EXPANDED_SNAP_POINT], []);
+  useEffect(() => {
+    recordMapCameraDiagnostic('sheet.detour.mounted', { routeId });
+    return () => recordMapCameraDiagnostic('sheet.detour.unmounted', { routeId });
+  }, [routeId]);
 
   const handleSheetChanges = useCallback(
     (index) => {
+      recordMapCameraDiagnostic('sheet.detour.changed', { routeId, index });
       if (index === -1) onClose?.();
       else setSheetExpanded(index >= 1);
     },
-    [onClose]
+    [onClose, routeId]
   );
 
   const toggleSheetExpanded = useCallback(() => {
@@ -87,6 +93,11 @@ const DetourDetailsSheet = ({
       index={0}
       snapPoints={snapPoints}
       onChange={handleSheetChanges}
+      onAnimate={(fromIndex, toIndex) => recordMapCameraDiagnostic('sheet.detour.animating', {
+        routeId,
+        fromIndex,
+        toIndex,
+      })}
       enablePanDownToClose
       backgroundStyle={styles.sheetBackground}
       handleIndicatorStyle={styles.handleIndicator}
