@@ -251,6 +251,16 @@ describe('WebMapView keyboard controls', () => {
   });
 });
 
+describe('WebMapView camera ownership', () => {
+  test('distinguishes rider zoom gestures from programmatic camera animations', () => {
+    expect(__TEST_ONLY__.isDirectMapUserInteraction({
+      originalEvent: { type: 'wheel' },
+    })).toBe(true);
+    expect(__TEST_ONLY__.isDirectMapUserInteraction({})).toBe(false);
+    expect(__TEST_ONLY__.isDirectMapUserInteraction()).toBe(false);
+  });
+});
+
 describe('WebMapView bus marker HTML', () => {
   test('uses route bus-marker artwork on web when an asset exists', () => {
     const html = __TEST_ONLY__.createBusHtml('#0C8CE5', '8', Number.NaN);

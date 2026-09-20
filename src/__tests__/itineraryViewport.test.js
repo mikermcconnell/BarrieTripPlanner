@@ -114,4 +114,21 @@ describe('itineraryViewport', () => {
       sw: [-79.6909, 44.387600000000006],
     });
   });
+
+  test('excludes non-finite and out-of-range coordinates from camera bounds', () => {
+    expect(computeCoordinateBounds([
+      { latitude: NaN, longitude: -79.7 },
+      { latitude: 44.39, longitude: Infinity },
+      { latitude: 144.39, longitude: -79.7 },
+      { lat: '44.38', lon: '-79.71' },
+      { latitude: 44.4, longitude: -79.68 },
+    ])).toEqual({
+      minLat: 44.38,
+      maxLat: 44.4,
+      minLon: -79.71,
+      maxLon: -79.68,
+      ne: [-79.68, 44.4],
+      sw: [-79.71, 44.38],
+    });
+  });
 });

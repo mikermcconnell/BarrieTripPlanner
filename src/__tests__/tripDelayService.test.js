@@ -64,6 +64,8 @@ const makeItinerary = ({ id, startMin, endMin, tripId, labels = null, isRecommen
 const tripUpdate = (tripId, stopId, delay) => ({
   tripUpdate: {
     tripId,
+    timestamp: Date.now() / 1000,
+    startDate: '20260513',
     stopTimeUpdates: [{ stopId, departure: { delay } }],
   },
 });
@@ -71,6 +73,8 @@ const tripUpdate = (tripId, stopId, delay) => ({
 const tripUpdateWithDepartureTime = (tripId, stopId, departureTimeMs) => ({
   tripUpdate: {
     tripId,
+    timestamp: Date.now() / 1000,
+    startDate: '20260513',
     stopTimeUpdates: [{ stopId, departure: { time: Math.round(departureTimeMs / 1000), delay: 0 } }],
   },
 });
@@ -80,7 +84,7 @@ describe('tripDelayService', () => {
 
   beforeEach(() => {
     fetchTripUpdates.mockReset();
-    dateNowSpy = null;
+    dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(minutes(0));
   });
 
   afterEach(() => {

@@ -15,6 +15,10 @@ import { validateTripDateTime, validateTripInputs } from '../utils/tripValidatio
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
 import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
+import { runBounded, throwIfAborted } from '../utils/requestControl';
+import { getItineraryNavigationBlock } from '../utils/tripNavigationSafety';
+import { isItineraryFeasible } from '../utils/itineraryFeasibility';
+import { ROUTING_CONFIG } from '../config/constants';
 
 // ─── Action Types ─────────────────────────────────────────────────
 const SET_FROM = 'SET_FROM';
@@ -24,6 +28,8 @@ const SET_TO_TEXT = 'SET_TO_TEXT';
 const SWAP = 'SWAP';
 const SEARCH_START = 'SEARCH_START';
 const SEARCH_SUCCESS = 'SEARCH_SUCCESS';
+const SEARCH_PREVIEW = 'SEARCH_PREVIEW';
+const SEARCH_PHASE = 'SEARCH_PHASE';
 const SEARCH_ERROR = 'SEARCH_ERROR';
 const SELECT_ITINERARY = 'SELECT_ITINERARY';
 const RESET = 'RESET';
@@ -55,6 +61,8 @@ const initialState = {
   itineraries: [],
   selectedIndex: 0,
   isLoading: false,
+  isRefining: false,
+  loadingMessage: null,
   error: null,
   hasSearched: false,
   fromSuggestions: [],
@@ -72,11 +80,17 @@ const clearResults = (state) => ({
   itineraries: [],
   selectedIndex: 0,
   isLoading: false,
+  isRefining: false,
+  loadingMessage: null,
   error: null,
   hasSearched: false,
 });
 
 // ─── Reducer ──────────────────────────────────────────────────────
+const itineraryIdentity = (itinerary) => JSON.stringify((itinerary?.legs || []).map(leg => [
+  leg.mode, leg.tripId, leg.from?.stopId, leg.to?.stopId, leg.scheduledStartTime ?? leg.startTime,
+]));
+
 function tripReducer(state, action) {
   switch (action.type) {
     case SET_PLANNING_MODE:
@@ -108,15 +122,30 @@ function tripReducer(state, action) {
       return {
         ...state,
         isLoading: true,
+        isRefining: false,
+        loadingMessage: 'Preparing schedules...',
         error: null,
         itineraries: [],
         hasSearched: true,
       };
+    case SEARCH_PHASE:
+      return { ...state, loadingMessage: action.payload };
+    case SEARCH_PREVIEW:
+      return { ...state, isLoading: false, isRefining: true, itineraries: [action.payload], selectedIndex: 0, loadingMessage: 'Checking alternatives...' };
     case SEARCH_SUCCESS: {
-      const sortedItineraries = sortRecommendedItineraryFirst(action.payload);
+      let sortedItineraries = sortRecommendedItineraryFirst(action.payload);
+      // Do not move the route the rider is looking at when alternatives finish.
+      if (state.isRefining && state.itineraries[state.selectedIndex]) {
+        const selectedKey = itineraryIdentity(state.itineraries[state.selectedIndex]);
+        const selected = sortedItineraries.find(it => itineraryIdentity(it) === selectedKey);
+        if (selected) sortedItineraries = [selected, ...sortedItineraries.filter(it => it !== selected)];
+      }
+      sortedItineraries = sortedItineraries.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
       return {
         ...state,
         isLoading: false,
+        isRefining: false,
+        loadingMessage: null,
         itineraries: sortedItineraries,
         selectedIndex: 0,
         error: sortedItineraries.length === 0 ? 'No routes found for this trip' : null,
@@ -125,7 +154,11 @@ function tripReducer(state, action) {
     case SEARCH_ERROR:
       return {
         ...state,
+        itineraries: [],
+        selectedIndex: 0,
         isLoading: false,
+        isRefining: false,
+        loadingMessage: null,
         error: action.payload,
       };
     case SELECT_ITINERARY:
@@ -147,6 +180,8 @@ function tripReducer(state, action) {
         itineraries: [],
         selectedIndex: 0,
         isLoading: false,
+        isRefining: false,
+        loadingMessage: null,
         isLocatingFrom: false,
         error: action.payload,
         hasSearched: isTripPlanningError,
@@ -176,6 +211,8 @@ function tripReducer(state, action) {
         itineraries: [],
         selectedIndex: 0,
         isLoading: false,
+        isRefining: false,
+        loadingMessage: null,
         error: null,
         hasSearched: false,
         fromSuggestions: [],
@@ -200,6 +237,8 @@ function tripReducer(state, action) {
         itineraries: [],
         selectedIndex: 0,
         isLoading: false,
+        isRefining: false,
+        loadingMessage: null,
         error: 'Could not get your location',
         hasSearched: false,
       };
@@ -239,10 +278,13 @@ export const useTripPlanner = ({
   const fromRequestSeqRef = useRef(0);
   const toRequestSeqRef = useRef(0);
   const tripSearchSeqRef = useRef(0);
+  const searchControllerRef = useRef(null);
   const locationRequestSeqRef = useRef(0);
 
   const invalidateTripSearches = useCallback(() => {
     tripSearchSeqRef.current += 1;
+    searchControllerRef.current?.abort();
+    searchControllerRef.current = null;
   }, []);
 
   const cancelCurrentLocationUpdates = useCallback(() => {
@@ -281,34 +323,74 @@ export const useTripPlanner = ({
       return;
     }
 
+    invalidateTripSearches();
     const requestSeq = ++tripSearchSeqRef.current;
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+    let previewPublished = false;
+    let previewKey = null;
+    const searchStartedAt = Date.now();
     dispatch({ type: SEARCH_START });
 
     try {
-      // Lazily build routing data on first trip search
-      let routing = null;
-      if (ensureRoutingData) {
-        try {
-          routing = await ensureRoutingData();
-        } catch {
-          // Continue without local routing — OTP fallback
+      const result = await runBounded(async (signal) => {
+        // Shared GTFS loading may continue for other screens, but a cancelled search
+        // must not start routing or walking when that shared load eventually finishes.
+        // Lazily build routing data on first trip search
+        let routing = null;
+        if (ensureRoutingData) {
+          try {
+            routing = await ensureRoutingData();
+          } catch {
+            // Continue without local routing — OTP fallback
+          }
         }
-      }
 
-      const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
-      const result = await planTripAuto({
-        fromLat: from.lat,
-        fromLon: from.lon,
-        toLat: to.lat,
-        toLon: to.lon,
-        date: tripTime,
-        time: tripTime,
-        arriveBy: state.timeMode === 'arriveBy',
-        routingData: routing,
-        enrichWalking: true, // Fetch walking geometry for the preview map; navigation can reuse it
-        onDemandZones,
-        stops,
-      });
+        throwIfAborted(signal);
+        if (requestSeq !== tripSearchSeqRef.current) return null;
+        dispatch({ type: SEARCH_PHASE, payload: 'Checking walking routes...' });
+        const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
+        return planTripAuto({
+          fromLat: from.lat,
+          fromLon: from.lon,
+          toLat: to.lat,
+          toLon: to.lon,
+          date: tripTime,
+          time: tripTime,
+          arriveBy: state.timeMode === 'arriveBy',
+          routingData: routing,
+          signal,
+          onCandidateReady: async (candidate) => {
+            if (requestSeq !== tripSearchSeqRef.current) return false;
+            throwIfAborted(signal);
+            let options = [candidate];
+            if (applyDelays) {
+              try {
+                options = await runBounded(() => applyDelays(options, { ...delayOptions, signal }), { signal });
+              } catch (error) {
+                throwIfAborted(signal);
+                // A failed early check is not permission to publish an unchecked option.
+                return false;
+              }
+            }
+            throwIfAborted(signal);
+            if (requestSeq !== tripSearchSeqRef.current) return false;
+            const feasible = options.filter(isItineraryFeasible);
+            const annotated = annotateItinerariesWithDetours(feasible, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts);
+            const preview = annotated.find(it => !getItineraryNavigationBlock(it));
+            if (!preview) return false;
+            previewPublished = true;
+            previewKey = itineraryIdentity(preview);
+            logger.info('Trip preview ready', { elapsedMs: Date.now() - searchStartedAt });
+            dispatch({ type: SEARCH_PREVIEW, payload: { ...preview, labels: null, isRecommended: false } });
+            onItinerariesReady?.(preview);
+            return true;
+          },
+          enrichWalking: true, // Fetch walking geometry for the preview map; navigation can reuse it
+          onDemandZones,
+          stops,
+        });
+      }, { signal: controller.signal, timeoutMs: 45000 });
 
       if (requestSeq !== tripSearchSeqRef.current) return;
 
@@ -318,13 +400,18 @@ export const useTripPlanner = ({
       // Apply real-time delays if the platform provides the function
       if (applyDelays && finalItineraries.length > 0) {
         try {
-          finalItineraries = await applyDelays(finalItineraries, delayOptions);
+          finalItineraries = await runBounded(() => applyDelays(finalItineraries, { ...delayOptions, signal: controller.signal }), { signal: controller.signal });
         } catch {
           // Continue without delay info
         }
       }
 
       if (requestSeq !== tripSearchSeqRef.current) return;
+
+      finalItineraries = finalItineraries.filter(isItineraryFeasible);
+      if (finalItineraries.length === 0) {
+        throw new TripPlanningError(TRIP_ERROR_CODES.NO_ROUTES_FOUND, 'No trip meets your requested time with the updated walking and bus times. Try another time.');
+      }
 
       finalItineraries = annotateItinerariesWithDetours(
         finalItineraries,
@@ -333,8 +420,14 @@ export const useTripPlanner = ({
         officialServiceImpacts
       );
 
+      if (previewKey) {
+        const selected = finalItineraries.find(it => itineraryIdentity(it) === previewKey);
+        if (selected) finalItineraries = [selected, ...finalItineraries.filter(it => it !== selected)];
+      }
+      finalItineraries = finalItineraries.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
       dispatch({ type: SEARCH_SUCCESS, payload: finalItineraries });
       logger.info('Trip planning completed', {
+        elapsedMs: Date.now() - searchStartedAt,
         resultsCount: finalItineraries.length,
         timeMode: state.timeMode,
         routingDiagnostics,
@@ -354,7 +447,7 @@ export const useTripPlanner = ({
         });
       } catch {}
 
-      if (onItinerariesReady && finalItineraries.length > 0) {
+      if (!previewPublished && onItinerariesReady && finalItineraries.length > 0) {
         onItinerariesReady(finalItineraries[0]);
       }
 
@@ -374,7 +467,7 @@ export const useTripPlanner = ({
         });
       }
     } catch (err) {
-      if (requestSeq !== tripSearchSeqRef.current) return;
+      if (requestSeq !== tripSearchSeqRef.current || err.name === 'AbortError') return;
       const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
       if (err instanceof TripPlanningError) {
         logger.warn('Trip planning search failed', {
@@ -574,12 +667,16 @@ export const useTripPlanner = ({
 
   // ─── Time mode control ──────────────────────────────────────
   const setTimeMode = useCallback((mode) => {
+    invalidateTripSearches();
+    dispatch({ type: CLEAR_RESULTS });
     dispatch({ type: SET_TIME_MODE, payload: mode });
-  }, []);
+  }, [invalidateTripSearches]);
 
   const setSelectedTime = useCallback((time) => {
+    invalidateTripSearches();
+    dispatch({ type: CLEAR_RESULTS });
     dispatch({ type: SET_DEPARTURE_TIME, payload: time });
-  }, []);
+  }, [invalidateTripSearches]);
 
   // ─── Mode control ───────────────────────────────────────────
   const enterPlanningMode = useCallback(() => {
@@ -603,6 +700,7 @@ export const useTripPlanner = ({
       fromRequestSeqRef.current += 1;
       toRequestSeqRef.current += 1;
       tripSearchSeqRef.current += 1;
+      searchControllerRef.current?.abort();
       locationRequestSeqRef.current += 1;
     };
   }, []);

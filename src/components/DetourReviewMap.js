@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapLibreGL from '@maplibre/maplibre-react-native';
 import { OSM_MAP_STYLE } from '../config/constants';
@@ -20,11 +20,18 @@ export default function DetourReviewMap({ reviewCase }) {
     ? [points.reduce((sum, point) => sum + point.longitude, 0) / points.length,
       points.reduce((sum, point) => sum + point.latitude, 0) / points.length]
     : DEFAULT_CENTER;
+  const initialCameraSettingsRef = useRef(null);
+  if (!initialCameraSettingsRef.current) {
+    initialCameraSettingsRef.current = {
+      centerCoordinate: center,
+      zoomLevel: points.length ? 14 : 12,
+    };
+  }
 
   return (
     <View style={styles.container} accessibilityLabel="Detected detour map">
       <MapLibreGL.MapView style={styles.map} mapStyle={OSM_MAP_STYLE} logoEnabled={false}>
-        <MapLibreGL.Camera defaultSettings={{ centerCoordinate: center, zoomLevel: points.length ? 14 : 12 }} />
+        <MapLibreGL.Camera defaultSettings={initialCameraSettingsRef.current} />
         <DetourOverlay
           routeId={reviewCase?.routeId}
           {...snapshot}

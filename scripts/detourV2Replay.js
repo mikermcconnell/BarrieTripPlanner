@@ -97,8 +97,8 @@ function replaySyntheticDetourTrace(fixture = {}) {
     throw new Error('Synthetic trace fixtures must set synthetic=true');
   }
   const tickMs = Number(fixture.tickMs || 30_000);
-  if (tickMs !== 30_000) {
-    throw new Error('Synthetic detour traces must use 30-second ticks');
+  if (![30_000, 60_000].includes(tickMs)) {
+    throw new Error('Synthetic detour traces must use 30- or 60-second ticks');
   }
   if (!Array.isArray(fixture.ticks) || fixture.ticks.length === 0) {
     throw new Error('Synthetic trace fixture must contain at least one tick');
@@ -168,6 +168,7 @@ function replaySyntheticDetourTrace(fixture = {}) {
     restartCount,
     firstDetectedTick: firstDetected?.tick ?? null,
     firstVisibleTick: firstVisible?.tick ?? null,
+    firstVisibleElapsedMs: firstVisible ? firstVisible.timestampMs - timeline[0].timestampMs : null,
     finalState: last?.state || 'absent',
     finalVisible: last?.visible === true,
     pathEverShown: timeline.some((tick) => tick.pathShown),

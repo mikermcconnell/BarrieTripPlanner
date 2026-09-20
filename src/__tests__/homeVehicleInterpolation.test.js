@@ -1,7 +1,10 @@
 import {
+  buildHomeVehicleMotionPath,
   getHomeVehicleAnimationDuration,
   getHomeVehicleMovementBearing,
   inferHomeVehicleBearings,
+  interpolateHomeVehicleBearing,
+  interpolateHomeVehicleMotionPath,
   interpolateHomeVehicles,
 } from '../utils/homeVehicleInterpolation';
 
@@ -48,8 +51,49 @@ describe('home vehicle interpolation', () => {
     expect(result[0].routeId).toBe('400');
   });
 
+  test('follows the route around a corner instead of cutting diagonally', () => {
+    const fromCoordinate = { latitude: 44, longitude: -79 };
+    const toCoordinate = { latitude: 44.001, longitude: -78.999 };
+    const motionPath = buildHomeVehicleMotionPath({
+      fromCoordinate,
+      toCoordinate,
+      snapPath: [
+        fromCoordinate,
+        { latitude: 44, longitude: -78.999 },
+        toCoordinate,
+      ],
+    });
+    const halfway = interpolateHomeVehicleMotionPath(motionPath, 0.5);
+
+    expect(motionPath.length).toBeGreaterThan(2);
+    expect(halfway.longitude).toBeCloseTo(-78.999, 5);
+    expect(halfway.latitude).toBeGreaterThan(44);
+    expect(halfway.latitude).toBeLessThan(44.00025);
+  });
+
+  test('falls back to direct movement when GPS is too far from the route', () => {
+    const fromCoordinate = { latitude: 44, longitude: -79 };
+    const toCoordinate = { latitude: 44.001, longitude: -78.999 };
+    const motionPath = buildHomeVehicleMotionPath({
+      fromCoordinate,
+      toCoordinate,
+      snapPath: [
+        { latitude: 45, longitude: -80 },
+        { latitude: 45.001, longitude: -80 },
+      ],
+    });
+
+    expect(motionPath).toEqual([fromCoordinate, toCoordinate]);
+  });
+
+  test('rotates bearings over the shortest arc', () => {
+    expect(interpolateHomeVehicleBearing(350, 10, 0.5)).toBeCloseTo(0, 5);
+    expect(interpolateHomeVehicleBearing(10, 350, 0.5)).toBeCloseTo(0, 5);
+  });
+
   test('clamps animation duration to safe bounds', () => {
     expect(getHomeVehicleAnimationDuration(100)).toBe(2000);
-    expect(getHomeVehicleAnimationDuration(20_000)).toBe(14_000);
+    expect(getHomeVehicleAnimationDuration(15_000)).toBe(15_750);
+    expect(getHomeVehicleAnimationDuration(20_000)).toBe(17_000);
   });
 });

@@ -43,12 +43,15 @@ describe('detour viewport freedom', () => {
   );
 
   test.each(['HomeScreen.js', 'HomeScreen.web.impl.js'])(
-    '%s performs exactly one immediate camera fit when a specific detour is selected',
+    '%s leaves the camera untouched when a specific detour is selected',
     (fileName) => {
       const handler = getDetourEventSelectionHandler(readScreen(fileName));
 
       expect(handler).toContain("handleMapViewModeChange('detour')");
-      expect(handler.match(/focusMapToDetourEvent\(/g)).toHaveLength(1);
+      expect(handler).not.toContain('focusMapToDetourEvent');
+      expect(handler).not.toContain('fitToCoordinates');
+      expect(handler).not.toContain('animateToRegion');
+      expect(handler).not.toContain('setCamera');
       expect(handler).not.toContain('setTimeout');
       expect(handler).not.toContain('requestAnimationFrame');
     }

@@ -10,6 +10,7 @@ const parseTripUpdates = (buffer) => {
   const updates = [];
   let offset = 0;
   const view = new Uint8Array(buffer);
+  let feedTimestamp = null;
 
   while (offset < view.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(view, offset);
@@ -18,7 +19,24 @@ const parseTripUpdates = (buffer) => {
     const fieldNumber = fieldTag >> 3;
     const wireType = fieldTag & 0x7;
 
-    if (fieldNumber === 2 && wireType === 2) {
+    if (fieldNumber === 1 && wireType === 2) {
+      const { value: length, bytesRead } = decodeVarint(view, offset);
+      offset += bytesRead;
+      const end = offset + length;
+      if (length < 0 || end > view.length) throw new Error('Invalid GTFS-RT header length');
+      while (offset < end) {
+        const tag = decodeVarint(view, offset);
+        offset += tag.bytesRead;
+        if ((tag.value >> 3) === 3 && (tag.value & 7) === 0) {
+          const timestamp = decodeVarint(view, offset);
+          feedTimestamp = timestamp.value;
+          offset += timestamp.bytesRead;
+        } else {
+          offset = skipField(view, offset, tag.value & 7);
+        }
+        if (offset > end) throw new Error('Truncated GTFS-RT header');
+      }
+    } else if (fieldNumber === 2 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(view, offset);
       offset += lenBytes;
       const entityData = view.slice(offset, offset + length);
@@ -30,7 +48,10 @@ const parseTripUpdates = (buffer) => {
     }
   }
 
-  return updates;
+  return updates.map((entity) => ({
+    ...entity,
+    tripUpdate: { ...entity.tripUpdate, feedTimestamp },
+  }));
 };
 
 /**
@@ -51,6 +72,10 @@ const parseEntity = (buffer) => {
       const { value, newOffset } = decodeString(buffer, offset);
       entity.id = value;
       offset = newOffset;
+    } else if (fieldNumber === 2 && wireType === 0) {
+      const deleted = decodeVarint(buffer, offset);
+      entity.isDeleted = Boolean(deleted.value);
+      offset += deleted.bytesRead;
     } else if (fieldNumber === 3 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
       offset += lenBytes;
@@ -61,7 +86,7 @@ const parseEntity = (buffer) => {
     }
   }
 
-  return entity.tripUpdate ? entity : null;
+  return entity.tripUpdate && !entity.isDeleted ? entity : null;
 };
 
 /**
@@ -88,6 +113,9 @@ const parseTripUpdate = (buffer) => {
       const trip = parseTripDescriptor(buffer.slice(offset, offset + length));
       update.tripId = trip.tripId;
       update.routeId = trip.routeId;
+      update.startDate = trip.startDate;
+      update.startTime = trip.startTime;
+      update.scheduleRelationship = trip.scheduleRelationship;
       offset += length;
     } else if (fieldNumber === 2 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
@@ -95,6 +123,10 @@ const parseTripUpdate = (buffer) => {
       const stopTime = parseStopTimeUpdate(buffer.slice(offset, offset + length));
       if (stopTime) update.stopTimeUpdates.push(stopTime);
       offset += length;
+    } else if (fieldNumber === 4 && wireType === 0) {
+      const timestamp = decodeVarint(buffer, offset);
+      update.timestamp = timestamp.value;
+      offset += timestamp.bytesRead;
     } else {
       offset = skipField(buffer, offset, wireType);
     }
@@ -108,7 +140,7 @@ const parseTripUpdate = (buffer) => {
  */
 const parseTripDescriptor = (buffer) => {
   let offset = 0;
-  const trip = { tripId: null, routeId: null };
+  const trip = { tripId: null, routeId: null, startDate: null, startTime: null, scheduleRelationship: 0 };
 
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
@@ -121,6 +153,14 @@ const parseTripDescriptor = (buffer) => {
       const { value, newOffset } = decodeString(buffer, offset);
       trip.tripId = value;
       offset = newOffset;
+    } else if ((fieldNumber === 2 || fieldNumber === 3) && wireType === 2) {
+      const { value, newOffset } = decodeString(buffer, offset);
+      trip[fieldNumber === 2 ? 'startTime' : 'startDate'] = value;
+      offset = newOffset;
+    } else if (fieldNumber === 4 && wireType === 0) {
+      const relationship = decodeVarint(buffer, offset);
+      trip.scheduleRelationship = relationship.value;
+      offset += relationship.bytesRead;
     } else if (fieldNumber === 5 && wireType === 2) {
       const { value, newOffset } = decodeString(buffer, offset);
       trip.routeId = value;
@@ -143,6 +183,7 @@ const parseStopTimeUpdate = (buffer) => {
     stopId: null,
     arrival: null,
     departure: null,
+    scheduleRelationship: 0,
   };
 
   while (offset < buffer.length) {
@@ -152,7 +193,11 @@ const parseStopTimeUpdate = (buffer) => {
     const fieldNumber = fieldTag >> 3;
     const wireType = fieldTag & 0x7;
 
-    if (fieldNumber === 1 && wireType === 0) {
+    if (fieldNumber === 5 && wireType === 0) {
+      const relationship = decodeVarint(buffer, offset);
+      stopTime.scheduleRelationship = relationship.value;
+      offset += relationship.bytesRead;
+    } else if (fieldNumber === 1 && wireType === 0) {
       const { value, bytesRead } = decodeVarint(buffer, offset);
       stopTime.stopSequence = value;
       offset += bytesRead;

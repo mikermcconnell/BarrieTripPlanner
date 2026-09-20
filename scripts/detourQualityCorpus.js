@@ -53,7 +53,20 @@ function loadDetourQualityCorpus(manifestPath) {
 }
 
 function scoreDetourQualityCorpus(manifestPath) {
-  return scoreDetourQualityCases(loadDetourQualityCorpus(manifestPath));
+  const cases = loadDetourQualityCorpus(manifestPath);
+  return {
+    ...scoreDetourQualityCases(cases),
+    // Snapshot agreement is not current-detector detection accuracy. These
+    // supported corpus types contain no labelled raw GPS time-series replay.
+    evidenceCoverage: {
+      detectionMetricSource: 'saved-output-versus-labels',
+      savedOutputCases: cases.filter((entry) => entry.groundTruth).length,
+      runtimeSnapshotReplays: cases.filter((entry) => entry.replay).length,
+      syntheticTraces: cases.filter((entry) => entry.syntheticTrace).length,
+      labelledRawTraceReplays: 0,
+      currentDetectorAccuracyEstablished: false,
+    },
+  };
 }
 
 function writeDetourQualityReport(report, outputPath) {

@@ -195,14 +195,7 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
 
   return (
     <>
-      {/* Semi-transparent backdrop for top half - clicking closes the sheet */}
-      <TouchableOpacity
-        style={styles.backdrop}
-        activeOpacity={1}
-        onPress={handleClose}
-      />
-
-      {/* Bottom sheet panel */}
+      {/* Keep the visible map interactive; the header close button dismisses the sheet. */}
       <Animated.View
         style={[
           styles.overlay,
@@ -359,16 +352,6 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
 };
 
 const styles = StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: '50%',
-    backgroundColor: 'rgba(0, 0, 0, 0.15)',
-    zIndex: 1999,
-  },
-
   overlay: {
     position: 'absolute',
     left: 0,

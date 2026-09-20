@@ -1,0 +1,41 @@
+diff --git a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/styles/layers/MLRNLayer.java b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/styles/layers/MLRNLayer.java
+index dd747f5..6f9752e 100644
+--- a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/styles/layers/MLRNLayer.java
++++ b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/styles/layers/MLRNLayer.java
+@@ -69,7 +69,7 @@ public abstract class MLRNLayer<T extends Layer> extends AbstractMapFeature {
+         mAboveLayerID = aboveLayerID;
+         if (mLayer != null) {
+             removeFromMap(mMapView);
+-            addAbove(mAboveLayerID);
++            reinsertLayer();
+         }
+     }
+ 
+@@ -81,7 +81,7 @@ public abstract class MLRNLayer<T extends Layer> extends AbstractMapFeature {
+         mBelowLayerID = belowLayerID;
+         if (mLayer != null) {
+             removeFromMap(mMapView);
+-            addBelow(mBelowLayerID);
++            reinsertLayer();
+         }
+     }
+ 
+@@ -205,6 +205,18 @@ public abstract class MLRNLayer<T extends Layer> extends AbstractMapFeature {
+         mMapView.layerAdded(mLayer);
+     }
+ 
++    private void reinsertLayer() {
++        if (mAboveLayerID != null) {
++            addAbove(mAboveLayerID);
++        } else if (mBelowLayerID != null) {
++            addBelow(mBelowLayerID);
++        } else if (mLayerIndex != null) {
++            addAtIndex(mLayerIndex);
++        } else {
++            add();
++        }
++    }
++
+     protected void insertLayer() {
+         if (getStyle() == null) return;
+         if (getStyle().getLayer(mID) != null) {

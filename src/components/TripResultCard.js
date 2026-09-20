@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../config/theme';
 import { formatDuration, formatMinutes, formatTimeFromTimestamp, formatDistance } from '../services/tripService';
 import DelayBadge from './DelayBadge';
+import { getItineraryDelayBadgeProps } from '../utils/tripDelayBadge';
 import { getContrastTextColor } from '../utils/colorUtils';
 import Icon from './Icon';
 import WalkingPaceIcon from './navigation/WalkingPaceIcon';
@@ -443,7 +444,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   // Get delay info from first transit leg
   const firstTransitLeg = transitLegs[0];
   const hasRealtimeInfo = itinerary.hasRealtimeInfo || firstTransitLeg?.isRealtime;
-  const delaySeconds = itinerary.totalDelaySeconds ?? firstTransitLeg?.delaySeconds ?? 0;
+  const delayBadgeProps = getItineraryDelayBadgeProps(itinerary);
 
   // Get metadata from enrichment
   const minutesUntilDeparture = itinerary.minutesUntilDeparture ?? 0;
@@ -531,7 +532,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             <View style={styles.topRowLeft}>
               <Text style={styles.durationLarge}>{duration}</Text>
               {hasRealtimeInfo && (
-                <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+                <DelayBadge {...delayBadgeProps} compact />
               )}
             </View>
             {leavesInText && (
@@ -672,7 +673,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
           <View style={styles.topRowLeft}>
             <Text style={styles.durationLarge}>{duration}</Text>
             {hasRealtimeInfo && (
-              <DelayBadge delaySeconds={delaySeconds} isRealtime={hasRealtimeInfo} compact />
+              <DelayBadge {...delayBadgeProps} compact />
             )}
           </View>
           {leavesInText && (

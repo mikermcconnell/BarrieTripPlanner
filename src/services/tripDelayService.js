@@ -14,6 +14,9 @@ import {
   isSameBusContinuation,
 } from '../utils/routeContinuity';
 import logger from '../utils/logger';
+import { runBounded, throwIfAborted } from '../utils/requestControl';
+import { finiteNumber, isFreshTripUpdate, matchesTripInstance } from '../utils/realtimeTripMatching';
+import { isItineraryFeasible } from '../utils/itineraryFeasibility';
 
 const MISSED_DEPARTURE_LABEL = 'Likely departed';
 const MISSED_TRANSFER_LABEL = 'Missed transfer';
@@ -34,59 +37,58 @@ const isTransitLeg = (leg) => (
 );
 
 const getNumericTime = (value, fallback = null) => (
-  Number.isFinite(Number(value)) ? Number(value) : fallback
+  finiteNumber(value) ?? fallback
 );
 
 const getTripUpdateMap = (updates = []) => {
-  const tripUpdateMap = new Map();
-  if (!Array.isArray(updates)) return tripUpdateMap;
-
+  const map = new Map();
+  if (!Array.isArray(updates)) return map;
   updates.forEach((entity) => {
-    const tripUpdate = entity?.tripUpdate;
-    if (tripUpdate?.tripId) {
-      tripUpdateMap.set(String(tripUpdate.tripId), tripUpdate);
-    }
+    const update = entity?.tripUpdate;
+    if (!update?.tripId || entity.isDeleted) return;
+    const key = String(update.tripId);
+    map.set(key, [...(map.get(key) || []), update]);
   });
+  return map;
+};
 
-  return tripUpdateMap;
+const endpointLeg = (leg, alighting = false) => alighting ? {
+  ...leg,
+  tripId: leg.alightingTripId || leg.tripId,
+  serviceDate: leg.alightingServiceDate || leg.serviceDate,
+} : leg;
+
+const getUpdateForLeg = (leg, map, options = {}, alighting = false) => {
+  const endpoint = endpointLeg(leg, alighting);
+  const nowMs = options.nowMs ?? Date.now();
+  return (map.get(String(endpoint.tripId)) || [])
+    .filter((update) => isFreshTripUpdate(update, nowMs, options.tripUpdateFreshnessSeconds))
+    .filter((update) => matchesTripInstance(endpoint, update, nowMs))
+    .sort((a, b) => (b.timestamp ?? b.feedTimestamp) - (a.timestamp ?? a.feedTimestamp))[0] || null;
 };
 
 const getBoardingStopSequence = (leg) => getNumericTime(
-  leg?.boardingStopSequence,
-  getNumericTime(leg?.from?.stopSequence, null)
+  leg?.boardingStopSequence, getNumericTime(leg?.from?.stopSequence, null)
 );
 
-const getStopTimeUpdateForLeg = (leg, tripUpdateMap) => {
+const getStopTimeUpdateForLeg = (leg, map, options = {}, alighting = false) => {
   if (!isTransitLeg(leg)) return null;
-
-  const update = tripUpdateMap.get(String(leg.tripId));
-  if (!update || !Array.isArray(update.stopTimeUpdates)) return null;
-
-  const boardingStopId = String(leg.from?.stopId || '');
-  const boardingStopSequence = getBoardingStopSequence(leg);
-
-  if (boardingStopSequence != null) {
-    const sequenceMatch = update.stopTimeUpdates.find((st) => (
-      getNumericTime(st?.stopSequence, null) === boardingStopSequence &&
-      (!boardingStopId || String(st?.stopId || '') === boardingStopId)
+  const update = getUpdateForLeg(leg, map, options, alighting);
+  if (!Array.isArray(update?.stopTimeUpdates)) return null;
+  const stopId = String((alighting ? leg.to : leg.from)?.stopId || '');
+  const sequence = alighting
+    ? getNumericTime(leg.alightingStopSequence, getNumericTime(leg.to?.stopSequence))
+    : getBoardingStopSequence(leg);
+  if (sequence != null) {
+    const exact = update.stopTimeUpdates.find((st) => (
+      getNumericTime(st.stopSequence) === sequence && (!st.stopId || !stopId || String(st.stopId) === stopId)
     ));
-    if (sequenceMatch) return sequenceMatch;
+    if (exact) return exact;
   }
-
-  if (boardingStopId) {
-    const stopIdMatch = update.stopTimeUpdates.find(
-      (st) => String(st?.stopId || '') === boardingStopId
-    );
-    if (stopIdMatch) return stopIdMatch;
-  }
-
-  if (boardingStopSequence != null) {
-    return update.stopTimeUpdates.find(
-      (st) => getNumericTime(st?.stopSequence, null) === boardingStopSequence
-    ) || null;
-  }
-
-  return null;
+  const matches = update.stopTimeUpdates.filter((st) => String(st.stopId || '') === stopId && stopId);
+  // A repeated stop ID is ambiguous; a different sequence must not match.
+  return matches.length === 1 && (sequence == null || getNumericTime(matches[0].stopSequence) == null)
+    ? matches[0] : null;
 };
 
 const getLegDurationSeconds = (leg) => {
@@ -103,45 +105,53 @@ const getLegDurationSeconds = (leg) => {
   return 0;
 };
 
-const getLegDelaySeconds = (leg, tripUpdateMap) => {
-  const stopUpdate = getStopTimeUpdateForLeg(leg, tripUpdateMap);
-  if (!stopUpdate) return null;
-
-  return stopUpdate?.departure?.delay ?? stopUpdate?.arrival?.delay ?? 0;
+const eventTime = (event, scheduledTime) => {
+  const time = finiteNumber(event?.time);
+  const delay = finiteNumber(event?.delay);
+  const predicted = time != null ? time * 1000 : delay != null ? scheduledTime + delay * 1000 : null;
+  // Reject malformed or cross-day event times rather than advertising them as live.
+  return predicted != null && Math.abs(predicted - scheduledTime) <= 6 * 3600 * 1000 ? predicted : null;
 };
 
-const applyTransitDelayToLeg = (leg, tripUpdateMap) => {
-  if (!isTransitLeg(leg)) {
-    return {
-      ...leg,
-      delaySeconds: 0,
-      isRealtime: false,
-    };
-  }
-
-  const delaySeconds = getLegDelaySeconds(leg, tripUpdateMap);
-  if (delaySeconds == null) {
-    return {
-      ...leg,
-      delaySeconds: 0,
-      isRealtime: false,
-    };
-  }
-
+const applyTransitDelayToLeg = (leg, map, options) => {
+  if (!isTransitLeg(leg)) return { ...leg, delaySeconds: 0, isRealtime: false };
   const scheduledStartTime = getNumericTime(leg.scheduledStartTime, leg.startTime);
   const scheduledEndTime = getNumericTime(leg.scheduledEndTime, leg.endTime);
-  const startTime = scheduledStartTime + delaySeconds * 1000;
-  const endTime = scheduledEndTime + delaySeconds * 1000;
-
+  const boardingUpdate = getUpdateForLeg(leg, map, options);
+  const alightingUpdate = getUpdateForLeg(leg, map, options, true);
+  const boarding = getStopTimeUpdateForLeg(leg, map, options);
+  const alighting = getStopTimeUpdateForLeg(leg, map, options, true);
+  const cancelled = [boardingUpdate, alightingUpdate].some((update) => [3, 7].includes(update?.scheduleRelationship));
+  const skipped = [boarding, alighting].some((stop) => stop?.scheduleRelationship === 1);
+  const noBoardingData = boarding?.scheduleRelationship === 2;
+  const noAlightingData = alighting?.scheduleRelationship === 2;
+  const boardingTime = !noBoardingData && !cancelled && !skipped
+    ? eventTime(boarding?.departure, scheduledStartTime) ?? eventTime(boarding?.arrival, scheduledStartTime) : null;
+  const arrivalTime = !noAlightingData && !cancelled && !skipped
+    ? eventTime(alighting?.arrival, scheduledEndTime) ?? eventTime(alighting?.departure, scheduledEndTime) : null;
+  const startTime = boardingTime ?? scheduledStartTime;
+  // Without a downstream prediction, GTFS delays propagate along the same trip.
+  // Explicit NO_DATA and a different trip in a through-service reset that inference.
+  const propagatedDelay = !noAlightingData && (!leg.alightingTripId || leg.alightingTripId === leg.tripId)
+    ? startTime - scheduledStartTime : 0;
+  const endTime = arrivalTime ?? scheduledEndTime + propagatedDelay;
+  const valid = endTime >= startTime;
   return {
     ...leg,
     scheduledStartTime,
     scheduledEndTime,
-    delaySeconds,
-    isRealtime: true,
-    startTime,
-    endTime,
-    duration: Math.max(0, Math.round((endTime - startTime) / 1000)),
+    startTime: valid ? startTime : scheduledStartTime,
+    endTime: valid ? endTime : scheduledEndTime,
+    delaySeconds: valid ? (startTime - scheduledStartTime) / 1000 : 0,
+    arrivalDelaySeconds: valid ? (endTime - scheduledEndTime) / 1000 : 0,
+    isRealtime: valid && (boardingTime != null || arrivalTime != null),
+    boardingRealtime: valid && boardingTime != null,
+    arrivalRealtime: valid && (arrivalTime != null || (boardingTime != null && !noAlightingData
+      && (!leg.alightingTripId || leg.alightingTripId === leg.tripId))),
+    realtimeUnavailable: cancelled ? 'TRIP_CANCELLED' : skipped ? 'STOP_SKIPPED' : null,
+    missedDeparture: false,
+    missedDepartureReason: null,
+    duration: Math.round(((valid ? endTime : scheduledEndTime) - (valid ? startTime : scheduledStartTime)) / 1000),
   };
 };
 
@@ -252,14 +262,6 @@ const getFirstTransitLeg = (itinerary) => (
   Array.isArray(itinerary?.legs) ? itinerary.legs.find(isTransitLeg) : null
 );
 
-const getStopEventTimeMs = (stopUpdate) => {
-  const departureTime = getNumericTime(stopUpdate?.departure?.time, null);
-  const arrivalTime = getNumericTime(stopUpdate?.arrival?.time, null);
-  const eventTimeSeconds = departureTime ?? arrivalTime;
-
-  return eventTimeSeconds == null ? null : eventTimeSeconds * 1000;
-};
-
 const getVehicleTimestampMs = (vehicle) => {
   const timestamp = getNumericTime(vehicle?.timestamp, null);
   if (timestamp == null) return null;
@@ -269,7 +271,7 @@ const getVehicleTimestampMs = (vehicle) => {
 
 const isFreshVehicle = (vehicle, nowMs, freshnessSeconds) => {
   const timestampMs = getVehicleTimestampMs(vehicle);
-  if (timestampMs == null) return true;
+  if (timestampMs == null) return false;
 
   return Math.abs(nowMs - timestampMs) <= freshnessSeconds * 1000;
 };
@@ -286,6 +288,7 @@ const findVehicleForLeg = (leg, vehicles, nowMs, options = {}) => {
   const matchingVehicles = vehicles
     .filter((vehicle) => String(vehicle?.tripId || '') === String(leg.tripId))
     .filter((vehicle) => isFreshVehicle(vehicle, nowMs, freshnessSeconds))
+    .filter((vehicle) => matchesTripInstance(leg, vehicle, nowMs))
     .sort((a, b) => (getVehicleTimestampMs(b) || 0) - (getVehicleTimestampMs(a) || 0));
 
   return matchingVehicles[0] || null;
@@ -318,8 +321,10 @@ const getMissedDepartureInfo = (itinerary, tripUpdateMap, options = {}) => {
     };
   }
 
-  const stopUpdate = getStopTimeUpdateForLeg(firstTransitLeg, tripUpdateMap);
-  const eventTimeMs = getStopEventTimeMs(stopUpdate);
+  const stopUpdate = getStopTimeUpdateForLeg(firstTransitLeg, tripUpdateMap, options);
+  if ([1, 2].includes(stopUpdate?.scheduleRelationship)) return null;
+  const scheduledStart = getNumericTime(firstTransitLeg.scheduledStartTime, firstTransitLeg.startTime);
+  const eventTimeMs = eventTime(stopUpdate?.departure, scheduledStart) ?? eventTime(stopUpdate?.arrival, scheduledStart);
   const graceSeconds = options.missedDepartureGraceSeconds ?? DEFAULT_MISSED_DEPARTURE_GRACE_SECONDS;
 
   if (eventTimeMs != null && nowMs > eventTimeMs + graceSeconds * 1000) {
@@ -490,6 +495,7 @@ const getLiveRiskPenaltySeconds = (itinerary) => (
 const refreshRecommendedLabels = (itineraries) => groupSimilarItinerariesForDisplay(
   rankItinerariesForRider(itineraries)
     .sort((a, b) => (
+      Number(!isItineraryFeasible(a)) - Number(!isItineraryFeasible(b)) ||
       Number(Boolean(a.hasMissedDeparture || a.hasMissedTransfer)) -
         Number(Boolean(b.hasMissedDeparture || b.hasMissedTransfer)) ||
       (a.riderRankingCostSeconds + getLiveRiskPenaltySeconds(a)) -
@@ -502,8 +508,10 @@ const refreshRecommendedLabels = (itineraries) => groupSimilarItinerariesForDisp
   .map((itinerary, index) => {
     const shouldRecommend =
       index === 0 &&
+      isItineraryFeasible(itinerary) &&
       !itinerary.hasMissedDeparture &&
       !itinerary.hasMissedTransfer &&
+      !itinerary.legs?.some((leg) => leg.realtimeUnavailable) &&
       itinerary.recommendationEligible !== false &&
       !itinerary.isTomorrow &&
       !itinerary.hasLongWait &&
@@ -542,19 +550,19 @@ export const applyDelaysToItinerary = async (itinerary, tripUpdates = null, opti
       updates = await fetchTripUpdates();
     } catch (error) {
       logger.warn('Could not fetch trip updates for delays:', error);
-      // Return itinerary unchanged if we can't get updates
-      return itinerary;
+      // A failed refresh must not preserve an old prediction labelled as live.
+      updates = [];
     }
   }
 
   const tripUpdateMap = getTripUpdateMap(updates);
 
-  const delayedLegs = itinerary.legs.map((leg) => applyTransitDelayToLeg(leg, tripUpdateMap));
+  const delayedLegs = itinerary.legs.map((leg) => applyTransitDelayToLeg(leg, tripUpdateMap, options));
   const updatedLegs = realignWalkLegs(delayedLegs);
 
   return markTransferRisk(
     markMissedDeparture(
-      recalculateItinerarySummary(itinerary, updatedLegs),
+      recalculateItinerarySummary({ ...itinerary, hasMissedDeparture: false, missedDeparture: null, hasMissedTransfer: false, hasTightTransfer: false, transferRisk: null, transferRiskPenaltySeconds: 0 }, updatedLegs),
       tripUpdateMap,
       options
     ),
@@ -576,11 +584,11 @@ export const applyDelaysToItineraries = async (itineraries, options = {}) => {
   // Fetch trip updates once for all itineraries
   let tripUpdates = null;
   try {
-    tripUpdates = await fetchTripUpdates();
+    tripUpdates = await runBounded(() => fetchTripUpdates(), { signal: options.signal });
   } catch (error) {
+    throwIfAborted(options.signal);
     logger.warn('Could not fetch trip updates:', error);
-    // Return itineraries unchanged
-    return itineraries;
+    tripUpdates = [];
   }
 
   // Apply delays to each itinerary, then re-rank because live delays can

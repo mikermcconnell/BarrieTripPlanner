@@ -128,6 +128,7 @@ const decodeVehiclePosition = (buffer) => {
       const trip = decodeTripDescriptor(buffer.slice(offset, offset + length));
       vehicle.tripId = trip.tripId;
       vehicle.routeId = trip.routeId;
+      vehicle.startDate = trip.startDate;
       offset += length;
     } else if (fieldNumber === 8 && wireType === 2) {
       // vehicle descriptor
@@ -195,6 +196,11 @@ const decodeTripDescriptor = (buffer) => {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
       offset += lenBytes;
       trip.tripId = new TextDecoder().decode(buffer.slice(offset, offset + length));
+      offset += length;
+    } else if (fieldNumber === 3 && wireType === 2) {
+      const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
+      offset += lenBytes;
+      trip.startDate = new TextDecoder().decode(buffer.slice(offset, offset + length));
       offset += length;
     } else if (fieldNumber === 5 && wireType === 2) {
       // route_id
@@ -471,6 +477,7 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
       bearing: vehicle.bearing,
       speed: Number.isFinite(vehicle.speed) ? vehicle.speed : null,
       tripId: vehicle.tripId,
+      startDate: vehicle.startDate || null,
       routeId: tripInfo.routeId || vehicle.routeId,
       shapeId: tripInfo.shapeId || null,
       directionId: tripInfo.directionId ?? null, // Include direction for detour detection

@@ -4,6 +4,9 @@ const React = require('react');
 const { act, create } = require('react-test-renderer');
 
 jest.mock('react-native', () => ({
+  Linking: {
+    openURL: jest.fn(() => Promise.resolve()),
+  },
   Modal: 'Modal',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
@@ -27,6 +30,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const DetourExplainerButton = require('../components/DetourExplainerButton').default;
+const { Linking } = require('react-native');
 
 const getText = (instance) => instance.root
   .findAllByType('Text')
@@ -48,11 +52,13 @@ describe('DetourExplainerButton', () => {
     expect(instance.root.findByType('Modal').props.visible).toBe(true);
     expect(getText(instance)).toEqual(expect.arrayContaining([
       'Meet the Auto Detour Detector',
+      "It keeps an eye on detours, so you don't have to.",
       'Built to spot unexpected route changes',
+      'When buses start taking a different path, the detector looks for the detour route and displays the estimated detour on your map.',
       'Spots something different',
-      'Checks that it is real',
-      'Shows you the detour',
-      'Knows when it is over',
+      'Confirms the detour',
+      'Detour is shown',
+      'Detour removal',
       'Good to know',
     ]));
 
@@ -61,7 +67,7 @@ describe('DetourExplainerButton', () => {
     expect(instance.root.findByType('Modal').props.visible).toBe(false);
   });
 
-  test('explains the timing and accuracy limits', () => {
+  test('explains the timing and accuracy limits and links to official alerts', () => {
     let instance;
     act(() => {
       instance = create(React.createElement(DetourExplainerButton));
@@ -69,9 +75,14 @@ describe('DetourExplainerButton', () => {
 
     act(() => instance.root.findByProps({ accessibilityLabel: 'Learn how the Auto Detour Detector works' }).props.onPress());
 
-    expect(getText(instance)).toContain(
-      'The detector takes a little time to check a new detour, and the path shown is its best estimate. Check Barrie Transit service alerts for planned changes and official updates.'
-    );
+    const rendered = JSON.stringify(instance.toJSON());
+    expect(rendered).toContain('Two bus trips must show the same detour before it appears on the map.');
+    expect(rendered).toContain('Depending on bus frequency, this may take one to two hours.');
+    expect(rendered).toContain('Detour routes and affected stops are estimates.');
+    expect(getText(instance)).toContain('Barrie Transit service alerts');
+
+    act(() => instance.root.findByProps({ accessibilityLabel: 'Open Barrie Transit service alerts' }).props.onPress());
+    expect(Linking.openURL).toHaveBeenCalledWith('https://www.myridebarrie.ca/News/');
   });
 
   test('minimizes the detector card to an icon and restores it', () => {

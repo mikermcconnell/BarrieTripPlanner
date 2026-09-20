@@ -68,6 +68,12 @@
       "android": {
         "buildType": "apk"
       }
+    },
+    "camera-diagnostics-apk": {
+      "extends": "production-apk",
+      "env": {
+        "EXPO_PUBLIC_ENABLE_MAP_CAMERA_DIAGNOSTICS": "true"
+      }
     }
   },
   "submit": {
@@ -75,6 +81,13 @@
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
+      }
+    },
+    "play-production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "production",
+        "releaseStatus": "completed"
       }
     }
   }

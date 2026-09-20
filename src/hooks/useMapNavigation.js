@@ -2,19 +2,37 @@
  * useMapNavigation Hook
  *
  * Handles navigation parameter effects for the HomeScreen map.
- * Responds to selectedStopId, selectedRouteId, selectedCoordinate,
- * and exitTripPlanning navigation params.
+ * Selections update map content and details without moving the camera.
  *
  * Shared between native and web HomeScreens.
  */
 import { useEffect, useRef } from 'react';
 import { getSelectedAddressFromParams, normalizeSelectedRouteId } from '../utils/mapSelection';
 
+const consumedMapFocusRequests = new Set();
+const MAX_CONSUMED_MAP_FOCUS_REQUESTS = 256;
+
+const claimMapFocusRequest = (requestId) => {
+  if (consumedMapFocusRequests.has(requestId)) return false;
+
+  consumedMapFocusRequests.add(requestId);
+  while (consumedMapFocusRequests.size > MAX_CONSUMED_MAP_FOCUS_REQUESTS) {
+    const oldestRequestId = consumedMapFocusRequests.values().next().value;
+    consumedMapFocusRequests.delete(oldestRequestId);
+  }
+  return true;
+};
+
+export const __TEST_ONLY__ = {
+  claimMapFocusRequest,
+  getConsumedMapFocusRequestCount: () => consumedMapFocusRequests.size,
+  resetConsumedMapFocusRequests: () => consumedMapFocusRequests.clear(),
+};
+
 export const useMapNavigation = ({
   route,
   navigation,
   stops,
-  mapRef,
   selectRoute,
   resetTrip,
   setSelectedStop,
@@ -22,36 +40,32 @@ export const useMapNavigation = ({
   hasSelection,
   showLocation,
 }) => {
-  const consumedStopRequestRef = useRef(null);
   const consumedRouteRequestRef = useRef(null);
-  const consumedAddressRequestRef = useRef(null);
 
   // Handle selected stop from navigation params
   useEffect(() => {
     const selectedStopId = route?.params?.selectedStopId;
-    if (!selectedStopId) {
-      consumedStopRequestRef.current = null;
-      return;
+    if (!selectedStopId) return;
+
+    const focusRequestId = route?.params?.selectedStopFocusRequestId ||
+      `legacy-stop-focus:${selectedStopId}`;
+    const stop = stops.find((candidate) => candidate.id === selectedStopId);
+    if (!stop) return;
+
+    if (claimMapFocusRequest(focusRequestId)) {
+      setSelectedStop(stop);
     }
 
-    if (consumedStopRequestRef.current !== selectedStopId) {
-      const stop = stops.find((s) => s.id === selectedStopId);
-      if (stop) {
-        consumedStopRequestRef.current = selectedStopId;
-        setSelectedStop(stop);
-        mapRef.current?.animateToRegion(
-          {
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          },
-          500
-        );
-        navigation.setParams({ selectedStopId: undefined });
-      }
-    }
-  }, [route?.params?.selectedStopId, stops, navigation]);
+    navigation.setParams({
+      selectedStopId: undefined,
+      selectedStopFocusRequestId: undefined,
+    });
+  }, [
+    route?.params?.selectedStopId,
+    route?.params?.selectedStopFocusRequestId,
+    stops,
+    navigation,
+  ]);
 
   // Handle selected route from navigation params
   useEffect(() => {
@@ -71,33 +85,28 @@ export const useMapNavigation = ({
   // Handle selected address/coordinate from navigation params
   useEffect(() => {
     const selectedAddress = getSelectedAddressFromParams(route?.params);
-    if (!selectedAddress) {
-      consumedAddressRequestRef.current = null;
-      return;
-    }
+    if (!selectedAddress) return;
+
     const { coordinate, label } = selectedAddress;
-    const requestKey = `${coordinate.latitude}:${coordinate.longitude}:${label || ''}`;
-    if (consumedAddressRequestRef.current === requestKey) return;
+    const focusRequestId = route?.params?.selectedAddressFocusRequestId ||
+      `legacy-address-focus:${coordinate.latitude}:${coordinate.longitude}:${label || ''}`;
 
-    consumedAddressRequestRef.current = requestKey;
-    setSelectedStop(null);
-    showLocation(coordinate, label);
-
-    mapRef.current?.animateToRegion(
-      {
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      },
-      500
-    );
+    if (claimMapFocusRequest(focusRequestId)) {
+      setSelectedStop(null);
+      showLocation(coordinate, label);
+    }
 
     navigation.setParams({
       selectedCoordinate: undefined,
       selectedAddressLabel: undefined,
+      selectedAddressFocusRequestId: undefined,
     });
-  }, [route?.params?.selectedCoordinate, route?.params?.selectedAddressLabel, navigation]);
+  }, [
+    route?.params?.selectedCoordinate,
+    route?.params?.selectedAddressLabel,
+    route?.params?.selectedAddressFocusRequestId,
+    navigation,
+  ]);
 
   // Handle exit from navigation - reset trip planning mode
   useEffect(() => {

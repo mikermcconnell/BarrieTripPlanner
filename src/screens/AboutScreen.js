@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { APP_CONFIG } from '../config/constants';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, SHADOWS, SPACING } from '../config/theme';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
-import { openExternalUrl } from '../utils/externalLinks';
+import { openAppContactEmail, openExternalUrl } from '../utils/externalLinks';
 
 export default function AboutScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -12,6 +12,10 @@ export default function AboutScreen({ navigation }) {
   const openLink = async (url) => {
     const result = await openExternalUrl(url);
     if (!result.success) Alert.alert('Could not open link', result.error);
+  };
+  const contactAppSupport = async () => {
+    const result = await openAppContactEmail();
+    if (!result.success) Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.APP_CONTACT_EMAIL}`);
   };
   const version = APP_CONFIG.BUILD_NUMBER ? `${APP_CONFIG.VERSION} (${APP_CONFIG.BUILD_NUMBER})` : APP_CONFIG.VERSION;
 
@@ -33,7 +37,8 @@ export default function AboutScreen({ navigation }) {
         <TouchableOpacity style={styles.row} onPress={() => openLink(APP_CONFIG.TERMS_URL)}><Text style={styles.rowText}>Terms of Service</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => openLink(APP_CONFIG.PRIVACY_URL)}><Text style={styles.rowText}>Privacy Policy</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => openLink(APP_CONFIG.ACCOUNT_DELETION_URL)}><Text style={styles.rowText}>Account deletion information</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.row} onPress={() => openLink(`mailto:${APP_CONFIG.APP_CONTACT_EMAIL}`)}><Text style={styles.rowText}>Contact app support</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('AppFeedback', { source: 'about' })}><Text style={styles.rowText}>Contact app support</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={contactAppSupport}><Text style={styles.rowText}>Email app support</Text><Text style={styles.chevron}>›</Text></TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );

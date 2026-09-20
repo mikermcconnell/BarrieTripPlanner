@@ -76,3 +76,19 @@ Synthetic results appear only under `syntheticLab` with `countsTowardProductionR
 - `normal-service-2026-07-14-route-8a-downtown-hub-egress.json` — operator-confirmed Route 8A normal terminal egress through Simcoe/Mary/Dunlop; the corrected detector output must contain no rider-visible Route 8A detour.
 - `review-queue-2026-07-09.md` — prioritized production cases awaiting operator labels.
 
+
+## Evidence boundary and follow-up coverage (2026-09-20)
+
+The corpus report now includes `evidenceCoverage`. The ten labelled detection cases compare saved output against labels; they do **not** measure today's detector on independently labelled raw GPS traces. The single real runtime-snapshot replay exercises restoration/safety, not full detection or clearing latency. `currentDetectorAccuracyEstablished` therefore remains false.
+
+`src/__tests__/detourSyntheticLab.test.js` additionally checks five positive scenarios with one-minute sampling and with the two buses separated by 15 minutes. The replay helper supports 30- and 60-second cadence and reports `firstVisibleElapsedMs` from actual tick timestamps. These are synthetic regression probes, never additional real ground-truth cases.
+
+Local historical evidence was also checked with:
+
+```powershell
+node scripts/validate-detour-ground-truth.js --fixture docs/detour-ground-truth/route-12b-bayfield-sophia-2026-06-05.json --active-detours-json logs/live-route-12b-active-detour-events-v2.json
+```
+
+That June 5 saved output fails: the closed section is 518.6m versus a 290m maximum and includes a disallowed distant notice and stop codes. Its skipped-stop list correctly remains empty. The log is an optional local artifact, not a checked-in fixture dependency. This historical failure is neither a current detector reproduction nor a passing sample to add to the production corpus.
+
+To expand real detector validation, capture time-ordered vehicle samples with their original timestamps/trip identities, the matching GTFS shapes/trips/stop sequences and service calendar, polling times, and independently confirmed detour/served-stop/reopening labels. Retain provenance and capture time. Do not derive expected answers from detector output or relabel synthetic traces as recorded evidence. The available saved outputs do not provide that complete input set; production accuracy sign-off remains blocked on those recordings and labels.

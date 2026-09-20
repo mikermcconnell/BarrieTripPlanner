@@ -9,7 +9,10 @@ const {
 
 describe('mapSelection utilities', () => {
   test('buildSelectedStopParams returns stop id payload', () => {
-    expect(buildSelectedStopParams({ id: '1234' })).toEqual({ selectedStopId: '1234' });
+    expect(buildSelectedStopParams({ id: '1234' }, 'focus-1')).toEqual({
+      selectedStopId: '1234',
+      selectedStopFocusRequestId: 'focus-1',
+    });
   });
 
   test('buildSelectedRouteParams returns route id payload', () => {
@@ -17,16 +20,20 @@ describe('mapSelection utilities', () => {
   });
 
   test('buildSelectedAddressParams prioritizes shortName', () => {
-    const params = buildSelectedAddressParams({
-      lat: 44.389,
-      lon: -79.69,
-      shortName: 'Barrie Transit Terminal',
-      displayName: 'Barrie Transit Terminal, Barrie, Ontario',
-    });
+    const params = buildSelectedAddressParams(
+      {
+        lat: 44.389,
+        lon: -79.69,
+        shortName: 'Barrie Transit Terminal',
+        displayName: 'Barrie Transit Terminal, Barrie, Ontario',
+      },
+      'address-focus-1'
+    );
 
     expect(params).toEqual({
       selectedCoordinate: { latitude: 44.389, longitude: -79.69 },
       selectedAddressLabel: 'Barrie Transit Terminal',
+      selectedAddressFocusRequestId: 'address-focus-1',
     });
   });
 

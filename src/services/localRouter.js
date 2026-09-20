@@ -20,8 +20,9 @@ import { haversineDistance } from '../utils/geometryUtils';
 import { getActiveServicesForDate, formatGTFSDate } from './calendarService';
 import { buildItinerary } from './itineraryBuilder';
 import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
+import { getServiceDayStartMs } from '../utils/gtfsServiceTime';
+import { getRequestedTimeMs } from '../utils/itineraryFeasibility';
 
-const SECONDS_PER_DAY = 24 * 3600;
 const SERVICE_DAY_ROLLOVER_WINDOW_SECONDS = 6 * 3600;
 const ARRIVE_BY_SEARCH_STEP_SECONDS = 10 * 60;
 
@@ -47,10 +48,12 @@ const addDays = (date, days) => {
 
 const buildServiceDaySearchContexts = (serviceCalendar, date, time) => {
   const requestedTime = dateToSeconds(time);
+  const requestedTimestamp = getRequestedTimeMs({ date, time });
   const contexts = [];
   const seen = new Set();
 
-  const addContext = (serviceDate, searchTime) => {
+  const addContext = (serviceDate) => {
+    const searchTime = (requestedTimestamp - getServiceDayStartMs(serviceDate)) / 1000;
     const activeServices = getActiveServicesForDate(serviceCalendar, serviceDate);
     if (activeServices.size === 0) return;
 
@@ -65,10 +68,10 @@ const buildServiceDaySearchContexts = (serviceCalendar, date, time) => {
     });
   };
 
-  addContext(date, requestedTime);
+  addContext(date);
 
   if (requestedTime < SERVICE_DAY_ROLLOVER_WINDOW_SECONDS) {
-    addContext(addDays(date, -1), requestedTime + SECONDS_PER_DAY);
+    addContext(addDays(date, -1));
   }
 
   return contexts;
@@ -189,6 +192,7 @@ export const planTripLocal = async ({
   time = new Date(),
   arriveBy = false,
   routingData,
+  maxItineraries = ROUTING_CONFIG.MAX_ITINERARIES,
 }) => {
   // Validate inputs
   if (!routingData) {
@@ -242,26 +246,26 @@ export const planTripLocal = async ({
 
   if (arriveBy) {
     raptorResults = deduplicateResults(
-      searchContexts.flatMap(({ searchTime, activeServices }) => (
+      searchContexts.flatMap(({ searchTime, activeServices, serviceDate }) => (
         raptorReverse(
           routingData,
           originStops,
           destStops,
           searchTime,
           activeServices
-        )
+        ).map((result) => ({ ...result, serviceDate }))
       ))
     );
   } else {
     raptorResults = deduplicateResults(
-      searchContexts.flatMap(({ searchTime, activeServices }) => (
+      searchContexts.flatMap(({ searchTime, activeServices, serviceDate }) => (
         collectForwardResultsForContext(
           routingData,
           originStops,
           destStops,
           searchTime,
           activeServices
-        )
+        ).map((result) => ({ ...result, serviceDate }))
       ))
     );
   }
@@ -269,13 +273,14 @@ export const planTripLocal = async ({
   // Keep a larger arrival-time candidate pool, then rank the built
   // itineraries by rider cost so transfer penalties can beat early arrivals.
   raptorResults.sort((a, b) => {
+    const dayOffset = (result) => getServiceDayStartMs(result.serviceDate) / 1000;
     if (arriveBy) {
-      return getResultDepartureTime(b) - getResultDepartureTime(a) ||
-        b.arrivalTime - a.arrivalTime ||
+      return (dayOffset(b) + getResultDepartureTime(b)) - (dayOffset(a) + getResultDepartureTime(a)) ||
+        (dayOffset(b) + b.arrivalTime) - (dayOffset(a) + a.arrivalTime) ||
         a.walkToDestSeconds - b.walkToDestSeconds;
     }
 
-    const timeDiff = a.arrivalTime - b.arrivalTime;
+    const timeDiff = (dayOffset(a) + a.arrivalTime) - (dayOffset(b) + b.arrivalTime);
     if (Math.abs(timeDiff) > 120) return timeDiff;
     return a.walkToDestSeconds - b.walkToDestSeconds;
   });
@@ -296,7 +301,7 @@ export const planTripLocal = async ({
       fromLon,
       toLat,
       toLon,
-      date,
+      date: result.serviceDate,
       arriveBy,
     })
   ));
@@ -307,7 +312,7 @@ export const planTripLocal = async ({
       (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
     ));
   }
-  itineraries = itineraries.slice(0, ROUTING_CONFIG.MAX_ITINERARIES);
+  itineraries = itineraries.slice(0, maxItineraries);
 
   return {
     from: { name: 'Origin', lat: fromLat, lon: fromLon },
@@ -709,7 +714,7 @@ const deduplicateResults = (results) => {
 
   results.forEach((result) => {
     // Create signature based on trip IDs — same physical bus = same trip
-    const signature = result.path
+    const signature = `${result.serviceDate ? formatGTFSDate(result.serviceDate) : ''}:` + result.path
       .filter((p) => p.type === 'TRANSIT')
       .map((p) => p.tripId)
       .join('|');

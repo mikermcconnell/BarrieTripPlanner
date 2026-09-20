@@ -58,6 +58,8 @@ const TripBottomSheet = ({
   onViewDetails,
   onStartNavigation,
   isLoading,
+  isRefining = false,
+  loadingMessage = null,
   error,
   hasSearched,
   onRetry,
@@ -84,7 +86,7 @@ const TripBottomSheet = ({
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingTitle}>Finding your best route…</Text>
+          <Text style={styles.loadingTitle}>{loadingMessage || 'Finding your best route…'}</Text>
           <Text style={styles.loadingSubtext}>Checking live buses and walking time.</Text>
         </View>
       );
@@ -188,7 +190,7 @@ const TripBottomSheet = ({
             <Text style={styles.resultsTitle}>
               Choose your route
             </Text>
-            <Text style={styles.resultsSubtitle}>Tap a card to preview it on the map.</Text>
+            <Text style={styles.resultsSubtitle} accessibilityLiveRegion="polite">{isRefining ? 'Checking alternatives — you can preview this route now.' : 'Tap a card to preview it on the map.'}</Text>
             {repeatTripSuggestion && onSaveCurrentTrip && (
               <View style={styles.repeatTripPrompt}>
                 <View style={styles.repeatTripPromptText}>

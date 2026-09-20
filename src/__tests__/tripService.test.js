@@ -22,6 +22,35 @@ const {
 } = require('../services/tripService');
 
 describe('tripService configuration and format helpers', () => {
+  test('cancellation remains connected while the OTP response body is loading', async () => {
+    const { OTP_CONFIG } = require('../config/constants');
+    const previousUrl = OTP_CONFIG.BASE_URL;
+    const previousFetch = global.fetch;
+    let startedBody;
+    const bodyStarted = new Promise(resolve => { startedBody = resolve; });
+    let requestSignal;
+    OTP_CONFIG.BASE_URL = 'https://otp.test';
+    global.fetch = jest.fn(async (_url, options) => {
+      requestSignal = options.signal;
+      return { ok: true, json: () => new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { name: 'AbortError' })), { once: true });
+        startedBody();
+      }) };
+    });
+    try {
+      const controller = new AbortController();
+      const operation = planTrip({ fromLat: 44.30, fromLon: -79.80, toLat: 44.49, toLon: -79.56, signal: controller.signal });
+      const assertion = expect(operation).rejects.toMatchObject({ name: 'AbortError' });
+      await bodyStarted;
+      controller.abort();
+      await assertion;
+      expect(requestSignal.aborted).toBe(true);
+    } finally {
+      OTP_CONFIG.BASE_URL = previousUrl;
+      global.fetch = previousFetch;
+    }
+  });
+
   test('fails fast when OTP backend URL is not configured', async () => {
     await expect(
       planTrip({

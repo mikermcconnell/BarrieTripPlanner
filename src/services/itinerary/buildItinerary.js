@@ -4,6 +4,8 @@ import { buildTransitLegGeometry } from './buildTransitLegGeometry';
 import { calculateLegDistance } from './calculateLegDistance';
 import { getIntermediateStops } from './getIntermediateStops';
 import { mergeTransitLegs } from './mergeTransitLegs';
+import { formatGTFSDate } from '../calendarService';
+import { getServiceDayStartMs } from '../../utils/gtfsServiceTime';
 
 const buildWalkLeg = ({ startTime, endTime, duration, distance, from, to }) => {
   const roundedDistance = Math.round(distance);
@@ -42,6 +44,9 @@ const buildTransitLeg = ({
   route,
   headsign,
   tripId,
+  serviceDate,
+  boardingStopSequence,
+  alightingStopSequence,
   directionId,
   blockId,
   intermediateStops,
@@ -62,6 +67,9 @@ const buildTransitLeg = ({
   route,
   headsign,
   tripId,
+  serviceDate,
+  boardingStopSequence,
+  alightingStopSequence,
   directionId,
   blockId,
   intermediateStops,
@@ -122,8 +130,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
   let totalWalkDistance = 0;
 
   const baseTime = new Date(date);
-  baseTime.setHours(0, 0, 0, 0);
-  const baseTimestamp = baseTime.getTime();
+  const baseTimestamp = getServiceDayStartMs(date);
 
   let lastEndTime = null;
 
@@ -220,6 +227,9 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         },
         headsign: segment.headsign,
         tripId: segment.tripId,
+        serviceDate: formatGTFSDate(baseTime),
+        boardingStopSequence: segment.boardingStopSequence,
+        alightingStopSequence: segment.alightingStopSequence,
         directionId: segment.directionId ?? trip?.directionId,
         blockId: trip?.blockId || segment.blockId || null,
         intermediateStops,

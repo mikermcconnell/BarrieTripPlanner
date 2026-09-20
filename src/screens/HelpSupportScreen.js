@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { APP_CONFIG } from '../config/constants';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, SHADOWS, SPACING } from '../config/theme';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
-import { openAppContactEmail, openTransitContactEmail } from '../utils/externalLinks';
+import { openAppContactEmail, openTransitContactPage } from '../utils/externalLinks';
 
 const FAQS = [
   ['Saved transit', 'Sign in to sync saved places, trips, stops, and routes across devices.'],
@@ -17,16 +17,15 @@ export default function HelpSupportScreen({ navigation }) {
   const bottomInset = useSafeBottomInset(insets.bottom);
 
   const contactBarrieTransit = async () => {
-    const result = await openTransitContactEmail({
-      subject: 'Barrie Transit question',
-      body: 'Please describe your Barrie Transit service question.\n',
-    });
+    const result = await openTransitContactPage();
     if (!result.success) {
-      Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.TRANSIT_CONTACT_EMAIL}`);
+      Alert.alert('Could not open Service Barrie', `${result.error}\n\nEmail ${APP_CONFIG.TRANSIT_CONTACT_EMAIL}`);
     }
   };
 
-  const contactAppSupport = async () => {
+  const contactAppSupport = () => navigation.navigate('AppFeedback', { source: 'help_support' });
+
+  const emailAppSupport = async () => {
     const result = await openAppContactEmail({
       body: 'Please describe the app issue or question.\n',
     });
@@ -34,8 +33,6 @@ export default function HelpSupportScreen({ navigation }) {
       Alert.alert('Could not open email', `${result.error}\n\nEmail ${APP_CONFIG.APP_CONTACT_EMAIL}`);
     }
   };
-
-  const shareFeedback = () => navigation.navigate('AppFeedback', { source: 'help_support' });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -53,8 +50,8 @@ export default function HelpSupportScreen({ navigation }) {
           <TouchableOpacity style={styles.primaryButton} onPress={contactAppSupport}>
             <Text style={styles.primaryButtonText}>Contact app support</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={shareFeedback}>
-            <Text style={styles.secondaryButtonText}>Share app feedback</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={emailAppSupport}>
+            <Text style={styles.secondaryButtonText}>Email app support</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={contactBarrieTransit}>
             <Text style={styles.secondaryButtonText}>Contact Barrie Transit</Text>

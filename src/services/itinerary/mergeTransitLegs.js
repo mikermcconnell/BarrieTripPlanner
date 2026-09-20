@@ -152,6 +152,9 @@ export const mergeTransitLegs = (legs, routingData) => {
           to: next.to,
           endTime: next.endTime,
           scheduledEndTime: next.scheduledEndTime,
+          alightingTripId: next.alightingTripId || next.tripId,
+          alightingStopSequence: next.alightingStopSequence,
+          alightingServiceDate: next.alightingServiceDate || next.serviceDate,
         };
         mergedLeg.duration = Math.round((mergedLeg.endTime - mergedLeg.startTime) / 1000);
         mergedLeg.distance = calculateLegDistance(

@@ -16,6 +16,8 @@ import { haversineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
 import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
+import { isItineraryFeasible } from '../utils/itineraryFeasibility';
+import { runBounded, throwIfAborted, abortableDelay } from '../utils/requestControl';
 
 const CACHE_PREFIX = 'walk_directions_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -26,13 +28,17 @@ let lastRequestTime = 0;
 /**
  * Wait if needed to respect LocationIQ rate limits
  */
-const waitForRateLimit = async () => {
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  if (elapsed < RATE_LIMIT_DELAY_MS) {
-    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY_MS - elapsed));
-  }
-  lastRequestTime = Date.now();
+let requestSlot = Promise.resolve();
+const waitForRateLimit = (signal) => {
+  const slot = requestSlot.then(async () => {
+    throwIfAborted(signal);
+    const remaining = RATE_LIMIT_DELAY_MS - (Date.now() - lastRequestTime);
+    if (remaining > 0) await abortableDelay(remaining, signal);
+    throwIfAborted(signal);
+    lastRequestTime = Date.now();
+  });
+  requestSlot = slot.catch(() => {});
+  return slot;
 };
 
 /**
@@ -44,10 +50,21 @@ const waitForRateLimit = async () => {
  * @param {number} toLon - Ending longitude
  * @returns {Promise<Object>} Walking directions with geometry and steps
  */
-export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
+export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon, { signal } = {}) => {
+  try {
+    return await runBounded(requestSignal => loadWalkingDirections(fromLat, fromLon, toLat, toLon, requestSignal), { signal });
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    logger.warn('Walking directions unavailable:', error.message);
+    return getFallbackDirections(fromLat, fromLon, toLat, toLon);
+  }
+};
+
+const loadWalkingDirections = async (fromLat, fromLon, toLat, toLon, signal) => {
   // Check cache first
   const cacheKey = generateCacheKey(fromLat, fromLon, toLat, toLon);
   const cached = await getCachedDirections(cacheKey);
+  throwIfAborted(signal);
   if (cached) {
     return cached;
   }
@@ -67,14 +84,14 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
       const proxyUrl = `${LOCATIONIQ_CONFIG.PROXY_URL}/api/walking-directions?${proxyParams}`;
       const proxyOptions = await getApiProxyRequestOptions(LOCATIONIQ_CONFIG.PROXY_TOKEN || '');
 
-      await waitForRateLimit();
-      response = await fetch(proxyUrl, proxyOptions);
+      await waitForRateLimit(signal);
+      response = await fetch(proxyUrl, { ...proxyOptions, signal });
 
       if (response.status === 429) {
         logger.warn('Walking directions rate limit hit, retrying after delay...');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        lastRequestTime = Date.now();
-        response = await fetch(proxyUrl, proxyOptions);
+        await abortableDelay(1000, signal);
+        await waitForRateLimit(signal);
+        response = await fetch(proxyUrl, { ...proxyOptions, signal });
       }
     } else if (canUseDirectLocationIQ) {
       // Direct call (native app or dev without proxy)
@@ -86,14 +103,14 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
         overview: 'full',
       });
 
-      await waitForRateLimit();
-      response = await fetch(`${url}?${params}`);
+      await waitForRateLimit(signal);
+      response = await fetch(`${url}?${params}`, { signal });
 
       if (response.status === 429) {
         logger.warn('LocationIQ rate limit hit, retrying after delay...');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        lastRequestTime = Date.now();
-        response = await fetch(`${url}?${params}`);
+        await abortableDelay(1000, signal);
+        await waitForRateLimit(signal);
+        response = await fetch(`${url}?${params}`, { signal });
       }
     } else {
       logger.warn('Walking directions proxy is not configured; using estimated walking leg');
@@ -109,6 +126,7 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
     }
 
     const data = await response.json();
+    throwIfAborted(signal);
 
     if (!data.routes || data.routes.length === 0) {
       return getFallbackDirections(fromLat, fromLon, toLat, toLon);
@@ -124,10 +142,11 @@ export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon) => {
     };
 
     // Cache the result
-    await cacheDirections(cacheKey, result);
+    void cacheDirections(cacheKey, result);
 
     return result;
   } catch (error) {
+    if (error.name === 'AbortError') throw error;
     logger.error('Walking directions error:', error);
     return getFallbackDirections(fromLat, fromLon, toLat, toLon);
   }
@@ -431,7 +450,8 @@ export const recalculateItineraryAfterWalkingEnrichment = (itinerary, legs = iti
  * @param {Object} itinerary - Itinerary object with legs
  * @returns {Promise<Object>} Enriched itinerary
  */
-export const enrichItineraryWithWalking = async (itinerary) => {
+export const enrichItineraryWithWalking = async (itinerary, { signal } = {}) => {
+  throwIfAborted(signal);
   const maxActualWalk = ROUTING_CONFIG.MAX_ACTUAL_WALK_DISTANCE || 1200;
   let hasExcessiveWalk = false;
   let longestWalkDistance = 0;
@@ -439,6 +459,7 @@ export const enrichItineraryWithWalking = async (itinerary) => {
   // Process walk legs sequentially to respect LocationIQ rate limits
   const enrichedLegs = [];
   for (const leg of itinerary.legs) {
+    throwIfAborted(signal);
     if (leg.mode !== 'WALK') {
       enrichedLegs.push(leg);
       continue;
@@ -449,7 +470,8 @@ export const enrichItineraryWithWalking = async (itinerary) => {
       leg.from.lat,
       leg.from.lon,
       leg.to.lat,
-      leg.to.lon
+      leg.to.lon,
+      { signal }
     );
 
     // Sanity check: walking duration shouldn't exceed distance / 0.8 m/s (very slow walking)
@@ -503,7 +525,7 @@ export const enrichItineraryWithWalking = async (itinerary) => {
  * @param {Object} tripPlan - Trip plan with itineraries array
  * @returns {Promise<Object>} Trip plan with enriched itineraries
  */
-export const enrichTripPlanWithWalking = async (tripPlan) => {
+export const enrichTripPlanWithWalking = async (tripPlan, { signal, onCandidateReady } = {}) => {
   const maxTripDuration = ROUTING_CONFIG.MAX_TRIP_DURATION || 7200; // 2 hours default
   const maxWaitTime = ROUTING_CONFIG.MAX_WAIT_TIME || 3600; // 1 hour default
   const highWalkThreshold = 1000; // meters - flag walks over this (1km)
@@ -511,12 +533,23 @@ export const enrichTripPlanWithWalking = async (tripPlan) => {
 
   // Process itineraries sequentially to respect LocationIQ rate limits
   const enrichedItineraries = [];
+  let previewAccepted = false;
   for (const itinerary of tripPlan.itineraries) {
-    enrichedItineraries.push(await enrichItineraryWithWalking(itinerary));
+    throwIfAborted(signal);
+    const enriched = await enrichItineraryWithWalking(itinerary, { signal });
+    enrichedItineraries.push(enriched);
+    // Early previews are conservative: never publish an estimated/unverified walk
+    // or an excessive option before the rest of the candidate pool is checked.
+    const hasVerifiedWalks = enriched.legs.every(leg => leg.mode !== 'WALK' || leg.walkingSource === 'locationiq');
+    if (!previewAccepted && onCandidateReady && hasVerifiedWalks && isItineraryFeasible(enriched)
+      && !enriched.hasExcessiveWalk && enriched.duration <= maxTripDuration) {
+      previewAccepted = await onCandidateReady({ ...enriched, labels: null, isRecommended: false }) === true;
+      throwIfAborted(signal);
+    }
   }
 
   // Add metadata to each itinerary
-  const withMetadata = enrichedItineraries.map((itinerary) => {
+  const withMetadata = enrichedItineraries.filter(isItineraryFeasible).map((itinerary) => {
     const departureTime = itinerary.startTime;
     const minutesUntilDeparture = Math.max(0, Math.round((departureTime - now) / 60000));
 

@@ -1,7 +1,4 @@
-import {
-  getTransitRideLegsWithIndexes,
-  isSameBusContinuation,
-} from './routeContinuity';
+import { getItineraryBoardingIssue, getItineraryTimeIssue, hasImpossibleItineraryTransfer } from './itineraryFeasibility';
 import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { annotateItinerariesWithDetours } from './tripDetourImpacts';
 import { annotateItinerariesWithStopClosures } from './stopClosureTripWarnings';
@@ -19,47 +16,33 @@ const hasBlockedStopRole = (items = []) => items.some((item) => (
   (item?.roles || []).some((role) => BLOCKED_STOP_ROLES.has(role))
 ));
 
-const getTransferWalkSeconds = (legs, fromIndex, toIndex) => (
-  legs
-    .slice(fromIndex + 1, toIndex)
-    .filter((leg) => String(leg?.mode || '').toUpperCase() === 'WALK')
-    .reduce((total, leg) => total + (Number(leg?.duration) || 0), 0)
-);
-
-const getFiniteTime = (value) => {
-  if (value == null || value === '') return null;
-  const time = Number(value);
-  return Number.isFinite(time) ? time : null;
-};
-
-const hasImpossibleTransfer = (itinerary) => {
-  const legs = itinerary?.legs || [];
-  const transitLegs = getTransitRideLegsWithIndexes(legs);
-
-  for (let index = 1; index < transitLegs.length; index += 1) {
-    const previous = transitLegs[index - 1];
-    const next = transitLegs[index];
-    if (isSameBusContinuation(previous, next, legs)) continue;
-
-    const previousEnd = getFiniteTime(previous.leg?.endTime);
-    const nextStart = getFiniteTime(next.leg?.startTime);
-    if (previousEnd == null || nextStart == null) continue;
-
-    const availableSeconds = Math.round((nextStart - previousEnd) / 1000);
-    if (getTransferWalkSeconds(legs, previous.index, next.index) > availableSeconds) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 export const getItineraryNavigationBlock = (itinerary) => {
   if (!itinerary || !Array.isArray(itinerary.legs) || itinerary.legs.length === 0) {
     return {
       code: 'NO_ROUTE_DATA',
       title: 'Navigation unavailable',
       message: 'This trip does not have enough route data to start navigation.',
+    };
+  }
+
+  const boardingIssue = itinerary.navigationStartCheckedAt != null
+    ? getItineraryBoardingIssue(itinerary) : null;
+  if (boardingIssue) {
+    return {
+      code: boardingIssue,
+      title: 'This bus can no longer be reached',
+      message: 'Re-plan the trip to find a bus you can reach from the start location now.',
+    };
+  }
+
+  const timeIssue = getItineraryTimeIssue(itinerary);
+  if (timeIssue) {
+    return {
+      code: timeIssue,
+      title: 'This trip no longer meets your requested time',
+      message: timeIssue === 'ARRIVES_TOO_LATE'
+        ? 'Updated travel times arrive after your deadline. Re-plan for an earlier trip.'
+        : 'There is not enough time to reach this bus. Re-plan for a later trip.',
     };
   }
 
@@ -71,6 +54,14 @@ export const getItineraryNavigationBlock = (itinerary) => {
     };
   }
 
+  if (itinerary.legs.some((leg) => leg.realtimeUnavailable)) {
+    return {
+      code: 'SERVICE_UNAVAILABLE',
+      title: 'This trip is no longer available',
+      message: 'A bus is cancelled or a required stop is skipped. Re-plan to find another trip.',
+    };
+  }
+
   if (itinerary.hasMissedTransfer) {
     return {
       code: 'MISSED_TRANSFER',
@@ -79,7 +70,7 @@ export const getItineraryNavigationBlock = (itinerary) => {
     };
   }
 
-  if (hasImpossibleTransfer(itinerary)) {
+  if (hasImpossibleItineraryTransfer(itinerary)) {
     return {
       code: 'IMPOSSIBLE_TRANSFER',
       title: 'Not enough time to transfer',

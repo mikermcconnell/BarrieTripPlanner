@@ -118,6 +118,26 @@ describe('SearchScreen', () => {
     const displayedCodes = list.props.data.map((stop) => stop.code);
 
     expect(displayedCodes).toEqual(FEATURED_STOP_CODES);
+    expect(list.props.data[0].code).toBe('9003');
+  });
+
+  test('keeps Allandale first when its preferred platform code changes', () => {
+    mockTransitState = {
+      ...mockTransitState,
+      stops: [
+        makeStop('999'),
+        { ...makeStop('9006'), name: 'Barrie Allandale Transit Terminal Platform 6' },
+        ...[...FEATURED_STOP_CODES]
+          .filter((code) => code !== '9003')
+          .reverse()
+          .map(makeStop),
+      ],
+    };
+
+    const inst = renderSearch();
+    const list = inst.root.findByType('FlatList');
+
+    expect(list.props.data[0].code).toBe('9006');
   });
 
   test('resets the result list to the top when the search screen renders', () => {

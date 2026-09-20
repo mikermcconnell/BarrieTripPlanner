@@ -536,6 +536,8 @@ describe('trip planner service regressions', () => {
       itineraries: [
         {
           id: 'enriched',
+          startTime: new Date('2026-03-06T10:00:00Z').getTime(),
+          endTime: new Date('2026-03-06T10:10:00Z').getTime(),
           legs: [
             {
               mode: 'WALK',
@@ -1111,7 +1113,7 @@ describe('trip planner service regressions', () => {
   test('zone-adjusted trips do not pollute cache for later plain searches', async () => {
     const retryFetchMock = jest.fn(async () => ({
       ok: true,
-      json: async () => makeOtpPlanResponse(),
+      json: async () => makeOtpPlanResponse({ startTime: new Date('2026-03-06T10:15:00Z').getTime(), endTime: new Date('2026-03-06T10:25:00Z').getTime() }),
     }));
     const analyzeZoneInvolvementMock = jest
       .fn()
@@ -1217,8 +1219,43 @@ describe('useTripPlanner regressions', () => {
       await flushMicrotasks();
     });
 
-    expect(applyDelaysMock).toHaveBeenCalledWith([itinerary], delayOptions);
+    expect(applyDelaysMock).toHaveBeenCalledWith([itinerary], expect.objectContaining({ ...delayOptions, signal: expect.any(AbortSignal) }));
 
+    unmount();
+  });
+
+  test('filters impossible live options before presenting a preview or saving history', async () => {
+    const invalid = { id: 'missed', requestedTimeMs: 100000, startTime: 50000, endTime: 300000, legs: [] };
+    const valid = { id: 'later', requestedTimeMs: 100000, startTime: 110000, endTime: 400000, legs: [] };
+    const onItinerariesReady = jest.fn();
+    const onTripPlanned = jest.fn();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock: jest.fn(async () => ({ itineraries: [invalid, valid] })),
+      hookOptions: { applyDelays: jest.fn(async (items) => items), onItinerariesReady, onTripPlanned },
+    });
+    await act(async () => {
+      await getHook().searchTrips({ lat: 44.38, lon: -79.69 }, { lat: 44.39, lon: -79.68 });
+      await flushMicrotasks();
+    });
+    expect(getHook().state.itineraries.map((item) => item.id)).toEqual(['later']);
+    expect(onItinerariesReady).toHaveBeenCalledWith(expect.objectContaining({ id: 'later' }));
+    expect(onTripPlanned).toHaveBeenCalledWith(expect.objectContaining({ itineraries: [expect.objectContaining(valid)] }));
+    unmount();
+  });
+
+  test('shows no-route error rather than opening an impossible last-bus preview', async () => {
+    const onItinerariesReady = jest.fn();
+    const { getHook, act, unmount } = loadUseTripPlanner({
+      planTripAutoMock: jest.fn(async () => ({ itineraries: [{ id: 'late', hasMissedTransfer: true, legs: [] }] })),
+      hookOptions: { onItinerariesReady },
+    });
+    await act(async () => {
+      await getHook().searchTrips({ lat: 44.38, lon: -79.69 }, { lat: 44.39, lon: -79.68 });
+      await flushMicrotasks();
+    });
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.error.code).toBe('NO_ROUTES_FOUND');
+    expect(onItinerariesReady).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -2157,5 +2194,103 @@ describe('web trip planner regressions', () => {
     expect(onSaveCurrentTrip).toHaveBeenCalledTimes(1);
 
     unmount();
+  });
+});
+
+describe('progressive previews and search cancellation', () => {
+  const from = {lat:44.38,lon:-79.69};
+  const to = {lat:44.39,lon:-79.68};
+  const candidate = (id, offset = 0) => {
+    const start = Date.now() + 3600000 + offset;
+    return {id,startTime:start,endTime:start+600000,duration:600,walkDistance:0,transfers:0,
+      legs:[{mode:'BUS',tripId:id,startTime:start,endTime:start+600000,duration:600,from:{stopId:'O'},to:{stopId:'D'}}]};
+  };
+
+  test.each(['setTimeMode', 'setSelectedTime'])('editing %s aborts the previous search', async (action) => {
+    const finish = createDeferred();
+    const planTripAutoMock = jest.fn(() => finish.promise);
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock });
+    let work;
+    await act(async () => { work = getHook().searchTrips(from, to); await flushMicrotasks(); });
+    const request = planTripAutoMock.mock.calls[0][0];
+    await act(async () => {
+      getHook()[action](action === 'setTimeMode' ? 'arriveBy' : new Date());
+      await work;
+    });
+    expect(request.signal.aborted).toBe(true);
+    await act(async () => { finish.resolve({ itineraries: [candidate('stale')] }); await flushMicrotasks(); });
+    expect(getHook().state.itineraries).toEqual([]);
+    unmount();
+  });
+
+  test('shows a checked first preview, then keeps it selected when a better alternative arrives', async () => {
+    const finish = createDeferred();const first=candidate('first');const better={...candidate('better',60000),isRecommended:true,labels:['Recommended']};
+    const onTripPlanned=jest.fn();const applyDelays=jest.fn(async its=>its);
+    const planTripAutoMock=jest.fn(async ({onCandidateReady})=>{await onCandidateReady(first);return finish.promise;});
+    const {getHook,act,unmount}=loadUseTripPlanner({planTripAutoMock,hookOptions:{applyDelays,onTripPlanned}});
+    let work;
+    await act(async()=>{work=getHook().searchTrips(from,to);await flushMicrotasks();});
+    expect(getHook().state.isLoading).toBe(false);expect(getHook().state.isRefining).toBe(true);
+    expect(getHook().state.itineraries[0]).toMatchObject({id:'first',isRecommended:false,labels:null});
+    expect(applyDelays).toHaveBeenCalledTimes(1);expect(onTripPlanned).not.toHaveBeenCalled();
+    await act(async()=>{finish.resolve({itineraries:[better,first]});await work;});
+    expect(getHook().state.isRefining).toBe(false);expect(getHook().state.itineraries.map(it=>it.id)).toEqual(['first','better']);
+    expect(getHook().state.selectedIndex).toBe(0);expect(onTripPlanned).toHaveBeenCalledTimes(1);unmount();
+  });
+
+  test('a live-invalid candidate is never published early', async () => {
+    const finish=createDeferred();const first=candidate('missed');let accepted;
+    const applyDelays=jest.fn(async its=>its.map(it=>({...it,hasMissedDeparture:true})));
+    const planTripAutoMock=jest.fn(async({onCandidateReady})=>{accepted=await onCandidateReady(first);return finish.promise;});
+    const {getHook,act,unmount}=loadUseTripPlanner({planTripAutoMock,hookOptions:{applyDelays}});let work;
+    await act(async()=>{work=getHook().searchTrips(from,to);await flushMicrotasks();});
+    expect(accepted).toBe(false);expect(getHook().state.itineraries).toEqual([]);expect(getHook().state.isLoading).toBe(true);
+    await act(async()=>{finish.resolve({itineraries:[first]});await work;});
+    expect(getHook().state.itineraries).toEqual([]);expect(getHook().state.error).toBeTruthy();unmount();
+  });
+
+  test('a final validation failure removes the earlier preview from the map and results', async () => {
+    const finish = createDeferred();
+    const first = candidate('first');
+    const applyDelays = jest.fn().mockImplementationOnce(async its => its)
+      .mockImplementationOnce(async its => its.map(it => ({ ...it, hasMissedDeparture: true })));
+    const planTripAutoMock = jest.fn(async ({ onCandidateReady }) => {
+      await onCandidateReady(first);
+      return finish.promise;
+    });
+    const { getHook, act, unmount } = loadUseTripPlanner({ planTripAutoMock, hookOptions: { applyDelays } });
+    let work;
+    await act(async () => { work = getHook().searchTrips(from, to); await flushMicrotasks(); });
+    expect(getHook().state.itineraries).toHaveLength(1);
+    await act(async () => { finish.resolve({ itineraries: [first] }); await work; });
+    expect(getHook().state.itineraries).toEqual([]);
+    expect(getHook().state.error).toBeTruthy();
+    expect(getHook().state.isRefining).toBe(false);
+    unmount();
+  });
+
+  test('reset aborts current work and suppresses late callbacks and history', async () => {
+    const finish=createDeferred();const onTripPlanned=jest.fn();const planTripAutoMock=jest.fn(()=>finish.promise);
+    const {getHook,act,unmount}=loadUseTripPlanner({planTripAutoMock,hookOptions:{onTripPlanned}});let work;
+    await act(async()=>{work=getHook().searchTrips(from,to);await flushMicrotasks();});
+    const request=planTripAutoMock.mock.calls[0][0];
+    await act(async()=>{getHook().reset();await work;});
+    expect(request.signal.aborted).toBe(true);
+    await act(async()=>{expect(await request.onCandidateReady(candidate('late'))).toBe(false);finish.resolve({itineraries:[candidate('late')]});await flushMicrotasks();});
+    expect(getHook().state.itineraries).toEqual([]);expect(onTripPlanned).not.toHaveBeenCalled();unmount();
+  });
+
+  test('cancellation during shared routing setup does not launch a stale search afterward', async () => {
+    const setup=createDeferred();const planTripAutoMock=jest.fn();
+    const {getHook,act,unmount}=loadUseTripPlanner({planTripAutoMock,hookOptions:{ensureRoutingData:()=>setup.promise}});let work;
+    await act(async()=>{work=getHook().searchTrips(from,to);await flushMicrotasks();});
+    await act(async()=>{getHook().reset();await work;setup.resolve({});await flushMicrotasks();});
+    expect(planTripAutoMock).not.toHaveBeenCalled();unmount();
+  });
+
+  test('the web sheet exposes the refining status while keeping results usable', () => {
+    const {root,unmount}=loadTripBottomSheetWeb({itineraries:[candidate('first')],hasSearched:true,isRefining:true,isLoading:false});
+    expect(root.findAll(node=>node.children?.includes('Checking alternatives — you can preview this route now.'))).toHaveLength(1);
+    expect(root.findAllByType('TripResultCard')).toHaveLength(1);unmount();
   });
 });

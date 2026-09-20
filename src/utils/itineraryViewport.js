@@ -1,18 +1,8 @@
 import { haversineDistance } from './geometryUtils';
 import { decodePolyline } from './polylineUtils';
+import { normalizeMapCoordinate, sanitizeMapCoordinates } from './mapCoordinates';
 
-const normalizeCoordinate = (point) => {
-  if (!point) return null;
-
-  const latitude = point.latitude ?? point.lat;
-  const longitude = point.longitude ?? point.lon;
-
-  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-    return null;
-  }
-
-  return { latitude, longitude };
-};
+const normalizeCoordinate = (point) => normalizeMapCoordinate(point);
 
 export const computeCoordinateBounds = (points) => {
   const coordinates = (points || [])
@@ -125,8 +115,8 @@ export const collectItineraryViewportCoordinates = (
       if (to) coordinates.push(to);
     }
 
-    if (includeLegGeometry && leg?.legGeometry?.points) {
-      coordinates.push(...decodePolyline(leg.legGeometry.points));
+    if (includeLegGeometry && typeof leg?.legGeometry?.points === 'string') {
+      coordinates.push(...sanitizeMapCoordinates(decodePolyline(leg.legGeometry.points)));
     }
 
     if (includeIntermediateStops && Array.isArray(leg?.intermediateStops)) {

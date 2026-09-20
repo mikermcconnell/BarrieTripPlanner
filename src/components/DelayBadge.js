@@ -8,13 +8,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../config/theme';
 import { formatDelay } from '../services/tripDelayService';
 
-const DelayBadge = ({ delaySeconds, isRealtime, compact = false }) => {
+const DelayBadge = ({ delaySeconds, isRealtime, compact = false, label = null }) => {
   // Don't show anything if not real-time data
   if (!isRealtime) {
     return null;
   }
 
   const { text, status } = formatDelay(delaySeconds);
+  const displayText = label ? `${label}: ${text}` : text;
 
   // Get colors based on status
   const getColors = () => {
@@ -61,7 +62,7 @@ const DelayBadge = ({ delaySeconds, isRealtime, compact = false }) => {
         compact && styles.containerCompact,
         { backgroundColor: colors.background },
       ]}
-      accessibilityLabel={`Delay status: ${text}`}
+      accessibilityLabel={`Delay status: ${displayText}`}
       accessibilityLiveRegion="polite"
     >
       {/* Real-time indicator dot */}
@@ -73,7 +74,7 @@ const DelayBadge = ({ delaySeconds, isRealtime, compact = false }) => {
           { color: colors.text },
         ]}
       >
-        {text}
+        {displayText}
       </Text>
     </View>
   );

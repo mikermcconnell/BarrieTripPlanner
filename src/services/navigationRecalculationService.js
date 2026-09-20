@@ -1,6 +1,9 @@
 import { TripPlanningError, TRIP_ERROR_CODES, planTripAuto } from './tripService';
 import { enrichItineraryWithWalking } from './walkingService';
 import logger from '../utils/logger';
+import { isItineraryFeasible } from '../utils/itineraryFeasibility';
+import { applyDelaysToItinerary } from './tripDelayService';
+import { getTransitRideLegsWithIndexes } from '../utils/routeContinuity';
 
 const isWalkLeg = (leg) => String(leg?.mode).toUpperCase() === 'WALK';
 
@@ -16,16 +19,23 @@ const needsWalkingPreparation = (itinerary) => (
 );
 
 export const prepareItineraryForNavigation = async (itinerary) => {
-  if (!needsWalkingPreparation(itinerary)) {
-    return itinerary;
+  let prepared = itinerary;
+  if (needsWalkingPreparation(itinerary)) {
+    try {
+      prepared = await enrichItineraryWithWalking(itinerary);
+    } catch (error) {
+      logger.warn('Could not prepare walking directions before navigation, using selected itinerary:', error);
+    }
   }
-
-  try {
-    return await enrichItineraryWithWalking(itinerary);
-  } catch (error) {
-    logger.warn('Could not prepare walking directions before navigation, using selected itinerary:', error);
-    return itinerary;
+  if (prepared?.legs?.some((leg) => !isWalkLeg(leg) && leg.tripId)) {
+    // Refresh after walking preparation; a preview may have been open for minutes.
+    // Failed refreshes revert to the timetable rather than retaining stale live times.
+    prepared = await applyDelaysToItinerary(prepared);
   }
+  if (getTransitRideLegsWithIndexes(prepared?.legs || []).length > 0) {
+    return { ...prepared, navigationStartCheckedAt: Date.now() };
+  }
+  return prepared;
 };
 
 export const recalculateNavigationItinerary = async ({
@@ -60,7 +70,7 @@ export const recalculateNavigationItinerary = async ({
     time: new Date(),
     arriveBy: false,
     routingData,
-    enrichWalking: false,
+    enrichWalking: true,
     onDemandZones,
     stops,
   });
@@ -74,6 +84,9 @@ export const recalculateNavigationItinerary = async ({
   }
 
   const enrichedItinerary = await enrichItineraryWithWalking(nextItinerary);
+  if (!isItineraryFeasible(enrichedItinerary)) {
+    throw new TripPlanningError(TRIP_ERROR_CODES.NO_ROUTES_FOUND, 'Updated walking times do not leave a feasible connection. Re-plan for another trip.');
+  }
   return {
     itinerary: {
       ...enrichedItinerary,

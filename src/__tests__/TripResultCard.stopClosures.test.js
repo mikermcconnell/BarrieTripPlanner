@@ -456,6 +456,8 @@ describe('TripResultCard stop closure notices', () => {
             duration: 420,
             isRealtime: true,
             delaySeconds: 4 * 60,
+            tripId: '12b-live',
+            boardingRealtime: true,
             route: { shortName: '12B', color: '#0C8CE5' },
           },
         ],
@@ -468,6 +470,7 @@ describe('TripResultCard stop closure notices', () => {
     expect(badges[0].props).toMatchObject({
       delaySeconds: 4 * 60,
       isRealtime: true,
+      label: 'Departure',
       compact: true,
     });
   });
@@ -486,6 +489,8 @@ describe('TripResultCard stop closure notices', () => {
               duration: 420,
               isRealtime: true,
               delaySeconds: totalDelaySeconds,
+              tripId: '12b-live',
+              boardingRealtime: true,
               route: { shortName: '12B', color: '#0C8CE5' },
             },
           ],
@@ -498,8 +503,22 @@ describe('TripResultCard stop closure notices', () => {
       expect(badges[0].props).toMatchObject({
         delaySeconds: totalDelaySeconds,
         isRealtime: true,
+        label: 'Departure',
         compact: true,
       });
     });
   });
 });
+
+  test.each([true, false])('arrival-only prediction is labelled in both card layouts (%s)', (isSelected) => {
+    const tree = renderTree(React.createElement(TripResultCard, {
+      isSelected,
+      onStartNavigation: jest.fn(),
+      itinerary: {id:'arrival-live',duration:1200,startTime:0,endTime:1200000,walkDistance:0,transfers:0,
+        hasRealtimeInfo:true,totalDelaySeconds:0,arrivalDelaySeconds:900,
+        legs:[{mode:'BUS',tripId:'A',isRealtime:true,boardingRealtime:false,arrivalRealtime:true,
+          delaySeconds:0,arrivalDelaySeconds:900,route:{shortName:'1'},from:{},to:{}}]},
+      onPress:jest.fn(),
+    }));
+    expect(tree.findByType('DelayBadge').props).toMatchObject({label:'Arrival',delaySeconds:900,isRealtime:true});
+  });

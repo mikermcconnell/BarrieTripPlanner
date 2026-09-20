@@ -88,6 +88,7 @@ export const TransitProvider = ({ children }) => {
   // Real-time data
   const [vehicles, setVehicles] = useState([]);
   const [lastVehicleUpdate, setLastVehicleUpdate] = useState(null);
+  const [nextVehicleRefreshAt, setNextVehicleRefreshAt] = useState(null);
   const [vehicleFeedHealth, setVehicleFeedHealth] = useState(null);
 
   // Loading and error states
@@ -263,13 +264,9 @@ export const TransitProvider = ({ children }) => {
     setStaticError(null);
     setUsingCachedData(false);
 
-    // Cache decoding and the network probe are independent. Running them
-    // together prevents a slow connectivity check from delaying saved data.
-    const [online, cachedData] = await Promise.all([
-      isOnline(),
-      getCachedGTFSData(),
-    ]);
-    setIsOffline(!online);
+    // Start both, but never hold usable saved data behind connectivity detection.
+    const onlinePromise = isOnline();
+    const cachedData = await getCachedGTFSData();
 
     // Phase 1: Try cache first for instant map display
     if (cachedData) {
@@ -280,10 +277,14 @@ export const TransitProvider = ({ children }) => {
       setIsLoadingStatic(false); // Map can render now
 
       // Phase 2: Background refresh if online
+      const online = await onlinePromise;
+      setIsOffline(!online);
+      // A trip search may already have fetched schedules while NetInfo settled.
+      if (gtfsDataRef.current !== cachedData && gtfsDataRef.current?.stopTimes) return;
       if (online) {
         setIsRefreshingStatic(true);
         try {
-          const refreshPromise = fetchAllStaticData();
+          const refreshPromise = gtfsFetchPromiseRef.current || fetchAllStaticData();
           gtfsFetchPromiseRef.current = refreshPromise;
           const data = await refreshPromise;
           gtfsDataRef.current = data;
@@ -292,11 +293,13 @@ export const TransitProvider = ({ children }) => {
           setLastStaticRefreshAt(Date.now());
           processAndStoreShapes(data.shapes);
           // Invalidate stale routing so next trip plan rebuilds
-          routingDataRef.current = null;
-          setRoutingData(null);
-          setIsRoutingReady(false);
-          setLastRoutingBuildAt(null);
-          setRoutingError(null);
+          if (routingDataRef.current?.sourceData !== data) {
+            routingDataRef.current = null;
+            setRoutingData(null);
+            setIsRoutingReady(false);
+            setLastRoutingBuildAt(null);
+            setRoutingError(null);
+          }
           await cacheGTFSData(data);
         } catch (error) {
           // Silent fail — cached data is already displayed
@@ -311,6 +314,8 @@ export const TransitProvider = ({ children }) => {
     }
 
     // No cache available
+    const online = await onlinePromise;
+    setIsOffline(!online);
     if (!online) {
       setStaticError('No internet connection and no cached data available');
       setLastStaticFailureAt(Date.now());
@@ -377,12 +382,15 @@ export const TransitProvider = ({ children }) => {
           gtfsDataRef.current = data;
           applyStaticData(data);
           processAndStoreShapes(data.shapes);
-          await cacheGTFSData(data);
+          // Persistence is best-effort background work, not a routing dependency.
+          void cacheGTFSData(data).catch((error) => logger.warn('Could not cache routing data:', error));
         }
 
         const routing = buildRoutingData(data);
         routing.routes = data.routes;
         routing.shapes = data.shapes || {};
+        // Keep only an identity token; do not duplicate the raw timetable in state.
+        Object.defineProperty(routing, 'sourceData', { value: data, enumerable: false });
         routingDataRef.current = routing;
         setRoutingData(routing);
         setIsRoutingReady(true);
@@ -483,15 +491,19 @@ export const TransitProvider = ({ children }) => {
    */
   const startVehicleUpdates = useCallback(() => {
     if (vehicleIntervalRef.current) {
-      clearInterval(vehicleIntervalRef.current);
+      clearTimeout(vehicleIntervalRef.current);
     }
 
     void loadVehiclePositions();
-
-    vehicleIntervalRef.current = setInterval(
-      () => loadVehiclePositions({ showLoading: false }),
-      REFRESH_INTERVALS.VEHICLE_POSITIONS
-    );
+    const scheduleNextVehicleUpdate = () => {
+      const nextRefreshAt = Date.now() + REFRESH_INTERVALS.VEHICLE_POSITIONS;
+      setNextVehicleRefreshAt(new Date(nextRefreshAt));
+      vehicleIntervalRef.current = setTimeout(() => {
+        void loadVehiclePositions({ showLoading: false });
+        scheduleNextVehicleUpdate();
+      }, REFRESH_INTERVALS.VEHICLE_POSITIONS);
+    };
+    scheduleNextVehicleUpdate();
   }, [loadVehiclePositions]);
 
   /**
@@ -499,9 +511,10 @@ export const TransitProvider = ({ children }) => {
    */
   const stopVehicleUpdates = useCallback(() => {
     if (vehicleIntervalRef.current) {
-      clearInterval(vehicleIntervalRef.current);
+      clearTimeout(vehicleIntervalRef.current);
       vehicleIntervalRef.current = null;
     }
+    setNextVehicleRefreshAt(null);
   }, []);
 
   /**
@@ -972,6 +985,7 @@ export const TransitProvider = ({ children }) => {
   const realtimeValue = useMemo(() => ({
     vehicles,
     lastVehicleUpdate,
+    nextVehicleRefreshAt,
     serviceAlerts,
     hasLoadedServiceAlerts,
     detoursEnabled: effectiveDetoursEnabled,
@@ -998,6 +1012,7 @@ export const TransitProvider = ({ children }) => {
   }), [
     vehicles,
     lastVehicleUpdate,
+    nextVehicleRefreshAt,
     serviceAlerts,
     hasLoadedServiceAlerts,
     effectiveDetoursEnabled,

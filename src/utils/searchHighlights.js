@@ -1,4 +1,5 @@
 export const FEATURED_STOP_CODES = [
+  '9003', // Barrie Allandale Transit Terminal
   '777', // Park Place
   '1', // Downtown Hub
   '330', // Georgian College
@@ -18,8 +19,17 @@ export const FEATURED_STOP_CODES = [
   '506', // Mapleview at Park Place
   '146', // Brock Street
   '525', // Barrie View Drive
-  '147', // Brock Street
 ];
+
+const ALLANDALE_TERMINAL_STOP_CODES = new Set([
+  '9003',
+  '9004',
+  '9005',
+  '9006',
+  '9009',
+  '9012',
+  '9013',
+]);
 
 const getStopCode = (stop) => String(
   stop?.code ??
@@ -30,6 +40,19 @@ const getStopCode = (stop) => String(
   ''
 ).trim();
 
+const getStopName = (stop) => String(stop?.name ?? stop?.stopName ?? stop?.stop_name ?? '')
+  .trim()
+  .toLowerCase();
+
+const findAllandaleTerminalStop = (stops, stopByCode) => {
+  for (const code of ALLANDALE_TERMINAL_STOP_CODES) {
+    const stop = stopByCode.get(code);
+    if (stop) return stop;
+  }
+
+  return stops.find((stop) => getStopName(stop).includes('allandale transit terminal'));
+};
+
 export const getHighlightedStops = (stops = [], limit = 20) => {
   const stopByCode = new Map();
   stops.forEach((stop) => {
@@ -39,15 +62,24 @@ export const getHighlightedStops = (stops = [], limit = 20) => {
     }
   });
 
-  const highlighted = FEATURED_STOP_CODES
-    .map((code) => stopByCode.get(code))
-    .filter(Boolean);
+  const highlighted = [];
+  const highlightedCodes = new Set();
+
+  FEATURED_STOP_CODES.forEach((code) => {
+    const stop = code === '9003'
+      ? findAllandaleTerminalStop(stops, stopByCode)
+      : stopByCode.get(code);
+    const stopCode = getStopCode(stop);
+    if (!stop || highlightedCodes.has(stopCode)) return;
+
+    highlighted.push(stop);
+    highlightedCodes.add(stopCode);
+  });
 
   if (highlighted.length >= limit) {
     return highlighted.slice(0, limit);
   }
 
-  const highlightedCodes = new Set(highlighted.map(getStopCode));
   const fallbackStops = stops.filter((stop) => !highlightedCodes.has(getStopCode(stop)));
 
   return [...highlighted, ...fallbackStops].slice(0, limit);

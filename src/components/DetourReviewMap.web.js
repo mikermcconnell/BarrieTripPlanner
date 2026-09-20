@@ -19,19 +19,42 @@ function collectPoints(snapshot = {}) {
 
 export default function DetourReviewMap({ reviewCase }) {
   const mapRef = useRef(null);
+  const focusedCaseKeyRef = useRef(null);
+  const userMovedMapRef = useRef(false);
   const snapshot = reviewCase?.snapshot || {};
   const points = useMemo(() => collectPoints(snapshot), [snapshot]);
+  const caseKey = reviewCase?.caseId || reviewCase?.eventId || [
+    reviewCase?.routeId || 'unknown-route',
+    reviewCase?.detectedAt || 'unknown-time',
+  ].join(':');
+
   useEffect(() => {
-    if (points.length > 0) {
-      setTimeout(() => mapRef.current?.fitToCoordinates(points, {
-        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 }, maxZoom: 15,
-      }), 150);
+    if (points.length === 0 || focusedCaseKeyRef.current === caseKey) {
+      return undefined;
     }
-  }, [points]);
+
+    focusedCaseKeyRef.current = caseKey;
+    userMovedMapRef.current = false;
+    const timer = setTimeout(() => {
+      if (userMovedMapRef.current) return;
+
+      mapRef.current?.fitToCoordinates(points, {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 }, maxZoom: 15,
+      });
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [caseKey, points]);
 
   return (
     <View style={styles.container} accessibilityLabel="Detected detour map">
-      <WebMapView ref={mapRef} initialRegion={DEFAULT_REGION}>
+      <WebMapView
+        ref={mapRef}
+        initialRegion={DEFAULT_REGION}
+        onUserInteraction={() => {
+          userMovedMapRef.current = true;
+        }}
+      >
         <DetourOverlay
           routeId={reviewCase?.routeId}
           {...snapshot}

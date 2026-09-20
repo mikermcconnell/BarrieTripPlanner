@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS } from '../config/theme';
 import Icon from '../components/Icon';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
+import { buildSelectedAddressParams } from '../utils/mapSelection';
 
 const FavoritesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -98,10 +99,12 @@ const FavoritesScreen = ({ navigation }) => {
     touchSavedPlace?.(place.id);
     navigation.getParent()?.navigate('Map', {
       screen: 'MapMain',
-      params: {
-        selectedCoordinate: { latitude: place.lat, longitude: place.lon },
-        selectedAddressLabel: place.name || place.addressText,
-      },
+      params: buildSelectedAddressParams({
+        lat: place.lat,
+        lon: place.lon,
+        shortName: place.name,
+        displayName: place.addressText,
+      }),
     });
   };
 

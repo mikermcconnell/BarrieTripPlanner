@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Platform, Alert, Linking } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { shareStop } from '../utils/shareUtils';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS, SHADOWS } from '../config/theme';
 import { addSafeBottomPadding, useSafeBottomInset } from '../utils/androidNavigationBar';
 import { getNoticeEndText, getNoticeStartText } from '../utils/noticeTimingUtils';
+import { recordMapCameraDiagnostic } from '../utils/mapCameraDiagnostics';
 
 // SVG Icons
 const CloseIcon = ({ size = 20, color = COLORS.textSecondary }) => (
@@ -118,17 +119,26 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
   const { arrivals, isLoading, error, loadArrivals } = useStopArrivals(stop);
 
   const snapPoints = useMemo(() => ['30%', '55%', '90%'], []);
+  useEffect(() => {
+    const stopId = String(stop?.id ?? stop?.stopId ?? stop?.code ?? 'unknown');
+    recordMapCameraDiagnostic('sheet.stop.mounted', { stopId });
+    return () => recordMapCameraDiagnostic('sheet.stop.unmounted', { stopId });
+  }, [stop?.code, stop?.id, stop?.stopId]);
   const handleClose = useCallback(() => {
     onClose?.();
   }, [onClose]);
 
   const handleSheetChanges = useCallback(
     (index) => {
+      recordMapCameraDiagnostic('sheet.stop.changed', {
+        stopId: String(stop?.id ?? stop?.stopId ?? stop?.code ?? 'unknown'),
+        index,
+      });
       if (index === -1) {
         onClose?.();
       }
     },
-    [onClose]
+    [onClose, stop?.code, stop?.id, stop?.stopId]
   );
 
   const handleDirectionsFrom = useCallback(() => {
@@ -187,6 +197,11 @@ const StopBottomSheet = ({ stop, onClose, onDirectionsFrom, onDirectionsTo, plat
       index={1}
       snapPoints={snapPoints}
       onChange={handleSheetChanges}
+      onAnimate={(fromIndex, toIndex) => recordMapCameraDiagnostic('sheet.stop.animating', {
+        stopId: String(stop?.id ?? stop?.stopId ?? stop?.code ?? 'unknown'),
+        fromIndex,
+        toIndex,
+      })}
       enablePanDownToClose
       backgroundStyle={styles.background}
       handleIndicatorStyle={styles.handleIndicator}

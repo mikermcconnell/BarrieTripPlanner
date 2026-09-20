@@ -11,6 +11,8 @@ import {
   sortRecommendedItineraryFirst,
 } from '../utils/tripItineraryRanking';
 import logger from '../utils/logger';
+import { throwIfAborted } from '../utils/requestControl';
+import { getRequestedTimeMs, withTripTimeConstraints, isItineraryFeasible } from '../utils/itineraryFeasibility';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
   ...tripPlan,
@@ -190,7 +192,7 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
     const hasExcessiveDuration = itinerary.duration > maxTripDuration;
 
     return {
-      ...itinerary,
+      ...withTripTimeConstraints(itinerary, tripParams),
       arriveBy: itinerary.arriveBy ?? Boolean(tripParams.arriveBy),
       labels: null,
       isRecommended: false,
@@ -202,14 +204,15 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
   });
 
   // Filter out excessive duration trips
-  const filtered = withMetadata.filter(it => !it.hasExcessiveDuration);
+  const feasible = withMetadata.filter(isItineraryFeasible);
+  const filtered = feasible.filter(it => !it.hasExcessiveDuration);
 
   // If all filtered out, only show if shortest is under 2x max (grace window)
   let finalItineraries;
   if (filtered.length > 0) {
     finalItineraries = filtered;
   } else {
-    const sorted = withMetadata.sort((a, b) => a.duration - b.duration);
+    const sorted = feasible.sort((a, b) => a.duration - b.duration);
     if (sorted.length > 0 && sorted[0].duration <= maxTripDuration * 2) {
       finalItineraries = sorted.slice(0, 3);
     } else {
@@ -309,7 +312,9 @@ export const planTrip = async ({
   maxWalkDistance = 1000,
   numItineraries = 3,
   includeWalkingOnly = true,
+  signal,
 }) => {
+  throwIfAborted(signal);
   const tripParams = { fromLat, fromLon, toLat, toLon, date, time, arriveBy };
   if (!OTP_CONFIG.BASE_URL) {
     if (includeWalkingOnly) {
@@ -351,6 +356,8 @@ export const planTrip = async ({
 
   // Create abort controller for timeout
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  signal?.addEventListener('abort', cancel, { once: true });
   const timeoutId = setTimeout(() => controller.abort(), OTP_CONFIG.TIMEOUT_MS);
 
   try {
@@ -358,8 +365,6 @@ export const planTrip = async ({
       signal: controller.signal,
       maxRetries: 2,
     });
-
-    clearTimeout(timeoutId);
 
     // Handle HTTP errors
     if (!response.ok) {
@@ -377,6 +382,7 @@ export const planTrip = async ({
     }
 
     const data = await response.json();
+    throwIfAborted(signal);
 
     // Handle OTP-specific errors
     if (data.error) {
@@ -420,7 +426,9 @@ export const planTrip = async ({
     return resultWithMetadata;
   } catch (error) {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', cancel);
 
+    throwIfAborted(signal);
     // Re-throw TripPlanningError as-is
     if (error instanceof TripPlanningError) {
       if (
@@ -521,6 +529,9 @@ export const planTrip = async ({
       TRIP_ERROR_CODES.NETWORK_ERROR,
       error.message || 'An unexpected error occurred'
     );
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', cancel);
   }
 };
 
@@ -603,6 +614,9 @@ const formatLeg = (leg) => ({
     : null,
   headsign: leg.headsign,
   tripId: leg.tripId,
+  serviceDate: leg.serviceDate || null,
+  boardingStopSequence: leg.from?.stopSequence ?? null,
+  alightingStopSequence: leg.to?.stopSequence ?? null,
   intermediateStops: leg.intermediateStops?.map((stop) => ({
     name: stop.name,
     lat: stop.lat,
@@ -811,7 +825,10 @@ export const planTripWithLocalRouter = async ({
   routingData,
   enrichWalking = true,
   includeWalkingOnly = true,
+  signal,
+  onCandidateReady,
 }) => {
+  throwIfAborted(signal);
   const tripParams = { fromLat, fromLon, toLat, toLon, date, time, arriveBy };
   try {
     // Use local RAPTOR router
@@ -824,8 +841,8 @@ export const planTripWithLocalRouter = async ({
       time,
       arriveBy,
       routingData,
+      maxItineraries: Math.max(ROUTING_CONFIG.MAX_ITINERARIES, ROUTING_CONFIG.ROUTING_CANDIDATE_POOL_SIZE || ROUTING_CONFIG.MAX_ITINERARIES * 2),
     });
-
     // Check if no itineraries were returned
     if (!result.itineraries || result.itineraries.length === 0) {
       throw new TripPlanningError(
@@ -834,10 +851,12 @@ export const planTripWithLocalRouter = async ({
       );
     }
 
+    result.itineraries = result.itineraries.map((itinerary) => withTripTimeConstraints(itinerary, tripParams));
+
     // Optionally enrich with real walking directions
     if (enrichWalking) {
       try {
-        const enrichedResult = await enrichTripPlanWithWalking(result);
+        const enrichedResult = await enrichTripPlanWithWalking(result, { signal, onCandidateReady });
         // Check if enrichment filtered out all itineraries
         if (!enrichedResult.itineraries || enrichedResult.itineraries.length === 0) {
           throw new TripPlanningError(
@@ -847,6 +866,8 @@ export const planTripWithLocalRouter = async ({
         }
         return enrichedResult;
       } catch (walkingError) {
+        throwIfAborted(signal);
+        if (walkingError.name === 'AbortError' || walkingError.name === 'TimeoutError') throw walkingError;
         // Re-throw TripPlanningError (from our check above)
         if (walkingError instanceof TripPlanningError) {
           throw walkingError;
@@ -985,14 +1006,7 @@ const buildOnDemandLeg = ({ zone, from, to, estimatedDuration, startTime }) => (
   isOnDemand: true,
 });
 
-const getRequestedTripTimestamp = ({ date, time }) => {
-  const requested = time ?? date;
-  const timestamp = requested instanceof Date
-    ? requested.getTime()
-    : new Date(requested || Date.now()).getTime();
-
-  return Number.isFinite(timestamp) ? timestamp : Date.now();
-};
+const getRequestedTripTimestamp = getRequestedTimeMs;
 
 /**
  * Plan a trip using the best available method
@@ -1002,6 +1016,7 @@ const getRequestedTripTimestamp = ({ date, time }) => {
  * @returns {Promise<Object>} Trip plan results
  */
 export const planTripAuto = async (params) => {
+  throwIfAborted(params.signal);
   const originalParams = {
     fromLat: params.fromLat,
     fromLon: params.fromLon,
@@ -1072,6 +1087,8 @@ export const planTripAuto = async (params) => {
           to: { name: 'Destination', lat: originalParams.toLat, lon: originalParams.toLon },
           itineraries: [{
             id: 'on-demand-direct',
+            requestedTimeMs,
+            arriveBy: Boolean(originalParams.arriveBy),
             duration: duration,
             startTime,
             endTime,
@@ -1140,6 +1157,14 @@ export const planTripAuto = async (params) => {
     }
   }
 
+  routingParams.onCandidateReady = !zoneTrip && params.onCandidateReady
+    ? (candidate) => {
+        throwIfAborted(params.signal);
+        const constrained = withTripTimeConstraints(candidate, originalParams);
+        return isItineraryFeasible(constrained) ? params.onCandidateReady(constrained) : false;
+      }
+    : undefined;
+
   const shouldUseCache = !zoneTrip;
   const cacheKey = shouldUseCache
     ? getTripCacheKey({
@@ -1154,7 +1179,8 @@ export const planTripAuto = async (params) => {
     : null;
   const cached = cacheKey ? getCachedTrip(cacheKey) : null;
   if (cached) {
-    return cached;
+    const itineraries = cached.itineraries.map((itinerary) => withTripTimeConstraints(itinerary, originalParams)).filter(isItineraryFeasible);
+    if (itineraries.length > 0) return { ...cached, itineraries };
   }
 
   let result;
@@ -1165,6 +1191,8 @@ export const planTripAuto = async (params) => {
     try {
       result = await planTripWithLocalRouter(routingParams);
     } catch (error) {
+      throwIfAborted(params.signal);
+      if (error.name === 'AbortError' || error.name === 'TimeoutError') throw error;
       logger.warn('Local router failed, trying OTP:', error.message);
       localRouterError = {
         message: error.message,
@@ -1193,11 +1221,12 @@ export const planTripAuto = async (params) => {
     const { routingData: _routingData, onDemandZones: _onDemandZones, stops: _stops, ...otpRequestParams } = routingParams;
     result = await planTrip({
       ...otpRequestParams,
+      numItineraries: ROUTING_CONFIG.ROUTING_CANDIDATE_POOL_SIZE || ROUTING_CONFIG.MAX_ITINERARIES * 2,
     });
 
     if (routingParams.enrichWalking !== false) {
       try {
-        const enrichedResult = await enrichTripPlanWithWalking(result);
+        const enrichedResult = await enrichTripPlanWithWalking(result, { signal: params.signal, onCandidateReady: routingParams.onCandidateReady });
         if (!enrichedResult.itineraries || enrichedResult.itineraries.length === 0) {
           throw new TripPlanningError(
             TRIP_ERROR_CODES.NO_ROUTES_FOUND,
@@ -1206,6 +1235,8 @@ export const planTripAuto = async (params) => {
         }
         result = enrichedResult;
       } catch (walkingError) {
+        throwIfAborted(params.signal);
+        if (walkingError.name === 'AbortError' || walkingError.name === 'TimeoutError') throw walkingError;
         if (walkingError instanceof TripPlanningError) {
           throw walkingError;
         }
@@ -1214,10 +1245,20 @@ export const planTripAuto = async (params) => {
     }
   }
 
+  throwIfAborted(params.signal);
+
   // ─── Splice ON_DEMAND legs onto routed itineraries ──────────────
   if (zoneTrip && !zoneTrip.sameZone) {
     result = spliceOnDemandLegs(result, zoneTrip, zoneAnalysis, originalParams);
     result = addBasicMetadata(result, originalParams, { includeWalkingOnly: true });
+  }
+
+  result = {
+    ...result,
+    itineraries: result.itineraries.map((itinerary) => withTripTimeConstraints(itinerary, originalParams)).filter(isItineraryFeasible),
+  };
+  if (result.itineraries.length === 0) {
+    throw new TripPlanningError(TRIP_ERROR_CODES.NO_ROUTES_FOUND, 'No trip meets the requested time after checking walking and connection times.');
   }
 
   const existingDiagnostics = result.routingDiagnostics || {};

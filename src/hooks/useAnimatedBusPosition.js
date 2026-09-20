@@ -57,11 +57,6 @@ const resolveMovementBearing = (from, to) => {
   return normalizeBearing(calculateBearing(from, to));
 };
 
-/**
- * Smooth ease-in/out so bus markers start and stop without a visible jump.
- */
-const easeInOutSine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
-
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const getNow = () => (
@@ -275,7 +270,6 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
     const now = getNow();
     const elapsed = now - ref.startTime;
     const duration = ref.durationMs || ANIMATION.BUS_POSITION_DURATION_MS;
-    const pulseDuration = ANIMATION.BUS_PULSE_DURATION_MS;
 
     if (elapsed >= duration) {
       setAnimated({
@@ -289,7 +283,9 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
       return;
     }
 
-    const t = easeInOutSine(elapsed / duration);
+    // Constant-speed movement avoids the visible slow-down and restart that
+    // otherwise happens at every GPS boundary.
+    const t = clamp(elapsed / duration, 0, 1);
     const pathPoint = interpolateMeasuredPath(ref.motionPath, t);
     const lat = pathPoint
       ? pathPoint.latitude
@@ -302,13 +298,7 @@ export const useAnimatedBusPosition = (vehicle, options = {}) => {
     let bearing = ref.fromBearing + bearingDelta * t;
     bearing = ((bearing % 360) + 360) % 360;
 
-    let scale = 1;
-    if (elapsed < pulseDuration) {
-      const pulseT = elapsed / pulseDuration;
-      scale = 1 + 0.08 * Math.sin(pulseT * Math.PI);
-    }
-
-    setAnimated({ latitude: lat, longitude: lng, bearing, scale });
+    setAnimated({ latitude: lat, longitude: lng, bearing, scale: 1 });
     ref.frameId = requestAnimationFrame(animate);
   }, []);
 

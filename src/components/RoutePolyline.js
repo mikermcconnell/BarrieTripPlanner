@@ -4,6 +4,7 @@ import { COLORS } from '../config/theme';
 import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
 import { darkenColor } from '../utils/geometryUtils';
 import { normalizeHexColor, hexToRgba } from '../utils/colorUtils';
+import { sanitizeMapCoordinates } from '../utils/mapCoordinates';
 
 let idCounter = 0;
 const POLYLINE_HITBOX = { width: 32, height: 32 };
@@ -30,13 +31,8 @@ const RoutePolylineComponent = ({
   onPress,
   offset = 0,
 }) => {
-  const formattedCoordinates = Array.isArray(coordinates)
-    ? coordinates
-        .filter((coord) =>
-          Number.isFinite(coord?.longitude) && Number.isFinite(coord?.latitude)
-        )
-        .map((coord) => [coord.longitude, coord.latitude])
-    : [];
+  const formattedCoordinates = sanitizeMapCoordinates(coordinates)
+    .map((coord) => [coord.longitude, coord.latitude]);
 
   if (formattedCoordinates.length < 2) {
     return null;
