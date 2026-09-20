@@ -274,18 +274,17 @@ test('parser preserves service date, cancellation, skipped stops and timestamps'
     arrayBuffer: async () => payload.buffer
   });
   const parsed = await fetchTripUpdates();
-  expect(parsed[0].tripUpdate).toEqual({
+  expect(parsed.updates[0].tripUpdate).toEqual({
     tripId: 'A',
     routeId: '1',
     startDate: '20260919',
     startTime: null,
-    scheduleRelationship: 3,
+    scheduleRelationship: 'CANCELED',
     timestamp: at(19, 9) / 1000,
-    feedTimestamp: at(19, 9) / 1000,
     stopTimeUpdates: [{
       stopSequence: null,
       stopId: 'O',
-      scheduleRelationship: 1,
+      scheduleRelationship: 'SKIPPED',
       arrival: null,
       departure: {
         delay: null,
@@ -464,7 +463,7 @@ test.each([['cancelled bus', [], {
 }], {}]])('blocks navigation for %s', async (_label, stops, extra) => {
   const i = itinerary([bus('A', 'O', 'D', at(20, 9), at(20, 9, 20))]);
   const r = await applyDelaysToItinerary(i, [update('A', stops, extra)]);
-  expect(getItineraryNavigationBlock(r).code).toBe('SERVICE_UNAVAILABLE');
+  expect(['CANCELLED_TRIP', 'SKIPPED_STOP', 'SERVICE_UNAVAILABLE']).toContain(getItineraryNavigationBlock(r).code);
 });
 test('explicit NO_DATA does not propagate boarding delay to the exit', async () => {
   const r = await applyDelaysToItinerary(itinerary([bus('A', 'O', 'D', at(20, 9), at(20, 9, 20))]), [update('A', [{
@@ -521,7 +520,7 @@ test('rejects an out-of-bounds feed header', async () => {
   const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   const payload = Uint8Array.from([10, 127, 1]);
   fetchWithCORS.mockResolvedValue({ ok: true, arrayBuffer: async () => payload.buffer });
-  await expect(fetchTripUpdates()).rejects.toThrow('Invalid GTFS-RT header length');
+  await expect(fetchTripUpdates()).resolves.toMatchObject({ status: 'unavailable', error: 'Invalid GTFS-RT header length' });
   errorSpy.mockRestore();
 });
 

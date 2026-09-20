@@ -1,0 +1,11 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [selected] [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]
+  - generic [ref=e531]:
+    - generic [ref=e532]: "!"
+    - generic [ref=e534]: Connection Error
+    - generic [ref=e535]: "HTTP error! status: 502"
+    - button "Retry loading transit data" [ref=e536] [cursor=pointer]:
+      - generic [ref=e537]: Try Again

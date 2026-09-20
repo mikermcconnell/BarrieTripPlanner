@@ -24,6 +24,43 @@ service cloud.firestore {
       return email is string && email.matches('.*@.*\\..*');
     }
 
+    function isValidSharedTripPoint(point) {
+      return point is map
+        && point.keys().hasOnly(['name', 'addressText', 'lat', 'lon'])
+        && isNonEmptyString(point.name)
+        && point.name.size() <= 200
+        && point.addressText is string
+        && point.addressText.size() <= 500
+        && point.lat is number
+        && point.lon is number;
+    }
+
+    function isValidSharedTripPayload(trip) {
+      return trip is map
+        && trip.keys().hasOnly(['id', 'name', 'icon', 'from', 'to', 'timePreference', 'summary', 'isPinned'])
+        && isNonEmptyString(trip.id)
+        && trip.id.size() <= 500
+        && isNonEmptyString(trip.name)
+        && trip.name.size() <= 200
+        && trip.icon is string
+        && trip.icon.size() <= 50
+        && isValidSharedTripPoint(trip.from)
+        && isValidSharedTripPoint(trip.to)
+        && trip.isPinned is bool;
+    }
+
+    function isValidSharedTripDocument(data, shareId) {
+      return data.keys().hasOnly([
+          'shareId', 'trip', 'createdBy', 'lastEditedBy', 'revision', 'createdAt', 'updatedAt'
+        ])
+        && data.shareId == shareId
+        && isValidSharedTripPayload(data.trip)
+        && isNonEmptyString(data.createdBy)
+        && isNonEmptyString(data.lastEditedBy)
+        && data.revision is int
+        && data.revision > 0;
+    }
+
     // ==================== USERS COLLECTION ====================
 
     match /users/{userId} {
@@ -151,6 +188,33 @@ service cloud.firestore {
           && request.resource.data.token.size() <= 512;
         allow delete: if isAuthenticated() && isOwner(userId);
       }
+    }
+
+    // Shared trips use an unguessable document ID as the collaboration link.
+    // Exact-link reads are public, collection listing is denied, and writes use
+    // an invisible Firebase identity so riders never face a sign-in screen.
+    match /sharedTrips/{shareId} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if isAuthenticated()
+        && isValidSharedTripDocument(request.resource.data, shareId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.lastEditedBy == request.auth.uid
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isAuthenticated()
+        && isValidSharedTripDocument(request.resource.data, shareId)
+        && request.resource.data.shareId == resource.data.shareId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.lastEditedBy == request.auth.uid
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
     }
 
     // ==================== ACTIVE DETOURS (V2) ====================

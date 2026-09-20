@@ -4,7 +4,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 jest.mock('../services/proxyAuth', () => ({ getApiProxyRequestOptions: jest.fn() }));
 jest.mock('../services/locationIQService', () => ({ geocodeAddress: jest.fn(), reverseGeocode: jest.fn() }));
-jest.mock('../services/arrivalService', () => ({ fetchTripUpdates: jest.fn() }));
+jest.mock('../services/arrivalService', () => ({ ...jest.requireActual('../services/arrivalService'), fetchTripUpdates: jest.fn() }));
 
 const storage = require('@react-native-async-storage/async-storage');
 const { buildRoutingData } = require('../services/routingDataService');

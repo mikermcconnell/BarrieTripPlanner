@@ -3,6 +3,7 @@ import { deriveAffectedStopDetailsForDetour } from '../hooks/useAffectedStops';
 import { annotateItinerariesWithDetours } from './tripDetourImpacts';
 import { annotateItinerariesWithStopClosures } from './stopClosureTripWarnings';
 import { getActiveOfficialServiceImpacts } from './officialServiceImpacts';
+import { ROUTING_CONFIG } from '../config/constants';
 
 const BLOCKED_DETOUR_SCOPES = new Set([
   'boarding_stop',
@@ -43,6 +44,22 @@ export const getItineraryNavigationBlock = (itinerary) => {
       message: timeIssue === 'ARRIVES_TOO_LATE'
         ? 'Updated travel times arrive after your deadline. Re-plan for an earlier trip.'
         : 'There is not enough time to reach this bus. Re-plan for a later trip.',
+      };
+    }
+
+  if (itinerary.realtimeServiceDisruption?.type === 'trip_cancelled') {
+    return {
+      code: 'CANCELLED_TRIP',
+      title: 'This trip was cancelled',
+      message: 'Re-plan the trip to find service that is still operating.',
+    };
+  }
+
+  if (itinerary.realtimeServiceDisruption?.type === 'stop_skipped') {
+    return {
+      code: 'SKIPPED_STOP',
+      title: 'A required stop will be skipped',
+      message: 'Re-plan the trip using stops that this bus will serve.',
     };
   }
 

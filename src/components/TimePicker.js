@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, SHADOWS, TOUCH_TARGET } from '../config/theme';
+import {
+  getAgencyWallClockPickerDate,
+  pickerDateToAgencyInstant,
+} from '../utils/serviceTime';
 
 const MODES = [
   { key: 'now', label: 'Current Time' },
@@ -18,22 +22,23 @@ const FUTURE_TIME_BUFFER_MS = 5 * 60 * 1000;
 
 const clampFutureTripTime = (date) => {
   const candidate = new Date(date);
-  if (!Number.isFinite(candidate.getTime())) {
-    return new Date(Date.now() + FUTURE_TIME_BUFFER_MS);
+  const agencyInstant = pickerDateToAgencyInstant(candidate);
+  if (!agencyInstant || agencyInstant.getTime() < Date.now()) {
+    return getAgencyWallClockPickerDate(Date.now() + FUTURE_TIME_BUFFER_MS) || new Date();
   }
-  return candidate.getTime() < Date.now()
-    ? new Date(Date.now() + FUTURE_TIME_BUFFER_MS)
-    : candidate;
+  return candidate;
 };
 
 const formatTime = (date) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-const isToday = (date) => date.toDateString() === new Date().toDateString();
+const getAgencyTodayForPicker = () => getAgencyWallClockPickerDate() || new Date();
+
+const isToday = (date) => date.toDateString() === getAgencyTodayForPicker().toDateString();
 
 const isTomorrow = (date) => {
-  const tomorrow = new Date();
+  const tomorrow = getAgencyTodayForPicker();
   tomorrow.setDate(tomorrow.getDate() + 1);
   return date.toDateString() === tomorrow.toDateString();
 };
@@ -100,7 +105,7 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
 
   const handleDayToggle = (day) => {
     const newDate = new Date(value);
-    const today = new Date();
+    const today = getAgencyTodayForPicker();
     if (day === 'today') {
       newDate.setFullYear(today.getFullYear(), today.getMonth(), today.getDate());
     } else {
@@ -154,7 +159,7 @@ const TimePicker = ({ value, onChange, mode = 'now' }) => {
 
   const showTimeOptions = mode === 'depart' || mode === 'arrive';
   const selectedDay = isToday(value) ? 'today' : isTomorrow(value) ? 'tomorrow' : null;
-  const todayStart = startOfDay(new Date());
+  const todayStart = startOfDay(getAgencyTodayForPicker());
   const calendarCells = buildCalendarCells(calendarMonth);
   const canGoToPreviousMonth = startOfMonth(calendarMonth) > startOfMonth(todayStart);
 

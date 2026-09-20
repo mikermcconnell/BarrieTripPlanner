@@ -3,9 +3,17 @@ import { View, Text, StyleSheet } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../config/theme';
 import { formatMinutes } from '../services/tripService';
 
+export const getArrivalDestinationLabel = (arrival) => {
+  const headsign = String(arrival?.headsign || arrival?.tripHeadsign || '').trim();
+  if (headsign) return headsign;
+  if (arrival?.isDestinationUpdating) return 'Updating destination...';
+  return 'Destination unavailable';
+};
+
 const ArrivalRow = ({ arrival, routeColor }) => {
   const isRealtime = arrival.isRealtime;
   const minutesAway = arrival.minutesAway;
+  const destinationLabel = getArrivalDestinationLabel(arrival);
 
   const getTimeDisplay = () => {
     if (minutesAway <= 0) return 'Now';
@@ -20,14 +28,14 @@ const ArrivalRow = ({ arrival, routeColor }) => {
   };
 
   return (
-    <View style={styles.container} accessibilityLabel={`Route ${arrival.routeShortName}, ${arrival.headsign || 'Unknown'}, ${getTimeDisplay()}${isRealtime ? ', real-time' : ', scheduled'}`} accessibilityLiveRegion="polite">
+    <View style={styles.container} accessibilityLabel={`Route ${arrival.routeShortName}, ${destinationLabel}, ${getTimeDisplay()}${isRealtime ? ', real-time' : ', scheduled'}`} accessibilityLiveRegion="polite">
       <View style={[styles.routeBadge, { backgroundColor: routeColor || COLORS.primary }]}>
         <Text style={styles.routeText}>{arrival.routeShortName}</Text>
       </View>
 
       <View style={styles.destinationContainer}>
         <Text style={styles.destination} numberOfLines={1}>
-          {arrival.headsign || arrival.tripHeadsign || 'Unknown'}
+          {destinationLabel}
         </Text>
         {arrival.stopSequence && (
           <Text style={styles.stopInfo}>Stop #{arrival.stopSequence}</Text>

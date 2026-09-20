@@ -2334,15 +2334,11 @@ describe('trip-aware shape resolution', () => {
 });
 
 describe('route-specific detector tuning', () => {
-  test('uses default detector thresholds for route 8 branches', () => {
+  test('uses default detector thresholds for route 8 branches without terminal route overrides', () => {
     const config8A = resolveRouteDetectorConfig('8A');
     const configDefault = resolveRouteDetectorConfig('route-1');
 
-    expect(ROUTE_DETECTOR_OVERRIDES['8A']).toEqual(expect.objectContaining({
-      ignoredRouteEdgeAreas: expect.arrayContaining([
-        expect.objectContaining({ label: 'Downtown Hub terminal egress' }),
-      ]),
-    }));
+    expect(ROUTE_DETECTOR_OVERRIDES['8A']).toBeUndefined();
     expect(config8A.offRouteThresholdMeters).toBe(configDefault.offRouteThresholdMeters);
     expect(config8A.onRouteClearThresholdMeters).toBe(configDefault.onRouteClearThresholdMeters);
     expect(config8A.consecutiveReadingsRequired).toBe(configDefault.consecutiveReadingsRequired);

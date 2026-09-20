@@ -1,0 +1,631 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e3386]:
+        - generic [ref=e3387]:
+          - generic [ref=e3388]:
+            - paragraph [ref=e3389]: TripPlan
+            - heading "Places" [level=1] [ref=e3390]
+            - paragraph [ref=e3391]: 42 saved places
+          - button "Add" [ref=e3393]
+        - generic [ref=e3398]:
+          - generic [ref=e3399]:
+            - generic [ref=e3400]:
+              - generic [ref=e3401]: Search places
+              - textbox "Search places" [ref=e3402]:
+                - /placeholder: Search places...
+            - button "Map" [ref=e3403]
+          - article [ref=e3412]:
+            - generic [ref=e3413]: Press and hold to copy Dublin Airport for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3421]:
+              - paragraph [ref=e3422]: Travel
+              - heading "Dublin Airport" [level=2] [ref=e3423]
+              - paragraph [ref=e3424]: Dublin Airport, County Dublin, Ireland
+            - generic [ref=e3425]:
+              - generic [ref=e3426]: Mapped
+              - generic [ref=e3427]: 3 linked plans
+            - generic [ref=e3428]:
+              - link "Directions" [ref=e3429] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.4264%2C-6.2499&travelmode=driving
+              - button "Edit place" [ref=e3430]
+              - button "Delete place" [ref=e3431]
+          - article [ref=e3432]:
+            - generic [ref=e3433]: Press and hold to copy Dublin lodging area for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3442]:
+              - paragraph [ref=e3443]: Stay
+              - heading "Dublin lodging area" [level=2] [ref=e3444]
+              - paragraph [ref=e3445]: Dublin 7 area, Dublin, Ireland
+            - paragraph [ref=e3446]: Check-in Sep 5; checkout Sep 7. Store access details outside TripPlan.
+            - generic [ref=e3447]:
+              - generic [ref=e3448]: Mapped
+              - generic [ref=e3449]: 2 linked plans
+            - generic [ref=e3450]:
+              - link "Directions" [ref=e3451] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3629%2C-6.2842&travelmode=driving
+              - button "Edit place" [ref=e3452]
+              - button "Delete place" [ref=e3453]
+          - article [ref=e3454]:
+            - generic [ref=e3455]: Press and hold to copy Georgian Quarter for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3461]:
+              - paragraph [ref=e3462]: Activity
+              - heading "Georgian Quarter" [level=2] [ref=e3463]
+              - paragraph [ref=e3464]: Merrion Square, Dublin, Ireland
+            - generic [ref=e3465]:
+              - generic [ref=e3466]: Mapped
+              - generic [ref=e3467]: 1 linked plan
+            - generic [ref=e3468]:
+              - link "Directions" [ref=e3469] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3392%2C-6.2501&travelmode=driving
+              - button "Edit place" [ref=e3470]
+              - button "Delete place" [ref=e3471]
+          - article [ref=e3472]:
+            - generic [ref=e3473]: Press and hold to copy Kehoe's for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3480]:
+              - paragraph [ref=e3481]: Food
+              - heading "Kehoe's" [level=2] [ref=e3482]
+              - paragraph [ref=e3483]: 9 South Anne Street, Dublin, Ireland
+            - generic [ref=e3484]:
+              - generic [ref=e3485]: Mapped
+              - generic [ref=e3486]: 1 linked plan
+            - generic [ref=e3487]:
+              - link "Directions" [ref=e3488] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3414%2C-6.2606&travelmode=driving
+              - button "Edit place" [ref=e3489]
+              - button "Delete place" [ref=e3490]
+          - article [ref=e3491]:
+            - generic [ref=e3492]: Press and hold to copy Trinity College & Book of Kells for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3498]:
+              - paragraph [ref=e3499]: Activity
+              - heading "Trinity College & Book of Kells" [level=2] [ref=e3500]
+              - paragraph [ref=e3501]: College Green, Dublin, Ireland
+            - generic [ref=e3502]:
+              - generic [ref=e3503]: Mapped
+              - generic [ref=e3504]: 1 linked plan
+            - generic [ref=e3505]:
+              - link "Directions" [ref=e3506] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3438%2C-6.2546&travelmode=driving
+              - button "Edit place" [ref=e3507]
+              - button "Delete place" [ref=e3508]
+          - article [ref=e3509]:
+            - generic [ref=e3510]: Press and hold to copy Kilmainham Gaol for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3516]:
+              - paragraph [ref=e3517]: Activity
+              - heading "Kilmainham Gaol" [level=2] [ref=e3518]
+              - paragraph [ref=e3519]: Inchicore Road, Kilmainham, Dublin, Ireland
+            - generic [ref=e3520]:
+              - generic [ref=e3521]: Mapped
+              - generic [ref=e3522]: 1 linked plan
+            - generic [ref=e3523]:
+              - link "Directions" [ref=e3524] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3419%2C-6.309&travelmode=driving
+              - button "Edit place" [ref=e3525]
+              - button "Delete place" [ref=e3526]
+          - article [ref=e3527]:
+            - generic [ref=e3528]: Press and hold to copy The Cobblestone for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3535]:
+              - paragraph [ref=e3536]: Food
+              - heading "The Cobblestone" [level=2] [ref=e3537]
+              - paragraph [ref=e3538]: 77 King Street North, Smithfield, Dublin, Ireland
+            - generic [ref=e3539]:
+              - generic [ref=e3540]: Mapped
+              - generic [ref=e3541]: 1 linked plan
+            - generic [ref=e3542]:
+              - link "Directions" [ref=e3543] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3489%2C-6.2783&travelmode=driving
+              - button "Edit place" [ref=e3544]
+              - button "Delete place" [ref=e3545]
+          - article [ref=e3546]:
+            - generic [ref=e3547]: Press and hold to copy Sixt Dublin Airport rental car for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3557]:
+              - paragraph [ref=e3558]: Transit
+              - heading "Sixt Dublin Airport rental car" [level=2] [ref=e3559]
+              - paragraph [ref=e3560]: Dublin Airport, County Dublin, Ireland
+            - paragraph [ref=e3561]: Sixt desk at Dublin Airport; car on airport.
+            - generic [ref=e3562]:
+              - generic [ref=e3563]: Mapped
+              - generic [ref=e3564]: 1 linked plan
+            - generic [ref=e3565]:
+              - link "Directions" [ref=e3566] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.4264%2C-6.2499&travelmode=driving
+              - button "Edit place" [ref=e3567]
+              - button "Delete place" [ref=e3568]
+          - article [ref=e3569]:
+            - generic [ref=e3570]: Press and hold to copy Belfast area for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3578]:
+              - paragraph [ref=e3579]: Travel
+              - heading "Belfast area" [level=2] [ref=e3580]
+              - paragraph [ref=e3581]: Belfast, Northern Ireland
+            - generic [ref=e3582]:
+              - generic [ref=e3583]: Mapped
+              - generic [ref=e3584]: 0 linked plans
+            - generic [ref=e3585]:
+              - link "Directions" [ref=e3586] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=54.5973%2C-5.9301&travelmode=driving
+              - button "Edit place" [ref=e3587]
+              - button "Delete place" [ref=e3588]
+          - article [ref=e3589]:
+            - generic [ref=e3590]: Press and hold to copy Dark Hedges for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3596]:
+              - paragraph [ref=e3597]: Activity
+              - heading "Dark Hedges" [level=2] [ref=e3598]
+              - paragraph [ref=e3599]: Bregagh Road, Armoy, Northern Ireland
+            - generic [ref=e3600]:
+              - generic [ref=e3601]: Mapped
+              - generic [ref=e3602]: 1 linked plan
+            - generic [ref=e3603]:
+              - link "Directions" [ref=e3604] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=55.1346%2C-6.3808&travelmode=driving
+              - button "Edit place" [ref=e3605]
+              - button "Delete place" [ref=e3606]
+          - article [ref=e3607]:
+            - generic [ref=e3608]: Press and hold to copy Causeway Coast lodging area for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3617]:
+              - paragraph [ref=e3618]: Stay
+              - heading "Causeway Coast lodging area" [level=2] [ref=e3619]
+              - paragraph [ref=e3620]: Causeway Coast area, Northern Ireland
+            - paragraph [ref=e3621]: Check-in Sep 7; checkout Sep 9. Store access and payment details outside TripPlan.
+            - generic [ref=e3622]:
+              - generic [ref=e3623]: Mapped
+              - generic [ref=e3624]: 2 linked plans
+            - generic [ref=e3625]:
+              - link "Directions" [ref=e3626] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=55.1272%2C-6.3376&travelmode=driving
+              - button "Edit place" [ref=e3627]
+              - button "Delete place" [ref=e3628]
+          - article [ref=e3629]:
+            - generic [ref=e3630]: Press and hold to copy Giant's Causeway for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3636]:
+              - paragraph [ref=e3637]: Activity
+              - heading "Giant's Causeway" [level=2] [ref=e3638]
+              - paragraph [ref=e3639]: Bushmills, Northern Ireland
+            - generic [ref=e3640]:
+              - generic [ref=e3641]: Mapped
+              - generic [ref=e3642]: 1 linked plan
+            - generic [ref=e3643]:
+              - link "Directions" [ref=e3644] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=55.2408%2C-6.5116&travelmode=driving
+              - button "Edit place" [ref=e3645]
+              - button "Delete place" [ref=e3646]
+          - article [ref=e3647]:
+            - generic [ref=e3648]: Press and hold to copy Carrick-a-Rede Rope Bridge for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3654]:
+              - paragraph [ref=e3655]: Activity
+              - heading "Carrick-a-Rede Rope Bridge" [level=2] [ref=e3656]
+              - paragraph [ref=e3657]: Ballintoy, Northern Ireland
+            - generic [ref=e3658]:
+              - generic [ref=e3659]: Mapped
+              - generic [ref=e3660]: 1 linked plan
+            - generic [ref=e3661]:
+              - link "Directions" [ref=e3662] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=55.2407%2C-6.3323&travelmode=driving
+              - button "Edit place" [ref=e3663]
+              - button "Delete place" [ref=e3664]
+          - article [ref=e3665]:
+            - generic [ref=e3666]: Press and hold to copy Dunluce Castle for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3672]:
+              - paragraph [ref=e3673]: Activity
+              - heading "Dunluce Castle" [level=2] [ref=e3674]
+              - paragraph [ref=e3675]: Dunluce Road, Bushmills, Northern Ireland
+            - generic [ref=e3676]:
+              - generic [ref=e3677]: Mapped
+              - generic [ref=e3678]: 1 linked plan
+            - generic [ref=e3679]:
+              - link "Directions" [ref=e3680] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=55.2102%2C-6.579&travelmode=driving
+              - button "Edit place" [ref=e3681]
+              - button "Delete place" [ref=e3682]
+          - article [ref=e3683]:
+            - generic [ref=e3684]: Press and hold to copy Cornwall Airport Newquay for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3692]:
+              - paragraph [ref=e3693]: Travel
+              - heading "Cornwall Airport Newquay" [level=2] [ref=e3694]
+              - paragraph [ref=e3695]: Newquay TR8 4RQ, Cornwall, England
+            - generic [ref=e3696]:
+              - generic [ref=e3697]: Mapped
+              - generic [ref=e3698]: 2 linked plans
+            - generic [ref=e3699]:
+              - link "Directions" [ref=e3700] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.4406%2C-4.9954&travelmode=driving
+              - button "Edit place" [ref=e3701]
+              - button "Delete place" [ref=e3702]
+          - article [ref=e3703]:
+            - generic [ref=e3704]: Press and hold to copy Home in Bath for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3713]:
+              - paragraph [ref=e3714]: Stay
+              - heading "Home in Bath" [level=2] [ref=e3715]
+              - paragraph [ref=e3716]: Bath, BA1 3BH, England
+            - paragraph [ref=e3717]: Hosted by Dan & Katie. Check-in Sep 13 at 4:00 p.m.; checkout Sep 18 at 11:00 a.m. Store access details outside TripPlan.
+            - generic [ref=e3718]:
+              - generic [ref=e3719]: Mapped
+              - generic [ref=e3720]: 2 linked plans
+            - generic [ref=e3721]:
+              - link "Directions" [ref=e3722] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.385869%2C-2.379356&travelmode=driving
+              - button "Edit place" [ref=e3723]
+              - button "Delete place" [ref=e3724]
+          - article [ref=e3725]:
+            - generic [ref=e3726]: Press and hold to copy Roman Baths for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3732]:
+              - paragraph [ref=e3733]: Activity
+              - heading "Roman Baths" [level=2] [ref=e3734]
+              - paragraph [ref=e3735]: Abbey Churchyard, Bath, England
+            - generic [ref=e3736]:
+              - generic [ref=e3737]: Mapped
+              - generic [ref=e3738]: 1 linked plan
+            - generic [ref=e3739]:
+              - link "Directions" [ref=e3740] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.3811%2C-2.3596&travelmode=driving
+              - button "Edit place" [ref=e3741]
+              - button "Delete place" [ref=e3742]
+          - article [ref=e3743]:
+            - generic [ref=e3744]: Press and hold to copy Royal Crescent & Bath Circuit for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3750]:
+              - paragraph [ref=e3751]: Activity
+              - heading "Royal Crescent & Bath Circuit" [level=2] [ref=e3752]
+              - paragraph [ref=e3753]: Royal Crescent, Bath, England
+            - generic [ref=e3754]:
+              - generic [ref=e3755]: Mapped
+              - generic [ref=e3756]: 2 linked plans
+            - generic [ref=e3757]:
+              - link "Directions" [ref=e3758] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.3867%2C-2.367&travelmode=driving
+              - button "Edit place" [ref=e3759]
+              - button "Delete place" [ref=e3760]
+          - article [ref=e3761]:
+            - generic [ref=e3762]: Press and hold to copy London Paddington for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3772]:
+              - paragraph [ref=e3773]: Transit
+              - heading "London Paddington" [level=2] [ref=e3774]
+              - paragraph [ref=e3775]: Praed Street, London, England
+            - generic [ref=e3776]:
+              - generic [ref=e3777]: Mapped
+              - generic [ref=e3778]: 1 linked plan
+            - generic [ref=e3779]:
+              - link "Directions" [ref=e3780] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.5173%2C-0.1774&travelmode=driving
+              - button "Edit place" [ref=e3781]
+              - button "Delete place" [ref=e3782]
+          - article [ref=e3783]:
+            - generic [ref=e3784]: Press and hold to copy Tower of London for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3790]:
+              - paragraph [ref=e3791]: Activity
+              - heading "Tower of London" [level=2] [ref=e3792]
+              - paragraph [ref=e3793]: London EC3N 4AB, England
+            - generic [ref=e3794]:
+              - generic [ref=e3795]: Mapped
+              - generic [ref=e3796]: 1 linked plan
+            - generic [ref=e3797]:
+              - link "Directions" [ref=e3798] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.5081%2C-0.0759&travelmode=driving
+              - button "Edit place" [ref=e3799]
+              - button "Delete place" [ref=e3800]
+          - article [ref=e3801]:
+            - generic [ref=e3802]: Press and hold to copy Castle Combe for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3808]:
+              - paragraph [ref=e3809]: Activity
+              - heading "Castle Combe" [level=2] [ref=e3810]
+              - paragraph [ref=e3811]: Castle Combe, Chippenham, England
+            - generic [ref=e3812]:
+              - generic [ref=e3813]: Mapped
+              - generic [ref=e3814]: 1 linked plan
+            - generic [ref=e3815]:
+              - link "Directions" [ref=e3816] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.4932%2C-2.2283&travelmode=driving
+              - button "Edit place" [ref=e3817]
+              - button "Delete place" [ref=e3818]
+          - article [ref=e3819]:
+            - generic [ref=e3820]: Press and hold to copy Charmouth Beach for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3826]:
+              - paragraph [ref=e3827]: Activity
+              - heading "Charmouth Beach" [level=2] [ref=e3828]
+              - paragraph [ref=e3829]: Charmouth, Dorset, England
+            - generic [ref=e3830]:
+              - generic [ref=e3831]: Mapped
+              - generic [ref=e3832]: 1 linked plan
+            - generic [ref=e3833]:
+              - link "Directions" [ref=e3834] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.733%2C-2.9&travelmode=driving
+              - button "Edit place" [ref=e3835]
+              - button "Delete place" [ref=e3836]
+          - article [ref=e3837]:
+            - generic [ref=e3838]: Press and hold to copy Lyme Regis for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3844]:
+              - paragraph [ref=e3845]: Activity
+              - heading "Lyme Regis" [level=2] [ref=e3846]
+              - paragraph [ref=e3847]: Lyme Regis, Dorset, England
+            - generic [ref=e3848]:
+              - generic [ref=e3849]: Mapped
+              - generic [ref=e3850]: 1 linked plan
+            - generic [ref=e3851]:
+              - link "Directions" [ref=e3852] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.7252%2C-2.9349&travelmode=driving
+              - button "Edit place" [ref=e3853]
+              - button "Delete place" [ref=e3854]
+          - article [ref=e3855]:
+            - generic [ref=e3856]: Press and hold to copy Home in Cornwall for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3865]:
+              - paragraph [ref=e3866]: Stay
+              - heading "Home in Cornwall" [level=2] [ref=e3867]
+              - paragraph [ref=e3868]: 43 Boslowick Road, Falmouth, Cornwall, TR11 4EX, England
+            - paragraph [ref=e3869]: Hosted by Jay. Check-in Sep 9 at 3:00 p.m.; checkout Sep 13 at 10:00 a.m. Store access details outside TripPlan.
+            - generic [ref=e3870]:
+              - generic [ref=e3871]: Mapped
+              - generic [ref=e3872]: 2 linked plans
+            - generic [ref=e3873]:
+              - link "Directions" [ref=e3874] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.147133%2C-5.087705&travelmode=driving
+              - button "Edit place" [ref=e3875]
+              - button "Delete place" [ref=e3876]
+          - article [ref=e3877]:
+            - generic [ref=e3878]: Press and hold to copy St Michael's Mount for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3884]:
+              - paragraph [ref=e3885]: Activity
+              - heading "St Michael's Mount" [level=2] [ref=e3886]
+              - paragraph [ref=e3887]: Marazion, Cornwall, England
+            - generic [ref=e3888]:
+              - generic [ref=e3889]: Mapped
+              - generic [ref=e3890]: 1 linked plan
+            - generic [ref=e3891]:
+              - link "Directions" [ref=e3892] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.1175%2C-5.4778&travelmode=driving
+              - button "Edit place" [ref=e3893]
+              - button "Delete place" [ref=e3894]
+          - article [ref=e3895]:
+            - generic [ref=e3896]: Press and hold to copy Kynance Cove for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3902]:
+              - paragraph [ref=e3903]: Activity
+              - heading "Kynance Cove" [level=2] [ref=e3904]
+              - paragraph [ref=e3905]: Lizard, Cornwall, England
+            - generic [ref=e3906]:
+              - generic [ref=e3907]: Mapped
+              - generic [ref=e3908]: 1 linked plan
+            - generic [ref=e3909]:
+              - link "Directions" [ref=e3910] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=49.974%2C-5.2314&travelmode=driving
+              - button "Edit place" [ref=e3911]
+              - button "Delete place" [ref=e3912]
+          - article [ref=e3913]:
+            - generic [ref=e3914]: Press and hold to copy Minack Theatre for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3920]:
+              - paragraph [ref=e3921]: Activity
+              - heading "Minack Theatre" [level=2] [ref=e3922]
+              - paragraph [ref=e3923]: Porthcurno, Penzance, Cornwall, England
+            - generic [ref=e3924]:
+              - generic [ref=e3925]: Mapped
+              - generic [ref=e3926]: 1 linked plan
+            - generic [ref=e3927]:
+              - link "Directions" [ref=e3928] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.0419%2C-5.651&travelmode=driving
+              - button "Edit place" [ref=e3929]
+              - button "Delete place" [ref=e3930]
+          - article [ref=e3931]:
+            - generic [ref=e3932]: Press and hold to copy London Heathrow Airport for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3940]:
+              - paragraph [ref=e3941]: Travel
+              - heading "London Heathrow Airport" [level=2] [ref=e3942]
+              - paragraph [ref=e3943]: London Heathrow Airport, Hounslow, England
+            - generic [ref=e3944]:
+              - generic [ref=e3945]: Mapped
+              - generic [ref=e3946]: 3 linked plans
+            - generic [ref=e3947]:
+              - link "Directions" [ref=e3948] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.47%2C-0.4543&travelmode=driving
+              - button "Edit place" [ref=e3949]
+              - button "Delete place" [ref=e3950]
+          - article [ref=e3951]:
+            - generic [ref=e3952]: Press and hold to copy Borough Market & South Bank for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3959]:
+              - paragraph [ref=e3960]: Food
+              - heading "Borough Market & South Bank" [level=2] [ref=e3961]
+              - paragraph [ref=e3962]: Borough Market, London, England
+            - generic [ref=e3963]:
+              - generic [ref=e3964]: Mapped
+              - generic [ref=e3965]: 0 linked plans
+            - generic [ref=e3966]:
+              - link "Directions" [ref=e3967] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.5055%2C-0.091&travelmode=driving
+              - button "Edit place" [ref=e3968]
+              - button "Delete place" [ref=e3969]
+          - article [ref=e3970]:
+            - generic [ref=e3971]: Press and hold to copy Guinness Storehouse for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3977]:
+              - paragraph [ref=e3978]: Activity
+              - heading "Guinness Storehouse" [level=2] [ref=e3979]
+              - paragraph [ref=e3980]: St. James’s Gate, Dublin 8, Ireland
+            - paragraph [ref=e3981]: Timed-entry tour; best Dublin fit for beer drinkers.
+            - generic [ref=e3982]:
+              - generic [ref=e3983]: Mapped
+              - generic [ref=e3984]: 1 linked plan
+            - generic [ref=e3985]:
+              - link "Directions" [ref=e3986] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3419%2C-6.2867&travelmode=driving
+              - button "Edit place" [ref=e3987]
+              - button "Delete place" [ref=e3988]
+          - article [ref=e3989]:
+            - generic [ref=e3990]: Press and hold to copy Lost Gardens of Heligan for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e3996]:
+              - paragraph [ref=e3997]: Activity
+              - heading "Lost Gardens of Heligan" [level=2] [ref=e3998]
+              - paragraph [ref=e3999]: Pentewan, St Austell, Cornwall, PL26 6EN, England
+            - paragraph [ref=e4000]: Strong Cornwall garden and plant stop; longer drive from Falmouth than from the old Probus base.
+            - generic [ref=e4001]:
+              - generic [ref=e4002]: Mapped
+              - generic [ref=e4003]: 1 linked plan
+            - generic [ref=e4004]:
+              - link "Directions" [ref=e4005] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.2858%2C-4.8094&travelmode=driving
+              - button "Edit place" [ref=e4006]
+              - button "Delete place" [ref=e4007]
+          - article [ref=e4008]:
+            - generic [ref=e4009]: Press and hold to copy Mevagissey or Charlestown harbour stop for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4015]:
+              - paragraph [ref=e4016]: Activity
+              - heading "Mevagissey or Charlestown harbour stop" [level=2] [ref=e4017]
+              - paragraph [ref=e4018]: Mevagissey or Charlestown, Cornwall, England
+            - paragraph [ref=e4019]: Choose one relaxed coastal village/harbour after Heligan.
+            - generic [ref=e4020]:
+              - generic [ref=e4021]: Mapped
+              - generic [ref=e4022]: 1 linked plan
+            - generic [ref=e4023]:
+              - link "Directions" [ref=e4024] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.2692%2C-4.7866&travelmode=driving
+              - button "Edit place" [ref=e4025]
+              - button "Delete place" [ref=e4026]
+          - article [ref=e4027]:
+            - generic [ref=e4028]: Press and hold to copy Lizard Point for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4034]:
+              - paragraph [ref=e4035]: Activity
+              - heading "Lizard Point" [level=2] [ref=e4036]
+              - paragraph [ref=e4037]: Lizard, Cornwall, England
+            - paragraph [ref=e4038]: Coastal walk with strong wildlife and scenery potential.
+            - generic [ref=e4039]:
+              - generic [ref=e4040]: Mapped
+              - generic [ref=e4041]: 1 linked plan
+            - generic [ref=e4042]:
+              - link "Directions" [ref=e4043] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=49.9596%2C-5.2053&travelmode=driving
+              - button "Edit place" [ref=e4044]
+              - button "Delete place" [ref=e4045]
+          - article [ref=e4046]:
+            - generic [ref=e4047]: Press and hold to copy Westonbirt Arboretum for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4053]:
+              - paragraph [ref=e4054]: Activity
+              - heading "Westonbirt Arboretum" [level=2] [ref=e4055]
+              - paragraph [ref=e4056]: Westonbirt, Tetbury, GL8 8QS, England
+            - paragraph [ref=e4057]: Tree collection and early autumn colour near the Cotswolds route.
+            - generic [ref=e4058]:
+              - generic [ref=e4059]: Mapped
+              - generic [ref=e4060]: 1 linked plan
+            - generic [ref=e4061]:
+              - link "Directions" [ref=e4062] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.6073%2C-2.2169&travelmode=driving
+              - button "Edit place" [ref=e4063]
+              - button "Delete place" [ref=e4064]
+          - article [ref=e4065]:
+            - generic [ref=e4066]: Press and hold to copy Prior Park Landscape Garden for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4072]:
+              - paragraph [ref=e4073]: Activity
+              - heading "Prior Park Landscape Garden" [level=2] [ref=e4074]
+              - paragraph [ref=e4075]: Ralph Allen Drive, Bath, BA2 5AH, England
+            - paragraph [ref=e4076]: Lighter Bath garden walk with a strong view back over Bath.
+            - generic [ref=e4077]:
+              - generic [ref=e4078]: Mapped
+              - generic [ref=e4079]: 1 linked plan
+            - generic [ref=e4080]:
+              - link "Directions" [ref=e4081] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.3601%2C-2.3449&travelmode=driving
+              - button "Edit place" [ref=e4082]
+              - button "Delete place" [ref=e4083]
+          - article [ref=e4084]:
+            - generic [ref=e4085]: Press and hold to copy Phoenix Park for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4091]:
+              - paragraph [ref=e4092]: Activity
+              - heading "Phoenix Park" [level=2] [ref=e4093]
+              - paragraph [ref=e4094]: Phoenix Park, Dublin, Ireland
+            - paragraph [ref=e4095]: Optional deer/wildlife walk if Dublin timing opens up.
+            - generic [ref=e4096]:
+              - generic [ref=e4097]: Mapped
+              - generic [ref=e4098]: 1 linked plan
+            - generic [ref=e4099]:
+              - link "Directions" [ref=e4100] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.3569%2C-6.329&travelmode=driving
+              - button "Edit place" [ref=e4101]
+              - button "Delete place" [ref=e4102]
+          - article [ref=e4103]:
+            - generic [ref=e4104]: Press and hold to copy Eden Project for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4110]:
+              - paragraph [ref=e4111]: Activity
+              - heading "Eden Project" [level=2] [ref=e4112]
+              - paragraph [ref=e4113]: Bodelva, Par, Cornwall, PL24 2SG, England
+            - paragraph [ref=e4114]: Rainy-day indoor-biome backup for Cornwall.
+            - generic [ref=e4115]:
+              - generic [ref=e4116]: Mapped
+              - generic [ref=e4117]: 1 linked plan
+            - generic [ref=e4118]:
+              - link "Directions" [ref=e4119] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.3619%2C-4.7447&travelmode=driving
+              - button "Edit place" [ref=e4120]
+              - button "Delete place" [ref=e4121]
+          - article [ref=e4122]:
+            - generic [ref=e4123]: Press and hold to copy Thermae Bath Spa for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4129]:
+              - paragraph [ref=e4130]: Activity
+              - heading "Thermae Bath Spa" [level=2] [ref=e4131]
+              - paragraph [ref=e4132]: The Hetling Pump Room, Hot Bath Street, Bath, BA1 1SJ, England
+            - paragraph [ref=e4133]: Low-energy Bath backup if the group needs a slower afternoon.
+            - generic [ref=e4134]:
+              - generic [ref=e4135]: Mapped
+              - generic [ref=e4136]: 1 linked plan
+            - generic [ref=e4137]:
+              - link "Directions" [ref=e4138] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=51.381%2C-2.361&travelmode=driving
+              - button "Edit place" [ref=e4139]
+              - button "Delete place" [ref=e4140]
+          - article [ref=e4141]:
+            - generic [ref=e4142]: Press and hold to copy Trebah Garden for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4148]:
+              - paragraph [ref=e4149]: Activity
+              - heading "Trebah Garden" [level=2] [ref=e4150]
+              - paragraph [ref=e4151]: Mawnan Smith, Falmouth, Cornwall, TR11 5JZ, England
+            - paragraph [ref=e4152]: Nearby subtropical valley garden and beach; optional alternative to Heligan.
+            - generic [ref=e4153]:
+              - generic [ref=e4154]: Mapped
+              - generic [ref=e4155]: 1 linked plan
+            - generic [ref=e4156]:
+              - link "Directions" [ref=e4157] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.103255%2C-5.122354&travelmode=driving
+              - button "Edit place" [ref=e4158]
+              - button "Delete place" [ref=e4159]
+          - article [ref=e4160]:
+            - generic [ref=e4161]: Press and hold to copy Castle Beach rock pools for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4167]:
+              - paragraph [ref=e4168]: Activity
+              - heading "Castle Beach rock pools" [level=2] [ref=e4169]
+              - paragraph [ref=e4170]: Cliff Road, Falmouth, Cornwall, TR11 4FX, England
+            - paragraph [ref=e4171]: Flexible low-tide rock-pooling stop close to the Falmouth stay.
+            - generic [ref=e4172]:
+              - generic [ref=e4173]: Mapped
+              - generic [ref=e4174]: 1 linked plan
+            - generic [ref=e4175]:
+              - link "Directions" [ref=e4176] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.148407%2C-5.056119&travelmode=driving
+              - button "Edit place" [ref=e4177]
+              - button "Delete place" [ref=e4178]
+          - article [ref=e4179]:
+            - generic [ref=e4180]: Press and hold to copy Monmouth Beach Ammonite Pavement for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4186]:
+              - paragraph [ref=e4187]: Activity
+              - heading "Monmouth Beach Ammonite Pavement" [level=2] [ref=e4188]
+              - paragraph [ref=e4189]: Monmouth Beach, Lyme Regis, Dorset, England
+            - paragraph [ref=e4190]: Low-tide-only fossil ledge west of The Cobb; check tide times and stay clear of the cliffs.
+            - generic [ref=e4191]:
+              - generic [ref=e4192]: Mapped
+              - generic [ref=e4193]: 1 linked plan
+            - generic [ref=e4194]:
+              - link "Directions" [ref=e4195] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=50.71915%2C-2.943702&travelmode=driving
+              - button "Edit place" [ref=e4196]
+              - button "Delete place" [ref=e4197]
+          - article [ref=e4198]:
+            - generic [ref=e4199]: Press and hold to copy Food for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4206]:
+              - paragraph [ref=e4207]: Food
+              - heading "Food" [level=2] [ref=e4208]
+              - paragraph [ref=e4209]: Dublin, Ireland
+            - paragraph [ref=e4210]: Enjoy
+            - generic [ref=e4211]:
+              - generic [ref=e4212]: Mapped
+              - generic [ref=e4213]: 0 linked plans
+            - generic [ref=e4214]:
+              - link "Directions" [ref=e4215] [cursor=pointer]:
+                - /url: https://www.google.com/maps/dir/?api=1&destination=53.34938%2C-6.260559&travelmode=driving
+              - button "Edit place" [ref=e4216]
+              - button "Delete place" [ref=e4217]
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

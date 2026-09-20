@@ -1,0 +1,44 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e3075]:
+        - generic [ref=e3076]:
+          - generic [ref=e3077]:
+            - paragraph [ref=e3078]: TripPlan
+            - heading "Trips" [level=1] [ref=e3079]
+            - paragraph [ref=e3080]: Your private trip dashboard
+          - button "Open" [ref=e3082]
+        - generic [ref=e3083]:
+          - article [ref=e3084]:
+            - generic [ref=e3086]:
+              - paragraph [ref=e3087]: Active trip
+              - heading "Dublin, Northern Ireland & England" [level=2] [ref=e3088]
+              - paragraph [ref=e3089]: Dublin → Northern Ireland → Falmouth/Cornwall → Jurassic Coast → Bath · Sat, Sep 5 to Fri, Sep 18
+            - generic [ref=e3099]:
+              - generic [ref=e3100]:
+                - paragraph [ref=e3101]: "14"
+                - paragraph [ref=e3102]: days
+              - generic [ref=e3103]:
+                - paragraph [ref=e3104]: "49"
+                - paragraph [ref=e3105]: plans
+              - generic [ref=e3106]:
+                - paragraph [ref=e3107]: 0/25
+                - paragraph [ref=e3108]: docs
+            - button "Continue trip" [ref=e3109]
+          - generic [ref=e3110]:
+            - heading "Access" [level=2] [ref=e3111]
+            - generic [ref=e3112]:
+              - paragraph [ref=e3113]: Editor link
+              - paragraph [ref=e3114]: editor-link@tripplan.invalid
+            - paragraph [ref=e3115]: Owners can share viewer or editor access from the More tab.
+          - generic [ref=e3116]:
+            - heading "New trip placeholder" [level=2] [ref=e3121]
+            - paragraph [ref=e3122]: The data model is ready for multiple trips. Creation flow comes next.
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

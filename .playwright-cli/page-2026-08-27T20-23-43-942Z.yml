@@ -1,0 +1,31 @@
+- generic [ref=f17e3]:
+  - generic [ref=f17e639]: Created project barrie-transit-planner
+  - generic [ref=f17e5]:
+    - banner [ref=f17e7]:
+      - generic [ref=f17e8]:
+        - button "Open main menu" [ref=f17e9] [cursor=pointer]
+        - generic [ref=f17e14]:
+          - generic [ref=f17e15]:
+            - button [ref=f17e16] [cursor=pointer]
+            - button [ref=f17e24] [cursor=pointer]
+            - button [ref=f17e29] [cursor=pointer]
+            - button "Command Palette" [ref=f17e35] [cursor=pointer]
+            - button "Help" [ref=f17e40] [cursor=pointer]
+          - button "michaelryanmcconnell@gmail.com" [ref=f17e46] [cursor=pointer]:
+            - img [ref=f17e49]:
+              - generic [ref=f17e51]: M
+    - generic [ref=f17e52]:
+      - banner [ref=f17e53]:
+        - generic:
+          - heading [level=1]
+        - generic [ref=f17e56]:
+          - button "Ask Seer" [ref=f17e57] [cursor=pointer]
+          - button "Give Feedback" [ref=f17e64] [cursor=pointer]
+      - main [ref=f17e69]:
+        - generic [ref=f17e648]:
+          - generic [ref=f17e649]:
+            - heading "Configure React Native SDK" [level=2] [ref=f17e650]
+            - generic [ref=f17e651]:
+              - button "Back to Platform Selection" [ref=f17e652] [cursor=pointer]
+              - button "Full Documentation" [ref=f17e657] [cursor=pointer]
+          - button "Take me to Issues" [ref=f17e663] [cursor=pointer]

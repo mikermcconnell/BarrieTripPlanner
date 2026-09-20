@@ -1,0 +1,129 @@
+- generic [ref=f3e4]:
+  - generic [ref=f3e7]:
+    - generic [ref=f3e10]:
+      - img "Google" [ref=f3e12]
+      - generic [ref=f3e13]: Sign in with Google
+    - generic [ref=f3e14]:
+      - generic [ref=f3e16]:
+        - heading "Sign in" [level=1] [ref=f3e17]
+        - paragraph [ref=f3e18]:
+          - text: to continue to
+          - button "sentry.io" [ref=f3e19] [cursor=pointer]
+      - generic [ref=f3e22]:
+        - generic [ref=f3e25]:
+          - generic [ref=f3e30]:
+            - textbox "Email or phone" [active] [ref=f3e31]
+            - generic: Email or phone
+          - paragraph [ref=f3e32]:
+            - link "Forgot email?" [ref=f3e33] [cursor=pointer]:
+              - /url: /signin/v2/usernamerecovery?app_domain=https://sentry.io&client_id=1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com&continue=https://accounts.google.com/signin/oauth/legacy/consent?authuser%3Dunknown%26part%3DAJi8hANT8oH0NjNOtO5VyOOD-cRhOive7xVIcBVgr5zDswGRjG2pXN3cxZvINzgsOo8j_QGiW_W3vapvdaX72we5NiGob_pdqv4_CyDNf7CZ-8ZBJgWV7JXzlKrm8XoJm6kU8puL9ZzDG983XZj-R4xV8NnB3pYqXJvJxDidZx9viSH4EGuhKm5uugPVweyF-ZSqLKEdozCLZbghxvT_xYtz0G-0ITLFZ0bjsELnr1Ifsnpb8hpWXGaNrM7aLaqAojxuEFu9LxEL5DhG0dluD7nOlPMNPeD-2xvX64Gv9mvyJNeKN7plLK5rjFl47ud6WtqGPaFa0Bx-rZ75YcPCyf2bIRDSOcPOtyfcKXd0wPBKvdOK-suT-cOR7cjRGjckkxEw3-NiJ6L9D4D_Ka6F83bH_qGy74HkAAXlzEed2yg4XxeueTwX0nWw75HQERPBayFtGIFz-FK7pC8vNz5VhduuPNzwgRS9aw%26flowName%3DGeneralOAuthFlow%26as%3DS606006564%253A1787862337961458%26client_id%3D1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com%23&dsh=S606006564:1787862337961458&flowName=GeneralOAuthLite&o2v=1&opparams=%253F&rart=ANgoxccl_X8--sE98ZHEVS-gCWR34yAQKBdxN2HTtJEa8Ayzvs_BODtLUFsszgH862Elw4GMavNGdiRXoe6kF4QLamyACK8elvZ7wwqhLCEfzWQ-abDPrMA&redirect_uri=https://sentry.io/extensions/google/setup/&response_type=code&scope=email&service=lso&state=4514f8da632232f1693b9e821007e6adecac85220b9334e4e92ef940a3e53e9a
+        - paragraph [ref=f3e36]:
+          - text: Before using this app, you can review sentry.io’s
+          - link "Privacy Policy" [ref=f3e37] [cursor=pointer]:
+            - /url: https://sentry.io/privacy/
+          - text: and
+          - link "Terms of Service" [ref=f3e38] [cursor=pointer]:
+            - /url: https://sentry.io/terms/
+          - text: .
+        - generic [ref=f3e40]:
+          - button "Next" [ref=f3e42]
+          - link "Create account" [ref=f3e44] [cursor=pointer]:
+            - /url: /lifecycle/flows/signup?app_domain=https://sentry.io&client_id=1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com&continue=https://accounts.google.com/signin/oauth/legacy/consent?authuser%3Dunknown%26part%3DAJi8hANT8oH0NjNOtO5VyOOD-cRhOive7xVIcBVgr5zDswGRjG2pXN3cxZvINzgsOo8j_QGiW_W3vapvdaX72we5NiGob_pdqv4_CyDNf7CZ-8ZBJgWV7JXzlKrm8XoJm6kU8puL9ZzDG983XZj-R4xV8NnB3pYqXJvJxDidZx9viSH4EGuhKm5uugPVweyF-ZSqLKEdozCLZbghxvT_xYtz0G-0ITLFZ0bjsELnr1Ifsnpb8hpWXGaNrM7aLaqAojxuEFu9LxEL5DhG0dluD7nOlPMNPeD-2xvX64Gv9mvyJNeKN7plLK5rjFl47ud6WtqGPaFa0Bx-rZ75YcPCyf2bIRDSOcPOtyfcKXd0wPBKvdOK-suT-cOR7cjRGjckkxEw3-NiJ6L9D4D_Ka6F83bH_qGy74HkAAXlzEed2yg4XxeueTwX0nWw75HQERPBayFtGIFz-FK7pC8vNz5VhduuPNzwgRS9aw%26flowName%3DGeneralOAuthFlow%26as%3DS606006564%253A1787862337961458%26client_id%3D1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com%23&dsh=S606006564:1787862337961458&flowEntry=SignUp&flowName=GlifWebSignIn&o2v=1&opparams=%253F&rart=ANgoxccl_X8--sE98ZHEVS-gCWR34yAQKBdxN2HTtJEa8Ayzvs_BODtLUFsszgH862Elw4GMavNGdiRXoe6kF4QLamyACK8elvZ7wwqhLCEfzWQ-abDPrMA&redirect_uri=https://sentry.io/extensions/google/setup/&response_type=code&scope=email&service=lso&signInUrl=https://accounts.google.com/signin/oauth?app_domain%3Dhttps://sentry.io%26client_id%3D1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com%26continue%3Dhttps://accounts.google.com/signin/oauth/legacy/consent?authuser%253Dunknown%2526part%253DAJi8hANT8oH0NjNOtO5VyOOD-cRhOive7xVIcBVgr5zDswGRjG2pXN3cxZvINzgsOo8j_QGiW_W3vapvdaX72we5NiGob_pdqv4_CyDNf7CZ-8ZBJgWV7JXzlKrm8XoJm6kU8puL9ZzDG983XZj-R4xV8NnB3pYqXJvJxDidZx9viSH4EGuhKm5uugPVweyF-ZSqLKEdozCLZbghxvT_xYtz0G-0ITLFZ0bjsELnr1Ifsnpb8hpWXGaNrM7aLaqAojxuEFu9LxEL5DhG0dluD7nOlPMNPeD-2xvX64Gv9mvyJNeKN7plLK5rjFl47ud6WtqGPaFa0Bx-rZ75YcPCyf2bIRDSOcPOtyfcKXd0wPBKvdOK-suT-cOR7cjRGjckkxEw3-NiJ6L9D4D_Ka6F83bH_qGy74HkAAXlzEed2yg4XxeueTwX0nWw75HQERPBayFtGIFz-FK7pC8vNz5VhduuPNzwgRS9aw%2526flowName%253DGeneralOAuthFlow%2526as%253DS606006564%25253A1787862337961458%2526client_id%253D1060652057516-a89b41kuqhobbocqtb3fr4mut2bfljb0.apps.googleusercontent.com%2523%26dsh%3DS606006564:1787862337961458%26flowName%3DGeneralOAuthLite%26o2v%3D1%26opparams%3D%25253F%26rart%3DANgoxccl_X8--sE98ZHEVS-gCWR34yAQKBdxN2HTtJEa8Ayzvs_BODtLUFsszgH862Elw4GMavNGdiRXoe6kF4QLamyACK8elvZ7wwqhLCEfzWQ-abDPrMA%26redirect_uri%3Dhttps://sentry.io/extensions/google/setup/%26response_type%3Dcode%26scope%3Demail%26service%3Dlso%26state%3D4514f8da632232f1693b9e821007e6adecac85220b9334e4e92ef940a3e53e9a&state=4514f8da632232f1693b9e821007e6adecac85220b9334e4e92ef940a3e53e9a
+  - contentinfo [ref=f3e45]:
+    - combobox [ref=f3e48] [cursor=pointer]:
+      - option "Afrikaans"
+      - option "azərbaycan"
+      - option "bosanski"
+      - option "català"
+      - option "Čeština"
+      - option "Cymraeg"
+      - option "Dansk"
+      - option "Deutsch"
+      - option "eesti"
+      - option "English (United Kingdom)"
+      - option "English (United States)" [selected]
+      - option "Español (España)"
+      - option "Español (Latinoamérica)"
+      - option "euskara"
+      - option "Filipino"
+      - option "Français (Canada)"
+      - option "Français (France)"
+      - option "Gaeilge"
+      - option "galego"
+      - option "Hrvatski"
+      - option "Indonesia"
+      - option "isiZulu"
+      - option "íslenska"
+      - option "Italiano"
+      - option "Kiswahili"
+      - option "latviešu"
+      - option "lietuvių"
+      - option "magyar"
+      - option "Melayu"
+      - option "Nederlands"
+      - option "norsk"
+      - option "o‘zbek"
+      - option "polski"
+      - option "Português (Brasil)"
+      - option "Português (Portugal)"
+      - option "română"
+      - option "shqip"
+      - option "Slovenčina"
+      - option "slovenščina"
+      - option "srpski (latinica)"
+      - option "Suomi"
+      - option "Svenska"
+      - option "Tiếng Việt"
+      - option "Türkçe"
+      - option "Ελληνικά"
+      - option "беларуская"
+      - option "български"
+      - option "кыргызча"
+      - option "қазақ тілі"
+      - option "македонски"
+      - option "монгол"
+      - option "Русский"
+      - option "српски (ћирилица)"
+      - option "Українська"
+      - option "ქართული"
+      - option "հայերեն"
+      - option "‫עברית‬‎"
+      - option "‫اردو‬‎"
+      - option "‫العربية‬‎"
+      - option "‫فارسی‬‎"
+      - option "አማርኛ"
+      - option "नेपाली"
+      - option "मराठी"
+      - option "हिन्दी"
+      - option "অসমীয়া"
+      - option "বাংলা"
+      - option "ਪੰਜਾਬੀ"
+      - option "ગુજરાતી"
+      - option "ଓଡ଼ିଆ"
+      - option "தமிழ்"
+      - option "తెలుగు"
+      - option "ಕನ್ನಡ"
+      - option "മലയാളം"
+      - option "සිංහල"
+      - option "ไทย"
+      - option "ລາວ"
+      - option "မြန်မာ"
+      - option "ខ្មែរ"
+      - option "한국어"
+      - option "中文（香港）"
+      - option "日本語"
+      - option "简体中文"
+      - option "繁體中文"
+    - list [ref=f3e49]:
+      - listitem [ref=f3e50]:
+        - link "Open Google Account Help Center (external, opens in a new window)" [ref=f3e51] [cursor=pointer]:
+          - /url: https://support.google.com/accounts?hl=en-US&p=account_iph
+          - text: Help
+      - listitem [ref=f3e52]:
+        - link "Privacy Policy (external, opens in a new window)" [ref=f3e53] [cursor=pointer]:
+          - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US&privacy=true
+          - text: Privacy
+      - listitem [ref=f3e54]:
+        - link "Google Terms of Service (external, opens in a new window)" [ref=f3e55] [cursor=pointer]:
+          - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US
+          - text: Terms

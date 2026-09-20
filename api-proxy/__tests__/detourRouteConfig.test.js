@@ -6,16 +6,36 @@ describe('detour route config', () => {
     jest.resetModules();
   });
 
-  test('includes the confirmed Route 8A Downtown Hub terminal egress area', () => {
-    const { getRouteDetectorConfig } = require('../detourRouteConfig');
+  test('includes the confirmed Downtown Hub terminal egress without a route allowlist', () => {
+    const {
+      getRouteDetectorConfig,
+      KNOWN_TERMINAL_CIRCULATIONS,
+    } = require('../detourRouteConfig');
 
-    expect(getRouteDetectorConfig('8A', {}).ignoredRouteEdgeAreas).toEqual([{
-      label: 'Downtown Hub terminal egress',
+    expect(getRouteDetectorConfig('8A', {}).ignoredRouteEdgeAreas).toBeUndefined();
+    expect(getRouteDetectorConfig('100', {}).ignoredRouteEdgeAreas).toBeUndefined();
+    expect(KNOWN_TERMINAL_CIRCULATIONS).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: 'downtown-hub-stop-2-egress',
+      label: 'Downtown Hub Stop 2 terminal egress',
       edge: 'start',
-      center: { latitude: 44.387753, longitude: -79.690237 },
-      radiusMeters: 200,
+      terminalStopIds: ['2'],
       maxProgressMeters: 250,
-    }]);
+      maxDistanceMeters: 55,
+      polyline: expect.any(Array),
+    })]));
+  });
+
+  test('rejects terminal circulation config without stop IDs or a safe path', () => {
+    const { normalizeKnownTerminalCirculation } = require('../detourRouteConfig');
+
+    expect(normalizeKnownTerminalCirculation({
+      id: 'unsafe',
+      edge: 'start',
+      terminalStopIds: [],
+      polyline: [{ latitude: 44.38, longitude: -79.69 }],
+      maxProgressMeters: 250,
+      maxDistanceMeters: 50,
+    })).toBeNull();
   });
 
   test('parses configured detour corridors from route overrides', () => {

@@ -219,11 +219,22 @@ async function setBaselineRoutes(liveData, routeIds, options = {}) {
   const now = new Date().toISOString();
   const liveDocs = serializeShapes(liveData.shapes, liveData.routeShapeMapping);
   const db = getDb();
+  const removedRouteIds = [];
+  const updatedRouteIds = [];
 
   for (const routeId of normalizedRouteIds) {
     const doc = liveDocs[routeId];
     if (!doc) {
-      throw new Error(`Route ${routeId} was not found in live GTFS.`);
+      if (!baselineCache.routeShapeMapping.has(routeId)) {
+        throw new Error(`Route ${routeId} was not found in live GTFS or the stored baseline.`);
+      }
+
+      baselineCache.routeShapeMapping.delete(routeId);
+      removedRouteIds.push(routeId);
+      if (db) {
+        await db.collection(COLLECTION).doc(routeId).delete();
+      }
+      continue;
     }
 
     baselineCache.routeShapeMapping.set(routeId, doc.shapeIds || []);
@@ -241,6 +252,17 @@ async function setBaselineRoutes(liveData, routeIds, options = {}) {
     if (db) {
       await db.collection(COLLECTION).doc(routeId).set(doc);
     }
+    updatedRouteIds.push(routeId);
+  }
+
+  // Routes can share shape IDs. Rebuild the cache's shape set from all
+  // remaining route references so replacing or retiring one route removes
+  // only shapes that are genuinely orphaned.
+  const referencedShapeIds = new Set(
+    [...baselineCache.routeShapeMapping.values()].flatMap((shapeIds) => shapeIds || [])
+  );
+  for (const shapeId of [...baselineCache.shapes.keys()]) {
+    if (!referencedShapeIds.has(shapeId)) baselineCache.shapes.delete(shapeId);
   }
 
   baselineCache.loadedAt = now;
@@ -252,9 +274,12 @@ async function setBaselineRoutes(liveData, routeIds, options = {}) {
       source,
       routeCount: baselineCache.routeShapeMapping.size,
       shapeCount: countRouteShapes(baselineCache.routeShapeMapping),
-      updatedRoutes: normalizedRouteIds,
+      updatedRoutes: updatedRouteIds,
+      removedRoutes: removedRouteIds,
     });
   }
+
+  return { updatedRouteIds, removedRouteIds };
 }
 
 async function clearBaseline() {

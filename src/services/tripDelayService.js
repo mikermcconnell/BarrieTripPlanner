@@ -3,7 +3,12 @@
  * Applies real-time GTFS-RT delays to trip itineraries
  */
 
-import { fetchTripUpdates } from './arrivalService';
+import {
+  fetchTripUpdates,
+  getTripUpdateEntities,
+  isFreshTripUpdateFeed,
+  isTripUpdateEntityFresh,
+} from './arrivalService';
 import { formatMinutes } from './tripService';
 import {
   groupSimilarItinerariesForDisplay,
@@ -17,12 +22,16 @@ import logger from '../utils/logger';
 import { runBounded, throwIfAborted } from '../utils/requestControl';
 import { finiteNumber, isFreshTripUpdate, matchesTripInstance } from '../utils/realtimeTripMatching';
 import { isItineraryFeasible } from '../utils/itineraryFeasibility';
+import { normalizeServiceDate } from '../utils/serviceTime';
+import { ROUTING_CONFIG } from '../config/constants';
 
 const MISSED_DEPARTURE_LABEL = 'Likely departed';
 const MISSED_TRANSFER_LABEL = 'Missed transfer';
 const TIGHT_TRANSFER_LABEL = 'Tight transfer';
+const CANCELLED_TRIP_LABEL = 'Service cancelled';
+const SKIPPED_STOP_LABEL = 'Stop skipped';
 const DEFAULT_MISSED_DEPARTURE_GRACE_SECONDS = 60;
-const DEFAULT_VEHICLE_FRESHNESS_SECONDS = 15 * 60;
+const DEFAULT_VEHICLE_FRESHNESS_SECONDS = 5 * 60;
 const DEFAULT_TIGHT_TRANSFER_BUFFER_SECONDS = 2 * 60;
 const DEFAULT_WARN_TRANSFER_BUFFER_SECONDS = 5 * 60;
 const MISSED_TRANSFER_RANKING_PENALTY_SECONDS = 24 * 60 * 60;
@@ -40,16 +49,22 @@ const getNumericTime = (value, fallback = null) => (
   finiteNumber(value) ?? fallback
 );
 
-const getTripUpdateMap = (updates = []) => {
-  const map = new Map();
-  if (!Array.isArray(updates)) return map;
-  updates.forEach((entity) => {
-    const update = entity?.tripUpdate;
-    if (!update?.tripId || entity.isDeleted) return;
-    const key = String(update.tripId);
-    map.set(key, [...(map.get(key) || []), update]);
+const getTripUpdateMap = (feed = []) => {
+  const tripUpdateMap = new Map();
+
+  getTripUpdateEntities(feed).forEach((entity) => {
+    const tripUpdate = entity?.tripUpdate;
+    if (
+      !entity?.isDeleted &&
+      tripUpdate?.tripId &&
+      isTripUpdateEntityFresh(entity, feed)
+    ) {
+      const tripId = String(tripUpdate.tripId);
+      if (!tripUpdateMap.has(tripId)) tripUpdateMap.set(tripId, []);
+      tripUpdateMap.get(tripId).push({ ...tripUpdate, feedTimestamp: tripUpdate.feedTimestamp ?? feed?.headerTimestamp });
+    }
   });
-  return map;
+  return tripUpdateMap;
 };
 
 const endpointLeg = (leg, alighting = false) => alighting ? {
@@ -66,6 +81,8 @@ const getUpdateForLeg = (leg, map, options = {}, alighting = false) => {
     .filter((update) => matchesTripInstance(endpoint, update, nowMs))
     .sort((a, b) => (b.timestamp ?? b.feedTimestamp) - (a.timestamp ?? a.feedTimestamp))[0] || null;
 };
+
+const normalizeStartTime = (value) => String(value || '').trim() || null;
 
 const getBoardingStopSequence = (leg) => getNumericTime(
   leg?.boardingStopSequence, getNumericTime(leg?.from?.stopSequence, null)
@@ -121,10 +138,10 @@ const applyTransitDelayToLeg = (leg, map, options) => {
   const alightingUpdate = getUpdateForLeg(leg, map, options, true);
   const boarding = getStopTimeUpdateForLeg(leg, map, options);
   const alighting = getStopTimeUpdateForLeg(leg, map, options, true);
-  const cancelled = [boardingUpdate, alightingUpdate].some((update) => [3, 7].includes(update?.scheduleRelationship));
-  const skipped = [boarding, alighting].some((stop) => stop?.scheduleRelationship === 1);
-  const noBoardingData = boarding?.scheduleRelationship === 2;
-  const noAlightingData = alighting?.scheduleRelationship === 2;
+  const cancelled = [boardingUpdate, alightingUpdate].some((update) => [3, 7, 'CANCELED', 'DELETED'].includes(update?.scheduleRelationship));
+  const skipped = [boarding, alighting].some((stop) => [1, 'SKIPPED'].includes(stop?.scheduleRelationship));
+  const noBoardingData = [2, 'NO_DATA'].includes(boarding?.scheduleRelationship);
+  const noAlightingData = [2, 'NO_DATA'].includes(alighting?.scheduleRelationship);
   const boardingTime = !noBoardingData && !cancelled && !skipped
     ? eventTime(boarding?.departure, scheduledStartTime) ?? eventTime(boarding?.arrival, scheduledStartTime) : null;
   const arrivalTime = !noAlightingData && !cancelled && !skipped
@@ -223,17 +240,13 @@ const recalculateItinerarySummary = (itinerary, legs) => {
     ? Math.round((endTime - scheduledEndTime) / 1000)
     : totalDelaySeconds;
   const now = Date.now();
-  const departureDate = startTime != null ? new Date(startTime) : null;
-  const nowDate = new Date(now);
+  const departureServiceDate = startTime != null ? normalizeServiceDate(startTime) : null;
+  const currentServiceDate = normalizeServiceDate(now);
   const minutesUntilDeparture = startTime != null
     ? Math.max(0, Math.round((startTime - now) / 60000))
     : itinerary.minutesUntilDeparture;
-  const isTomorrow = departureDate
-    ? (
-        departureDate.getDate() !== nowDate.getDate() ||
-        departureDate.getMonth() !== nowDate.getMonth() ||
-        departureDate.getFullYear() !== nowDate.getFullYear()
-      )
+  const isTomorrow = departureServiceDate && currentServiceDate
+    ? departureServiceDate > currentServiceDate
     : itinerary.isTomorrow;
 
   return {
@@ -285,8 +298,18 @@ const findVehicleForLeg = (leg, vehicles, nowMs, options = {}) => {
   if (!isTransitLeg(leg) || !Array.isArray(vehicles) || vehicles.length === 0) return null;
 
   const freshnessSeconds = options.vehicleFreshnessSeconds ?? DEFAULT_VEHICLE_FRESHNESS_SECONDS;
+  const legServiceDate = normalizeServiceDate(leg?.serviceDate);
+  const legStartTime = normalizeStartTime(leg?.tripStartTime);
   const matchingVehicles = vehicles
     .filter((vehicle) => String(vehicle?.tripId || '') === String(leg.tripId))
+    .filter((vehicle) => {
+      const vehicleServiceDate = normalizeServiceDate(vehicle?.startDate);
+      if (legServiceDate && vehicleServiceDate && legServiceDate !== vehicleServiceDate) {
+        return false;
+      }
+      const vehicleStartTime = normalizeStartTime(vehicle?.startTime);
+      return !(legStartTime && vehicleStartTime && legStartTime !== vehicleStartTime);
+    })
     .filter((vehicle) => isFreshVehicle(vehicle, nowMs, freshnessSeconds))
     .filter((vehicle) => matchesTripInstance(leg, vehicle, nowMs))
     .sort((a, b) => (getVehicleTimestampMs(b) || 0) - (getVehicleTimestampMs(a) || 0));
@@ -421,7 +444,8 @@ const getTransferRiskInfo = (itinerary, options = {}) => {
 
     const transferWalkSeconds = getTransferWalkSeconds(legs, previousEntry.index, nextEntry.index);
     const windowSeconds = Math.round((nextStart - previousEnd) / 1000);
-    const bufferSeconds = windowSeconds - transferWalkSeconds;
+    const bufferSeconds =
+      windowSeconds - transferWalkSeconds - (ROUTING_CONFIG.MIN_TRANSFER_TIME || 0);
     let status = null;
 
     if (bufferSeconds < 0) {
@@ -468,13 +492,76 @@ const markTransferRisk = (itinerary, options = {}) => {
   };
 };
 
+const normalizeScheduleRelationship = (relationship, type) => {
+  if (typeof relationship === 'string') return relationship.toUpperCase();
+  const numeric = getNumericTime(relationship, 0);
+  if (type === 'trip') {
+    return ({ 0: 'SCHEDULED', 3: 'CANCELED', 7: 'DELETED' })[numeric] || String(numeric);
+  }
+  return ({ 0: 'SCHEDULED', 1: 'SKIPPED', 2: 'NO_DATA', 3: 'UNSCHEDULED' })[numeric] || String(numeric);
+};
+
+const getServiceDisruptionInfo = (itinerary, tripUpdateMap) => {
+  const transitLegs = Array.isArray(itinerary?.legs) ? itinerary.legs.filter(isTransitLeg) : [];
+
+  for (const leg of transitLegs) {
+    const update = getUpdateForLeg(leg, tripUpdateMap);
+    if (!update) continue;
+
+    const tripRelationship = normalizeScheduleRelationship(update.scheduleRelationship, 'trip');
+    if (tripRelationship === 'CANCELED' || tripRelationship === 'DELETED') {
+      return {
+        type: 'trip_cancelled',
+        tripId: leg.tripId,
+        routeId: leg.routeId || leg.route?.id || null,
+        routeShortName: getLegRouteLabel(leg),
+      };
+    }
+
+    const requiredStops = [
+      { point: 'boarding', stop: leg.from },
+      { point: 'alighting', stop: leg.to },
+    ];
+    for (const requiredStop of requiredStops) {
+      const stopUpdate = getStopTimeUpdateForLeg(leg, tripUpdateMap, {}, requiredStop.point === 'alighting');
+      if (normalizeScheduleRelationship(stopUpdate?.scheduleRelationship, 'stop') === 'SKIPPED') {
+        return {
+          type: 'stop_skipped',
+          tripId: leg.tripId,
+          routeId: leg.routeId || leg.route?.id || null,
+          routeShortName: getLegRouteLabel(leg),
+          stopId: requiredStop.stop?.stopId || stopUpdate?.stopId || null,
+          stopName: requiredStop.stop?.name || null,
+          point: requiredStop.point,
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
+const markServiceDisruption = (itinerary, tripUpdateMap) => {
+  const realtimeServiceDisruption = getServiceDisruptionInfo(itinerary, tripUpdateMap);
+  if (!realtimeServiceDisruption) return itinerary;
+
+  return {
+    ...itinerary,
+    hasRealtimeServiceDisruption: true,
+    realtimeServiceDisruption,
+    recommendationEligible: false,
+  };
+};
+
 const withoutRecommendedLabel = (labels) => {
   if (!Array.isArray(labels)) return [];
   return labels.filter((label) => (
     label !== 'Recommended' &&
     label !== MISSED_DEPARTURE_LABEL &&
     label !== MISSED_TRANSFER_LABEL &&
-    label !== TIGHT_TRANSFER_LABEL
+    label !== TIGHT_TRANSFER_LABEL &&
+    label !== CANCELLED_TRIP_LABEL &&
+    label !== SKIPPED_STOP_LABEL
   ));
 };
 
@@ -487,7 +574,20 @@ const isWalkingOnlyItinerary = (itinerary) => (
   )
 );
 
+const getItineraryOperatingDate = (itinerary) => normalizeServiceDate(
+  itinerary?.scheduledStartTime ?? itinerary?.startTime
+);
+
+const withRealtimeStatus = (itinerary, status, feed = null) => ({
+  ...itinerary,
+  realtimeStatus: status,
+  realtimeFeedAgeMs: Number.isFinite(Number(feed?.ageMs)) ? Number(feed.ageMs) : null,
+  realtimeCheckedAt: feed?.checkedAt || Date.now(),
+  ...(status === 'live' ? {} : { hasRealtimeInfo: false }),
+});
+
 const getLiveRiskPenaltySeconds = (itinerary) => (
+  (itinerary.hasRealtimeServiceDisruption ? MISSED_TRANSFER_RANKING_PENALTY_SECONDS : 0) ||
   itinerary.transferRiskPenaltySeconds ||
   (itinerary.hasMissedDeparture ? MISSED_TRANSFER_RANKING_PENALTY_SECONDS : 0)
 );
@@ -496,6 +596,8 @@ const refreshRecommendedLabels = (itineraries) => groupSimilarItinerariesForDisp
   rankItinerariesForRider(itineraries)
     .sort((a, b) => (
       Number(!isItineraryFeasible(a)) - Number(!isItineraryFeasible(b)) ||
+      Number(Boolean(a.hasRealtimeServiceDisruption)) -
+        Number(Boolean(b.hasRealtimeServiceDisruption)) ||
       Number(Boolean(a.hasMissedDeparture || a.hasMissedTransfer)) -
         Number(Boolean(b.hasMissedDeparture || b.hasMissedTransfer)) ||
       (a.riderRankingCostSeconds + getLiveRiskPenaltySeconds(a)) -
@@ -509,6 +611,7 @@ const refreshRecommendedLabels = (itineraries) => groupSimilarItinerariesForDisp
     const shouldRecommend =
       index === 0 &&
       isItineraryFeasible(itinerary) &&
+      !itinerary.hasRealtimeServiceDisruption &&
       !itinerary.hasMissedDeparture &&
       !itinerary.hasMissedTransfer &&
       !itinerary.legs?.some((leg) => leg.realtimeUnavailable) &&
@@ -517,6 +620,11 @@ const refreshRecommendedLabels = (itineraries) => groupSimilarItinerariesForDisp
       !itinerary.hasLongWait &&
       (!itinerary.hasHighWalk || isWalkingOnlyItinerary(itinerary));
     const labels = withoutRecommendedLabel(itinerary.labels);
+    if (itinerary.realtimeServiceDisruption?.type === 'trip_cancelled') {
+      labels.unshift(CANCELLED_TRIP_LABEL);
+    } else if (itinerary.realtimeServiceDisruption?.type === 'stop_skipped') {
+      labels.unshift(SKIPPED_STOP_LABEL);
+    }
     if (itinerary.hasMissedDeparture) {
       labels.unshift(MISSED_DEPARTURE_LABEL);
     }
@@ -555,18 +663,48 @@ export const applyDelaysToItinerary = async (itinerary, tripUpdates = null, opti
     }
   }
 
+  const operatingDate = getItineraryOperatingDate(itinerary);
+  const currentAgencyDate = normalizeServiceDate(new Date(options.nowMs ?? Date.now()));
+  if (
+    operatingDate &&
+    currentAgencyDate &&
+    operatingDate > currentAgencyDate
+  ) {
+    updates = [];
+    options = { ...options, vehicles: [] };
+  }
+
+  if (!isFreshTripUpdateFeed(updates)) {
+    const fallbackStatus = ['stale', 'unavailable'].includes(updates?.status)
+      ? updates.status
+      : 'unavailable';
+    const scheduled = await applyDelaysToItinerary(itinerary, [], options);
+    return withRealtimeStatus(scheduled, fallbackStatus, updates);
+  }
+
   const tripUpdateMap = getTripUpdateMap(updates);
 
   const delayedLegs = itinerary.legs.map((leg) => applyTransitDelayToLeg(leg, tripUpdateMap, options));
   const updatedLegs = realignWalkLegs(delayedLegs);
+  const disruptionAwareItinerary = markServiceDisruption(
+    recalculateItinerarySummary({ ...itinerary, hasMissedDeparture: false, missedDeparture: null, hasMissedTransfer: false, hasTightTransfer: false, transferRisk: null, transferRiskPenaltySeconds: 0, hasRealtimeServiceDisruption: false, realtimeServiceDisruption: null }, updatedLegs),
+    tripUpdateMap
+  );
 
-  return markTransferRisk(
+  const liveAwareItinerary = markTransferRisk(
     markMissedDeparture(
-      recalculateItinerarySummary({ ...itinerary, hasMissedDeparture: false, missedDeparture: null, hasMissedTransfer: false, hasTightTransfer: false, transferRisk: null, transferRiskPenaltySeconds: 0 }, updatedLegs),
+      disruptionAwareItinerary,
       tripUpdateMap,
       options
     ),
     options
+  );
+  return withRealtimeStatus(
+    liveAwareItinerary,
+    liveAwareItinerary.hasRealtimeInfo || liveAwareItinerary.hasRealtimeServiceDisruption
+      ? 'live'
+      : 'scheduled',
+    updates
   );
 };
 
@@ -597,7 +735,13 @@ export const applyDelaysToItineraries = async (itineraries, options = {}) => {
     itineraries.map((itinerary) => applyDelaysToItinerary(itinerary, tripUpdates, options))
   );
 
-  return refreshRecommendedLabels(updatedItineraries);
+  const viableItineraries = updatedItineraries.filter(
+    (itinerary) => !itinerary.hasRealtimeServiceDisruption
+  );
+
+  return refreshRecommendedLabels(
+    viableItineraries.length > 0 ? viableItineraries : updatedItineraries
+  );
 };
 
 /**

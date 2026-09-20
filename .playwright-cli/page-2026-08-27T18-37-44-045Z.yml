@@ -1,0 +1,74 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e5352]:
+        - generic [ref=e5354]:
+          - paragraph [ref=e5355]: TripPlan
+          - heading "More" [level=1] [ref=e5356]
+          - paragraph [ref=e5357]: Tools and settings for Dublin, Northern Ireland & England.
+        - generic [ref=e5358]:
+          - generic "Trip tools" [ref=e5359]:
+            - button "Files 25 saved" [ref=e5360]:
+              - generic [ref=e5368]:
+                - text: Files
+                - generic [ref=e5369]: 25 saved
+            - button "Share Invite people" [ref=e5370]:
+              - generic [ref=e5378]:
+                - text: Share
+                - generic [ref=e5379]: Invite people
+            - button "Trips Switch trip" [ref=e5380]:
+              - generic [ref=e5390]:
+                - text: Trips
+                - generic [ref=e5391]: Switch trip
+            - button "Places Add or edit" [ref=e5392]:
+              - generic [ref=e5402]:
+                - text: Places
+                - generic [ref=e5403]: Add or edit
+          - button "Trip settings Dates, destination, and people" [ref=e5404]:
+            - generic [ref=e5410]:
+              - text: Trip settings
+              - generic [ref=e5411]: Dates, destination, and people
+          - generic [ref=e5412]:
+            - text: Search this trip
+            - textbox "Search this trip" [ref=e5414]:
+              - /placeholder: Plans, places, files, notes...
+          - generic [ref=e5415]:
+            - generic [ref=e5416]:
+              - generic [ref=e5417]:
+                - heading "Needs attention" [level=2] [ref=e5418]
+                - paragraph [ref=e5419]: Details that may need a decision.
+              - generic [ref=e5420]: "4"
+            - generic [ref=e5421]:
+              - article [ref=e5422]:
+                - generic [ref=e5423]:
+                  - heading "Georgian Quarter wander missing ticket" [level=3] [ref=e5424]
+                  - paragraph [ref=e5425]: Sat, Sep 5 · Attach a confirmation, ticket, or link
+                - button "Fix" [ref=e5426]
+              - article [ref=e5427]:
+                - generic [ref=e5428]:
+                  - heading "Kilmainham Gaol needs info" [level=3] [ref=e5429]
+                  - paragraph [ref=e5430]: Sun, Sep 6 · Book ahead; guided tour only and sells out weeks in advance.
+                - button "Fix" [ref=e5431]
+              - article [ref=e5432]:
+                - generic [ref=e5433]:
+                  - heading "Guinness Storehouse needs info" [level=3] [ref=e5434]
+                  - paragraph [ref=e5435]: Sun, Sep 6 · Main Sunday morning activity; allow about 2 hours.
+                - button "Fix" [ref=e5436]
+              - article [ref=e5437]:
+                - generic [ref=e5438]:
+                  - heading "Dark Hedges stop missing ticket" [level=3] [ref=e5439]
+                  - paragraph [ref=e5440]: Mon, Sep 7 · Attach a confirmation, ticket, or link
+                - button "Fix" [ref=e5441]
+          - group [ref=e5442]:
+            - generic "Add from text Paste a confirmation or travel note" [ref=e5443] [cursor=pointer]:
+              - generic [ref=e5450]:
+                - generic [ref=e5451]: Add from text
+                - generic [ref=e5452]: Paste a confirmation or travel note
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

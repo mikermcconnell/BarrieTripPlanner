@@ -1,0 +1,252 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [active] [selected] [ref=e264] [cursor=pointer]
+  - generic [ref=e300]:
+    - generic [ref=e2805]:
+      - generic [ref=e3262]:
+        - region [ref=e3263]
+        - button [ref=e3264] [cursor=pointer]:
+          - generic [ref=e2810]: "364"
+        - button [ref=e3265] [cursor=pointer]:
+          - generic [ref=e2815]: "365"
+        - button [ref=e3266] [cursor=pointer]:
+          - generic [ref=e2820]: "366"
+        - button [ref=e3267] [cursor=pointer]:
+          - generic [ref=e2825]: "367"
+        - button [ref=e3268] [cursor=pointer]:
+          - generic [ref=e2830]: "744"
+        - button [ref=e3269] [cursor=pointer]:
+          - generic [ref=e2835]: "745"
+        - button [ref=e3270] [cursor=pointer]:
+          - generic [ref=e2840]: "746"
+        - button [ref=e3271] [cursor=pointer]:
+          - generic [ref=e2845]: "747"
+        - button [ref=e3272] [cursor=pointer]:
+          - generic [ref=e2850]: "805"
+        - button [ref=e3273] [cursor=pointer]:
+          - generic [ref=e2855]: "808"
+        - button [ref=e3274] [cursor=pointer]:
+          - generic [ref=e2860]: "809"
+        - button [ref=e3275] [cursor=pointer]:
+          - generic [ref=e2865]: "812"
+        - button [ref=e3276] [cursor=pointer]:
+          - generic [ref=e2870]: "880"
+        - button [ref=e3277] [cursor=pointer]:
+          - generic [ref=e2875]: "881"
+        - button [ref=e3278] [cursor=pointer]:
+          - generic [ref=e2880]: "977"
+        - button [ref=e3279] [cursor=pointer]:
+          - generic [ref=e2885]: "978"
+        - button [ref=e3280] [cursor=pointer]:
+          - generic [ref=e2890]: "979"
+        - button [ref=e3281] [cursor=pointer]:
+          - generic [ref=e2895]: "986"
+        - button [ref=e3282] [cursor=pointer]:
+          - generic [ref=e2900]: "510"
+        - button [ref=e3283] [cursor=pointer]:
+          - generic [ref=e2905]: "336"
+        - button [ref=e3284] [cursor=pointer]:
+          - generic [ref=e2910]: "265"
+        - button [ref=e3285] [cursor=pointer]:
+          - generic [ref=e3286]: "959"
+        - button [ref=e3287] [cursor=pointer]:
+          - generic [ref=e3288]: "142"
+        - button [ref=e3289] [cursor=pointer]:
+          - generic [ref=e2931]: 8A
+        - button [ref=e3290] [cursor=pointer]:
+          - generic [ref=e2937]: 8A
+        - button [ref=e3291] [cursor=pointer]:
+          - generic [ref=e2943]: "100"
+        - button [ref=e3292] [cursor=pointer]:
+          - generic [ref=e2949]: "10"
+        - button [ref=e3293] [cursor=pointer]:
+          - generic [ref=e2955]: 7A
+        - button [ref=e3294] [cursor=pointer]:
+          - generic [ref=e2961]: 7B
+        - button [ref=e3295] [cursor=pointer]:
+          - generic [ref=e2967]: 2B
+        - button [ref=e3296] [cursor=pointer]:
+          - generic [ref=e2973]: "11"
+        - button [ref=e3297] [cursor=pointer]:
+          - generic [ref=e2979]: 12A
+        - button [ref=e3298] [cursor=pointer]:
+          - generic [ref=e2985]: 12B
+        - button [ref=e3299] [cursor=pointer]:
+          - generic [ref=e2991]: "400"
+        - button [ref=e3300] [cursor=pointer]:
+          - generic [ref=e2997]: "101"
+        - button [ref=e3301] [cursor=pointer]:
+          - generic [ref=e3003]: 8A
+        - button [ref=e3302] [cursor=pointer]:
+          - generic [ref=e3009]: 8B
+        - button [ref=e3303] [cursor=pointer]:
+          - generic [ref=e3015]: 8B
+        - button [ref=e3304] [cursor=pointer]:
+          - generic [ref=e3021]: "100"
+        - button [ref=e3305] [cursor=pointer]:
+          - generic [ref=e3027]: 2A
+        - button [ref=e3306] [cursor=pointer]:
+          - generic [ref=e3033]: 8B
+        - button [ref=e3307] [cursor=pointer]:
+          - generic [ref=e3039]: 8A
+        - button [ref=e3308] [cursor=pointer]:
+          - generic [ref=e3045]: 8A
+        - button [ref=e3309] [cursor=pointer]:
+          - generic [ref=e3051]: "10"
+        - button [ref=e3310] [cursor=pointer]:
+          - generic [ref=e3057]: 7A
+        - button [ref=e3311] [cursor=pointer]:
+          - generic [ref=e3063]: 15B
+        - button [ref=e3312] [cursor=pointer]:
+          - generic [ref=e3069]: 7B
+        - button [ref=e3313] [cursor=pointer]:
+          - generic [ref=e3075]: 2B
+        - button [ref=e3314] [cursor=pointer]:
+          - generic [ref=e3081]: "11"
+        - button [ref=e3315] [cursor=pointer]:
+          - generic [ref=e3087]: "101"
+        - button [ref=e3316] [cursor=pointer]:
+          - generic [ref=e3093]: 12A
+        - button [ref=e3317] [cursor=pointer]:
+          - generic [ref=e3099]: 8B
+        - button [ref=e3318] [cursor=pointer]:
+          - generic [ref=e3105]: "400"
+        - button [ref=e3319] [cursor=pointer]:
+          - generic [ref=e3111]: 8B
+        - img [ref=e3320]:
+          - generic: Barrie Allandale Hub
+        - img [ref=e3321]:
+          - generic: Downtown Hub
+        - img [ref=e3322]:
+          - generic: Park Place
+        - img [ref=e3323]:
+          - generic: Georgian College
+        - img [ref=e3324]:
+          - generic: Barrie South GO
+        - group [ref=e3124]:
+          - generic [ref=e3328] [cursor=pointer]
+          - generic [ref=e3126]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link [ref=e3329] [cursor=pointer]:
+              - /url: https://maplibre.org/
+              - text: MapLibre
+      - generic [ref=e3130]:
+        - textbox [ref=e3330]:
+          - /placeholder: Where to?
+        - generic [ref=e3135]: LIVE
+      - button [ref=e3332] [cursor=pointer]:
+        - generic [ref=e3175]: "Active detours: 2 locations"
+        - generic [ref=e3177]:
+          - generic [ref=e3178]: 12B
+          - generic [ref=e3180]: 8B
+        - generic [ref=e3182]: ▼
+      - button [ref=e3333] [cursor=pointer]:
+        - generic [ref=e3184]: i
+        - generic [ref=e3186]:
+          - generic [ref=e3187]: 4 official detour notices
+          - generic [ref=e3188]: Mapleview Detour and Shuttle
+          - generic [ref=e3189]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e3190]:
+          - generic [ref=e3191]: 12B
+          - generic [ref=e3193]: "15"
+        - button [ref=e3334]:
+          - generic [ref=e3196]: ×
+      - generic [ref=e3197] [cursor=pointer]:
+        - button [ref=e3335]:
+          - generic [ref=e3203]:
+            - generic [ref=e3204]: LIVE MAP FEATURE
+            - generic [ref=e3205]: Auto Detour Detector
+            - generic [ref=e3206]: See how it works
+          - generic [ref=e3207]: ›
+        - button [ref=e3336]:
+          - generic [ref=e3209]: −
+      - button [ref=e3337] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button [ref=e3338] [cursor=pointer]:
+        - generic [ref=e3259]: Map options
+        - generic [ref=e3260]: "2"
+    - generic [ref=e3348]:
+      - generic [ref=e3349]: Profile
+      - generic [ref=e3351]:
+        - generic [ref=e3366]:
+          - generic [ref=e3367]: You're not signed in
+          - generic [ref=e3368]: Sign in to save your transit
+          - generic [ref=e3369]: Save places, trips, stops, and routes across devices.
+        - generic [ref=e3370] [cursor=pointer]: Sign In
+      - generic [ref=e3399]:
+        - generic [ref=e3400]: Help shape MyBarrie Transit
+        - generic [ref=e3401]: This app is new and we're actively improving it. Tell us what's working, what's confusing, or what you'd like to see next.
+        - generic [ref=e3402] [cursor=pointer]: Share app feedback
+      - generic [ref=e3404]:
+        - generic [ref=e3405]: Your transit
+        - generic [ref=e3406]:
+          - generic [ref=e3407] [cursor=pointer]:
+            - generic [ref=e3434]:
+              - generic [ref=e3435]: My Transit
+              - generic [ref=e3436]: No saved transit yet
+            - generic [ref=e3437]: ›
+          - generic [ref=e3438] [cursor=pointer]:
+            - generic [ref=e3528]:
+              - generic [ref=e3529]: Trip History
+              - generic [ref=e3530]: 1 recent trip
+            - generic [ref=e3531]: ›
+      - generic [ref=e3532]:
+        - generic [ref=e3533]: Updates
+        - generic [ref=e3535] [cursor=pointer]:
+          - generic [ref=e3569]:
+            - generic [ref=e3570]: Service Alerts
+            - generic [ref=e3571]: Latest Barrie Transit updates
+          - generic [ref=e3572]: ›
+      - generic [ref=e3573]:
+        - generic [ref=e3574]: App
+        - generic [ref=e3575]:
+          - generic [ref=e3576] [cursor=pointer]:
+            - generic [ref=e3623]:
+              - generic [ref=e3624]: Settings
+              - generic [ref=e3625]: App preferences
+            - generic [ref=e3626]: ›
+          - generic [ref=e3627] [cursor=pointer]:
+            - generic [ref=e3676]:
+              - generic [ref=e3677]: Help & Support
+              - generic [ref=e3678]: FAQ and contact
+            - generic [ref=e3679]: ›
+          - generic [ref=e3680] [cursor=pointer]:
+            - generic [ref=e3735]:
+              - generic [ref=e3736]: About
+              - generic [ref=e3737]: Version 1.0.9
+            - generic [ref=e3738]: ›
+          - generic [ref=e3739] [cursor=pointer]:
+            - generic [ref=e3766]:
+              - generic [ref=e3767]: Transit network feedback
+              - generic [ref=e3768]: Routes, stops, schedules, and service
+            - generic [ref=e3769]: ›
+          - generic [ref=e3770] [cursor=pointer]:
+            - generic [ref=e3819]:
+              - generic [ref=e3820]: App feedback
+              - generic [ref=e3821]: Bugs, usability, or app ideas
+            - generic [ref=e3822]: ›
+      - generic [ref=e3823]:
+        - generic [ref=e3824]: MyBarrie Transit
+        - generic [ref=e3825]: Version 1.0.9
+        - generic [ref=e3826]: © 2026 Barrie Transit

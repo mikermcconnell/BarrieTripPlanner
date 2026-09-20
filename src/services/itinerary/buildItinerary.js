@@ -4,8 +4,8 @@ import { buildTransitLegGeometry } from './buildTransitLegGeometry';
 import { calculateLegDistance } from './calculateLegDistance';
 import { getIntermediateStops } from './getIntermediateStops';
 import { mergeTransitLegs } from './mergeTransitLegs';
-import { formatGTFSDate } from '../calendarService';
 import { getServiceDayStartMs } from '../../utils/gtfsServiceTime';
+import { normalizeServiceDate } from '../../utils/serviceTime';
 
 const buildWalkLeg = ({ startTime, endTime, duration, distance, from, to }) => {
   const roundedDistance = Math.round(distance);
@@ -122,15 +122,15 @@ const getRouteInfo = (routingData, routeId) => {
 export const buildItinerary = (result, routingData, tripInfo) => {
   const { path, arrivalTime, walkToDestSeconds, destinationStopId } = result;
   const { stopIndex, tripIndex } = routingData;
-  const { fromLat, fromLon, toLat, toLon, date, arriveBy = false } = tripInfo;
+  const { fromLat, fromLon, toLat, toLon, date, serviceDate, arriveBy = false } = tripInfo;
 
   const legs = [];
   let totalWalkTime = 0;
   let totalWaitTime = 0;
   let totalWalkDistance = 0;
 
-  const baseTime = new Date(date);
-  const baseTimestamp = getServiceDayStartMs(date);
+  const itineraryServiceDate = normalizeServiceDate(serviceDate || date);
+  const baseTimestamp = getServiceDayStartMs(itineraryServiceDate);
 
   let lastEndTime = null;
 
@@ -227,11 +227,11 @@ export const buildItinerary = (result, routingData, tripInfo) => {
         },
         headsign: segment.headsign,
         tripId: segment.tripId,
-        serviceDate: formatGTFSDate(baseTime),
         boardingStopSequence: segment.boardingStopSequence,
         alightingStopSequence: segment.alightingStopSequence,
         directionId: segment.directionId ?? trip?.directionId,
         blockId: trip?.blockId || segment.blockId || null,
+        serviceDate: itineraryServiceDate,
         intermediateStops,
         shapes: routingData.shapes,
         tripIndex,
@@ -333,6 +333,7 @@ export const buildItinerary = (result, routingData, tripInfo) => {
     walkDistance: Math.round(totalWalkDistance),
     transfers: recalcTransfers,
     arriveBy,
+    serviceDate: itineraryServiceDate,
     legs: mergedLegs,
   };
 };

@@ -35,7 +35,13 @@ import { useDisplayedEntities } from '../hooks/useDisplayedEntities';
 import { useDismissedOfficialImpacts } from '../hooks/useDismissedOfficialImpacts';
 import TripBottomSheet from '../components/TripBottomSheet';
 import { applyDelaysToItineraries } from '../services/tripDelayService';
-import { fetchTripUpdates } from '../services/arrivalService';
+import {
+  fetchTripUpdates,
+  getTripUpdateEntities,
+  isFreshTripUpdateFeed,
+  isTripUpdateEntityFresh,
+} from '../services/arrivalService';
+import { applyItineraryAvailabilityPolicy } from '../utils/itineraryAvailabilityPolicy';
 import logger from '../utils/logger';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { getDetourOverlayRouteIds, useDetourOverlays } from '../hooks/useDetourOverlays';
@@ -122,6 +128,7 @@ import {
   getDetourEventSegmentIndexForRoute,
 } from '../utils/detourExplorerSelection';
 import { prepareItineraryForNavigation } from '../services/navigationRecalculationService';
+import { sharedTripFirestoreService } from '../services/firebase/sharedTripFirestoreService';
 import { trackEvent } from '../services/analyticsService';
 import { getOneWayRouteArrowVisibility } from '../utils/oneWayRoutes';
 import { getMapChromeOffsets, getRouteFilterPanelStyle, isWideWebViewport } from '../utils/webLayout';
@@ -456,6 +463,7 @@ const buildSavedPlaceMarkerHtml = (marker) => {
 const HomeScreen = ({ route }) => {
   const mapRef = useRef(null);
   const navigation = useNavigation();
+  const [sharedTripEdit, setSharedTripEdit] = useState(null);
   const { width } = useWindowDimensions();
   const isWideWeb = isWideWebViewport({ platform: 'web', width });
   const {
@@ -769,8 +777,21 @@ const HomeScreen = ({ route }) => {
       const requestId = ++latestRequest;
       try {
         const updates = await fetchTripUpdates();
-        const tripUpdate = updates.find(
-          (entity) => String(entity?.tripUpdate?.tripId) === String(selectedVehicle.tripId)
+        const tripUpdate = (isFreshTripUpdateFeed(updates) ? getTripUpdateEntities(updates) : []).find(
+          (entity) => (
+            isTripUpdateEntityFresh(entity, updates) &&
+            String(entity?.tripUpdate?.tripId) === String(selectedVehicle.tripId) &&
+            (
+              !entity?.tripUpdate?.startDate ||
+              !selectedVehicle.startDate ||
+              String(entity.tripUpdate.startDate) === String(selectedVehicle.startDate)
+            ) &&
+            (
+              !entity?.tripUpdate?.startTime ||
+              !selectedVehicle.startTime ||
+              String(entity.tripUpdate.startTime) === String(selectedVehicle.startTime)
+            )
+          )
         )?.tripUpdate || null;
         if (active && requestId === latestRequest) setSelectedVehicleTripUpdate(tripUpdate);
       } catch (error) {
@@ -785,7 +806,7 @@ const HomeScreen = ({ route }) => {
       active = false;
       clearInterval(refreshInterval);
     };
-  }, [selectedVehicle?.tripId]);
+  }, [selectedVehicle?.tripId, selectedVehicle?.startDate, selectedVehicle?.startTime]);
 
   const routeColorByRouteId = useMemo(
     () => Object.fromEntries((routes || []).filter((route) => route?.id).map((route) => [route.id, getRouteColor(route.id)])),
@@ -1061,6 +1082,8 @@ const HomeScreen = ({ route }) => {
     showToSuggestions,
     isTypingFrom,
     isTypingTo,
+    fromSearchError,
+    toSearchError,
     timeMode,
     selectedTime,
   } = tripState;
@@ -1091,23 +1114,9 @@ const HomeScreen = ({ route }) => {
     : null;
   const showHolidayNotice = Boolean(visibleHomeHolidayServiceInfo);
 
-  const {
-    tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
-    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
-  } = useTripVisualization({
-    isTripPlanningMode,
-    itineraries,
-    selectedItineraryIndex,
-    vehicles,
-    shapes,
-    routeShapeMapping,
-    tripMapping,
-    tripFrom: tripFromLocation,
-    tripTo: tripToLocation,
-  });
-  const itinerariesWithStopClosureNotices = useMemo(() => {
+  const annotatedItineraries = useMemo(() => {
     const detourAwareItineraries = annotateItinerariesWithDetours(
-      itineraries,
+      itineraries.map((itinerary, plannerIndex) => ({ ...itinerary, plannerIndex })),
       detoursEnabled ? activeDetours : {},
       detourStopDetailsByRouteId,
       visibleOfficialServiceImpacts
@@ -1121,9 +1130,34 @@ const HomeScreen = ({ route }) => {
     transitNewsImpacts,
     visibleOfficialServiceImpacts,
   ]);
+  const itineraryAvailability = useMemo(
+    () => applyItineraryAvailabilityPolicy(annotatedItineraries),
+    [annotatedItineraries]
+  );
+  const itinerariesWithStopClosureNotices = itineraryAvailability.itineraries;
+  const displaySelectedItineraryIndex = Math.max(0, itinerariesWithStopClosureNotices.findIndex(
+    (itinerary) => itinerary.plannerIndex === selectedItineraryIndex
+  ));
   const selectedItinerary = isTripPlanningMode
-    ? itinerariesWithStopClosureNotices[selectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
+    ? itinerariesWithStopClosureNotices[displaySelectedItineraryIndex] ?? itinerariesWithStopClosureNotices[0] ?? null
     : null;
+  const {
+    tripRouteCoordinates, tripMarkers, tripEndpointMarkers, intermediateStopMarkers,
+    boardingAlightingMarkers, transferMarkers, tripVehicles, busApproachLines,
+  } = useTripVisualization({
+    isTripPlanningMode,
+    itineraries: itinerariesWithStopClosureNotices,
+    selectedItineraryIndex: displaySelectedItineraryIndex,
+    vehicles,
+    shapes,
+    routeShapeMapping,
+    tripMapping,
+    tripFrom: tripFromLocation,
+    tripTo: tripToLocation,
+  });
+  const busApproachViewportCoordinates = useMemo(() => (
+    busApproachLines.flatMap((line) => (Array.isArray(line?.coordinates) ? line.coordinates : []))
+  ), [busApproachLines]);
   const isTripPreviewMode = isTripPlanningMode && Boolean(selectedItinerary);
   const shouldCompactTripSearchHeader =
     hasTripSearched && !isTripLoading && itinerariesWithStopClosureNotices.length > 0;
@@ -1218,22 +1252,39 @@ const HomeScreen = ({ route }) => {
   }, [enterPlanningMode, showMessage, touchSavedTrip, setTripFrom, setTripTo, searchTrips]);
 
   const handleSaveCurrentTrip = useCallback(async () => {
-    if (!isAuthenticated) {
-      showMessage('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
-      return;
-    }
     const payload = buildSavedTripPayload({
       from: { ...tripFromLocation, name: tripFromText || 'Start' },
       to: { ...tripToLocation, name: tripToText || 'Destination' },
-      itinerary: itineraries?.[selectedItineraryIndex] || itineraries?.[0] || null,
+      itinerary: selectedItinerary,
     });
     if (!payload) {
       showMessage('Trip not ready', 'Choose a valid origin and destination before saving this trip.');
       return;
     }
+
+    if (sharedTripEdit?.shareId) {
+      const sharedResult = await sharedTripFirestoreService.updateSharedTrip(
+        sharedTripEdit.shareId,
+        payload,
+        sharedTripEdit.revision
+      );
+      if (!sharedResult.success) {
+        showMessage('Could not update shared trip', sharedResult.error || 'Open the latest shared trip and try again.');
+        return;
+      }
+      await addSavedTrip(payload);
+      setSharedTripEdit(null);
+      showMessage('Shared trip updated', 'Everyone with the link will see this version.');
+      navigation.getParent()?.navigate('Profile', {
+        screen: 'SharedTrip',
+        params: { shareId: sharedTripEdit.shareId },
+      });
+      return;
+    }
+
     const result = await addSavedTrip(payload);
     showMessage(result?.success ? 'Trip saved' : 'Could not save trip', result?.success ? `${payload.name} is now in My Transit.` : (result?.error || 'Please try again.'));
-  }, [addSavedTrip, isAuthenticated, itineraries, selectedItineraryIndex, showMessage, tripFromLocation, tripFromText, tripToLocation, tripToText]);
+  }, [addSavedTrip, navigation, selectedItinerary, sharedTripEdit, showMessage, tripFromLocation, tripFromText, tripToLocation, tripToText]);
 
   const handleSavePlace = useCallback(async (location, text, label = 'Saved place', labelType = 'custom') => {
     if (!isAuthenticated) {
@@ -1281,6 +1332,14 @@ const HomeScreen = ({ route }) => {
     handleSelectSavedTrip(tripToPlan);
     navigation.setParams({ savedTripToPlan: undefined });
   }, [route?.params?.savedTripToPlan, handleSelectSavedTrip, navigation]);
+
+  useEffect(() => {
+    const tripToEdit = route?.params?.sharedTripToEdit;
+    if (!tripToEdit?.shareId || !tripToEdit?.trip) return;
+    setSharedTripEdit({ shareId: tripToEdit.shareId, revision: tripToEdit.revision });
+    handleSelectSavedTrip(tripToEdit.trip);
+    navigation.setParams({ sharedTripToEdit: undefined });
+  }, [route?.params?.sharedTripToEdit, handleSelectSavedTrip, navigation]);
 
   const [hoveredRouteId, setHoveredRouteId] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(() =>
@@ -2055,6 +2114,8 @@ const HomeScreen = ({ route }) => {
           showToSuggestions={showToSuggestions}
           isTypingFrom={isTypingFrom}
           isTypingTo={isTypingTo}
+          fromSearchError={fromSearchError}
+          toSearchError={toSearchError}
           onSwap={swapTripLocations}
           onClose={exitTripPlanningMode}
           onUseCurrentLocation={useCurrentLocationForTrip}
@@ -2380,8 +2441,11 @@ const HomeScreen = ({ route }) => {
         <SheetErrorBoundary fallbackMessage="Trip results failed to load.">
           <TripBottomSheet
             itineraries={itinerariesWithStopClosureNotices}
-            selectedIndex={selectedItineraryIndex}
-            onSelectItinerary={setSelectedItineraryIndex}
+            selectedIndex={displaySelectedItineraryIndex}
+            onSelectItinerary={(displayIndex) => {
+              const plannerIndex = itinerariesWithStopClosureNotices[displayIndex]?.plannerIndex;
+              setSelectedItineraryIndex(plannerIndex ?? displayIndex);
+            }}
             onViewDetails={viewTripDetails}
             onStartNavigation={startNavigationDirect}
             isLoading={isTripLoading}
@@ -2394,12 +2458,14 @@ const HomeScreen = ({ route }) => {
             savedTrips={rankedSavedTrips}
             onSelectSavedTrip={handleSelectSavedTrip}
             onSaveCurrentTrip={handleSaveCurrentTrip}
+            saveCurrentTripLabel={sharedTripEdit ? 'Update shared trip' : 'Save this route'}
             repeatTripSuggestion={repeatTripSuggestion}
             onRetry={() => {
               if (tripFromLocation && tripToLocation) {
                 searchTrips(tripFromLocation, tripToLocation);
               }
             }}
+            allTripsBlocked={itineraryAvailability.allBlocked}
           />
         </SheetErrorBoundary>
       )}

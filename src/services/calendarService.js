@@ -7,18 +7,12 @@
  * - Service exceptions for holidays etc. (calendar_dates.txt)
  */
 
-/**
- * Parse a GTFS date string (YYYYMMDD) into a Date object
- * @param {string} dateStr - Date in YYYYMMDD format
- * @returns {Date} JavaScript Date object
- */
-const parseGTFSDate = (dateStr) => {
-  if (!dateStr || dateStr.length !== 8) return null;
-  const year = parseInt(dateStr.substring(0, 4), 10);
-  const month = parseInt(dateStr.substring(4, 6), 10) - 1; // JS months are 0-indexed
-  const day = parseInt(dateStr.substring(6, 8), 10);
-  return new Date(year, month, day);
-};
+import {
+  addServiceDays,
+  getServiceDayOfWeek,
+  normalizeServiceDate,
+  serviceDateTimeToTimestamp,
+} from '../utils/serviceTime';
 
 /**
  * Format a Date object to GTFS date string (YYYYMMDD)
@@ -26,10 +20,7 @@ const parseGTFSDate = (dateStr) => {
  * @returns {string} Date in YYYYMMDD format
  */
 export const formatGTFSDate = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
+  return normalizeServiceDate(date);
 };
 
 /**
@@ -38,8 +29,7 @@ export const formatGTFSDate = (date) => {
  * @returns {string} Day name (e.g., 'monday', 'tuesday')
  */
 const getDayOfWeek = (date) => {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  return days[date.getDay()];
+  return getServiceDayOfWeek(formatGTFSDate(date));
 };
 
 /**
@@ -49,10 +39,11 @@ const getDayOfWeek = (date) => {
  * @returns {boolean} True if date is within range
  */
 const isDateInRange = (date, calendar) => {
-  const start = parseGTFSDate(calendar.startDate);
-  const end = parseGTFSDate(calendar.endDate);
-  if (!start || !end) return false;
-  return date >= start && date <= end;
+  const dateKey = formatGTFSDate(date);
+  const start = normalizeServiceDate(calendar.startDate);
+  const end = normalizeServiceDate(calendar.endDate);
+  if (!dateKey || !start || !end) return false;
+  return dateKey >= start && dateKey <= end;
 };
 
 /**
@@ -65,10 +56,9 @@ const isDateInRange = (date, calendar) => {
  * @param {number} daysBack - Number of past days to pre-compute (default 1)
  * @returns {Object} Map of date strings to Set of active service_ids
  */
-export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30, daysBack = 1) => {
+export const buildServiceCalendar = (calendar = [], calendarDates = [], daysAhead = null, daysBack = 1) => {
   const serviceCalendar = {};
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = formatGTFSDate(new Date());
 
   // Pre-index calendar_dates by date for faster lookup
   const exceptions = {};
@@ -79,18 +69,28 @@ export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30, da
     exceptions[cd.date].push(cd);
   });
 
-  // Build service sets for each day in the requested window.
-  for (let i = -daysBack; i < daysAhead; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() + i);
-    const dateStr = formatGTFSDate(date);
-    const dayOfWeek = getDayOfWeek(date);
+  const explicitEndDate = Number.isFinite(daysAhead) && daysAhead > 0
+    ? addServiceDays(today, Math.trunc(daysAhead) - 1)
+    : null;
+  const feedEndDate = [
+    ...calendar.map((entry) => normalizeServiceDate(entry.endDate)).filter(Boolean),
+    ...calendarDates.map((entry) => normalizeServiceDate(entry.date)).filter(Boolean),
+  ].sort().pop();
+  const supportedEndDate = explicitEndDate || (
+    feedEndDate && feedEndDate >= today ? feedEndDate : addServiceDays(today, 29)
+  );
+  const supportedStartDate = addServiceDays(today, -Math.max(0, Math.trunc(daysBack) || 0));
+
+  // Build through the actual static-feed horizon unless a caller explicitly
+  // requests a shorter window.
+  for (let dateStr = supportedStartDate; dateStr <= supportedEndDate; dateStr = addServiceDays(dateStr, 1)) {
+    const dayOfWeek = getDayOfWeek(dateStr);
 
     const activeServices = new Set();
 
     // Check regular calendar entries
     calendar.forEach((cal) => {
-      if (isDateInRange(date, cal) && cal[dayOfWeek]) {
+      if (isDateInRange(dateStr, cal) && cal[dayOfWeek]) {
         activeServices.add(cal.serviceId);
       }
     });
@@ -110,8 +110,15 @@ export const buildServiceCalendar = (calendar, calendarDates, daysAhead = 30, da
     serviceCalendar[dateStr] = activeServices;
   }
 
+  Object.defineProperty(serviceCalendar, '__range', {
+    value: { startDate: supportedStartDate, endDate: supportedEndDate },
+    enumerable: false,
+  });
+
   return serviceCalendar;
 };
+
+export const getServiceCalendarRange = (serviceCalendar) => serviceCalendar?.__range || null;
 
 /**
  * Get active services for a specific date
@@ -159,15 +166,14 @@ export const getTodayServices = (serviceCalendar) => {
  * @returns {Date|null} Next date with service, or null if none found
  */
 export const findNextServiceDate = (serviceCalendar, fromDate, maxDays = 7) => {
-  // Clone the date to avoid mutating the input
-  const date = new Date(fromDate.getTime());
+  let serviceDate = formatGTFSDate(fromDate);
 
   for (let i = 0; i < maxDays; i++) {
-    const services = getActiveServicesForDate(serviceCalendar, date);
+    const services = getActiveServicesForDate(serviceCalendar, serviceDate);
     if (services.size > 0) {
-      return new Date(date.getTime()); // Return a clone
+      return new Date(serviceDateTimeToTimestamp(serviceDate, 0));
     }
-    date.setDate(date.getDate() + 1);
+    serviceDate = addServiceDays(serviceDate, 1);
   }
 
   return null;

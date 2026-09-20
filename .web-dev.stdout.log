@@ -1,0 +1,447 @@
+
+> barrie-transit-planner@1.0.9 web:dev
+> concurrently -k -n proxy,expo "node proxy-server.js" "node scripts/start-web-dev.js"
+
+[proxy] 
+[proxy] WARNING: No LocationIQ API key found. API proxy routes will not work.
+[proxy] Set LOCATIONIQ_API_KEY in .env
+[proxy] 
+[proxy] 
+[proxy] Barrie Transit Dev Server running at http://127.0.0.1:3001
+[proxy] 
+[proxy] Endpoints:
+[proxy]   GET /proxy?url=<encoded-url>              - CORS proxy (GTFS feeds)
+[proxy]   GET /api/autocomplete?q=...               - LocationIQ autocomplete
+[proxy]   GET /api/geocode?q=...                    - LocationIQ forward geocode
+[proxy]   GET /api/reverse-geocode?lat=...&lon=...  - LocationIQ reverse geocode
+[proxy]   GET /api/walking-directions?from=...&to=... - Walking directions
+[proxy]   GET /health                               - Health check
+[proxy] 
+[proxy] LocationIQ API key: MISSING
+[proxy] Press Ctrl+C to stop
+[proxy] 
+[proxy] [3:00:46 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] (node:47156) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+[proxy] (Use `node --trace-deprecation ...` to show where the warning was created)
+[expo] Starting project at C:\Users\micha\Documents\MikeApps\BarrieTripPlanner-master
+[proxy] [3:00:47 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] Starting Metro Bundler
+[proxy] [3:01:00 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:01 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] Waiting on http://localhost:8081
+[expo] Logs for your project will appear below.
+[proxy] [3:01:16 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:01:16 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:16 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:16 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:01:31 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:31 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:46 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:46 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:57 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:01:58 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:01:58 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:58 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:01:58 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:01:58 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] Web Bundled 816ms node_modules\expo\AppEntry.js (344 modules)
+[expo] Web Bundled 839ms node_modules\expo\AppEntry.js (1 module)
+[expo]  LOG  [web] Logs will appear in the browser console
+[expo] Web .\AppRuntime.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 78.8% (1220/1374)
+[expo] Web Bundled 5170ms AppRuntime.js (1834 modules)
+[proxy] [3:02:11 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:02:11 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:11 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[expo] Web src\screens\HomeScreen.web.impl.js ░░░░░░░░░░░░░░░░  3.2% ( 35/196)
+[proxy] [3:02:11 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:02:11 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:11 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[expo] Web Bundled 2315ms src\screens\HomeScreen.web.impl.js (1250 modules)
+[proxy] [3:02:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:02:13 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:13 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] Web node_modules\expo\AppEntry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 91.6% (1689/1765)
+[expo] Web Bundled 5053ms node_modules\expo\AppEntry.js (1918 modules)
+[proxy] [3:02:29 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:30 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:43 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:44 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:02:58 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[proxy] [3:02:59 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] Web Bundled 270ms node_modules\expo\AppEntry.js (1 module)
+[proxy] [3:03:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:03:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:03:28 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:29 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:44 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:44 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:59 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:03:59 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] Web Bundled 44ms node_modules\expo\AppEntry.js (1 module)
+[expo]  LOG  [web] Logs will appear in the browser console
+[expo] Web Bundled 243ms AppRuntime.js (1 module)
+[proxy] [3:04:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:04:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[expo] Web Bundled 206ms src\screens\HomeScreen.web.impl.js (1 module)
+[proxy] [3:04:15 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:04:15 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/Google_transit.zip
+[proxy] [3:04:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:04:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:04:29 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:29 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:52 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:52 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:58 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:04:59 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:13 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:05:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:05:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:05:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:05:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:40 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:41 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:59 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:05:59 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:06:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:06:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:06:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:06:29 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:29 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:06:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:07:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:07:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:07:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:07:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:07:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:16 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:08:16 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:08:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:08:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:08:21 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:22 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:32 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:32 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:45 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:45 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:08:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:03 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:03 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:14 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:09:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:09:14 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:09:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:09:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:09:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:10:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:10:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:10:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:11:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:11:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:11:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:11:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:11:50 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:12:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:12:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:12:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:12:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:35 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:12:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:13:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:13:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:13:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:13:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:13:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:08 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:14:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:14:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:14:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:14:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:14:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:05 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:15:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:15:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:15:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:15:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:15:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:08 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:08 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:16:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:16:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:16:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:16:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:16:50 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:17:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:08 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:17:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:17:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:17:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:17:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:18:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:18:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:18:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:18:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:18:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:07 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:19:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:07 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:19:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:19:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:19:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:19:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:09 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:09 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:20:09 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:09 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:20:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:20:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:20:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:35 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:20:50 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:21:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:21:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:21:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:22:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:22:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:22:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:23:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:23:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:23:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:24:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:24:20 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:24:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:25:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:25:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:25:50 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:26:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:26:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:26:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:27:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:27:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:27:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:05 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:28:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:28:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:28:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:19 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:29:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:19 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_ServiceAlerts.pb
+[proxy] [3:29:34 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:34 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:49 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:29:49 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:30:04 p.m.] Proxying: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[proxy] [3:30:04 p.m.] Response: 200 for https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+[expo] › Detected a change in metro.config.js. Restart the server to see the new results.
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] | (node:22144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] | (Use `node --trace-warnings ...` to show where the warning was created)
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+[expo] Web Bundled 39731ms node_modules\expo\AppEntry.js (1 module)
+[expo] Web node_modules\expo\AppEntry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)

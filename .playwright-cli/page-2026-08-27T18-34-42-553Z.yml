@@ -1,0 +1,61 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e4218]:
+        - generic [ref=e4220]:
+          - generic:
+            - region "Map" [ref=e4221]
+            - 'img "Stop 1: Dublin Airport" [ref=e4222]':
+              - strong [ref=e4224]: "1"
+            - 'img "Stop 2: Dublin lodging area" [ref=e4225]':
+              - strong [ref=e4227]: "2"
+            - 'img "Stop 3: Georgian Quarter" [ref=e4228]':
+              - strong [ref=e4230]: "3"
+            - 'img "Stop 4: Kehoe''s" [ref=e4231]':
+              - strong [ref=e4233]: "4"
+          - generic:
+            - generic [ref=e4234]:
+              - button "Zoom in" [ref=e4235] [cursor=pointer]
+              - button "Zoom out" [ref=e4237] [cursor=pointer]
+            - generic:
+              - button "Toggle attribution" [ref=e4240] [cursor=pointer]
+              - link "Mapbox homepage" [ref=e4243] [cursor=pointer]:
+                - /url: https://www.mapbox.com/
+        - generic [ref=e4244]:
+          - generic [ref=e4245]:
+            - generic [ref=e4246]:
+              - heading "Map" [level=1] [ref=e4247]
+              - paragraph [ref=e4248]: 4 places
+            - button "Previous trip day" [disabled] [ref=e4249]: ‹
+            - generic [ref=e4250] [cursor=pointer]:
+              - generic [ref=e4251]: Day 1 · Sat, Sep 5
+              - textbox "Choose trip day" [ref=e4252]: 2026-09-05
+            - button "Next trip day" [ref=e4253]: ›
+          - generic "Map filters" [ref=e4254]:
+            - button "Place" [ref=e4255]
+            - button "Day" [ref=e4260]
+            - button "Stays" [ref=e4270]
+            - button "Food" [ref=e4277]
+            - button "Saved" [ref=e4282]
+            - button "Activities" [ref=e4286]
+            - button "Travel" [ref=e4290]
+            - button "All" [ref=e4298]
+        - generic "Day 1 · Sat, Sep 5 selected stop" [ref=e4307]:
+          - button "Previous stop" [ref=e4308]: ‹
+          - button "4 6:30 PM Later First pint at Kehoe's or The Long Hall Kehoe's" [ref=e4309]:
+            - generic [ref=e4310]: "4"
+            - generic [ref=e4311]:
+              - generic [ref=e4312]:
+                - generic [ref=e4313]: 6:30 PM
+                - generic [ref=e4314]: Later
+              - generic [ref=e4315]: First pint at Kehoe's or The Long Hall
+              - generic [ref=e4316]: Kehoe's
+          - button "Next stop" [disabled] [ref=e4320]: ›
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

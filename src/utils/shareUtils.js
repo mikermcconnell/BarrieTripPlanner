@@ -42,3 +42,38 @@ export const shareStop = async (stop) => {
     return { success: false };
   }
 };
+
+export const getSharedTripLink = (shareId) => (
+  `https://barrie-transit-trip-plan-cc84e.web.app/trip.html?id=${encodeURIComponent(shareId)}`
+);
+
+export const shareTrip = async (trip, shareId) => {
+  const title = trip?.name || 'Shared MyBarrie Transit trip';
+  const link = getSharedTripLink(shareId);
+  const message = `${title}\nOpen and edit this trip in MyBarrie Transit:\n${link}`;
+
+  if (Platform.OS === 'web') {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title, text: message, url: link });
+        return { success: true, link };
+      } catch (error) {
+        if (error?.name === 'AbortError') return { success: false, cancelled: true, link };
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(message);
+      return { success: true, copied: true, link };
+    } catch {
+      return { success: false, link };
+    }
+  }
+
+  try {
+    const result = await Share.share({ title, message, url: link });
+    return { success: result.action !== Share.dismissedAction, link };
+  } catch {
+    return { success: false, link };
+  }
+};

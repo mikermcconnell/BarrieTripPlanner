@@ -38,7 +38,14 @@ function readGoogleWebClientId(googleServicesFile) {
 }
 
 module.exports = ({ config }) => {
-  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || packageJson.version;
+  const configuredAppVersion = String(process.env.EXPO_PUBLIC_APP_VERSION || '').trim();
+  if (configuredAppVersion && configuredAppVersion !== packageJson.version) {
+    throw new Error(
+      `EXPO_PUBLIC_APP_VERSION ${configuredAppVersion} does not match package.json ${packageJson.version}. ` +
+      'Production releases and OTA updates must keep one version identity.'
+    );
+  }
+  const appVersion = packageJson.version;
   const mergedConfig = {
     ...(config || {}),
     ...(appJson?.expo || {}),
@@ -46,7 +53,8 @@ module.exports = ({ config }) => {
   const resolvedConfig = JSON.parse(JSON.stringify(mergedConfig));
   const googleServicesFile = resolveGoogleServicesFile(resolvedConfig);
   const isEasBuild = process.env.EAS_BUILD === 'true';
-  const isEasProductionBuild = isEasBuild && process.env.EAS_BUILD_PROFILE === 'production';
+  const isEasProductionBuild = isEasBuild
+    && ['production', 'production-apk', 'internal-testing'].includes(process.env.EAS_BUILD_PROFILE);
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || readGoogleWebClientId(googleServicesFile);
 
   if (hasValue(googleWebClientId) && !hasValue(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)) {
@@ -69,6 +77,28 @@ module.exports = ({ config }) => {
     throw new Error(
       'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production EAS build. Set it as an EAS environment variable or include a web OAuth client in google-services.json.'
     );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_SENTRY_DSN)) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_SENTRY_DSN for production EAS build. Set it in the EAS production environment.'
+    );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY)) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_CARTO_BASEMAP_KEY for production EAS build. Set it in the EAS production environment.'
+    );
+  }
+
+  if (isEasProductionBuild && !hasValue(process.env.SENTRY_AUTH_TOKEN)) {
+    throw new Error(
+      'Missing SENTRY_AUTH_TOKEN for production EAS build. Set it as a sensitive EAS production environment variable.'
+    );
+  }
+
+  if (isEasProductionBuild && process.env.SENTRY_DISABLE_AUTO_UPLOAD === 'true') {
+    throw new Error('SENTRY_DISABLE_AUTO_UPLOAD must not be true for production EAS builds.');
   }
 
   if (isEasProductionBuild) {
@@ -123,6 +153,7 @@ module.exports = ({ config }) => {
       EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       EXPO_PUBLIC_API_PROXY_URL: process.env.EXPO_PUBLIC_API_PROXY_URL,
+      EXPO_PUBLIC_CARTO_BASEMAP_KEY: process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY,
       EXPO_PUBLIC_ENABLE_AUTO_DETOURS: process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS,
       EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION: process.env.EXPO_PUBLIC_ACTIVE_DETOURS_COLLECTION,
     },

@@ -7,18 +7,18 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 // Execute the actual critical-path callbacks with deferred IO. These tests isolate
 // ordering, not mounted React rendering or real-device startup elapsed time.
 const loadCallback = (name, env) => {
-  const start = source.indexOf(`const ${name} = useCallback(async () => {`);
-  const end = source.indexOf('}, [applyStaticData, processAndStoreShapes]);', start);
+  const start = source.indexOf(`const ${name} = useCallback(async `);
+  const end = source.indexOf('}, [applyStaticData, cacheGTFSDataInBackground, processAndStoreShapes]);', start);
   if (start < 0 || end < 0) throw new Error('Critical-path callback boundary changed');
-  const body = source.slice(start, end).split('useCallback(async () => {')[1];
-  return new Function(...Object.keys(env), `return async () => {${body}}`)(...Object.values(env));
+  const body = source.slice(start, end).split('=> {').slice(1).join('=> {');
+  return new Function(...Object.keys(env), `return async ({ onProgress } = {}) => {${body}}`)(...Object.values(env));
 };
 const environment = () => {
   const env = {};
   for (const name of ['setIsLoadingStatic','setIsRefreshingStatic','setStaticError','setUsingCachedData','setIsOffline','applyStaticData','processAndStoreShapes','setLastStaticRefreshAt','setRoutingData','setIsRoutingReady','setLastRoutingBuildAt','setRoutingError','setLastStaticFailureAt','setIsBuildingRouting','setLastRoutingFailureAt']) env[name] = jest.fn();
   for (const name of ['gtfsDataRef','gtfsFetchPromiseRef','routingDataRef','routingBuildPromiseRef']) env[name] = { current: null };
   return {...env, logger:{warn:jest.fn(),error:jest.fn()},getUserFacingErrorMessage:(_,text)=>text,
-    cacheGTFSData:jest.fn(async()=>{}),buildRoutingData:jest.fn(()=>({})),
+    cacheGTFSDataInBackground:jest.fn(async()=>{}),buildRoutingDataAsync:jest.fn(async()=>({})),
     fetchAllStaticData:jest.fn(async()=>({routes:[],stops:[],stopTimes:[],shapes:{}}))};
 };
 
@@ -37,10 +37,10 @@ test('cached map becomes usable while connectivity detection is still pending', 
 test('first routing index is ready without waiting for cache persistence', async () => {
   const write = deferred(); const env = environment();
   env.gtfsDataRef.current = {routes:[{}],stops:[{}]};
-  env.cacheGTFSData = jest.fn(() => write.promise);
+  env.cacheGTFSDataInBackground = jest.fn(() => write.promise);
   const routing = await loadCallback('ensureRoutingData', env)();
   expect(routing).toBe(env.routingDataRef.current);
-  expect(env.buildRoutingData).toHaveBeenCalledTimes(1);
+  expect(env.buildRoutingDataAsync).toHaveBeenCalledTimes(1);
   expect(env.setIsRoutingReady).toHaveBeenCalledWith(true);
   write.resolve();
 });

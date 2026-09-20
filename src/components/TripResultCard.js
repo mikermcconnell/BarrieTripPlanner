@@ -426,6 +426,26 @@ const TripTimingSummary = ({ startTime, endTime }) => (
   </View>
 );
 
+const RealtimeStatusBadge = ({ status }) => {
+  const normalizedStatus = ['live', 'scheduled', 'stale', 'unavailable'].includes(status)
+    ? status
+    : 'scheduled';
+  const label = {
+    live: 'Live',
+    scheduled: 'Scheduled',
+    stale: 'Live data stale',
+    unavailable: 'Live data unavailable',
+  }[normalizedStatus];
+
+  return (
+    <View style={[styles.realtimeStatusBadge, styles[`realtimeStatusBadge_${normalizedStatus}`]]}>
+      <Text style={[styles.realtimeStatusText, styles[`realtimeStatusText_${normalizedStatus}`]]}>
+        {label}
+      </Text>
+    </View>
+  );
+};
+
 const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, isSelected = false }) => {
   const startTime = formatTimeFromTimestamp(itinerary.startTime);
   const endTime = formatTimeFromTimestamp(itinerary.endTime);
@@ -445,6 +465,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
   const firstTransitLeg = transitLegs[0];
   const hasRealtimeInfo = itinerary.hasRealtimeInfo || firstTransitLeg?.isRealtime;
   const delayBadgeProps = getItineraryDelayBadgeProps(itinerary);
+  const realtimeStatus = itinerary.realtimeStatus || (hasRealtimeInfo ? 'live' : 'scheduled');
 
   // Get metadata from enrichment
   const minutesUntilDeparture = itinerary.minutesUntilDeparture ?? 0;
@@ -534,6 +555,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
               {hasRealtimeInfo && (
                 <DelayBadge {...delayBadgeProps} compact />
               )}
+              {transitLegs.length > 0 && <RealtimeStatusBadge status={realtimeStatus} />}
             </View>
             {leavesInText && (
               <Text style={[
@@ -675,6 +697,7 @@ const TripResultCard = ({ itinerary, onPress, onViewDetails, onStartNavigation, 
             {hasRealtimeInfo && (
               <DelayBadge {...delayBadgeProps} compact />
             )}
+              {transitLegs.length > 0 && <RealtimeStatusBadge status={realtimeStatus} />}
           </View>
           {leavesInText && (
             <Text style={[
@@ -862,6 +885,46 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     paddingRight: SPACING.sm,
+    gap: SPACING.xs,
+    flexWrap: 'wrap',
+  },
+  realtimeStatusBadge: {
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+  },
+  realtimeStatusBadge_live: {
+    backgroundColor: COLORS.success + '18',
+    borderColor: COLORS.success + '55',
+  },
+  realtimeStatusBadge_scheduled: {
+    backgroundColor: COLORS.grey100,
+    borderColor: COLORS.borderLight,
+  },
+  realtimeStatusBadge_stale: {
+    backgroundColor: COLORS.warning + '18',
+    borderColor: COLORS.warning + '55',
+  },
+  realtimeStatusBadge_unavailable: {
+    backgroundColor: COLORS.grey100,
+    borderColor: COLORS.grey400,
+  },
+  realtimeStatusText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  realtimeStatusText_live: {
+    color: COLORS.success,
+  },
+  realtimeStatusText_scheduled: {
+    color: COLORS.textSecondary,
+  },
+  realtimeStatusText_stale: {
+    color: COLORS.warningDark || COLORS.textPrimary,
+  },
+  realtimeStatusText_unavailable: {
+    color: COLORS.textSecondary,
   },
   timingRow: {
     flexDirection: 'row',

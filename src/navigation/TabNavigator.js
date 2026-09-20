@@ -32,6 +32,7 @@ const getHelpSupportScreen = () => require('../screens/HelpSupportScreen').defau
 const getAboutScreen = () => require('../screens/AboutScreen').default;
 const getAppFeedbackScreen = () => require('../screens/AppFeedbackScreen').default;
 const getAppFeedbackInboxScreen = () => require('../screens/AppFeedbackInboxScreen').default;
+const getSharedTripScreen = () => require('../screens/SharedTripScreen').default;
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -94,6 +95,7 @@ const ProfileStack = () => (
     <Stack.Screen name="About" getComponent={getAboutScreen} />
     <Stack.Screen name="AppFeedback" getComponent={getAppFeedbackScreen} />
     <Stack.Screen name="AppFeedbackInbox" getComponent={getAppFeedbackInboxScreen} />
+    <Stack.Screen name="SharedTrip" getComponent={getSharedTripScreen} />
   </Stack.Navigator>
 );
 

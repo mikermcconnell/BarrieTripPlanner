@@ -53,6 +53,14 @@ describe('runtimeConfig', () => {
     expect(runtimeConfig.detours.enabledByDefault).toBe(true);
   });
 
+  test('reads the CARTO basemap key from public runtime config', () => {
+    process.env.EXPO_PUBLIC_CARTO_BASEMAP_KEY = 'carto-test-key';
+
+    const { default: runtimeConfig } = loadRuntimeConfig();
+
+    expect(runtimeConfig.basemap.cartoApiKey).toBe('carto-test-key');
+  });
+
   test('falls back to legacy geometry flag when detour flag is unset', () => {
     delete process.env.EXPO_PUBLIC_ENABLE_AUTO_DETOURS;
     process.env.EXPO_PUBLIC_ENABLE_DETOUR_GEOMETRY_UI = 'true';

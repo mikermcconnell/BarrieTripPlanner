@@ -28,6 +28,17 @@ const GOOGLE_NATIVE_ERROR_MESSAGES = {
   SIGN_IN_REQUIRED: 'Choose a Google account to continue.',
 };
 
+const GOOGLE_SIGN_IN_CANCELLATION_CODES = new Set([
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+  'SIGN_IN_CANCELLED',
+  '12501',
+]);
+
+const isGoogleSignInCancellation = (error) => (
+  GOOGLE_SIGN_IN_CANCELLATION_CODES.has(String(error?.code || ''))
+);
+
 const getNativeGoogleErrorMessage = (error) => {
   const code = error?.code || '';
   const message = error?.message || '';
@@ -273,13 +284,12 @@ export const authService = {
         user: this.formatUser(user),
       };
     } catch (error) {
-      logger.error('Google sign in error:', error);
-      // User cancelled
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'SIGN_IN_CANCELLED') {
+      if (isGoogleSignInCancellation(error)) {
         return { success: false, error: null };
       }
 
       const nativeErrorMessage = getNativeGoogleErrorMessage(error);
+      logger.error('Google sign in error:', error);
       if (nativeErrorMessage) {
         return { success: false, error: nativeErrorMessage };
       }

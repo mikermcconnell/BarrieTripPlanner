@@ -1,0 +1,96 @@
+[    1001ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:19025
+[    1039ms] [WARNING] "shadow*" style props are deprecated. Use "boxShadow". @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[    1044ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4744
+[    1062ms] [WARNING] props.pointerEvents is deprecated. Use style.pointerEvents @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[    1105ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false collapsable collapsable collapsable @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[    1109ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false accessible accessible false accessible accessible accessible @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[    5689ms] [WARNING] [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. @ :257739
+[    5880ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 113, percent: 55, ready: false} @ :53378
+[    5886ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    5956ms] [INFO] [startup] phase {phase: ready, elapsedMs: 189, percent: 100, ready: true} @ :53378
+[    5957ms] [INFO] [startup] ready {elapsedMs: 189, routes: 0, stops: 0} @ :53396
+[    5958ms] [WARNING] Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:36603
+[    5959ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    6048ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 280, percent: 55, ready: false} @ :53378
+[    6049ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    7441ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    8348ms] [INFO] [startup] phase {phase: ready, elapsedMs: 2580, percent: 100, ready: true} @ :53378
+[    8348ms] [INFO] [startup] ready {elapsedMs: 2581, routes: 15, stops: 556} @ :53396
+[    8351ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    8399ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[    8954ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  ...
+    <EnsureSingleNavigator>
+      <StaticContainer name="MapMain" render={function HomeScreenWebShell} navigation={{...}} ...>
+        <HomeScreenWebShell navigation={{...}} route={{name:"MapMain", ...}}>
+          <HomeScreen navigation={{...}} route={{name:"MapMain", ...}}>
+            <View style={{flex:1, ...}} accessibilityElementsHidden={false} importantForAccessibility="auto" ...>
+              <div dir={null} ref={function forwardRef} className="css-view-g...">
+                <div>
+                <MapTapPopup>
+                <View>
+                <SurveyNudgeBanner>
+                <DetourAlertStrip>
+                <UpcomingDetourStrip>
+                <OfficialImpactStrip impacts={[...]} routeColorByRouteId={{10:"#681757", ...}} onDismiss={function} ...>
+                  <View style={[...]} pointerEvents="box-none">
+                    <div dir={null} ref={function forwardRef} className="css-view-g..." style={{top:"230px", ...}}>
+                      <TouchableOpacity style={[...]} activeOpacity={0.84} onPress={function handlePress} ...>
+                        <View accessibilityRole="button" accessibilityLabel="4 official..." ...>
+>                         <button
+>                           onKeyDown={function onKeyDown}
+>                           onClick={function onClick}
+>                           onContextMenu={function onContextMenu}
+>                           dir={null}
+>                           ref={function forwardRef}
+>                           aria-label="4 official detour notices: Mapleview Detour and Shuttle"
+>                           role="button"
+>                           className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor-1loqt..."
+>                           style={{transitionDuration:"0s"}}
+>                           type="button"
+>                         >
+                            <View>
+                            <View>
+                            <View>
+                            <TouchableOpacity style={{width:44,height:44, ...}} onPress={function onPress} ...>
+                              <View accessibilityRole="button" accessibilityLabel="Hide plann..." ...>
+>                               <button
+>                                 onKeyDown={function onKeyDown}
+>                                 onClick={function onClick}
+>                                 onContextMenu={function onContextMenu}
+>                                 dir={null}
+>                                 ref={function forwardRef}
+>                                 aria-label="Hide planned detour notice"
+>                                 role="button"
+>                                 className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor..."
+>                                 style={{transitionDuration:"0s"}}
+>                                 type="button"
+>                               >
+                ...
+                ...
+ @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6857
+[    8954ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6859
+[    9025ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  257984ms] [WARNING] [LocalGeocoding] Failed to load address data: The method or property expo-file-system.readAsStringAsync is not available on web, are you sure you've linked all the native dependencies properly? @ :287492
+[  982432ms] [WARNING] Disconnected from Metro (1006)
+To reconnect:
+- Ensure that Metro is running and available on the same network
+- Reload this app (will trigger further help if Metro cannot be connected to) @ http://127.0.0.1:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:2279
+[  982585ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581
+[  982743ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?gsessionid=ceVaAglD4XUlOPDPQ-UTHwMFMpZGWXOLOoxFz_MSLGAuguXaVwAQbg&VER=8&database=projects%2Fbarrie-transit-trip-plan-cc84e%2Fdatabases%2F(default)&RID=rpc&SID=5EMmfhsZCc4O27XBHIZESw&AID=312&CI=0&TYPE=xmlhttp&zx=ifcv3876bi80&t=2:0
+[  982745ms] [WARNING] [2026-08-27T14:52:01.431Z]  @firebase/firestore: Firestore (12.9.0): WebChannelConnection RPC 'Listen' stream 0x242fe288 transport errored. Name: undefined Message: undefined @ :214743
+[  983001ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125581

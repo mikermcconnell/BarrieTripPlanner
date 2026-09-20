@@ -1,0 +1,7 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - paragraph [ref=e4]: TripPlan editor link
+      - heading "Opening shared trip..." [level=1] [ref=e5]
+      - paragraph [ref=e6]: Preparing secure editing access. No sign-in is required.
+  - alert [ref=e7]

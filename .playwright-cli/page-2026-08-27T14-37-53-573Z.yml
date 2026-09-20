@@ -1,0 +1,252 @@
+- generic [ref=e38]:
+  - generic [ref=e39]:
+    - generic [ref=e47]:
+      - generic [ref=e2495]:
+        - region [ref=e2496]
+        - button [ref=e2497] [cursor=pointer]:
+          - generic [ref=e52]: "364"
+        - button [ref=e2498] [cursor=pointer]:
+          - generic [ref=e57]: "365"
+        - button [ref=e2499] [cursor=pointer]:
+          - generic [ref=e62]: "366"
+        - button [ref=e2500] [cursor=pointer]:
+          - generic [ref=e67]: "367"
+        - button [ref=e2501] [cursor=pointer]:
+          - generic [ref=e72]: "744"
+        - button [ref=e2502] [cursor=pointer]:
+          - generic [ref=e77]: "745"
+        - button [ref=e2503] [cursor=pointer]:
+          - generic [ref=e82]: "746"
+        - button [ref=e2504] [cursor=pointer]:
+          - generic [ref=e87]: "747"
+        - button [ref=e2505] [cursor=pointer]:
+          - generic [ref=e92]: "805"
+        - button [ref=e2506] [cursor=pointer]:
+          - generic [ref=e97]: "808"
+        - button [ref=e2507] [cursor=pointer]:
+          - generic [ref=e102]: "809"
+        - button [ref=e2508] [cursor=pointer]:
+          - generic [ref=e107]: "812"
+        - button [ref=e2509] [cursor=pointer]:
+          - generic [ref=e112]: "880"
+        - button [ref=e2510] [cursor=pointer]:
+          - generic [ref=e117]: "881"
+        - button [ref=e2511] [cursor=pointer]:
+          - generic [ref=e122]: "977"
+        - button [ref=e2512] [cursor=pointer]:
+          - generic [ref=e127]: "978"
+        - button [ref=e2513] [cursor=pointer]:
+          - generic [ref=e132]: "979"
+        - button [ref=e2514] [cursor=pointer]:
+          - generic [ref=e137]: "986"
+        - button [ref=e2515] [cursor=pointer]:
+          - generic [ref=e142]: "510"
+        - button [ref=e2516] [cursor=pointer]:
+          - generic [ref=e147]: "336"
+        - button [ref=e2517] [cursor=pointer]:
+          - generic [ref=e152]: "265"
+        - button [ref=e2518] [cursor=pointer]:
+          - generic [ref=e2519]: "959"
+        - button [ref=e2520] [cursor=pointer]:
+          - generic [ref=e2521]: "142"
+        - button [ref=e2522] [cursor=pointer]:
+          - generic [ref=e173]: "10"
+        - button [ref=e2523] [cursor=pointer]:
+          - generic [ref=e2205]: 8A
+        - button [ref=e2524] [cursor=pointer]:
+          - generic [ref=e2525]: "100"
+        - button [ref=e2530] [cursor=pointer]:
+          - generic [ref=e2215]: 2B
+        - button [ref=e2531] [cursor=pointer]:
+          - generic [ref=e233]: 12A
+        - button [ref=e2532] [cursor=pointer]:
+          - generic [ref=e2533]: "400"
+        - img [ref=e2538]:
+          - generic: Barrie Allandale Hub
+        - img [ref=e2539]:
+          - generic: Downtown Hub
+        - img [ref=e2540]:
+          - generic: Park Place
+        - img [ref=e2541]:
+          - generic: Georgian College
+        - img [ref=e2542]:
+          - generic: Barrie South GO
+        - button [ref=e2543] [cursor=pointer]:
+          - generic [ref=e1309]: 7A
+        - button [ref=e2544] [cursor=pointer]:
+          - generic [ref=e1315]: "101"
+        - button [ref=e2545] [cursor=pointer]:
+          - generic [ref=e2546]: 8B
+        - button [ref=e2551] [cursor=pointer]:
+          - generic [ref=e2230]: 8A
+        - button [ref=e2552] [cursor=pointer]:
+          - generic [ref=e2235]: 8A
+        - button [ref=e2553] [cursor=pointer]:
+          - generic [ref=e2240]: 12A
+        - button [ref=e2554] [cursor=pointer]:
+          - generic [ref=e2245]: 15A
+        - button [ref=e2555] [cursor=pointer]:
+          - generic [ref=e1417]: 8A
+        - button [ref=e2556] [cursor=pointer]
+        - button [ref=e2557] [cursor=pointer]
+        - button [ref=e2558] [cursor=pointer]
+        - button [ref=e2559] [cursor=pointer]
+        - button [ref=e2560] [cursor=pointer]
+        - button [ref=e2561] [cursor=pointer]
+        - button [ref=e2562] [cursor=pointer]
+        - button [ref=e2563] [cursor=pointer]
+        - button [ref=e2564] [cursor=pointer]
+        - button [ref=e2565] [cursor=pointer]
+        - button [ref=e2566] [cursor=pointer]
+        - button [ref=e2567] [cursor=pointer]
+        - button [ref=e2568] [cursor=pointer]
+        - button [ref=e2569] [cursor=pointer]
+        - button [ref=e2570] [cursor=pointer]
+        - button [ref=e2571] [cursor=pointer]
+        - button [ref=e2572] [cursor=pointer]
+        - button [ref=e2573] [cursor=pointer]
+        - button [ref=e2574] [cursor=pointer]
+        - button [ref=e2575] [cursor=pointer]
+        - button [ref=e2576] [cursor=pointer]
+        - button [ref=e2577] [cursor=pointer]
+        - button [ref=e2578] [cursor=pointer]
+        - button [ref=e2579] [cursor=pointer]
+        - button [ref=e2580] [cursor=pointer]
+        - button [ref=e2581] [cursor=pointer]
+        - button [ref=e2582] [cursor=pointer]
+        - button [ref=e2583] [cursor=pointer]
+        - img [ref=e2584]:
+          - generic: Georgian Mall
+        - img [ref=e2585]:
+          - generic: RVH
+        - img [ref=e2586]:
+          - generic: Peggy Hill Team CC
+        - button [ref=e2587] [cursor=pointer]:
+          - generic [ref=e2588]: 8B
+        - button [ref=e2593] [cursor=pointer]:
+          - generic [ref=e2594]: 7A
+        - button [ref=e2599] [cursor=pointer]:
+          - generic [ref=e2600]: 7B
+        - button [ref=e2605] [cursor=pointer]:
+          - generic [ref=e2606]: "11"
+        - button [ref=e2611] [cursor=pointer]:
+          - generic [ref=e2278]: 12B
+        - button [ref=e2612] [cursor=pointer]:
+          - generic [ref=e2284]: 8B
+        - button [ref=e2613] [cursor=pointer]:
+          - generic [ref=e2614]: 2A
+        - button [ref=e2619] [cursor=pointer]:
+          - generic [ref=e2296]: 8B
+        - button [ref=e2620] [cursor=pointer]:
+          - generic [ref=e2302]: 8A
+        - button [ref=e2621] [cursor=pointer]:
+          - generic [ref=e2622]: "10"
+        - button [ref=e2627] [cursor=pointer]:
+          - generic [ref=e2628]: 7B
+        - button [ref=e2633] [cursor=pointer]:
+          - generic [ref=e2634]: "11"
+        - button [ref=e2639] [cursor=pointer]:
+          - generic [ref=e2640]: 12B
+        - button [ref=e2645] [cursor=pointer]:
+          - generic [ref=e2646]: "400"
+        - button [ref=e2651] [cursor=pointer]:
+          - generic [ref=e2338]: "101"
+        - button [ref=e2652] [cursor=pointer]:
+          - generic [ref=e2344]: 8B
+        - button [ref=e2653] [cursor=pointer]:
+          - generic [ref=e2654]: "100"
+        - button [ref=e2659] [cursor=pointer]:
+          - generic [ref=e2356]: 2A
+        - group [ref=e372]:
+          - generic [ref=e2660] [cursor=pointer]
+          - generic [ref=e374]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link [ref=e2661] [cursor=pointer]:
+              - /url: https://maplibre.org/
+              - text: MapLibre
+      - generic [ref=e2363]:
+        - textbox [ref=e2662]:
+          - /placeholder: Where to?
+        - generic [ref=e2368]: LIVE
+      - button [ref=e2664] [cursor=pointer]:
+        - generic [ref=e2408]: "Active detours: 2 locations"
+        - generic [ref=e2410]:
+          - generic [ref=e2411]: 12B
+          - generic [ref=e2413]: 8B
+        - generic [ref=e2415]: ▼
+      - button [ref=e2665] [cursor=pointer]:
+        - generic [ref=e2417]: i
+        - generic [ref=e2419]:
+          - generic [ref=e2420]: 4 official detour notices
+          - generic [ref=e2421]: Mapleview Detour and Shuttle
+          - generic [ref=e2422]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e2423]:
+          - generic [ref=e2424]: 12B
+          - generic [ref=e2426]: "15"
+        - button [ref=e2666]:
+          - generic [ref=e2429]: ×
+      - generic [ref=e2430] [cursor=pointer]:
+        - button [ref=e2667]:
+          - generic [ref=e2436]:
+            - generic [ref=e2437]: LIVE MAP FEATURE
+            - generic [ref=e2438]: Auto Detour Detector
+            - generic [ref=e2439]: See how it works
+          - generic [ref=e2440]: ›
+        - button [ref=e2668]:
+          - generic [ref=e2442]: −
+      - button [ref=e2669] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button [ref=e2670] [cursor=pointer]:
+        - generic [ref=e2492]: Map options
+        - generic [ref=e2493]: "2"
+    - generic [ref=e913]:
+      - generic [ref=e914]: Search
+      - generic [ref=e917]:
+        - generic [ref=e918]: 🔍
+        - textbox "Search stops" [ref=e2671]:
+          - /placeholder: Search stops...
+          - text: Downtown Hub
+        - button "Clear search" [ref=e2672] [cursor=pointer]:
+          - generic [ref=e1239]: ✕
+      - generic [ref=e920]:
+        - tab "Search stops" [ref=e2673] [cursor=pointer]:
+          - generic [ref=e922]: Stops
+        - tab "Search routes" [ref=e2674] [cursor=pointer]:
+          - generic [ref=e924]: Routes
+        - tab "Search addresses" [ref=e2675] [cursor=pointer]:
+          - generic [ref=e926]: Addresses
+      - generic [ref=e927]: 2 stops found
+      - generic [ref=e930]:
+        - 'button "Downtown Hub, Stop #2" [ref=e2676] [cursor=pointer]':
+          - generic [ref=e991]:
+            - generic [ref=e992]: Downtown Hub
+            - generic [ref=e993]: "Stop #2"
+          - generic [ref=e994]: ›
+        - 'button "Downtown Hub, Stop #1" [ref=e2677] [cursor=pointer]':
+          - generic [ref=e959]:
+            - generic [ref=e960]: Downtown Hub
+            - generic [ref=e961]: "Stop #1"
+          - generic [ref=e962]: ›
+  - tablist [ref=e511]:
+    - tab "Map" [ref=e513] [cursor=pointer]
+    - tab "Search" [active] [selected] [ref=e630] [cursor=pointer]
+    - tab "Profile" [ref=e735] [cursor=pointer]

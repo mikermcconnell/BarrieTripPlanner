@@ -19,9 +19,10 @@ function clean(value) {
 }
 
 function versionFromEnv(env = process.env) {
-  // V2 is the production source of truth. V1 remains available only when a
-  // test or isolated migration tool opts into it explicitly.
-  return clean(env.DETOUR_DETECTOR_VERSION).toLowerCase() === 'v1' ? 'v1' : 'v2';
+  const version = clean(env.DETOUR_DETECTOR_VERSION).toLowerCase();
+  if (!version) return 'v2';
+  if (version === 'v1' || version === 'v2') return version;
+  throw new Error(`Unsupported DETOUR_DETECTOR_VERSION "${version}". Expected "v1" or "v2".`);
 }
 
 function buildDetourStorageConfig(env = process.env) {
@@ -38,11 +39,17 @@ function buildDetourStorageConfig(env = process.env) {
 }
 
 function resolveDetourStorageConfig(storageConfig = null, env = process.env) {
-  const defaults = buildDetourStorageConfig(env);
   const source = storageConfig && typeof storageConfig === 'object' ? storageConfig : {};
+  const sourceVersion = clean(source.detourVersion).toLowerCase();
+  if (sourceVersion && sourceVersion !== 'v1' && sourceVersion !== 'v2') {
+    throw new Error(`Unsupported detourVersion "${sourceVersion}". Expected "v1" or "v2".`);
+  }
+  const defaults = sourceVersion
+    ? buildDetourStorageConfig({ ...env, DETOUR_DETECTOR_VERSION: sourceVersion })
+    : buildDetourStorageConfig(env);
 
   return {
-    detourVersion: clean(source.detourVersion) || defaults.detourVersion,
+    detourVersion: sourceVersion || defaults.detourVersion,
     activeCollection: clean(source.activeCollection) || defaults.activeCollection,
     historyCollection: clean(source.historyCollection) || defaults.historyCollection,
     runtimeStateCollection:

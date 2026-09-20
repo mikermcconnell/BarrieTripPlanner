@@ -40,7 +40,7 @@ jest.mock('../services/routingDataService', () => ({
 
 jest.mock('../services/calendarService', () => ({
   getActiveServicesForDate: (...args) => mockGetActiveServicesForDate(...args),
-  formatGTFSDate: jest.fn(),
+  formatGTFSDate: jest.requireActual('../services/calendarService').formatGTFSDate,
 }));
 
 jest.mock('../services/itineraryBuilder', () => ({

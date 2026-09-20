@@ -1,5 +1,6 @@
 param(
-  [switch]$SkipSourceControlCheck
+  [switch]$SkipSourceControlCheck,
+  [switch]$InternalTesting
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,22 +30,45 @@ if (-not $SkipSourceControlCheck) {
   if ([int]$counts[0] -ne 0 -or [int]$counts[1] -ne 0) {
     throw "Release branch is not synchronized with its upstream branch."
   }
+  $branch = git branch --show-current
+  if (-not $InternalTesting -and $branch -ne "master") {
+    throw "Production releases must be built from master, not $branch."
+  }
+  $upstream = git rev-parse --abbrev-ref '@{upstream}'
+  if (-not $InternalTesting -and $upstream -ne "origin/master") {
+    throw "Production master must track origin/master, not $upstream."
+  }
+  if ($InternalTesting -and ($branch -notlike 'release/*' -or $upstream -ne "origin/$branch")) {
+    throw "Internal testing requires a synchronized release/* branch tracking its matching origin branch."
+  }
 }
+
+if ($InternalTesting) {
+  $eas = Get-Content (Join-Path $PSScriptRoot '../eas.json') -Raw | ConvertFrom-Json
+  if ($eas.submit.'internal-testing'.android.track -ne 'internal' -or
+      $eas.build.'internal-testing'.channel -ne 'internal-testing' -or
+      $eas.build.'internal-testing'.android.buildType -ne 'app-bundle') {
+    throw 'Internal testing must use its isolated channel and the Google Play internal track.'
+  }
+}
+
+Write-Host "== Release identity =="
+Invoke-CheckedCommand node scripts/verify-release-identity.js
 
 Write-Host "== App and API tests =="
 Invoke-CheckedCommand npm run test:all
 
 Write-Host "== Android production env preflight =="
-Invoke-CheckedCommand npm run prebuild:android:production
+Invoke-CheckedCommand npm run prebuild:android:eas
 
 Write-Host "== Expo Doctor =="
 Invoke-CheckedCommand npx expo-doctor
 
 Write-Host "== Root production audit =="
-Invoke-CheckedCommand npm audit --omit=dev --audit-level=high
+Invoke-CheckedCommand node scripts/verify-production-audit.js
 
 Write-Host "== API proxy production audit =="
-Invoke-CheckedCommand npm --prefix api-proxy audit --omit=dev --audit-level=high
+Invoke-CheckedCommand node scripts/verify-production-audit.js --prefix api-proxy
 
 Write-Host "== Firebase anonymous auth and protected proxy access =="
 $anonymousProxyCheck = @'
@@ -175,18 +199,7 @@ foreach ($legalUrl in $legalUrls) {
 }
 
 Write-Host "== Firestore feedback retention policy =="
-$ttlJson = gcloud firestore fields ttls list `
-  --project=barrie-transit-trip-plan-cc84e `
-  --format=json
-if ($LASTEXITCODE -ne 0) { throw "Could not verify Firestore TTL policies" }
-$ttlFields = $ttlJson | ConvertFrom-Json
-foreach ($collectionGroup in @("appFeedback", "appFeedbackRateLimits")) {
-  $suffix = "/collectionGroups/$collectionGroup/fields/expiresAt"
-  $ttl = $ttlFields | Where-Object { $_.name.EndsWith($suffix) } | Select-Object -First 1
-  if (-not $ttl -or $ttl.ttlConfig.state -ne "ACTIVE") {
-    throw "Firestore TTL is not active for $collectionGroup.expiresAt"
-  }
-}
+Invoke-CheckedCommand node scripts/verify-firestore-ttl.js
 
 $proxyUrl = "https://apiproxy-r7pziiwpua-uc.a.run.app"
 

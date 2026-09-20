@@ -17,6 +17,7 @@ export const matchesTripInstance = (leg, update, nowMs = Date.now()) => {
   const scheduledStart = finiteNumber(leg?.scheduledStartTime ?? leg?.startTime);
   if (scheduledStart == null) return false;
   const serviceDate = leg.serviceDate || formatGTFSDate(new Date(scheduledStart));
+  if (leg.tripStartTime && update?.startTime && leg.tripStartTime !== update.startTime) return false;
   if (update?.startDate) return String(update.startDate) === String(serviceDate);
 
   // Undated feeds can only support a nearby, unambiguous current-day trip.

@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyBarrie Transit",
     "slug": "barrie-transit-planner",
-    "version": "1.0.8",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 26,
+      "versionCode": 31,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
@@ -90,7 +90,7 @@
       [
         "@sentry/react-native",
         {
-          "organization": "barrie-transit",
+          "organization": "mike-mcconnell",
           "project": "barrie-transit-planner"
         }
       ],

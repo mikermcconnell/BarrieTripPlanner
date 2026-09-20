@@ -102,6 +102,8 @@ const decodeVehiclePosition = (buffer) => {
   const vehicle = {
     tripId: null,
     routeId: null,
+    startDate: null,
+    startTime: null,
     vehicleId: null,
     vehicleLabel: null,
     latitude: null,
@@ -129,6 +131,7 @@ const decodeVehiclePosition = (buffer) => {
       vehicle.tripId = trip.tripId;
       vehicle.routeId = trip.routeId;
       vehicle.startDate = trip.startDate;
+      vehicle.startTime = trip.startTime;
       offset += length;
     } else if (fieldNumber === 8 && wireType === 2) {
       // vehicle descriptor
@@ -182,7 +185,7 @@ const decodeVehiclePosition = (buffer) => {
  */
 const decodeTripDescriptor = (buffer) => {
   let offset = 0;
-  const trip = { tripId: null, routeId: null };
+  const trip = { tripId: null, routeId: null, startDate: null, startTime: null };
 
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
@@ -196,6 +199,11 @@ const decodeTripDescriptor = (buffer) => {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
       offset += lenBytes;
       trip.tripId = new TextDecoder().decode(buffer.slice(offset, offset + length));
+      offset += length;
+    } else if (fieldNumber === 2 && wireType === 2) {
+      const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
+      offset += lenBytes;
+      trip.startTime = new TextDecoder().decode(buffer.slice(offset, offset + length));
       offset += length;
     } else if (fieldNumber === 3 && wireType === 2) {
       const { value: length, bytesRead: lenBytes } = decodeVarint(buffer, offset);
@@ -343,7 +351,7 @@ const isFreshVehicle = (
   staleThresholdMs = VEHICLE_POSITION_STALE_THRESHOLD_SECONDS * 1000
 ) => {
   const timestampMs = toVehicleTimestampMs(vehicle);
-  return timestampMs == null || Math.max(0, nowMs - timestampMs) <= staleThresholdMs;
+  return timestampMs != null && Math.max(0, nowMs - timestampMs) <= staleThresholdMs;
 };
 
 export const buildVehicleFeedStatus = (
@@ -477,7 +485,8 @@ export const formatVehiclesForMap = (vehicles, tripMapping = {}) => {
       bearing: vehicle.bearing,
       speed: Number.isFinite(vehicle.speed) ? vehicle.speed : null,
       tripId: vehicle.tripId,
-      startDate: vehicle.startDate || null,
+      startDate: vehicle.startDate,
+      startTime: vehicle.startTime,
       routeId: tripInfo.routeId || vehicle.routeId,
       shapeId: tripInfo.shapeId || null,
       directionId: tripInfo.directionId ?? null, // Include direction for detour detection

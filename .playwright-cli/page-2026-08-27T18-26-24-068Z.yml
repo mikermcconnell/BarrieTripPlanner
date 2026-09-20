@@ -1,0 +1,40 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e1228]:
+        - generic [ref=e1230]:
+          - paragraph [ref=e1231]: TripPlan
+          - heading "Bookings" [level=1] [ref=e1232]
+          - paragraph [ref=e1233]: See what needs attention and what is already handled.
+        - generic [ref=e1234]:
+          - navigation "Booking status" [ref=e1235]:
+            - button "Needs action 13 items" [ref=e1236]:
+              - generic [ref=e1237]: Needs action
+              - generic [ref=e1238]: 13 items
+            - button "Planned 12 items" [ref=e1239]:
+              - generic [ref=e1240]: Planned
+              - generic [ref=e1241]: 12 items
+            - button "Booked 14 items" [ref=e1242]:
+              - generic [ref=e1243]: Booked
+              - generic [ref=e1244]: 14 items
+            - button "Paid 0 items" [active] [pressed] [ref=e1245]:
+              - generic [ref=e1246]: Paid
+              - generic [ref=e1247]: 0 items
+            - button "Optional 4 items" [ref=e1248]:
+              - generic [ref=e1249]: Optional
+              - generic [ref=e1250]: 4 items
+          - generic [ref=e1251]:
+            - heading "Paid" [level=2] [ref=e1814]
+            - paragraph [ref=e1253]: Completed purchases and paid reservations.
+          - region "Paid" [ref=e1815]:
+            - generic [ref=e1816]:
+              - paragraph [ref=e1822]: Nothing here
+              - paragraph [ref=e1823]: You are clear in this category.
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

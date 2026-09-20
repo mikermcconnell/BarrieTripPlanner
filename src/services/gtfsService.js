@@ -16,11 +16,21 @@ const LOCAL_DEV_PROXY_FALLBACK_ENABLED =
   (typeof __DEV__ !== 'undefined' && __DEV__) ||
   process.env.NODE_ENV === 'test' ||
   Boolean(process.env.JEST_WORKER_ID);
+const GTFS_PARSE_CHUNK_SIZE = 750;
 
-const base64ToArrayBuffer = (base64) => {
+const yieldToEventLoop = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const reportProgress = (onProgress, stage) => {
+  if (typeof onProgress === 'function') {
+    onProgress(stage);
+  }
+};
+
+const base64ToArrayBuffer = async (base64) => {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const clean = String(base64 || '').replace(/[\r\n\s=]/g, '');
-  const bytes = [];
+  const bytes = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let byteIndex = 0;
   let buffer = 0;
   let bits = 0;
 
@@ -32,11 +42,18 @@ const base64ToArrayBuffer = (base64) => {
 
     if (bits >= 8) {
       bits -= 8;
-      bytes.push((buffer >> bits) & 0xff);
+      bytes[byteIndex] = (buffer >> bits) & 0xff;
+      byteIndex += 1;
+    }
+
+    if ((i + 1) % 65536 === 0) {
+      await yieldToEventLoop();
     }
   }
 
-  return new Uint8Array(bytes).buffer;
+  return byteIndex === bytes.length
+    ? bytes.buffer
+    : bytes.slice(0, byteIndex).buffer;
 };
 
 const toZipBytes = (data) => {
@@ -84,7 +101,7 @@ const findEndOfCentralDirectoryOffsets = (bytes) => {
   return offsets;
 };
 
-const extractZipTextFilesFromCentralDirectory = (bytes) => {
+const extractZipTextFilesFromCentralDirectory = async (bytes) => {
   const eocdOffsets = findEndOfCentralDirectoryOffsets(bytes);
 
   for (const eocdOffset of eocdOffsets) {
@@ -137,6 +154,8 @@ const extractZipTextFilesFromCentralDirectory = (bytes) => {
         valid = false;
         break;
       }
+
+      await yieldToEventLoop();
     }
 
     if (valid && Object.keys(files).length > 0) {
@@ -214,6 +233,54 @@ const parseCSVLine = (line) => {
 
   values.push(current.trim().replace(/^"|"$/g, ''));
   return values;
+};
+
+/**
+ * Visit CSV records without first allocating an array containing every line.
+ * Large GTFS files are processed in chunks so Android can render progress,
+ * service timers, and the trip-search watchdog between batches.
+ */
+const visitCSVRecordsCooperatively = async (
+  csvText,
+  visitor,
+  { chunkSize = GTFS_PARSE_CHUNK_SIZE, yieldControl = yieldToEventLoop } = {}
+) => {
+  const text = String(csvText || '').trim();
+  if (!text) return;
+
+  const headerEnd = text.indexOf('\n');
+  const rawHeader = headerEnd >= 0 ? text.slice(0, headerEnd) : text;
+  const headerLine = rawHeader.charCodeAt(0) === 0xfeff ? rawHeader.slice(1) : rawHeader;
+  const headers = headerLine
+    .replace(/\r$/, '')
+    .split(',')
+    .map((header) => header.trim().replace(/"/g, ''));
+
+  let cursor = headerEnd >= 0 ? headerEnd + 1 : text.length;
+  let processed = 0;
+
+  while (cursor < text.length) {
+    const nextLineBreak = text.indexOf('\n', cursor);
+    const lineEnd = nextLineBreak >= 0 ? nextLineBreak : text.length;
+    const line = text.slice(cursor, lineEnd).trim();
+    cursor = nextLineBreak >= 0 ? nextLineBreak + 1 : text.length;
+
+    if (!line) continue;
+
+    const values = parseCSVLine(line);
+    if (values.length === headers.length) {
+      const record = {};
+      headers.forEach((header, index) => {
+        record[header] = values[index];
+      });
+      visitor(record);
+    }
+
+    processed += 1;
+    if (processed % chunkSize === 0) {
+      await yieldControl();
+    }
+  }
 };
 
 /**
@@ -313,7 +380,7 @@ const downloadGTFSZip = async () => {
         break;
       } catch (zipError) {
         try {
-          files = extractZipTextFilesFromCentralDirectory(zipBytes);
+          files = await extractZipTextFilesFromCentralDirectory(zipBytes);
           logger.warn(
             'GTFS ZIP required central-directory fallback extraction',
             describeZipBytes(zipBytes)
@@ -441,7 +508,34 @@ const parseShapes = (content) => {
     }
   });
 
-  // Sort each shape's points by sequence
+  Object.keys(shapes).forEach((shapeId) => {
+    shapes[shapeId].sort((a, b) => a.sequence - b.sequence);
+  });
+
+  return shapes;
+};
+
+const parseShapesCooperatively = async (content, options) => {
+  const shapes = {};
+
+  await visitCSVRecordsCooperatively(content, (point) => {
+    const shapeId = point.shape_id;
+    if (!shapeId) return;
+
+    const lat = parseFloat(point.shape_pt_lat);
+    const lon = parseFloat(point.shape_pt_lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+    if (!shapes[shapeId]) {
+      shapes[shapeId] = [];
+    }
+    shapes[shapeId].push({
+      latitude: lat,
+      longitude: lon,
+      sequence: parseInt(point.shape_pt_sequence || '0', 10),
+    });
+  }, options);
+
   Object.keys(shapes).forEach((shapeId) => {
     shapes[shapeId].sort((a, b) => a.sequence - b.sequence);
   });
@@ -547,6 +641,24 @@ const parseStopTimes = (content) => {
   }));
 };
 
+const parseStopTimesCooperatively = async (content, options) => {
+  const stopTimes = [];
+
+  await visitCSVRecordsCooperatively(content, (st) => {
+    stopTimes.push({
+      tripId: st.trip_id,
+      stopId: st.stop_id,
+      stopSequence: parseInt(st.stop_sequence || '0', 10),
+      arrivalTime: parseTimeToSeconds(st.arrival_time),
+      departureTime: parseTimeToSeconds(st.departure_time),
+      pickupType: parseInt(st.pickup_type || '0', 10),
+      dropOffType: parseInt(st.drop_off_type || '0', 10),
+    });
+  }, options);
+
+  return stopTimes;
+};
+
 /**
  * Parse calendar from calendar.txt content
  * Defines regular weekly service patterns
@@ -623,23 +735,39 @@ export const createRouteStopsMapping = (trips, stopTimes) => {
  * Fetch all static GTFS data from the ZIP file
  * @returns {Promise<Object>} Object containing all parsed GTFS data
  */
-export const fetchAllStaticData = async () => {
+export const fetchAllStaticData = async ({ onProgress, yieldControl = yieldToEventLoop } = {}) => {
   try {
+    reportProgress(onProgress, 'Downloading the latest transit schedule');
     const files = await downloadGTFSZip();
+    await yieldControl();
 
-    // Parse each file
+    reportProgress(onProgress, 'Reading routes and stops');
     const routes = files['routes.txt'] ? parseRoutes(files['routes.txt']) : [];
     const stops = files['stops.txt'] ? parseStops(files['stops.txt']) : [];
-    const shapes = files['shapes.txt'] ? parseShapes(files['shapes.txt']) : {};
     const trips = files['trips.txt'] ? parseTrips(files['trips.txt']) : [];
-    const stopTimes = files['stop_times.txt'] ? parseStopTimes(files['stop_times.txt']) : [];
     const calendar = files['calendar.txt'] ? parseCalendar(files['calendar.txt']) : [];
     const calendarDates = files['calendar_dates.txt'] ? parseCalendarDates(files['calendar_dates.txt']) : [];
+    await yieldControl();
 
+    reportProgress(onProgress, 'Preparing the route map');
+    const shapes = files['shapes.txt']
+      ? await parseShapesCooperatively(files['shapes.txt'], { yieldControl })
+      : {};
+
+    reportProgress(onProgress, 'Reading scheduled stop times');
+    const stopTimes = files['stop_times.txt']
+      ? await parseStopTimesCooperatively(files['stop_times.txt'], { yieldControl })
+      : [];
+    await yieldControl();
+
+    reportProgress(onProgress, 'Linking routes and stops');
     const tripMapping = createTripMapping(trips);
     const routeShapeMapping = createRouteShapeMapping(trips);
+    await yieldControl();
     const routeStopsMapping = createRouteStopsMapping(trips, stopTimes);
+    await yieldControl();
     const routeStopSequencesMapping = createRouteStopSequencesMapping(trips, stopTimes);
+    await yieldControl();
 
     return {
       routes,

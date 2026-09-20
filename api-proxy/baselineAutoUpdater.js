@@ -1,6 +1,11 @@
 const { buildBaselineDivergence, getShapeCoordinateSignature } = require('./baselineDivergence');
+const {
+  loadPendingRoutes: loadStoredPendingRoutes,
+  savePendingRoutes: saveStoredPendingRoutes,
+} = require('./baselineAutoUpdateStateStore');
 
 const DEFAULT_STABILITY_MS = 30 * 60 * 1000;
+const REMOVED_ROUTE_SIGNATURE = '__route_removed_from_live_gtfs__';
 const pendingRoutes = new Map();
 
 function isEnabled() {
@@ -29,7 +34,9 @@ function getMapValue(collection, key) {
 }
 
 function routeShapeSignature(data = {}, routeId) {
-  const shapeIds = getMapValue(data.routeShapeMapping, routeId) || [];
+  const rawShapeIds = getMapValue(data.routeShapeMapping, routeId);
+  if (rawShapeIds == null) return REMOVED_ROUTE_SIGNATURE;
+  const shapeIds = rawShapeIds || [];
   return (Array.isArray(shapeIds) ? shapeIds : [])
     .map((shapeId) => {
       const shape = getMapValue(data.shapes, shapeId);
@@ -55,6 +62,26 @@ function buildDivergence(baselineData, liveData) {
   });
 }
 
+function replacePendingRoutes(records) {
+  if (!Array.isArray(records)) return;
+  pendingRoutes.clear();
+  for (const record of records) {
+    const routeId = normalizeRouteId(record?.routeId);
+    if (!routeId || !record?.signature) continue;
+    pendingRoutes.set(routeId, {
+      signature: record.signature,
+      firstSeenAt: Number(record.firstSeenAt) || 0,
+      dueAt: Number(record.dueAt) || 0,
+    });
+  }
+}
+
+function serializePendingRoutes() {
+  return [...pendingRoutes.entries()]
+    .map(([routeId, pending]) => ({ routeId, ...pending }))
+    .sort((a, b) => a.routeId.localeCompare(b.routeId));
+}
+
 async function evaluateBaselineAutoUpdate({
   baselineDivergence,
   baselineData,
@@ -64,6 +91,8 @@ async function evaluateBaselineAutoUpdate({
   setBaselineRoutes,
   protectedRouteIds = [],
   nowMs = Date.now(),
+  loadPendingRoutes = loadStoredPendingRoutes,
+  savePendingRoutes = saveStoredPendingRoutes,
 } = {}) {
   const protectedRouteIdSet = normalizeRouteIdSet(protectedRouteIds);
   if (!isEnabled()) {
@@ -76,6 +105,10 @@ async function evaluateBaselineAutoUpdate({
     };
   }
 
+  if (typeof loadPendingRoutes === 'function') {
+    replacePendingRoutes(await loadPendingRoutes());
+  }
+
   const changedRouteIds = getChangedRouteIds(baselineDivergence);
   const changedRouteSet = new Set(changedRouteIds);
   for (const routeId of [...pendingRoutes.keys()]) {
@@ -83,6 +116,7 @@ async function evaluateBaselineAutoUpdate({
   }
 
   if (changedRouteIds.length === 0) {
+    if (typeof savePendingRoutes === 'function') await savePendingRoutes([]);
     return {
       baselineDivergence,
       pendingRouteIds: [],
@@ -161,6 +195,10 @@ async function evaluateBaselineAutoUpdate({
     ))
     .sort();
 
+  if (typeof savePendingRoutes === 'function') {
+    await savePendingRoutes(serializePendingRoutes());
+  }
+
   return {
     baselineDivergence: refreshedDivergence,
     pendingRouteIds,
@@ -177,5 +215,7 @@ function resetBaselineAutoUpdaterForTests() {
 module.exports = {
   evaluateBaselineAutoUpdate,
   routeShapeSignature,
+  REMOVED_ROUTE_SIGNATURE,
+  serializePendingRoutes,
   resetBaselineAutoUpdaterForTests,
 };

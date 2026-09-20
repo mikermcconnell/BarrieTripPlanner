@@ -13,6 +13,11 @@ import {
 import logger from '../utils/logger';
 import { throwIfAborted } from '../utils/requestControl';
 import { getRequestedTimeMs, withTripTimeConstraints, isItineraryFeasible } from '../utils/itineraryFeasibility';
+import {
+  AGENCY_TIME_ZONE,
+  getAgencyDateTimeParts,
+  normalizeServiceDate,
+} from '../utils/serviceTime';
 
 const withRoutingDiagnostics = (tripPlan, routingDiagnostics) => ({
   ...tripPlan,
@@ -182,11 +187,11 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
     const departureTime = itinerary.startTime;
     const minutesUntilDeparture = Math.max(0, Math.round((departureTime - now) / 60000));
 
-    const nowDate = new Date(now);
-    const departureDate = new Date(departureTime);
-    const isTomorrow = departureDate.getDate() !== nowDate.getDate() ||
-                       departureDate.getMonth() !== nowDate.getMonth() ||
-                       departureDate.getFullYear() !== nowDate.getFullYear();
+    const currentServiceDate = normalizeServiceDate(now);
+    const departureServiceDate = normalizeServiceDate(departureTime);
+    const isTomorrow = Boolean(
+      currentServiceDate && departureServiceDate && departureServiceDate > currentServiceDate
+    );
 
     const hasHighWalk = itinerary.walkDistance > highWalkThreshold;
     const hasExcessiveDuration = itinerary.duration > maxTripDuration;
@@ -221,7 +226,7 @@ const addBasicMetadata = (tripPlan, tripParams = {}, options = {}) => {
   }
 
   // Sort by rider-friendly generalized cost so transfers need to save enough time.
-  finalItineraries = groupSimilarItinerariesForDisplay(
+  finalItineraries = (options.preserveCandidates ? (items) => items : groupSimilarItinerariesForDisplay)(
     placeNonRecommendedWalkingAfterTransit(
       rankItinerariesForRider(finalItineraries)
     )
@@ -413,7 +418,7 @@ export const planTrip = async ({
 
     const result = formatTripPlan(data.plan);
 
-    const resultWithMetadata = addBasicMetadata(result, tripParams, { includeWalkingOnly });
+    const resultWithMetadata = addBasicMetadata(result, tripParams, { includeWalkingOnly, preserveCandidates: true });
 
     // Check if no itineraries were returned, including walking-only fallback
     if (!resultWithMetadata.itineraries || resultWithMetadata.itineraries.length === 0) {
@@ -539,16 +544,18 @@ export const planTrip = async ({
  * Format date for OTP API (YYYY-MM-DD)
  */
 const formatDate = (date) => {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const parts = getAgencyDateTimeParts(date);
+  if (!parts) return '';
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 };
 
 /**
  * Format time for OTP API (HH:MM)
  */
 const formatTime = (time) => {
-  const t = new Date(time);
-  return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+  const parts = getAgencyDateTimeParts(time);
+  if (!parts) return '';
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
 };
 
 /**
@@ -855,8 +862,9 @@ export const planTripWithLocalRouter = async ({
 
     // Optionally enrich with real walking directions
     if (enrichWalking) {
+      const resultWithMetadata = addBasicMetadata(result, tripParams, { includeWalkingOnly, preserveCandidates: true });
       try {
-        const enrichedResult = await enrichTripPlanWithWalking(result, { signal, onCandidateReady });
+        const enrichedResult = await enrichTripPlanWithWalking(resultWithMetadata, { signal, onCandidateReady });
         // Check if enrichment filtered out all itineraries
         if (!enrichedResult.itineraries || enrichedResult.itineraries.length === 0) {
           throw new TripPlanningError(
@@ -864,7 +872,10 @@ export const planTripWithLocalRouter = async ({
             'No reasonable transit routes found within 2 hours'
           );
         }
-        return enrichedResult;
+        return withRoutingDiagnostics(enrichedResult, buildRoutingDiagnostics({
+          source: 'local_router',
+          walkingEnrichment: 'trip_enrichment',
+        }));
       } catch (walkingError) {
         throwIfAborted(signal);
         if (walkingError.name === 'AbortError' || walkingError.name === 'TimeoutError') throw walkingError;
@@ -874,7 +885,10 @@ export const planTripWithLocalRouter = async ({
         }
         logger.warn('Walking enrichment failed, using estimates:', walkingError);
         // Still add basic metadata even without walking enrichment
-        return addBasicMetadata(result, tripParams, { includeWalkingOnly });
+        return withRoutingDiagnostics(resultWithMetadata, buildRoutingDiagnostics({
+          source: 'local_router',
+          walkingEnrichment: 'estimated',
+        }));
       }
     }
 
@@ -951,13 +965,13 @@ function getTripCacheKey({
   arriveBy = false,
   enrichWalking = true,
 }) {
-  const timeRounded = Math.floor(requestedTimeMs / TRIP_CACHE_TTL_MS);
+  const requestedMinute = Math.floor(requestedTimeMs / (60 * 1000));
   return [
     fromLat.toFixed(4),
     fromLon.toFixed(4),
     toLat.toFixed(4),
     toLon.toFixed(4),
-    timeRounded,
+    requestedMinute,
     arriveBy ? 'arrive' : 'depart',
     enrichWalking === false ? 'walk-deferred' : 'walk-enriched',
   ].join(',');
@@ -1165,7 +1179,7 @@ export const planTripAuto = async (params) => {
       }
     : undefined;
 
-  const shouldUseCache = !zoneTrip;
+  const shouldUseCache = !zoneTrip && params.useCache !== false;
   const cacheKey = shouldUseCache
     ? getTripCacheKey({
         fromLat: routingParams.fromLat,
@@ -1396,5 +1410,9 @@ export const formatDistance = (meters) => {
  */
 export const formatTimeFromTimestamp = (timestamp) => {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: AGENCY_TIME_ZONE,
+  });
 };

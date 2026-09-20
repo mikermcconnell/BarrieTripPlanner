@@ -47,7 +47,7 @@ const getTripSummary = (item) => {
 const TripHistoryScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
-  const { tripHistory, clearTripHistory, addSavedTrip, isAuthenticated } = useAuth();
+  const { tripHistory, clearTripHistory, addSavedTrip } = useAuth();
 
   const handleClearHistory = () => {
     Alert.alert(
@@ -80,10 +80,6 @@ const TripHistoryScreen = ({ navigation }) => {
   };
 
   const saveTrip = async (item) => {
-    if (!isAuthenticated) {
-      Alert.alert('Sign in to save trips', 'Create or sign in to your account to save trips across devices.');
-      return;
-    }
     const payload = buildSavedTripPayload({
       from: item.from,
       to: item.to,

@@ -21,6 +21,7 @@ Working notes in [`docs/plans/`](./docs/plans/) are non-default context. Start w
 - Interactive map with route polylines
 - Stop search and information
 - Trip planning with integrated trip details and navigation
+- Local-first My Trips with editable, real-time collaboration links
 - Service alerts and detour overlays
 - Official MyRide holiday-service notices with advance in-app and opted-in push reminders
 - Platform maps for major transit hubs from the City of Barrie source PDF
@@ -76,6 +77,8 @@ Supporting features:
    - `LOCATIONIQ_API_KEY` (for local `proxy-server.js` / `api-proxy`)
    - `EXPO_PUBLIC_FIREBASE_*`
    - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` for native Google sign-in
+   - `EXPO_PUBLIC_SENTRY_DSN` for production crash/error delivery
+   - `SENTRY_AUTH_TOKEN` as a sensitive EAS production variable for readable source maps
    - Optional fallback OTP backend: `EXPO_PUBLIC_OTP_URL`
    - Keep `EXPO_PUBLIC_ALLOW_DIRECT_LOCATIONIQ=false` for production/public builds
    - Keep `EXPO_PUBLIC_API_PROXY_TOKEN` empty for production/public builds
@@ -189,6 +192,10 @@ Run web with the local proxy:
 npm run web:dev
 ```
 
+Web development keeps GTFS traffic on the local CORS proxy and uses the
+configured authenticated API proxy for LocationIQ geocoding. The LocationIQ
+key remains server-side; do not add it as an `EXPO_PUBLIC_*` variable.
+
 If you use a deployed proxy instead, set:
 - `EXPO_PUBLIC_CORS_PROXY_URL`
 - or `EXPO_PUBLIC_API_PROXY_URL` (with a `/proxy?url=` endpoint)
@@ -289,7 +296,7 @@ The backend deployment/auth/ops model is documented in [docs/API-PROXY-OPERATION
    - `DETOUR_HISTORY_ENABLED=true` (default true)
    - `DETOUR_HISTORY_RETENTION_DAYS=30` (default 30; set `<=0` to disable automatic pruning)
    - `DETOUR_BURST_SAMPLING_ENABLED=false` for normal scheduled production; burst sampling is diagnostic only
-   - `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000` and `DETOUR_CANDIDATE_CONFIRMATION_WINDOW_MS=10800000` keep compact backend memory for low-frequency route confirmation
+   - `DETOUR_DETECTOR_VERSION=v2`, `DETOUR_VEHICLE_TRACE_WINDOW_MS=1200000`, and the headway-aware candidate defaults (`2700000` fallback, `1.25` headway multiplier, `600000` buffer, `5400000` cap) keep event-scoped storage and bounded backend memory for low-frequency route confirmation
    - `BASELINE_AUTO_INIT=false` (prevents seeding the baseline from live GTFS during an active detour)
    - `DETOUR_REQUIRE_SAFE_BASELINE=true` (blocks detection until a trusted baseline is loaded)
    - `FIREBASE_SERVICE_ACCOUNT_JSON=...` (or `GOOGLE_APPLICATION_CREDENTIALS`)
@@ -345,6 +352,14 @@ Deploy updated rules so clients can read:
 - dev active/history collections only when local isolated testing is intentionally enabled
 - legacy `activeDetours/*`, `detourHistory/*`, `activeDetoursV2/*`, and `detourHistoryV2/*` remain read-only archive/audit data and are not production sources of truth
 
+Shared trips also require:
+
+- Firebase Anonymous Authentication enabled. It provides an invisible low-privilege identity for edits; riders do not see a sign-in screen.
+- the current `firestore.rules` deployed so exact `sharedTrips/{shareId}` links can be read while collection listing stays disabled
+- Firebase Hosting deployed from `legal-public/` so `trip.html?id=...` provides the public live viewer and app-edit handoff
+
+My Trips is local-first for signed-out riders. Account sign-in is optional and remains useful for account-backed cross-device storage. Shared-trip updates are revision checked so a stale editor cannot overwrite a newer saved version.
+
 ### EAS Android Firebase file
 
 - `app.config.js` resolves `android.googleServicesFile` from `GOOGLE_SERVICES_JSON` when present.
@@ -355,12 +370,15 @@ Deploy updated rules so clients can read:
 
 - Before building any Android App Bundle (`.aab`) for Google Play Console, always increment the Android `versionCode`.
 - Keep the Expo config and native Android config in sync: update `android.versionCode` in `app.base.json` and `versionCode` in `android/app/build.gradle`.
+- Keep `package.json`, `app.base.json`, and `release.json` on the same release version. `release.json` must record a version name and Android version code higher than the last known Play production release.
+- Do not use `EXPO_PUBLIC_APP_VERSION` to move a build or OTA update onto another runtime. A mismatched override is rejected by app configuration and the production preflight.
 
 ### Production release gate
 
 - Run `npm run verify:production` from a clean branch that is synchronized with its upstream branch.
+- Production releases must come from clean `master` tracking the exact `origin/master` commit. The gate prints and validates the checked-in release identity before running the broader suite.
 - The gate checks tests, production environment safety, Expo health, dependency severity, live API auth, legal URLs, and feedback-retention TTL policies.
-- Public auto-detours require `EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true`. The production release gate also verifies the live baseline and rollout health before a build can proceed.
+- Public auto-detours require `EXPO_PUBLIC_AUTO_DETOURS_APPROVED=true`. Keep both production flags `false` until the live baseline and rollout-health critical checks pass; the production release gate verifies those checks whenever the feature is enabled.
 - Run `npm run build:release` only after the gate passes. It creates the Google Play AAB through EAS-managed upload signing; a local Gradle release is a smoke-test artifact and must not be uploaded.
 - Static legal pages live in `legal-public/` and Firebase Hosting is configured to deploy only that directory. They identify Mike McMike as the independent operator. Obtain legal review, run `firebase deploy --only hosting`, then verify each public URL. The app contact is `mybarrietransit@outlook.com`; Service Barrie remains the transit-service contact only.
 

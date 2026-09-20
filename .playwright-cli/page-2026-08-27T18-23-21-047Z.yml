@@ -1,0 +1,99 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e198]:
+        - generic [ref=e200]:
+          - generic:
+            - region "Map" [ref=e201]
+            - 'img "Stop 1: Dublin Airport" [ref=e395]':
+              - strong [ref=e397]: "1"
+            - 'img "Stop 2: Dublin lodging area" [ref=e398]':
+              - strong [ref=e400]: "2"
+            - 'img "Stop 3: Georgian Quarter" [ref=e401]':
+              - strong [ref=e403]: "3"
+            - 'img "Stop 4: Kehoe''s" [ref=e404]':
+              - strong [ref=e406]: "4"
+            - img "Select Trinity College & Book of Kells" [ref=e407]
+            - img "Select Kilmainham Gaol" [ref=e412]
+            - img "Select The Cobblestone" [ref=e417]
+            - img "Select Sixt Dublin Airport rental car" [ref=e423]
+            - img "Select Belfast area" [ref=e432]
+            - img "Select Dark Hedges" [ref=e439]
+            - img "Select Causeway Coast lodging area" [ref=e444]
+            - img "Select Giant's Causeway" [ref=e452]
+            - img "Select Carrick-a-Rede Rope Bridge" [ref=e457]
+            - img "Select Dunluce Castle" [ref=e462]
+            - img "Select Cornwall Airport Newquay" [ref=e467]
+            - img "Select Home in Bath" [ref=e474]
+            - img "Select Roman Baths" [ref=e482]
+            - img "Select Royal Crescent & Bath Circuit" [ref=e487]
+            - img "Select London Paddington" [ref=e492]
+            - img "Select Tower of London" [ref=e501]
+            - img "Select Castle Combe" [ref=e506]
+            - img "Select Charmouth Beach" [ref=e511]
+            - img "Select Lyme Regis" [ref=e516]
+            - img "Select Home in Cornwall" [ref=e521]
+            - img "Select St Michael's Mount" [ref=e529]
+            - img "Select Kynance Cove" [ref=e534]
+            - img "Select Minack Theatre" [ref=e539]
+            - img "Select London Heathrow Airport" [ref=e544]
+            - img "Select Borough Market & South Bank" [ref=e551]
+            - img "Select Guinness Storehouse" [ref=e557]
+            - img "Select Lost Gardens of Heligan" [ref=e562]
+            - img "Select Mevagissey or Charlestown harbour stop" [ref=e567]
+            - img "Select Lizard Point" [ref=e572]
+            - img "Select Westonbirt Arboretum" [ref=e577]
+            - img "Select Prior Park Landscape Garden" [ref=e582]
+            - img "Select Phoenix Park" [ref=e587]
+            - img "Select Eden Project" [ref=e592]
+            - img "Select Thermae Bath Spa" [ref=e597]
+            - img "Select Trebah Garden" [ref=e602]
+            - img "Select Castle Beach rock pools" [ref=e607]
+            - img "Select Monmouth Beach Ammonite Pavement" [ref=e612]
+            - img "Select Food" [ref=e617]
+          - generic:
+            - generic [ref=e202]:
+              - button "Zoom in" [ref=e203] [cursor=pointer]
+              - button "Zoom out" [ref=e205] [cursor=pointer]
+            - generic:
+              - button "Toggle attribution" [ref=e208] [cursor=pointer]
+              - link "Mapbox homepage" [ref=e211] [cursor=pointer]:
+                - /url: https://www.mapbox.com/
+        - generic [ref=e213]:
+          - generic [ref=e214]:
+            - generic [ref=e215]:
+              - heading "Map" [level=1] [ref=e216]
+              - paragraph [ref=e217]: 42 places
+            - button "Previous trip day" [disabled] [ref=e218]: ‹
+            - generic [ref=e219] [cursor=pointer]:
+              - generic [ref=e220]: Day 1 · Sat, Sep 5
+              - textbox "Choose trip day" [ref=e221]: 2026-09-05
+            - button "Next trip day" [ref=e222]: ›
+          - generic "Map filters" [ref=e223]:
+            - button "Place" [ref=e224]
+            - button "Day" [ref=e229]
+            - button "Stays" [ref=e239]
+            - button "Food" [ref=e246]
+            - button "Saved" [ref=e251]
+            - button "Activities" [ref=e255]
+            - button "Travel" [ref=e259]
+            - button "All" [active] [ref=e267]
+        - generic "Day 1 · Sat, Sep 5 selected stop" [ref=e276]:
+          - button "Previous stop" [ref=e277]: ‹
+          - button "4 6:30 PM Later First pint at Kehoe's or The Long Hall Kehoe's" [ref=e393]:
+            - generic [ref=e279]: "4"
+            - generic [ref=e280]:
+              - generic [ref=e281]:
+                - generic [ref=e282]: 6:30 PM
+                - generic [ref=e283]: Later
+              - generic [ref=e284]: First pint at Kehoe's or The Long Hall
+              - generic [ref=e285]: Kehoe's
+          - button "Next stop" [disabled] [ref=e289]: ›
+      - navigation [ref=e170]:
+        - button [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

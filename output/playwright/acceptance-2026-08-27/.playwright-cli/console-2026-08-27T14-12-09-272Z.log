@@ -1,0 +1,6 @@
+[       0ms] Error: Page crashed and was reset to about:blank.
+    at _Tab.logErrorMessage (D:\DeveloperCaches\npm\_npx\31e32ef8478fbf80\node_modules\playwright-core\lib\coreBundle.js:64466:62)
+    at Context.ensureTab (D:\DeveloperCaches\npm\_npx\31e32ef8478fbf80\node_modules\playwright-core\lib\coreBundle.js:64820:28)
+    at async Object.handle (D:\DeveloperCaches\npm\_npx\31e32ef8478fbf80\node_modules\playwright-core\lib\coreBundle.js:63891:20)
+    at async BrowserBackend.callTool (D:\DeveloperCaches\npm\_npx\31e32ef8478fbf80\node_modules\playwright-core\lib\coreBundle.js:65552:11)
+    at async connection.onmessage (D:\DeveloperCaches\npm\_npx\31e32ef8478fbf80\node_modules\playwright-core\lib\coreBundle.js:73726:29)

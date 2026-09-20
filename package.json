@@ -1,6 +1,6 @@
 {
   "name": "barrie-transit-planner",
-  "version": "1.0.8",
+  "version": "1.0.12",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -31,10 +31,12 @@
     "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
     "build:release:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Apk",
     "verify:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-readiness.ps1",
+    "verify:release-identity": "node scripts/verify-release-identity.js",
+    "verify:sentry": "node scripts/verify-sentry-ingestion.js",
     "prebuild:android:production": "node scripts/preflight-android-production-env.js --profile production",
     "eas:build:android": "npm run prebuild:android:eas && eas build --platform android --profile production --clear-cache",
     "eas-build-pre-install": "node scripts/preflight-android-production-env.js",
-    "prebuild:android:eas": "eas env:exec production \"node scripts/preflight-android-production-env.js --profile production\" --non-interactive",
+    "prebuild:android:eas": "node scripts/run-eas-cli.js env:exec production \"node scripts/preflight-android-production-env.js --profile production\"",
     "validate:detour-ground-truth": "node scripts/validate-detour-ground-truth.js --active-detours-json docs/detour-ground-truth/snapshots/route-10-mulcaster-simcoe-2026-05-26-active-detours.json",
     "score:detour-quality": "node scripts/score-detour-quality.js",
     "score:detour-synthetic-lab": "node scripts/score-detour-quality.js --synthetic-only",
@@ -75,7 +77,7 @@
     "expo-updates": "~29.0.20",
     "firebase": "^12.9.0",
     "jszip": "^3.10.1",
-    "maplibre-gl": "^5.19.0",
+    "maplibre-gl": "^6.10.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
@@ -100,20 +102,22 @@
     "typescript": "~5.9.2"
   },
   "overrides": {
+    "uuid": "^11.1.1",
     "fast-xml-parser": "^5.7.0",
     "minimatch": "^10.2.3",
-    "protobufjs": "^7.6.4",
+    "protobufjs": "^7.6.5",
     "node-forge": "^1.4.0",
     "undici": "^6.24.0",
-    "@xmldom/xmldom": "^0.8.13",
+    "@xmldom/xmldom": "^0.8.15",
     "picomatch": "^4.0.4",
     "shell-quote": "^1.8.5",
     "@grpc/grpc-js": "^1.9.16",
-    "fast-uri": "^3.1.5",
+    "fast-uri": "^3.1.6",
     "brace-expansion": "^5.0.9",
-    "js-yaml": "^4.3.1",
+    "js-yaml": "^4.3.2",
     "nanoid": "^3.3.18",
-    "postcss": "^8.5.23"
+    "postcss": "^8.5.23",
+    "browserslist": "^4.28.9"
   },
   "private": true
 }

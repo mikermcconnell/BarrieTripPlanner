@@ -1,0 +1,305 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [ref=e42] [cursor=pointer]
+    - tab "Search" [active] [selected] [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]
+  - generic [ref=e300]:
+    - generic [ref=e308]:
+      - generic [ref=e1031]:
+        - region [ref=e1032]
+        - button [ref=e1033] [cursor=pointer]:
+          - generic [ref=e542]: "364"
+        - button [ref=e1034] [cursor=pointer]:
+          - generic [ref=e547]: "365"
+        - button [ref=e1035] [cursor=pointer]:
+          - generic [ref=e552]: "366"
+        - button [ref=e1036] [cursor=pointer]:
+          - generic [ref=e557]: "367"
+        - button [ref=e1037] [cursor=pointer]:
+          - generic [ref=e562]: "744"
+        - button [ref=e1038] [cursor=pointer]:
+          - generic [ref=e567]: "745"
+        - button [ref=e1039] [cursor=pointer]:
+          - generic [ref=e572]: "746"
+        - button [ref=e1040] [cursor=pointer]:
+          - generic [ref=e577]: "747"
+        - button [ref=e1041] [cursor=pointer]:
+          - generic [ref=e582]: "805"
+        - button [ref=e1042] [cursor=pointer]:
+          - generic [ref=e587]: "808"
+        - button [ref=e1043] [cursor=pointer]:
+          - generic [ref=e592]: "809"
+        - button [ref=e1044] [cursor=pointer]:
+          - generic [ref=e597]: "812"
+        - button [ref=e1045] [cursor=pointer]:
+          - generic [ref=e602]: "880"
+        - button [ref=e1046] [cursor=pointer]:
+          - generic [ref=e607]: "881"
+        - button [ref=e1047] [cursor=pointer]:
+          - generic [ref=e612]: "977"
+        - button [ref=e1048] [cursor=pointer]:
+          - generic [ref=e617]: "978"
+        - button [ref=e1049] [cursor=pointer]:
+          - generic [ref=e622]: "979"
+        - button [ref=e1050] [cursor=pointer]:
+          - generic [ref=e627]: "986"
+        - button [ref=e1051] [cursor=pointer]:
+          - generic [ref=e632]: "510"
+        - button [ref=e1052] [cursor=pointer]:
+          - generic [ref=e637]: "336"
+        - button [ref=e1053] [cursor=pointer]:
+          - generic [ref=e642]: "265"
+        - button [ref=e1054] [cursor=pointer]:
+          - generic [ref=e1055]: "959"
+        - button [ref=e1056] [cursor=pointer]:
+          - generic [ref=e1057]: "142"
+        - img [ref=e1058]:
+          - generic: Barrie Allandale Hub
+        - img [ref=e1059]:
+          - generic: Downtown Hub
+        - img [ref=e1060]:
+          - generic: Park Place
+        - img [ref=e1061]:
+          - generic: Georgian College
+        - img [ref=e1062]:
+          - generic: Barrie South GO
+        - button [ref=e1066] [cursor=pointer]:
+          - generic [ref=e840]: 8A
+        - button [ref=e1067] [cursor=pointer]:
+          - generic [ref=e1068]: "10"
+        - button [ref=e1073] [cursor=pointer]:
+          - generic [ref=e1074]: 12A
+        - button [ref=e1079] [cursor=pointer]:
+          - generic [ref=e870]: 12B
+        - button [ref=e1080] [cursor=pointer]:
+          - generic [ref=e1081]: "101"
+        - button [ref=e1086] [cursor=pointer]:
+          - generic [ref=e1087]: 8A
+        - button [ref=e1092] [cursor=pointer]:
+          - generic [ref=e1093]: 8B
+        - button [ref=e1098] [cursor=pointer]:
+          - generic [ref=e1099]: 2A
+        - button [ref=e1104] [cursor=pointer]:
+          - generic [ref=e1105]: 8A
+        - button [ref=e1110] [cursor=pointer]:
+          - generic [ref=e930]: 7A
+        - button [ref=e1111] [cursor=pointer]:
+          - generic [ref=e1112]: 7B
+        - button [ref=e1117] [cursor=pointer]:
+          - generic [ref=e942]: 2B
+        - button [ref=e1118] [cursor=pointer]:
+          - generic [ref=e1119]: "101"
+        - button [ref=e1124] [cursor=pointer]:
+          - generic [ref=e960]: 12A
+        - button [ref=e1125] [cursor=pointer]:
+          - generic [ref=e1126]: "100"
+        - button [ref=e1131] [cursor=pointer]:
+          - generic [ref=e978]: "400"
+        - button [ref=e1132] [cursor=pointer]:
+          - generic [ref=e1133]: 12B
+        - button [ref=e1138] [cursor=pointer]:
+          - generic [ref=e1139]: "400"
+        - button [ref=e1144] [cursor=pointer]:
+          - generic [ref=e1145]: 8B
+        - button [ref=e1150] [cursor=pointer]:
+          - generic [ref=e1151]: 15A
+        - button [ref=e1156] [cursor=pointer]:
+          - generic [ref=e1157]: 2A
+        - button [ref=e1162] [cursor=pointer]:
+          - generic [ref=e1163]: 7A
+        - button [ref=e1168] [cursor=pointer]:
+          - generic [ref=e1169]: "11"
+        - button [ref=e1174] [cursor=pointer]:
+          - generic [ref=e1175]: 8B
+        - button [ref=e1180] [cursor=pointer]:
+          - generic [ref=e1181]: "100"
+        - button [ref=e1186] [cursor=pointer]:
+          - generic [ref=e1187]: 8A
+        - button [ref=e1192] [cursor=pointer]:
+          - generic [ref=e1193]: "10"
+        - button [ref=e1198] [cursor=pointer]:
+          - generic [ref=e1199]: "11"
+        - button [ref=e1204] [cursor=pointer]:
+          - generic [ref=e1205]: 8B
+        - button [ref=e1210] [cursor=pointer]:
+          - generic [ref=e1211]: 8A
+        - button [ref=e1216] [cursor=pointer]:
+          - generic [ref=e1217]: 8B
+        - button [ref=e1222] [cursor=pointer]:
+          - generic [ref=e1223]: 7A
+        - group [ref=e670]:
+          - generic [ref=e1228] [cursor=pointer]
+          - generic [ref=e672]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link [ref=e1229] [cursor=pointer]:
+              - /url: https://maplibre.org/
+              - text: MapLibre
+      - generic [ref=e676]:
+        - textbox [ref=e1230]:
+          - /placeholder: Where to?
+        - generic [ref=e681]: LIVE
+      - button [ref=e1232] [cursor=pointer]:
+        - generic [ref=e721]: "Active detours: 2 locations"
+        - generic [ref=e723]:
+          - generic [ref=e724]: 12B
+          - generic [ref=e726]: 8B
+        - generic [ref=e728]: ▼
+      - button [ref=e1233] [cursor=pointer]:
+        - generic [ref=e730]: i
+        - generic [ref=e732]:
+          - generic [ref=e733]: 4 official detour notices
+          - generic [ref=e734]: Mapleview Detour and Shuttle
+          - generic [ref=e735]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e736]:
+          - generic [ref=e737]: 12B
+          - generic [ref=e739]: "15"
+        - button [ref=e1234]:
+          - generic [ref=e742]: ×
+      - generic [ref=e743] [cursor=pointer]:
+        - button [ref=e1235]:
+          - generic [ref=e749]:
+            - generic [ref=e750]: LIVE MAP FEATURE
+            - generic [ref=e751]: Auto Detour Detector
+            - generic [ref=e752]: See how it works
+          - generic [ref=e753]: ›
+        - button [ref=e1236]:
+          - generic [ref=e755]: −
+      - button [ref=e1237] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button [ref=e1238] [cursor=pointer]:
+        - generic [ref=e805]: Map options
+        - generic [ref=e806]: "2"
+    - generic [ref=e1243]:
+      - generic [ref=e1244]: Search
+      - generic [ref=e1247]:
+        - generic [ref=e1248]: 🔍
+        - textbox "Search stops" [ref=e1249]:
+          - /placeholder: Search stops...
+      - generic [ref=e1250]:
+        - tab "Search stops" [ref=e1251] [cursor=pointer]:
+          - generic [ref=e1252]: Stops
+        - tab "Search routes" [ref=e1253] [cursor=pointer]:
+          - generic [ref=e1254]: Routes
+        - tab "Search addresses" [ref=e1255] [cursor=pointer]:
+          - generic [ref=e1256]: Addresses
+      - generic [ref=e1257]: Showing 20 highlighted stops
+      - generic [ref=e1260]:
+        - 'button "Park Place, Stop #777" [ref=e1262] [cursor=pointer]':
+          - generic [ref=e1273]:
+            - generic [ref=e1274]: Park Place
+            - generic [ref=e1275]: "Stop #777"
+          - generic [ref=e1276]: ›
+        - 'button "Downtown Hub, Stop #1" [ref=e1278] [cursor=pointer]':
+          - generic [ref=e1289]:
+            - generic [ref=e1290]: Downtown Hub
+            - generic [ref=e1291]: "Stop #1"
+          - generic [ref=e1292]: ›
+        - 'button "Georgian College, Stop #330" [ref=e1294] [cursor=pointer]':
+          - generic [ref=e1305]:
+            - generic [ref=e1306]: Georgian College
+            - generic [ref=e1307]: "Stop #330"
+          - generic [ref=e1308]: ›
+        - 'button "Downtown Hub, Stop #2" [ref=e1310] [cursor=pointer]':
+          - generic [ref=e1321]:
+            - generic [ref=e1322]: Downtown Hub
+            - generic [ref=e1323]: "Stop #2"
+          - generic [ref=e1324]: ›
+        - 'button "Maple at Ross, Stop #486" [ref=e1326] [cursor=pointer]':
+          - generic [ref=e1337]:
+            - generic [ref=e1338]: Maple at Ross
+            - generic [ref=e1339]: "Stop #486"
+          - generic [ref=e1340]: ›
+        - 'button "Maple at Ross, Stop #485" [ref=e1342] [cursor=pointer]':
+          - generic [ref=e1353]:
+            - generic [ref=e1354]: Maple at Ross
+            - generic [ref=e1355]: "Stop #485"
+          - generic [ref=e1356]: ›
+        - 'button "Barrie South GO Station, Stop #725" [ref=e1358] [cursor=pointer]':
+          - generic [ref=e1369]:
+            - generic [ref=e1370]: Barrie South GO Station
+            - generic [ref=e1371]: "Stop #725"
+          - generic [ref=e1372]: ›
+        - 'button "Georgian Mall, Stop #440" [ref=e1374] [cursor=pointer]':
+          - generic [ref=e1385]:
+            - generic [ref=e1386]: Georgian Mall
+            - generic [ref=e1387]: "Stop #440"
+          - generic [ref=e1388]: ›
+        - 'button "Georgian Mall, Stop #441" [ref=e1390] [cursor=pointer]':
+          - generic [ref=e1401]:
+            - generic [ref=e1402]: Georgian Mall
+            - generic [ref=e1403]: "Stop #441"
+          - generic [ref=e1404]: ›
+        - 'button "Owen Street, Stop #192" [ref=e1406] [cursor=pointer]':
+          - generic [ref=e1417]:
+            - generic [ref=e1418]: Owen Street
+            - generic [ref=e1419]: "Stop #192"
+          - generic [ref=e1420]: ›
+        - 'button "Owen Street, Stop #191" [ref=e1422] [cursor=pointer]':
+          - generic [ref=e1433]:
+            - generic [ref=e1434]: Owen Street
+            - generic [ref=e1435]: "Stop #191"
+          - generic [ref=e1436]: ›
+        - 'button "Bayfield at Sophia, Stop #75" [ref=e1438] [cursor=pointer]':
+          - generic [ref=e1449]:
+            - generic [ref=e1450]: Bayfield at Sophia
+            - generic [ref=e1451]: "Stop #75"
+          - generic [ref=e1452]: ›
+        - 'button "Grove Street, Stop #68" [ref=e1454] [cursor=pointer]':
+          - generic [ref=e1465]:
+            - generic [ref=e1466]: Grove Street
+            - generic [ref=e1467]: "Stop #68"
+          - generic [ref=e1468]: ›
+        - 'button "Wellington Street, Stop #74" [ref=e1470] [cursor=pointer]':
+          - generic [ref=e1481]:
+            - generic [ref=e1482]: Wellington Street
+            - generic [ref=e1483]: "Stop #74"
+          - generic [ref=e1484]: ›
+        - 'button "Bayfield at Wellington, Stop #73" [ref=e1486] [cursor=pointer]':
+          - generic [ref=e1497]:
+            - generic [ref=e1498]: Bayfield at Wellington
+            - generic [ref=e1499]: "Stop #73"
+          - generic [ref=e1500]: ›
+        - 'button "Grove Street, Stop #67" [ref=e1502] [cursor=pointer]':
+          - generic [ref=e1513]:
+            - generic [ref=e1514]: Grove Street
+            - generic [ref=e1515]: "Stop #67"
+          - generic [ref=e1516]: ›
+        - 'button "Mapleview at Park Place, Stop #506" [ref=e1518] [cursor=pointer]':
+          - generic [ref=e1529]:
+            - generic [ref=e1530]: Mapleview at Park Place
+            - generic [ref=e1531]: "Stop #506"
+          - generic [ref=e1532]: ›
+        - 'button "Brock Street, Stop #146" [ref=e1534] [cursor=pointer]':
+          - generic [ref=e1545]:
+            - generic [ref=e1546]: Brock Street
+            - generic [ref=e1547]: "Stop #146"
+          - generic [ref=e1548]: ›
+        - 'button "Barrie View Drive, Stop #525" [ref=e1550] [cursor=pointer]':
+          - generic [ref=e1561]:
+            - generic [ref=e1562]: Barrie View Drive
+            - generic [ref=e1563]: "Stop #525"
+          - generic [ref=e1564]: ›
+        - 'button "Brock Street, Stop #147" [ref=e1566] [cursor=pointer]':
+          - generic [ref=e1577]:
+            - generic [ref=e1578]: Brock Street
+            - generic [ref=e1579]: "Stop #147"
+          - generic [ref=e1580]: ›

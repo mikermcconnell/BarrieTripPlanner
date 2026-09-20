@@ -13,4 +13,3 @@ export const getItineraryDelayBadgeProps = (itinerary) => {
   // Legacy itineraries have no endpoint availability. Do not assert on-time status.
   return { isRealtime: false, delaySeconds: 0, label: null };
 };
-

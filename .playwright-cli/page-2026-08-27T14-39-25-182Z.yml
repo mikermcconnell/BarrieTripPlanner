@@ -1,0 +1,291 @@
+- generic [ref=e38]:
+  - generic [ref=e39]:
+    - generic [ref=e47]:
+      - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e3152]:
+        - generic:
+          - region "Map" [ref=e3153]
+          - button ", stop 364, stop closure reported" [ref=e3154] [cursor=pointer]:
+            - generic [ref=e52]: "364"
+          - button ", stop 365, stop closure reported" [ref=e3155] [cursor=pointer]:
+            - generic [ref=e57]: "365"
+          - button ", stop 366, stop closure reported" [ref=e3156] [cursor=pointer]:
+            - generic [ref=e62]: "366"
+          - button ", stop 367, stop closure reported" [ref=e3157] [cursor=pointer]:
+            - generic [ref=e67]: "367"
+          - button ", stop 744, stop closure reported" [ref=e3158] [cursor=pointer]:
+            - generic [ref=e72]: "744"
+          - button ", stop 745, stop closure reported" [ref=e3159] [cursor=pointer]:
+            - generic [ref=e77]: "745"
+          - button ", stop 746, stop closure reported" [ref=e3160] [cursor=pointer]:
+            - generic [ref=e82]: "746"
+          - button ", stop 747, stop closure reported" [ref=e3161] [cursor=pointer]:
+            - generic [ref=e87]: "747"
+          - button ", stop 805, stop closure reported" [ref=e3162] [cursor=pointer]:
+            - generic [ref=e92]: "805"
+          - button ", stop 808, stop closure reported" [ref=e3163] [cursor=pointer]:
+            - generic [ref=e97]: "808"
+          - button ", stop 809, stop closure reported" [ref=e3164] [cursor=pointer]:
+            - generic [ref=e102]: "809"
+          - button ", stop 812, stop closure reported" [ref=e3165] [cursor=pointer]:
+            - generic [ref=e107]: "812"
+          - button ", stop 880, stop closure reported" [ref=e3166] [cursor=pointer]:
+            - generic [ref=e112]: "880"
+          - button ", stop 881, stop closure reported" [ref=e3167] [cursor=pointer]:
+            - generic [ref=e117]: "881"
+          - button ", stop 977, stop closure reported" [ref=e3168] [cursor=pointer]:
+            - generic [ref=e122]: "977"
+          - button ", stop 978, stop closure reported" [ref=e3169] [cursor=pointer]:
+            - generic [ref=e127]: "978"
+          - button ", stop 979, stop closure reported" [ref=e3170] [cursor=pointer]:
+            - generic [ref=e132]: "979"
+          - button ", stop 986, stop closure reported" [ref=e3171] [cursor=pointer]:
+            - generic [ref=e137]: "986"
+          - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e3172] [cursor=pointer]:
+            - generic [ref=e142]: "510"
+          - button ", stop 336, stop closure reported" [ref=e3173] [cursor=pointer]:
+            - generic [ref=e147]: "336"
+          - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e3174] [cursor=pointer]:
+            - generic [ref=e152]: "265"
+          - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e3175] [cursor=pointer]:
+            - generic "Stop 959. Not served by Route 8B during this detour" [ref=e3176]: "959"
+          - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e3177] [cursor=pointer]:
+            - generic "Stop 142. Not served by Route 8B during this detour" [ref=e3178]: "142"
+          - img "Barrie Allandale Hub bus hub" [ref=e3179]:
+            - generic: Barrie Allandale Hub
+          - img "Downtown Hub bus hub" [ref=e3180]:
+            - generic: Downtown Hub
+          - img "Park Place bus hub" [ref=e3181]:
+            - generic: Park Place
+          - img "Georgian College bus hub" [ref=e3182]:
+            - generic: Georgian College
+          - img "Barrie South GO bus hub" [ref=e3183]:
+            - generic: Barrie South GO
+          - button "Downtown Hub, stop 1" [ref=e3184] [cursor=pointer]
+          - button "Maple at Ross, stop 486" [ref=e3185] [cursor=pointer]
+          - button "Collier at Mulcaster, stop 190" [ref=e3186] [cursor=pointer]
+          - button "Owen Street, stop 191" [ref=e3187] [cursor=pointer]
+          - button "Collier at Clapperton, stop 187" [ref=e3188] [cursor=pointer]
+          - button "Lakeshore at Marina, stop 159" [ref=e3189] [cursor=pointer]
+          - button "Lakeshore at Victoria, stop 157" [ref=e3190] [cursor=pointer]
+          - img "Georgian Mall bus hub" [ref=e3191]:
+            - generic: Georgian Mall
+          - img "RVH bus hub" [ref=e3192]:
+            - generic: RVH
+          - img "Peggy Hill Team CC bus hub" [ref=e3193]:
+            - generic: Peggy Hill Team CC
+          - button "Route 8B bus 2201. Next stop Brock Street" [ref=e3194] [cursor=pointer]:
+            - generic [ref=e2767]: 8B
+          - button "Route 8B bus 1713. Next stop Yonge at Mapleview" [ref=e3195] [cursor=pointer]:
+            - generic [ref=e3015]: 8B
+          - button "Route 8B bus 1702. Next stop Collier at Clapperton" [ref=e3196] [cursor=pointer]:
+            - generic [ref=e3197]: 8B
+          - button "Route 8B bus 1102. Next stop Sundew Drive" [ref=e3202] [cursor=pointer]:
+            - generic [ref=e3203]: 8B
+          - button "Route 8B bus 2101. Next stop Alliance Boulevard" [ref=e3208] [cursor=pointer]:
+            - generic [ref=e3139]: 8B
+          - button "Barrie South GO Station, stop 725" [ref=e3209] [cursor=pointer]
+          - button "Park Place, stop 777" [ref=e3213] [cursor=pointer]
+          - button "Mapleton at Essa, stop 494" [ref=e3217] [cursor=pointer]
+          - button "Emms Drive, stop 492" [ref=e3221] [cursor=pointer]
+          - button "Peggy Hill Community Centre, stop 487" [ref=e3225] [cursor=pointer]
+          - button "Brock Street, stop 147" [ref=e3229] [cursor=pointer]
+          - button "Georgian College, stop 330" [ref=e3233] [cursor=pointer]
+          - button "125 Mapleview Drive West, stop 537" [ref=e3237] [cursor=pointer]
+          - button "Canadian Tire Plaza, stop 527" [ref=e3241] [cursor=pointer]
+          - button "Bryne Drive, stop 529" [ref=e3245] [cursor=pointer]
+          - button "Barrie View Drive, stop 525" [ref=e3249] [cursor=pointer]
+          - button "Country Lane, stop 782" [ref=e3253] [cursor=pointer]
+          - button "Esther Drive, stop 783" [ref=e3257] [cursor=pointer]
+          - button "Yonge at Ashford, stop 784" [ref=e3261] [cursor=pointer]
+          - button "Big Bay Plaza, stop 724" [ref=e3265] [cursor=pointer]
+          - button "Yonge at Big Bay Point, stop 704" [ref=e3269] [cursor=pointer]
+          - button "Cox Mill Road, stop 708" [ref=e3273] [cursor=pointer]
+          - button "Mill Creek, stop 706" [ref=e3277] [cursor=pointer]
+          - button "D'Ambrosio Drive, stop 710" [ref=e3281] [cursor=pointer]
+          - button "MacMillan Crescent, stop 721" [ref=e3285] [cursor=pointer]
+          - button "Maclaren Avenue, stop 720" [ref=e3289] [cursor=pointer]
+          - button "Yonge at Little, stop 717" [ref=e3293] [cursor=pointer]
+          - button "Foster Drive, stop 711" [ref=e3297] [cursor=pointer]
+          - button "Yonge at Huronia, stop 715" [ref=e3301] [cursor=pointer]
+          - button "Peartree Court, stop 171" [ref=e3305] [cursor=pointer]
+          - button "Robinson Street, stop 172" [ref=e3309] [cursor=pointer]
+          - button "Burton at Bayview, stop 163" [ref=e3313] [cursor=pointer]
+          - button "Granville Street, stop 167" [ref=e3317] [cursor=pointer]
+          - button "Barrie Allandale Transit Terminal Platform 12, stop 9012" [ref=e3321] [cursor=pointer]
+          - button "Brock at Innisfil, stop 115" [ref=e3325] [cursor=pointer]
+          - button "Brock Street, stop 8" [ref=e3329] [cursor=pointer]
+          - button "Anne at John Street, stop 21" [ref=e3333] [cursor=pointer]
+          - button "Anne at Vespra Street, stop 29" [ref=e3337] [cursor=pointer]
+          - button "Anne at Dunlop, stop 5" [ref=e3341] [cursor=pointer]
+          - button "Anne at Donald, stop 27" [ref=e3345] [cursor=pointer]
+          - button "Edgehill Drive, stop 17" [ref=e3349] [cursor=pointer]
+          - button "Shirley Avenue, stop 25" [ref=e3353] [cursor=pointer]
+          - button "Castle Drive, stop 13" [ref=e3357] [cursor=pointer]
+          - button "Valley Drive, stop 28" [ref=e3361] [cursor=pointer]
+          - button "Ecole Catholique, stop 3" [ref=e3365] [cursor=pointer]
+          - button "Cundles at Anne, stop 16" [ref=e3369] [cursor=pointer]
+          - button "Cundles at Sunnidale, stop 239" [ref=e3373] [cursor=pointer]
+          - button "Cundles at Kozlov, stop 235" [ref=e3377] [cursor=pointer]
+          - button "Kozlov at Cundles, stop 415" [ref=e3381] [cursor=pointer]
+          - button "Heather Street, stop 416" [ref=e3385] [cursor=pointer]
+          - button "Gloria Street, stop 901" [ref=e3389] [cursor=pointer]
+          - button "Wal-Mart Plaza, stop 454" [ref=e3393] [cursor=pointer]
+          - button "Livingstone at Bayfield, stop 455" [ref=e3397] [cursor=pointer]
+          - button "Georgian Mall, stop 441" [ref=e3401] [cursor=pointer]
+          - button "Stanley Street, stop 449" [ref=e3405] [cursor=pointer]
+          - button "Birchwood Drive, stop 127" [ref=e3409] [cursor=pointer]
+          - button "Springdale Drive, stop 126" [ref=e3413] [cursor=pointer]
+          - button "Deerpark Drive, stop 623" [ref=e3417] [cursor=pointer]
+          - button "Springdale at Cundles, stop 622" [ref=e3421] [cursor=pointer]
+          - button "Janine Street, stop 219" [ref=e3425] [cursor=pointer]
+          - button "Cundles at Daphne, stop 221" [ref=e3429] [cursor=pointer]
+          - button "St. Vincent at Sperling, stop 631" [ref=e3433] [cursor=pointer]
+          - button "Bell Farm at St. Vincent, stop 106" [ref=e3437] [cursor=pointer]
+          - button "Alliance Boulevard, stop 105" [ref=e3441] [cursor=pointer]
+          - button "115 Bell Farm, stop 108" [ref=e3445] [cursor=pointer]
+          - button "Mapleview at Essa, stop 870" [ref=e3449] [cursor=pointer]
+          - button "Hollyholme Farm Road, stop 531" [ref=e3453] [cursor=pointer]
+          - button "Reid Drive, stop 534" [ref=e3457] [cursor=pointer]
+          - button "Mapleview at Veteran's, stop 539" [ref=e3461] [cursor=pointer]
+          - button "North Village Way, stop 736" [ref=e3465] [cursor=pointer]
+          - button "Essa at Ardagh, stop 294" [ref=e3469] [cursor=pointer]
+          - button "Loggers Run, stop 307" [ref=e3473] [cursor=pointer]
+          - button "Burton Avenue, stop 818" [ref=e3477] [cursor=pointer]
+          - button "Churchill Drive, stop 676" [ref=e3481] [cursor=pointer]
+          - button "Ellis Drive, stop 677" [ref=e3485] [cursor=pointer]
+          - button "RVH (Atrium Entrance), stop 559" [ref=e3489] [cursor=pointer]
+          - button "RVH Main Entrance, stop 333" [ref=e3493] [cursor=pointer]
+          - button "322 Georgian Drive, stop 326" [ref=e3497] [cursor=pointer]
+          - button "Johnson at Georgian, stop 405" [ref=e3501] [cursor=pointer]
+          - button "Cheltenham Road, stop 402" [ref=e3505] [cursor=pointer]
+          - button "Hickling Trail, stop 411" [ref=e3509] [cursor=pointer]
+          - button "Johnson at Grove, stop 407" [ref=e3513] [cursor=pointer]
+          - button "Steel Street, stop 413" [ref=e3517] [cursor=pointer]
+          - button "Steel at Blake, stop 343" [ref=e3521] [cursor=pointer]
+          - button "Lions Gate Centre, stop 911" [ref=e3525] [cursor=pointer]
+          - button "Johnson at Indian Arrow Road, stop 959" [ref=e3529] [cursor=pointer]
+          - button "Vancouver Street, stop 142" [ref=e3533] [cursor=pointer]
+          - button "Parkview Center, stop 135" [ref=e3537] [cursor=pointer]
+          - button "Rodney Street, stop 138" [ref=e3541] [cursor=pointer]
+          - button "St. Vincent Street, stop 140" [ref=e3545] [cursor=pointer]
+          - button "Collier Street, stop 131" [ref=e3549] [cursor=pointer]
+          - button "Collier at Berczy, stop 185" [ref=e3553] [cursor=pointer]
+          - button "Poyntz Street, stop 193" [ref=e3557] [cursor=pointer]
+          - button "Lakeshore at Centennial, stop 155" [ref=e3561] [cursor=pointer]
+          - button "Barrie Allandale Transit Terminal Platform 4, stop 9004" [ref=e3565] [cursor=pointer]
+          - button "Essa at Anne, stop 293" [ref=e3569] [cursor=pointer]
+          - button "Essa at Fairview, stop 300" [ref=e3573] [cursor=pointer]
+          - button "Loggers Run, stop 306" [ref=e3577] [cursor=pointer]
+          - button "Essa at Veteran's, stop 312" [ref=e3581] [cursor=pointer]
+          - button "Harvie Road, stop 304" [ref=e3585] [cursor=pointer]
+          - button "Roberta Place, stop 290" [ref=e3589] [cursor=pointer]
+          - button "Bibby Court, stop 540" [ref=e3593] [cursor=pointer]
+          - button "Farmstead Crescent, stop 546" [ref=e3597] [cursor=pointer]
+          - button "Churchland Drive, stop 541" [ref=e3601] [cursor=pointer]
+          - button "Downing Cresent, stop 544" [ref=e3605] [cursor=pointer]
+          - button "Sundew Drive, stop 551" [ref=e3609] [cursor=pointer]
+          - button "Marsellus at Mapleview, stop 550" [ref=e3613] [cursor=pointer]
+          - button "Lougheed at Mapleview, stop 472" [ref=e3617] [cursor=pointer]
+          - button "Lougheed Road, stop 48" [ref=e3621] [cursor=pointer]
+          - button "Rundle Cresent, stop 50" [ref=e3625] [cursor=pointer]
+          - button "Athabaska at Essa, stop 45" [ref=e3629] [cursor=pointer]
+          - button "Dunn Street, stop 298" [ref=e3633] [cursor=pointer]
+          - button "Ecole Romeo Dallaire, stop 292" [ref=e3637] [cursor=pointer]
+          - button "47 Churchhill Dr, stop 982" [ref=e3641] [cursor=pointer]
+          - button "Huronia Medical Clinic, stop 752" [ref=e3645] [cursor=pointer]
+          - button "Mapleview at Huronia, stop 513" [ref=e3649] [cursor=pointer]
+          - button "Stunden Lane, stop 519" [ref=e3653] [cursor=pointer]
+          - button "Seline Crescent, stop 518" [ref=e3657] [cursor=pointer]
+          - button "Madelaine Drive, stop 965" [ref=e3661] [cursor=pointer]
+          - button "Mapleview at Greer, stop 966" [ref=e3665] [cursor=pointer]
+          - button "Goodwin Drive, stop 967" [ref=e3669] [cursor=pointer]
+          - button "Yonge at Mapleview, stop 954" [ref=e3673] [cursor=pointer]
+          - button "Sundew at Red Oak, stop 640" [ref=e3677] [cursor=pointer]
+        - group [ref=e372]:
+          - generic "Toggle attribution" [ref=e3681] [cursor=pointer]
+          - generic [ref=e374]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link "MapLibre" [ref=e3682] [cursor=pointer]:
+              - /url: https://maplibre.org/
+      - generic [ref=e2363]:
+        - textbox "Where to?" [ref=e3683]
+        - generic [ref=e2369]:
+          - generic "Transit status live" [ref=e3684]: LIVE
+          - generic [ref=e2373]: Rte 8B · 5 active
+      - button "Expand detour list" [ref=e3686] [cursor=pointer]:
+        - generic [ref=e2408]: "Active detours: 2 locations"
+        - generic [ref=e2410]:
+          - generic [ref=e2411]: 12B
+          - generic [ref=e2413]: 8B
+        - generic [ref=e2415]: ▼
+      - 'button "4 official detour notices: Mapleview Detour and Shuttle" [ref=e3687] [cursor=pointer]':
+        - generic [ref=e2417]: i
+        - generic [ref=e2419]:
+          - generic [ref=e2420]: 4 official detour notices
+          - generic [ref=e2421]: Mapleview Detour and Shuttle
+          - generic [ref=e2422]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e2423]:
+          - generic [ref=e2424]: 12B
+          - generic [ref=e2426]: "15"
+        - button "Hide planned detour notice" [ref=e3688]:
+          - generic [ref=e2429]: ×
+      - generic [ref=e2430] [cursor=pointer]:
+        - button "Learn how the Auto Detour Detector works" [ref=e3689]:
+          - generic [ref=e2436]:
+            - generic [ref=e2437]: LIVE MAP FEATURE
+            - generic [ref=e2438]: Auto Detour Detector
+            - generic [ref=e2439]: See how it works
+          - generic [ref=e2440]: ›
+        - button "Minimize Auto Detour Detector button" [ref=e3690]:
+          - generic [ref=e2442]: −
+      - button "Center on my location" [ref=e3691] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button "Open map options" [ref=e3692] [cursor=pointer]:
+        - generic [ref=e2492]: Map options
+        - generic [ref=e2493]: "2"
+    - generic [ref=e913]:
+      - generic [ref=e914]: Search
+      - generic [ref=e917]:
+        - generic [ref=e918]: 🔍
+        - textbox [ref=e3693]:
+          - /placeholder: Search routes...
+          - text: 8B
+        - button [ref=e3694] [cursor=pointer]:
+          - generic [ref=e1239]: ✕
+      - generic [ref=e920]:
+        - tab [ref=e3695] [cursor=pointer]:
+          - generic [ref=e922]: Stops
+        - tab [ref=e3696] [cursor=pointer]:
+          - generic [ref=e924]: Routes
+        - tab [ref=e3697] [cursor=pointer]:
+          - generic [ref=e926]: Addresses
+      - generic [ref=e927]: 1 routes found
+      - button [active] [ref=e3698] [cursor=pointer]:
+        - generic [ref=e3146]: 8B
+        - generic [ref=e3148]:
+          - generic [ref=e3149]: Crosstown/Essa
+          - generic [ref=e3150]: Route 8B
+        - generic [ref=e3151]: ›
+  - tablist [ref=e511]:
+    - tab "Map" [selected] [ref=e513] [cursor=pointer]
+    - tab "Search" [ref=e630] [cursor=pointer]
+    - tab "Profile" [ref=e735] [cursor=pointer]

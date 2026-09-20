@@ -8,6 +8,7 @@ const { projectCoordinateToRoute, projectOntoPolyline } = require('../detour/pro
 const { haversineDistance, pointToPolylineDistance } = require('../geometry');
 const {
   getRouteDetectorConfig,
+  KNOWN_TERMINAL_CIRCULATIONS,
   normalizeConfiguredDetourCorridor,
 } = require('../detourRouteConfig');
 const {
@@ -31,6 +32,11 @@ const {
   normalizeDirection,
   normalizeDirectionMode,
 } = require('./confirmedEventRefresh');
+const {
+  CONSECUTIVE_READINGS_REQUIRED,
+  DEFAULT_MIN_VEHICLES_FOR_DETOUR,
+  isWithinServiceHours,
+} = require('../detour/detectionConfig');
 
 const DEFAULT_OFF_ROUTE_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_OFF_ROUTE_THRESHOLD_METERS,
@@ -40,8 +46,11 @@ const DEFAULT_ON_ROUTE_CLEAR_THRESHOLD_METERS = positiveNumber(
   process.env.DETOUR_ON_ROUTE_CLEAR_THRESHOLD_METERS,
   40
 );
-const MIN_OFF_ROUTE_POINTS = 3;
-const MIN_UNIQUE_SIGNATURES = 2;
+// V2 keeps the existing safety floors while honoring stricter operational
+// settings. A deployment may raise either threshold, but cannot accidentally
+// weaken the normal three-ping/two-identity confirmation rule.
+const MIN_OFF_ROUTE_POINTS = Math.max(3, CONSECUTIVE_READINGS_REQUIRED);
+const MIN_UNIQUE_SIGNATURES = Math.max(2, DEFAULT_MIN_VEHICLES_FOR_DETOUR);
 const MIN_SAFE_SPAN_METERS = 100;
 const GEOMETRY_CLUSTER_GAP_METERS = positiveNumber(
   process.env.DETOUR_V2_GEOMETRY_CLUSTER_GAP_METERS,
@@ -247,9 +256,11 @@ function toMillis(value, fallback = Date.now()) {
 function getVehicleSampleTimeMs(vehicle) {
   if (vehicle?.timestampMs != null) {
     const value = Number(vehicle.timestampMs);
-    return Number.isFinite(value) ? value : Date.now();
+    return Number.isFinite(value) && value > 0 ? value : null;
   }
-  return toMillis(vehicle?.timestamp, Date.now());
+  if (vehicle?.timestamp == null) return null;
+  const value = toMillis(vehicle.timestamp, null);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function normalizeCoordinate(point) {
@@ -261,6 +272,12 @@ function normalizeCoordinate(point) {
 
 function normalizeRouteId(routeId) {
   return String(routeId || '').trim();
+}
+
+function getTripData(tripMapping, tripId) {
+  if (!tripId || !tripMapping) return null;
+  if (typeof tripMapping.get === 'function') return tripMapping.get(tripId) || null;
+  return tripMapping[tripId] || null;
 }
 
 function evidenceSignature(vehicle = {}) {
@@ -2523,6 +2540,7 @@ function createDetourV2Detector(config = {}) {
     config.confirmedRefreshDirectionMode ??
       process.env.DETOUR_V2_CONFIRMED_REFRESH_DIRECTION_MODE
   );
+  const enforceServiceHours = config.enforceServiceHours !== false;
 
   let tickId = 0;
   let lastVehicleCount = 0;
@@ -2634,6 +2652,35 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function getKnownTerminalCirculationObservation(
+    tripData,
+    coordinate,
+    projection,
+    shapeLengthMeters
+  ) {
+    if (!tripData || !coordinate || !projection) return null;
+
+    return KNOWN_TERMINAL_CIRCULATIONS.find((circulation) => {
+      const terminalStopId = circulation.edge === 'end'
+        ? tripData.lastStopId
+        : tripData.firstStopId;
+      if (!terminalStopId || !circulation.terminalStopIds.includes(String(terminalStopId))) {
+        return false;
+      }
+
+      const edgeProgressMeters = circulation.edge === 'end'
+        ? shapeLengthMeters - Number(projection.progressMeters)
+        : Number(projection.progressMeters);
+      return (
+        circulation.enabled !== false &&
+        Number.isFinite(edgeProgressMeters) &&
+        edgeProgressMeters >= 0 &&
+        edgeProgressMeters <= circulation.maxProgressMeters &&
+        pointToPolylineDistance(coordinate, circulation.polyline) <= circulation.maxDistanceMeters
+      );
+    }) || null;
+  }
+
   function isIgnoredRouteEdgeObservation(routeId, coordinate, projection, shapeLengthMeters) {
     const areas = getRouteDetectorConfig(routeId, {}).ignoredRouteEdgeAreas;
     if (!Array.isArray(areas) || areas.length === 0) return false;
@@ -2667,6 +2714,7 @@ function createDetourV2Detector(config = {}) {
       offRoute: 0,
       confirmedRefresh: 0,
       ignoredRouteEdge: 0,
+      knownTerminalCirculation: 0,
       noProjection: 0,
       newestSampleMs: null,
     };
@@ -2683,6 +2731,7 @@ function createDetourV2Detector(config = {}) {
         offRoute: summary.offRoute || 0,
         confirmedRefresh: summary.confirmedRefresh || 0,
         ignoredRouteEdge: summary.ignoredRouteEdge || 0,
+        knownTerminalCirculation: summary.knownTerminalCirculation || 0,
         noProjection: summary.noProjection || 0,
         newestSampleMs: summary.newestSampleMs || null,
       }])
@@ -4312,6 +4361,20 @@ function createDetourV2Detector(config = {}) {
     }
   }
 
+  function buildReportedDetours(shapes, stopImpactData) {
+    lastReportedDetours = {};
+    for (const [eventId, detour] of activeDetours.entries()) {
+      lastReportedDetours[eventId] = snapshotDetour(detour);
+    }
+    for (const detour of Object.values(lastReportedDetours)) {
+      if (detour?.routeId) {
+        enrichDetourMapStopImpacts({ [detour.routeId]: detour }, shapes, stopImpactData);
+        applyRiderVisibilityGuard(detour, detour.geometry);
+      }
+    }
+    return defineRouteAliases(lastReportedDetours);
+  }
+
   function processVehicles(
     vehicles = [],
     shapes = new Map(),
@@ -4319,6 +4382,18 @@ function createDetourV2Detector(config = {}) {
     tripMapping = null,
     stopImpactData = null
   ) {
+    if (enforceServiceHours && !isWithinServiceHours(Date.now())) {
+      lastVehicleCount = 0;
+      lastRouteProjectionSummaries = {};
+      lastCurrentOffRouteVehicleIdsByEvent = new Map();
+      lastCurrentOffRouteVehicleIdsByRoute = new Map();
+      for (const detour of activeDetours.values()) {
+        detour.vehiclesOffRoute = new Set();
+        detour.currentVehicleCount = 0;
+      }
+      return buildReportedDetours(shapes, stopImpactData);
+    }
+
     tickId += 1;
     lastVehicleCount = vehicles.length;
     const currentOffRouteVehicleIdsByRoute = new Map();
@@ -4345,6 +4420,7 @@ function createDetourV2Detector(config = {}) {
       if (!routeId || !coordinate || !signature || !id) continue;
 
       const timestampMs = getVehicleSampleTimeMs(vehicle);
+      if (!Number.isFinite(timestampMs)) continue;
       const key = sampleKey(vehicle, coordinate, timestampMs);
       if (seenSamples.has(key)) continue;
       seenSamples.add(key);
@@ -4386,6 +4462,12 @@ function createDetourV2Detector(config = {}) {
       }
 
       const shapeLengthMeters = getShapeLengthMeters(shapes, projection.shapeId);
+      const knownTerminalCirculation = getKnownTerminalCirculationObservation(
+        mappedTrip,
+        coordinate,
+        projection,
+        shapeLengthMeters
+      );
       const ignoredRouteEdgeObservation = isIgnoredRouteEdgeObservation(
         routeId,
         coordinate,
@@ -4393,7 +4475,9 @@ function createDetourV2Detector(config = {}) {
         shapeLengthMeters
       );
 
-      const classification = ignoredRouteEdgeObservation
+      const classification = knownTerminalCirculation
+        ? 'known-terminal-circulation'
+        : ignoredRouteEdgeObservation
         ? 'ignored-route-edge'
         : projection.distanceMeters > offRouteThresholdMeters
         ? 'off-route'
@@ -4401,7 +4485,9 @@ function createDetourV2Detector(config = {}) {
           ? 'on-route-clear'
           : 'deadband';
 
-      routeSummary[classification === 'ignored-route-edge'
+      routeSummary[classification === 'known-terminal-circulation'
+        ? 'knownTerminalCirculation'
+        : classification === 'ignored-route-edge'
         ? 'ignoredRouteEdge'
         : classification === 'off-route'
         ? 'offRoute'
@@ -4424,9 +4510,10 @@ function createDetourV2Detector(config = {}) {
         progressMeters: projection.progressMeters,
         sampledAt: timestampMs,
         classification,
+        knownTerminalCirculationId: knownTerminalCirculation?.id || null,
       });
 
-      if (ignoredRouteEdgeObservation) continue;
+      if (knownTerminalCirculation || ignoredRouteEdgeObservation) continue;
 
       const transitionKey = transitionObservationKey(routeId, signature);
       const previousTransitionState = transitionObservationState.get(transitionKey) || {};
@@ -4736,17 +4823,7 @@ function createDetourV2Detector(config = {}) {
     lastCurrentOffRouteVehicleIdsByEvent = cloneVehicleIdMap(currentOffRouteVehicleIdsByEvent);
     lastCurrentOffRouteVehicleIdsByRoute = cloneVehicleIdMap(currentOffRouteVehicleIdsByRoute);
 
-    lastReportedDetours = {};
-    for (const [eventId, detour] of activeDetours.entries()) {
-      lastReportedDetours[eventId] = snapshotDetour(detour);
-    }
-    for (const detour of Object.values(lastReportedDetours)) {
-      if (detour?.routeId) {
-        enrichDetourMapStopImpacts({ [detour.routeId]: detour }, shapes, stopImpactData);
-        applyRiderVisibilityGuard(detour, detour.geometry);
-      }
-    }
-    return defineRouteAliases(lastReportedDetours);
+    return buildReportedDetours(shapes, stopImpactData);
   }
 
   function getState() {
@@ -5060,6 +5137,10 @@ function createDetourV2Detector(config = {}) {
         : null;
       const existing = overlappingCanonical || activeDetours.get(restoredEventId);
       if (existing) {
+        // Count a valid matching snapshot as hydrated even when the runtime
+        // copy is already as rich. The worker uses this count to distinguish a
+        // successful non-empty read from a genuinely empty cold start.
+        count += 1;
         if (hasStaleMixedSafetySuppression(restored)) {
           existing.geometry = suppressStaleMixedGeometry(cloneJson(restored.geometry) || {});
           existing.riderVisible = false;
@@ -5073,7 +5154,6 @@ function createDetourV2Detector(config = {}) {
             restored.lastEvidenceAt ||
             existing.geometryLastEvidenceAt;
           existing.lastEvidenceAt = restored.lastEvidenceAt || existing.lastEvidenceAt;
-          count += 1;
         } else if (
           hasTrustedVisibleGeometry(restored) &&
           toMillis(restored.latestGpsEvidenceAt, 0) >= toMillis(existing.latestGpsEvidenceAt, 0)
@@ -5095,7 +5175,6 @@ function createDetourV2Detector(config = {}) {
             restored.lastEvidenceAt ||
             existing.geometryLastEvidenceAt;
           existing.lastEvidenceAt = restored.lastEvidenceAt || existing.lastEvidenceAt;
-          count += 1;
         }
         continue;
       }

@@ -1,0 +1,65 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - generic [ref=f3e6]:
+        - generic [ref=f3e7]: Loading
+        - progressbar [active] [ref=f3e8]
+      - main [ref=f3e88]:
+        - generic [ref=f3e89]:
+          - generic [ref=f3e90]: Sign in with Google
+          - generic [ref=f3e96]:
+            - heading "Welcome" [level=1] [ref=f3e97]
+            - generic [ref=f3e98]: michaelryanmcconnell@gmail.com
+        - generic [ref=f3e108]:
+          - generic [ref=f3e30]:
+            - generic [ref=f3e35]:
+              - generic [ref=f3e40]:
+                - textbox "Email or phone" [ref=f3e41]: michaelryanmcconnell@gmail.com
+                - generic: Email or phone
+              - button "Forgot email?" [ref=f3e45] [cursor=pointer]
+            - generic [ref=f3e48]:
+              - text: Before using this app, you can review sentry.io’s
+              - link "Privacy Policy" [ref=f3e49] [cursor=pointer]:
+                - /url: https://sentry.io/privacy/
+              - text: and
+              - link "Terms of Service" [ref=f3e50] [cursor=pointer]:
+                - /url: https://sentry.io/terms/
+              - text: .
+          - generic [ref=f3e109]:
+            - generic [ref=f3e115]:
+              - generic [ref=f3e123]:
+                - textbox "Enter your password" [ref=f3e124]
+                - generic: Enter your password
+              - generic [ref=f3e131]:
+                - checkbox "Show password" [ref=f3e135] [cursor=pointer]
+                - generic [ref=f3e136]: Show password
+            - generic [ref=f3e141]:
+              - text: Before using this app, you can review sentry.io’s
+              - link "Privacy Policy" [ref=f3e142] [cursor=pointer]:
+                - /url: https://sentry.io/privacy/
+              - text: and
+              - link "Terms of Service" [ref=f3e143] [cursor=pointer]:
+                - /url: https://sentry.io/terms/
+              - text: .
+        - generic [ref=f3e145]:
+          - button "Next" [ref=f3e149]
+          - button "Try another way" [ref=f3e156]
+    - contentinfo [ref=f3e71]:
+      - combobox "Change language English (United States)" [ref=f3e75] [cursor=pointer]:
+        - generic: English (United States)
+      - list [ref=f3e77]:
+        - listitem [ref=f3e78]:
+          - link "Open Google Account Help Center (external, opens in a new window)" [ref=f3e79] [cursor=pointer]:
+            - /url: https://support.google.com/accounts?hl=en-US&p=account_iph
+            - text: Help
+        - listitem [ref=f3e80]:
+          - link "Privacy Policy (external, opens in a new window)" [ref=f3e81] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US&privacy=true
+            - text: Privacy
+        - listitem [ref=f3e82]:
+          - link "Google Terms of Service (external, opens in a new window)" [ref=f3e83] [cursor=pointer]:
+            - /url: https://accounts.google.com/TOS?loc=CA&hl=en-US
+            - text: Terms
+  - iframe [ref=f3e84]:
+    
+  - generic [ref=f3e162]: Welcome

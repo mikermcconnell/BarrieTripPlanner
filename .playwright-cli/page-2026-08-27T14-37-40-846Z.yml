@@ -1,0 +1,251 @@
+- generic [ref=e38]:
+  - generic [ref=e39]:
+    - generic [ref=e47]:
+      - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e1240]:
+        - generic:
+          - region "Map" [ref=e1241]
+          - button ", stop 364, stop closure reported" [ref=e1242] [cursor=pointer]:
+            - generic [ref=e52]: "364"
+          - button ", stop 365, stop closure reported" [ref=e1243] [cursor=pointer]:
+            - generic [ref=e57]: "365"
+          - button ", stop 366, stop closure reported" [ref=e1244] [cursor=pointer]:
+            - generic [ref=e62]: "366"
+          - button ", stop 367, stop closure reported" [ref=e1245] [cursor=pointer]:
+            - generic [ref=e67]: "367"
+          - button ", stop 744, stop closure reported" [ref=e1246] [cursor=pointer]:
+            - generic [ref=e72]: "744"
+          - button ", stop 745, stop closure reported" [ref=e1247] [cursor=pointer]:
+            - generic [ref=e77]: "745"
+          - button ", stop 746, stop closure reported" [ref=e1248] [cursor=pointer]:
+            - generic [ref=e82]: "746"
+          - button ", stop 747, stop closure reported" [ref=e1249] [cursor=pointer]:
+            - generic [ref=e87]: "747"
+          - button ", stop 805, stop closure reported" [ref=e1250] [cursor=pointer]:
+            - generic [ref=e92]: "805"
+          - button ", stop 808, stop closure reported" [ref=e1251] [cursor=pointer]:
+            - generic [ref=e97]: "808"
+          - button ", stop 809, stop closure reported" [ref=e1252] [cursor=pointer]:
+            - generic [ref=e102]: "809"
+          - button ", stop 812, stop closure reported" [ref=e1253] [cursor=pointer]:
+            - generic [ref=e107]: "812"
+          - button ", stop 880, stop closure reported" [ref=e1254] [cursor=pointer]:
+            - generic [ref=e112]: "880"
+          - button ", stop 881, stop closure reported" [ref=e1255] [cursor=pointer]:
+            - generic [ref=e117]: "881"
+          - button ", stop 977, stop closure reported" [ref=e1256] [cursor=pointer]:
+            - generic [ref=e122]: "977"
+          - button ", stop 978, stop closure reported" [ref=e1257] [cursor=pointer]:
+            - generic [ref=e127]: "978"
+          - button ", stop 979, stop closure reported" [ref=e1258] [cursor=pointer]:
+            - generic [ref=e132]: "979"
+          - button ", stop 986, stop closure reported" [ref=e1259] [cursor=pointer]:
+            - generic [ref=e137]: "986"
+          - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e1260] [cursor=pointer]:
+            - generic [ref=e142]: "510"
+          - button ", stop 336, stop closure reported" [ref=e1261] [cursor=pointer]:
+            - generic [ref=e147]: "336"
+          - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e1262] [cursor=pointer]:
+            - generic [ref=e152]: "265"
+          - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e1263] [cursor=pointer]:
+            - generic "Stop 959. Not served by Route 8B during this detour" [ref=e1264]: "959"
+          - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e1265] [cursor=pointer]:
+            - generic "Stop 142. Not served by Route 8B during this detour" [ref=e1266]: "142"
+          - button "Route 10 bus 1101. Next stop Maple at Ross" [ref=e1267] [cursor=pointer]:
+            - generic [ref=e173]: "10"
+          - button "Route 8A bus 2102. Next stop Barrie View Drive" [ref=e1274] [cursor=pointer]:
+            - generic [ref=e2205]: 8A
+          - button "Route 100 bus 1705. Next stop Rolston Drive" [ref=e1280] [cursor=pointer]:
+            - generic [ref=e2210]: "100"
+          - button "Route 2B bus 2602. Next stop Ferndale at Tiffin" [ref=e1281] [cursor=pointer]:
+            - generic [ref=e2215]: 2B
+          - button "Route 12A bus 2603. Next stop Maple at Ross" [ref=e1287] [cursor=pointer]:
+            - generic [ref=e233]: 12A
+          - button "Route 400 bus 2601. Next stop Rose at Highway 400" [ref=e1290] [cursor=pointer]:
+            - generic [ref=e2220]: "400"
+          - img "Barrie Allandale Hub bus hub" [ref=e1302]:
+            - generic: Barrie Allandale Hub
+          - img "Downtown Hub bus hub" [ref=e1303]:
+            - generic: Downtown Hub
+          - img "Park Place bus hub" [ref=e1304]:
+            - generic: Park Place
+          - img "Georgian College bus hub" [ref=e1305]:
+            - generic: Georgian College
+          - img "Barrie South GO bus hub" [ref=e1306]:
+            - generic: Barrie South GO
+          - button "Route 7A bus 2203. Next stop Barrie Allandale Transit Terminal Platform 6" [ref=e1308] [cursor=pointer]:
+            - generic [ref=e1309]: 7A
+          - button "Route 101 bus 1601. Next stop Johnson at Napier" [ref=e1314] [cursor=pointer]:
+            - generic [ref=e1315]: "101"
+          - button "Route 8B bus 2101. Next stop St. Vincent at Sperling" [ref=e1326] [cursor=pointer]:
+            - generic [ref=e2225]: 8B
+          - button "Route 8A bus 1502. Next stop Barrie Allandale Transit Terminal Platform 5" [ref=e1338] [cursor=pointer]:
+            - generic [ref=e2230]: 8A
+          - button "Route 8A bus 1701. Next stop Esther Drive" [ref=e1344] [cursor=pointer]:
+            - generic [ref=e2235]: 8A
+          - button "Route 12A bus 1708. Next stop Hurst Drive" [ref=e1368] [cursor=pointer]:
+            - generic [ref=e2240]: 12A
+          - button "Route 15A bus 1704. Next stop Big Bay Point at Dodson" [ref=e1410] [cursor=pointer]:
+            - generic [ref=e2245]: 15A
+          - button "Route 8A bus 1710. Next stop Johnson at Hickling Trail" [ref=e1416] [cursor=pointer]:
+            - generic [ref=e1417]: 8A
+          - button "Victoria Street, stop 152" [ref=e1434] [cursor=pointer]
+          - button "Bradford at Simcoe, stop 150" [ref=e1438] [cursor=pointer]
+          - button "Downtown Hub, stop 2" [ref=e1442] [cursor=pointer]
+          - button "Maple at Ross, stop 485" [ref=e1446] [cursor=pointer]
+          - button "Bayfield at Wellington, stop 73" [ref=e1450] [cursor=pointer]
+          - button "Downtown Hub, stop 1" [ref=e1454] [cursor=pointer]
+          - button "Bayfield at Chase McEachern, stop 89" [ref=e1458] [cursor=pointer]
+          - button "Owen Street, stop 192" [ref=e1462] [cursor=pointer]
+          - button "Collier at Mulcaster, stop 189" [ref=e1466] [cursor=pointer]
+          - button "Wellington Street, stop 74" [ref=e1470] [cursor=pointer]
+          - button "Bayfield at Sophia, stop 75" [ref=e1474] [cursor=pointer]
+          - button "Maple at Ross, stop 486" [ref=e1478] [cursor=pointer]
+          - button "Lakeshore at Victoria, stop 156" [ref=e1482] [cursor=pointer]
+          - button "Lakeshore at Simcoe, stop 158" [ref=e1486] [cursor=pointer]
+          - button "Collier at Clapperton, stop 188" [ref=e1490] [cursor=pointer]
+          - button "Mulcaster at Collier, stop 556" [ref=e1494] [cursor=pointer]
+          - button "Codrington Street, stop 558" [ref=e1498] [cursor=pointer]
+          - button "Barrie By the Bay Plaza, stop 144" [ref=e1502] [cursor=pointer]
+          - button "Victoria Street, stop 151" [ref=e1506] [cursor=pointer]
+          - button "Dunlop at High Street, stop 275" [ref=e1510] [cursor=pointer]
+          - button "Collier at Mulcaster, stop 190" [ref=e1514] [cursor=pointer]
+          - button "Owen Street, stop 191" [ref=e1518] [cursor=pointer]
+          - button "Collier at Clapperton, stop 187" [ref=e1522] [cursor=pointer]
+          - button "Lakeshore at Marina, stop 159" [ref=e1526] [cursor=pointer]
+          - button "Lakeshore at Victoria, stop 157" [ref=e1530] [cursor=pointer]
+          - button "Bayfield at Dunlop, stop 88" [ref=e1534] [cursor=pointer]
+          - button "Mulcaster at Codrington, stop 946" [ref=e1538] [cursor=pointer]
+          - button "Mulcaster at Collier, stop 557" [ref=e1542] [cursor=pointer]
+          - img "Georgian Mall bus hub" [ref=e1546]:
+            - generic: Georgian Mall
+          - img "RVH bus hub" [ref=e1547]:
+            - generic: RVH
+          - img "Peggy Hill Team CC bus hub" [ref=e1548]:
+            - generic: Peggy Hill Team CC
+          - button "Route 8B bus 1702. Next stop Owen Street" [ref=e2253] [cursor=pointer]:
+            - generic [ref=e2254]: 8B
+          - button "Route 7A bus 2103. Next stop Mills Road" [ref=e2259] [cursor=pointer]:
+            - generic [ref=e2260]: 7A
+          - button "Route 7B bus 1703. Next stop Wellington Street" [ref=e2265] [cursor=pointer]:
+            - generic [ref=e2266]: 7B
+          - button "Route 11 bus 2002. Next stop Penetang at Berczy" [ref=e2271] [cursor=pointer]:
+            - generic [ref=e2272]: "11"
+          - button "Route 12B bus 1706. Next stop Maple at Ross" [ref=e2277] [cursor=pointer]:
+            - generic [ref=e2278]: 12B
+          - button "Route 8B bus 2201. Next stop Barrie South GO Station" [ref=e2283] [cursor=pointer]:
+            - generic [ref=e2284]: 8B
+          - button "Route 2A bus 1712. Next stop Mapleview at Park Place" [ref=e2289] [cursor=pointer]:
+            - generic [ref=e2290]: 2A
+          - button "Route 8B bus 1102. Next stop Churchland Drive" [ref=e2295] [cursor=pointer]:
+            - generic [ref=e2296]: 8B
+          - button "Route 8A bus 1707. Next stop Brock at Innisfil" [ref=e2301] [cursor=pointer]:
+            - generic [ref=e2302]: 8A
+          - button "Route 10 bus 1503. Next stop Wal-Mart Plaza" [ref=e2307] [cursor=pointer]:
+            - generic [ref=e2308]: "10"
+          - button "Route 7B bus 1709. Next stop Phillips Street" [ref=e2313] [cursor=pointer]:
+            - generic [ref=e2314]: 7B
+          - button "Route 11 bus 2302. Next stop Longman Drive" [ref=e2319] [cursor=pointer]:
+            - generic [ref=e2320]: "11"
+          - button "Route 12B bus 2001. Next stop Ellis Drive" [ref=e2325] [cursor=pointer]:
+            - generic [ref=e2326]: 12B
+          - button "Route 400 bus 2206. Next stop Loggers Run" [ref=e2331] [cursor=pointer]:
+            - generic [ref=e2332]: "400"
+          - button "Route 101 bus 1103. Next stop Bayfield Mall" [ref=e2337] [cursor=pointer]:
+            - generic [ref=e2338]: "101"
+          - button "Route 8B bus 1713. Next stop Goodwin Drive" [ref=e2343] [cursor=pointer]:
+            - generic [ref=e2344]: 8B
+          - button "Route 100 bus 2301. Next stop Owen Street" [ref=e2349] [cursor=pointer]:
+            - generic [ref=e2350]: "100"
+          - button "Route 2A bus 2303. Next stop Dunlop at High Street" [ref=e2355] [cursor=pointer]:
+            - generic [ref=e2356]: 2A
+        - group [ref=e372]:
+          - generic "Toggle attribution" [ref=e1549] [cursor=pointer]
+          - generic [ref=e374]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link "MapLibre" [ref=e1550] [cursor=pointer]:
+              - /url: https://maplibre.org/
+      - generic [ref=e2363]:
+        - textbox "Where to?" [ref=e2367]
+        - generic "Transit status live" [ref=e2370]: LIVE
+      - button "Expand detour list" [ref=e2375] [cursor=pointer]:
+        - generic [ref=e2408]: "Active detours: 2 locations"
+        - generic [ref=e2410]:
+          - generic [ref=e2411]: 12B
+          - generic [ref=e2413]: 8B
+        - generic [ref=e2415]: ▼
+      - 'button "4 official detour notices: Mapleview Detour and Shuttle" [ref=e2416] [cursor=pointer]':
+        - generic [ref=e2417]: i
+        - generic [ref=e2419]:
+          - generic [ref=e2420]: 4 official detour notices
+          - generic [ref=e2421]: Mapleview Detour and Shuttle
+          - generic [ref=e2422]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e2423]:
+          - generic [ref=e2424]: 12B
+          - generic [ref=e2426]: "15"
+        - button "Hide planned detour notice" [ref=e2428]:
+          - generic [ref=e2429]: ×
+      - generic [ref=e2430] [cursor=pointer]:
+        - button "Learn how the Auto Detour Detector works" [ref=e2431]:
+          - generic [ref=e2436]:
+            - generic [ref=e2437]: LIVE MAP FEATURE
+            - generic [ref=e2438]: Auto Detour Detector
+            - generic [ref=e2439]: See how it works
+          - generic [ref=e2440]: ›
+        - button "Minimize Auto Detour Detector button" [ref=e2441]:
+          - generic [ref=e2442]: −
+      - button "Center on my location" [ref=e2443] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button "Open map options" [ref=e2446] [cursor=pointer]:
+        - generic [ref=e2492]: Map options
+        - generic [ref=e2493]: "2"
+    - generic [ref=e913]:
+      - generic [ref=e914]: Search
+      - generic [ref=e917]:
+        - generic [ref=e918]: 🔍
+        - textbox [ref=e2198]:
+          - /placeholder: Search stops...
+          - text: Downtown Hub
+        - button [ref=e2199] [cursor=pointer]:
+          - generic [ref=e1239]: ✕
+      - generic [ref=e920]:
+        - tab [ref=e2200] [cursor=pointer]:
+          - generic [ref=e922]: Stops
+        - tab [ref=e2201] [cursor=pointer]:
+          - generic [ref=e924]: Routes
+        - tab [ref=e2202] [cursor=pointer]:
+          - generic [ref=e926]: Addresses
+      - generic [ref=e927]: 2 stops found
+      - generic [ref=e930]:
+        - button [ref=e2203] [cursor=pointer]:
+          - generic [ref=e991]:
+            - generic [ref=e992]: Downtown Hub
+            - generic [ref=e993]: "Stop #2"
+          - generic [ref=e994]: ›
+        - button [ref=e2204] [cursor=pointer]:
+          - generic [ref=e959]:
+            - generic [ref=e960]: Downtown Hub
+            - generic [ref=e961]: "Stop #1"
+          - generic [ref=e962]: ›
+  - tablist [ref=e511]:
+    - tab "Map" [selected] [ref=e513] [cursor=pointer]
+    - tab "Search" [ref=e630] [cursor=pointer]
+    - tab "Profile" [ref=e735] [cursor=pointer]

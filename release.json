@@ -1,0 +1,12 @@
+{
+  "current": {
+    "version": "1.0.12",
+    "androidVersionCode": 31
+  },
+  "previousProduction": {
+    "version": "1.0.11",
+    "androidVersionCode": 30,
+    "easBuildId": "9b60017e-6300-4a80-a1a8-cdf5549bf6bc",
+    "gitCommit": "23362d6dd93fd37076e4d51a9f3ef657b8651300"
+  }
+}

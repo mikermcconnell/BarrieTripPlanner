@@ -1,3 +1,4 @@
+import { ROUTING_CONFIG } from '../config/constants';
 import { finiteNumber } from './realtimeTripMatching';
 import { getTransitRideLegsWithIndexes, isSameBusContinuation } from './routeContinuity';
 
@@ -55,13 +56,15 @@ export const hasImpossibleItineraryTransfer = (itinerary) => {
     const walkSeconds = legs.slice(previous.index + 1, next.index)
       .filter((leg) => String(leg.mode).toUpperCase() === 'WALK')
       .reduce((sum, leg) => sum + (Number(leg.duration) || 0), 0);
-    return start - end < walkSeconds * 1000;
+    const fixedScheduleTransfer = previous.leg.mode !== 'ON_DEMAND' && next.leg.mode !== 'ON_DEMAND';
+    const minimumBuffer = fixedScheduleTransfer ? (ROUTING_CONFIG.MIN_TRANSFER_TIME || 0) : 0;
+    return start - end < (walkSeconds + minimumBuffer) * 1000;
   });
 };
 
 export const isItineraryFeasible = (itinerary) => (
   !getItineraryTimeIssue(itinerary) &&
   !hasImpossibleItineraryTransfer(itinerary) &&
-  !itinerary?.hasMissedDeparture && !itinerary?.hasMissedTransfer &&
+  !itinerary?.hasRealtimeServiceDisruption && !itinerary?.hasMissedDeparture && !itinerary?.hasMissedTransfer &&
   !(itinerary?.legs || []).some((leg) => leg.realtimeUnavailable)
 );

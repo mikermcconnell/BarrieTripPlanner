@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { haversineDistance } from '../utils/geometryUtils';
 import logger from '../utils/logger';
 import { getApiProxyRequestOptions } from './proxyAuth';
+import { normalizeServiceDate } from '../utils/serviceTime';
 import { rankItinerariesForRider } from '../utils/tripItineraryRanking';
 import { isItineraryFeasible } from '../utils/itineraryFeasibility';
 import { runBounded, throwIfAborted, abortableDelay } from '../utils/requestControl';
@@ -24,6 +25,36 @@ const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RATE_LIMIT_DELAY_MS = 550; // ~2 req/sec to stay within LocationIQ free tier
 
 let lastRequestTime = 0;
+
+const isWalkingOnlyItinerary = (itinerary) => (
+  itinerary?.isWalkingOnly ||
+  (
+    Array.isArray(itinerary?.legs) &&
+    itinerary.legs.length === 1 &&
+    String(itinerary.legs[0]?.mode).toUpperCase() === 'WALK'
+  )
+);
+
+const placeNonRecommendedWalkingAfterTransit = (itineraries = []) => {
+  const nonRecommendedWalking = itineraries.filter((itinerary) => (
+    isWalkingOnlyItinerary(itinerary) && itinerary.recommendationEligible === false
+  ));
+
+  if (nonRecommendedWalking.length === 0) {
+    return itineraries;
+  }
+
+  const otherItineraries = itineraries.filter((itinerary) => (
+    !isWalkingOnlyItinerary(itinerary) || itinerary.recommendationEligible !== false
+  ));
+  const hasTransit = otherItineraries.some((itinerary) => !isWalkingOnlyItinerary(itinerary));
+
+  return hasTransit
+    ? [...otherItineraries, ...nonRecommendedWalking]
+    : itineraries;
+};
+
+
 
 /**
  * Wait if needed to respect LocationIQ rate limits
@@ -50,9 +81,9 @@ const waitForRateLimit = (signal) => {
  * @param {number} toLon - Ending longitude
  * @returns {Promise<Object>} Walking directions with geometry and steps
  */
-export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon, { signal } = {}) => {
+export const getWalkingDirections = async (fromLat, fromLon, toLat, toLon, { signal, timeoutMs = 15000 } = {}) => {
   try {
-    return await runBounded(requestSignal => loadWalkingDirections(fromLat, fromLon, toLat, toLon, requestSignal), { signal });
+    return await runBounded(requestSignal => loadWalkingDirections(fromLat, fromLon, toLat, toLon, requestSignal), { signal, timeoutMs });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
     logger.warn('Walking directions unavailable:', error.message);
@@ -167,7 +198,7 @@ const formatWalkingSteps = (steps) => {
 };
 
 /**
- * OTP relativeDirection → OSRM type/modifier mapping
+ * OTP relativeDirection â†’ OSRM type/modifier mapping
  */
 const OTP_DIRECTION_MAP = {
   DEPART:        { type: 'depart',   modifier: null },
@@ -298,7 +329,7 @@ const getFallbackDirections = (fromLat, fromLon, toLat, toLon) => {
  */
 const generateCacheKey = (fromLat, fromLon, toLat, toLon) => {
   // Round to ~50m precision for cache hits on similar locations
-  const precision = 2000; // 1/2000 degree ≈ 50m
+  const precision = 2000; // 1/2000 degree â‰ˆ 50m
   const key = [
     Math.round(fromLat * precision),
     Math.round(fromLon * precision),
@@ -554,11 +585,11 @@ export const enrichTripPlanWithWalking = async (tripPlan, { signal, onCandidateR
     const minutesUntilDeparture = Math.max(0, Math.round((departureTime - now) / 60000));
 
     // Check if trip is tomorrow (departure is after midnight relative to now)
-    const nowDate = new Date(now);
-    const departureDate = new Date(departureTime);
-    const isTomorrow = departureDate.getDate() !== nowDate.getDate() ||
-                       departureDate.getMonth() !== nowDate.getMonth() ||
-                       departureDate.getFullYear() !== nowDate.getFullYear();
+    const currentServiceDate = normalizeServiceDate(now);
+    const departureServiceDate = normalizeServiceDate(departureTime);
+    const isTomorrow = Boolean(
+      currentServiceDate && departureServiceDate && departureServiceDate > currentServiceDate
+    );
 
     // Check for high walking distance
     const hasHighWalk = itinerary.walkDistance > highWalkThreshold;
@@ -615,6 +646,7 @@ export const enrichTripPlanWithWalking = async (tripPlan, { signal, onCandidateR
       (a.riderCostSeconds || 0) - (b.riderCostSeconds || 0)
     ));
   }
+  finalItineraries = placeNonRecommendedWalkingAfterTransit(finalItineraries);
 
   // Add recommendation labels
   if (finalItineraries.length > 0) {
@@ -625,14 +657,22 @@ export const enrichTripPlanWithWalking = async (tripPlan, { signal, onCandidateR
       it.walkDistance < best.walkDistance ? it : best, finalItineraries[0]);
     const fewestTransfers = finalItineraries.reduce((best, it) =>
       it.transfers < best.transfers ? it : best, finalItineraries[0]);
-    const recommendedOption = finalItineraries[0]; // Already sorted by rider cost
+    const recommendedOption = finalItineraries.find((itinerary) => (
+      itinerary.recommendationEligible !== false
+    ));
 
     // Assign labels (priority: recommended > fastest > least walking)
     finalItineraries = finalItineraries.map((it) => {
       const labels = [];
 
-      // "Recommended" = best rider-cost option AND leaves soon AND reasonable walk
-      if (it === recommendedOption && !it.isTomorrow && !it.hasLongWait && !it.hasHighWalk) {
+      // "Recommended" = best eligible rider-cost option that leaves soon.
+      // A walking-only trip may still be the best choice when its distance is high.
+      if (
+        it === recommendedOption &&
+        !it.isTomorrow &&
+        !it.hasLongWait &&
+        (!it.hasHighWalk || isWalkingOnlyItinerary(it))
+      ) {
         labels.push('Recommended');
       } else if (it === fastest && !labels.includes('Recommended')) {
         labels.push('Fastest');

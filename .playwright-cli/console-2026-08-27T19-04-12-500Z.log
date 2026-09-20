@@ -1,0 +1,400 @@
+[     426ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:19025
+[     489ms] [WARNING] "shadow*" style props are deprecated. Use "boxShadow". @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[     498ms] [LOG] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF. @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4744
+[     634ms] [WARNING] props.pointerEvents is deprecated. Use style.pointerEvents @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:23929
+[     682ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false collapsable collapsable false collapsable collapsable collapsable @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[     688ms] [ERROR] Received `%s` for a non-boolean attribute `%s`.
+
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.
+
+If you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead. false accessible accessible false accessible accessible accessible @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:7042
+[    2627ms] [WARNING] [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect. @ :257947
+[    2911ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 184, percent: 55, ready: false} @ :53378
+[    2919ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    2995ms] [INFO] [startup] phase {phase: ready, elapsedMs: 269, percent: 100, ready: true} @ :53378
+[    2997ms] [INFO] [startup] ready {elapsedMs: 270, routes: 0, stops: 0} @ :53396
+[    2997ms] [WARNING] Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:36603
+[    2998ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    3308ms] [INFO] [startup] phase {phase: Loading routes, stops, and schedules..., elapsedMs: 581, percent: 55, ready: false} @ :53378
+[    3309ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    4791ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[    4792ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[    4793ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[    4793ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[    5423ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[    5423ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[    5424ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[    5425ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[    5425ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[    5425ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[    5505ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    7128ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  ...
+    <EnsureSingleNavigator>
+      <StaticContainer name="MapMain" render={function HomeScreenWebShell} navigation={{...}} ...>
+        <HomeScreenWebShell navigation={{...}} route={{name:"MapMain", ...}}>
+          <HomeScreen navigation={{...}} route={{name:"MapMain", ...}}>
+            <View style={{flex:1, ...}} accessibilityElementsHidden={false} importantForAccessibility="auto" ...>
+              <div dir={null} ref={function forwardRef} className="css-view-g...">
+                <div>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <WebRoutePolylineComponent>
+                <DetourOverlay>
+                <DetourOverlay>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <_c15>
+                <DetourOverlay>
+                <DetourOverlay>
+                <BusHubOverlay>
+                <MapTapPopup>
+                <View>
+                <SurveyNudgeBanner>
+                <DetourAlertStrip>
+                <UpcomingDetourStrip>
+                <OfficialImpactStrip impacts={[...]} routeColorByRouteId={{10:"#681757", ...}} onDismiss={function} ...>
+                  <View style={[...]} pointerEvents="box-none">
+                    <div dir={null} ref={function forwardRef} className="css-view-g..." style={{top:"230px", ...}}>
+                      <TouchableOpacity style={[...]} activeOpacity={0.84} onPress={function handlePress} ...>
+                        <View accessibilityRole="button" accessibilityLabel="4 official..." ...>
+>                         <button
+>                           onKeyDown={function onKeyDown}
+>                           onClick={function onClick}
+>                           onContextMenu={function onContextMenu}
+>                           dir={null}
+>                           ref={function forwardRef}
+>                           aria-label="4 official detour notices: Mapleview Detour and Shuttle"
+>                           role="button"
+>                           className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor-1loqt..."
+>                           style={{transitionDuration:"0s"}}
+>                           type="button"
+>                         >
+                            <View>
+                            <View>
+                            <View>
+                            <TouchableOpacity style={{width:44,height:44, ...}} onPress={function onPress} ...>
+                              <View accessibilityRole="button" accessibilityLabel="Hide plann..." ...>
+>                               <button
+>                                 onKeyDown={function onKeyDown}
+>                                 onClick={function onClick}
+>                                 onContextMenu={function onContextMenu}
+>                                 dir={null}
+>                                 ref={function forwardRef}
+>                                 aria-label="Hide planned detour notice"
+>                                 role="button"
+>                                 className="css-view-g5y9jx r-transitionProperty-1i6wzkk r-userSelect-lrvibr r-cursor..."
+>                                 style={{transitionDuration:"0s"}}
+>                                 type="button"
+>                               >
+                ...
+                ...
+ @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6857
+[    7128ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:6859
+[    7228ms] [INFO] [startup] phase {phase: ready, elapsedMs: 4501, percent: 100, ready: true} @ :53378
+[    7229ms] [INFO] [startup] ready {elapsedMs: 4502, routes: 15, stops: 556} @ :53396
+[    7233ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    7397ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[    7751ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[   63464ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[   63614ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[   63614ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[   64363ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[   64363ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[   64363ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[   64519ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  123422ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  123476ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  123476ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  124062ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  124062ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  124062ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  124172ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  183475ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  183540ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  183540ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  184140ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  184140ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  184140ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  184264ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  243426ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  243494ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  243494ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  244133ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  244133ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  244134ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  244263ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  303438ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  303484ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  303484ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  304067ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  304067ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  304067ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  304173ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  363421ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  363500ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  363500ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  364094ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  364094ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  364094ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  364203ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  423443ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  423524ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  423524ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  424109ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  424109ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  424109ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  424228ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  483421ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  483562ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  483562ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  484299ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  484300ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  484300ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  484412ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  543424ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  543499ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  543499ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  544118ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  544118ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  544118ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  544231ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  603433ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  603437ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  603438ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  604032ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  604032ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  604032ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  604143ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  663429ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  663434ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  663434ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  664052ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  664052ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  664052ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  664167ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  723439ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  723481ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  723481ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  724083ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  724083ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  724083ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  724190ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  783430ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  783461ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  783461ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  784068ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  784069ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  784069ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  784190ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  843424ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  843490ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  843491ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  844094ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  844094ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  844094ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  844201ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  903480ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  903582ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  903582ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  904197ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  904197ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  904197ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  904310ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  963477ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[  963547ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  963547ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  964129ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[  964129ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[  964129ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[  964224ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1023438ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1023524ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1023524ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1024122ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1024122ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1024122ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1024247ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1083413ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1083413ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1083417ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1084039ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1084039ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1084039ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1084147ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1143416ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1143501ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1143502ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1144094ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1144094ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1144094ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1144214ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1203434ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1203518ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1203518ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1204110ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1204110ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1204110ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1204236ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1263388ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1263448ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1263448ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1264050ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1264050ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1264050ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1264128ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1323386ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1323432ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1323432ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1324016ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1324017ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1324017ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1324089ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1383478ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1383619ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1383619ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1384260ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1384260ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1384260ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1384376ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1443412ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1443454ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1443455ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1444044ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1444045ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1444045ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1444146ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1503394ms] [INFO] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628
+[ 1503522ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1503522ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1504091ms] [ERROR] Access to fetch at 'https://apiproxy-r7pziiwpua-uc.a.run.app/api/health' from origin 'http://localhost:8081' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:8081/:0
+[ 1504091ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://apiproxy-r7pziiwpua-uc.a.run.app/api/health:0
+[ 1504091ms] [WARNING] API proxy health check failed: TypeError: Failed to fetch
+    at retryFetch (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253468:32)
+    at async fetchProxyHealth (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:253407:22)
+    at async eval (eval at <anonymous> (http://localhost:8081/node_modules/expo/AppEntry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable:4577:16), <anonymous>:125424:28) @ :125428
+[ 1504172ms] [WARNING] Transit diagnostics updated {overall: Object, staticData: Object, realtimeVehicles: Object, routing: Object, proxyApi: Object} @ :125628

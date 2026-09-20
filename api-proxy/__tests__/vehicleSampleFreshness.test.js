@@ -93,6 +93,20 @@ describe('vehicle sample freshness tracking', () => {
     });
   });
 
+  test('reports future-dated feed evidence separately from fresh evidence', () => {
+    const now = Date.parse('2026-05-28T15:24:32.000Z');
+    const timestamp = Math.floor((now + 3 * 60 * 1000) / 1000);
+
+    expect(summarizeVehicleFeedFreshness(
+      [{ id: 'bus-1', timestamp }],
+      { now, maxFutureSkewMs: 2 * 60 * 1000 }
+    )).toMatchObject({
+      stale: false,
+      status: 'future',
+      futureTimestampCount: 1,
+    });
+  });
+
   test('normalizes seconds and milliseconds timestamps', () => {
     expect(toVehicleTimestampMs({ timestamp: 1770000000 })).toBe(1770000000000);
     expect(toVehicleTimestampMs({ timestampMs: 1770000000000 })).toBe(1770000000000);

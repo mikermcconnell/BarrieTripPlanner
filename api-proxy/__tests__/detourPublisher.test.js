@@ -620,6 +620,150 @@ describe('detourPublisher storage config', () => {
     expect(collection).not.toHaveBeenCalledWith('detourHistory');
   });
 
+  test('commits active state and history atomically and retries the same detected event', async () => {
+    jest.resetModules();
+    const originalRetentionDays = process.env.DETOUR_HISTORY_RETENTION_DAYS;
+    const originalHistoryEnabled = process.env.DETOUR_HISTORY_ENABLED;
+    process.env.DETOUR_HISTORY_RETENTION_DAYS = '0';
+    process.env.DETOUR_HISTORY_ENABLED = 'true';
+
+    const writes = {};
+    const attemptedBatches = [];
+    let failNextCommit = true;
+    const collection = jest.fn((name) => ({
+      doc: (id) => ({
+        path: `${name}/${id}`,
+        set: jest.fn(async () => {
+          throw new Error('non-atomic set should not be used');
+        }),
+        delete: jest.fn(async () => {
+          throw new Error('non-atomic delete should not be used');
+        }),
+      }),
+      get: async () => ({ size: 0, docs: [], forEach: () => {} }),
+    }));
+    const db = {
+      collection,
+      batch: () => {
+        const operations = [];
+        attemptedBatches.push(operations);
+        return {
+          set: (ref, data, options) => operations.push({ type: 'set', ref, data, options }),
+          delete: (ref) => operations.push({ type: 'delete', ref }),
+          commit: async () => {
+            if (failNextCommit) {
+              failNextCommit = false;
+              throw new Error('simulated atomic commit failure');
+            }
+            operations.forEach((operation) => {
+              if (operation.type === 'set') writes[operation.ref.path] = operation.data;
+              if (operation.type === 'delete') delete writes[operation.ref.path];
+            });
+          },
+        };
+      },
+    };
+
+    jest.doMock('../firebaseAdmin', () => ({ getDb: () => db }));
+    const { publishDetours } = require('../detourPublisher');
+    const detours = {
+      '8A:shape-1:100-300': {
+        eventId: '8A:shape-1:100-300',
+        routeId: '8A',
+        shapeId: 'shape-1',
+        detourVersion: 'v2',
+        state: 'active',
+        detectedAt: 1000,
+        lastSeenAt: 2000,
+        vehicleCount: 2,
+        uniqueVehicleCount: 2,
+        clearReason: 'normal-route-observed',
+        clearProof: {
+          evidenceType: 'normal-route-gps',
+          method: 'single-track-traversal',
+          observedAt: 2500,
+          sampleCount: 4,
+          sourceCount: 1,
+          shapeId: 'shape-1',
+          coverageRatio: 1,
+          requiredCoverageRatio: 0.95,
+          coveragePassed: true,
+          movementMeters: 950,
+          requiredMovementMeters: 950,
+          movementPassed: true,
+          coreSampleCount: 1,
+          coreCoveragePassed: true,
+          maxProgressGapMeters: 100,
+          maxAllowedProgressGapMeters: 500,
+          progressGapPassed: true,
+          passed: true,
+        },
+        geometry: { shapeId: 'shape-1', canShowDetourPath: false, segments: [] },
+      },
+    };
+    const options = {
+      now: 3000,
+      storageConfig: {
+        detourVersion: 'v2',
+        activeCollection: 'activeDetourEventsV2',
+        historyCollection: 'detourEventHistoryV2',
+      },
+    };
+
+    try {
+      await expect(publishDetours(detours, options)).rejects.toThrow('simulated atomic commit failure');
+      expect(writes).toEqual({});
+
+      await expect(publishDetours(detours, options)).resolves.toEqual({
+        staleAutoClearedRouteIds: [],
+        serviceRestorationEvents: [],
+      });
+      expect(writes['activeDetourEventsV2/8A:shape-1:100-300']).toBeDefined();
+
+      failNextCommit = true;
+      await expect(publishDetours({}, options)).rejects.toThrow('simulated atomic commit failure');
+      expect(writes['activeDetourEventsV2/8A:shape-1:100-300']).toBeDefined();
+
+      await expect(publishDetours({}, options)).resolves.toEqual({
+        staleAutoClearedRouteIds: [],
+        serviceRestorationEvents: [expect.objectContaining({
+          eventType: 'DETOUR_CLEARED',
+          eventId: '8A:shape-1:100-300',
+        })],
+      });
+    } finally {
+      if (originalRetentionDays == null) delete process.env.DETOUR_HISTORY_RETENTION_DAYS;
+      else process.env.DETOUR_HISTORY_RETENTION_DAYS = originalRetentionDays;
+      if (originalHistoryEnabled == null) delete process.env.DETOUR_HISTORY_ENABLED;
+      else process.env.DETOUR_HISTORY_ENABLED = originalHistoryEnabled;
+    }
+
+    expect(attemptedBatches).toHaveLength(4);
+    const firstHistoryPath = attemptedBatches[0].find((operation) =>
+      operation.ref.path.startsWith('detourEventHistoryV2/')
+    ).ref.path;
+    const secondHistoryPath = attemptedBatches[1].find((operation) =>
+      operation.ref.path.startsWith('detourEventHistoryV2/')
+    ).ref.path;
+    expect(secondHistoryPath).toBe(firstHistoryPath);
+    const firstClearHistoryPath = attemptedBatches[2].find((operation) =>
+      operation.ref.path.startsWith('detourEventHistoryV2/')
+    ).ref.path;
+    const secondClearHistoryPath = attemptedBatches[3].find((operation) =>
+      operation.ref.path.startsWith('detourEventHistoryV2/')
+    ).ref.path;
+    expect(secondClearHistoryPath).toBe(firstClearHistoryPath);
+    expect(writes['activeDetourEventsV2/8A:shape-1:100-300']).toBeUndefined();
+    expect(writes[secondHistoryPath]).toEqual(expect.objectContaining({
+      eventType: 'DETOUR_DETECTED',
+      eventId: '8A:shape-1:100-300',
+    }));
+    expect(writes[secondClearHistoryPath]).toEqual(expect.objectContaining({
+      eventType: 'DETOUR_CLEARED',
+      eventId: '8A:shape-1:100-300',
+    }));
+  });
+
 
   test('publishDetours writes V2 active event docs by event id', async () => {
     jest.resetModules();

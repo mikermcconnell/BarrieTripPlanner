@@ -173,11 +173,41 @@ function buildScheduleIndex({ tripsRaw, stopTimesCSV = '', calendarCSV = '', cal
   };
 }
 
+function buildTripTerminalStopMapping(stopTimesRaw = []) {
+  const terminalStopsByTrip = new Map();
+
+  for (const row of stopTimesRaw) {
+    const tripId = String(row.trip_id ?? row.tripId ?? '').trim();
+    const stopId = String(row.stop_id ?? row.stopId ?? '').trim();
+    const sequence = Number(row.stop_sequence ?? row.stopSequence);
+    if (!tripId || !stopId || !Number.isFinite(sequence)) continue;
+
+    const current = terminalStopsByTrip.get(tripId) || {
+      firstStopId: null,
+      firstSequence: Infinity,
+      lastStopId: null,
+      lastSequence: -Infinity,
+    };
+    if (sequence < current.firstSequence) {
+      current.firstStopId = stopId;
+      current.firstSequence = sequence;
+    }
+    if (sequence > current.lastSequence) {
+      current.lastStopId = stopId;
+      current.lastSequence = sequence;
+    }
+    terminalStopsByTrip.set(tripId, current);
+  }
+
+  return terminalStopsByTrip;
+}
+
 function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const shapesRaw = parseCSV(shapesCSV);
   const tripsRaw = parseCSV(tripsCSV);
   const stopsRaw = extra.stopsCSV ? parseCSV(extra.stopsCSV) : [];
   const stopTimesRaw = extra.stopTimesCSV ? parseCSV(extra.stopTimesCSV) : [];
+  const terminalStopsByTrip = buildTripTerminalStopMapping(stopTimesRaw);
 
   const shapes = new Map();
   for (const row of shapesRaw) {
@@ -194,11 +224,14 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const tripMapping = new Map();
   const routeShapeSets = new Map();
   for (const row of tripsRaw) {
+    const terminalStops = terminalStopsByTrip.get(row.trip_id);
     tripMapping.set(row.trip_id, {
       routeId: row.route_id,
       shapeId: row.shape_id,
       headsign: row.trip_headsign,
       directionId: parseInt(row.direction_id, 10),
+      firstStopId: terminalStops?.firstStopId || null,
+      lastStopId: terminalStops?.lastStopId || null,
     });
     if (!routeShapeSets.has(row.route_id)) routeShapeSets.set(row.route_id, new Set());
     if (row.shape_id) routeShapeSets.get(row.route_id).add(row.shape_id);
@@ -311,4 +344,10 @@ async function forceRefresh() {
   return refreshPromise;
 }
 
-module.exports = { getStaticData, forceRefresh, buildDataStructures, parseGtfsTimeToSeconds };
+module.exports = {
+  getStaticData,
+  forceRefresh,
+  buildDataStructures,
+  buildTripTerminalStopMapping,
+  parseGtfsTimeToSeconds,
+};

@@ -1,0 +1,98 @@
+- generic [ref=e1]:
+  - alert [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic: Synced
+      - generic [ref=e4503]:
+        - generic [ref=e4504]:
+          - generic [ref=e4505]:
+            - paragraph [ref=e4506]: TripPlan
+            - heading "Dublin, Northern Ireland & England" [level=1] [ref=e4507]
+            - paragraph [ref=e4508]: Sat, Sep 5 · Day 1
+          - group [ref=e4510]:
+            - generic "Open account menu" [ref=e4511] [cursor=pointer]: E
+        - generic [ref=e4513]:
+          - article [ref=e4514]:
+            - generic [ref=e4515]: Press and hold to copy Arrive in Dublin for a web search. Keyboard users can press Enter or Space.
+            - generic [ref=e4516]:
+              - generic [ref=e4517]:
+                - paragraph [ref=e4518]: Next up
+                - generic [ref=e4519]: 4 need attention
+              - generic [ref=e4521]:
+                - heading "Arrive in Dublin" [level=2] [ref=e4522]
+                - paragraph [ref=e4523]: 10:00 AM
+                - paragraph [ref=e4529]: Dublin Airport
+              - generic [ref=e4541]:
+                - link "Directions" [ref=e4542] [cursor=pointer]:
+                  - /url: https://www.google.com/maps/dir/?api=1&destination=53.4264%2C-6.2499&travelmode=driving
+                - button "Tickets (1)" [ref=e4548]
+              - generic [ref=e4553]:
+                - button "Done" [ref=e4554]
+                - button "Late" [ref=e4557]
+                - button "Skip" [ref=e4561]
+          - region "Today readiness" [ref=e4564]:
+            - generic [ref=e4565]:
+              - paragraph [ref=e4566]: 4/4
+              - paragraph [ref=e4567]: mapped
+            - generic [ref=e4568]:
+              - paragraph [ref=e4569]: "2"
+              - paragraph [ref=e4570]: docs ready
+            - generic [ref=e4571]:
+              - paragraph [ref=e4572]: "3"
+              - paragraph [ref=e4573]: travelers
+          - generic [ref=e4574]:
+            - generic "3 travelers" [ref=e4575]:
+              - generic "Traveler 1" [ref=e4576]: T
+              - generic "Traveler 2" [ref=e4577]: T
+              - generic "Traveler 3" [ref=e4578]: T
+            - generic [ref=e4579]:
+              - paragraph [ref=e4580]: Shared trip progress
+              - paragraph [ref=e4581]: Done, late and skipped updates sync to everyone.
+          - generic [ref=e4583]:
+            - generic [ref=e4584]:
+              - heading "Needs attention" [level=2] [ref=e4585]
+              - paragraph [ref=e4590]: Georgian Quarter wander missing ticket
+            - button "Review" [ref=e4591]
+          - generic [ref=e4592]:
+            - generic [ref=e4593]:
+              - heading "Today's plan" [level=2] [ref=e4594]
+              - paragraph [ref=e4595]: 4 stops
+            - generic [ref=e4596]:
+              - article [ref=e4597]:
+                - generic [ref=e4598]: Press and hold to copy Arrive in Dublin for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e4599]:
+                  - time [ref=e4601]: 10:00 AM
+                  - generic [ref=e4608]:
+                    - generic [ref=e4609]:
+                      - generic [ref=e4610]: Logistics
+                      - generic [ref=e4611]: booked
+                    - heading "Arrive in Dublin" [level=3] [ref=e4612]
+                    - paragraph [ref=e4613]:
+                      - generic [ref=e4618]: Dublin Airport
+              - article [ref=e4619]:
+                - generic [ref=e4620]: "Press and hold to copy Check in: Dublin lodging area for a web search. Keyboard users can press Enter or Space."
+                - generic [ref=e4621]:
+                  - time [ref=e4623]: 3:00 PM
+                  - generic [ref=e4631]:
+                    - generic [ref=e4632]:
+                      - generic [ref=e4633]: Logistics
+                      - generic [ref=e4634]: booked
+                    - 'heading "Check in: Dublin lodging area" [level=3] [ref=e4635]'
+                    - paragraph [ref=e4636]:
+                      - generic [ref=e4641]: Dublin lodging area
+              - article [ref=e4642]:
+                - generic [ref=e4643]: Press and hold to copy Georgian Quarter wander for a web search. Keyboard users can press Enter or Space.
+                - generic [ref=e4644]:
+                  - time [ref=e4646]: 4:30 PM
+                  - generic [ref=e4651]:
+                    - generic [ref=e4652]: Activity
+                    - heading "Georgian Quarter wander" [level=3] [ref=e4654]
+                    - paragraph [ref=e4655]:
+                      - generic [ref=e4660]: Georgian Quarter
+            - button "View all 4 plans" [ref=e4661]
+      - navigation [ref=e170]:
+        - button [active] [ref=e171]
+        - button [ref=e176]
+        - button [ref=e180]
+        - button [ref=e186]
+        - button [ref=e192]

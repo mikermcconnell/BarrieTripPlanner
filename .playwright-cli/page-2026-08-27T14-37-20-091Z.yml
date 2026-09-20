@@ -1,0 +1,594 @@
+- generic [ref=e38]:
+  - generic [ref=e39]:
+    - generic [ref=e47]:
+      - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e1240]:
+        - generic:
+          - region "Map" [ref=e1241]
+          - button ", stop 364, stop closure reported" [ref=e1242] [cursor=pointer]:
+            - generic [ref=e52]: "364"
+          - button ", stop 365, stop closure reported" [ref=e1243] [cursor=pointer]:
+            - generic [ref=e57]: "365"
+          - button ", stop 366, stop closure reported" [ref=e1244] [cursor=pointer]:
+            - generic [ref=e62]: "366"
+          - button ", stop 367, stop closure reported" [ref=e1245] [cursor=pointer]:
+            - generic [ref=e67]: "367"
+          - button ", stop 744, stop closure reported" [ref=e1246] [cursor=pointer]:
+            - generic [ref=e72]: "744"
+          - button ", stop 745, stop closure reported" [ref=e1247] [cursor=pointer]:
+            - generic [ref=e77]: "745"
+          - button ", stop 746, stop closure reported" [ref=e1248] [cursor=pointer]:
+            - generic [ref=e82]: "746"
+          - button ", stop 747, stop closure reported" [ref=e1249] [cursor=pointer]:
+            - generic [ref=e87]: "747"
+          - button ", stop 805, stop closure reported" [ref=e1250] [cursor=pointer]:
+            - generic [ref=e92]: "805"
+          - button ", stop 808, stop closure reported" [ref=e1251] [cursor=pointer]:
+            - generic [ref=e97]: "808"
+          - button ", stop 809, stop closure reported" [ref=e1252] [cursor=pointer]:
+            - generic [ref=e102]: "809"
+          - button ", stop 812, stop closure reported" [ref=e1253] [cursor=pointer]:
+            - generic [ref=e107]: "812"
+          - button ", stop 880, stop closure reported" [ref=e1254] [cursor=pointer]:
+            - generic [ref=e112]: "880"
+          - button ", stop 881, stop closure reported" [ref=e1255] [cursor=pointer]:
+            - generic [ref=e117]: "881"
+          - button ", stop 977, stop closure reported" [ref=e1256] [cursor=pointer]:
+            - generic [ref=e122]: "977"
+          - button ", stop 978, stop closure reported" [ref=e1257] [cursor=pointer]:
+            - generic [ref=e127]: "978"
+          - button ", stop 979, stop closure reported" [ref=e1258] [cursor=pointer]:
+            - generic [ref=e132]: "979"
+          - button ", stop 986, stop closure reported" [ref=e1259] [cursor=pointer]:
+            - generic [ref=e137]: "986"
+          - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e1260] [cursor=pointer]:
+            - generic [ref=e142]: "510"
+          - button ", stop 336, stop closure reported" [ref=e1261] [cursor=pointer]:
+            - generic [ref=e147]: "336"
+          - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e1262] [cursor=pointer]:
+            - generic [ref=e152]: "265"
+          - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e1263] [cursor=pointer]:
+            - generic "Stop 959. Not served by Route 8B during this detour" [ref=e1264]: "959"
+          - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e1265] [cursor=pointer]:
+            - generic "Stop 142. Not served by Route 8B during this detour" [ref=e1266]: "142"
+          - button "Route 10 bus 1101. Next stop Maple at Ross" [ref=e1267] [cursor=pointer]:
+            - generic [ref=e173]: "10"
+          - button "Route 2A bus 1712. Next stop South Village Way" [ref=e1268] [cursor=pointer]:
+            - generic [ref=e1269]: 2A
+          - button "Route 8A bus 2102. Next stop Barrie View Drive" [ref=e1274] [cursor=pointer]:
+            - generic [ref=e1275]: 8A
+          - button "Route 100 bus 1705. Next stop Rolston Drive" [ref=e1280] [cursor=pointer]:
+            - generic [ref=e215]: "100"
+          - button "Route 2B bus 2602. Next stop Ferndale at Tiffin" [ref=e1281] [cursor=pointer]:
+            - generic [ref=e1282]: 2B
+          - button "Route 12A bus 2603. Next stop Maple at Ross" [ref=e1287] [cursor=pointer]:
+            - generic [ref=e233]: 12A
+          - button "Route 400 bus 2206. Next stop Essa at Ardagh" [ref=e1288] [cursor=pointer]:
+            - generic [ref=e1111]: "400"
+          - button "Route 101 bus 1103. Next stop Bayfield at Cundles" [ref=e1289] [cursor=pointer]:
+            - generic [ref=e1116]: "101"
+          - button "Route 400 bus 2601. Next stop Rose at Highway 400" [ref=e1290] [cursor=pointer]:
+            - generic [ref=e1291]: "400"
+          - button "Route 8B bus 2201. Next stop Barrie Allandale Transit Terminal Platform 12" [ref=e1296] [cursor=pointer]:
+            - generic [ref=e1297]: 8B
+          - img "Barrie Allandale Hub bus hub" [ref=e1302]:
+            - generic: Barrie Allandale Hub
+          - img "Downtown Hub bus hub" [ref=e1303]:
+            - generic: Downtown Hub
+          - img "Park Place bus hub" [ref=e1304]:
+            - generic: Park Place
+          - img "Georgian College bus hub" [ref=e1305]:
+            - generic: Georgian College
+          - img "Barrie South GO bus hub" [ref=e1306]:
+            - generic: Barrie South GO
+          - button "Route 7B bus 1703. Next stop Grove Street" [ref=e1307] [cursor=pointer]:
+            - generic [ref=e1141]: 7B
+          - button "Route 7A bus 2203. Next stop Barrie Allandale Transit Terminal Platform 6" [ref=e1308] [cursor=pointer]:
+            - generic [ref=e1309]: 7A
+          - button "Route 101 bus 1601. Next stop Johnson at Napier" [ref=e1314] [cursor=pointer]:
+            - generic [ref=e1315]: "101"
+          - button "Route 7B bus 1709. Next stop Patterson at Tiffin" [ref=e1320] [cursor=pointer]:
+            - generic [ref=e1321]: 7B
+          - button "Route 8B bus 2101. Next stop St. Vincent at Sperling" [ref=e1326] [cursor=pointer]:
+            - generic [ref=e1327]: 8B
+          - button "Route 8B bus 1713. Next stop Mapleview at Greer" [ref=e1332] [cursor=pointer]:
+            - generic [ref=e1333]: 8B
+          - button "Route 8A bus 1502. Next stop Barrie Allandale Transit Terminal Platform 5" [ref=e1338] [cursor=pointer]:
+            - generic [ref=e1339]: 8A
+          - button "Route 8A bus 1701. Next stop Esther Drive" [ref=e1344] [cursor=pointer]:
+            - generic [ref=e1345]: 8A
+          - button "Route 8B bus 1702. Next stop Collier at Mulcaster" [ref=e1350] [cursor=pointer]:
+            - generic [ref=e1351]: 8B
+          - button "Route 7A bus 2103. Next stop Commerce Park Drive" [ref=e1356] [cursor=pointer]:
+            - generic [ref=e1357]: 7A
+          - button "Route 11 bus 2002. Next stop Codrington Street" [ref=e1362] [cursor=pointer]:
+            - generic [ref=e1363]: "11"
+          - button "Route 12A bus 1708. Next stop Hurst Drive" [ref=e1368] [cursor=pointer]:
+            - generic [ref=e1369]: 12A
+          - button "Route 12B bus 1706. Next stop Bayfield at Sophia" [ref=e1374] [cursor=pointer]:
+            - generic [ref=e1375]: 12B
+          - button "Route 8B bus 1102. Next stop Farmstead Crescent" [ref=e1380] [cursor=pointer]:
+            - generic [ref=e1381]: 8B
+          - button "Route 8A bus 1707. Next stop Brock Street" [ref=e1386] [cursor=pointer]:
+            - generic [ref=e1387]: 8A
+          - button "Route 10 bus 1503. Next stop Kozlov Street" [ref=e1392] [cursor=pointer]:
+            - generic [ref=e1393]: "10"
+          - button "Route 11 bus 2302. Next stop Emma King Elementary School" [ref=e1398] [cursor=pointer]:
+            - generic [ref=e1399]: "11"
+          - button "Route 12B bus 2001. Next stop Churchill Drive" [ref=e1404] [cursor=pointer]:
+            - generic [ref=e1405]: 12B
+          - button "Route 15A bus 1704. Next stop Big Bay Point at Dodson" [ref=e1410] [cursor=pointer]:
+            - generic [ref=e1411]: 15A
+          - button "Route 8A bus 1710. Next stop Johnson at Hickling Trail" [ref=e1416] [cursor=pointer]:
+            - generic [ref=e1417]: 8A
+          - button "Route 100 bus 2301. Next stop Collier at Mulcaster" [ref=e1422] [cursor=pointer]:
+            - generic [ref=e1423]: "100"
+          - button "Route 2A bus 2303. Next stop Frances Street" [ref=e1428] [cursor=pointer]:
+            - generic [ref=e1429]: 2A
+          - button "Victoria Street, stop 152" [ref=e1434] [cursor=pointer]
+          - button "Bradford at Simcoe, stop 150" [ref=e1438] [cursor=pointer]
+          - button "Downtown Hub, stop 2" [ref=e1442] [cursor=pointer]
+          - button "Maple at Ross, stop 485" [ref=e1446] [cursor=pointer]
+          - button "Bayfield at Wellington, stop 73" [ref=e1450] [cursor=pointer]
+          - button "Downtown Hub, stop 1" [ref=e1454] [cursor=pointer]
+          - button "Bayfield at Chase McEachern, stop 89" [ref=e1458] [cursor=pointer]
+          - button "Owen Street, stop 192" [ref=e1462] [cursor=pointer]
+          - button "Collier at Mulcaster, stop 189" [ref=e1466] [cursor=pointer]
+          - button "Wellington Street, stop 74" [ref=e1470] [cursor=pointer]
+          - button "Bayfield at Sophia, stop 75" [ref=e1474] [cursor=pointer]
+          - button "Maple at Ross, stop 486" [ref=e1478] [cursor=pointer]
+          - button "Lakeshore at Victoria, stop 156" [ref=e1482] [cursor=pointer]
+          - button "Lakeshore at Simcoe, stop 158" [ref=e1486] [cursor=pointer]
+          - button "Collier at Clapperton, stop 188" [ref=e1490] [cursor=pointer]
+          - button "Mulcaster at Collier, stop 556" [ref=e1494] [cursor=pointer]
+          - button "Codrington Street, stop 558" [ref=e1498] [cursor=pointer]
+          - button "Barrie By the Bay Plaza, stop 144" [ref=e1502] [cursor=pointer]
+          - button "Victoria Street, stop 151" [ref=e1506] [cursor=pointer]
+          - button "Dunlop at High Street, stop 275" [ref=e1510] [cursor=pointer]
+          - button "Collier at Mulcaster, stop 190" [ref=e1514] [cursor=pointer]
+          - button "Owen Street, stop 191" [ref=e1518] [cursor=pointer]
+          - button "Collier at Clapperton, stop 187" [ref=e1522] [cursor=pointer]
+          - button "Lakeshore at Marina, stop 159" [ref=e1526] [cursor=pointer]
+          - button "Lakeshore at Victoria, stop 157" [ref=e1530] [cursor=pointer]
+          - button "Bayfield at Dunlop, stop 88" [ref=e1534] [cursor=pointer]
+          - button "Mulcaster at Codrington, stop 946" [ref=e1538] [cursor=pointer]
+          - button "Mulcaster at Collier, stop 557" [ref=e1542] [cursor=pointer]
+          - img "Georgian Mall bus hub" [ref=e1546]:
+            - generic: Georgian Mall
+          - img "RVH bus hub" [ref=e1547]:
+            - generic: RVH
+          - img "Peggy Hill Team CC bus hub" [ref=e1548]:
+            - generic: Peggy Hill Team CC
+        - group [ref=e372]:
+          - generic "Toggle attribution" [ref=e1549] [cursor=pointer]
+          - generic [ref=e374]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link "MapLibre" [ref=e1550] [cursor=pointer]:
+              - /url: https://maplibre.org/
+      - generic [ref=e1551] [cursor=pointer]
+      - generic [ref=e1552]:
+        - generic [ref=e1555]:
+          - generic [ref=e1560]:
+            - generic [ref=e1561]: Downtown Hub
+            - generic [ref=e1562]: "Stop #2"
+          - button "Close stop details" [ref=e1563] [cursor=pointer]
+        - generic [ref=e1566]:
+          - button "Plan trip from Downtown Hub" [ref=e1567] [cursor=pointer]:
+            - generic [ref=e1570]: Trip from here
+          - button "Plan trip to Downtown Hub" [ref=e1571] [cursor=pointer]:
+            - generic [ref=e1574]: Trip to here
+          - button "Share stop details" [ref=e1575] [cursor=pointer]
+        - generic [ref=e1578]:
+          - generic [ref=e1579]: 🗺️
+          - generic [ref=e1581]:
+            - generic [ref=e1582]: Platform map available
+            - generic [ref=e1583]: Find your bus platform at Downtown Hub.
+            - button "Open platform map for Downtown Hub" [ref=e1584] [cursor=pointer]:
+              - generic [ref=e1585]: Open platform map
+        - generic [ref=e1586]:
+          - generic [ref=e1587]: Upcoming Arrivals
+          - generic [ref=e1588]: Real-time
+        - generic [ref=e1594]:
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 3 min, real-time" [ref=e1595]:
+            - generic [ref=e1596]: "100"
+            - generic [ref=e1598]:
+              - generic [ref=e1599]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1600]: "Stop #139"
+            - generic [ref=e1601]: 3 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 8 min, real-time" [ref=e1605]:
+            - generic [ref=e1606]: "100"
+            - generic [ref=e1608]:
+              - generic [ref=e1609]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1610]: 8 min
+          - generic "Route 7A, GROVE to Georgian College, 10 min, real-time" [ref=e1614]:
+            - generic [ref=e1615]: 7A
+            - generic [ref=e1617]:
+              - generic [ref=e1618]: GROVE to Georgian College
+              - generic [ref=e1619]: "Stop #167"
+            - generic [ref=e1620]: 10 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 15 min, real-time" [ref=e1624]:
+            - generic [ref=e1625]: 8A
+            - generic [ref=e1627]:
+              - generic [ref=e1628]: RVH/YONGE to Georgian College
+              - generic [ref=e1629]: "Stop #268"
+            - generic [ref=e1630]: 15 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 28 min, real-time" [ref=e1634]:
+            - generic [ref=e1635]: "100"
+            - generic [ref=e1637]:
+              - generic [ref=e1638]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1639]: "Stop #139"
+            - generic [ref=e1640]: 28 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 28 min, real-time" [ref=e1644]:
+            - generic [ref=e1645]: "10"
+            - generic [ref=e1647]:
+              - generic [ref=e1648]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e1649]: "Stop #254"
+            - generic [ref=e1650]: 28 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 33 min, real-time" [ref=e1654]:
+            - generic [ref=e1655]: "10"
+            - generic [ref=e1657]:
+              - generic [ref=e1658]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1659]: 33 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 33 min, real-time" [ref=e1663]:
+            - generic [ref=e1664]: "100"
+            - generic [ref=e1666]:
+              - generic [ref=e1667]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1668]: 33 min
+          - generic "Route 12A, GEORGIAN MALL, 37 min, real-time" [ref=e1672]:
+            - generic [ref=e1673]: 12A
+            - generic [ref=e1675]:
+              - generic [ref=e1676]: GEORGIAN MALL
+              - generic [ref=e1677]: "Stop #117"
+            - generic [ref=e1678]: 37 min
+          - generic "Route 7A, GROVE to Georgian College, 40 min, real-time" [ref=e1682]:
+            - generic [ref=e1683]: 7A
+            - generic [ref=e1685]:
+              - generic [ref=e1686]: GROVE to Georgian College
+              - generic [ref=e1687]: "Stop #167"
+            - generic [ref=e1688]: 40 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 44 min, real-time" [ref=e1692]:
+            - generic [ref=e1693]: 8A
+            - generic [ref=e1695]:
+              - generic [ref=e1696]: RVH/YONGE to Georgian College
+              - generic [ref=e1697]: "Stop #268"
+            - generic [ref=e1698]: 44 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 53 min, real-time" [ref=e1702]:
+            - generic [ref=e1703]: "100"
+            - generic [ref=e1705]:
+              - generic [ref=e1706]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1707]: "Stop #139"
+            - generic [ref=e1708]: 53 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 57 min, real-time" [ref=e1712]:
+            - generic [ref=e1713]: "100"
+            - generic [ref=e1715]:
+              - generic [ref=e1716]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1717]: 57 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 59 min, real-time" [ref=e1721]:
+            - generic [ref=e1722]: "10"
+            - generic [ref=e1724]:
+              - generic [ref=e1725]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e1726]: "Stop #254"
+            - generic [ref=e1727]: 59 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 1 hr 3 min, real-time" [ref=e1731]:
+            - generic [ref=e1732]: "10"
+            - generic [ref=e1734]:
+              - generic [ref=e1735]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1736]: 1 hr 3 min
+          - generic "Route 7A, GROVE to Georgian College, 1 hr 10 min, real-time" [ref=e1740]:
+            - generic [ref=e1741]: 7A
+            - generic [ref=e1743]:
+              - generic [ref=e1744]: GROVE to Georgian College
+              - generic [ref=e1745]: "Stop #167"
+            - generic [ref=e1746]: 1 hr 10 min
+          - generic "Route 12A, GEORGIAN MALL, 1 hr 12 min, real-time" [ref=e1750]:
+            - generic [ref=e1751]: 12A
+            - generic [ref=e1753]:
+              - generic [ref=e1754]: GEORGIAN MALL
+              - generic [ref=e1755]: "Stop #117"
+            - generic [ref=e1756]: 1 hr 12 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 1 hr 14 min, real-time" [ref=e1760]:
+            - generic [ref=e1761]: 8A
+            - generic [ref=e1763]:
+              - generic [ref=e1764]: RVH/YONGE to Georgian College
+              - generic [ref=e1765]: "Stop #268"
+            - generic [ref=e1766]: 1 hr 14 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 1 hr 18 min, real-time" [ref=e1770]:
+            - generic [ref=e1771]: "100"
+            - generic [ref=e1773]:
+              - generic [ref=e1774]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1775]: "Stop #139"
+            - generic [ref=e1776]: 1 hr 18 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 1 hr 22 min, real-time" [ref=e1780]:
+            - generic [ref=e1781]: "100"
+            - generic [ref=e1783]:
+              - generic [ref=e1784]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1785]: 1 hr 22 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 1 hr 30 min, real-time" [ref=e1789]:
+            - generic [ref=e1790]: "10"
+            - generic [ref=e1792]:
+              - generic [ref=e1793]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e1794]: "Stop #254"
+            - generic [ref=e1795]: 1 hr 30 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 1 hr 33 min, real-time" [ref=e1799]:
+            - generic [ref=e1800]: "10"
+            - generic [ref=e1802]:
+              - generic [ref=e1803]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1804]: 1 hr 33 min
+          - generic "Route 7A, GROVE to Georgian College, 1 hr 39 min, real-time" [ref=e1808]:
+            - generic [ref=e1809]: 7A
+            - generic [ref=e1811]:
+              - generic [ref=e1812]: GROVE to Georgian College
+              - generic [ref=e1813]: "Stop #167"
+            - generic [ref=e1814]: 1 hr 39 min
+          - generic "Route 12A, GEORGIAN MALL, 1 hr 42 min, real-time" [ref=e1818]:
+            - generic [ref=e1819]: 12A
+            - generic [ref=e1821]:
+              - generic [ref=e1822]: GEORGIAN MALL
+              - generic [ref=e1823]: "Stop #117"
+            - generic [ref=e1824]: 1 hr 42 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 1 hr 42 min, real-time" [ref=e1828]:
+            - generic [ref=e1829]: "100"
+            - generic [ref=e1831]:
+              - generic [ref=e1832]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1833]: "Stop #139"
+            - generic [ref=e1834]: 1 hr 42 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 1 hr 45 min, real-time" [ref=e1838]:
+            - generic [ref=e1839]: 8A
+            - generic [ref=e1841]:
+              - generic [ref=e1842]: RVH/YONGE to Georgian College
+              - generic [ref=e1843]: "Stop #268"
+            - generic [ref=e1844]: 1 hr 45 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 1 hr 46 min, real-time" [ref=e1848]:
+            - generic [ref=e1849]: "100"
+            - generic [ref=e1851]:
+              - generic [ref=e1852]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1853]: 1 hr 46 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 2 hr, real-time" [ref=e1857]:
+            - generic [ref=e1858]: "10"
+            - generic [ref=e1860]:
+              - generic [ref=e1861]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e1862]: "Stop #254"
+            - generic [ref=e1863]: 2 hr
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 2 hr 3 min, real-time" [ref=e1867]:
+            - generic [ref=e1868]: "10"
+            - generic [ref=e1870]:
+              - generic [ref=e1871]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1872]: 2 hr 3 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 2 hr 7 min, real-time" [ref=e1876]:
+            - generic [ref=e1877]: "100"
+            - generic [ref=e1879]:
+              - generic [ref=e1880]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1881]: "Stop #139"
+            - generic [ref=e1882]: 2 hr 7 min
+          - generic "Route 7A, GROVE to Georgian College, 2 hr 9 min, real-time" [ref=e1886]:
+            - generic [ref=e1887]: 7A
+            - generic [ref=e1889]:
+              - generic [ref=e1890]: GROVE to Georgian College
+              - generic [ref=e1891]: "Stop #167"
+            - generic [ref=e1892]: 2 hr 9 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 2 hr 11 min, real-time" [ref=e1896]:
+            - generic [ref=e1897]: "100"
+            - generic [ref=e1899]:
+              - generic [ref=e1900]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1901]: 2 hr 11 min
+          - generic "Route 12A, GEORGIAN MALL, 2 hr 12 min, real-time" [ref=e1905]:
+            - generic [ref=e1906]: 12A
+            - generic [ref=e1908]:
+              - generic [ref=e1909]: GEORGIAN MALL
+              - generic [ref=e1910]: "Stop #117"
+            - generic [ref=e1911]: 2 hr 12 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 2 hr 15 min, real-time" [ref=e1915]:
+            - generic [ref=e1916]: 8A
+            - generic [ref=e1918]:
+              - generic [ref=e1919]: RVH/YONGE to Georgian College
+              - generic [ref=e1920]: "Stop #268"
+            - generic [ref=e1921]: 2 hr 15 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 2 hr 30 min, real-time" [ref=e1925]:
+            - generic [ref=e1926]: "10"
+            - generic [ref=e1928]:
+              - generic [ref=e1929]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e1930]: "Stop #254"
+            - generic [ref=e1931]: 2 hr 30 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 2 hr 31 min, real-time" [ref=e1935]:
+            - generic [ref=e1936]: "100"
+            - generic [ref=e1938]:
+              - generic [ref=e1939]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1940]: "Stop #139"
+            - generic [ref=e1941]: 2 hr 31 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 2 hr 33 min, real-time" [ref=e1945]:
+            - generic [ref=e1946]: "10"
+            - generic [ref=e1948]:
+              - generic [ref=e1949]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1950]: 2 hr 33 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 2 hr 36 min, real-time" [ref=e1954]:
+            - generic [ref=e1955]: "100"
+            - generic [ref=e1957]:
+              - generic [ref=e1958]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e1959]: 2 hr 36 min
+          - generic "Route 7A, GROVE to Georgian College, 2 hr 39 min, real-time" [ref=e1963]:
+            - generic [ref=e1964]: 7A
+            - generic [ref=e1966]:
+              - generic [ref=e1967]: GROVE to Georgian College
+              - generic [ref=e1968]: "Stop #167"
+            - generic [ref=e1969]: 2 hr 39 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 2 hr 45 min, real-time" [ref=e1973]:
+            - generic [ref=e1974]: 8A
+            - generic [ref=e1976]:
+              - generic [ref=e1977]: RVH/YONGE to Georgian College
+              - generic [ref=e1978]: "Stop #268"
+            - generic [ref=e1979]: 2 hr 45 min
+          - generic "Route 12A, GEORGIAN MALL, 2 hr 48 min, real-time" [ref=e1983]:
+            - generic [ref=e1984]: 12A
+            - generic [ref=e1986]:
+              - generic [ref=e1987]: GEORGIAN MALL
+              - generic [ref=e1988]: "Stop #117"
+            - generic [ref=e1989]: 2 hr 48 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 2 hr 58 min, real-time" [ref=e1993]:
+            - generic [ref=e1994]: "100"
+            - generic [ref=e1996]:
+              - generic [ref=e1997]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e1998]: "Stop #139"
+            - generic [ref=e1999]: 2 hr 58 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 3 hr, real-time" [ref=e2003]:
+            - generic [ref=e2004]: "10"
+            - generic [ref=e2006]:
+              - generic [ref=e2007]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e2008]: "Stop #254"
+            - generic [ref=e2009]: 3 hr
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 3 hr 2 min, real-time" [ref=e2013]:
+            - generic [ref=e2014]: "100"
+            - generic [ref=e2016]:
+              - generic [ref=e2017]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e2018]: 3 hr 2 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 3 hr 3 min, real-time" [ref=e2022]:
+            - generic [ref=e2023]: "10"
+            - generic [ref=e2025]:
+              - generic [ref=e2026]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e2027]: 3 hr 3 min
+          - generic "Route 7A, GROVE to Georgian College, 3 hr 9 min, real-time" [ref=e2031]:
+            - generic [ref=e2032]: 7A
+            - generic [ref=e2034]:
+              - generic [ref=e2035]: GROVE to Georgian College
+              - generic [ref=e2036]: "Stop #167"
+            - generic [ref=e2037]: 3 hr 9 min
+          - generic "Route 8A, RVH/YONGE to Georgian College, 3 hr 15 min, real-time" [ref=e2041]:
+            - generic [ref=e2042]: 8A
+            - generic [ref=e2044]:
+              - generic [ref=e2045]: RVH/YONGE to Georgian College
+              - generic [ref=e2046]: "Stop #268"
+            - generic [ref=e2047]: 3 hr 15 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 3 hr 23 min, real-time" [ref=e2051]:
+            - generic [ref=e2052]: "100"
+            - generic [ref=e2054]:
+              - generic [ref=e2055]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e2056]: "Stop #139"
+            - generic [ref=e2057]: 3 hr 23 min
+          - generic "Route 12A, GEORGIAN MALL, 3 hr 24 min, real-time" [ref=e2061]:
+            - generic [ref=e2062]: 12A
+            - generic [ref=e2064]:
+              - generic [ref=e2065]: GEORGIAN MALL
+              - generic [ref=e2066]: "Stop #117"
+            - generic [ref=e2067]: 3 hr 24 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 3 hr 30 min, real-time" [ref=e2071]:
+            - generic [ref=e2072]: "10"
+            - generic [ref=e2074]:
+              - generic [ref=e2075]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e2076]: "Stop #254"
+            - generic [ref=e2077]: 3 hr 30 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 3 hr 33 min, real-time" [ref=e2081]:
+            - generic [ref=e2082]: "10"
+            - generic [ref=e2084]:
+              - generic [ref=e2085]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e2086]: 3 hr 33 min
+          - generic "Route 7A, GROVE to Georgian College, 3 hr 39 min, real-time" [ref=e2090]:
+            - generic [ref=e2091]: 7A
+            - generic [ref=e2093]:
+              - generic [ref=e2094]: GROVE to Georgian College
+              - generic [ref=e2095]: "Stop #167"
+            - generic [ref=e2096]: 3 hr 39 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 3 hr 49 min, real-time" [ref=e2100]:
+            - generic [ref=e2101]: "100"
+            - generic [ref=e2103]:
+              - generic [ref=e2104]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e2105]: "Stop #139"
+            - generic [ref=e2106]: 3 hr 49 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 3 hr 53 min, real-time" [ref=e2110]:
+            - generic [ref=e2111]: "100"
+            - generic [ref=e2113]:
+              - generic [ref=e2114]: Red Express to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e2115]: 3 hr 53 min
+          - generic "Route 12A, GEORGIAN MALL, 3 hr 56 min, real-time" [ref=e2119]:
+            - generic [ref=e2120]: 12A
+            - generic [ref=e2122]:
+              - generic [ref=e2123]: GEORGIAN MALL
+              - generic [ref=e2124]: "Stop #117"
+            - generic [ref=e2125]: 3 hr 56 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 4 hr, real-time" [ref=e2129]:
+            - generic [ref=e2130]: "10"
+            - generic [ref=e2132]:
+              - generic [ref=e2133]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e2134]: "Stop #254"
+            - generic [ref=e2135]: 4 hr
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 4 hr 3 min, real-time" [ref=e2139]:
+            - generic [ref=e2140]: "10"
+            - generic [ref=e2142]:
+              - generic [ref=e2143]: NORTH LOOP to Downtown Barrie Terminal
+              - text: "0"
+            - generic [ref=e2144]: 4 hr 3 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 4 hr 30 min, real-time" [ref=e2148]:
+            - generic [ref=e2149]: "10"
+            - generic [ref=e2151]:
+              - generic [ref=e2152]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e2153]: "Stop #254"
+            - generic [ref=e2154]: 4 hr 30 min
+          - generic "Route 12A, GEORGIAN MALL, 4 hr 31 min, real-time" [ref=e2158]:
+            - generic [ref=e2159]: 12A
+            - generic [ref=e2161]:
+              - generic [ref=e2162]: GEORGIAN MALL
+              - generic [ref=e2163]: "Stop #117"
+            - generic [ref=e2164]: 4 hr 31 min
+          - generic "Route 100, Red Express to Downtown Barrie Terminal, 4 hr 41 min, real-time" [ref=e2168]:
+            - generic [ref=e2169]: "100"
+            - generic [ref=e2171]:
+              - generic [ref=e2172]: Red Express to Downtown Barrie Terminal
+              - generic [ref=e2173]: "Stop #139"
+            - generic [ref=e2174]: 4 hr 41 min
+          - generic "Route 10, NORTH LOOP to Downtown Barrie Terminal, 5 hr, real-time" [ref=e2178]:
+            - generic [ref=e2179]: "10"
+            - generic [ref=e2181]:
+              - generic [ref=e2182]: NORTH LOOP to Downtown Barrie Terminal
+              - generic [ref=e2183]: "Stop #254"
+            - generic [ref=e2184]: 5 hr
+          - generic "Route 7A, GROVE to Georgian College, 5 hr 9 min, real-time" [ref=e2188]:
+            - generic [ref=e2189]: 7A
+            - generic [ref=e2191]:
+              - generic [ref=e2192]: GROVE to Georgian College
+              - generic [ref=e2193]: "Stop #167"
+            - generic [ref=e2194]: 5 hr 9 min
+    - generic [ref=e913]:
+      - generic [ref=e914]: Search
+      - generic [ref=e917]:
+        - generic [ref=e918]: 🔍
+        - textbox [ref=e2198]:
+          - /placeholder: Search stops...
+          - text: Downtown Hub
+        - button [ref=e2199] [cursor=pointer]:
+          - generic [ref=e1239]: ✕
+      - generic [ref=e920]:
+        - tab [ref=e2200] [cursor=pointer]:
+          - generic [ref=e922]: Stops
+        - tab [ref=e2201] [cursor=pointer]:
+          - generic [ref=e924]: Routes
+        - tab [ref=e2202] [cursor=pointer]:
+          - generic [ref=e926]: Addresses
+      - generic [ref=e927]: 2 stops found
+      - generic [ref=e930]:
+        - button [active] [ref=e2203] [cursor=pointer]:
+          - generic [ref=e991]:
+            - generic [ref=e992]: Downtown Hub
+            - generic [ref=e993]: "Stop #2"
+          - generic [ref=e994]: ›
+        - button [ref=e2204] [cursor=pointer]:
+          - generic [ref=e959]:
+            - generic [ref=e960]: Downtown Hub
+            - generic [ref=e961]: "Stop #1"
+          - generic [ref=e962]: ›
+  - tablist [ref=e511]:
+    - tab "Map" [selected] [ref=e513] [cursor=pointer]
+    - tab "Search" [ref=e630] [cursor=pointer]
+    - tab "Profile" [ref=e735] [cursor=pointer]

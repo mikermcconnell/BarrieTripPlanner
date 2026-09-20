@@ -1,0 +1,169 @@
+- generic [ref=f17e5]:
+  - banner [ref=f17e7]:
+    - generic [ref=f17e8]:
+      - button "Open main menu" [ref=f17e9] [cursor=pointer]
+      - generic [ref=f17e14]:
+        - generic [ref=f17e15]:
+          - button [ref=f17e16] [cursor=pointer]
+          - button [ref=f17e24] [cursor=pointer]
+          - button [ref=f17e29] [cursor=pointer]
+          - button "Command Palette" [ref=f17e35] [cursor=pointer]
+          - button "Help" [ref=f17e40] [cursor=pointer]
+        - button "michaelryanmcconnell@gmail.com" [ref=f17e46] [cursor=pointer]:
+          - img [ref=f17e49]:
+            - generic [ref=f17e51]: M
+  - generic [active] [ref=f17e52]:
+    - banner [ref=f17e53]:
+      - heading "Create a new project in 3 steps" [level=1] [ref=f17e386]
+      - generic [ref=f17e56]:
+        - button "Ask Seer" [ref=f17e57] [cursor=pointer]
+        - button "Give Feedback" [ref=f17e64] [cursor=pointer]
+    - main [ref=f17e69]:
+      - list [ref=f17e392]:
+        - paragraph [ref=f17e393]:
+          - text: Set up a separate project for each part of your application (for example, your API server and frontend client), to quickly pinpoint which part of your application errors are coming from.
+          - link "Read the docs" [ref=f17e394] [cursor=pointer]:
+            - /url: https://docs.sentry.io/product/sentry-basics/integrate-frontend/create-new-project/
+          - text: .
+        - listitem [ref=f17e395]: Choose your platform
+        - generic [ref=f17e396]:
+          - tablist [ref=f17e400]:
+            - tab "Popular" [selected] [ref=f17e401] [cursor=pointer]
+            - tab "Browser" [ref=f17e403] [cursor=pointer]
+            - tab "Server" [ref=f17e405] [cursor=pointer]
+            - tab "Mobile" [ref=f17e407] [cursor=pointer]
+            - tab "Desktop" [ref=f17e409] [cursor=pointer]
+            - tab "Serverless" [ref=f17e411] [cursor=pointer]
+            - tab "Gaming" [ref=f17e413] [cursor=pointer]
+            - tab "All" [ref=f17e415] [cursor=pointer]
+          - textbox "Filter Platforms" [ref=f17e419]
+        - generic [ref=f17e420]:
+          - generic [ref=f17e422] [cursor=pointer]:
+            - img "javascript-nextjs" [ref=f17e423]
+            - heading "Next.js" [level=3] [ref=f17e424]
+          - generic [ref=f17e426] [cursor=pointer]:
+            - img "javascript-react" [ref=f17e427]
+            - heading "React" [level=3] [ref=f17e428]
+          - generic [ref=f17e430] [cursor=pointer]:
+            - img "react-native" [ref=f17e431]
+            - heading "React Native" [level=3] [ref=f17e432]
+            - button "Clear" [ref=f17e631]
+          - generic [ref=f17e434] [cursor=pointer]:
+            - img "node" [ref=f17e435]
+            - heading "Node.js" [level=3] [ref=f17e436]
+          - generic [ref=f17e438] [cursor=pointer]:
+            - img "php-laravel" [ref=f17e439]
+            - heading "Laravel" [level=3] [ref=f17e440]
+          - generic [ref=f17e442] [cursor=pointer]:
+            - img "python-fastapi" [ref=f17e443]
+            - heading "FastAPI" [level=3] [ref=f17e444]
+          - generic [ref=f17e446] [cursor=pointer]:
+            - img "flutter" [ref=f17e447]
+            - heading "Flutter" [level=3] [ref=f17e448]
+          - generic [ref=f17e450] [cursor=pointer]:
+            - img "python-django" [ref=f17e451]
+            - heading "Django" [level=3] [ref=f17e452]
+          - generic [ref=f17e454] [cursor=pointer]:
+            - img "python" [ref=f17e455]
+            - heading "Python" [level=3] [ref=f17e456]
+          - generic [ref=f17e458] [cursor=pointer]:
+            - img "node-express" [ref=f17e459]
+            - heading "Express" [level=3] [ref=f17e460]
+          - generic [ref=f17e462] [cursor=pointer]:
+            - img "javascript" [ref=f17e463]
+            - heading "Browser JavaScript" [level=3] [ref=f17e464]
+          - generic [ref=f17e466] [cursor=pointer]:
+            - img "php" [ref=f17e467]
+            - heading "PHP" [level=3] [ref=f17e468]
+          - generic [ref=f17e470] [cursor=pointer]:
+            - img "ruby-rails" [ref=f17e471]
+            - heading "Rails" [level=3] [ref=f17e472]
+          - generic [ref=f17e474] [cursor=pointer]:
+            - img "apple-ios" [ref=f17e475]
+            - heading "iOS" [level=3] [ref=f17e476]
+          - generic [ref=f17e478] [cursor=pointer]:
+            - img "node-nestjs" [ref=f17e479]
+            - heading "Nest.js" [level=3] [ref=f17e480]
+          - generic [ref=f17e482] [cursor=pointer]:
+            - img "python-flask" [ref=f17e483]
+            - heading "Flask" [level=3] [ref=f17e484]
+          - generic [ref=f17e486] [cursor=pointer]:
+            - img "javascript-vue" [ref=f17e487]
+            - heading "Vue" [level=3] [ref=f17e488]
+          - generic [ref=f17e490] [cursor=pointer]:
+            - img "dotnet-aspnetcore" [ref=f17e491]
+            - heading "ASP.NET Core" [level=3] [ref=f17e492]
+          - generic [ref=f17e494] [cursor=pointer]:
+            - img "javascript-nuxt" [ref=f17e495]
+            - heading "Nuxt" [level=3] [ref=f17e496]
+          - generic [ref=f17e498] [cursor=pointer]:
+            - img "dotnet-maui" [ref=f17e499]
+            - heading ".NET MAUI" [level=3] [ref=f17e500]
+          - generic [ref=f17e502] [cursor=pointer]:
+            - img "javascript-angular" [ref=f17e503]
+            - heading "Angular" [level=3] [ref=f17e504]
+          - generic [ref=f17e506] [cursor=pointer]:
+            - img "android" [ref=f17e507]
+            - heading "Android" [level=3] [ref=f17e508]
+          - generic [ref=f17e510] [cursor=pointer]:
+            - img "java-spring-boot" [ref=f17e511]
+            - heading "Spring Boot" [level=3] [ref=f17e512]
+          - generic [ref=f17e514] [cursor=pointer]:
+            - img "php-symfony" [ref=f17e515]
+            - heading "Symfony" [level=3] [ref=f17e516]
+          - generic [ref=f17e518] [cursor=pointer]:
+            - img "node-cloudflare-workers" [ref=f17e519]
+            - heading "Cloudflare Workers" [level=3] [ref=f17e520]
+          - generic [ref=f17e522] [cursor=pointer]:
+            - img "electron" [ref=f17e523]
+            - heading "Electron" [level=3] [ref=f17e524]
+          - generic [ref=f17e526] [cursor=pointer]:
+            - img "unity" [ref=f17e527]
+            - heading "Unity" [level=3] [ref=f17e528]
+          - generic [ref=f17e530] [cursor=pointer]:
+            - img "javascript-remix" [ref=f17e531]
+            - heading "Remix" [level=3] [ref=f17e532]
+        - listitem [ref=f17e533]: Set your alert frequency
+        - generic [ref=f17e534]:
+          - radiogroup "Options for creating an alert" [ref=f17e535]:
+            - generic [ref=f17e536] [cursor=pointer]:
+              - radio "Alert me on high priority issues" [checked] [ref=f17e537]
+              - generic [ref=f17e538]: Alert me on high priority issues
+            - generic [ref=f17e540] [cursor=pointer]:
+              - radio "When there are more than 10 occurrences of a unique error in one minute" [ref=f17e541]
+              - generic [ref=f17e543]:
+                - text: When there are more than
+                - spinbutton "10" [ref=f17e545]
+                - generic [ref=f17e550]:
+                  - generic [ref=f17e551]: occurrences of
+                  - textbox [ref=f17e556]
+                - text: a unique error in
+                - generic [ref=f17e565]:
+                  - generic [ref=f17e566]: one minute
+                  - textbox [ref=f17e571]
+            - generic [ref=f17e576] [cursor=pointer]:
+              - radio "I'll create my own alerts later" [ref=f17e577]
+              - generic [ref=f17e578]: I'll create my own alerts later
+          - generic [ref=f17e583]:
+            - checkbox "Notify via email" [checked] [disabled] [ref=f17e585]
+            - generic [ref=f17e586]: Notify via email
+          - button "Connect to messaging" [ref=f17e588] [cursor=pointer]
+        - listitem [ref=f17e598]: Name your project and assign it a team
+        - generic [ref=f17e599]:
+          - generic [ref=f17e600]:
+            - generic [ref=f17e601]: Project slug
+            - generic [ref=f17e602]:
+              - img "react-native" [ref=f17e636]
+              - textbox "project-slug" [ref=f17e604]: react-native
+          - generic [ref=f17e605]:
+            - generic [ref=f17e606]: Team
+            - generic [ref=f17e610]:
+              - generic [ref=f17e611] [cursor=pointer]:
+                - generic [ref=f17e613]:
+                  - generic "mike mcconnell" [ref=f17e615]:
+                    - img [ref=f17e616]:
+                      - generic [ref=f17e618]: MM
+                  - generic [ref=f17e619]: "#mike-mcconnell"
+                - textbox "Select a Team" [ref=f17e622]
+              - generic [ref=f17e624] [cursor=pointer]
+          - button "Create Project" [ref=f17e637] [cursor=pointer]

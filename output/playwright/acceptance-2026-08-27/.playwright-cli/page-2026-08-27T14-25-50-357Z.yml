@@ -1,0 +1,252 @@
+- generic [ref=e38]:
+  - generic [ref=e300]:
+    - generic [ref=e2805]:
+      - generic "Transit map. Use arrow keys to move the map and plus or minus to zoom." [ref=e7153]:
+        - generic:
+          - region "Map" [ref=e7154]
+          - button ", stop 364, stop closure reported" [ref=e7155] [cursor=pointer]:
+            - generic [ref=e2810]: "364"
+          - button ", stop 365, stop closure reported" [ref=e7156] [cursor=pointer]:
+            - generic [ref=e2815]: "365"
+          - button ", stop 366, stop closure reported" [ref=e7157] [cursor=pointer]:
+            - generic [ref=e2820]: "366"
+          - button ", stop 367, stop closure reported" [ref=e7158] [cursor=pointer]:
+            - generic [ref=e2825]: "367"
+          - button ", stop 744, stop closure reported" [ref=e7159] [cursor=pointer]:
+            - generic [ref=e2830]: "744"
+          - button ", stop 745, stop closure reported" [ref=e7160] [cursor=pointer]:
+            - generic [ref=e2835]: "745"
+          - button ", stop 746, stop closure reported" [ref=e7161] [cursor=pointer]:
+            - generic [ref=e2840]: "746"
+          - button ", stop 747, stop closure reported" [ref=e7162] [cursor=pointer]:
+            - generic [ref=e2845]: "747"
+          - button ", stop 805, stop closure reported" [ref=e7163] [cursor=pointer]:
+            - generic [ref=e2850]: "805"
+          - button ", stop 808, stop closure reported" [ref=e7164] [cursor=pointer]:
+            - generic [ref=e2855]: "808"
+          - button ", stop 809, stop closure reported" [ref=e7165] [cursor=pointer]:
+            - generic [ref=e2860]: "809"
+          - button ", stop 812, stop closure reported" [ref=e7166] [cursor=pointer]:
+            - generic [ref=e2865]: "812"
+          - button ", stop 880, stop closure reported" [ref=e7167] [cursor=pointer]:
+            - generic [ref=e2870]: "880"
+          - button ", stop 881, stop closure reported" [ref=e7168] [cursor=pointer]:
+            - generic [ref=e2875]: "881"
+          - button ", stop 977, stop closure reported" [ref=e7169] [cursor=pointer]:
+            - generic [ref=e2880]: "977"
+          - button ", stop 978, stop closure reported" [ref=e7170] [cursor=pointer]:
+            - generic [ref=e2885]: "978"
+          - button ", stop 979, stop closure reported" [ref=e7171] [cursor=pointer]:
+            - generic [ref=e2890]: "979"
+          - button ", stop 986, stop closure reported" [ref=e7172] [cursor=pointer]:
+            - generic [ref=e2895]: "986"
+          - button "Mapleview at Chef, stop 510, stop closure reported" [ref=e7173] [cursor=pointer]:
+            - generic [ref=e2900]: "510"
+          - button ", stop 336, stop closure reported" [ref=e7174] [cursor=pointer]:
+            - generic [ref=e2905]: "336"
+          - button "Dunlop at Anne, stop 265, stop closure reported" [ref=e7175] [cursor=pointer]:
+            - generic [ref=e2910]: "265"
+          - button "Johnson at Indian Arrow Road, Not served by Route 8B during this detour" [ref=e7176] [cursor=pointer]:
+            - generic "Stop 959. Not served by Route 8B during this detour" [ref=e7177]: "959"
+          - button "Vancouver Street, Not served by Route 8B during this detour" [ref=e7178] [cursor=pointer]:
+            - generic "Stop 142. Not served by Route 8B during this detour" [ref=e7179]: "142"
+          - img "Barrie Allandale Hub bus hub" [ref=e7180]:
+            - generic: Barrie Allandale Hub
+          - img "Downtown Hub bus hub" [ref=e7181]:
+            - generic: Downtown Hub
+          - img "Park Place bus hub" [ref=e7182]:
+            - generic: Park Place
+          - img "Georgian College bus hub" [ref=e7183]:
+            - generic: Georgian College
+          - img "Barrie South GO bus hub" [ref=e7184]:
+            - generic: Barrie South GO
+          - img "Bus hub" [ref=e7185]
+          - img "Bus hub" [ref=e7186]
+          - img "Bus hub" [ref=e7187]
+          - button "Route 8A bus 1701. Next stop Granville Street" [ref=e7188] [cursor=pointer]:
+            - generic [ref=e7189]: 8A
+          - button "Route 400 bus 2601. Next stop Barrie Primary Care Centre" [ref=e7194] [cursor=pointer]:
+            - generic [ref=e7195]: "400"
+          - button "Route 101 bus 1103. Next stop 130 Bell Farm" [ref=e7200] [cursor=pointer]:
+            - generic [ref=e7201]: "101"
+          - button "Route 100 bus 2301. Next stop RVH (Atrium Entrance)" [ref=e7206] [cursor=pointer]:
+            - generic [ref=e7207]: "100"
+          - button "Route 7B bus 2103. Next stop Park Place" [ref=e7212] [cursor=pointer]:
+            - generic [ref=e7213]: 7B
+          - button "Route 7B bus 1709. Next stop Barrie By the Bay Plaza" [ref=e7218] [cursor=pointer]:
+            - generic [ref=e7219]: 7B
+          - button "Route 2B bus 2602. Next stop Sarjeant Drive" [ref=e7224] [cursor=pointer]:
+            - generic [ref=e7225]: 2B
+          - button "Route 8B bus 1713. Next stop North Village Way" [ref=e7230] [cursor=pointer]:
+            - generic [ref=e6672]: 8B
+          - button "Route 2A bus 2303. Next stop Miller at Dunlop" [ref=e7231] [cursor=pointer]:
+            - generic [ref=e7232]: 2A
+          - button "Route 8B bus 1702. Next stop Cheltenham Road" [ref=e7237] [cursor=pointer]:
+            - generic [ref=e7238]: 8B
+          - button "Route 8A bus 2102. Next stop Ellis Drive" [ref=e7243] [cursor=pointer]:
+            - generic [ref=e7244]: 8A
+          - button "Route 10 bus 1101. Next stop Penetang at St Vincent" [ref=e7249] [cursor=pointer]:
+            - generic [ref=e7250]: "10"
+          - button "Route 11 bus 2002. Next stop Downtown Hub" [ref=e7255] [cursor=pointer]:
+            - generic [ref=e7256]: "11"
+          - button "Route 101 bus 1601. Next stop Bayfield at Chase McEachern" [ref=e7261] [cursor=pointer]:
+            - generic [ref=e7077]: "101"
+          - button "Route 10 bus 1503. Next stop Letitia Street" [ref=e7262] [cursor=pointer]:
+            - generic [ref=e7263]: "10"
+          - button "Route 12B bus 2001. Next stop Barrie Primary Care Centre" [ref=e7268] [cursor=pointer]:
+            - generic [ref=e7269]: 12B
+          - button "Route 8A bus 1710. Next stop Owen Street" [ref=e7274] [cursor=pointer]:
+            - generic [ref=e7275]: 8A
+          - button "Route 8B bus 2101. Next stop Cundles at Sunnidale" [ref=e7280] [cursor=pointer]:
+            - generic [ref=e7281]: 8B
+          - button "Route 8B bus 2201. Next stop Big Bay Plaza" [ref=e7286] [cursor=pointer]:
+            - generic [ref=e7124]: 8B
+          - button "Route 7A bus 1703. Next stop Grove at Duckworth" [ref=e7287] [cursor=pointer]:
+            - generic [ref=e7288]: 7A
+          - button "Route 12B bus 1706" [ref=e7293] [cursor=pointer]:
+            - generic [ref=e7294]: 12B
+          - button "Route 2A bus 1712. Next stop South Village Way" [ref=e7299] [cursor=pointer]:
+            - generic [ref=e7300]: 2A
+          - button "Route 8A bus 1707. Next stop Gloria Street" [ref=e7305] [cursor=pointer]:
+            - generic [ref=e7306]: 8A
+          - button "Route 100 bus 1705. Next stop Grove Street" [ref=e7311] [cursor=pointer]:
+            - generic [ref=e7312]: "100"
+          - button "Route 7A bus 2203. Next stop Wildflower Court" [ref=e7317] [cursor=pointer]:
+            - generic [ref=e7318]: 7A
+          - button "Route 11 bus 2302. Next stop Michael Crescent" [ref=e7323] [cursor=pointer]:
+            - generic [ref=e7324]: "11"
+          - button "Route 12A bus 2603. Next stop Springhome Road" [ref=e7329] [cursor=pointer]:
+            - generic [ref=e7330]: 12A
+          - button "Route 400 bus 2206. Next stop Bayfield at Highway 400" [ref=e7335] [cursor=pointer]:
+            - generic [ref=e7336]: "400"
+          - button "Route 8A bus 1502. Next stop Marsellus at Mapleton" [ref=e7341] [cursor=pointer]:
+            - generic [ref=e7342]: 8A
+          - button "Route 15B bus 1704. Next stop Saint Gabriel Catholic School" [ref=e7347] [cursor=pointer]:
+            - generic [ref=e7348]: 15B
+        - group [ref=e3124]:
+          - generic "Toggle attribution" [ref=e7353] [cursor=pointer]
+          - generic [ref=e3126]:
+            - text: © OpenStreetMap contributors © CARTO |
+            - link "MapLibre" [ref=e7354] [cursor=pointer]:
+              - /url: https://maplibre.org/
+      - generic [ref=e3130]:
+        - textbox "Where to?" [ref=e7355]
+        - generic "Transit status live" [ref=e7356]: LIVE
+      - button "Expand detour list" [ref=e7357] [cursor=pointer]:
+        - generic [ref=e3175]: "Active detours: 2 locations"
+        - generic [ref=e3177]:
+          - generic [ref=e3178]: 12B
+          - generic [ref=e3180]: 8B
+        - generic [ref=e3182]: ▼
+      - 'button "4 official detour notices: Mapleview Detour and Shuttle" [ref=e7358] [cursor=pointer]':
+        - generic [ref=e3184]: i
+        - generic [ref=e3186]:
+          - generic [ref=e3187]: 4 official detour notices
+          - generic [ref=e3188]: Mapleview Detour and Shuttle
+          - generic [ref=e3189]: Route 12B no longer directly serves Barrie South GO. Use Route 15 shuttle.
+        - generic [ref=e3190]:
+          - generic [ref=e3191]: 12B
+          - generic [ref=e3193]: "15"
+        - button "Hide planned detour notice" [ref=e7359]:
+          - generic [ref=e3196]: ×
+      - generic [ref=e3197] [cursor=pointer]:
+        - button "Learn how the Auto Detour Detector works" [ref=e7360]:
+          - generic [ref=e3203]:
+            - generic [ref=e3204]: LIVE MAP FEATURE
+            - generic [ref=e3205]: Auto Detour Detector
+            - generic [ref=e3206]: See how it works
+          - generic [ref=e3207]: ›
+        - button "Minimize Auto Detour Detector button" [ref=e7361]:
+          - generic [ref=e3209]: −
+      - button "Center on my location" [ref=e7362] [cursor=pointer]
+      - generic:
+        - generic:
+          - generic: Routes
+          - generic: ×
+        - generic: All
+        - generic: "400"
+        - generic: "101"
+        - generic: "100"
+        - generic: 15B
+        - generic: 15A
+        - generic: 12B
+        - generic: 12A
+        - generic: "11"
+        - generic: "10"
+        - generic: 8A
+        - generic: 8B
+        - generic: 7A
+        - generic: 7B
+        - generic: 2A
+        - generic: 2B
+      - button "Open map options" [ref=e7363] [cursor=pointer]:
+        - generic [ref=e3259]: Map options
+        - generic [ref=e3260]: "2"
+    - generic [ref=e3348]:
+      - generic [ref=e3349]: Profile
+      - generic [ref=e3351]:
+        - generic [ref=e3366]:
+          - generic [ref=e3367]: You're not signed in
+          - generic [ref=e3368]: Sign in to save your transit
+          - generic [ref=e3369]: Save places, trips, stops, and routes across devices.
+        - generic [ref=e3370] [cursor=pointer]: Sign In
+      - generic [ref=e3399]:
+        - generic [ref=e3400]: Help shape MyBarrie Transit
+        - generic [ref=e3401]: This app is new and we're actively improving it. Tell us what's working, what's confusing, or what you'd like to see next.
+        - generic [ref=e3402] [cursor=pointer]: Share app feedback
+      - generic [ref=e3404]:
+        - generic [ref=e3405]: Your transit
+        - generic [ref=e3406]:
+          - generic [ref=e3407] [cursor=pointer]:
+            - generic [ref=e3434]:
+              - generic [ref=e3435]: My Transit
+              - generic [ref=e3436]: No saved transit yet
+            - generic [ref=e3437]: ›
+          - generic [ref=e3438] [cursor=pointer]:
+            - generic [ref=e3528]:
+              - generic [ref=e3529]: Trip History
+              - generic [ref=e3530]: 1 recent trip
+            - generic [ref=e3531]: ›
+      - generic [ref=e3532]:
+        - generic [ref=e3533]: Updates
+        - generic [ref=e3535] [cursor=pointer]:
+          - generic [ref=e3569]:
+            - generic [ref=e3570]: Service Alerts
+            - generic [ref=e3571]: Latest Barrie Transit updates
+          - generic [ref=e3572]: ›
+      - generic [ref=e3573]:
+        - generic [ref=e3574]: App
+        - generic [ref=e3575]:
+          - generic [ref=e3576] [cursor=pointer]:
+            - generic [ref=e3623]:
+              - generic [ref=e3624]: Settings
+              - generic [ref=e3625]: App preferences
+            - generic [ref=e3626]: ›
+          - generic [ref=e3627] [cursor=pointer]:
+            - generic [ref=e3676]:
+              - generic [ref=e3677]: Help & Support
+              - generic [ref=e3678]: FAQ and contact
+            - generic [ref=e3679]: ›
+          - generic [ref=e3680] [cursor=pointer]:
+            - generic [ref=e3735]:
+              - generic [ref=e3736]: About
+              - generic [ref=e3737]: Version 1.0.9
+            - generic [ref=e3738]: ›
+          - generic [ref=e3739] [cursor=pointer]:
+            - generic [ref=e3766]:
+              - generic [ref=e3767]: Transit network feedback
+              - generic [ref=e3768]: Routes, stops, schedules, and service
+            - generic [ref=e3769]: ›
+          - generic [ref=e3770] [cursor=pointer]:
+            - generic [ref=e3819]:
+              - generic [ref=e3820]: App feedback
+              - generic [ref=e3821]: Bugs, usability, or app ideas
+            - generic [ref=e3822]: ›
+      - generic [ref=e3823]:
+        - generic [ref=e3824]: MyBarrie Transit
+        - generic [ref=e3825]: Version 1.0.9
+        - generic [ref=e3826]: © 2026 Barrie Transit
+  - tablist [ref=e40]:
+    - tab "Map" [active] [selected] [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]

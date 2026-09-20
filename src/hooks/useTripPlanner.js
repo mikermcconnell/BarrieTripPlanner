@@ -14,11 +14,17 @@ import { autocompleteAddress, reverseGeocode, getDistanceFromBarrie } from '../s
 import { validateTripDateTime, validateTripInputs } from '../utils/tripValidation';
 import { annotateItinerariesWithDetours } from '../utils/tripDetourImpacts';
 import { sortRecommendedItineraryFirst } from '../utils/tripItineraryRanking';
+import { getUserFacingErrorMessage } from '../utils/userFacingErrors';
 import logger from '../utils/logger';
 import { runBounded, throwIfAborted } from '../utils/requestControl';
 import { getItineraryNavigationBlock } from '../utils/tripNavigationSafety';
 import { isItineraryFeasible } from '../utils/itineraryFeasibility';
 import { ROUTING_CONFIG } from '../config/constants';
+import {
+  getAgencyWallClockPickerDate,
+  isCurrentAgencyServiceDate,
+  pickerDateToAgencyInstant,
+} from '../utils/serviceTime';
 
 // ─── Action Types ─────────────────────────────────────────────────
 const SET_FROM = 'SET_FROM';
@@ -27,6 +33,7 @@ const SET_FROM_TEXT = 'SET_FROM_TEXT';
 const SET_TO_TEXT = 'SET_TO_TEXT';
 const SWAP = 'SWAP';
 const SEARCH_START = 'SEARCH_START';
+const SEARCH_STAGE = 'SEARCH_STAGE';
 const SEARCH_SUCCESS = 'SEARCH_SUCCESS';
 const SEARCH_PREVIEW = 'SEARCH_PREVIEW';
 const SEARCH_PHASE = 'SEARCH_PHASE';
@@ -43,11 +50,20 @@ const SET_TIME_MODE = 'SET_TIME_MODE';
 const SET_DEPARTURE_TIME = 'SET_DEPARTURE_TIME';
 const SET_FROM_TYPING = 'SET_FROM_TYPING';
 const SET_TO_TYPING = 'SET_TO_TYPING';
+const SET_FROM_SEARCH_ERROR = 'SET_FROM_SEARCH_ERROR';
+const SET_TO_SEARCH_ERROR = 'SET_TO_SEARCH_ERROR';
 const CLEAR_RESULTS = 'CLEAR_RESULTS';
 const SET_FROM_USES_CURRENT_LOCATION = 'SET_FROM_USES_CURRENT_LOCATION';
 const CURRENT_LOCATION_START = 'CURRENT_LOCATION_START';
 const CURRENT_LOCATION_SUCCESS = 'CURRENT_LOCATION_SUCCESS';
 const CURRENT_LOCATION_ERROR = 'CURRENT_LOCATION_ERROR';
+
+const DEFAULT_TRIP_SEARCH_TIMEOUT_MS = 45000;
+
+const createTripSearchTimeoutError = () => new TripPlanningError(
+  TRIP_ERROR_CODES.TIMEOUT,
+  'Trip planning timed out'
+);
 
 // ─── Initial State ────────────────────────────────────────────────
 const initialState = {
@@ -63,6 +79,7 @@ const initialState = {
   isLoading: false,
   isRefining: false,
   loadingMessage: null,
+  searchStage: null,
   error: null,
   hasSearched: false,
   fromSuggestions: [],
@@ -71,6 +88,8 @@ const initialState = {
   showToSuggestions: false,
   isTypingFrom: false,
   isTypingTo: false,
+  fromSearchError: null,
+  toSearchError: null,
   timeMode: 'now',          // 'now' | 'departAt' | 'arriveBy'
   selectedTime: null,       // Date object or null (null = use current time)
 };
@@ -82,6 +101,7 @@ const clearResults = (state) => ({
   isLoading: false,
   isRefining: false,
   loadingMessage: null,
+  searchStage: null,
   error: null,
   hasSearched: false,
 });
@@ -106,9 +126,9 @@ function tripReducer(state, action) {
     case SET_TO:
       return { ...state, to: action.payload };
     case SET_FROM_TEXT:
-      return { ...state, fromText: action.payload };
+      return { ...state, fromText: action.payload, fromSearchError: null };
     case SET_TO_TEXT:
-      return { ...state, toText: action.payload };
+      return { ...state, toText: action.payload, toSearchError: null };
     case SWAP:
       return {
         ...state,
@@ -117,6 +137,8 @@ function tripReducer(state, action) {
         fromUsesCurrentLocation: false,
         fromText: state.toText,
         toText: state.fromText,
+        fromSearchError: state.toSearchError,
+        toSearchError: state.fromSearchError,
       };
     case SEARCH_START:
       return {
@@ -124,6 +146,7 @@ function tripReducer(state, action) {
         isLoading: true,
         isRefining: false,
         loadingMessage: 'Preparing schedules...',
+        searchStage: 'Preparing transit schedules',
         error: null,
         itineraries: [],
         hasSearched: true,
@@ -132,6 +155,10 @@ function tripReducer(state, action) {
       return { ...state, loadingMessage: action.payload };
     case SEARCH_PREVIEW:
       return { ...state, isLoading: false, isRefining: true, itineraries: [action.payload], selectedIndex: 0, loadingMessage: 'Checking alternatives...' };
+    case SEARCH_STAGE:
+      return state.isLoading
+        ? { ...state, searchStage: action.payload }
+        : state;
     case SEARCH_SUCCESS: {
       let sortedItineraries = sortRecommendedItineraryFirst(action.payload);
       // Do not move the route the rider is looking at when alternatives finish.
@@ -146,6 +173,7 @@ function tripReducer(state, action) {
         isLoading: false,
         isRefining: false,
         loadingMessage: null,
+        searchStage: null,
         itineraries: sortedItineraries,
         selectedIndex: 0,
         error: sortedItineraries.length === 0 ? 'No routes found for this trip' : null,
@@ -159,6 +187,7 @@ function tripReducer(state, action) {
         isLoading: false,
         isRefining: false,
         loadingMessage: null,
+        searchStage: null,
         error: action.payload,
       };
     case SELECT_ITINERARY:
@@ -182,23 +211,30 @@ function tripReducer(state, action) {
         isLoading: false,
         isRefining: false,
         loadingMessage: null,
+        searchStage: null,
         isLocatingFrom: false,
         error: action.payload,
         hasSearched: isTripPlanningError,
       };
     }
     case SET_TIME_MODE:
-      return {
+      return clearResults({
         ...state,
         timeMode: action.payload,
-        selectedTime: action.payload === 'now' ? null : (state.selectedTime || new Date()),
-      };
+        selectedTime: action.payload === 'now'
+          ? null
+          : (state.selectedTime || getAgencyWallClockPickerDate() || new Date()),
+      });
     case SET_DEPARTURE_TIME:
-      return { ...state, selectedTime: action.payload };
+      return clearResults({ ...state, selectedTime: action.payload });
     case SET_FROM_TYPING:
       return { ...state, isTypingFrom: action.payload };
     case SET_TO_TYPING:
       return { ...state, isTypingTo: action.payload };
+    case SET_FROM_SEARCH_ERROR:
+      return { ...state, fromSearchError: action.payload };
+    case SET_TO_SEARCH_ERROR:
+      return { ...state, toSearchError: action.payload };
     case CLEAR_RESULTS:
       return clearResults(state);
     case CURRENT_LOCATION_START:
@@ -259,6 +295,7 @@ function tripReducer(state, action) {
  * @param {Object} [options.activeDetours] - Active detour feed keyed by route
  * @param {Object} [options.detourStopDetailsByRouteId] - Derived skipped/affected stop details keyed by route
  * @param {Array} [options.officialServiceImpacts] - Reviewed official baseline-change notices
+ * @param {number} [options.tripSearchTimeoutMs] - Overall search watchdog duration
  */
 export const useTripPlanner = ({
   ensureRoutingData,
@@ -271,6 +308,7 @@ export const useTripPlanner = ({
   activeDetours = {},
   detourStopDetailsByRouteId = {},
   officialServiceImpacts = [],
+  tripSearchTimeoutMs = DEFAULT_TRIP_SEARCH_TIMEOUT_MS,
 } = {}) => {
   const [state, dispatch] = useReducer(tripReducer, initialState);
   const fromDebounceRef = useRef(null);
@@ -307,9 +345,12 @@ export const useTripPlanner = ({
       return;
     }
 
+    const selectedAgencyTime = state.timeMode === 'now'
+      ? null
+      : pickerDateToAgencyInstant(state.selectedTime);
     const timeValidation = validateTripDateTime({
       timeMode: state.timeMode,
-      selectedTime: state.selectedTime,
+      selectedTime: selectedAgencyTime,
     });
     if (!timeValidation.valid) {
       invalidateTripSearches();
@@ -331,6 +372,11 @@ export const useTripPlanner = ({
     let previewKey = null;
     const searchStartedAt = Date.now();
     dispatch({ type: SEARCH_START });
+    const reportSearchStage = (message) => {
+      if (requestSeq === tripSearchSeqRef.current && message) {
+        dispatch({ type: SEARCH_STAGE, payload: message });
+      }
+    };
 
     try {
       const result = await runBounded(async (signal) => {
@@ -340,7 +386,7 @@ export const useTripPlanner = ({
         let routing = null;
         if (ensureRoutingData) {
           try {
-            routing = await ensureRoutingData();
+            routing = await ensureRoutingData({ onProgress: reportSearchStage });
           } catch {
             // Continue without local routing — OTP fallback
           }
@@ -349,7 +395,7 @@ export const useTripPlanner = ({
         throwIfAborted(signal);
         if (requestSeq !== tripSearchSeqRef.current) return null;
         dispatch({ type: SEARCH_PHASE, payload: 'Checking walking routes...' });
-        const tripTime = state.timeMode === 'now' ? new Date() : (state.selectedTime || new Date());
+        const tripTime = state.timeMode === 'now' ? new Date() : (selectedAgencyTime || new Date());
         return planTripAuto({
           fromLat: from.lat,
           fromLon: from.lon,
@@ -359,12 +405,13 @@ export const useTripPlanner = ({
           time: tripTime,
           arriveBy: state.timeMode === 'arriveBy',
           routingData: routing,
+          useCache: state.timeMode !== 'now',
           signal,
           onCandidateReady: async (candidate) => {
             if (requestSeq !== tripSearchSeqRef.current) return false;
             throwIfAborted(signal);
             let options = [candidate];
-            if (applyDelays) {
+            if (applyDelays && isCurrentAgencyServiceDate(tripTime)) {
               try {
                 options = await runBounded(() => applyDelays(options, { ...delayOptions, signal }), { signal });
               } catch (error) {
@@ -390,7 +437,7 @@ export const useTripPlanner = ({
           onDemandZones,
           stops,
         });
-      }, { signal: controller.signal, timeoutMs: 45000 });
+      }, { signal: controller.signal, timeoutMs: tripSearchTimeoutMs });
 
       if (requestSeq !== tripSearchSeqRef.current) return;
 
@@ -398,7 +445,7 @@ export const useTripPlanner = ({
       const routingDiagnostics = result.routingDiagnostics || {};
 
       // Apply real-time delays if the platform provides the function
-      if (applyDelays && finalItineraries.length > 0) {
+      if (applyDelays && finalItineraries.length > 0 && (state.timeMode === 'now' || isCurrentAgencyServiceDate(selectedAgencyTime))) {
         try {
           finalItineraries = await runBounded(() => applyDelays(finalItineraries, { ...delayOptions, signal: controller.signal }), { signal: controller.signal });
         } catch {
@@ -468,6 +515,7 @@ export const useTripPlanner = ({
       }
     } catch (err) {
       if (requestSeq !== tripSearchSeqRef.current || err.name === 'AbortError') return;
+      if (err.name === 'TimeoutError') err = createTripSearchTimeoutError();
       const errorCode = err instanceof TripPlanningError ? err.code : 'UNEXPECTED_ERROR';
       if (err instanceof TripPlanningError) {
         logger.warn('Trip planning search failed', {
@@ -496,7 +544,7 @@ export const useTripPlanner = ({
         dispatch({ type: SEARCH_ERROR, payload: err.message || 'Could not find routes. Please try again.' });
       }
     }
-  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches]);
+  }, [ensureRoutingData, onItinerariesReady, onTripPlanned, applyDelays, delayOptions, activeDetours, detourStopDetailsByRouteId, officialServiceImpacts, state.timeMode, state.selectedTime, state.fromText, state.toText, onDemandZones, stops, invalidateTripSearches, tripSearchTimeoutMs]);
 
   // ─── Address search (debounced) ──────────────────────────────
   const searchFromAddress = useCallback((text) => {
@@ -526,7 +574,14 @@ export const useTripPlanner = ({
         dispatch({ type: SET_FROM_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: sorted.length > 0 });
         dispatch({ type: SET_FROM_TYPING, payload: false });
-      } catch {
+      } catch (error) {
+        if (requestSeq !== fromRequestSeqRef.current) return;
+        dispatch({ type: SET_FROM_SUGGESTIONS, payload: [] });
+        dispatch({ type: SHOW_FROM_SUGGESTIONS, payload: false });
+        dispatch({
+          type: SET_FROM_SEARCH_ERROR,
+          payload: getUserFacingErrorMessage(error, 'Address search is unavailable. Please try again.'),
+        });
         dispatch({ type: SET_FROM_TYPING, payload: false });
       }
     }, 300);
@@ -557,7 +612,14 @@ export const useTripPlanner = ({
         dispatch({ type: SET_TO_SUGGESTIONS, payload: sorted });
         dispatch({ type: SHOW_TO_SUGGESTIONS, payload: sorted.length > 0 });
         dispatch({ type: SET_TO_TYPING, payload: false });
-      } catch {
+      } catch (error) {
+        if (requestSeq !== toRequestSeqRef.current) return;
+        dispatch({ type: SET_TO_SUGGESTIONS, payload: [] });
+        dispatch({ type: SHOW_TO_SUGGESTIONS, payload: false });
+        dispatch({
+          type: SET_TO_SEARCH_ERROR,
+          payload: getUserFacingErrorMessage(error, 'Address search is unavailable. Please try again.'),
+        });
         dispatch({ type: SET_TO_TYPING, payload: false });
       }
     }, 300);

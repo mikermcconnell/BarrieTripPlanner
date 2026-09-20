@@ -341,13 +341,9 @@ export const autocompleteAddress = async (query) => {
       const cached = getCached(autocompleteCache, cacheKey);
       if (cached) return cached;
 
-      try {
-        const apiResults = await _apiAutocomplete(query);
-        setCache(autocompleteCache, cacheKey, apiResults);
-        return apiResults;
-      } catch {
-        return [];
-      }
+      const apiResults = await _apiAutocomplete(query);
+      setCache(autocompleteCache, cacheKey, apiResults);
+      return apiResults;
     }
 
     // Some local results but query doesn't look like an address — supplement

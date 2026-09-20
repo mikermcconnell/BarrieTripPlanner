@@ -176,4 +176,44 @@ describe('fetchAllStaticData', () => {
       'https://www.myridebarrie.ca/gtfs/Google_transit.zip?bttpCacheBust='
     );
   });
+
+  test('parses large stop-time files cooperatively and reports cold-load progress', async () => {
+    const { fetchWithCORS } = require('../utils/fetchWithCORS');
+    const JSZip = require('jszip').default;
+    const { fetchAllStaticData } = require('../services/gtfsService');
+    const baseFiles = makeZipFiles();
+    const stopTimeRows = Array.from({ length: 1600 }, (_, index) => (
+      `trip-1,08:00:00,08:00:00,${100 + (index % 2)},${index + 1}`
+    ));
+    const stages = [];
+    const yieldControl = jest.fn(async () => {});
+
+    fetchWithCORS.mockResolvedValueOnce(makeResponse(new ArrayBuffer(4)));
+    JSZip.loadAsync.mockResolvedValueOnce({
+      files: {
+        ...baseFiles,
+        'stop_times.txt': {
+          async: jest.fn().mockResolvedValue(
+            'trip_id,arrival_time,departure_time,stop_id,stop_sequence\n' +
+            stopTimeRows.join('\n')
+          ),
+        },
+      },
+    });
+
+    const data = await fetchAllStaticData({
+      onProgress: (stage) => stages.push(stage),
+      yieldControl,
+    });
+
+    expect(data.stopTimes).toHaveLength(1600);
+    expect(stages).toEqual([
+      'Downloading the latest transit schedule',
+      'Reading routes and stops',
+      'Preparing the route map',
+      'Reading scheduled stop times',
+      'Linking routes and stops',
+    ]);
+    expect(yieldControl.mock.calls.length).toBeGreaterThanOrEqual(8);
+  });
 });

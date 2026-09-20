@@ -60,6 +60,7 @@ const TripBottomSheet = ({
   isLoading,
   isRefining = false,
   loadingMessage = null,
+  loadingStage = null,
   error,
   hasSearched,
   onRetry,
@@ -68,7 +69,10 @@ const TripBottomSheet = ({
   savedTrips = [],
   onSelectSavedTrip,
   onSaveCurrentTrip,
+  saveCurrentTripLabel = 'Save this route',
   repeatTripSuggestion = null,
+  mapPreviewUnavailable = false,
+  allTripsBlocked = false,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = useSafeBottomInset(insets.bottom);
@@ -186,11 +190,15 @@ const TripBottomSheet = ({
       <>
         <View style={styles.resultsHeader}>
           <View style={styles.resultsHeaderText}>
-            <Text style={styles.resultsEyebrow}>Live trip options</Text>
+            <Text style={styles.resultsEyebrow}>Trip options</Text>
             <Text style={styles.resultsTitle}>
               Choose your route
             </Text>
-            <Text style={styles.resultsSubtitle} accessibilityLiveRegion="polite">{isRefining ? 'Checking alternatives — you can preview this route now.' : 'Tap a card to preview it on the map.'}</Text>
+            <Text style={styles.resultsSubtitle}>
+              {mapPreviewUnavailable
+                ? 'Trip cards are ready. The map preview is temporarily unavailable.'
+                : isRefining ? 'Checking alternatives — you can preview this route now.' : 'Tap a card to preview it on the map.'}
+            </Text>
             {repeatTripSuggestion && onSaveCurrentTrip && (
               <View style={styles.repeatTripPrompt}>
                 <View style={styles.repeatTripPromptText}>
@@ -216,28 +224,32 @@ const TripBottomSheet = ({
                 style={styles.saveTripButton}
                 onPress={onSaveCurrentTrip}
                 accessibilityRole="button"
-                accessibilityLabel="Save this route"
+                accessibilityLabel={saveCurrentTripLabel}
               >
                 <Icon name="Star" size={14} color={COLORS.primary} />
-                <Text style={styles.saveTripButtonText}>Save this route</Text>
+                <Text style={styles.saveTripButtonText}>{saveCurrentTripLabel}</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={styles.mapKeyToggle}
-              onPress={() => setIsMapKeyExpanded((expanded) => !expanded)}
-              accessibilityRole="button"
-              accessibilityLabel={isMapKeyExpanded ? 'Hide trip map key' : 'Show trip map key'}
-              accessibilityState={{ expanded: isMapKeyExpanded }}
-            >
-              <Text style={styles.mapKeyToggleIcon}>ⓘ</Text>
-              <Text style={styles.mapKeyToggleText}>Map key</Text>
-              <Text style={styles.mapKeyToggleIcon}>{isMapKeyExpanded ? '⌃' : '⌄'}</Text>
-            </TouchableOpacity>
-            <TripPreviewMapLegend
-              visible={isMapKeyExpanded}
-              variant="inline"
-              style={styles.inlineMapKey}
-            />
+            {!mapPreviewUnavailable && (
+              <>
+                <TouchableOpacity
+                  style={styles.mapKeyToggle}
+                  onPress={() => setIsMapKeyExpanded((expanded) => !expanded)}
+                  accessibilityRole="button"
+                  accessibilityLabel={isMapKeyExpanded ? 'Hide trip map key' : 'Show trip map key'}
+                  accessibilityState={{ expanded: isMapKeyExpanded }}
+                >
+                  <Text style={styles.mapKeyToggleIcon}>ⓘ</Text>
+                  <Text style={styles.mapKeyToggleText}>Map key</Text>
+                  <Text style={styles.mapKeyToggleIcon}>{isMapKeyExpanded ? '⌃' : '⌄'}</Text>
+                </TouchableOpacity>
+                <TripPreviewMapLegend
+                  visible={isMapKeyExpanded}
+                  variant="inline"
+                  style={styles.inlineMapKey}
+                />
+              </>
+            )}
           </View>
           <View style={styles.resultsCountPill}>
             <Text style={styles.resultsCountText}>
@@ -248,6 +260,17 @@ const TripBottomSheet = ({
             </Text>
           </View>
         </View>
+        {allTripsBlocked && (
+          <View style={styles.blockedTripsNotice} accessibilityRole="alert">
+            <Icon name="TriangleAlert" size={18} color={COLORS.error} />
+            <View style={styles.blockedTripsNoticeText}>
+              <Text style={styles.blockedTripsNoticeTitle}>No currently usable trip</Text>
+              <Text style={styles.blockedTripsNoticeDetail}>
+                Every option has a closure, cancellation, or connection problem. Re-plan before travelling.
+              </Text>
+            </View>
+          </View>
+        )}
         <View style={styles.resultsList}>
           {itineraries.map((itinerary, index) => (
             <TripResultCard
@@ -361,6 +384,31 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: SPACING.lg,
     paddingHorizontal: SPACING.md,
+  },
+  blockedTripsNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.error + '55',
+    backgroundColor: COLORS.error + '10',
+  },
+  blockedTripsNoticeText: {
+    flex: 1,
+  },
+  blockedTripsNoticeTitle: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  blockedTripsNoticeDetail: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 2,
   },
   recentTitle: {
     fontSize: FONT_SIZES.xs,

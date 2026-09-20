@@ -1,0 +1,59 @@
+- generic [ref=e38]:
+  - tablist [ref=e40]:
+    - tab "Map" [selected] [ref=e42] [cursor=pointer]
+    - tab "Search" [ref=e159] [cursor=pointer]
+    - tab "Profile" [ref=e264] [cursor=pointer]
+  - generic [ref=e1750]:
+    - generic [ref=e1751]:
+      - generic [ref=e1752] [cursor=pointer]
+      - generic [ref=e1755]: Trip Details
+    - generic [ref=e1757]:
+      - generic [ref=e1758]:
+        - generic [ref=e1759]: 18 min
+        - generic [ref=e1760]:
+          - generic [ref=e1761]: 10:16 AM
+          - generic [ref=e1836]: 10:35 AM
+        - generic [ref=e1837]: 389m walk
+      - generic [ref=e1885]:
+        - generic [ref=e1886]: Step-by-Step Directions
+        - generic [ref=e1891]:
+          - generic [ref=e1892]:
+            - generic [ref=e1893]: 10:16 AM
+            - generic [ref=e1895]: Origin
+          - generic [ref=e1908]:
+            - generic [ref=e1909]: "Walk to Stop #2"
+            - generic [ref=e1910]: 14m • about 0 min
+            - generic [ref=e1911]: Downtown Hub
+        - generic [ref=e1916]:
+          - generic [ref=e1917]:
+            - generic [ref=e1918]:
+              - generic [ref=e1919]: 10:16 AM
+              - generic [ref=e1920]: (+1 min late)
+            - generic [ref=e1921]: Downtown Hub (#2)
+          - generic [ref=e1923]:
+            - generic [ref=e1924]: 7A
+            - generic [ref=e1926]:
+              - generic [ref=e1927]:
+                - generic [ref=e1928]: Board Route 7A
+                - generic [ref=e1929]: Live
+              - generic [ref=e1932]: Toward GROVE to Georgian College • 13 min
+              - generic [ref=e1933]: Board at Downtown Hub (#2)
+              - generic [ref=e1934]: "Stay on bus: 10 stops before yours"
+              - generic [ref=e1935]: Get off at Georgian College (#331)
+          - generic [ref=e1936]: "On bus: Maple at Ross (#485) → Bayfield at Wellington (#73) → Grove Street (#67) + 7 more"
+        - generic [ref=e1941]:
+          - generic [ref=e1942]:
+            - generic [ref=e1943]: 10:29 AM
+            - generic [ref=e1945]: Georgian College (#331)
+          - generic [ref=e1994]:
+            - generic [ref=e1995]: Walk to Destination
+            - generic [ref=e1996]: 375m • about 5 min
+          - generic [ref=e1997]:
+            - generic [ref=e1998]: 10:35 AM
+            - generic [ref=e1999]: Destination
+      - button "Fare information, expand" [ref=e2001] [cursor=pointer]:
+        - generic [ref=e2002]: 🎫 Fare Information
+        - generic [ref=e2003]: ▼
+    - generic [ref=e2004]:
+      - generic [ref=e2005] [cursor=pointer]: Remind me
+      - generic [ref=e2007] [cursor=pointer]: Start Navigation

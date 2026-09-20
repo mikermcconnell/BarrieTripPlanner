@@ -26,6 +26,7 @@ function summarizeVehicleFeedFreshness(
   {
     now = Date.now(),
     staleThresholdMs = 5 * 60 * 1000,
+    maxFutureSkewMs = 2 * 60 * 1000,
   } = {}
 ) {
   const list = Array.isArray(vehicles) ? vehicles : [];
@@ -35,10 +36,15 @@ function summarizeVehicleFeedFreshness(
   const newestTimestampMs = timestamps.length > 0 ? Math.max(...timestamps) : null;
   const oldestTimestampMs = timestamps.length > 0 ? Math.min(...timestamps) : null;
   const newestAgeMs = Number.isFinite(newestTimestampMs) ? Math.max(0, now - newestTimestampMs) : null;
+  const futureTimestampCount = timestamps.filter((timestampMs) => (
+    timestampMs - now > maxFutureSkewMs
+  )).length;
   const stale = list.length > 0 && Number.isFinite(newestAgeMs) && newestAgeMs > staleThresholdMs;
   let status = 'empty';
   if (list.length > 0 && timestamps.length === 0) {
     status = 'unknown';
+  } else if (futureTimestampCount > 0) {
+    status = 'future';
   } else if (stale) {
     status = 'stale';
   } else if (list.length > 0) {
@@ -52,6 +58,8 @@ function summarizeVehicleFeedFreshness(
     oldestTimestampMs,
     newestAgeMs,
     staleThresholdMs,
+    maxFutureSkewMs,
+    futureTimestampCount,
     stale,
     status,
   };

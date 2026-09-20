@@ -1,9 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const { createDetourV2Detector, _test } = require('../detourV2/detector');
+const { createDetourV2Detector: createRawDetourV2Detector, _test } = require('../detourV2/detector');
 const { projectOntoPolyline } = require('../detour/projection');
 const { pointToPolylineDistance } = require('../geometry');
+
+// Most detector fixtures use historical timestamps and should be independent
+// of the wall clock. Service-hour behavior has dedicated tests below.
+function createDetourV2Detector(config = {}) {
+  return createRawDetourV2Detector({ enforceServiceHours: false, ...config });
+}
 
 const shapes = new Map();
 shapes.set('shape-1', [
@@ -143,6 +149,67 @@ function detourForRoute(result, routeId) {
 }
 
 describe('Auto Detour V2 detector', () => {
+
+  test('does not accumulate or publish new evidence outside service hours', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-09T07:00:00.000Z'));
+    try {
+      const detector = createRawDetourV2Detector({ enforceServiceHours: true });
+      const result = detector.processVehicles([
+        vehicle({ id: 'bus-1', tripId: 'trip-1', timestampMs: Date.now() - 2000 }),
+        vehicle({ id: 'bus-2', tripId: 'trip-2', timestampMs: Date.now() - 1000 }),
+        vehicle({ id: 'bus-2', tripId: 'trip-2', timestampMs: Date.now() }),
+      ], shapes, routeShapeMapping);
+
+      expect(result).toEqual({});
+      expect(detector.getState()).toEqual(expect.objectContaining({
+        vehicleCount: 0,
+        activeDetourCount: 0,
+        candidateEvidence: {},
+      }));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('does not treat samples with missing timestamps as current evidence', () => {
+    const detector = createDetourV2Detector();
+    const result = detector.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', timestampMs: null }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', timestampMs: undefined }),
+      vehicle({ id: 'bus-3', tripId: 'trip-3', timestampMs: undefined, timestamp: 0 }),
+    ], shapes, routeShapeMapping);
+
+    expect(result).toEqual({});
+    expect(detector.getState().candidateEvidence).toEqual({});
+  });
+
+  test('retains an already-active detour outside service hours without advancing clear state', () => {
+    const source = createDetourV2Detector();
+    const active = source.processVehicles([
+      vehicle({ id: 'bus-1', tripId: 'trip-1', timestampMs: 1000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', timestampMs: 2000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', timestampMs: 3000 }),
+    ], shapes, routeShapeMapping);
+    const eventId = Object.keys(active)[0];
+    expect(eventId).toBeTruthy();
+
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-09T07:00:00.000Z'));
+    try {
+      const restored = createRawDetourV2Detector({ enforceServiceHours: true });
+      const runtimeState = source.serializeDetectorRuntimeState();
+      restored.hydrateRuntimeState(runtimeState);
+      expect(restored.hydrateActiveDetourSnapshots(runtimeState.activeEvents)).toBe(1);
+      const retained = restored.processVehicles([], shapes, routeShapeMapping);
+
+      expect(retained[eventId]).toEqual(expect.objectContaining({
+        state: 'active',
+        currentVehicleCount: 0,
+      }));
+      expect(retained[eventId].riderVisible).toBe(active[eventId].riderVisible);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 
   test('fills small inferred-path handoff gaps at the regular-route boundaries', () => {
     const entryPoint = { latitude: 44.3900, longitude: -79.7000 };
@@ -1131,6 +1198,10 @@ describe('Auto Detour V2 detector', () => {
     ];
     const testShapes = new Map([[shapeId, shape]]);
     const testMapping = new Map([['8A', [shapeId]]]);
+    const tripMapping = new Map([
+      ['route-8a-terminal-trip-a', { shapeId, firstStopId: '2', lastStopId: '330' }],
+      ['route-8a-terminal-trip-b', { shapeId, firstStopId: '2', lastStopId: '330' }],
+    ]);
     const detector = createDetourV2Detector();
 
     const result = detector.processVehicles([
@@ -1162,18 +1233,125 @@ describe('Auto Detour V2 detector', () => {
         coordinate: { latitude: 44.38863754272461, longitude: -79.69181060791016 },
         timestampMs: 4000,
       }),
-    ], testShapes, testMapping);
+    ], testShapes, testMapping, tripMapping);
 
     expect(detoursForRoute(result, '8A')).toEqual([]);
     expect(detector.getState().routeProjectionSummaries['8A']).toEqual(expect.objectContaining({
-      ignoredRouteEdge: 4,
+      knownTerminalCirculation: 4,
       offRoute: 0,
     }));
     expect(detector.getRouteDebug('8A').projectionDiagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ classification: 'ignored-route-edge' }),
+        expect.objectContaining({
+          classification: 'known-terminal-circulation',
+          knownTerminalCirculationId: 'downtown-hub-stop-2-egress',
+        }),
       ])
     );
+  });
+
+  test('applies the Downtown Hub terminal circulation globally to Route 100', () => {
+    const shapeId = 'route-100-downtown-hub-loop';
+    const shape = [
+      { latitude: 44.387753, longitude: -79.690237 },
+      { latitude: 44.388719, longitude: -79.691065 },
+      { latitude: 44.390400, longitude: -79.692507 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['100', [shapeId]]]);
+    const tripMapping = new Map([
+      ['route-100-terminal-trip-a', { shapeId, firstStopId: '2', lastStopId: '2' }],
+      ['route-100-terminal-trip-b', { shapeId, firstStopId: '2', lastStopId: '2' }],
+    ]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'route-100-terminal-bus-a',
+        routeId: '100',
+        tripId: 'route-100-terminal-trip-a',
+        coordinate: { latitude: 44.387468, longitude: -79.690149 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'route-100-terminal-bus-a',
+        routeId: '100',
+        tripId: 'route-100-terminal-trip-a',
+        coordinate: { latitude: 44.386841, longitude: -79.691031 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'route-100-terminal-bus-b',
+        routeId: '100',
+        tripId: 'route-100-terminal-trip-b',
+        coordinate: { latitude: 44.387562, longitude: -79.691660 },
+        timestampMs: 3000,
+      }),
+      vehicle({
+        id: 'route-100-terminal-bus-b',
+        routeId: '100',
+        tripId: 'route-100-terminal-trip-b',
+        coordinate: { latitude: 44.388332, longitude: -79.692333 },
+        timestampMs: 4000,
+      }),
+    ], testShapes, testMapping, tripMapping);
+
+    expect(detoursForRoute(result, '100')).toEqual([]);
+    expect(detector.getState().candidateEvidence).toEqual({});
+    expect(detector.getState().routeProjectionSummaries['100']).toEqual(expect.objectContaining({
+      knownTerminalCirculation: 4,
+      offRoute: 0,
+    }));
+  });
+
+  test('still activates a real terminal-edge deviation outside the approved circulation path', () => {
+    const shapeId = 'downtown-hub-real-detour';
+    const shape = [
+      { latitude: 44.387753, longitude: -79.690237 },
+      { latitude: 44.387753, longitude: -79.688000 },
+      { latitude: 44.387753, longitude: -79.686000 },
+      { latitude: 44.387753, longitude: -79.684000 },
+    ];
+    const testShapes = new Map([[shapeId, shape]]);
+    const testMapping = new Map([['100', [shapeId]]]);
+    const tripMapping = new Map([
+      ['real-terminal-detour-a', { shapeId, firstStopId: '2', lastStopId: '2' }],
+      ['real-terminal-detour-b', { shapeId, firstStopId: '2', lastStopId: '2' }],
+    ]);
+    const detector = createDetourV2Detector();
+
+    const result = detector.processVehicles([
+      vehicle({
+        id: 'real-terminal-bus-a',
+        routeId: '100',
+        tripId: 'real-terminal-detour-a',
+        coordinate: { latitude: 44.3892, longitude: -79.6900 },
+        timestampMs: 1000,
+      }),
+      vehicle({
+        id: 'real-terminal-bus-a',
+        routeId: '100',
+        tripId: 'real-terminal-detour-a',
+        coordinate: { latitude: 44.3892, longitude: -79.6885 },
+        timestampMs: 2000,
+      }),
+      vehicle({
+        id: 'real-terminal-bus-b',
+        routeId: '100',
+        tripId: 'real-terminal-detour-b',
+        coordinate: { latitude: 44.3892, longitude: -79.6870 },
+        timestampMs: 3000,
+      }),
+    ], testShapes, testMapping, tripMapping);
+
+    expect(detourForRoute(result, '100')).toEqual(expect.objectContaining({
+      routeId: '100',
+      vehicleCount: 2,
+    }));
+    expect(detector.getState().routeProjectionSummaries['100']).toEqual(expect.objectContaining({
+      knownTerminalCirculation: 0,
+      offRoute: 3,
+    }));
   });
 
   test('still activates a materially off-route detour at the start of a route', () => {
@@ -3329,10 +3507,13 @@ describe('Auto Detour V2 detector', () => {
 
     const tripShapeDetector = createDetourV2Detector();
     result = tripShapeDetector.processVehicles([
-      vehicle({ id: 'bus-1', tripId: 'trip-1', tripShapeId: 'main-shape', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 1000 }),
-      vehicle({ id: 'bus-2', tripId: 'trip-2', tripShapeId: 'main-shape', coordinate: { latitude: 44.395, longitude: -79.696 }, timestampMs: 2000 }),
-      vehicle({ id: 'bus-2', tripId: 'trip-2', tripShapeId: 'main-shape', coordinate: { latitude: 44.395, longitude: -79.694 }, timestampMs: 3000 }),
-    ], variantShapes, variantMapping);
+      vehicle({ id: 'bus-1', tripId: 'trip-1', coordinate: { latitude: 44.395, longitude: -79.698 }, timestampMs: 1000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.696 }, timestampMs: 2000 }),
+      vehicle({ id: 'bus-2', tripId: 'trip-2', coordinate: { latitude: 44.395, longitude: -79.694 }, timestampMs: 3000 }),
+    ], variantShapes, variantMapping, new Map([
+      ['trip-1', { shapeId: 'main-shape' }],
+      ['trip-2', { shapeId: 'main-shape' }],
+    ]));
 
     expect(result['8A']).toEqual(expect.objectContaining({
       routeId: '8A',
@@ -4834,4 +5015,3 @@ describe('Auto Detour V2 detector', () => {
     expect(result['8A'].geometry.segments[0].geometryGate.reason).toBe('span-too-short');
   });
 });
-
