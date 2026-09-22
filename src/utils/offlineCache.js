@@ -119,6 +119,7 @@ export const cacheGTFSData = async (data) => {
     await cacheData(CACHE_KEYS.MAPPINGS, {
       trips: data.trips,
       tripMapping: data.tripMapping,
+      arrivalDestinationPatterns: data.arrivalDestinationPatterns,
       routeShapeMapping: data.routeShapeMapping,
       routeStopsMapping: data.routeStopsMapping,
       routeStopSequencesMapping: data.routeStopSequencesMapping,

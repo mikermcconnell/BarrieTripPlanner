@@ -18,7 +18,7 @@ jest.mock('../utils/logger', () => ({
   warn: jest.fn(),
 }));
 
-import { getCachedGTFSData } from '../utils/offlineCache';
+import { cacheGTFSData, getCachedGTFSData } from '../utils/offlineCache';
 
 const writeCachePart = (key, data, ageMs) => {
   mockStorage.set(key, JSON.stringify({
@@ -53,4 +53,10 @@ describe('GTFS startup cache', () => {
 
     await expect(getCachedGTFSData()).resolves.toBeNull();
   });
+});
+
+test('destination patterns survive public timetable cache write and read-back', async () => {
+  const arrivalDestinationPatterns = { '8A': [{ headsign: 'College', stopIds: ['A', 'B', 'C'] }] };
+  await expect(cacheGTFSData({ routes: [{ id: '8A' }], stops: [{ id: 'A' }], shapes: {}, tripMapping: {}, arrivalDestinationPatterns })).resolves.toEqual({ success: true });
+  await expect(getCachedGTFSData()).resolves.toEqual(expect.objectContaining({ arrivalDestinationPatterns }));
 });

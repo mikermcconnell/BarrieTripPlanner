@@ -20,6 +20,7 @@ export const useStopArrivals = (stop, options = {}) => {
   const {
     routes,
     tripMapping,
+    arrivalDestinationPatterns,
     isLoadingStatic,
     isRefreshingStatic,
     loadStaticData,
@@ -51,7 +52,7 @@ export const useStopArrivals = (stop, options = {}) => {
         setError('Live arrival information is stale');
         return;
       }
-      const resolvedArrivals = getArrivalsForStop(tripUpdates, stop.id, routes, tripMapping);
+      const resolvedArrivals = getArrivalsForStop(tripUpdates, stop.id, routes, tripMapping, arrivalDestinationPatterns);
       const unresolvedArrivals = resolvedArrivals.filter(
         (arrival) => arrival.destinationStatus !== 'available'
       );
@@ -121,6 +122,7 @@ export const useStopArrivals = (stop, options = {}) => {
     stop,
     routes,
     tripMapping,
+    arrivalDestinationPatterns,
     isLoadingStatic,
     isRefreshingStatic,
     loadStaticData,

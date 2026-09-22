@@ -1,0 +1,961 @@
+{
+  "capturedAt": "2026-09-20T23:49:51.714317+00:00",
+  "source": "https://www.myridebarrie.ca/gtfs/",
+  "update": {
+    "tripId": "cc83688f-2fbd-425c-99f7-793d0b132d65",
+    "routeId": "8A",
+    "scheduleRelationship": "SCHEDULED",
+    "startDate": null,
+    "startTime": null,
+    "timestamp": 1789948189,
+    "stopTimeUpdates": [
+      {
+        "stopSequence": 0,
+        "stopId": "9005",
+        "arrival": {
+          "delay": 0,
+          "time": 1789951320
+        },
+        "departure": {
+          "delay": 0,
+          "time": 1789951320
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 6,
+        "stopId": "154",
+        "arrival": {
+          "delay": null,
+          "time": 1789951463
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789951463
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 12,
+        "stopId": "156",
+        "arrival": {
+          "delay": null,
+          "time": 1789951556
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789951556
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 17,
+        "stopId": "158",
+        "arrival": {
+          "delay": null,
+          "time": 1789951664
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789951664
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 22,
+        "stopId": "2",
+        "arrival": {
+          "delay": 152,
+          "time": 1789951892
+        },
+        "departure": {
+          "delay": 32,
+          "time": 1789951892
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 27,
+        "stopId": "485",
+        "arrival": {
+          "delay": null,
+          "time": 1789952000
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952000
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 33,
+        "stopId": "188",
+        "arrival": {
+          "delay": null,
+          "time": 1789952068
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952068
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 35,
+        "stopId": "192",
+        "arrival": {
+          "delay": null,
+          "time": 1789952098
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952098
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 39,
+        "stopId": "189",
+        "arrival": {
+          "delay": null,
+          "time": 1789952130
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952130
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 40,
+        "stopId": "194",
+        "arrival": {
+          "delay": null,
+          "time": 1789952143
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952143
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 45,
+        "stopId": "186",
+        "arrival": {
+          "delay": null,
+          "time": 1789952169
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952169
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 53,
+        "stopId": "128",
+        "arrival": {
+          "delay": null,
+          "time": 1789952226
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952226
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 54,
+        "stopId": "141",
+        "arrival": {
+          "delay": null,
+          "time": 1789952248
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952248
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 55,
+        "stopId": "139",
+        "arrival": {
+          "delay": null,
+          "time": 1789952266
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952266
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 60,
+        "stopId": "136",
+        "arrival": {
+          "delay": null,
+          "time": 1789952302
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952302
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 61,
+        "stopId": "143",
+        "arrival": {
+          "delay": null,
+          "time": 1789952318
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952318
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 64,
+        "stopId": "129",
+        "arrival": {
+          "delay": 0,
+          "time": 1789952400
+        },
+        "departure": {
+          "delay": 0,
+          "time": 1789952400
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 66,
+        "stopId": "182",
+        "arrival": {
+          "delay": null,
+          "time": 1789952456
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952456
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 67,
+        "stopId": "184",
+        "arrival": {
+          "delay": null,
+          "time": 1789952491
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952491
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 72,
+        "stopId": "183",
+        "arrival": {
+          "delay": null,
+          "time": 1789952558
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952558
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 74,
+        "stopId": "414",
+        "arrival": {
+          "delay": null,
+          "time": 1789952612
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952612
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 75,
+        "stopId": "409",
+        "arrival": {
+          "delay": null,
+          "time": 1789952658
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952658
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 76,
+        "stopId": "410",
+        "arrival": {
+          "delay": null,
+          "time": 1789952722
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952722
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 77,
+        "stopId": "401",
+        "arrival": {
+          "delay": null,
+          "time": 1789952812
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952812
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 80,
+        "stopId": "406",
+        "arrival": {
+          "delay": null,
+          "time": 1789952879
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952879
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 83,
+        "stopId": "325",
+        "arrival": {
+          "delay": null,
+          "time": 1789952929
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952929
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 85,
+        "stopId": "332",
+        "arrival": {
+          "delay": null,
+          "time": 1789952976
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789952976
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 88,
+        "stopId": "612",
+        "arrival": {
+          "delay": null,
+          "time": 1789953027
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789953027
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 99,
+        "stopId": "569",
+        "arrival": {
+          "delay": null,
+          "time": 1789953081
+        },
+        "departure": {
+          "delay": null,
+          "time": 1789953081
+        },
+        "scheduleRelationship": "SCHEDULED"
+      },
+      {
+        "stopSequence": 113,
+        "stopId": "330",
+        "arrival": {
+          "delay": 34,
+          "time": 1789953214
+        },
+        "departure": {
+          "delay": 34,
+          "time": 1789953214
+        },
+        "scheduleRelationship": "SCHEDULED"
+      }
+    ]
+  },
+  "patterns": {
+    "8A": [
+      {
+        "headsign": "RVH/YONGE to Park Place",
+        "stopIds": [
+          "330",
+          "109",
+          "104",
+          "107",
+          "630",
+          "220",
+          "621",
+          "624",
+          "125",
+          "448",
+          "440",
+          "453",
+          "912",
+          "913",
+          "914",
+          "232",
+          "238",
+          "244",
+          "15",
+          "4",
+          "23",
+          "12",
+          "24",
+          "18",
+          "6",
+          "30",
+          "22",
+          "7",
+          "114",
+          "146",
+          "9003"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Park Place",
+        "stopIds": [
+          "330",
+          "109",
+          "104",
+          "107",
+          "630",
+          "220",
+          "621",
+          "624",
+          "125",
+          "448",
+          "440",
+          "453",
+          "912",
+          "913",
+          "914",
+          "232",
+          "238",
+          "244",
+          "15",
+          "4",
+          "23",
+          "12",
+          "24",
+          "18",
+          "26",
+          "6",
+          "30",
+          "22",
+          "7",
+          "114",
+          "146",
+          "9003",
+          "168",
+          "165",
+          "173",
+          "166",
+          "716",
+          "712",
+          "718",
+          "719",
+          "709",
+          "707",
+          "705",
+          "722",
+          "800",
+          "801",
+          "725"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2",
+          "485",
+          "188",
+          "192",
+          "189",
+          "194",
+          "186",
+          "128",
+          "141",
+          "139",
+          "136",
+          "143",
+          "129",
+          "182",
+          "184",
+          "183",
+          "414",
+          "409",
+          "410",
+          "401",
+          "406",
+          "325",
+          "332",
+          "612",
+          "569",
+          "330"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "725",
+          "953",
+          "955",
+          "956",
+          "957",
+          "516",
+          "511",
+          "512",
+          "741",
+          "678",
+          "675",
+          "987",
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "548",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2",
+          "485",
+          "188",
+          "192",
+          "189",
+          "194",
+          "186",
+          "128",
+          "141",
+          "139",
+          "136",
+          "143",
+          "129",
+          "182",
+          "184",
+          "183",
+          "414",
+          "409",
+          "410",
+          "401",
+          "406",
+          "325",
+          "332",
+          "612",
+          "569",
+          "330"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "548",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "725",
+          "953",
+          "955",
+          "956",
+          "957",
+          "516",
+          "511",
+          "512",
+          "741",
+          "678",
+          "675",
+          "987",
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "548",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "548",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2",
+          "485",
+          "188",
+          "192",
+          "189",
+          "194",
+          "186",
+          "128",
+          "141",
+          "139",
+          "136",
+          "143",
+          "129",
+          "182",
+          "184",
+          "183",
+          "414",
+          "409",
+          "410",
+          "401",
+          "406",
+          "325",
+          "332",
+          "612",
+          "569",
+          "330"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "725",
+          "953",
+          "955",
+          "956",
+          "957",
+          "516",
+          "511",
+          "512",
+          "741",
+          "678",
+          "675",
+          "987",
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "606",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2",
+          "485",
+          "188",
+          "192",
+          "189",
+          "194",
+          "186",
+          "128",
+          "141",
+          "139",
+          "136",
+          "143",
+          "129",
+          "182",
+          "184",
+          "183",
+          "414",
+          "409",
+          "410",
+          "401",
+          "406",
+          "325",
+          "332",
+          "612",
+          "569",
+          "330"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Park Place",
+        "stopIds": [
+          "9003",
+          "168",
+          "165",
+          "173",
+          "166",
+          "716",
+          "712",
+          "718",
+          "719",
+          "709",
+          "707",
+          "705",
+          "722",
+          "800",
+          "801",
+          "725"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "2",
+          "485",
+          "188",
+          "192",
+          "189",
+          "194",
+          "186",
+          "128",
+          "141",
+          "139",
+          "136",
+          "143",
+          "129",
+          "182",
+          "184",
+          "183",
+          "414",
+          "409",
+          "410",
+          "401",
+          "406",
+          "325",
+          "332",
+          "333",
+          "612",
+          "569",
+          "330"
+        ]
+      },
+      {
+        "headsign": "RVH/YONGE to Georgian College",
+        "stopIds": [
+          "725",
+          "953",
+          "955",
+          "956",
+          "957",
+          "516",
+          "511",
+          "512",
+          "741",
+          "678",
+          "675",
+          "987",
+          "777",
+          "506",
+          "524",
+          "526",
+          "536",
+          "538",
+          "533",
+          "530",
+          "308",
+          "299",
+          "46",
+          "49",
+          "47",
+          "473",
+          "548",
+          "552",
+          "545",
+          "542",
+          "543",
+          "547",
+          "488",
+          "493",
+          "495",
+          "291",
+          "305",
+          "313",
+          "295",
+          "983",
+          "296",
+          "301",
+          "873",
+          "817",
+          "9005",
+          "154",
+          "156",
+          "158",
+          "2"
+        ]
+      }
+    ]
+  }
+}

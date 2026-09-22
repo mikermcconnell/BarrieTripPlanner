@@ -1,6 +1,6 @@
 {
   "name": "barrie-transit-planner",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",

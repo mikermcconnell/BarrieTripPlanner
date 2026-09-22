@@ -73,6 +73,7 @@ export const TransitProvider = ({ children }) => {
   const [calendar, setCalendar] = useState([]);
   const [calendarDates, setCalendarDates] = useState([]);
   const [tripMapping, setTripMapping] = useState({});
+  const [arrivalDestinationPatterns, setArrivalDestinationPatterns] = useState({});
   const [routeShapeMapping, setRouteShapeMapping] = useState({});
   const [routeStopsMapping, setRouteStopsMapping] = useState({});
   const [routeStopSequencesMapping, setRouteStopSequencesMapping] = useState({});
@@ -269,6 +270,7 @@ export const TransitProvider = ({ children }) => {
     setCalendar(data.calendar || []);
     setCalendarDates(data.calendarDates || []);
     setTripMapping(data.tripMapping || {});
+    setArrivalDestinationPatterns(data.arrivalDestinationPatterns || {});
     setRouteShapeMapping(data.routeShapeMapping || {});
     setRouteStopsMapping(data.routeStopsMapping || {});
     setRouteStopSequencesMapping(data.routeStopSequencesMapping || {});
@@ -966,6 +968,7 @@ export const TransitProvider = ({ children }) => {
     calendar,
     calendarDates,
     tripMapping,
+    arrivalDestinationPatterns,
     routeShapeMapping: visibleRouteShapeMapping,
     allRouteShapeMapping: routeShapeMapping,
     routeStopsMapping: visibleRouteStopsMapping,
@@ -999,6 +1002,7 @@ export const TransitProvider = ({ children }) => {
     calendar,
     calendarDates,
     tripMapping,
+    arrivalDestinationPatterns,
     visibleRouteShapeMapping,
     routeShapeMapping,
     visibleRouteStopsMapping,

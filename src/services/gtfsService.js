@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { createArrivalDestinationPatterns } from '../utils/arrivalDestination';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import pako from 'pako';
@@ -766,6 +767,8 @@ export const fetchAllStaticData = async ({ onProgress, yieldControl = yieldToEve
     await yieldControl();
     const routeStopsMapping = createRouteStopsMapping(trips, stopTimes);
     await yieldControl();
+    const arrivalDestinationPatterns = createArrivalDestinationPatterns(trips, stopTimes);
+    await yieldControl();
     const routeStopSequencesMapping = createRouteStopSequencesMapping(trips, stopTimes);
     await yieldControl();
 
@@ -781,6 +784,7 @@ export const fetchAllStaticData = async ({ onProgress, yieldControl = yieldToEve
       routeShapeMapping,
       routeStopsMapping,
       routeStopSequencesMapping,
+      arrivalDestinationPatterns,
     };
   } catch (error) {
     logger.error('Error fetching all static data:', error);

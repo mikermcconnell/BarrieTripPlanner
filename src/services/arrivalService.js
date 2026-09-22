@@ -1,3 +1,4 @@
+import { resolveArrivalDestination } from '../utils/arrivalDestination';
 import { GTFS_URLS } from '../config/constants';
 import { decodeVarint, decodeInt32Varint, skipField, decodeString } from '../utils/protobufDecoder';
 import { fetchWithCORS } from '../utils/fetchWithCORS';
@@ -423,7 +424,7 @@ export const fetchTripUpdates = async () => {
 /**
  * Get arrivals for a specific stop
  */
-export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => {
+export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping, arrivalDestinationPatterns = {}) => {
   const arrivals = [];
   const now = Math.floor(Date.now() / 1000);
 
@@ -436,7 +437,7 @@ export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => 
     if (!update) return;
     if (['CANCELED', 'DELETED'].includes(update.scheduleRelationship)) return;
 
-    update.stopTimeUpdates.forEach((stopTime) => {
+    update.stopTimeUpdates.forEach((stopTime, stopIndex) => {
       if (stopTime.stopId !== stopId) return;
       if (stopTime.scheduleRelationship === 'SKIPPED') return;
 
@@ -446,7 +447,11 @@ export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => 
       const hasTripMapping = Object.prototype.hasOwnProperty.call(tripMapping, update.tripId);
       const tripInfo = tripMapping[update.tripId] || {};
       const route = routes.find((r) => r.id === (update.routeId || tripInfo.routeId));
-      const headsign = String(tripInfo.headsign || '').trim();
+      const directHeadsign = String(tripInfo.headsign || '').trim();
+      const fallbackHeadsign = !hasTripMapping
+        ? resolveArrivalDestination(update, stopIndex, arrivalDestinationPatterns)
+        : '';
+      const headsign = directHeadsign || fallbackHeadsign;
 
       arrivals.push({
         tripId: update.tripId,
@@ -454,6 +459,7 @@ export const getArrivalsForStop = (tripUpdates, stopId, routes, tripMapping) => 
         routeShortName: route?.shortName || update.routeId || '?',
         routeColor: route?.color,
         headsign,
+        destinationSource: directHeadsign ? 'trip-id' : fallbackHeadsign ? 'stop-pattern' : null,
         destinationStatus: headsign
           ? 'available'
           : hasTripMapping

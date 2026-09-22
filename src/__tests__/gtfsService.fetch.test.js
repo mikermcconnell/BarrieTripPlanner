@@ -94,6 +94,9 @@ describe('fetchAllStaticData', () => {
     expect(data.routes).toHaveLength(1);
     expect(data.stops).toHaveLength(1);
     expect(data.trips[0].blockId).toBe('block-1');
+    expect(data.arrivalDestinationPatterns).toEqual({
+      '11': [{ headsign: 'Downtown', stopIds: ['100'] }],
+    });
     expect(fetchWithCORS).toHaveBeenCalledTimes(2);
     expect(JSZip.loadAsync.mock.calls[0][0]).toBeInstanceOf(Uint8Array);
     expect(fetchWithCORS.mock.calls[0][0]).toBe('https://www.myridebarrie.ca/gtfs/Google_transit.zip');

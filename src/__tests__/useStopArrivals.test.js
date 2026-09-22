@@ -62,6 +62,21 @@ describe('useStopArrivals destination refresh lifecycle', () => {
     jest.useRealTimers();
   });
 
+  test('passes patterns to arrivals and does not refresh or report a resolved fallback', async () => {
+    const patterns = { '8A': [{ headsign: 'College', stopIds: ['A', 'B', 'C'] }] };
+    const loadStaticData = jest.fn();
+    mockUseTransitStatic.mockReturnValue({ routes, tripMapping: {}, arrivalDestinationPatterns: patterns, loadStaticData });
+    mockGetArrivalsForStop.mockReturnValue([{ tripId: 'fallback-trip', headsign: 'College', destinationStatus: 'available', destinationSource: 'stop-pattern' }]);
+    let instance;
+    await act(async () => { instance = create(React.createElement(HookHarness)); });
+    await runImmediateArrivalLoad();
+    expect(mockGetArrivalsForStop).toHaveBeenCalledWith([], stop.id, routes, {}, patterns);
+    expect(latestHookValue.arrivals[0].headsign).toBe('College');
+    expect(loadStaticData).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+    act(() => instance.unmount());
+  });
+
   test('refreshes static data once, reports context after failure, and resolves on mapping update', async () => {
     const loadStaticData = jest.fn().mockResolvedValue(undefined);
     let staticState = {

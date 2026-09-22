@@ -858,7 +858,6 @@ const NavigationScreen = ({ route }) => {
       setShowStaleWarning(false);
       setShowMissedBusWarning(false);
       disableFollowMode();
-      setFollowMode('full-trip');
       setItinerary(nextItinerary);
       resetNavigation();
       startNavigation();
