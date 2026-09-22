@@ -22,6 +22,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm --prefix api-proxy ci
+      - name: Generate Android manifest for native contract tests
+        run: npx expo prebuild --platform android --no-install
       - name: Run app test suite
         run: npm test -- --runInBand
 
