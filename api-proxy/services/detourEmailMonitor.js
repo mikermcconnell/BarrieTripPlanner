@@ -763,7 +763,7 @@ function normalizeResendAttachment(attachment) {
   return normalized;
 }
 
-async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = globalThis.fetch }) {
+async function sendViaResend({ apiKey, from, recipients, message, idempotencyKey, fetchImpl = globalThis.fetch }) {
   if (typeof fetchImpl !== 'function') {
     throw new Error('global fetch is unavailable; use Node 18+ or provide fetchImpl');
   }
@@ -773,6 +773,7 @@ async function sendViaResend({ apiKey, from, recipients, message, fetchImpl = gl
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     body: JSON.stringify({
       from,
@@ -1080,4 +1081,5 @@ module.exports = {
   shouldSendDetourEmailEvent,
   validateClearEvent,
   sendViaResend,
+  findExistingNotificationForEvent,
 };

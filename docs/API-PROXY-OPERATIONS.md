@@ -159,29 +159,17 @@ Public rider clients should obtain Firebase ID tokens before calling protected p
 - `DETOUR_REQUIRE_SAFE_BASELINE=true` — blocks detector ticks when only live-fallback or auto-initialized baseline data is available
 - Firebase Admin credentials
 
-### Detour email monitor
+### Detour management brief
 
-The GitHub Actions workflow `.github/workflows/detour-email-monitor.yml` runs `npm --prefix api-proxy run detour:email-monitor` every 5 minutes.
+The Firebase Gen 2 scheduled function `detourManagementBrief` checks `activeDetourEventsV2` every five minutes. It sends one map-first management brief per active, confirmed (`alertVisible: true`) physical event to one configured recipient. Shared route records are grouped by `sharedDetourEventId`; unrelated events stay separate. It uses the existing `detourEmailNotifications` collection, including legacy sent records, for dedupe.
 
-It reads Firestore detour history, sends first-time detour emails through Resend, then records sent events in `detourEmailNotifications` so later runs do not resend the same event.
+Configure these Firebase function secrets: `RESEND_API_KEY`, `CARTO_BASEMAP_API_KEY` (the app's keyed CARTO basemap key), `DETOUR_ALERT_RECIPIENT` (Mike's one email address), and `DETOUR_ALERT_FROM` (a verified Resend sender). Deploy the function from `api-proxy/` through the normal Firebase release path. Set `DETOUR_MANAGEMENT_BRIEF_ENABLED=true` in the function environment only after the Outlook gate below. Until then, the function returns `disabled` and sends nothing. The old GitHub Actions email schedule is removed in this release.
 
-Required GitHub secrets:
+The Firebase project is `barrie-transit-trip-plan-cc84e`. From the repo root, set each secret with `npx firebase-tools functions:secrets:set NAME --project barrie-transit-trip-plan-cc84e`, then deploy only this function with `npx firebase-tools deploy --only functions:detourManagementBrief --project barrie-transit-trip-plan-cc84e`. Put the activation flag in the ignored `api-proxy/.env.barrie-transit-trip-plan-cc84e` file before redeploying after the Outlook check. Keep this flag out of source control. The Cloud Run API proxy and this scheduled Firebase function deploy independently.
 
-- `DETOUR_ALERT_RECIPIENTS` — comma-separated recipients; use Michael's email for operations alerts
-- `RESEND_API_KEY`
-- `FIREBASE_SERVICE_ACCOUNT_JSON`
+The renderer fetches current CARTO Voyager street tiles transiently and includes visible OpenStreetMap/CARTO attribution. It draws the skipped regular route from a sufficiently detailed published route shape, the likely diversion only from an OSRM road-matched path approved by the existing rider trust gate, and skipped stop markers. It does not cache tiles or turn sparse endpoints into straight road lines. If a road-matched diversion is unavailable, the email states “Diversion path pending” and shows the affected area. If no coordinates or tiles are available, it records `waiting_map` and retries while the event is active. Cleared events are not sent. Delivery uses a CID inline JPEG with the same image attached. A frozen payload and Resend idempotency key make retries safe within Resend's 24-hour window; an unresolved send past 23 hours is marked `delivery_unknown` for manual reconciliation.
 
-Optional environment:
-
-- `DETOUR_ALERT_FROM` — defaults to `BTTP Detour Alerts <onboarding@resend.dev>` until a custom sender domain is verified
-- `DETOUR_ALERT_APP_URL`
-- `DETOUR_ALERT_LOOKBACK_MIN=30`
-- `DETOUR_ALERT_MAX_EVENTS=50`
-- `DETOUR_ALERT_INCLUDE_CLEARED=false`
-- `DETOUR_ALERT_EVENT_TYPES=DETOUR_DETECTED` to override the default event type list
-- `DETOUR_ALERT_NOTIFICATION_COLLECTION=detourEmailNotifications`
-
-Detour emails are text-only. The monitor enriches stop codes with GTFS stop names when available.
+Before enabling automatic sends, send a real preview to Mike and check the inline map near the top in Outlook desktop and web, then forward it and check the forwarded map. Confirm the provider accepted the message and verify the Firestore `sent` record. The normal delivery target is within 15 minutes after a confirmed event has a usable map; monitor `waiting_map`, `delivery_unknown`, and scheduler failures. The source can be run with injected dependencies for local previews without writing synthetic detours to production Firestore.
 
 ### Official baseline-impact scanner
 

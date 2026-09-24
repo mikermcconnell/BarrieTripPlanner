@@ -1,5 +1,5 @@
 const { startServer, registerShutdown } = require('./server');
-const { createApiProxyFunction } = require('./functions');
+const { createApiProxyFunction, createDetourManagementBriefFunction } = require('./functions');
 const {
   buildProxyConfig,
   loadProxyEnvFiles,
@@ -28,6 +28,7 @@ const apiProxy = createApiProxyFunction(appHandler, {}, process.env);
 if (apiProxy) {
   module.exports.apiProxy = apiProxy;
 }
+module.exports.detourManagementBrief = createDetourManagementBriefFunction();
 
 if (require.main === module) {
   const { app, PORT, detourWorker, newsWorker } = loadAppBundle();

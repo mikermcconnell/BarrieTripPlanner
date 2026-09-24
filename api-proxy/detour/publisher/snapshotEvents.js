@@ -150,6 +150,7 @@ function makeSnapshot(doc, previousSnapshot = null) {
     detectedAtMs: toMillis(doc.detectedAt),
     lastSeenAtMs: toMillis(doc.lastSeenAt),
     updatedAtMs: toMillis(doc.updatedAt),
+    alertConfirmedAtMs: toMillis(doc.alertConfirmedAt) ?? previousSnapshot?.alertConfirmedAtMs ?? null,
     triggerVehicleId: doc.triggerVehicleId || null,
     vehicleCount: normalizeVehicleCount(doc.vehicleCount),
     uniqueVehicleCount: normalizeVehicleCount(doc.uniqueVehicleCount ?? doc.vehicleCount),

@@ -32,6 +32,24 @@ function createApiProxyFunction(app, workers = {}, env = process.env) {
   }
 }
 
+function createDetourManagementBriefFunction() {
+  const { onSchedule } = require('firebase-functions/v2/scheduler');
+  return onSchedule({
+    schedule: 'every 5 minutes',
+    timeZone: 'America/Toronto',
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '512MiB',
+    maxInstances: 1,
+    secrets: ['RESEND_API_KEY', 'CARTO_BASEMAP_API_KEY', 'DETOUR_ALERT_RECIPIENT', 'DETOUR_ALERT_FROM'],
+  }, async () => {
+    const { runDetourManagementBrief } = require('./services/detourManagementBrief');
+    const result = await runDetourManagementBrief();
+    console.log('[detourManagementBrief]', JSON.stringify(result));
+  });
+}
+
 module.exports = {
   createApiProxyFunction,
+  createDetourManagementBriefFunction,
 };

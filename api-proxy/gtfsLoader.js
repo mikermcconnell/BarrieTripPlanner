@@ -14,6 +14,7 @@ let cache = {
   stopsById: null,
   stopsByCode: null,
   routeStopSequencesMapping: null,
+  routeColors: null,
   lastRefresh: null,
 };
 let refreshPromise = null;
@@ -206,6 +207,7 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const shapesRaw = parseCSV(shapesCSV);
   const tripsRaw = parseCSV(tripsCSV);
   const stopsRaw = extra.stopsCSV ? parseCSV(extra.stopsCSV) : [];
+  const routesRaw = extra.routesCSV ? parseCSV(extra.routesCSV) : [];
   const stopTimesRaw = extra.stopTimesCSV ? parseCSV(extra.stopTimesCSV) : [];
   const terminalStopsByTrip = buildTripTerminalStopMapping(stopTimesRaw);
 
@@ -249,6 +251,13 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
     calendarDatesCSV: extra.calendarDatesCSV,
   });
   const routeStopSequencesMapping = buildRouteStopSequencesMapping(tripsRaw, stopTimesRaw);
+  const routeColors = new Map();
+  for (const route of routesRaw) {
+    const color = String(route.route_color || '').trim();
+    if (route.route_id && /^[0-9a-fA-F]{6}$/.test(color)) {
+      routeColors.set(route.route_id, `#${color.toUpperCase()}`);
+    }
+  }
 
   const stopsById = new Map();
   const stopsByCode = new Map();
@@ -276,6 +285,7 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
     stopsById,
     stopsByCode,
     routeStopSequencesMapping,
+    routeColors,
   };
 }
 
@@ -288,19 +298,21 @@ async function refreshData() {
     if (!shapesFile || !tripsFile) {
       throw new Error('ZIP missing shapes.txt or trips.txt');
     }
-    const [shapesCSV, tripsCSV, stopsCSV, stopTimesCSV, calendarCSV, calendarDatesCSV] = await Promise.all([
+    const [shapesCSV, tripsCSV, stopsCSV, stopTimesCSV, calendarCSV, calendarDatesCSV, routesCSV] = await Promise.all([
       shapesFile.async('string'),
       tripsFile.async('string'),
       zip.file('stops.txt')?.async('string') || Promise.resolve(''),
       zip.file('stop_times.txt')?.async('string') || Promise.resolve(''),
       zip.file('calendar.txt')?.async('string') || Promise.resolve(''),
       zip.file('calendar_dates.txt')?.async('string') || Promise.resolve(''),
+      zip.file('routes.txt')?.async('string') || Promise.resolve(''),
     ]);
     const data = buildDataStructures(shapesCSV, tripsCSV, {
       stopsCSV,
       stopTimesCSV,
       calendarCSV,
       calendarDatesCSV,
+      routesCSV,
     });
     const prevShapeCount = cache.shapes ? cache.shapes.size : 0;
     const prevTripCount = cache.tripMapping ? cache.tripMapping.size : 0;
@@ -334,6 +346,7 @@ async function getStaticData() {
     stopsById: cache.stopsById,
     stopsByCode: cache.stopsByCode,
     routeStopSequencesMapping: cache.routeStopSequencesMapping,
+    routeColors: cache.routeColors,
     lastRefresh: cache.lastRefresh,
   };
 }

@@ -1930,6 +1930,8 @@ function rememberPublishedDetour(publishId, data = {}) {
     riderVisible: data.riderVisible !== false,
     riderVisibilityReason: data.riderVisibilityReason || null,
     alertVisible: data.alertVisible === true,
+    alertConfirmedAt: data.alertConfirmedAt || null,
+    alertConfirmedAtMs: toMillis(data.alertConfirmedAt),
     alertVisibilityReason: data.alertVisibilityReason || null,
     staleForReview: Boolean(data.staleForReview),
     confidence: data.confidence || null,
@@ -3411,6 +3413,9 @@ async function publishDetours(activeDetours, options = {}) {
       doc.canShowDetourPath = false;
     }
     attachRiderPublishGates(doc);
+    if (doc.alertVisible === true) {
+      doc.alertConfirmedAt = previousSnapshot?.alertConfirmedAtMs || now;
+    }
     recordDetourDecision({
       publishId,
       routeId,

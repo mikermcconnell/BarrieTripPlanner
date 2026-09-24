@@ -1,4 +1,4 @@
-const { createApiProxyFunction } = require('../functions');
+const { createApiProxyFunction, createDetourManagementBriefFunction } = require('../functions');
 
 describe('Firebase function deployment options', () => {
   test('uses the lower Gen 1 CPU tier for the API proxy function', () => {
@@ -15,5 +15,14 @@ describe('Firebase function deployment options', () => {
       minInstances: 0,
       maxInstances: 3,
     });
+  });
+
+  test('schedules the brief every five minutes with its required secrets', () => {
+    const endpoint = createDetourManagementBriefFunction().__endpoint;
+    expect(endpoint.scheduleTrigger).toMatchObject({ schedule: 'every 5 minutes', timeZone: 'America/Toronto' });
+    expect(endpoint.maxInstances).toBe(1);
+    expect(endpoint.secretEnvironmentVariables.map((item) => item.key)).toEqual([
+      'RESEND_API_KEY', 'CARTO_BASEMAP_API_KEY', 'DETOUR_ALERT_RECIPIENT', 'DETOUR_ALERT_FROM',
+    ]);
   });
 });
