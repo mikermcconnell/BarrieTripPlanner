@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyBarrie Transit",
     "slug": "barrie-transit-planner",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
@@ -32,7 +32,7 @@
       }
     },
     "android": {
-      "versionCode": 33,
+      "versionCode": 34,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
