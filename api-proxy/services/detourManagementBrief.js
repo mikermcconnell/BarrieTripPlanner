@@ -69,9 +69,9 @@ function buildBriefMessage(event, map, routeColors) {
   const routes = event.sharedRouteIds.length ? event.sharedRouteIds.join(', ') : (event.routeId || 'Unknown');
   const location = event.eventLocationLabel || insight.bestLocationTitle || 'Location being confirmed';
   const stops = insight.skippedStops.length
-    ? `${insight.skippedStops.length} skipped stop${insight.skippedStops.length === 1 ? '' : 's'}: ${insight.skippedStops.join('; ')}`
+    ? insight.skippedStops.join('; ')
     : insight.affectedStops.length
-      ? `${insight.affectedStops.length} affected stop${insight.affectedStops.length === 1 ? '' : 's'}: ${insight.affectedStops.join('; ')}`
+      ? insight.affectedStops.join('; ')
       : 'Stop impacts have not been confirmed.';
   const impactHeadline = insight.skippedStops.length
     ? `${insight.skippedStops.length} skipped stop${insight.skippedStops.length === 1 ? '' : 's'}`

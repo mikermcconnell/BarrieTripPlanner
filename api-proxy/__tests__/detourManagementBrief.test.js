@@ -99,6 +99,7 @@ describe('detour management brief', () => {
     });
     expect(message.html).toContain('1 skipped stop');
     expect(message.html).not.toContain('1 skipped stop: #101');
+    expect(message.html).toContain('<strong>Stops:</strong> #101 Example stop');
   });
 
   test('renders CARTO tiles with attribution and a CID-ready JPEG', async () => {
