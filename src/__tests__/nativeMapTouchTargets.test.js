@@ -29,9 +29,9 @@ describe('native map touch targets', () => {
 
   test('Android home buses select through the MapLibre source hitbox', () => {
     const source = readSource('components', 'home-map', 'HomeMapVehicleLayer.js');
-    expect(source).toContain('<MapLibreGL.Animated.ShapeSource');
-    expect(source).toContain('hitbox={{ width: HOME_MAP_THEME.busMarkerHitTarget');
-    expect(source).toContain('onPress={handlePress}');
+    expect(source).toContain('<MapLibreGL.Animated.GeoJSONSource');
+    expect(source).toContain('top: HOME_MAP_THEME.busMarkerHitTarget / 2');
+    expect(source).toContain('handlePress(toLegacyPressEvent(event))');
     expect(source).not.toContain('<TouchableOpacity');
   });
 

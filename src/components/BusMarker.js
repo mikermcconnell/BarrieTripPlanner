@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { useAnimatedBusPosition } from '../hooks/useAnimatedBusPosition';
 import BusDirectionArrow from './BusDirectionArrow';
 import { normalizeMapCoordinate } from '../utils/mapCoordinates';

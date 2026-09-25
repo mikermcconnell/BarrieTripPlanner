@@ -23,7 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Map components - MapLibre
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { MAP_CONFIG, OSM_MAP_STYLE } from '../config/constants';
 import {
   BUS_APPROACH_LINE_DASH_PATTERN,

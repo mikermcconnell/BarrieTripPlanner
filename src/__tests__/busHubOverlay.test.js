@@ -11,11 +11,14 @@ jest.mock('react-native', () => ({
   StyleSheet: { create: (styles) => styles },
 }));
 
-jest.mock('@maplibre/maplibre-react-native', () => ({
+jest.mock('../utils/mapLibreCompat', () => ({
+  __esModule: true,
+  default: {
   MarkerView: 'MarkerView',
   ShapeSource: 'ShapeSource',
   CircleLayer: 'CircleLayer',
   SymbolLayer: 'SymbolLayer',
+  },
 }));
 
 jest.mock('react-native-svg', () => ({

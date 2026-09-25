@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { COLORS } from '../config/theme';
 
 const StopMarkerComponent = ({ stop, onPress, isSelected = false }) => {

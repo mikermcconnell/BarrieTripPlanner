@@ -3,10 +3,13 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 const React = require('react');
 const { create, act } = require('react-test-renderer');
 
-jest.mock('@maplibre/maplibre-react-native', () => ({
+jest.mock('../utils/mapLibreCompat', () => ({
+  __esModule: true,
+  default: {
   ShapeSource: 'ShapeSource',
   LineLayer: 'LineLayer',
   SymbolLayer: 'SymbolLayer',
+  },
 }));
 
 const RoutePolyline = require('../components/RoutePolyline').default;

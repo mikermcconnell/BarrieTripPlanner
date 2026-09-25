@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL, { toLegacyPressEvent } from '../../utils/mapLibreCompat';
 import { HOME_MAP_THEME } from '../../config/homeMapTheme';
 import {
   HOME_MAP_VEHICLE_LAYER_ANCHOR_ID,
@@ -115,12 +115,12 @@ const HomeMapVehicleLayer = ({
 
     if (feature?.properties?.point_count != null || feature?.properties?.cluster) {
       try {
-        const leafCollection = await sourceRef.current?.getClusterLeaves?.(
-          feature,
+        const leaves = await sourceRef.current?.getClusterLeaves?.(
+          feature?.properties?.cluster_id,
           feature?.properties?.point_count || 20,
           0
         );
-        const vehicleIds = (leafCollection?.features || [])
+        const vehicleIds = (leaves || [])
           .map((leaf) => leaf?.properties?.id ?? leaf?.id)
           .filter((id) => id != null)
           .map(String);
@@ -142,16 +142,21 @@ const HomeMapVehicleLayer = ({
   }, [onSelectVehicle, onSelectVehicleCluster]);
 
   return (
-    <MapLibreGL.Animated.ShapeSource
+    <MapLibreGL.Animated.GeoJSONSource
       ref={sourceRef}
       id="home-live-vehicles"
-      shape={animatedShape}
+      data={animatedShape}
       cluster={clusteringEnabled}
       clusterRadius={HOME_MAP_THEME.vehicleClusterRadius}
       clusterMinPoints={2}
-      clusterMaxZoomLevel={HOME_MAP_THEME.vehicleClusterMaxZoom}
-      hitbox={{ width: HOME_MAP_THEME.busMarkerHitTarget, height: HOME_MAP_THEME.busMarkerHitTarget }}
-      onPress={handlePress}
+      clusterMaxZoom={HOME_MAP_THEME.vehicleClusterMaxZoom}
+      hitbox={{
+        top: HOME_MAP_THEME.busMarkerHitTarget / 2,
+        right: HOME_MAP_THEME.busMarkerHitTarget / 2,
+        bottom: HOME_MAP_THEME.busMarkerHitTarget / 2,
+        left: HOME_MAP_THEME.busMarkerHitTarget / 2,
+      }}
+      onPress={(event) => { event.stopPropagation?.(); void handlePress(toLegacyPressEvent(event)); }}
     >
       <MapLibreGL.CircleLayer
         id={HOME_MAP_VEHICLE_LAYER_ANCHOR_ID}
@@ -241,7 +246,7 @@ const HomeMapVehicleLayer = ({
           textOpacity: 1,
         }}
       />
-    </MapLibreGL.Animated.ShapeSource>
+    </MapLibreGL.Animated.GeoJSONSource>
   );
 };
 

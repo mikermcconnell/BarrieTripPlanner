@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { COLORS } from '../config/theme';
 import { ROUTE_LINE_LABEL_STYLE } from '../config/routeLineLabels';
 import { darkenColor } from '../utils/geometryUtils';

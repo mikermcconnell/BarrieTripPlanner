@@ -43,15 +43,13 @@ describe('detour viewport freedom', () => {
   );
 
   test.each(['HomeScreen.js', 'HomeScreen.web.impl.js'])(
-    '%s leaves the camera untouched when a specific detour is selected',
+    '%s focuses only on an explicit detour selection without delayed refits',
     (fileName) => {
       const handler = getDetourEventSelectionHandler(readScreen(fileName));
 
       expect(handler).toContain("handleMapViewModeChange('detour')");
-      expect(handler).not.toContain('focusMapToDetourEvent');
-      expect(handler).not.toContain('fitToCoordinates');
-      expect(handler).not.toContain('animateToRegion');
-      expect(handler).not.toContain('setCamera');
+      expect(handler).toContain('focusMapToDetourEvent({');
+      expect(handler).toContain('fallbackRouteId: primaryRouteId');
       expect(handler).not.toContain('setTimeout');
       expect(handler).not.toContain('requestAnimationFrame');
     }

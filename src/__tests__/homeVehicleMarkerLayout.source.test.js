@@ -3,12 +3,16 @@ import path from 'path';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 
-jest.mock('@maplibre/maplibre-react-native', () => ({
+jest.mock('../utils/mapLibreCompat', () => ({
+  __esModule: true,
+  default: {
   Animated: {
-    ShapeSource: 'AnimatedShapeSource',
+    GeoJSONSource: 'AnimatedGeoJSONSource',
   },
   CircleLayer: 'CircleLayer',
   SymbolLayer: 'SymbolLayer',
+  },
+  toLegacyPressEvent: (event) => event,
 }));
 
 jest.mock('../hooks/useAnimatedHomeVehicleShape', () => ({
@@ -57,7 +61,7 @@ describe('home vehicle marker layout', () => {
       .map((node) => node.props);
     const byId = Object.fromEntries(layers.map((layer) => [layer.id, layer]));
 
-    expect(instance.root.findByType('AnimatedShapeSource').props.shape.features).toEqual([]);
+    expect(instance.root.findByType('AnimatedGeoJSONSource').props.data.features).toEqual([]);
     expect(byId[HOME_MAP_VEHICLE_LAYER_ANCHOR_ID].aboveLayerID).toBeUndefined();
     expect(byId['home-live-vehicle-cluster-counts'].aboveLayerID).toBe(HOME_MAP_VEHICLE_LAYER_ANCHOR_ID);
     expect(byId['home-live-vehicle-direction'].aboveLayerID).toBe('home-live-vehicle-cluster-counts');

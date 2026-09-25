@@ -1,6 +1,6 @@
 import React, { useMemo, forwardRef, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { MAP_CONFIG, ROUTE_COLORS, OSM_MAP_STYLE } from '../config/constants';
 import { COLORS, SHADOWS } from '../config/theme';
 import {

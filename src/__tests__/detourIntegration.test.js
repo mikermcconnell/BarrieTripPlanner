@@ -31,12 +31,15 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-jest.mock('@maplibre/maplibre-react-native', () => ({
+jest.mock('../utils/mapLibreCompat', () => ({
+  __esModule: true,
+  default: {
   MarkerView: 'MarkerView',
   PointAnnotation: 'PointAnnotation',
   ShapeSource: 'ShapeSource',
   CircleLayer: 'CircleLayer',
   SymbolLayer: 'SymbolLayer',
+  },
 }));
 
 jest.mock('../components/RoutePolyline', () => MockRoutePolyline);

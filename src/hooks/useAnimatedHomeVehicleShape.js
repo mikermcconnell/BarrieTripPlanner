@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Animated as RNAnimated, Easing } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { ANIMATION, PERFORMANCE_BUDGETS } from '../config/constants';
 import {
   buildHomeVehicleMotionPath,
@@ -20,7 +20,7 @@ export const getHomeVehicleShapeIdentity = (featureCollection) => (
 
 export const createAnimatedHomeVehicleShape = (featureCollection, {
   AnimatedApi = RNAnimated,
-  ShapeClass = MapLibreGL.Animated.Shape,
+  ShapeClass = MapLibreGL.Animated.GeoJSON,
   slotCount = PERFORMANCE_BUDGETS.MAP_MAX_VISIBLE_VEHICLES,
 } = {}) => {
   const nodesById = new Map();

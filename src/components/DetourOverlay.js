@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import RoutePolyline from './RoutePolyline';
 import ClosedStopMarker from './ClosedStopMarker';
 import { COLORS } from '../config/theme';

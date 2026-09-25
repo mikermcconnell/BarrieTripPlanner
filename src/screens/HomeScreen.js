@@ -7,7 +7,7 @@ import { View, StyleSheet, Text, TouchableOpacity, Animated, Platform, Interacti
 import Constants from 'expo-constants';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTransitStatic, useTransitRealtime } from '../context/TransitContext';
@@ -143,6 +143,7 @@ import { getActiveDetourNotices, getUpcomingDetourNotices } from '../utils/upcom
 import { getActiveOfficialServiceImpacts } from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
+import { focusMapToDetourEvent } from '../utils/detourViewport';
 import {
   DEFAULT_DETOUR_EXPLORER_SELECTION,
   buildDetourExplorerSelection,
@@ -2447,7 +2448,39 @@ const HomeScreen = ({ route }) => {
       routeId: primaryRouteId,
     }));
     handleMapViewModeChange('detour');
-  }, [handleMapViewModeChange]);
+    // One explicit selection gets one camera command. No state/effect or feed
+    // refresh can refit it after the rider starts panning or pinching.
+    focusMapToDetourEvent({
+      activeDetours: statusDetours,
+      detourEvent,
+      fallbackRouteId: primaryRouteId,
+      mapRef: {
+        fitToCoordinates: (coordinates, { edgePadding } = {}) => {
+          const latitudes = coordinates.map((point) => point.latitude);
+          const longitudes = coordinates.map((point) => point.longitude);
+          cameraRef.current?.setCamera({
+            bounds: {
+              sw: [Math.min(...longitudes), Math.min(...latitudes)],
+              ne: [Math.max(...longitudes), Math.max(...latitudes)],
+            },
+            padding: {
+              paddingTop: edgePadding?.top || 0,
+              paddingRight: edgePadding?.right || 0,
+              paddingBottom: edgePadding?.bottom || 0,
+              paddingLeft: edgePadding?.left || 0,
+            },
+            animationDuration: 500,
+          });
+        },
+        animateToRegion: (region) => cameraRef.current?.setCamera({
+          centerCoordinate: [region.longitude, region.latitude],
+          zoomLevel: Math.log2(360 / region.latitudeDelta),
+          animationDuration: 500,
+        }),
+      },
+      edgePadding: { top: 180, right: 60, bottom: 340 + floatingBottomOffset, left: 60 },
+    });
+  }, [floatingBottomOffset, handleMapViewModeChange, statusDetours]);
 
   const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
     if (!routeId) return;
