@@ -7,9 +7,12 @@ jest.mock('react-native', () => ({
   },
 }));
 
-jest.mock('@maplibre/maplibre-react-native', () => ({
+jest.mock('../utils/mapLibreCompat', () => ({
+  __esModule: true,
+  default: {
   MarkerView: 'MarkerView',
   PointAnnotation: 'PointAnnotation',
+  },
 }));
 
 jest.mock('react-native-svg', () => ({

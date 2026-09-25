@@ -1,12 +1,12 @@
 {
   "current": {
-    "version": "1.0.13",
-    "androidVersionCode": 32
+    "version": "1.0.14",
+    "androidVersionCode": 33
   },
   "previousProduction": {
-    "version": "1.0.11",
-    "androidVersionCode": 30,
-    "easBuildId": "9b60017e-6300-4a80-a1a8-cdf5549bf6bc",
-    "gitCommit": "23362d6dd93fd37076e4d51a9f3ef657b8651300"
+    "version": "1.0.13",
+    "androidVersionCode": 32,
+    "easBuildId": "3ab96581-041b-480b-bdcf-8a140fa50698",
+    "gitCommit": "a50ef74b3e2d8fb42a174291010b63ec01103300"
   }
 }

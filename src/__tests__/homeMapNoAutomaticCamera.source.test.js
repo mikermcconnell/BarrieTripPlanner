@@ -23,18 +23,21 @@ const expectCameraNeutral = (source) => {
 
 describe('home map automatic camera policy', () => {
   test.each(['screens/HomeScreen.js', 'screens/HomeScreen.web.impl.js'])(
-    '%s keeps detour and official-impact selections camera neutral',
+    '%s allows only explicit detour focus and keeps official impacts camera neutral',
     (relativePath) => {
       const source = read(relativePath);
-      expectCameraNeutral(getHandler(
+      const detourHandler = getHandler(
         source,
         'const showDetourEventOnMap = useCallback',
         'const showDetourRouteOnMap'
-      ));
+      );
+      expect(detourHandler).toContain('focusMapToDetourEvent({');
+      expect(detourHandler).not.toContain('setTimeout');
+      expect(detourHandler).not.toContain('requestAnimationFrame');
       expectCameraNeutral(getHandler(
         source,
         'const handleOfficialImpactPress = useCallback',
-        'const trip = useTripPlanner'
+        relativePath.endsWith('HomeScreen.js') ? 'const trip = useTripPlanner' : 'const canUseDetourView'
       ));
     }
   );
@@ -64,13 +67,12 @@ describe('home map automatic camera policy', () => {
   test('native Home camera commands are limited to explicit controls and follow cancellation', () => {
     const source = read('screens/HomeScreen.js');
 
-    expect(countMatches(source, /\.setCamera\s*\(/g)).toBe(4);
+    expect(countMatches(source, /\.setCamera\s*\(/g)).toBe(6);
     expect(source).toContain("source: 'home.dev-pan'");
     expect(source).toContain("source: 'home.dev-zoom'");
     expect(source).toContain("source: 'home.stop-following-user-location'");
     expect(source).toContain("source: 'home.current-location'");
-    expect(source).not.toContain('fitToCoordinates');
-    expect(source).not.toContain('animateToRegion');
+    expect(source).toContain('focusMapToDetourEvent({');
 
     const stopFollowingHandler = getHandler(
       source,
@@ -91,14 +93,14 @@ describe('home map automatic camera policy', () => {
 
     expect(countMatches(source, /\.animateToRegion\s*\(/g)).toBe(1);
     expect(currentLocationHandler).toContain('animateToRegion');
-    expect(source).not.toContain('fitToCoordinates');
+    expect(source).toContain('focusMapToDetourEvent({');
     expect(source).not.toContain('setCamera');
   });
 
-  test('obsolete automatic framing modules are removed', () => {
+  test('trip auto-fit is absent while explicit detour geometry focus is available', () => {
     expect(fs.existsSync(sourcePath('hooks/useTripPreviewViewport.js'))).toBe(false);
     expect(fs.existsSync(sourcePath('utils/tripPreviewAutoFit.js'))).toBe(false);
-    expect(fs.existsSync(sourcePath('utils/detourViewport.js'))).toBe(false);
+    expect(fs.existsSync(sourcePath('utils/detourViewport.js'))).toBe(true);
   });
 
   test('explicit current-location controls remain available', () => {

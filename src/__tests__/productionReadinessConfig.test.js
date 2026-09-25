@@ -7,7 +7,9 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 describe('production release safeguards', () => {
   test('production audit exceptions are limited to Metro image parsing advisories', () => {
     const allowlist = require('../../release-audit-allowlist.json');
-    expect(Object.keys(allowlist.advisories).sort()).toEqual(['1138808', '1138809']);
+    expect(Object.keys(allowlist.advisories).sort()).toEqual([
+      '1138808', '1138809', '1239765', '1239766',
+    ]);
     expect(new Set(Object.values(allowlist.advisories).map((entry) => entry.package))).toEqual(new Set(['image-size']));
   });
 

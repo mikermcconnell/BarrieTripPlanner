@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import { OSM_MAP_STYLE } from '../config/constants';
 import DetourOverlay from './DetourOverlay';
 

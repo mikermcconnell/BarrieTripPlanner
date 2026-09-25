@@ -163,10 +163,10 @@ describe('HomeScreen map performance', () => {
       'utf8'
     );
 
-    expect(source).toContain('<MapLibreGL.Animated.ShapeSource');
+    expect(source).toContain('<MapLibreGL.Animated.GeoJSONSource');
     expect(source).toContain('useAnimatedHomeVehicleShape');
     expect(source).not.toContain('useBatchedHomeVehiclePositions');
-    expect(source).toContain('clusterMaxZoomLevel={HOME_MAP_THEME.vehicleClusterMaxZoom}');
+    expect(source).toContain('clusterMaxZoom={HOME_MAP_THEME.vehicleClusterMaxZoom}');
     expect(source).toContain("textFont: ['Noto Sans Bold']");
     expect(source).toContain('id="home-live-vehicle-direction"');
     expect(source).toContain('aboveLayerID="home-live-vehicle-cluster-counts"');

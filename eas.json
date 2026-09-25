@@ -42,6 +42,11 @@
         "buildType": "apk"
       }
     },
+    "detour-beta": {
+      "extends": "preview",
+      "channel": "detour-beta",
+      "environment": "production"
+    },
     "production": {
       "channel": "production",
       "environment": "production",

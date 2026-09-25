@@ -121,6 +121,7 @@ import {
 } from '../utils/officialServiceImpacts';
 import { enrichDetoursWithDerivedStopCodes } from '../utils/detourStopCodeEnrichment';
 import { getActiveDetourEventCount } from '../utils/detourEvents';
+import { focusMapToDetourEvent } from '../utils/detourViewport';
 import {
   DEFAULT_DETOUR_EXPLORER_SELECTION,
   buildDetourExplorerSelection,
@@ -879,7 +880,14 @@ const HomeScreen = ({ route }) => {
       routeId: primaryRouteId,
     }));
     handleMapViewModeChange('detour');
-  }, [handleMapViewModeChange]);
+    focusMapToDetourEvent({
+      activeDetours: statusDetours,
+      detourEvent,
+      fallbackRouteId: primaryRouteId,
+      mapRef,
+      edgePadding: { top: 180, right: 60, bottom: 340, left: 60 },
+    });
+  }, [handleMapViewModeChange, statusDetours]);
 
   const showDetourRouteOnMap = useCallback((routeId, detourEvent = detourSheetEvent) => {
     if (!routeId) return;

@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapLibreGL from '@maplibre/maplibre-react-native';
+import MapLibreGL from '../utils/mapLibreCompat';
 import {
   BUS_HUBS,
   BUS_HUB_TYPES,
