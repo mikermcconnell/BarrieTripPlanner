@@ -1,10 +1,15 @@
 # MapLibre 11 detour-focus beta
 
-Status: isolated Android beta; **device gesture sign-off still required**.
+Status: submitted to Google Play internal testing; **device gesture sign-off still required**.
 
-Internal APK build: https://expo.dev/accounts/mrmcconn/projects/barrie-transit-planner/builds/af7591ad-ad2a-4739-9983-d04f6acc70ae
-(finished September 25, 2026; `detour-beta` channel; version 1.0.13 / Android
-versionCode 32). No Play submission or production update was made.
+Play internal AAB: https://expo.dev/artifacts/eas/cKVurwcB4MOKA3qb682F-wPIBqG51kQ35aJdO95A5Xk.aab
+(EAS build `bbfb0201-2ff1-44c5-b85f-83547897b60b`; version 1.0.14 / Android
+versionCode 33). Play track read-back confirmed internal `33` completed and
+production `32` unchanged. No production update was made.
+
+Earlier APK-only artifact (not the Play build): EAS build
+`af7591ad-ad2a-4739-9983-d04f6acc70ae`, on the `detour-beta` channel, version
+1.0.13 / code 32.
 
 This branch upgrades native MapLibre from 10.4.2 to 11.4.0 and restores a single
 camera fit when a rider explicitly selects a specific detour. Opening detour
@@ -17,6 +22,14 @@ using the existing backend configuration. It does not include the separate,
 unfinished Google Sign-In work. It uses the normal Android package name and
 version, so installing it may replace an existing production installation;
 uninstalling it may erase locally stored app data. It is not submitted to Play.
+
+The Play internal build is the `internal-testing` AAB, with a separate OTA
+channel from production. It contains the MapLibre/detour camera change only,
+not the separate Google Sign-In work. Live backend readiness is limited: the
+detour worker still reports GTFS baseline divergence on routes 7A, 7B, and 8B
+(checked September 25, 2026). Some real detours may therefore be hidden during
+this beta; do not interpret missing detours on those routes as evidence about
+the map fix.
 
 ## Android beta checks
 
