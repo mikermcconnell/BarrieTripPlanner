@@ -1,0 +1,46 @@
+name: Detour brief preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      event_id:
+        description: Active event ID containing the detour geometry
+        required: true
+        default: '8B:ceeeb924-c9cb-4358-aedb-d96b5bdfe1e4:5100-5300'
+      send:
+        description: Send the test preview after rendering
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-proxy
+    env:
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      CARTO_BASEMAP_API_KEY: ${{ secrets.CARTO_BASEMAP_API_KEY }}
+      DETOUR_ALERT_RECIPIENT: ${{ secrets.DETOUR_ALERT_RECIPIENTS }}
+      DETOUR_ALERT_FROM: ${{ secrets.DETOUR_ALERT_FROM }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      DETOUR_PREVIEW_EVENT_ID: ${{ inputs.event_id }}
+      DETOUR_PREVIEW_SEND: ${{ inputs.send }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: api-proxy/package-lock.json
+      - run: npm ci
+      - run: node scripts/sendDetourBriefPreview.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: detour-brief-preview-map
+          path: ${{ runner.temp }}/detour-brief-preview.jpg
+          if-no-files-found: error
