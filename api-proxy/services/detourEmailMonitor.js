@@ -176,7 +176,7 @@ function enrichStopWithName(stop, gtfsData = {}) {
   if (!code && !explicitName && !resolvedName) return stop;
   return {
     ...(typeof stop === 'object' && stop != null ? stop : {}),
-    stopCode: code || resolvedCode || '',
+    stopCode: resolvedCode || code || '',
     name: explicitName || resolvedName || '',
   };
 }
@@ -218,14 +218,13 @@ function stopLabel(stop) {
 }
 
 function collectStopsFromFields(event, fields = []) {
-  const labels = new Set();
+  const stops = [];
   const addStops = (source) => {
     if (!source) return;
     fields.forEach((fieldName) => {
       if (!Array.isArray(source[fieldName])) return;
       source[fieldName].forEach((stop) => {
-        const label = stopLabel(stop);
-        if (label) labels.add(label);
+        stops.push(stop);
       });
     });
   };
@@ -234,7 +233,30 @@ function collectStopsFromFields(event, fields = []) {
   if (Array.isArray(event?.segments)) {
     event.segments.forEach(addStops);
   }
-  return [...labels];
+  // A stop can appear as a full object, a public code, and an internal ID.
+  // Count the stop once and keep its most informative label.
+  const aliases = new Map();
+  for (const stop of stops) {
+    if (!stop || typeof stop !== 'object') continue;
+    const code = stopCodeValue(stop);
+    if (!code) continue;
+    for (const id of [stop.id, stop.stopId, stop.stop_id]) {
+      if (id != null) aliases.set(String(id).replace(/^#/, '').trim(), code);
+    }
+  }
+  const labels = new Map();
+  for (const stop of stops) {
+    const rawCode = stopCodeValue(stop);
+    const code = aliases.get(rawCode) || rawCode;
+    const name = stopNameValue(stop);
+    const key = code ? `code:${code}` : `name:${name.toLowerCase()}`;
+    if (!code && !name) continue;
+    const label = stopLabel({ stopCode: code, name });
+    if (!labels.has(key) || name && !labels.get(key).hasName) {
+      labels.set(key, { label, hasName: Boolean(name) });
+    }
+  }
+  return [...labels.values()].map((stop) => stop.label);
 }
 
 function collectSkippedStops(event) {

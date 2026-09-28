@@ -11,17 +11,45 @@ function passesNear(path, latitude, longitude) {
     Math.abs(Number(value.longitude) - longitude) < 0.00045);
 }
 
-function getBriefDisplayCorrection(event) {
+function getBriefDisplayCorrection(event, targetSegment) {
   if (event?.eventId !== BLAKE_ROUTE_8B_EVENT_ID || event.routeId !== '8B') return null;
-  const segments = Array.isArray(event.segments) && event.segments.length ? event.segments : [event];
+  const segments = targetSegment ? [targetSegment]
+    : Array.isArray(event.segments) && event.segments.length ? event.segments : [event];
   // Stop applying the exception if the detector replaces either corridor.
   if (!segments.some((segment) =>
+    segment.canShowDetourPath === true && /^osrm-(match|route)$/.test(segment.roadMatchSource || '') &&
     passesNear(segment.skippedSegmentPolyline, 44.394809, -79.660687) &&
     passesNear(segment.likelyDetourPolyline, 44.396167, -79.659512))) return null;
   return {
     reversePathRoles: true,
-    routingText: 'Likely active via Puget Street and Shanty Bay Road; Codrington Street section out of service.',
+    routingRoads: ['Johnson Street', 'Shanty Bay Road'],
+    affectedRoads: ['Blake Street'],
   };
 }
 
-module.exports = { getBriefDisplayCorrection };
+// Apply the reviewed path roles to ALL email content, not only the map lines.
+// Stops derived from the former closed path cannot be asserted after swapping it.
+function prepareBriefDisplayEvent(event) {
+  if (event?.briefDisplayPrepared || !getBriefDisplayCorrection(event)) return event;
+  const emptyImpacts = {
+    skippedStops: [], skippedStopCodes: [], skippedStopIds: [],
+    affectedStops: [], affectedStopCodes: [], affectedStopIds: [],
+    likelyDetourRoadNames: [], closedSegmentRoadNames: [],
+    skippedSegmentRoadNames: [], closedRoadNames: [],
+  };
+  const segments = (event.segments?.length ? event.segments : [event]).map((segment) => {
+    const correction = getBriefDisplayCorrection(event, segment);
+    if (!correction) return segment;
+    return {
+      ...segment, ...emptyImpacts,
+      skippedSegmentPolyline: segment.likelyDetourPolyline,
+      likelyDetourPolyline: segment.skippedSegmentPolyline,
+      skippedSegmentRoadNames: correction.affectedRoads,
+      likelyDetourRoadNames: correction.routingRoads,
+      briefStopImpactsPending: true,
+    };
+  });
+  return { ...event, ...emptyImpacts, segments, briefDisplayPrepared: true, briefStopImpactsPending: true };
+}
+
+module.exports = { getBriefDisplayCorrection, prepareBriefDisplayEvent };

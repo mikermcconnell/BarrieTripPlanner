@@ -42,5 +42,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: detour-brief-preview-map
-          path: ${{ runner.temp }}/detour-brief-preview.jpg
+          path: |
+            ${{ runner.temp }}/detour-brief-preview.jpg
+            ${{ runner.temp }}/detour-brief-preview.html
           if-no-files-found: error

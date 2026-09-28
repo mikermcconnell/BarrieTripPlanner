@@ -44,6 +44,10 @@ Official MyRide notices can enrich stop impacts only after GPS has confirmed a d
 
 ## 2. Architecture
 
+### Management email presentation
+
+The scheduled management brief is a snapshot of a qualified active event. Its preview and live messages share the same map and content builders. A display-only path correction must also correct road labels and withhold stop impacts derived from the former closed path; it cannot relax production visibility or baseline gates. Count unique stops by public code after GTFS enrichment, and preserve route variants in map badges. See [backend operations](API-PROXY-OPERATIONS.md#detour-management-brief) for the exact event exception, map failure handling, and email rendering checks.
+
 ```
 GTFS-RT Feed (vehicle positions)
         │

@@ -1,0 +1,394 @@
+{
+  "eventId": "8B:ceeeb924-c9cb-4358-aedb-d96b5bdfe1e4:5100-5300",
+  "routeId": "8B",
+  "state": "active",
+  "alertVisible": true,
+  "baselineDiverged": true,
+  "eventLocationLabel": "Blake Street",
+  "skippedSegmentPolyline": [
+    {
+      "latitude": 44.397423297847986,
+      "longitude": -79.65635364459823
+    },
+    {
+      "latitude": 44.3973019364676,
+      "longitude": -79.6565659618682
+    },
+    {
+      "latitude": 44.3971151306902,
+      "longitude": -79.6566752943242
+    },
+    {
+      "latitude": 44.39634709,
+      "longitude": -79.65679556
+    },
+    {
+      "latitude": 44.3944726141735,
+      "longitude": -79.6571268849038
+    },
+    {
+      "latitude": 44.3944352512593,
+      "longitude": -79.6571601599991
+    },
+    {
+      "latitude": 44.3944114748469,
+      "longitude": -79.657250478115
+    },
+    {
+      "latitude": 44.394581306152,
+      "longitude": -79.6593230411948
+    },
+    {
+      "latitude": 44.3946594283869,
+      "longitude": -79.6600455861218
+    },
+    {
+      "latitude": 44.3948088793282,
+      "longitude": -79.6606873201029
+    },
+    {
+      "latitude": 44.3949107774784,
+      "longitude": -79.6609677816206
+    },
+    {
+      "latitude": 44.395009278855,
+      "longitude": -79.6614051114448
+    },
+    {
+      "latitude": 44.3950364516194,
+      "longitude": -79.6617568767381
+    },
+    {
+      "latitude": 44.3950659638909,
+      "longitude": -79.6619006490863
+    },
+    {
+      "latitude": 44.3951288008285,
+      "longitude": -79.6619957207874
+    },
+    {
+      "latitude": 44.3952640230256,
+      "longitude": -79.6621419171268
+    },
+    {
+      "latitude": 44.3952979888312,
+      "longitude": -79.6622797710931
+    },
+    {
+      "latitude": 44.3952250861948,
+      "longitude": -79.6627636817308
+    },
+    {
+      "latitude": 44.3952028845258,
+      "longitude": -79.6634158779188
+    },
+    {
+      "latitude": 44.39525065156862,
+      "longitude": -79.66394511441587
+    }
+  ],
+  "likelyDetourPolyline": [
+    {
+      "latitude": 44.39689151914344,
+      "longitude": -79.65671030912763
+    },
+    {
+      "latitude": 44.396992,
+      "longitude": -79.657352
+    },
+    {
+      "latitude": 44.396912,
+      "longitude": -79.657559
+    },
+    {
+      "latitude": 44.396602,
+      "longitude": -79.658364
+    },
+    {
+      "latitude": 44.396557,
+      "longitude": -79.658486
+    },
+    {
+      "latitude": 44.396278,
+      "longitude": -79.659221
+    },
+    {
+      "latitude": 44.396167,
+      "longitude": -79.659512
+    },
+    {
+      "latitude": 44.395931,
+      "longitude": -79.660135
+    },
+    {
+      "latitude": 44.395837,
+      "longitude": -79.660377
+    },
+    {
+      "latitude": 44.395452,
+      "longitude": -79.661402
+    },
+    {
+      "latitude": 44.395413,
+      "longitude": -79.661505
+    },
+    {
+      "latitude": 44.395358,
+      "longitude": -79.661658
+    },
+    {
+      "latitude": 44.39503076633048,
+      "longitude": -79.66168327777349
+    }
+  ],
+  "canShowDetourPath": true,
+  "roadMatchSource": "osrm-match",
+  "entryPoint": {
+    "latitude": 44.397423297847986,
+    "longitude": -79.65635364459823
+  },
+  "exitPoint": {
+    "latitude": 44.39525065156862,
+    "longitude": -79.66394511441587
+  },
+  "likelyDetourRoadNames": [
+    "Blake Street"
+  ],
+  "segments": [
+    {
+      "skippedSegmentPolyline": [
+        {
+          "latitude": 44.397423297847986,
+          "longitude": -79.65635364459823
+        },
+        {
+          "latitude": 44.3973019364676,
+          "longitude": -79.6565659618682
+        },
+        {
+          "latitude": 44.3971151306902,
+          "longitude": -79.6566752943242
+        },
+        {
+          "latitude": 44.39634709,
+          "longitude": -79.65679556
+        },
+        {
+          "latitude": 44.3944726141735,
+          "longitude": -79.6571268849038
+        },
+        {
+          "latitude": 44.3944352512593,
+          "longitude": -79.6571601599991
+        },
+        {
+          "latitude": 44.3944114748469,
+          "longitude": -79.657250478115
+        },
+        {
+          "latitude": 44.394581306152,
+          "longitude": -79.6593230411948
+        },
+        {
+          "latitude": 44.3946594283869,
+          "longitude": -79.6600455861218
+        },
+        {
+          "latitude": 44.3948088793282,
+          "longitude": -79.6606873201029
+        },
+        {
+          "latitude": 44.3949107774784,
+          "longitude": -79.6609677816206
+        },
+        {
+          "latitude": 44.395009278855,
+          "longitude": -79.6614051114448
+        },
+        {
+          "latitude": 44.3950364516194,
+          "longitude": -79.6617568767381
+        },
+        {
+          "latitude": 44.3950659638909,
+          "longitude": -79.6619006490863
+        },
+        {
+          "latitude": 44.3951288008285,
+          "longitude": -79.6619957207874
+        },
+        {
+          "latitude": 44.3952640230256,
+          "longitude": -79.6621419171268
+        },
+        {
+          "latitude": 44.3952979888312,
+          "longitude": -79.6622797710931
+        },
+        {
+          "latitude": 44.3952250861948,
+          "longitude": -79.6627636817308
+        },
+        {
+          "latitude": 44.3952028845258,
+          "longitude": -79.6634158779188
+        },
+        {
+          "latitude": 44.39525065156862,
+          "longitude": -79.66394511441587
+        }
+      ],
+      "likelyDetourPolyline": [
+        {
+          "latitude": 44.39689151914344,
+          "longitude": -79.65671030912763
+        },
+        {
+          "latitude": 44.396992,
+          "longitude": -79.657352
+        },
+        {
+          "latitude": 44.396912,
+          "longitude": -79.657559
+        },
+        {
+          "latitude": 44.396602,
+          "longitude": -79.658364
+        },
+        {
+          "latitude": 44.396557,
+          "longitude": -79.658486
+        },
+        {
+          "latitude": 44.396278,
+          "longitude": -79.659221
+        },
+        {
+          "latitude": 44.396167,
+          "longitude": -79.659512
+        },
+        {
+          "latitude": 44.395931,
+          "longitude": -79.660135
+        },
+        {
+          "latitude": 44.395837,
+          "longitude": -79.660377
+        },
+        {
+          "latitude": 44.395452,
+          "longitude": -79.661402
+        },
+        {
+          "latitude": 44.395413,
+          "longitude": -79.661505
+        },
+        {
+          "latitude": 44.395358,
+          "longitude": -79.661658
+        },
+        {
+          "latitude": 44.39503076633048,
+          "longitude": -79.66168327777349
+        }
+      ],
+      "canShowDetourPath": true,
+      "roadMatchSource": "osrm-match",
+      "entryPoint": {
+        "latitude": 44.397423297847986,
+        "longitude": -79.65635364459823
+      },
+      "exitPoint": {
+        "latitude": 44.39525065156862,
+        "longitude": -79.66394511441587
+      },
+      "skippedStops": [
+        {
+          "id": "959",
+          "code": "959",
+          "name": "Johnson at Indian Arrow Road",
+          "latitude": 44.39634709,
+          "longitude": -79.65679556,
+          "locationType": 0,
+          "parentStation": null,
+          "routeId": "8B",
+          "routeIds": [
+            "8B"
+          ],
+          "affectedRouteIds": [
+            "8B"
+          ],
+          "servedRouteIds": [],
+          "allServingRouteIds": [
+            "8B"
+          ],
+          "impactScope": "route",
+          "detourStopRole": "skipped"
+        }
+      ],
+      "skippedStopCodes": [
+        "959"
+      ],
+      "skippedStopIds": [
+        "959"
+      ],
+      "affectedStops": [
+        {
+          "id": "959",
+          "code": "959",
+          "name": "Johnson at Indian Arrow Road",
+          "latitude": 44.39634709,
+          "longitude": -79.65679556,
+          "locationType": 0,
+          "parentStation": null,
+          "routeId": "8B",
+          "routeIds": [
+            "8B"
+          ],
+          "affectedRouteIds": [
+            "8B"
+          ],
+          "servedRouteIds": [],
+          "allServingRouteIds": [
+            "8B"
+          ],
+          "impactScope": "route",
+          "detourStopRole": "skipped"
+        },
+        {
+          "id": "142",
+          "code": "142",
+          "name": "Vancouver Street",
+          "latitude": 44.3952250861948,
+          "longitude": -79.6627636817308,
+          "locationType": 0,
+          "parentStation": null,
+          "routeId": "8B",
+          "routeIds": [
+            "8B"
+          ],
+          "affectedRouteIds": [
+            "8B"
+          ],
+          "servedRouteIds": [],
+          "allServingRouteIds": [
+            "8B"
+          ],
+          "impactScope": "route",
+          "detourStopRole": "served-by-gps"
+        }
+      ],
+      "affectedStopCodes": [
+        "959",
+        "142"
+      ],
+      "affectedStopIds": [
+        "959",
+        "142"
+      ],
+      "likelyDetourRoadNames": [
+        "Blake Street"
+      ]
+    }
+  ]
+}

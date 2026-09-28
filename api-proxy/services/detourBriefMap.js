@@ -3,7 +3,7 @@
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { haversineDistance } = require('../detour/roadGeometry');
 const { getNoticeRouteColor, getNoticeRouteTextColor } = require('./detourNoticeStyle');
-const { getBriefDisplayCorrection } = require('./detourBriefDisplay');
+const { prepareBriefDisplayEvent } = require('./detourBriefDisplay');
 
 const WIDTH = 960;
 const MAP_HEIGHT = 540;
@@ -54,13 +54,11 @@ function collectMapGeometry(events) {
   const anchors = [];
   const skippedStops = [];
   const endpoints = [];
-  for (const event of events) {
+  for (const event of events.map(prepareBriefDisplayEvent)) {
     const routeId = String(event.routeId || '').trim().toUpperCase();
-    const correction = getBriefDisplayCorrection(event);
     const segments = Array.isArray(event.segments) && event.segments.length ? event.segments : [event];
     for (const segment of segments) {
-      const reversed = correction?.reversePathRoles === true && hasRoadMatchedDiversion(segment);
-      const closed = line(reversed ? segment.likelyDetourPolyline : segment.skippedSegmentPolyline);
+      const closed = line(segment.skippedSegmentPolyline);
       if (followsPublishedRouteShape(closed)) {
         closures.push(closed);
         styledClosures.push({ path: closed, routeId });
@@ -68,8 +66,8 @@ function collectMapGeometry(events) {
       else if (closed.length >= 2) anchors.push(closed[0], closed[closed.length - 1]);
       let activePathShown = false;
       if (hasRoadMatchedDiversion(segment)) {
-        const diversion = line(reversed ? segment.skippedSegmentPolyline : segment.likelyDetourPolyline);
-        if (reversed ? followsPublishedRouteShape(diversion) : diversion.length >= 3) {
+        const diversion = line(segment.likelyDetourPolyline);
+        if (segment.briefStopImpactsPending ? followsPublishedRouteShape(diversion) : diversion.length >= 3) {
           diversions.push(diversion);
           styledDiversions.push({ path: diversion, routeId });
           activePathShown = true;
@@ -191,7 +189,7 @@ function drawRouteIcons(ctx, styledPaths, project, routeColors) {
   for (const { path, routeIds } of groups.values()) {
     const projected = path.map(project);
     const routes = [...routeIds].map((routeId) => ({
-      routeId, label: routeId.match(/^\d+/)?.[0] || routeId,
+      routeId, label: routeId,
     }));
     const seen = new Set();
     const uniqueRoutes = routes.filter(({ label }) => !seen.has(label) && seen.add(label));
@@ -254,9 +252,16 @@ async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl =
     const url = `https://a.basemaps.cartocdn.com/rastertiles/voyager/${view.zoom}/${x}/${y}@2x.png?key=${encodeURIComponent(cartoKey)}`;
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(12000) });
     if (!response.ok) throw new Error(`CARTO tile request failed: ${response.status}`);
+    // CARTO's key-error placeholder is an HTTP 200 PNG with a wm-* ETag.
+    // Treat it as a failed map so the sender retains its waiting_map retry.
+    if (/^(?:W\/)?"?wm-/i.test(response.headers?.get?.('etag') || '')) {
+      throw new Error('CARTO returned a watermarked error tile; check the basemap key');
+    }
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length || buffer.length > 3_000_000) throw new Error('CARTO tile response has invalid size');
-    return loadImage(buffer);
+    const tile = await loadImage(buffer);
+    if (tile.width !== TILE_SIZE || tile.height !== TILE_SIZE) throw new Error('CARTO tile has unexpected dimensions');
+    return tile;
   }));
   tiles.forEach(({ x, y }, index) => ctx.drawImage(images[index], x * TILE_SIZE - left, y * TILE_SIZE - top, TILE_SIZE, TILE_SIZE));
   const project = (p) => { const xy = world(p, view.zoom); return { x: xy.x - left, y: xy.y - top }; };

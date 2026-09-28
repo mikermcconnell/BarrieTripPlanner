@@ -1,7 +1,9 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const { collectMapGeometry, renderDetourBriefMap } = require('../services/detourBriefMap');
-const { buildBriefMessage, groupActiveEvents, runDetourManagementBrief } = require('../services/detourManagementBrief');
-const { sendViaResend } = require('../services/detourEmailMonitor');
+const { buildBriefMessage, groupActiveEvents, runDetourManagementBrief, isConfirmedActive } = require('../services/detourManagementBrief');
+const { sendViaResend, buildDetourEmailInsights, enrichEventStopNames } = require('../services/detourEmailMonitor');
+const { prepareBriefDisplayEvent } = require('../services/detourBriefDisplay');
+const blakeEvent = require('./fixtures/detour-brief-blake.json');
 
 function event(id = 'route-2-event') {
   return {
@@ -50,6 +52,67 @@ const env = {
 };
 
 describe('detour management brief', () => {
+  test('counts a stop once across objects, codes, IDs, and repeated segments', () => {
+    const source = { skippedStopCodes: ['959'], skippedStopIds: ['internal-959'], segments: [
+      { skippedStops: [{ id: 'internal-959', code: '959', name: 'Johnson at Indian Arrow Road' }] },
+      { skippedStopCodes: ['959'], skippedStops: [{ code: '142', name: 'Vancouver Street' }] },
+    ] };
+    expect(buildDetourEmailInsights(source).skippedStops).toEqual([
+      '#959 Johnson at Indian Arrow Road', '#142 Vancouver Street',
+    ]);
+    const enriched = enrichEventStopNames({ skippedStopIds: ['internal-959'], skippedStopCodes: ['959'] }, {
+      stopsById: new Map([['internal-959', { id: 'internal-959', code: '959', name: 'Johnson' }]]),
+    });
+    expect(buildDetourEmailInsights(enriched).skippedStops).toEqual(['#959 Johnson']);
+  });
+
+  test('keeps the reviewed Blake map, road names, and stop impacts consistent', () => {
+    const original = JSON.stringify(blakeEvent);
+    const prepared = prepareBriefDisplayEvent(blakeEvent);
+    const geometry = collectMapGeometry([blakeEvent]);
+    expect(geometry.diversions[0]).toEqual(blakeEvent.segments[0].skippedSegmentPolyline);
+    expect(geometry.closures[0]).toEqual(blakeEvent.segments[0].likelyDetourPolyline);
+    expect(geometry.skippedStops).toHaveLength(0);
+    expect(collectMapGeometry([prepared])).toEqual(geometry);
+    const map = { buffer: Buffer.from('map'), pathPending: false, renderedAt: 1789990200000, geometry };
+    const message = buildBriefMessage(blakeEvent, map, undefined, { preview: true });
+    expect(message.text).toContain('Johnson Street and Shanty Bay Road');
+    expect(message.text).toContain('Affected section: Blake Street');
+    expect(message.text).toContain('Stop impacts have not been confirmed');
+    expect(message.html).not.toMatch(/Puget|Codrington|#959|Confirmed detour/);
+    expect(message.html).toContain('Out of service');
+    expect(message.subject).toContain('[TEST PREVIEW] Route 8B');
+    expect(JSON.stringify(blakeEvent)).toBe(original);
+    const other = { ...blakeEvent, eventId: 'another-event' };
+    expect(prepareBriefDisplayEvent(other)).toBe(other);
+    expect(collectMapGeometry([other]).skippedStops).toHaveLength(1);
+  });
+
+  test('preview and live mail share content while preview cannot assert a live confirmation', () => {
+    const source = event();
+    const map = { buffer: Buffer.from('map'), pathPending: true, renderedAt: 1789990200000 };
+    const live = buildBriefMessage(source, map);
+    const preview = buildBriefMessage(source, map, undefined, { preview: true });
+    for (const message of [live, preview]) {
+      expect(message.html).toContain('<html lang="en"');
+      expect(message.html).toContain('<meta charset="utf-8">');
+      expect(message.html).toContain('width="752"');
+      expect(message.text).toContain('Diversion path pending');
+      expect(message.html).not.toContain('Barrie Transit has confirmed');
+    }
+    expect(live.html).toContain('Confirmed detour');
+    expect(preview.html).toContain('No live service notice');
+    expect(preview.html).not.toContain('Confirmed detour');
+    expect(preview.attachments).toEqual(live.attachments);
+  });
+
+  test('display preparation does not relax production confirmation or baseline gates', () => {
+    expect(isConfirmedActive(prepareBriefDisplayEvent(blakeEvent))).toBe(false);
+    for (const flags of [{ baselineDiverged: true }, { baselineUpdatePending: true }, { alertVisible: false }, { state: 'cleared' }]) {
+      expect(isConfirmedActive({ ...event(), ...flags })).toBe(false);
+    }
+  });
+
   test('groups shared routes but keeps independent events separate', () => {
     const first = { ...event('first'), sharedDetourEventId: 'shared-one' };
     const sibling = { ...event('sibling'), routeId: '8', sharedDetourEventId: 'shared-one' };
@@ -110,6 +173,15 @@ describe('detour management brief', () => {
     expect(fetchImpl.mock.calls[0][0]).toContain('?key=example');
     expect(map.buffer.subarray(0, 2).toString('hex')).toBe('ffd8');
     expect(map.pathPending).toBe(true);
+  });
+
+  test('rejects HTTP 200 CARTO key-error placeholders instead of mailing a broken basemap', async () => {
+    const fetchImpl = jest.fn(async () => ({
+      ok: true, headers: new Map([['etag', '"wm-da89c20e77c1-light"']]),
+      arrayBuffer: async () => createCanvas(512, 512).toBuffer('image/png'),
+    }));
+    await expect(renderDetourBriefMap([event()], { cartoKey: 'invalid', fetchImpl }))
+      .rejects.toThrow('watermarked error tile');
   });
 
   test('waits for a map, retries while active, and sends once with one recipient', async () => {

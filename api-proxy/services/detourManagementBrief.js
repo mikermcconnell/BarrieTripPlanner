@@ -1,11 +1,11 @@
 'use strict';
 
 const { getDb } = require('../firebaseAdmin');
-const { buildDetourEmailInsights, enrichEventStopNames, findExistingNotificationForEvent, makeNotificationId, sendViaResend } = require('./detourEmailMonitor');
+const { enrichEventStopNames, findExistingNotificationForEvent, makeNotificationId, sendViaResend } = require('./detourEmailMonitor');
 const { getStaticData } = require('../gtfsLoader');
 const { renderDetourBriefMap } = require('./detourBriefMap');
-const { getNoticeRouteColor, getNoticeRouteTextColor } = require('./detourNoticeStyle');
-const { getBriefDisplayCorrection } = require('./detourBriefDisplay');
+const { buildBriefMessage } = require('./detourBriefMessage');
+const { prepareBriefDisplayEvent } = require('./detourBriefDisplay');
 
 const ACTIVE_COLLECTION = 'activeDetourEventsV2';
 const NOTIFICATION_COLLECTION = 'detourEmailNotifications';
@@ -18,20 +18,6 @@ function millis(value) {
   if (typeof value?.toMillis === 'function') return value.toMillis();
   const parsed = Date.parse(String(value || ''));
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function timeLabel(value) {
-  const ms = millis(value);
-  return ms == null ? 'Time unavailable' : new Date(ms).toLocaleString('en-CA', {
-    timeZone: 'America/Toronto', month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
-  });
-}
-
-function html(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[char]));
 }
 
 function isConfirmedActive(event) {
@@ -53,7 +39,8 @@ function groupActiveEvents(docs) {
   return [...groups.values()];
 }
 
-function briefIdentity(events) {
+function briefIdentity(sourceEvents) {
+  const events = sourceEvents.map(prepareBriefDisplayEvent);
   const primary = events[0];
   return {
     ...primary,
@@ -62,82 +49,6 @@ function briefIdentity(events) {
       ? event.sharedRouteIds : [event.routeId]).filter(Boolean))].sort(),
     segments: events.flatMap((event) => Array.isArray(event.segments) && event.segments.length
       ? event.segments : [event]),
-  };
-}
-
-function buildBriefMessage(event, map, routeColors) {
-  const insight = buildDetourEmailInsights(event);
-  const correction = getBriefDisplayCorrection(event);
-  const routes = event.sharedRouteIds.length ? event.sharedRouteIds.join(', ') : (event.routeId || 'Unknown');
-  const location = event.eventLocationLabel || insight.bestLocationTitle || 'Location being confirmed';
-  const stops = insight.skippedStops.length
-    ? `${insight.skippedStops.length} skipped stop${insight.skippedStops.length === 1 ? '' : 's'}: ${insight.skippedStops.join('; ')}`
-    : insight.affectedStops.length
-      ? `${insight.affectedStops.length} affected stop${insight.affectedStops.length === 1 ? '' : 's'}: ${insight.affectedStops.join('; ')}`
-      : 'Stop impacts have not been confirmed.';
-  const impactHeadline = insight.skippedStops.length
-    ? `${insight.skippedStops.length} skipped stop${insight.skippedStops.length === 1 ? '' : 's'}`
-    : insight.affectedStops.length
-      ? `${insight.affectedStops.length} affected stop${insight.affectedStops.length === 1 ? '' : 's'}`
-      : 'Stop impacts pending';
-  const impactDetails = insight.skippedStops.length
-    ? insight.skippedStops.join('; ')
-    : insight.affectedStops.length
-      ? insight.affectedStops.join('; ')
-      : 'Stop details have not been confirmed.';
-  const affected = insight.closedRoads.length ? insight.closedRoads.join(', ') : location;
-  const path = map.pathPending
-    ? 'Diversion path pending. The map shows the affected area only.'
-    : correction?.routingText || `Likely diversion: ${insight.likelyRoads.length ? insight.likelyRoads.join(', ') : 'see the solid route-colored line on the map'}.`;
-  const statusTimeLabel = millis(event.alertConfirmedAt) != null ? 'Confirmed'
-    : millis(event.detectedAt) != null ? 'First detected' : 'Last updated';
-  const statusTime = timeLabel(event.alertConfirmedAt || event.detectedAt || event.updatedAt);
-  const mapTime = timeLabel(map.renderedAt);
-  const subject = `Confirmed Barrie Transit detour | Route${event.sharedRouteIds.length > 1 ? 's' : ''} ${routes} | ${location}`;
-  const summary = `Barrie Transit has confirmed a detour affecting Route${event.sharedRouteIds.length > 1 ? 's' : ''} ${routes} near ${location}.`;
-  const text = [summary, '', 'See the attached street map.', '', `Affected section: ${affected}.`, path, stops,
-    '', `${statusTimeLabel}: ${statusTime}`, `Map prepared: ${mapTime}`, '', 'Map data © OpenStreetMap contributors © CARTO.'].join('\n');
-  const eventRoutes = event.sharedRouteIds.length ? event.sharedRouteIds : [event.routeId || '?'];
-  const routeBadges = eventRoutes.map((routeId) => {
-    const color = getNoticeRouteColor(routeId, routeColors);
-    return `<span style="display:inline-block;background:${color};color:${getNoticeRouteTextColor(color)};font-size:14px;font-weight:bold;padding:6px 10px;margin:0 5px 5px 0;border-radius:4px">Route ${html(routeId)}</span>`;
-  }).join('');
-  const body = [
-    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media screen and (max-width:700px){.notice-column{display:block!important;width:100%!important;box-sizing:border-box!important}.notice-side{padding:16px 0 0!important}.notice-title{font-size:28px!important}.notice-wrap{padding:0!important}.notice-header{padding:16px!important}.notice-logo{width:85px!important;font-size:16px!important}.notice-warning{display:none!important}}</style></head><body style="margin:0;padding:0;background:#eef2f5;font-family:Arial,sans-serif;color:#20242a">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f5"><tr><td align="center" class="notice-wrap" style="padding:20px 10px">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:860px;background:#ffffff;border-collapse:collapse">',
-    '<tr><td class="notice-header" style="background:#104A78;padding:22px 25px;color:#ffffff">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td class="notice-logo" valign="middle" style="width:142px;font-size:22px;font-weight:800;line-height:0.95;color:#ffffff">Barrie<br>Transit</td><td valign="middle">',
-    '<div class="notice-title" style="font-size:42px;font-weight:800;line-height:1.05;letter-spacing:0.3px;color:#ffffff">Detour Notice</div>',
-    `<div style="font-size:15px;font-weight:bold;line-height:1.4;color:#ffffff;margin-top:5px">Confirmed route${eventRoutes.length > 1 ? 's' : ''} ${html(routes)} &nbsp;|&nbsp; ${html(location)}</div>`,
-    '</td><td class="notice-warning" valign="top" align="right" style="width:30px;font-size:27px;font-weight:bold;color:#ffffff">!</td></tr></table></td></tr>',
-    '<tr><td style="padding:18px 20px 8px">',
-    `<div style="margin-bottom:8px">${routeBadges}</div>`,
-    `<div style="font-size:18px;font-weight:bold;line-height:1.35">${html(location)}</div>`,
-    `<div style="font-size:14px;line-height:1.5;color:#4f5d6b;margin-top:3px">${html(impactHeadline)}${impactDetails ? ` &middot; ${html(impactDetails)}` : ''}</div>`,
-    '</td></tr>',
-    '<tr><td style="padding:8px 20px 20px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>',
-    '<td class="notice-column" valign="top" width="63%" style="width:63%">',
-    `<img src="cid:detour-map" alt="Street map of ${html(location)}${map.pathPending ? '; diversion path pending' : '; affected section and likely diversion'}" width="100%" style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #26313d;box-sizing:border-box;border-radius:5px" />`,
-    '</td><td class="notice-column notice-side" valign="top" width="37%" style="width:37%;padding-left:16px">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #26313d;border-radius:5px;border-collapse:separate"><tr><td style="padding:12px 13px">',
-    '<div style="font-size:12px;font-weight:bold;letter-spacing:0.6px;text-transform:uppercase;color:#104A78">Current status</div>',
-    '<div style="font-size:19px;line-height:1.35;font-weight:bold;margin-top:5px">Confirmed detour</div>',
-    `<div style="font-size:13px;line-height:1.45;color:#4f5d6b;margin-top:6px">${html(statusTimeLabel)} ${html(statusTime)}<br>Active until normal service is confirmed.</div>`,
-    '</td></tr></table>',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #26313d;border-radius:5px;border-collapse:separate;margin-top:12px"><tr><td style="padding:12px 13px">',
-    '<div style="font-size:18px;font-weight:bold;margin-bottom:8px">Details</div>',
-    `<div style="font-size:13px;line-height:1.5"><strong>Affected:</strong> ${html(affected)}</div>`,
-    `<div style="font-size:13px;line-height:1.5;margin-top:8px"><strong>Stops:</strong> ${html(stops)}</div>`,
-    `<div style="font-size:13px;line-height:1.5;margin-top:8px"><strong>Routing:</strong> ${html(path)}</div>`,
-    '</td></tr></table>',
-    '</td></tr></table></td></tr>',
-    `<tr><td style="border-top:1px solid #dce4eb;padding:13px 20px 18px;color:#5e6975;font-size:11px;line-height:1.5">Automated operations notice. Map prepared ${html(mapTime)}. Route colors from Barrie Transit GTFS where available. Map attached for forwarding. &copy; OpenStreetMap contributors &copy; CARTO.</td></tr>`,
-    '</table></td></tr></table></body></html>',
-  ].join('');
-  return {
-    subject, text, html: body,
-    attachments: [{ filename: 'barrie-detour-map.jpg', content: map.buffer.toString('base64'), content_type: 'image/jpeg', content_id: 'detour-map' }],
   };
 }
 
