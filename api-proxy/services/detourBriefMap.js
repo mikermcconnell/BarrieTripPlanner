@@ -2,7 +2,8 @@
 
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { haversineDistance } = require('../detour/roadGeometry');
-const { getNoticeRouteColor } = require('./detourNoticeStyle');
+const { getNoticeRouteColor, getNoticeRouteTextColor } = require('./detourNoticeStyle');
+const { getBriefDisplayCorrection } = require('./detourBriefDisplay');
 
 const WIDTH = 960;
 const MAP_HEIGHT = 540;
@@ -52,27 +53,33 @@ function collectMapGeometry(events) {
   const styledDiversions = [];
   const anchors = [];
   const skippedStops = [];
+  const endpoints = [];
   for (const event of events) {
     const routeId = String(event.routeId || '').trim().toUpperCase();
+    const correction = getBriefDisplayCorrection(event);
     const segments = Array.isArray(event.segments) && event.segments.length ? event.segments : [event];
     for (const segment of segments) {
-      const closed = line(segment.skippedSegmentPolyline);
+      const reversed = correction?.reversePathRoles === true && hasRoadMatchedDiversion(segment);
+      const closed = line(reversed ? segment.likelyDetourPolyline : segment.skippedSegmentPolyline);
       if (followsPublishedRouteShape(closed)) {
         closures.push(closed);
         styledClosures.push({ path: closed, routeId });
       }
       else if (closed.length >= 2) anchors.push(closed[0], closed[closed.length - 1]);
+      let activePathShown = false;
       if (hasRoadMatchedDiversion(segment)) {
-        const diversion = line(segment.likelyDetourPolyline);
-        if (diversion.length >= 3) {
+        const diversion = line(reversed ? segment.skippedSegmentPolyline : segment.likelyDetourPolyline);
+        if (reversed ? followsPublishedRouteShape(diversion) : diversion.length >= 3) {
           diversions.push(diversion);
           styledDiversions.push({ path: diversion, routeId });
+          activePathShown = true;
         }
       }
-      for (const value of [segment.entryPoint, segment.exitPoint]) {
-        const p = point(value);
-        if (p) anchors.push(p);
-      }
+      const entry = point(segment.entryPoint);
+      const exit = point(segment.exitPoint);
+      if (entry) anchors.push(entry);
+      if (exit) anchors.push(exit);
+      if (activePathShown && entry && exit) endpoints.push({ entry, exit });
       for (const stop of Array.isArray(segment.skippedStops) ? segment.skippedStops : []) {
         const p = point(stop);
         if (p) skippedStops.push(p);
@@ -83,7 +90,7 @@ function collectMapGeometry(events) {
   const uniqueDiversions = distinctLines(diversions);
   const all = [...uniqueClosures.flat(), ...uniqueDiversions.flat(), ...anchors, ...skippedStops];
   return { closures: uniqueClosures, diversions: uniqueDiversions, styledClosures, styledDiversions,
-    anchors, skippedStops, points: all, pathPending: uniqueDiversions.length === 0 };
+    anchors, skippedStops, endpoints, points: all, pathPending: uniqueDiversions.length === 0 };
 }
 
 function world(pointValue, zoom) {
@@ -157,6 +164,76 @@ function strokeRoutePaths(ctx, styledPaths, project, routeColors, width, dashed)
   }
 }
 
+function pointAlongPath(path, fraction) {
+  const lengths = path.slice(1).map((p, index) =>
+    Math.hypot(p.x - path[index].x, p.y - path[index].y));
+  let remaining = lengths.reduce((sum, length) => sum + length, 0) * fraction;
+  for (let index = 0; index < lengths.length; index++) {
+    if (remaining <= lengths[index]) {
+      const t = remaining / lengths[index];
+      return {
+        x: path[index].x + (path[index + 1].x - path[index].x) * t,
+        y: path[index].y + (path[index + 1].y - path[index].y) * t,
+      };
+    }
+    remaining -= lengths[index];
+  }
+  return path[path.length - 1];
+}
+
+function drawRouteIcons(ctx, styledPaths, project, routeColors) {
+  const groups = new Map();
+  for (const { path, routeId } of styledPaths) {
+    const key = JSON.stringify(path);
+    if (!groups.has(key)) groups.set(key, { path, routeIds: new Set() });
+    groups.get(key).routeIds.add(routeId);
+  }
+  for (const { path, routeIds } of groups.values()) {
+    const projected = path.map(project);
+    const routes = [...routeIds].map((routeId) => ({
+      routeId, label: routeId.match(/^\d+/)?.[0] || routeId,
+    }));
+    const seen = new Set();
+    const uniqueRoutes = routes.filter(({ label }) => !seen.has(label) && seen.add(label));
+    uniqueRoutes.forEach(({ routeId, label }, index) => {
+      const fraction = Math.max(0.25, Math.min(0.8, 0.6 + (index - (uniqueRoutes.length - 1) / 2) * 0.18));
+      const p = pointAlongPath(projected, fraction);
+      const color = getNoticeRouteColor(routeId, routeColors);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.32)'; ctx.shadowBlur = 7;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 34, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = getNoticeRouteTextColor(color);
+      ctx.font = `bold ${label.length > 2 ? 29 : label.length > 1 ? 36 : 44}px Arial`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, p.x, p.y + 2);
+      ctx.restore();
+    });
+  }
+}
+
+function drawEndpoint(ctx, p, label, color) {
+  const boxWidth = label === 'START' ? 91 : 72;
+  const boxX = p.x + boxWidth + 28 <= WIDTH ? p.x + 24 : p.x - boxWidth - 24;
+  ctx.save();
+  ctx.shadowColor = 'rgba(10,30,50,0.35)'; ctx.shadowBlur = 5;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(boxX, p.y - 15, boxWidth, 30);
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 18px Arial';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label[0], p.x, p.y + 1);
+  ctx.fillStyle = color; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left';
+  ctx.fillText(label, boxX + 9, p.y + 1);
+  ctx.restore();
+}
+
 async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl = globalThis.fetch } = {}) {
   cartoKey = String(cartoKey || '').trim();
   if (!cartoKey) throw new Error('CARTO_BASEMAP_API_KEY is missing');
@@ -187,6 +264,7 @@ async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl =
   ctx.lineJoin = 'round';
   strokeRoutePaths(ctx, geometry.styledClosures, project, routeColors, 8, true);
   strokeRoutePaths(ctx, geometry.styledDiversions, project, routeColors, 10, false);
+  drawRouteIcons(ctx, geometry.styledDiversions, project, routeColors);
   if (!geometry.closures.length && geometry.anchors.length) {
     for (const anchor of geometry.anchors) {
       const xy = project(anchor);
@@ -202,6 +280,15 @@ async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl =
     ctx.strokeStyle = '#d93645'; ctx.lineWidth = 4; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(xy.x - 7, xy.y - 7); ctx.lineTo(xy.x + 7, xy.y + 7);
     ctx.strokeStyle = '#d93645'; ctx.lineWidth = 3; ctx.stroke();
+  }
+  const drawnEndpoints = new Set();
+  for (const { entry, exit } of geometry.endpoints) {
+    for (const [label, value, color] of [['START', entry, '#087f5b'], ['END', exit, '#0f4777']]) {
+      const key = `${label}:${value.latitude.toFixed(6)}:${value.longitude.toFixed(6)}`;
+      if (drawnEndpoints.has(key)) continue;
+      drawnEndpoints.add(key);
+      drawEndpoint(ctx, project(value), label, color);
+    }
   }
   // Keep the legend inside the attachment, below the street map.
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, MAP_HEIGHT, WIDTH, HEIGHT - MAP_HEIGHT);

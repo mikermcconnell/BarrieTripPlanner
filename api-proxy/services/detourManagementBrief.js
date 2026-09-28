@@ -5,6 +5,7 @@ const { buildDetourEmailInsights, enrichEventStopNames, findExistingNotification
 const { getStaticData } = require('../gtfsLoader');
 const { renderDetourBriefMap } = require('./detourBriefMap');
 const { getNoticeRouteColor, getNoticeRouteTextColor } = require('./detourNoticeStyle');
+const { getBriefDisplayCorrection } = require('./detourBriefDisplay');
 
 const ACTIVE_COLLECTION = 'activeDetourEventsV2';
 const NOTIFICATION_COLLECTION = 'detourEmailNotifications';
@@ -66,6 +67,7 @@ function briefIdentity(events) {
 
 function buildBriefMessage(event, map, routeColors) {
   const insight = buildDetourEmailInsights(event);
+  const correction = getBriefDisplayCorrection(event);
   const routes = event.sharedRouteIds.length ? event.sharedRouteIds.join(', ') : (event.routeId || 'Unknown');
   const location = event.eventLocationLabel || insight.bestLocationTitle || 'Location being confirmed';
   const stops = insight.skippedStops.length
@@ -86,13 +88,15 @@ function buildBriefMessage(event, map, routeColors) {
   const affected = insight.closedRoads.length ? insight.closedRoads.join(', ') : location;
   const path = map.pathPending
     ? 'Diversion path pending. The map shows the affected area only.'
-    : `Likely diversion: ${insight.likelyRoads.length ? insight.likelyRoads.join(', ') : 'see the solid route-colored line on the map'}.`;
-  const confirmed = timeLabel(event.alertConfirmedAt || event.updatedAt || event.detectedAt);
+    : correction?.routingText || `Likely diversion: ${insight.likelyRoads.length ? insight.likelyRoads.join(', ') : 'see the solid route-colored line on the map'}.`;
+  const statusTimeLabel = millis(event.alertConfirmedAt) != null ? 'Confirmed'
+    : millis(event.detectedAt) != null ? 'First detected' : 'Last updated';
+  const statusTime = timeLabel(event.alertConfirmedAt || event.detectedAt || event.updatedAt);
   const mapTime = timeLabel(map.renderedAt);
   const subject = `Confirmed Barrie Transit detour | Route${event.sharedRouteIds.length > 1 ? 's' : ''} ${routes} | ${location}`;
   const summary = `Barrie Transit has confirmed a detour affecting Route${event.sharedRouteIds.length > 1 ? 's' : ''} ${routes} near ${location}.`;
   const text = [summary, '', 'See the attached street map.', '', `Affected section: ${affected}.`, path, stops,
-    '', `Confirmed: ${confirmed}`, `Map prepared: ${mapTime}`, '', 'Map data © OpenStreetMap contributors © CARTO.'].join('\n');
+    '', `${statusTimeLabel}: ${statusTime}`, `Map prepared: ${mapTime}`, '', 'Map data © OpenStreetMap contributors © CARTO.'].join('\n');
   const eventRoutes = event.sharedRouteIds.length ? event.sharedRouteIds : [event.routeId || '?'];
   const routeBadges = eventRoutes.map((routeId) => {
     const color = getNoticeRouteColor(routeId, routeColors);
@@ -119,7 +123,7 @@ function buildBriefMessage(event, map, routeColors) {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #26313d;border-radius:5px;border-collapse:separate"><tr><td style="padding:12px 13px">',
     '<div style="font-size:12px;font-weight:bold;letter-spacing:0.6px;text-transform:uppercase;color:#104A78">Current status</div>',
     '<div style="font-size:19px;line-height:1.35;font-weight:bold;margin-top:5px">Confirmed detour</div>',
-    `<div style="font-size:13px;line-height:1.45;color:#4f5d6b;margin-top:6px">Confirmed ${html(confirmed)}<br>Active until normal service is confirmed.</div>`,
+    `<div style="font-size:13px;line-height:1.45;color:#4f5d6b;margin-top:6px">${html(statusTimeLabel)} ${html(statusTime)}<br>Active until normal service is confirmed.</div>`,
     '</td></tr></table>',
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #26313d;border-radius:5px;border-collapse:separate;margin-top:12px"><tr><td style="padding:12px 13px">',
     '<div style="font-size:18px;font-weight:bold;margin-bottom:8px">Details</div>',

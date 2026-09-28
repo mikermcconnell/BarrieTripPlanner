@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="data:," />
+    <title>Route 8B Blake Street detour · management brief mockup</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #e9eef2;
+        color: #20242a;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 28px 18px 44px;
+        background: #e9eef2;
+      }
+
+      .review-page {
+        width: min(100%, 980px);
+        margin: 0 auto;
+      }
+
+      .review-banner {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 14px;
+        padding: 16px 18px;
+        border: 1px solid #cbd9e3;
+        border-left: 4px solid #2474a5;
+        border-radius: 7px;
+        background: #f8fbfd;
+        box-shadow: 0 2px 8px rgba(31, 49, 65, 0.06);
+      }
+
+      .review-banner h1 {
+        margin: 0;
+        color: #173b55;
+        font-size: 16px;
+        line-height: 1.3;
+      }
+
+      .review-banner p {
+        margin: 5px 0 0;
+        color: #51616d;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .review-tag {
+        flex: 0 0 auto;
+        margin-top: 1px;
+        padding: 6px 9px;
+        border: 1px solid #b4d2e3;
+        border-radius: 999px;
+        background: #eaf4fa;
+        color: #1c5d81;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.7px;
+        white-space: nowrap;
+      }
+
+      .message-envelope {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 7px 12px;
+        margin-bottom: 14px;
+        padding: 15px 18px;
+        border: 1px solid #d4dde4;
+        border-radius: 7px;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(31, 49, 65, 0.05);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .message-envelope dt {
+        color: #687681;
+        font-weight: 700;
+      }
+
+      .message-envelope dd {
+        min-width: 0;
+        margin: 0;
+        color: #2d353b;
+        overflow-wrap: anywhere;
+      }
+
+      .message-envelope .subject {
+        font-weight: 700;
+      }
+
+      .email-frame {
+        overflow: hidden;
+        border: 1px solid #d1d9df;
+        border-radius: 7px;
+        background: #eef2f5;
+        box-shadow: 0 8px 24px rgba(31, 49, 65, 0.1);
+      }
+
+      .email-wrap {
+        padding: 20px 10px;
+        background: #eef2f5;
+      }
+
+      .email-card {
+        width: 100%;
+        max-width: 860px;
+        margin: 0 auto;
+        border-collapse: collapse;
+        background: #ffffff;
+      }
+
+      .email-header {
+        padding: 22px 25px;
+        background: #104a78;
+        color: #ffffff;
+      }
+
+      .email-logo {
+        width: 142px;
+        color: #ffffff;
+        font-size: 22px;
+        font-weight: 800;
+        line-height: 0.95;
+      }
+
+      .email-title {
+        color: #ffffff;
+        font-size: 42px;
+        font-weight: 800;
+        letter-spacing: 0.3px;
+        line-height: 1.05;
+      }
+
+      .email-route-summary {
+        margin-top: 5px;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.4;
+      }
+
+      .email-warning {
+        width: 30px;
+        color: #ffffff;
+        font-size: 27px;
+        font-weight: 700;
+      }
+
+      .route-badge {
+        display: inline-block;
+        margin: 0 5px 5px 0;
+        padding: 6px 10px;
+        border-radius: 4px;
+        background: #000000;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .brief-location {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .brief-impact {
+        margin-top: 3px;
+        color: #4f5d6b;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .map-image {
+        display: block;
+        width: 100%;
+        max-width: 520px;
+        height: auto;
+        border: 1px solid #26313d;
+        border-radius: 5px;
+      }
+
+      .notice-panel {
+        border: 2px solid #26313d;
+        border-collapse: separate;
+        border-radius: 5px;
+      }
+
+      .status-label {
+        color: #104a78;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+      }
+
+      .status-title {
+        margin-top: 5px;
+        font-size: 19px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .status-detail {
+        margin-top: 6px;
+        color: #4f5d6b;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .details-title {
+        margin-bottom: 8px;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .details-copy {
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .details-copy + .details-copy { margin-top: 8px; }
+
+      .email-footer {
+        border-top: 1px solid #dce4eb;
+        padding: 13px 20px 18px;
+        color: #5e6975;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      @media screen and (max-width: 700px) {
+        body { padding: 12px 8px 24px; }
+        .review-banner { gap: 12px; padding: 13px; }
+        .review-banner p { font-size: 12px; }
+        .review-tag { font-size: 9px; }
+        .message-envelope { grid-template-columns: 48px minmax(0, 1fr); padding: 13px; }
+        .email-wrap { padding: 0; }
+        .email-header { padding: 16px; }
+        .email-logo { width: 85px; font-size: 16px; }
+        .email-title { font-size: 28px; }
+        .email-warning { display: none; }
+        .email-column { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+        .email-side { padding: 16px 0 0 !important; }
+        .email-content { padding: 16px !important; }
+      }
+
+      @media screen and (max-width: 390px) {
+        .review-banner { display: block; }
+        .review-tag { display: inline-block; margin-top: 10px; }
+        .email-header table { table-layout: auto; }
+        .email-logo { width: 72px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="review-page">
+      <section class="review-banner" aria-labelledby="preview-heading">
+        <div>
+          <h1 id="preview-heading">Detour management email preview</h1>
+          <p>Active Route 8B Blake Street event captured from the production detour feed on Sep 28, 2026. The path labels reflect the corrected routing: the Shanty Bay Road path is active and the Codrington Street path is out of service. Start and end mark the event's entry and exit points. The map uses OpenStreetMap tiles; production uses CARTO. Nothing was sent.</p>
+        </div>
+        <span class="review-tag">LOCAL MOCKUP</span>
+      </section>
+
+      <dl class="message-envelope" aria-label="Email preview details">
+        <dt>From</dt>
+        <dd>Barrie Transit operations</dd>
+        <dt>To</dt>
+        <dd>Mike · review preview</dd>
+        <dt>Subject</dt>
+        <dd class="subject">Confirmed Barrie Transit detour | Route 8B | Blake Street</dd>
+        <dt>Captured</dt>
+        <dd>Sep 28, 2026 · 1:06 p.m. EDT · active at capture</dd>
+      </dl>
+
+      <section class="email-frame" aria-label="Detour notice email body">
+        <div class="email-wrap">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-card">
+            <tbody>
+              <tr>
+                <td class="email-header">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tbody>
+                      <tr>
+                        <td class="email-logo" valign="middle">Barrie<br />Transit</td>
+                        <td valign="middle">
+                          <div class="email-title">Detour Notice</div>
+                          <div class="email-route-summary">Confirmed route 8B &nbsp;|&nbsp; Blake Street</div>
+                        </td>
+                        <td class="email-warning" valign="top" align="right">!</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td class="email-content" style="padding:18px 20px 8px">
+                  <div style="margin-bottom:8px"><span class="route-badge">Route 8B</span></div>
+                  <div class="brief-location">Blake Street</div>
+                  <div class="brief-impact">1 skipped stop &middot; #959 Johnson at Indian Arrow Road</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="email-content" style="padding:8px 20px 20px">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                    <tbody>
+                      <tr>
+                        <td class="email-column" valign="top" width="63%" style="width:63%">
+                          <img class="map-image" src="detour-management-blake-map.jpg" alt="Route 8B map with a circular route 8 icon on the solid active line, detour start and end icons, dashed out-of-service routing along Codrington Street, and skipped stop #959" width="960" height="640" />
+                        </td>
+                        <td class="email-column email-side" valign="top" width="37%" style="width:37%;padding-left:16px">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="notice-panel">
+                            <tbody>
+                              <tr><td style="padding:12px 13px">
+                                <div class="status-label">Current status</div>
+                                <div class="status-title">Confirmed detour</div>
+                                <div class="status-detail">First detected Sep 2, 2026, 6:57 a.m. EDT<br />Active until normal service is confirmed.</div>
+                              </td></tr>
+                            </tbody>
+                          </table>
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="notice-panel" style="margin-top:12px">
+                            <tbody>
+                              <tr><td style="padding:12px 13px">
+                                <div class="details-title">Details</div>
+                                <div class="details-copy"><strong>Affected:</strong> Blake Street</div>
+                                <div class="details-copy"><strong>Stops:</strong> 1 skipped stop: #959 Johnson at Indian Arrow Road</div>
+                                <div class="details-copy"><strong>Routing:</strong> Likely active via Puget Street and Shanty Bay Road; Codrington Street section out of service.</div>
+                              </td></tr>
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td class="email-footer">Automated operations notice. Map prepared for review on Sep 28, 2026. Route colors from Barrie Transit GTFS where available. Map attached for forwarding. &copy; OpenStreetMap contributors.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
