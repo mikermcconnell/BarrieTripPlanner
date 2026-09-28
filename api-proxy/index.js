@@ -1,13 +1,10 @@
 const { startServer, registerShutdown } = require('./server');
 const { createApiProxyFunction, createDetourManagementBriefFunction } = require('./functions');
-const {
-  buildProxyConfig,
-  loadProxyEnvFiles,
-  validateProxyConfig,
-} = require('./config/env');
+const { loadProxyEnvFiles } = require('./config/env');
 
 loadProxyEnvFiles(__dirname);
-validateProxyConfig(buildProxyConfig(process.env), process.env);
+// createApiProxyApp validates proxy auth when that app is loaded. The scheduled
+// management brief has no proxy endpoints and must not require proxy auth env.
 
 let appBundle = null;
 
