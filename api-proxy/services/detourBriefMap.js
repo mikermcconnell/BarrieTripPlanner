@@ -7,7 +7,6 @@ const { prepareBriefDisplayEvent } = require('./detourBriefDisplay');
 
 const WIDTH = 960;
 const MAP_HEIGHT = 540;
-const HEIGHT = 640;
 const TILE_SIZE = 512; // CARTO @2x raster tiles
 const PAD = 64;
 const MAX_CLOSURE_POINT_GAP_METERS = 350;
@@ -238,7 +237,7 @@ async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl =
   const geometry = collectMapGeometry(events);
   const view = viewport(geometry.points);
   if (!view) throw new Error('No usable detour map coordinates');
-  const canvas = createCanvas(WIDTH, HEIGHT);
+  const canvas = createCanvas(WIDTH, MAP_HEIGHT);
   const ctx = canvas.getContext('2d');
   const left = view.centerX - WIDTH / 2;
   const top = view.centerY - MAP_HEIGHT / 2;
@@ -295,33 +294,7 @@ async function renderDetourBriefMap(events, { cartoKey, routeColors, fetchImpl =
       drawEndpoint(ctx, project(value), label, color);
     }
   }
-  // Keep the legend inside the attachment, below the street map.
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, MAP_HEIGHT, WIDTH, HEIGHT - MAP_HEIGHT);
-  ctx.fillStyle = '#263347'; ctx.font = 'bold 24px Arial'; ctx.fillText('Legend', 26, MAP_HEIGHT + 34);
-  ctx.font = '19px Arial';
-  const routeColor = getNoticeRouteColor(events[0]?.routeId, routeColors);
-  if (geometry.pathPending) {
-    ctx.fillStyle = '#6b7280'; ctx.fillText('Diversion path pending', 26, MAP_HEIGHT + 71);
-  } else {
-    ctx.fillStyle = routeColor; ctx.fillRect(26, MAP_HEIGHT + 61, 44, 9);
-    ctx.fillStyle = '#263347'; ctx.fillText('Likely active routing', 80, MAP_HEIGHT + 71);
-  }
-  if (geometry.closures.length) {
-    ctx.fillStyle = routeColor;
-    for (let x = 350; x < 395; x += 17) ctx.fillRect(x, MAP_HEIGHT + 61, 11, 9);
-    ctx.fillStyle = '#263347'; ctx.fillText('Out of service', 408, MAP_HEIGHT + 71);
-  } else {
-    ctx.fillStyle = '#d93645'; ctx.fillRect(350, MAP_HEIGHT + 61, 44, 9);
-    ctx.fillStyle = '#263347'; ctx.fillText('Affected area', 408, MAP_HEIGHT + 71);
-  }
-  if (geometry.skippedStops.length) {
-    ctx.beginPath(); ctx.arc(694, MAP_HEIGHT + 66, 9, 0, 2 * Math.PI);
-    ctx.fillStyle = '#ffffff'; ctx.fill();
-    ctx.strokeStyle = '#d93645'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(688, MAP_HEIGHT + 60); ctx.lineTo(700, MAP_HEIGHT + 72);
-    ctx.stroke();
-    ctx.fillStyle = '#263347'; ctx.fillText('Skipped stop', 714, MAP_HEIGHT + 71);
-  }
+  // The email provides one readable HTML legend below the image.
   ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(WIDTH - 301, MAP_HEIGHT - 30, 293, 22);
   ctx.font = '12px Arial'; ctx.fillStyle = '#263347';
   ctx.fillText('© OpenStreetMap contributors  © CARTO', WIDTH - 293, MAP_HEIGHT - 14);
