@@ -328,6 +328,8 @@ The Firebase scheduled function `detourManagementBrief` checks active V2 detours
 
 The legend appears once, as HTML below the image; the JPEG contains the map and attribution without an embedded legend. The manual `Detour brief preview` workflow uses the same template as live notices, explicitly marks its subject and body as a preview, and exports both HTML and JPEG artifacts. A complete path preview can have no confirmed skipped stops.
 
+After an emailed detour clears with auditable normal-route GPS proof, the same five-minute function sends one closure email with a `DETOUR OVER` subject and a prominent green “THE DETOUR IS OVER” banner. It reuses the original notice map when available and identifies it as historical. It sends only when the matching detection email was sent, avoids sending while the same physical event remains active, and deduplicates in `detourEmailNotifications`. Operator removals and superseded paths are not described as normal service restored.
+
 Map failures leave the brief in `waiting_map` in Firestore and retry while the event remains active. Sent briefs use the existing `detourEmailNotifications` collection and stable Resend idempotency keys to avoid repeats. The previous GitHub Actions email schedule has been retired. See [backend operations](docs/API-PROXY-OPERATIONS.md#detour-management-brief) for deployment and the Outlook rollout gate.
 
 ### Firestore rules

@@ -43,9 +43,11 @@ function createDetourManagementBriefFunction() {
     maxInstances: 1,
     secrets: ['RESEND_API_KEY', 'CARTO_BASEMAP_API_KEY', 'DETOUR_ALERT_RECIPIENT', 'DETOUR_ALERT_FROM'],
   }, async () => {
-    const { runDetourManagementBrief } = require('./services/detourManagementBrief');
-    const result = await runDetourManagementBrief();
-    console.log('[detourManagementBrief]', JSON.stringify(result));
+    const { runDetourClearedBrief, runDetourManagementBrief } = require('./services/detourManagementBrief');
+    const detected = await runDetourManagementBrief();
+    console.log('[detourManagementBrief]', JSON.stringify(detected));
+    const cleared = await runDetourClearedBrief();
+    console.log('[detourManagementBrief:cleared]', JSON.stringify(cleared));
   });
 }
 

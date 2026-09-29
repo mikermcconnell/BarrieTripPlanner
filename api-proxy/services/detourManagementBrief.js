@@ -1,7 +1,10 @@
 'use strict';
 
 const { getDb } = require('../firebaseAdmin');
-const { enrichEventStopNames, findExistingNotificationForEvent, makeNotificationId, sendViaResend } = require('./detourEmailMonitor');
+const { buildDetourEmailInsights, enrichEventStopNames, findExistingNotificationForEvent,
+  makeNotificationId, sendViaResend, validateClearEvent } = require('./detourEmailMonitor');
+const { getDetourHistory } = require('../detourPublisher');
+const { buildDetourStorageConfig } = require('../detour/storageConfig');
 const { getStaticData } = require('../gtfsLoader');
 const { renderDetourBriefMap } = require('./detourBriefMap');
 const { buildBriefMessage } = require('./detourBriefMessage');
@@ -11,6 +14,9 @@ const ACTIVE_COLLECTION = 'activeDetourEventsV2';
 const NOTIFICATION_COLLECTION = 'detourEmailNotifications';
 const LEASE_MS = 10 * 60 * 1000;
 const IDEMPOTENCY_MS = 23 * 60 * 60 * 1000;
+const CLEAR_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const CLEAR_HISTORY_LIMIT = 200;
+const MAX_STORED_CLEAR_MAP_CHARS = 750_000;
 
 function millis(value) {
   if (typeof value === 'number') return value;
@@ -18,6 +24,17 @@ function millis(value) {
   if (typeof value?.toMillis === 'function') return value.toMillis();
   const parsed = Date.parse(String(value || ''));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildNoticeSnapshot(event) {
+  const insight = buildDetourEmailInsights(event);
+  return {
+    eventLocationLabel: event.eventLocationLabel || null,
+    closedSegmentRoadNames: insight.closedRoads,
+    likelyDetourRoadNames: insight.likelyRoads,
+    sharedRouteIds: event.sharedRouteIds || [],
+    briefDisplayPrepared: event.briefDisplayPrepared === true,
+  };
 }
 
 function isConfirmedActive(event) {
@@ -91,6 +108,7 @@ async function reserveSend(db, ref, message, event, nowMs) {
       sharedDetourEventId: event.sharedDetourEventId || null,
       routeId: event.routeId || null, sharedRouteIds: event.sharedRouteIds,
       confirmedAt: millis(event.alertConfirmedAt) ?? millis(event.updatedAt),
+      noticeSnapshot: record.noticeSnapshot || buildNoticeSnapshot(event),
       message: payload, preparedAt, leaseUntil: nowMs + LEASE_MS,
       attempts: Number(record.attempts || 0) + 1,
     }, { merge: true });
@@ -146,8 +164,10 @@ async function runDetourManagementBrief({
         idempotencyKey: `detour-brief-${ref.id}`,
       });
       const sentAt = now();
+      const mapContent = reserved.message.attachments?.find((item) => item.content_id === 'detour-map')?.content;
       await ref.set({ status: 'sent', sentAt, provider: 'resend',
         providerMessageId: provider?.id || null, message: null, leaseUntil: null,
+        clearMap: typeof mapContent === 'string' && mapContent.length <= MAX_STORED_CLEAR_MAP_CHARS ? mapContent : null,
         preparedToSentMs: sentAt - reserved.preparedAt,
       }, { merge: true });
       result.sent++;
@@ -160,4 +180,138 @@ async function runDetourManagementBrief({
   return result;
 }
 
-module.exports = { buildBriefMessage, groupActiveEvents, isConfirmedActive, runDetourManagementBrief, reserveSend };
+function clearMatchesActiveEvent(clearEvent, activeDoc) {
+  const active = activeDoc.data() || {};
+  const activeState = String(active.state || 'active').toLowerCase();
+  if (activeState === 'cleared') return false;
+  const eventIds = new Set([clearEvent.eventId, clearEvent.detourEventId].filter(Boolean).map(String));
+  if (eventIds.has(String(activeDoc.id))) return true;
+  if (eventIds.has(String(active.eventId || active.detourEventId || ''))) return true;
+  const sharedId = String(clearEvent.sharedDetourEventId || '').trim();
+  return Boolean(sharedId && String(active.sharedDetourEventId || '').trim() === sharedId);
+}
+
+async function reserveClearanceSend(db, ref, message, clearEvent, detectedNotificationId, nowMs) {
+  let outcome = null;
+  await db.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref);
+    const record = snapshot.data() || {};
+    if (snapshot.exists && record.status === 'sent') { outcome = { reason: 'already-sent' }; return; }
+    if (snapshot.exists && record.status === 'delivery_unknown') { outcome = { reason: 'delivery-unknown' }; return; }
+    if (record.status === 'sending' && Number(record.leaseUntil) > nowMs) {
+      outcome = { reason: 'send-in-progress' }; return;
+    }
+    if (record.status === 'sending' && nowMs - Number(record.preparedAt || nowMs) >= IDEMPOTENCY_MS) {
+      tx.set(ref, { status: 'delivery_unknown', deliveryUnknownAt: nowMs,
+        failureMessage: 'Clear email send result was not recorded before the idempotency window expired' }, { merge: true });
+      outcome = { reason: 'delivery-unknown' }; return;
+    }
+    const preparedAt = record.preparedAt || nowMs;
+    tx.set(ref, {
+      status: 'sending', notificationId: ref.id, eventType: 'DETOUR_CLEARED',
+      eventId: clearEvent.eventId, detourEventId: clearEvent.detourEventId || clearEvent.eventId,
+      sharedDetourEventId: clearEvent.sharedDetourEventId || null,
+      routeId: clearEvent.routeId || null,
+      sharedRouteIds: clearEvent.sharedRouteIds || [],
+      detectedNotificationId, clearedAt: millis(clearEvent.clearedAt) ?? millis(clearEvent.occurredAt),
+      clearReason: clearEvent.clearReason, clearValidation: 'auditable-normal-route-gps',
+      message: record.message || message, preparedAt, leaseUntil: nowMs + LEASE_MS,
+      attempts: Number(record.attempts || 0) + 1,
+    }, { merge: true });
+    outcome = { message: record.message || message, preparedAt };
+  });
+  return outcome;
+}
+
+async function runDetourClearedBrief({
+  env = process.env, db = getDb(), queryClearHistory = getDetourHistory,
+  sendEmail = sendViaResend, now = Date.now,
+} = {}) {
+  if (env.DETOUR_MANAGEMENT_BRIEF_ENABLED !== 'true') return { skipped: 'disabled' };
+  const recipient = String(env.DETOUR_ALERT_RECIPIENT || '').trim();
+  if (!recipient || recipient.includes(',') || recipient.includes(';')) {
+    throw new Error('Configure exactly one DETOUR_ALERT_RECIPIENT');
+  }
+  if (!env.RESEND_API_KEY || !env.DETOUR_ALERT_FROM) {
+    throw new Error('Clear notice sender requires RESEND_API_KEY and DETOUR_ALERT_FROM');
+  }
+  if (!db) throw new Error('Firestore is unavailable');
+
+  const history = await queryClearHistory({
+    limit: CLEAR_HISTORY_LIMIT, startMs: now() - CLEAR_LOOKBACK_MS,
+    eventTypes: ['DETOUR_CLEARED'], storageConfig: buildDetourStorageConfig(env), internal: true,
+  });
+  const activeSnapshot = await db.collection(ACTIVE_COLLECTION).get();
+  const activeDocs = activeSnapshot.docs || [];
+  const result = { checked: history.length, sent: 0, skipped: 0, errors: [] };
+
+  for (const clearEvent of history) {
+    const proof = validateClearEvent(clearEvent);
+    // A superseded or operator-removed alert is not proof buses returned to
+    // normal. Send closure mail only after the detector's auditable GPS clear.
+    if (!proof.valid || proof.reason !== 'auditable-gps-proof') {
+      result.skipped++;
+      continue;
+    }
+    if (activeDocs.some((doc) => clearMatchesActiveEvent(clearEvent, doc))) {
+      result.skipped++;
+      continue;
+    }
+
+    const detectedIdentity = { ...clearEvent, eventType: 'DETOUR_DETECTED' };
+    const detectedNotificationId = makeNotificationId(detectedIdentity);
+    const detectedSnapshot = await db.collection(NOTIFICATION_COLLECTION).doc(detectedNotificationId).get();
+    const detection = detectedSnapshot.data() || {};
+    const clearedAt = millis(clearEvent.clearedAt) ?? millis(clearEvent.occurredAt);
+    if (!detectedSnapshot.exists || detection.status !== 'sent' ||
+        detection.eventType !== 'DETOUR_DETECTED' || !Number.isFinite(detection.sentAt) ||
+        clearedAt == null || clearedAt < detection.sentAt) {
+      result.skipped++;
+      continue;
+    }
+
+    const clearRef = db.collection(NOTIFICATION_COLLECTION).doc(makeNotificationId(clearEvent));
+    const existing = await clearRef.get();
+    if (existing.exists && !['pending', 'sending'].includes(existing.data()?.status)) {
+      result.skipped++;
+      continue;
+    }
+    const snapshot = detection.noticeSnapshot || {};
+    const messageEvent = {
+      ...clearEvent, ...snapshot,
+      eventType: 'DETOUR_CLEARED', eventId: clearEvent.eventId,
+      detourEventId: clearEvent.detourEventId || clearEvent.eventId,
+      sharedDetourEventId: clearEvent.sharedDetourEventId || detection.sharedDetourEventId,
+      routeId: clearEvent.routeId || detection.routeId,
+      sharedRouteIds: snapshot.sharedRouteIds?.length ? snapshot.sharedRouteIds : (detection.sharedRouteIds || []),
+      eventLocationLabel: clearEvent.eventLocationLabel || snapshot.eventLocationLabel,
+      clearedAt,
+    };
+    const mapContent = typeof detection.clearMap === 'string' ? detection.clearMap : '';
+    const message = buildBriefMessage(messageEvent, mapContent ? {
+      buffer: Buffer.from(mapContent, 'base64'), pathPending: true, renderedAt: detection.confirmedAt || clearEvent.detectedAt,
+    } : null, undefined, { clearance: { clearedAt } });
+    const reserved = await reserveClearanceSend(db, clearRef, message, clearEvent, detectedNotificationId, now());
+    if (!reserved?.message) { result.skipped++; continue; }
+
+    try {
+      const provider = await sendEmail({
+        apiKey: env.RESEND_API_KEY, from: env.DETOUR_ALERT_FROM,
+        recipients: [recipient], message: reserved.message,
+        idempotencyKey: `detour-clear-${clearRef.id}`,
+      });
+      await clearRef.set({ status: 'sent', sentAt: now(), provider: 'resend',
+        providerMessageId: provider?.id || null, message: null, leaseUntil: null,
+      }, { merge: true });
+      result.sent++;
+    } catch (error) {
+      await clearRef.set({ leaseUntil: 0, lastSendErrorAt: now(),
+        failureMessage: String(error.message || error).slice(0, 500) }, { merge: true });
+      result.errors.push({ notificationId: clearRef.id, reason: String(error.message || error) });
+    }
+  }
+  return result;
+}
+
+module.exports = { buildBriefMessage, clearMatchesActiveEvent, groupActiveEvents, isConfirmedActive,
+  runDetourManagementBrief, runDetourClearedBrief, reserveClearanceSend, reserveSend };
