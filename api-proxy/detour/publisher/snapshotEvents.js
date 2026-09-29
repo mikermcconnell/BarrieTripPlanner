@@ -39,6 +39,7 @@ function hasGeometryPayload(source) {
     'canShowDetourPath',
     'likelyDetourPolyline',
     'likelyDetourRoadNames',
+    'likelyDetourDirections',
     'roadMatchConfidence',
     'detourPathLabel',
     'detourZone',
@@ -80,6 +81,7 @@ function geometrySignatureFromSegments(segments) {
         polylineSignature(segment?.likelyDetourPolyline),
         polylineSignature(segment?.inferredDetourPolyline),
         (segment?.likelyDetourRoadNames || []).join(','),
+        JSON.stringify(segment?.likelyDetourDirections || []),
       ].join(':');
     })
     .join('|');
@@ -104,6 +106,7 @@ function makeSnapshot(doc, previousSnapshot = null) {
     ? doc.canShowDetourPath
     : (previousSnapshot?.canShowDetourPath ?? null);
   const likelyDetourRoadNames = pickGeometryValue(doc, previousSnapshot, 'likelyDetourRoadNames', []);
+  const likelyDetourDirections = pickGeometryValue(doc, previousSnapshot, 'likelyDetourDirections', []);
   const roadMatchConfidence = hasOwn(doc, 'roadMatchConfidence')
     ? doc.roadMatchConfidence || null
     : (previousSnapshot?.roadMatchConfidence || null);
@@ -199,6 +202,7 @@ function makeSnapshot(doc, previousSnapshot = null) {
     canShowDetourPath,
     likelyDetourPolyline,
     likelyDetourRoadNames,
+    likelyDetourDirections,
     roadMatchConfidence,
     roadMatchRawConfidence,
     roadMatchSource,
@@ -297,6 +301,7 @@ function compactReviewSegment(segment = {}) {
     inferredDetourPolyline: compactPolyline(segment.inferredDetourPolyline),
     likelyDetourPolyline: compactPolyline(segment.likelyDetourPolyline),
     likelyDetourRoadNames: cloneJson(segment.likelyDetourRoadNames) || [],
+    likelyDetourDirections: cloneJson(segment.likelyDetourDirections) || [],
     canShowDetourPath: segment.canShowDetourPath ?? null,
     skippedStops: Array.isArray(segment.skippedStops) ? cloneJson(segment.skippedStops.slice(0, 200)) : [],
   };
@@ -348,6 +353,7 @@ function buildDetectedEvent(routeId, current, now) {
   if (current.inferredDetourPolyline) event.inferredDetourPolyline = cloneJson(current.inferredDetourPolyline);
   if (current.likelyDetourPolyline) event.likelyDetourPolyline = cloneJson(current.likelyDetourPolyline);
   if (current.likelyDetourRoadNames?.length) event.likelyDetourRoadNames = cloneJson(current.likelyDetourRoadNames);
+  if (current.likelyDetourDirections?.length) event.likelyDetourDirections = cloneJson(current.likelyDetourDirections);
   if (current.roadMatchConfidence) event.roadMatchConfidence = current.roadMatchConfidence;
   if (current.detourPathLabel) event.detourPathLabel = current.detourPathLabel;
   if (current.segmentCount > 0) event.segmentCount = current.segmentCount;
@@ -369,6 +375,9 @@ function buildUpdatedEvent(routeId, previous, current, now) {
   if ((previous.state || 'active') !== (current.state || 'active')) changedFields.push('state');
   if ((previous.confidence || null) !== (current.confidence || null)) changedFields.push('confidence');
   if ((previous.roadMatchConfidence || null) !== (current.roadMatchConfidence || null)) changedFields.push('roadMatchConfidence');
+  if (JSON.stringify(previous.likelyDetourDirections || []) !== JSON.stringify(current.likelyDetourDirections || [])) {
+    changedFields.push('likelyDetourDirections');
+  }
   if ((previous.evidencePointCount ?? null) !== (current.evidencePointCount ?? null)) changedFields.push('evidencePointCount');
   if ((previous.clearReason || null) !== (current.clearReason || null)) changedFields.push('clearReason');
   if ((previous.riderVisible !== false) !== (current.riderVisible !== false)) changedFields.push('riderVisible');
@@ -397,6 +406,7 @@ function buildUpdatedEvent(routeId, previous, current, now) {
     clearReason: current.clearReason || null,
     clearProof: cloneJson(current.clearProof) || null,
     changedFields,
+    likelyDetourDirections: cloneJson(current.likelyDetourDirections) || [],
     riderVisible: current.riderVisible !== false,
     riderVisibilityReason: current.riderVisibilityReason || null,
     alertVisible: current.alertVisible === true,
@@ -440,6 +450,7 @@ function buildClearedEvent(routeId, previous, now) {
   if (previous?.inferredDetourPolyline) event.inferredDetourPolyline = cloneJson(previous.inferredDetourPolyline);
   if (previous?.likelyDetourPolyline) event.likelyDetourPolyline = cloneJson(previous.likelyDetourPolyline);
   if (previous?.likelyDetourRoadNames?.length) event.likelyDetourRoadNames = cloneJson(previous.likelyDetourRoadNames);
+  if (previous?.likelyDetourDirections?.length) event.likelyDetourDirections = cloneJson(previous.likelyDetourDirections);
   if (previous?.roadMatchConfidence) event.roadMatchConfidence = previous.roadMatchConfidence;
   if (previous?.detourPathLabel) event.detourPathLabel = previous.detourPathLabel;
   if (previous?.segmentCount > 0) event.segmentCount = previous.segmentCount;

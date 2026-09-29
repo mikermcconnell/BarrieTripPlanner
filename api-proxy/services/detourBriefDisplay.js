@@ -35,6 +35,7 @@ function prepareBriefDisplayEvent(event) {
     skippedStops: [], skippedStopCodes: [], skippedStopIds: [],
     affectedStops: [], affectedStopCodes: [], affectedStopIds: [],
     likelyDetourRoadNames: [], closedSegmentRoadNames: [],
+    likelyDetourDirections: [],
     skippedSegmentRoadNames: [], closedRoadNames: [],
   };
   const segments = (event.segments?.length ? event.segments : [event]).map((segment) => {

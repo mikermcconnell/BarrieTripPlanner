@@ -32,6 +32,9 @@ function buildNoticeSnapshot(event) {
     eventLocationLabel: event.eventLocationLabel || null,
     closedSegmentRoadNames: insight.closedRoads,
     likelyDetourRoadNames: insight.likelyRoads,
+    likelyDetourDirections: event.likelyDetourDirections?.length
+      ? event.likelyDetourDirections
+      : (event.segments || []).flatMap((segment) => segment.likelyDetourDirections || []),
     sharedRouteIds: event.sharedRouteIds || [],
     briefDisplayPrepared: event.briefDisplayPrepared === true,
   };

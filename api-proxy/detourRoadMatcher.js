@@ -27,6 +27,7 @@ const ROAD_MATCH_FIELDS = [
   'entryConnectorPolyline',
   'exitConnectorPolyline',
   'likelyDetourRoadNames',
+  'likelyDetourDirections',
   'roadMatchConfidence',
   'roadMatchRawConfidence',
   'roadMatchSource',
@@ -595,6 +596,22 @@ function extractRoadNames(matching) {
   return dedupeRoadNames(names);
 }
 
+function extractRoadDirections(matching) {
+  const directions = [];
+  (matching?.legs || []).forEach((leg) => {
+    (leg?.steps || []).forEach((step) => {
+      const roadName = String(step?.name || '').trim();
+      if (!roadName) return;
+      const maneuverType = String(step?.maneuver?.type || '').trim();
+      const modifier = String(step?.maneuver?.modifier || '').trim();
+      const previous = directions[directions.length - 1];
+      if (previous?.roadName.toLowerCase() === roadName.toLowerCase() && maneuverType !== 'uturn') return;
+      directions.push({ roadName, maneuverType, modifier });
+    });
+  });
+  return directions;
+}
+
 function parseMatchedPolyline(matching) {
   const coordinates = matching?.geometry?.coordinates;
   if (!Array.isArray(coordinates)) return [];
@@ -714,6 +731,7 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
       entryConnectorPolyline: null,
       exitConnectorPolyline: null,
       likelyDetourRoadNames: extractRoadNames(matchable),
+      likelyDetourDirections: extractRoadDirections(matchable),
       roadMatchConfidence: confidenceLabel(matchable.confidence),
       roadMatchRawConfidence: Number.isFinite(Number(matchable.confidence))
         ? Number(matchable.confidence)
@@ -733,6 +751,7 @@ function buildRoadMatchedResult(matchable, source, options = {}) {
     entryConnectorPolyline: null,
     exitConnectorPolyline: null,
     likelyDetourRoadNames: extractRoadNames(matchable),
+    likelyDetourDirections: extractRoadDirections(matchable),
     roadMatchConfidence: confidenceLabel(matchable.confidence),
     roadMatchRawConfidence: Number.isFinite(Number(matchable.confidence))
       ? Number(matchable.confidence)
@@ -1075,7 +1094,12 @@ function addDisplayStopMetadata(match, segment) {
 }
 
 async function matchSegment(segment, options) {
-  const candidate = getMatchCandidate(segment);
+  const inferredCandidate = getMatchCandidate(segment);
+  const candidate = inferredCandidate.length >= 2
+    ? inferredCandidate
+    : segment?.canShowDetourPath === true && !segment?.likelyDetourDirections?.length
+      ? normalizePolyline(segment.likelyDetourPolyline)
+      : [];
   if (candidate.length < 2) {
     return { ...segment };
   }
@@ -1201,6 +1225,7 @@ async function matchDetourGeometry(geometry, options = {}) {
     next.entryConnectorPolyline = primaryMatch.entryConnectorPolyline || null;
     next.exitConnectorPolyline = primaryMatch.exitConnectorPolyline || null;
     next.likelyDetourRoadNames = primaryMatch.likelyDetourRoadNames || [];
+    next.likelyDetourDirections = primaryMatch.likelyDetourDirections || [];
     next.roadMatchConfidence = primaryMatch.roadMatchConfidence || null;
     next.roadMatchRawConfidence = primaryMatch.roadMatchRawConfidence ?? null;
     next.roadMatchSource = primaryMatch.roadMatchSource || ROAD_MATCH_SOURCE;
@@ -1225,6 +1250,7 @@ module.exports = {
   buildOsrmMatchUrl,
   buildOsrmRouteUrl,
   confidenceLabel,
+  extractRoadDirections,
   getRoadMatcherStats,
   isRoadMatchingEnabled,
   matchDetourGeometry,

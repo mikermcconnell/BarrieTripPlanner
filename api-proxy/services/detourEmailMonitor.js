@@ -275,6 +275,71 @@ function collectAffectedStops(event) {
   ]);
 }
 
+function classifyDetourStopImpacts(event = {}) {
+  const sources = [event, ...(Array.isArray(event.segments) ? event.segments : [])];
+  const entries = [];
+  for (const source of sources) {
+    for (const field of ['skippedStops', 'skippedStopCodes', 'skippedStopIds']) {
+      for (const stop of Array.isArray(source?.[field]) ? source[field] : []) {
+        entries.push({ stop, classification: 'not-served' });
+      }
+    }
+    for (const field of ['affectedStopCodes', 'affectedStopIds']) {
+      for (const stop of Array.isArray(source?.[field]) ? source[field] : []) {
+        entries.push({ stop, classification: 'impact-unconfirmed' });
+      }
+    }
+    for (const stop of Array.isArray(source?.affectedStops) ? source.affectedStops : []) {
+      const role = String(stop?.detourStopRole || '').toLowerCase();
+      const classification = role === 'skipped' ? 'not-served'
+        : role === 'served-by-detour' ? 'served-on-detour'
+          : role === 'served-by-gps' ? 'served-on-regular-route'
+            : role === 'boundary' ? 'detour-boundary'
+              : role === 'uncertain' ? 'service-uncertain'
+                : 'impact-unconfirmed';
+      entries.push({ stop, classification });
+    }
+  }
+
+  const aliases = new Map();
+  for (const { stop } of entries) {
+    if (!stop || typeof stop !== 'object') continue;
+    const code = stopCodeValue(stop);
+    if (!code) continue;
+    for (const id of [stop.id, stop.stopId, stop.stop_id]) {
+      if (id != null) aliases.set(String(id).replace(/^#/, '').trim(), code);
+    }
+  }
+
+  const priority = ['not-served', 'served-on-detour', 'served-on-regular-route', 'detour-boundary', 'service-uncertain', 'impact-unconfirmed'];
+  const impacts = new Map();
+  for (const { stop, classification } of entries) {
+    const rawCode = stopCodeValue(stop);
+    const code = aliases.get(rawCode) || rawCode;
+    const name = stopNameValue(stop);
+    if (!code && !name) continue;
+    const key = code ? `code:${code}` : `name:${name.toLowerCase()}`;
+    const current = impacts.get(key);
+    const next = {
+      code,
+      name,
+      classification,
+    };
+    if (!current) {
+      impacts.set(key, next);
+      continue;
+    }
+    impacts.set(key, {
+      code: current.code || code,
+      name: current.name || name,
+      classification: priority.indexOf(classification) < priority.indexOf(current.classification)
+        ? classification
+        : current.classification,
+    });
+  }
+  return [...impacts.values()];
+}
+
 function cleanLabel(value) {
   return String(value || '')
     .replace(/\s+/g, ' ')
@@ -1091,6 +1156,7 @@ async function runDetourEmailMonitor({
 
 module.exports = {
   buildDetourEmailInsights,
+  classifyDetourStopImpacts,
   collectLikelyRoadNames,
   classifyClearance,
   enrichEventStopNames,
