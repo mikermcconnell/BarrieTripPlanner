@@ -149,7 +149,7 @@ async function runDetourManagementBrief({
         if (!gtfsData && getGtfsData) {
           try { gtfsData = await getGtfsData(); } catch (error) { console.warn('[detourManagementBrief] GTFS enrichment unavailable:', error.message); }
         }
-        const map = await renderMap(events, { cartoKey: env.CARTO_BASEMAP_API_KEY, routeColors: gtfsData?.routeColors });
+        const map = await renderMap(events, { cartoKey: env.CARTO_BASEMAP_API_KEY, routeColors: gtfsData?.routeColors, gtfsData });
         message = buildBriefMessage(enrichEventStopNames(identity, gtfsData), map, gtfsData?.routeColors);
       } catch (error) {
         await recordWaitingMap(db, ref, error.message, now());

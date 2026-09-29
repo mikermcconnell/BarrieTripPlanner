@@ -167,6 +167,16 @@ function resolveStopFromGtfs(stop, gtfsData = {}) {
   return gtfsData.stopsByCode?.get(code) || gtfsData.stopsById?.get(code) || null;
 }
 
+function stopCoordinates(stop) {
+  const latitude = stop?.latitude ?? stop?.lat ?? stop?.stop_lat;
+  const longitude = stop?.longitude ?? stop?.lon ?? stop?.lng ?? stop?.stop_lon;
+  if (latitude == null || longitude == null || latitude === '' || longitude === '') return {};
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 85 && Math.abs(lon) <= 180
+    ? { latitude: lat, longitude: lon } : {};
+}
+
 function enrichStopWithName(stop, gtfsData = {}) {
   const code = stopCodeValue(stop);
   const explicitName = stopNameValue(stop);
@@ -176,6 +186,8 @@ function enrichStopWithName(stop, gtfsData = {}) {
   if (!code && !explicitName && !resolvedName) return stop;
   return {
     ...(typeof stop === 'object' && stop != null ? stop : {}),
+    ...stopCoordinates(resolved),
+    ...stopCoordinates(stop),
     stopCode: resolvedCode || code || '',
     name: explicitName || resolvedName || '',
   };
@@ -317,19 +329,24 @@ function classifyDetourStopImpacts(event = {}) {
     const rawCode = stopCodeValue(stop);
     const code = aliases.get(rawCode) || rawCode;
     const name = stopNameValue(stop);
-    if (!code && !name) continue;
-    const key = code ? `code:${code}` : `name:${name.toLowerCase()}`;
+    const coordinates = stopCoordinates(stop);
+    if (!code && !name && coordinates.latitude == null) continue;
+    const key = code ? `code:${code}` : name ? `name:${name.toLowerCase()}`
+      : `point:${coordinates.latitude}:${coordinates.longitude}`;
     const current = impacts.get(key);
     const next = {
       code,
       name,
       classification,
+      ...coordinates,
     };
     if (!current) {
       impacts.set(key, next);
       continue;
     }
     impacts.set(key, {
+      ...stopCoordinates(next),
+      ...stopCoordinates(current),
       code: current.code || code,
       name: current.name || name,
       classification: priority.indexOf(classification) < priority.indexOf(current.classification)

@@ -98,7 +98,7 @@ const STOP_CLASSIFICATIONS = [
   ['not-served', 'Not served (skipped by this route)'],
   ['served-on-detour', 'Served on the detour'],
   ['served-on-regular-route', 'Served on the regular route'],
-  ['detour-boundary', 'Detour boundary stops'],
+  ['detour-boundary', 'Served at detour boundaries'],
   ['service-uncertain', 'Service status uncertain'],
   ['impact-unconfirmed', 'Impact not confirmed'],
 ];
@@ -176,6 +176,9 @@ function buildBriefMessage(sourceEvent, map, routeColors, { preview = false, cle
       map?.geometry?.closures?.length ? legendItem('Out of service', true)
         : map?.geometry?.anchors?.length ? '<span style="display:inline-block;margin:4px 18px 4px 0">&#9675; Affected area</span>' : '',
       map?.geometry?.skippedStops?.length ? '<span style="display:inline-block;margin:4px 0">&#8856; Skipped stop</span>' : '',
+      map?.geometry?.uncertainStops?.length ? '<span style="display:inline-block;margin:4px 18px;color:#946000">? Stop service unconfirmed</span>' : '',
+      map?.geometry?.servedStops?.length ? '<span style="display:inline-block;margin:4px 18px;color:#087f5b">&#10003; Served / boundary stop</span>' : '',
+      map?.geometry?.unmappedSkippedStops?.length ? `<span style="display:inline-block;margin:4px 0">${map.geometry.unmappedSkippedStops.length} skipped stop location(s) unavailable</span>` : '',
     ].join('');
   const detailRow = (label, content) => `<tr><td class="detail-label" valign="top" width="104" style="width:104px;padding:12px 12px 12px 0;border-bottom:1px solid #e3e9ef;${FONT};font-size:15px;line-height:23px;font-weight:bold;color:#263347">${label}</td><td valign="top" style="padding:12px 0;border-bottom:1px solid #e3e9ef;${FONT};font-size:15px;line-height:23px;color:#263347;overflow-wrap:anywhere;word-break:break-word">${content}</td></tr>`;
   const directionSection = !isClearance

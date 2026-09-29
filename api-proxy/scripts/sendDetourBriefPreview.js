@@ -24,7 +24,7 @@ async function main() {
   }
   let gtfsData;
   try { gtfsData = await getStaticData(); } catch (error) { console.warn('Preview stop enrichment unavailable:', error.message); }
-  const map = await renderDetourBriefMap([event], { cartoKey: process.env.CARTO_BASEMAP_API_KEY, routeColors: gtfsData?.routeColors });
+  const map = await renderDetourBriefMap([event], { cartoKey: process.env.CARTO_BASEMAP_API_KEY, routeColors: gtfsData?.routeColors, gtfsData });
   const message = buildBriefMessage(enrichEventStopNames(event, gtfsData), map, gtfsData?.routeColors, { preview: true });
   const output = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'detour-brief-preview.jpg');
   fs.writeFileSync(output, map.buffer);

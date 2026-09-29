@@ -209,7 +209,7 @@ describe('detour management brief', () => {
       renderMap: async () => ({ buffer: Buffer.from('image'), pathPending: true, renderedAt: 1789990200000 }),
       now: () => 1789990300000 });
     expect(result.sent).toBe(2);
-    expect(sendEmail.mock.calls[0][0].message.subject).toContain('Routes 2, 8');
+    expect(sendEmail.mock.calls[0][0].message.subject).toBe('Confirmed Detour | 2, 8');
     expect(sendEmail).toHaveBeenCalledTimes(2);
   });
 
