@@ -25,6 +25,14 @@ MCP Apps `postMessage` bridge (falling back to `window.openai`) and does the fol
 If you change `widget/map.html` in a way that matters to hosts, bump the `map-vN` segment of `WIDGET_URI` in `widget.js`
 (hosts cache by URI).
 
+## Public website
+The same service serves the pages required for app directory review: `/` (product page), `/support`, `/privacy`,
+`/terms`, plus `/logo.svg`. Content lives in `site/pages.js` and static files in `site/public/`. **Keep the privacy
+policy in step with what the server does.** It currently states that tool inputs aren't stored and that IPs are held in
+memory for under a minute (rate limiting). If you add logging or analytics, update it.
+
+Submission copy, test cases, and assets are in `submission/` (see `submission/SUBMISSION.md`).
+
 ## Run locally
 ```bash
 cd api-proxy
@@ -45,7 +53,7 @@ URL: `https://transit-arrival-production.up.railway.app/mcp`.
 
 Service settings (already applied; listed here in case it needs recreating). They live on the Railway service
 itself, because Railway has deprecated `railway.json`:
-1. Source: this repo, branch `feature/transit-arrival` (switch it to `master` after merging). **Root Directory** `api-proxy`.
+1. Source: this repo, branch `master`, watch pattern `/api-proxy/**`. **Root Directory** `api-proxy`.
 2. **Start command** `npm run transit-arrival:start`. Without it Railway runs `npm start`, which is the main proxy, and
    that crashes for lack of its own env vars.
 3. **Healthcheck path** `/health`, restart on failure.
@@ -57,8 +65,9 @@ the widget, and a live query. A failed run emails the repo owner.
 Environment variables:
 | Variable | Required | Purpose |
 |---|---|---|
-| `CARTO_BASEMAP_API_KEY` (or `EXPO_PUBLIC_CARTO_BASEMAP_KEY`) | **yes** | Map tiles. Without it tiles show "API KEY REQUIRED". Use the same key as the app. |
+| `CARTO_BASEMAP_API_KEY` (or `EXPO_PUBLIC_CARTO_BASEMAP_KEY`) | **yes** | Map tiles. Without it tiles show "API KEY REQUIRED". Use a key registered for this app: CARTO's terms forbid sharing a key across projects. |
 | `TRANSIT_ARRIVAL_RATE_LIMIT_PER_MIN` | no | Abuse ceiling for `/mcp` (default 1500/min/IP; ChatGPT shares egress IPs). |
+| `TRANSIT_ARRIVAL_OPERATOR_NAME`, `TRANSIT_ARRIVAL_SUPPORT_EMAIL` | **yes** | Operator name and contact shown on the website, privacy policy, and terms. The server warns at startup if they're unset. |
 | `TRANSIT_ARRIVAL_DEV_HOST` | no | `true` serves the `/dev` preview host. Leave unset in production. |
 
 `PORT` is provided by Railway. Transit feeds are public.

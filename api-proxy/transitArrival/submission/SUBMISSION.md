@@ -1,0 +1,95 @@
+# Transit Arrival: ChatGPT app directory submission
+
+Copy each field into the submission form at platform.openai.com. Character limits are from OpenAI's submission docs.
+
+## Identity and URLs
+
+| Field | Value |
+|---|---|
+| App name (identifier, ≤64, lowercase-hyphen) | `transit-arrival` |
+| Display name (≤30) | `Transit Arrival` |
+| Subtitle (≤30) | `Live bus times and map` |
+| Developer name (≤80) | *Your verified name or business name* |
+| Category | Travel (or Navigation / Lifestyle if Travel isn't offered) |
+| Version | `0.1.0` |
+| MCP server URL | `https://transit-arrival-production.up.railway.app/mcp` |
+| Authentication | None |
+| Product website | `https://transit-arrival-production.up.railway.app/` |
+| Support | `https://transit-arrival-production.up.railway.app/support` |
+| Privacy policy | `https://transit-arrival-production.up.railway.app/privacy` |
+| Terms of service | `https://transit-arrival-production.up.railway.app/terms` |
+| Countries | `CA` (add `US` if you want US users to see it) |
+
+## Assets (in this folder)
+
+| Asset | File |
+|---|---|
+| Logo / primary icon | `logo-1024.png` (also `logo-512.png`; source `../site/public/logo.svg`) |
+| Composer icon | `icon-composer-512.png` (transparent; source `../site/public/icon-composer.svg`) |
+| Screenshots | `screenshot-stop.png`, `screenshot-route.png`, `screenshot-choose-stop-dark.png` |
+
+## Long description (≤4000)
+
+> Transit Arrival answers "where's my bus?" with a live map, right in the conversation.
+>
+> Ask about a stop or a route, such as "When's the next bus at Georgian Mall?" or "Where is the route 8 bus?", and Transit Arrival shows:
+> - **A live map** with each bus heading your way, its route line, and your stop.
+> - **Arrival times in minutes**, from real-time predictions when the bus is being tracked and from the published timetable when it isn't. Every time is labelled as live or scheduled, so you know which is which.
+> - **Where each bus is now**, including its next stop.
+>
+> Use whatever you know: a stop name, an intersection, a landmark, or the stop number on the sign. If a name matches several stops, tap the right one on the map. The map keeps refreshing while it's on screen. When no bus is due soon, Transit Arrival tells you when the next one is scheduled.
+>
+> Transit Arrival currently covers buses in Barrie, Ontario, Canada. No account or sign-in is needed, and it never asks for your location.
+>
+> Transit Arrival is an independent app and isn't affiliated with the City of Barrie or Barrie Transit. Arrival times are estimates based on public transit data.
+
+## Positive test cases (≥5)
+
+All tests can run at any time of day. Outside service hours, the expected result is the "next scheduled trip" message instead of live buses.
+
+| # | Scenario | User prompt | Expected tool(s) | Observable expected result |
+|---|---|---|---|---|
+| 1 | Next arrivals at a named stop | "When's the next bus at Georgian Mall?" | `get_transit_status` (`stop: "Georgian Mall"`) | Map with the Georgian Mall stops marked, route lines, and bus markers. List of up to 5 arrivals with route, destination, and minutes, each labelled live or scheduled. |
+| 2 | Where is a route's bus | "Where is the route 8 bus right now?" | `get_transit_status` (`route: "8"`) | Map showing every 8A and 8B bus with its route line. Each row shows the bus's next stop and minutes to it. |
+| 3 | Route plus direction | "Is there a route 8 bus going to Park Place soon?" | `get_transit_status` (`route: "8"`, `direction: "Park Place"`) | Only buses whose destination includes Park Place are shown. |
+| 4 | Stop by number | "Next buses at stop 1" | `get_transit_status` (`stop: "1"`) | Arrivals for Downtown Hub (stop 1). The stop is centred on the map. |
+| 5 | Ambiguous stop name | "Next bus on Bayfield" | `get_transit_status` (`stop: "Bayfield"`) | The app lists several Bayfield stops and shows them on the map, and ChatGPT asks which one. Tapping a stop on the map loads its arrivals. |
+| 6 | Route list | "What bus routes are there in Barrie?" | `list_routes` | Text list of all routes with their destinations. |
+| 7 | Find a stop | "What stop numbers are at the Downtown Hub?" | `find_stops` (`query: "Downtown Hub"`) | Stops 1 and 2 with the routes serving each. |
+
+## Negative test cases (≥3)
+
+| # | Scenario | User prompt | Expected behaviour |
+|---|---|---|---|
+| 1 | Unsupported city | "When's the next TTC streetcar at Queen and Spadina?" | Transit Arrival is not used, or it says the stop isn't found. It doesn't invent Toronto times. ChatGPT explains the app covers Barrie only. |
+| 2 | Not a transit question | "What's the weather in Barrie today?" | Transit Arrival is not called. |
+| 3 | Purchase or account action | "Buy me a Barrie Transit bus pass." | Transit Arrival is not called. It has no purchase or account tools. |
+| 4 | Non-existent route | "Where is Barrie route 99?" | `get_transit_status` returns "No route matches", and ChatGPT says there's no route 99 rather than making one up. |
+
+## Content security policy (justification)
+
+The widget loads no scripts, styles, or fonts from other domains; everything is bundled into the widget HTML. Its only
+external requests are map image tiles from `https://a.basemaps.cartocdn.com`, `https://b.basemaps.cartocdn.com`, and
+`https://c.basemaps.cartocdn.com` (CARTO basemaps, declared in `resourceDomains`), which draw the street map behind the
+buses. No `connectDomains` or `frameDomains` are used.
+
+## Tool annotations
+
+All three tools are read-only lookups of public transit data:
+`readOnlyHint: true`, `destructiveHint: false`, `openWorldHint: true`, `idempotentHint: true`.
+
+## Release notes (0.1.0)
+
+First release: live bus map and arrival minutes for Barrie, Ontario; timetable fallback; stop search by name or number;
+route list.
+
+## Demo video checklist
+
+Record in ChatGPT with developer mode and the connector added, 60–90 seconds:
+1. "When's the next bus at Georgian Mall?" Show the map and the minutes. Let it auto-refresh once (20 s).
+2. Tap an arrival row to highlight its bus on the map.
+3. "Where is the route 8 bus?" Show the route view.
+4. "Next bus on Bayfield." Tap a stop on the map to choose it.
+5. Expand to fullscreen and back.
+
+Upload it unlisted (for example on YouTube or Google Drive with link access) and paste the URL.

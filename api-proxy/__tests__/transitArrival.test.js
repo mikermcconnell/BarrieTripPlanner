@@ -297,3 +297,23 @@ describe('map widget', () => {
     await client.close();
   });
 });
+describe('public website', () => {
+  const request = require('supertest');
+  const { createTransitArrivalApp } = require('../transitArrival/server');
+  const { app } = createTransitArrivalApp({ transitData: createFixture(), widgetHtml: '<html></html>' });
+
+  it.each(['/', '/support', '/privacy', '/terms'])('serves %s with the not-affiliated notice', async (route) => {
+    const res = await request(app).get(route);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('not affiliated with');
+  });
+
+  it('serves the logo but not the page source', async () => {
+    expect((await request(app).get('/logo.svg')).status).toBe(200);
+    expect((await request(app).get('/pages.js')).status).toBe(404);
+  });
+
+  it('keeps the dev preview host off by default', async () => {
+    expect((await request(app).get('/dev')).status).toBe(404);
+  });
+});

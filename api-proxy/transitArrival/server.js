@@ -7,6 +7,7 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const { createMcpServer } = require('./mcpServer');
 const { createTransitData } = require('./transitData');
 const { buildWidgetHtml } = require('./widget');
+const { pages } = require('./site/pages');
 const { APP_NAME, APP_VERSION } = require('./config');
 
 function createTransitArrivalApp({ transitData = createTransitData(), widgetHtml = buildWidgetHtml() } = {}) {
@@ -38,6 +39,12 @@ function createTransitArrivalApp({ transitData = createTransitData(), widgetHtml
   }
 
   app.get('/health', (req, res) => res.json({ ok: true, app: APP_NAME, version: APP_VERSION }));
+
+  // Public website: product page, support, privacy policy, terms, logo.
+  for (const [route, render] of Object.entries(pages)) {
+    app.get(route, (req, res) => res.type('html').send(render()));
+  }
+  app.use(express.static(path.join(__dirname, 'site', 'public'), { index: false, maxAge: '1h' }));
 
   // Stateless Streamable HTTP: a fresh server + transport per request.
   app.post('/mcp', async (req, res) => {
@@ -74,6 +81,9 @@ if (require.main === module) {
   const { app, transitData } = createTransitArrivalApp();
   app.listen(port, () => {
     console.log(`[transitArrival] ${APP_NAME} MCP server listening on :${port}/mcp`);
+    if (!process.env.TRANSIT_ARRIVAL_OPERATOR_NAME || !process.env.TRANSIT_ARRIVAL_SUPPORT_EMAIL) {
+      console.warn('[transitArrival] TRANSIT_ARRIVAL_OPERATOR_NAME / TRANSIT_ARRIVAL_SUPPORT_EMAIL unset; public pages show placeholders.');
+    }
     // Warm the GTFS cache so the first rider request isn't slow.
     transitData.listRoutes().catch((err) => console.error('[transitArrival] GTFS warm-up failed:', err.message));
   });
