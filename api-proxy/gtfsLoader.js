@@ -15,6 +15,8 @@ let cache = {
   stopsByCode: null,
   routeStopSequencesMapping: null,
   routeColors: null,
+  routesById: null,
+  stopTimesByStop: null,
   lastRefresh: null,
 };
 let refreshPromise = null;
@@ -203,6 +205,20 @@ function buildTripTerminalStopMapping(stopTimesRaw = []) {
   return terminalStopsByTrip;
 }
 
+// stopId -> [{ tripId, seconds }] sorted by scheduled time, for timetable lookups.
+function buildStopTimesByStop(stopTimesRaw = []) {
+  const byStop = new Map();
+  for (const row of stopTimesRaw) {
+    const stopId = String(row.stop_id || '').trim();
+    const seconds = parseGtfsTimeToSeconds(row.arrival_time || row.departure_time);
+    if (!stopId || !row.trip_id || !Number.isFinite(seconds)) continue;
+    if (!byStop.has(stopId)) byStop.set(stopId, []);
+    byStop.get(stopId).push({ tripId: row.trip_id, seconds });
+  }
+  for (const list of byStop.values()) list.sort((a, b) => a.seconds - b.seconds);
+  return byStop;
+}
+
 function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   const shapesRaw = parseCSV(shapesCSV);
   const tripsRaw = parseCSV(tripsCSV);
@@ -252,10 +268,19 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
   });
   const routeStopSequencesMapping = buildRouteStopSequencesMapping(tripsRaw, stopTimesRaw);
   const routeColors = new Map();
+  const routesById = new Map();
   for (const route of routesRaw) {
     const color = String(route.route_color || '').trim();
     if (route.route_id && /^[0-9a-fA-F]{6}$/.test(color)) {
       routeColors.set(route.route_id, `#${color.toUpperCase()}`);
+    }
+    if (route.route_id) {
+      routesById.set(route.route_id, {
+        id: route.route_id,
+        shortName: String(route.route_short_name || route.route_id).trim(),
+        longName: String(route.route_long_name || '').trim(),
+        description: String(route.route_desc || '').trim(),
+      });
     }
   }
 
@@ -286,6 +311,8 @@ function buildDataStructures(shapesCSV, tripsCSV, extra = {}) {
     stopsByCode,
     routeStopSequencesMapping,
     routeColors,
+    routesById,
+    stopTimesByStop: buildStopTimesByStop(stopTimesRaw),
   };
 }
 
@@ -347,6 +374,8 @@ async function getStaticData() {
     stopsByCode: cache.stopsByCode,
     routeStopSequencesMapping: cache.routeStopSequencesMapping,
     routeColors: cache.routeColors,
+    routesById: cache.routesById,
+    stopTimesByStop: cache.stopTimesByStop,
     lastRefresh: cache.lastRefresh,
   };
 }

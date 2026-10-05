@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Transit Arrival – local widget host</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 0; background: #f4f4f5; color: #111; }
+  body.dark { background: #111; color: #eee; }
+  form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; }
+  input { padding: 6px 8px; width: 140px; }
+  .chat { max-width: 720px; margin: 0 auto 40px; padding: 0 12px; }
+  .chat.narrow { max-width: 400px; }
+  .bubble { background: #fff; border-radius: 14px; padding: 10px 14px; margin: 8px 0; white-space: pre-wrap; font-size: 13px; }
+  body.dark .bubble { background: #262626; }
+  iframe { width: 100%; border: 1px solid #d4d4d8; border-radius: 14px; background: #fff; display: block; }
+  #log { font: 11px ui-monospace, monospace; color: #71717a; padding: 0 12px; max-height: 120px; overflow: auto; }
+</style>
+</head>
+<body>
+<form id="form">
+  <label>route <input name="route" placeholder="8"></label>
+  <label>stop <input name="stop" placeholder="Georgian Mall"></label>
+  <label>direction <input name="direction" placeholder="Park Place"></label>
+  <button>Ask</button>
+  <label><input type="checkbox" id="dark" style="width:auto"> dark</label>
+  <label><input type="checkbox" id="narrow" style="width:auto"> phone width</label>
+</form>
+<div class="chat" id="chat">
+  <div class="bubble" id="text">Enter a stop or route and press Ask.</div>
+  <iframe id="frame" sandbox="allow-scripts" height="520"></iframe>
+</div>
+<div id="log"></div>
+<script>
+  const WIDGET_URI = 'ui://transit-arrival/map-v2.html';
+  const frame = document.getElementById('frame');
+  const log = (m) => { const el = document.getElementById('log'); el.textContent = new Date().toLocaleTimeString() + ' ' + m + '\n' + el.textContent; };
+  let rpcId = 1;
+  let pendingResult = null;
+  let pendingInput = null;
+  let displayMode = 'inline';
+
+  // Minimal MCP client over stateless Streamable HTTP (handles JSON or SSE replies).
+  async function mcp(method, params) {
+    const res = await fetch('/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: rpcId++, method, params }),
+    });
+    const body = await res.text();
+    const json = body.trim().startsWith('{')
+      ? JSON.parse(body)
+      : JSON.parse(body.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5)).join(''));
+    if (json.error) throw new Error(json.error.message);
+    return json.result;
+  }
+
+  const hostContext = () => ({
+    theme: document.getElementById('dark').checked ? 'dark' : 'light',
+    displayMode,
+    availableDisplayModes: ['inline', 'fullscreen'],
+    locale: 'en-CA',
+    timeZone: 'America/Toronto',
+  });
+  const toFrame = (msg) => frame.contentWindow.postMessage(msg, '*');
+
+  window.addEventListener('message', async (event) => {
+    if (event.source !== frame.contentWindow) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== '2.0') return;
+    log('widget → ' + msg.method);
+    if (msg.method === 'ui/initialize') {
+      toFrame({ jsonrpc: '2.0', id: msg.id, result: {
+        protocolVersion: '2026-01-26', hostInfo: { name: 'dev-host', version: '0' }, hostCapabilities: {}, hostContext: hostContext(),
+      } });
+    } else if (msg.method === 'ui/notifications/initialized') {
+      if (pendingInput) toFrame({ jsonrpc: '2.0', method: 'ui/notifications/tool-input', params: { arguments: pendingInput } });
+      if (pendingResult) toFrame({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: pendingResult });
+    } else if (msg.method === 'tools/call') {
+      try {
+        toFrame({ jsonrpc: '2.0', id: msg.id, result: await mcp('tools/call', msg.params) });
+      } catch (err) {
+        toFrame({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: err.message } });
+      }
+    } else if (msg.method === 'ui/request-display-mode') {
+      displayMode = msg.params.mode;
+      frame.style.height = displayMode === 'fullscreen' ? '90vh' : '';
+      toFrame({ jsonrpc: '2.0', id: msg.id, result: { mode: displayMode } });
+    } else if (msg.method === 'ui/notifications/size-changed') {
+      if (displayMode === 'inline') frame.height = msg.params.height;
+    } else if (msg.id != null) {
+      toFrame({ jsonrpc: '2.0', id: msg.id, result: {} });
+    }
+  });
+
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const args = {};
+    for (const [k, v] of new FormData(e.target)) if (v.trim()) args[k] = v.trim();
+    pendingInput = args;
+    const [result, resource] = await Promise.all([
+      mcp('tools/call', { name: 'get_transit_status', arguments: args }),
+      mcp('resources/read', { uri: WIDGET_URI }),
+    ]);
+    pendingResult = result;
+    document.getElementById('text').textContent = result.content[0].text;
+    frame.srcdoc = resource.contents[0].text;
+    log('model text ' + result.content[0].text.length + ' chars; structuredContent ' +
+      JSON.stringify(result.structuredContent).length + ' bytes; _meta ' + JSON.stringify(result._meta || {}).length + ' bytes');
+  });
+  document.getElementById('dark').addEventListener('change', () => {
+    document.body.classList.toggle('dark');
+    toFrame({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: hostContext() });
+  });
+  document.getElementById('narrow').addEventListener('change', (e) => {
+    document.getElementById('chat').classList.toggle('narrow', e.target.checked);
+  });
+  const params = new URLSearchParams(location.search);
+  for (const key of ['route', 'stop', 'direction']) if (params.get(key)) document.querySelector('[name=' + key + ']').value = params.get(key);
+  if (params.get('dark') === '1') { document.getElementById('dark').checked = true; document.body.classList.add('dark'); }
+  if (params.get('narrow') === '1') { document.getElementById('narrow').checked = true; document.getElementById('chat').classList.add('narrow'); }
+  if (params.has('route') || params.has('stop')) document.getElementById('form').requestSubmit();
+</script>
+</body>
+</html>

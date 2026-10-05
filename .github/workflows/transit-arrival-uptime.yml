@@ -1,0 +1,58 @@
+name: Transit Arrival uptime
+
+# Checks the public ChatGPT app endpoint. A failed scheduled run emails the
+# repo owner, which is the alert.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: https://transit-arrival-production.up.railway.app
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Health, tools, widget, and a live query
+        run: |
+          node --input-type=module <<'JS'
+          const base = process.env.BASE_URL;
+          const health = await fetch(`${base}/health`);
+          if (!health.ok) throw new Error(`/health returned ${health.status}`);
+
+          let id = 1;
+          async function mcp(method, params) {
+            const res = await fetch(`${base}/mcp`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: id++, method, params }),
+            });
+            const body = await res.text();
+            if (!res.ok) throw new Error(`${method} returned ${res.status}: ${body.slice(0, 200)}`);
+            const json = body.trim().startsWith('{')
+              ? JSON.parse(body)
+              : JSON.parse(body.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5)).join(''));
+            if (json.error) throw new Error(`${method} error: ${json.error.message}`);
+            return json.result;
+          }
+
+          const { tools } = await mcp('tools/list', {});
+          const status = tools.find((t) => t.name === 'get_transit_status');
+          if (!status) throw new Error('get_transit_status missing');
+          const uri = status._meta?.ui?.resourceUri;
+          const widget = await mcp('resources/read', { uri });
+          if (!widget.contents?.[0]?.text?.includes('L.map(')) throw new Error(`widget ${uri} did not load`);
+
+          const result = await mcp('tools/call', { name: 'get_transit_status', arguments: { stop: 'Downtown Hub' } });
+          if (result.isError || !result.structuredContent?.stop) {
+            throw new Error(`live query failed: ${JSON.stringify(result).slice(0, 300)}`);
+          }
+          console.log(result.content[0].text);
+          JS

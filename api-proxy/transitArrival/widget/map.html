@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>/*__LEAFLET_CSS__*/</style>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #111827; --muted: #6b7280; --line: #e5e7eb; --card: #f9fafb;
+    --accent: #16a34a; --warn-bg: #fef3c7; --warn-fg: #92400e;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  body.dark {
+    --bg: #1f1f1f; --fg: #f3f4f6; --muted: #9ca3af; --line: #374151; --card: #262626;
+    --warn-bg: #422006; --warn-fg: #fcd34d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  #app { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
+  header .text { flex: 1; min-width: 0; }
+  .title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { font-size: 12px; color: var(--muted); }
+  .icon-btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px;
+    height: 30px; padding: 0 10px; font-size: 12px; cursor: pointer;
+  }
+  #map { height: 300px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--card); }
+  body.fullscreen #map { height: 60vh; }
+  ul { list-style: none; margin: 0; padding: 4px 0; }
+  li.row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+  li.row + li.row { border-top: 1px solid var(--line); }
+  li.row:hover, li.row.active { background: var(--card); }
+  .badge {
+    min-width: 40px; height: 26px; padding: 0 6px; border-radius: 6px; font-weight: 700; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .row .main { flex: 1; min-width: 0; }
+  .row .head { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .detail { font-size: 12px; color: var(--muted); }
+  .eta { text-align: right; min-width: 52px; }
+  .eta .num { font-size: 22px; font-weight: 700; line-height: 1; }
+  .eta .unit { font-size: 11px; color: var(--muted); }
+  .eta .num.due { font-size: 16px; color: var(--accent); }
+  .eta.sched .num { color: var(--muted); font-weight: 600; }
+  .eta.sched .num.due { color: var(--muted); }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+         padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); margin-right: 4px; }
+  .live { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px;
+          animation: pulse 2s infinite; vertical-align: middle; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .note { margin: 6px 12px; padding: 8px 10px; border-radius: 8px; font-size: 12px; background: var(--warn-bg); color: var(--warn-fg); }
+  .empty { padding: 14px 12px; font-size: 13px; color: var(--muted); }
+  footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 10px; font-size: 11px; color: var(--muted); }
+  .bus-icon { background: transparent; border: 0; }
+  .bus {
+    transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center;
+    min-width: 30px; height: 22px; padding: 0 5px; border-radius: 11px; font: 700 11px/1 system-ui, sans-serif;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); white-space: nowrap;
+  }
+  .bus.focus { outline: 3px solid var(--accent); }
+  .leaflet-container { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="text">
+      <div class="title" id="title">Transit Arrival</div>
+      <div class="sub" id="subtitle">Loading live data…</div>
+    </div>
+    <button class="icon-btn" id="expand" hidden>Expand</button>
+  </header>
+  <div id="map"></div>
+  <div id="notes"></div>
+  <ul id="list"></ul>
+  <footer>
+    <span><span class="live" id="liveDot"></span><span id="updated">Live</span></span>
+    <button class="icon-btn" id="refresh">Refresh</button>
+  </footer>
+</div>
+<script>/*__LEAFLET_JS__*/</script>
+<script>
+(function () {
+  'use strict';
+  const CONFIG = /*__CONFIG__*/;
+  const TOOL = 'get_transit_status';
+  const DEFAULT_COLOR = '#2563eb';
+
+  const state = { args: null, data: null, mapData: null, receivedAt: 0, focusId: null, fitKey: null, mode: 'none', hostContext: {} };
+
+  // ---------- host bridge: MCP Apps (postMessage JSON-RPC), ChatGPT window.openai fallback ----------
+  const bridge = (function () {
+    let nextId = 1;
+    const pending = new Map();
+    const handlers = {};
+    const send = (msg) => window.parent.postMessage(msg, '*');
+    window.addEventListener('message', (event) => {
+      if (event.source !== window.parent) return;
+      const msg = event.data;
+      if (!msg || msg.jsonrpc !== '2.0') return;
+      if (msg.id != null && !msg.method) {
+        const entry = pending.get(msg.id);
+        if (!entry) return;
+        pending.delete(msg.id);
+        if (msg.error) entry.reject(new Error(msg.error.message || 'Host error'));
+        else entry.resolve(msg.result);
+        return;
+      }
+      if (msg.id != null && (msg.method === 'ui/resource-teardown' || msg.method === 'ping')) {
+        send({ jsonrpc: '2.0', id: msg.id, result: {} });
+        return;
+      }
+      if (handlers[msg.method]) handlers[msg.method](msg.params || {});
+    });
+    return {
+      request(method, params, timeoutMs) {
+        const id = nextId++;
+        send({ jsonrpc: '2.0', id, method, params });
+        return new Promise((resolve, reject) => {
+          pending.set(id, { resolve, reject });
+          setTimeout(() => { if (pending.delete(id)) reject(new Error(method + ' timed out')); }, timeoutMs || 20000);
+        });
+      },
+      notify(method, params) { send({ jsonrpc: '2.0', method, params: params || {} }); },
+      on(method, fn) { handlers[method] = fn; },
+    };
+  })();
+
+  async function callTool(args) {
+    if (state.mode === 'mcp') return bridge.request('tools/call', { name: TOOL, arguments: args });
+    if (state.mode === 'openai' && window.openai && window.openai.callTool) return window.openai.callTool(TOOL, args);
+    throw new Error('No host connection');
+  }
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  function textColorFor(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return '#ffffff';
+    const n = parseInt(m[1], 16);
+    const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.6 ? '#111111' : '#ffffff';
+  }
+  function routeColor(routeId) {
+    const routes = (state.data && state.data.routes) || [];
+    const route = routes.find((r) => r.routeId === routeId);
+    const shape = ((state.mapData && state.mapData.shapes) || []).find((s) => s.routeId === routeId);
+    return (route && route.color) || (shape && shape.color) || DEFAULT_COLOR;
+  }
+  function badge(routeId) {
+    const bg = routeColor(routeId);
+    return '<span class="badge" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(routeId) + '</span>';
+  }
+  function minutesUntil(epochSeconds) {
+    return Math.max(0, Math.round((epochSeconds * 1000 - Date.now()) / 60000));
+  }
+  function etaHtml(minutes, scheduled) {
+    const cls = scheduled ? 'eta sched' : 'eta';
+    if (minutes <= 0) return '<div class="' + cls + '"><div class="num due">Due</div></div>';
+    return '<div class="' + cls + '"><div class="num">' + minutes + '</div><div class="unit">min</div></div>';
+  }
+
+  // ---------- map ----------
+  const map = L.map('map', { zoomControl: true, attributionControl: true }).setView(CONFIG.center, 13);
+  let tiles = null;
+  function setTiles(dark) {
+    if (tiles) map.removeLayer(tiles);
+    tiles = L.tileLayer(dark ? CONFIG.tiles.dark : CONFIG.tiles.light, {
+      subdomains: 'abc', maxZoom: 19, attribution: CONFIG.tiles.attribution,
+    }).addTo(map);
+  }
+  setTiles(false);
+  const shapeLayer = L.layerGroup().addTo(map);
+  const stopLayer = L.layerGroup().addTo(map);
+  const vehicleMarkers = new Map();
+
+  function busIcon(vehicle) {
+    const bg = routeColor(vehicle.routeId);
+    const focus = vehicle.vehicleId === state.focusId ? ' focus' : '';
+    return L.divIcon({
+      className: 'bus-icon',
+      iconSize: [0, 0],
+      html: '<div class="bus' + focus + '" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(vehicle.routeId) + '</div>',
+    });
+  }
+
+  function drawMap() {
+    const data = state.data || {};
+    shapeLayer.clearLayers();
+    stopLayer.clearLayers();
+    const bounds = [];
+
+    for (const shape of (state.mapData && state.mapData.shapes) || []) {
+      if (!shape.points || shape.points.length < 2) continue;
+      L.polyline(shape.points, { color: '#ffffff', weight: 7, opacity: 0.9, interactive: false }).addTo(shapeLayer);
+      L.polyline(shape.points, { color: shape.color || DEFAULT_COLOR, weight: 4, opacity: 0.85, interactive: false }).addTo(shapeLayer);
+    }
+
+    const stopLocations = data.stop ? (data.stop.locations || [data.stop]) : [];
+    for (const loc of stopLocations) {
+      L.circleMarker([loc.latitude, loc.longitude], {
+        radius: 9, color: '#111827', weight: 3, fillColor: '#ffffff', fillOpacity: 1,
+      }).bindTooltip(esc(data.stop.name) + ' · stop ' + esc(loc.stopCode)).addTo(stopLayer);
+      bounds.push([loc.latitude, loc.longitude]);
+    }
+
+    for (const candidate of data.stopCandidates || []) {
+      L.circleMarker([candidate.latitude, candidate.longitude], {
+        radius: 8, color: '#111827', weight: 2, fillColor: '#fbbf24', fillOpacity: 1,
+      }).bindTooltip(esc(candidate.name) + ' · stop ' + esc(candidate.stopCode))
+        .on('click', () => selectStop(candidate.stopCode))
+        .addTo(stopLayer);
+      bounds.push([candidate.latitude, candidate.longitude]);
+    }
+
+    const vehicles = data.vehicles || [];
+    const seen = new Set();
+    for (const vehicle of vehicles) {
+      seen.add(vehicle.vehicleId);
+      const latLng = [vehicle.latitude, vehicle.longitude];
+      bounds.push(latLng);
+      let marker = vehicleMarkers.get(vehicle.vehicleId);
+      if (marker) {
+        marker.setLatLng(latLng);
+        marker.setIcon(busIcon(vehicle));
+      } else {
+        marker = L.marker(latLng, { icon: busIcon(vehicle), keyboard: false }).addTo(map);
+        marker.on('click', () => focusVehicle(vehicle.vehicleId));
+        vehicleMarkers.set(vehicle.vehicleId, marker);
+      }
+      const next = vehicle.nextStop ? '<br>Next: ' + esc(vehicle.nextStop.name) : '';
+      marker.bindTooltip('<b>' + esc(vehicle.routeId) + '</b> ' + esc(vehicle.headsign || '') + next);
+    }
+    for (const [id, marker] of vehicleMarkers) {
+      if (!seen.has(id)) { map.removeLayer(marker); vehicleMarkers.delete(id); }
+    }
+
+    // Only re-frame when the question changes, so refreshes don't fight the user's panning.
+    const fitKey = JSON.stringify(state.args || {});
+    if (fitKey !== state.fitKey) {
+      state.fitKey = fitKey;
+      if (bounds.length === 0) {
+        for (const shape of (state.mapData && state.mapData.shapes) || []) bounds.push(...shape.points);
+      }
+      if (bounds.length === 1) map.setView(bounds[0], 15);
+      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16 });
+    }
+  }
+
+  function focusVehicle(vehicleId) {
+    state.focusId = state.focusId === vehicleId ? null : vehicleId;
+    const marker = vehicleMarkers.get(vehicleId);
+    if (marker && state.focusId) map.panTo(marker.getLatLng());
+    drawMap();
+    renderList();
+  }
+
+  // ---------- list ----------
+  function renderList() {
+    const data = state.data || {};
+    const list = $('list');
+    let html = '';
+    if (data.stop) {
+      for (const a of data.arrivals || []) {
+        const vid = a.vehicle && a.vehicle.vehicleId;
+        const late = a.delayMinutes > 0 ? ' · ' + a.delayMinutes + ' min late' : (a.delayMinutes < 0 ? ' · ' + (-a.delayMinutes) + ' min early' : '');
+        const where = a.vehicle && a.vehicle.nextStop ? ' · near ' + esc(a.vehicle.nextStop.name) : '';
+        html += '<li class="row' + (vid && vid === state.focusId ? ' active' : '') + '" data-vehicle="' + esc(vid || '') + '">' +
+          badge(a.routeId) +
+          '<div class="main"><div class="head">' + esc(a.headsign || 'Route ' + a.routeId) + '</div>' +
+          '<div class="detail">' + (a.realtime ? '' : '<span class="tag">Scheduled</span>') +
+          'Stop ' + esc(a.stopCode) + ' · ' + esc(a.arrivalTime) + esc(late) + where + '</div></div>' +
+          etaHtml(minutesUntil(a.arrivalEpoch), !a.realtime) + '</li>';
+      }
+    } else if (data.stopCandidates && data.stopCandidates.length) {
+      html += '<li class="empty">Which stop? Tap one on the map or below.</li>';
+      for (const s of data.stopCandidates) {
+        html += '<li class="row" data-stop="' + esc(s.stopCode) + '"><span class="badge" style="background:#fbbf24;color:#111">' +
+          esc(s.stopCode) + '</span><div class="main"><div class="head">' + esc(s.name) + '</div>' +
+          '<div class="detail">Routes ' + esc((s.routes || []).join(', ')) + '</div></div></li>';
+      }
+    } else {
+      for (const v of data.vehicles || []) {
+        let where = 'Location updated ' + v.lastUpdateSecondsAgo + 's ago';
+        if (v.nextStop) {
+          const mins = minutesUntil(v.nextStop.epoch);
+          where = mins <= 0 ? 'Arriving at ' + esc(v.nextStop.name) : 'Next stop ' + esc(v.nextStop.name) + ' in ' + mins + ' min';
+        }
+        html += '<li class="row' + (v.vehicleId === state.focusId ? ' active' : '') + '" data-vehicle="' + esc(v.vehicleId) + '">' +
+          badge(v.routeId) +
+          '<div class="main"><div class="head">' + esc(v.headsign || 'Route ' + v.routeId) + '</div>' +
+          '<div class="detail">' + where + '</div></div></li>';
+      }
+    }
+    if (!html && state.data) html = '<li class="empty">Nothing to show right now.</li>';
+    list.innerHTML = html;
+    list.querySelectorAll('li[data-vehicle]').forEach((li) => {
+      if (li.dataset.vehicle) li.addEventListener('click', () => focusVehicle(li.dataset.vehicle));
+    });
+    list.querySelectorAll('li[data-stop]').forEach((li) => li.addEventListener('click', () => selectStop(li.dataset.stop)));
+  }
+
+  function renderHeader() {
+    const data = state.data || {};
+    let title = CONFIG.appName;
+    let sub = data.agency || '';
+    if (data.stop) {
+      title = data.stop.name;
+      sub = 'Stop ' + (data.stop.stopCodes || [data.stop.stopCode]).join(' / ') + ' · next arrivals';
+    } else if (data.stopCandidates && data.stopCandidates.length) {
+      title = 'Choose a stop';
+      sub = data.stopCandidates.length + ' stops match "' + ((state.args && state.args.stop) || '') + '"';
+    } else if (data.routes && data.routes.length) {
+      title = 'Route ' + data.routes.map((r) => r.name).join(', ');
+      sub = (data.vehicles || []).length + ' vehicle(s) on the road';
+    }
+    $('title').textContent = title;
+    $('subtitle').textContent = sub;
+    const notes = (data.notes || []).filter((n) => !/Ask the rider|pass its stopCode/.test(n));
+    $('notes').innerHTML = notes.map((n) => '<div class="note">' + esc(n) + '</div>').join('');
+  }
+
+  function tick() {
+    if (!state.receivedAt) return;
+    const secs = Math.round((Date.now() - state.receivedAt) / 1000);
+    const live = !(state.data && state.data.feed) || state.data.feed.predictions === 'fresh';
+    $('liveDot').hidden = !live;
+    $('updated').textContent = (live ? 'Live' : 'Timetable') + (secs < 5 ? ' · just updated' : ' · updated ' + secs + 's ago');
+  }
+
+  function render(result) {
+    if (!result) return;
+    const structured = result.structuredContent || result;
+    if (!structured || typeof structured !== 'object') return;
+    state.data = structured;
+    state.mapData = (result._meta && result._meta.map) || state.mapData;
+    state.receivedAt = Date.now();
+    renderHeader();
+    drawMap();
+    renderList();
+    tick();
+  }
+
+  // ---------- actions ----------
+  let refreshing = false;
+  async function refresh() {
+    if (!state.args || refreshing) return;
+    refreshing = true;
+    $('refresh').disabled = true;
+    try {
+      render(await callTool(state.args));
+    } catch (err) {
+      $('updated').textContent = 'Could not refresh, retrying…';
+    } finally {
+      refreshing = false;
+      $('refresh').disabled = false;
+    }
+  }
+
+  async function selectStop(stopCode) {
+    const candidate = ((state.data && state.data.stopCandidates) || []).find((s) => s.stopCode === String(stopCode));
+    state.args = Object.assign({}, state.args || {}, { stop: String(stopCode) });
+    state.focusId = null;
+    await refresh();
+    // Let the model know which stop the rider picked so follow-up questions use it.
+    if (state.mode === 'mcp' && candidate) {
+      bridge.request('ui/update-model-context', {
+        content: [{ type: 'text', text: 'The rider selected stop ' + candidate.stopCode + ' (' + candidate.name + ') in the map.' }],
+      }).catch(() => {});
+    }
+  }
+
+  $('refresh').addEventListener('click', refresh);
+  $('expand').addEventListener('click', async () => {
+    const next = state.hostContext.displayMode === 'fullscreen' ? 'inline' : 'fullscreen';
+    try {
+      if (state.mode === 'mcp') {
+        const res = await bridge.request('ui/request-display-mode', { mode: next });
+        applyContext({ displayMode: (res && res.mode) || next });
+      } else if (window.openai && window.openai.requestDisplayMode) {
+        await window.openai.requestDisplayMode({ mode: next });
+        applyContext({ displayMode: next });
+      }
+    } catch (err) { /* host declined */ }
+  });
+
+  setInterval(tick, 1000);
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && state.data && !(state.data.stopCandidates || []).length) refresh();
+    else renderList();
+  }, CONFIG.refreshMs);
+
+  function applyContext(ctx) {
+    state.hostContext = Object.assign({}, state.hostContext, ctx || {});
+    const dark = state.hostContext.theme === 'dark';
+    if (document.body.classList.contains('dark') !== dark) {
+      document.body.classList.toggle('dark', dark);
+      setTiles(dark);
+    }
+    document.body.classList.toggle('fullscreen', state.hostContext.displayMode === 'fullscreen');
+    $('expand').textContent = state.hostContext.displayMode === 'fullscreen' ? 'Collapse' : 'Expand';
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+
+  // ---------- startup ----------
+  function readOpenAiGlobals() {
+    const oa = window.openai;
+    if (!oa) return;
+    if (oa.toolInput) state.args = oa.toolInput;
+    if (oa.toolOutput) render({ structuredContent: oa.toolOutput, _meta: oa.toolResponseMetadata });
+    applyContext({ theme: oa.theme, displayMode: oa.displayMode });
+  }
+
+  bridge.on('ui/notifications/tool-input', (p) => { state.args = p.arguments || state.args; });
+  bridge.on('ui/notifications/tool-result', (p) => render(p));
+  bridge.on('ui/notifications/host-context-changed', (p) => applyContext(p));
+
+  readOpenAiGlobals();
+  window.addEventListener('openai:set_globals', readOpenAiGlobals);
+
+  bridge.request('ui/initialize', {
+    protocolVersion: '2026-01-26',
+    appInfo: { name: CONFIG.appSlug, version: CONFIG.version },
+    appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] },
+  }, 5000).then((result) => {
+    state.mode = 'mcp';
+    const ctx = (result && result.hostContext) || {};
+    applyContext(ctx);
+    const modes = (ctx.availableDisplayModes || []);
+    $('expand').hidden = modes.length > 0 && modes.indexOf('fullscreen') === -1;
+    bridge.notify('ui/notifications/initialized');
+    if (window.ResizeObserver) {
+      new ResizeObserver(() => {
+        const rect = document.documentElement.getBoundingClientRect();
+        bridge.notify('ui/notifications/size-changed', { width: Math.ceil(rect.width), height: Math.ceil(rect.height) });
+      }).observe(document.body);
+    }
+  }).catch(() => {
+    if (window.openai) {
+      state.mode = 'openai';
+      $('expand').hidden = !window.openai.requestDisplayMode;
+    }
+  });
+})();
+</script>
+</body>
+</html>
