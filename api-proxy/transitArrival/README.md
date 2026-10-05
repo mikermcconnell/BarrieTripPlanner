@@ -43,12 +43,13 @@ Inspect the raw protocol: `npx @modelcontextprotocol/inspector` → Streamable H
 Production: Railway project **Transit Arrival**, service `transit-arrival`, deploying from GitHub.
 URL: `https://transit-arrival-production.up.railway.app/mcp`.
 
-Service settings (already applied; listed here in case it needs recreating):
-1. Source: this repo; **Root Directory** `api-proxy`.
-2. **Config file path** `/api-proxy/transitArrival/railway.json`, which sets the start command
-   (`npm run transit-arrival:start`) and the `/health` check. Without it Railway runs `npm start`, which is the main
-   proxy, and that crashes for lack of its own env vars.
-3. A public domain.
+Service settings (already applied; listed here in case it needs recreating). They live on the Railway service
+itself, because Railway has deprecated `railway.json`:
+1. Source: this repo, branch `feature/transit-arrival` (switch it to `master` after merging). **Root Directory** `api-proxy`.
+2. **Start command** `npm run transit-arrival:start`. Without it Railway runs `npm start`, which is the main proxy, and
+   that crashes for lack of its own env vars.
+3. **Healthcheck path** `/health`, restart on failure.
+4. A public domain.
 
 Monitoring: `.github/workflows/transit-arrival-uptime.yml` runs every 15 minutes. It checks `/health`, the tool list,
 the widget, and a live query. A failed run emails the repo owner.
