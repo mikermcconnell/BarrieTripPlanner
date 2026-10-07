@@ -24,12 +24,14 @@ const stopLine = (s) => `- ${s.name} (${s.agencyName ? `${s.agencyName}, ` : ''}
 function summarizeStatus(status) {
   const lines = [];
   if (status.agency) lines.push(`Agency: ${status.agency.name}`);
+  if (status.agencies) lines.push(`Agencies: ${status.agencies.map((a) => a.name).join(', ')}`);
   if (status.stop) {
     lines.push(`Stop: ${status.stop.name} (stop ${status.stop.stopCodes.join('/')})`);
     for (const a of status.arrivals) {
       const where = a.vehicle?.nextStop ? `, bus is near ${a.vehicle.nextStop.name}` : '';
       const source = a.realtime ? 'live' : 'scheduled';
-      lines.push(`- Route ${routeLabel(a)} ${a.headsign || ''}: ${formatMinutes(a.minutes)} (${a.arrivalTime}, ${source}${where})`);
+      const by = a.agencyName ? ` (${a.agencyName})` : '';
+      lines.push(`- Route ${routeLabel(a)}${by} ${a.headsign || ''}: ${formatMinutes(a.minutes)} (${a.arrivalTime}, ${source}${where})`);
     }
   }
   if (status.routes.length > 0 && !status.stop) {

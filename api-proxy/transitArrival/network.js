@@ -8,6 +8,7 @@ const { normalizeText } = require('./feedStore');
 const { createTransitData } = require('./transitData');
 
 const CANDIDATES_PER_AGENCY = 5;
+const SHARED_STOP_ARRIVAL_LIMIT = 8;
 
 function createTransitNetwork({
   agencies,
@@ -60,6 +61,33 @@ function createTransitNetwork({
     };
   }
 
+  // A stop several agencies serve under the same name (e.g. Mississauga's City Centre terminal,
+  // used by MiWay and Brampton Transit) is one place: show every agency's arrivals together.
+  async function sharedStopStatus(candidates, query) {
+    const parts = (await Promise.all(candidates.map((a) => dataFor(a).getStatus(query)))).filter((s) => s.stop);
+    const names = new Set(parts.map((s) => normalizeText(s.stop.name)));
+    if (parts.length < 2 || names.size !== 1) return null;
+    const withAgency = (s, item) => ({ ...item, agencyId: s.agency.id, agencyName: s.agency.name });
+    return {
+      agency: null,
+      agencies: parts.map((s) => s.agency),
+      feed: parts[0].feed,
+      routes: [],
+      stop: {
+        ...parts[0].stop,
+        stopCodes: parts.flatMap((s) => s.stop.stopCodes),
+        locations: parts.flatMap((s) => s.stop.locations),
+      },
+      arrivals: parts.flatMap((s) => s.arrivals.map((a) => withAgency(s, a)))
+        .sort((a, b) => a.arrivalEpoch - b.arrivalEpoch)
+        .slice(0, SHARED_STOP_ARRIVAL_LIMIT),
+      vehicles: parts.flatMap((s) => s.vehicles.map((v) => withAgency(s, v))),
+      notes: [`${parts[0].stop.name} is served by ${parts.map((s) => s.agency.name).join(' and ')}; arrivals from each are shown.`,
+        ...new Set(parts.flatMap((s) => s.notes))],
+      map: { shapes: parts.flatMap((s) => s.map?.shapes || []) },
+    };
+  }
+
   async function getStatus({ agency, route, stop, direction } = {}) {
     const picked = await pickAgencies({ agency, stop, route });
     if (picked.unknown) return unknownAgencyResult(picked.unknown);
@@ -74,6 +102,10 @@ function createTransitNetwork({
       result.notes.push(`No covered agency has ${asked}. Covered: ${coverage()}. ` +
         "Check the spelling, or ask the rider which city they're in.");
       return result;
+    }
+    if (stop) {
+      const shared = await sharedStopStatus(picked.agencies, { route, stop, direction });
+      if (shared) return shared;
     }
     result.agencyCandidates = picked.agencies.map(summary);
     result.notes.push(`${asked[0].toUpperCase()}${asked.slice(1)} exists in more than one area: ` +

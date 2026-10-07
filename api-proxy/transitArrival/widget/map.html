@@ -283,6 +283,7 @@
           badge(a.routeId, a.routeName) +
           '<div class="main"><div class="head">' + esc(a.headsign || 'Route ' + (a.routeName || a.routeId)) + '</div>' +
           '<div class="detail">' + (a.realtime ? '' : '<span class="tag">Scheduled</span>') +
+          (a.agencyName ? esc(a.agencyName) + ' · ' : '') +
           'Stop ' + esc(a.stopCode) + ' · ' + esc(a.arrivalTime) + esc(late) + where + '</div></div>' +
           etaHtml(minutesUntil(a.arrivalEpoch), !a.realtime) + '</li>';
       }

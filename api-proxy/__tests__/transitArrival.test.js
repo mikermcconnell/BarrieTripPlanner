@@ -72,6 +72,7 @@ const barrieZip = () => zipOf({
     ['441', '441', 'Georgian Mall', 44.4110, -79.7051, 0],
     ['77', '77', 'Georgian Mall North Entrance', 44.4130, -79.7094, 0],
     ['1', '1', 'Downtown Hub', 44.3875, -79.6903, 0],
+    ['900', '900', 'Shared Terminal', 44.0, -79.5, 0],
   ]),
   'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,shape_id', [
     ['8A', 'weekday', 't8a', 'RVH/YONGE to Park Place', 's8a'],
@@ -86,7 +87,7 @@ const barrieZip = () => zipOf({
   'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence', [
     ['t8a', at(-10), at(-10), '1', 1], ['t8a', at(4), at(4), '440', 2],
     ['t8a-saturday', at(0), at(0), '1', 1], ['t8a-saturday', at(10), at(10), '440', 2],
-    ['t8a-later', at(10), at(10), '1', 1], ['t8a-later', at(20), at(20), '440', 2],
+    ['t8a-later', at(10), at(10), '1', 1], ['t8a-later', at(20), at(20), '440', 2], ['t8a-later', at(25), at(25), '900', 3],
     ['t8b', at(-5), at(-5), '77', 1], ['t8b', at(2), at(2), '441', 2],
     ['t8b-tomorrow', '05:30:00', '05:30:00', '77', 1], ['t8b-tomorrow', '05:45:00', '05:45:00', '441', 2],
     ['t80', '06:00:00', '06:00:00', '1', 1],
@@ -109,6 +110,7 @@ const yrtZip = () => zipOf({
     ['9821', '9821', 'RICHMOND HILL CENTRE PLATFORM 2', 43.8401, -79.4257, 0, '10'],
     ['9822', '9822', 'BUS LOOP ARRIVALS', 43.8403, -79.4255, 0, '10'],
     ['1', '1', '"YONGE / MAJOR MACKENZIE"', 43.8746, -79.4398, 0, ''],
+    ['950', '950', 'SHARED TERMINAL', 44.0001, -79.5001, 0, ''],
   ]),
   'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,shape_id', [
     ['8', 'weekday', 'y8', '008 Kennedy - SB', ''],
@@ -118,7 +120,7 @@ const yrtZip = () => zipOf({
   'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence', [
     ['y8', at(2), at(2), '9822', 1], ['y8', ` ${at(3)}`, ` ${at(3)}`, '9820', 2], ['y8', at(9), at(9), '1', 3],
     ['yblue', at(6), at(6), '9821', 1],
-    ['yblueb', at(30), at(30), '9821', 1],
+    ['yblueb', at(30), at(30), '9821', 1], ['yblueb', at(32), at(32), '950', 2],
   ]),
   'calendar.txt': CALENDAR,
 });
@@ -426,6 +428,14 @@ describe('multi-agency network', () => {
     const shared = agencyData({ ...AGENCIES[1], sharedRealtimeFeed: true }, { vehicles: [foreign, ours] });
     const status = await shared.getStatus({ route: '8' });
     expect(status.vehicles.map((v) => v.vehicleId)).toEqual(['yrt-bus']);
+  });
+
+  it('shows every agency at a stop they share', async () => {
+    const status = await createNetwork().getStatus({ stop: 'Shared Terminal' });
+    expect(status.agencies.map((a) => a.id)).toEqual(['barrie', 'yrt']);
+    expect(status.stop.stopCodes).toEqual(['900', '950']);
+    expect(status.arrivals.map((a) => [a.agencyId, a.routeName, a.minutes])).toEqual([['barrie', '8A', 25], ['yrt', 'blue B', 32]]);
+    expect(summarizeStatus(status)).toContain('Route blue B (York Region Transit)');
   });
 
   it('says so when asked about an agency it does not cover', async () => {
