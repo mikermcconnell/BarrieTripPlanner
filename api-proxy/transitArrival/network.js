@@ -9,6 +9,14 @@ const { createTransitData } = require('./transitData');
 
 const CANDIDATES_PER_AGENCY = 5;
 const SHARED_STOP_ARRIVAL_LIMIT = 8;
+const SHARED_STOP_RADIUS_METERS = 300;
+
+function metersBetween(a, b) {
+  const rad = Math.PI / 180;
+  const x = (b.longitude - a.longitude) * rad * Math.cos(((a.latitude + b.latitude) / 2) * rad);
+  const y = (b.latitude - a.latitude) * rad;
+  return Math.hypot(x, y) * 6371000;
+}
 
 function createTransitNetwork({
   agencies,
@@ -65,8 +73,12 @@ function createTransitNetwork({
   // used by MiWay and Brampton Transit) is one place: show every agency's arrivals together.
   async function sharedStopStatus(candidates, query) {
     const parts = (await Promise.all(candidates.map((a) => dataFor(a).getStatus(query)))).filter((s) => s.stop);
-    const names = new Set(parts.map((s) => normalizeText(s.stop.name)));
-    if (parts.length < 2 || names.size !== 1) return null;
+    // If only one agency resolves the name to a single place, that's the answer.
+    if (parts.length === 1) return parts[0];
+    // Agencies name shared stops differently ("City Centre Transit Terminal" vs "Mississauga CC Terminal"),
+    // so "same place" means within walking distance of each other.
+    const [first, ...rest] = parts;
+    if (parts.length < 2 || !rest.every((s) => metersBetween(first.stop, s.stop) <= SHARED_STOP_RADIUS_METERS)) return null;
     const withAgency = (s, item) => ({ ...item, agencyId: s.agency.id, agencyName: s.agency.name });
     return {
       agency: null,

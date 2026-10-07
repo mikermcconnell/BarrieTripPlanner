@@ -20,7 +20,9 @@ const displayRouteName = (shortName) => String(shortName || '').replace(/(^|\|)0
 const routeKey = (text) => normalizeText(text).replace(/(^| )0+(?=\d)/g, '$1');
 
 // Platforms and bays of one terminal are one place to a rider.
-const placeKey = (name) => normalizeText(name).replace(/ (platform|bay) [a-z0-9]+$/, '');
+const placeKey = (name) => normalizeText(name)
+  .replace(/ (platform|bay) [a-z0-9]+$/, '')
+  .replace(/ (arrivals?|departures?|drop off)$/, '');
 
 // Stops are one place if linked by a shared name (ignoring platform/bay) or a shared parent station.
 function countPlaces(stops) {
