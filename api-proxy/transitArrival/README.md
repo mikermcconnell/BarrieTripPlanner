@@ -19,13 +19,18 @@ Static GTFS is kept on disk, not in memory, so RAM stays roughly flat as agencie
 - Realtime feeds are fetched only while someone is asking about that agency (cached 15 s), so idle agencies cost
   nothing.
 
-Six agencies (Barrie, YRT, MiWay, Brampton, Durham, HSR) build in about 85 s total into ~110 MB of SQLite. RSS sits
+Eight agencies (Barrie, YRT, MiWay, Brampton, Durham, HSR, Milton, Oakville) build in about 90 s total into ~115 MB of SQLite. RSS sits
 around 140 MB idle and peaks near 230 MB while several agencies are being queried.
 
 Adding an agency: check its licence, confirm its GTFS-RT trip ids match the static feed's `trips.txt` (Burlington's
 published zip ran a season ahead of its live feed), then add an `agencies.json` entry with a few aliases and examples.
 If a newly published zip doesn't cover today yet, the current timetable is kept until it does.
 Stops sharing a GTFS `parent_station` (terminals) are answered as one place.
+- Omit `tripUpdatesUrl`/`vehiclePositionsUrl` for agencies with no live data (Oakville); answers come from the timetable
+  with a note saying so.
+- Set `sharedRealtimeFeed: true` when one GTFS-RT feed covers several agencies (Metrolinx's tmix.se hosting, used by
+  Milton, Orillia, Simcoe County LINX and others); only trips in that agency's timetable are used.
+- Search tokens must start a word of the stop name, so "milton" doesn't match "Hamilton".
 
 ## Tools
 | Tool | Purpose |

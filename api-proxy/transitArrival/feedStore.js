@@ -12,7 +12,7 @@ const JSZip = require('jszip');
 const { DatabaseSync } = require('node:sqlite');
 const { parseGtfsTimeToSeconds } = require('../gtfsLoader');
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 const SHAPE_TOLERANCE_METERS = 5;
 const PAGE_CACHE_KIB = 1024;
 const SHAPE_CACHE_LIMIT = 200;
@@ -158,6 +158,7 @@ async function buildAgencyDb(zipBuffer, outPath) {
     // Some agencies prefix headsigns with the route ("109 S Express ..."); the route is shown separately.
     const shortNames = new Map(db.prepare('SELECT route_id, short_name FROM routes').all().map((r) => [r.route_id, r.short_name]));
     const cleanHeadsign = (routeId, headsign) => {
+      if (/^auto generated/i.test(headsign || '')) return null; // placeholder text in some exports
       const prefix = shortNames.get(routeId);
       if (!headsign || !prefix || !headsign.toLowerCase().startsWith(`${prefix.toLowerCase()} `)) return headsign || null;
       return headsign.slice(prefix.length).trim() || headsign;
@@ -182,6 +183,7 @@ async function buildAgencyDb(zipBuffer, outPath) {
 
     const insertStopTime = db.prepare('INSERT OR IGNORE INTO stop_times VALUES (?, ?, ?)');
     const tripStart = new Map();
+    const tripLastStop = new Map();
     await forEachRow(zip, 'stop_times.txt', (r) => {
       const seconds = parseGtfsTimeToSeconds(r.arrival_time || r.departure_time);
       if (!r.stop_id || !r.trip_id || !Number.isFinite(seconds)) return;
@@ -189,10 +191,19 @@ async function buildAgencyDb(zipBuffer, outPath) {
       const departure = parseGtfsTimeToSeconds(r.departure_time || r.arrival_time);
       const start = tripStart.get(r.trip_id);
       if (Number.isFinite(departure) && (start == null || departure < start)) tripStart.set(r.trip_id, departure);
+      const sequence = Number(r.stop_sequence);
+      const last = tripLastStop.get(r.trip_id);
+      if (!last || sequence > last[0]) tripLastStop.set(r.trip_id, [sequence, r.stop_id]);
     });
     const setStart = db.prepare('UPDATE trips SET start_seconds = ? WHERE trip_id = ?');
     for (const [tripId, seconds] of tripStart) setStart.run(seconds, tripId);
     tripStart.clear();
+    // Trips without a usable headsign are labelled with their final stop.
+    const setHeadsign = db.prepare(
+      'UPDATE trips SET headsign = (SELECT name FROM stops WHERE stop_id = ?) WHERE trip_id = ? AND headsign IS NULL'
+    );
+    for (const [tripId, [, stopId]] of tripLastStop) setHeadsign.run(stopId, tripId);
+    tripLastStop.clear();
 
     const insertPoint = db.prepare('INSERT INTO shape_points VALUES (?, ?, ?, ?)');
     await forEachRow(zip, 'shapes.txt', (r) => {
@@ -304,10 +315,10 @@ function openStore(dbPath) {
     stopByCode: (code) => toStop(q.stopByCode.get(code, code, code)),
     stopRouteIds: (stopId) => q.stopRoutes.all(stopId).map((r) => r.route_id),
     getTrip: (tripId) => toTrip(q.trip.get(tripId)),
-    // All tokens must appear in the stop name; shortest names first.
+    // Every token must start a word of the stop name ("milton" doesn't match "hamilton"); shortest names first.
     searchStops(tokens, { routeIds = null, limit = 5 } = {}) {
-      const where = tokens.map(() => 's.search_name LIKE ?');
-      const params = tokens.map((t) => `%${t}%`);
+      const where = tokens.map(() => "(' ' || s.search_name) LIKE ?");
+      const params = tokens.map((t) => `% ${t}%`);
       if (routeIds) {
         where.push(`s.stop_id IN (SELECT stop_id FROM stop_routes WHERE route_id IN (${routeIds.map(() => '?').join(',')}))`);
         params.push(...routeIds);
@@ -363,9 +374,13 @@ function openStopIndex(indexPath) {
       const ids = new Set(byCode.all(raw, raw).map((r) => r.agency_id));
       const tokens = /^\d+$/.test(raw) ? [] : searchTokens(raw);
       if (tokens.length > 0) {
-        const sql = 'SELECT DISTINCT s.agency_id FROM stop_search f JOIN stops s ON s.rowid = f.rowid WHERE ' +
+        // The trigram index narrows by substring; then require each token to start a word.
+        const sql = 'SELECT s.agency_id, s.search_name FROM stop_search f JOIN stops s ON s.rowid = f.rowid WHERE ' +
           tokens.map(() => 'f.search_name LIKE ?').join(' AND ');
-        for (const r of db.prepare(sql).all(...tokens.map((t) => `%${t}%`))) ids.add(r.agency_id);
+        for (const r of db.prepare(sql).iterate(...tokens.map((t) => `%${t}%`))) {
+          const words = ` ${r.search_name}`;
+          if (tokens.every((t) => words.includes(` ${t}`))) ids.add(r.agency_id);
+        }
       }
       return [...ids];
     },

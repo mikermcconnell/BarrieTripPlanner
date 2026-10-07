@@ -409,6 +409,25 @@ describe('multi-agency network', () => {
     ]);
   });
 
+  it('serves agencies without live feeds from the timetable and says so', async () => {
+    const scheduleOnly = createTransitData({
+      agency: { ...AGENCIES[1], tripUpdatesUrl: undefined, vehiclePositionsUrl: undefined },
+      getStore: () => feedManager.getStore('yrt'),
+      now: () => NOW_MS,
+    });
+    const status = await scheduleOnly.getStatus({ stop: 'Richmond Hill Centre' });
+    expect(status.arrivals.every((a) => !a.realtime)).toBe(true);
+    expect(status.notes[0]).toBe("York Region Transit doesn't publish live bus data, so times shown are from the timetable.");
+  });
+
+  it("ignores other agencies' buses in a shared realtime feed", async () => {
+    const foreign = { id: 'other-town', tripId: 'not-ours', routeId: '8', coordinate: { latitude: 43.9, longitude: -79.4 }, timestamp: NOW_S - 5 };
+    const ours = { id: 'yrt-bus', tripId: 'y8', routeId: '8', coordinate: { latitude: 43.84, longitude: -79.42 }, timestamp: NOW_S - 5 };
+    const shared = agencyData({ ...AGENCIES[1], sharedRealtimeFeed: true }, { vehicles: [foreign, ours] });
+    const status = await shared.getStatus({ route: '8' });
+    expect(status.vehicles.map((v) => v.vehicleId)).toEqual(['yrt-bus']);
+  });
+
   it('says so when asked about an agency it does not cover', async () => {
     const status = await createNetwork().getStatus({ agency: 'TTC', stop: 'Union' });
     expect(status.notes[0]).toMatch(/isn't a covered transit agency/);

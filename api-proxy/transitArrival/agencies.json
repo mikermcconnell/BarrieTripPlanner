@@ -100,5 +100,38 @@
     },
     "attribution": "Contains public sector Data made available under the City of Hamilton's Open Data Licence.",
     "examples": { "stop": "Eastgate Terminal", "route": "1", "direction": "Hamilton GO Centre" }
+  },
+  {
+    "id": "milton",
+    "name": "Milton Transit",
+    "region": "Milton, Ontario",
+    "aliases": ["milton", "milton transit"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://metrolinx.tmix.se/gtfs/gtfs-milton.zip",
+    "vehiclePositionsUrl": "https://metrolinx.tmix.se/gtfs-realtime-milton/vehiclepositions.pb",
+    "tripUpdatesUrl": "https://metrolinx.tmix.se/gtfs-realtime-milton/tripupdates.pb",
+    "sharedRealtimeFeed": true,
+    "licence": {
+      "name": "Open Government Licence – Milton",
+      "url": "https://discover-milton.hub.arcgis.com/pages/disclaimer-and-terms-of-use"
+    },
+    "attribution": "Contains information licensed under the Open Government Licence – Milton.",
+    "examples": { "stop": "Milton GO Station", "route": "2", "direction": "Milton GO" }
+  },
+  {
+    "id": "oakville",
+    "name": "Oakville Transit",
+    "region": "Oakville, Ontario (timetable only, no live bus tracking)",
+    "aliases": ["oakville", "oakville transit"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://www.arcgis.com/sharing/rest/content/items/d78a1c1ad6a940009de8b68839a8f606/data",
+    "licence": {
+      "name": "Open Government Licence – Town of Oakville",
+      "url": "https://www.oakville.ca/town-hall/town-studies-plans-projects/town-initiatives/open-data/open-data-licence/"
+    },
+    "attribution": "Contains information licensed under the Open Government Licence — Town of Oakville.",
+    "examples": { "stop": "Oakville GO Station", "route": "5", "direction": "Oakville GO" }
   }
 ]

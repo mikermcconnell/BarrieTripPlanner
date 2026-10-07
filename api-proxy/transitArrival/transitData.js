@@ -22,6 +22,23 @@ const routeKey = (text) => normalizeText(text).replace(/(^| )0+(?=\d)/g, '$1');
 // Platforms and bays of one terminal are one place to a rider.
 const placeKey = (name) => normalizeText(name).replace(/ (platform|bay) [a-z0-9]+$/, '');
 
+// Stops are one place if linked by a shared name (ignoring platform/bay) or a shared parent station.
+function countPlaces(stops) {
+  const link = new Map();
+  const root = (k) => {
+    if (!link.has(k)) link.set(k, k);
+    while (link.get(k) !== k) k = link.get(k);
+    return k;
+  };
+  const join = (a, b) => link.set(root(a), root(b));
+  for (const s of stops) {
+    const nameKey = `n:${placeKey(s.name)}`;
+    join(nameKey, `n:${placeKey(s.place)}`);
+    if (s.parentId) join(nameKey, `p:${s.parentId}`);
+  }
+  return new Set(stops.map((s) => root(`n:${placeKey(s.name)}`))).size;
+}
+
 function zonedParts(ms, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -114,8 +131,11 @@ function resolveRoutes(store, query) {
 function createTransitData({
   agency,
   getStore,
-  fetchTripUpdates = () => realtimeFeeds.fetchTripUpdates(agency.tripUpdatesUrl),
-  fetchVehicles = () => realtimeFeeds.fetchVehicles(agency.vehiclePositionsUrl),
+  // Agencies without live feeds are served from the timetable alone.
+  fetchTripUpdates = agency.tripUpdatesUrl
+    ? () => realtimeFeeds.fetchTripUpdates(agency.tripUpdatesUrl)
+    : async () => ({ updates: [], status: 'none', ageMs: null }),
+  fetchVehicles = agency.vehiclePositionsUrl ? () => realtimeFeeds.fetchVehicles(agency.vehiclePositionsUrl) : async () => [],
   now = () => Date.now(),
   realtimeCacheMs = REALTIME_CACHE_MS,
 }) {
@@ -278,7 +298,16 @@ function createTransitData({
   // Live status for a stop (next arrivals) and/or a route (where its vehicles are).
   async function getStatus({ route, stop, direction, limit = DEFAULT_ARRIVAL_LIMIT } = {}) {
     const store = await getStore();
-    const rt = await loadRealtime();
+    let rt = await loadRealtime();
+    // Some hosts publish one realtime feed for several agencies; keep only trips in this agency's timetable.
+    if (agency.sharedRealtimeFeed) {
+      const ours = (tripId) => Boolean(tripId && store.getTrip(tripId));
+      rt = {
+        ...rt,
+        tripUpdates: { ...rt.tripUpdates, updates: rt.tripUpdates.updates.filter((u) => ours(u.tripId)) },
+        vehicles: rt.vehicles.filter((v) => ours(v.tripId)),
+      };
+    }
     const nowSeconds = Math.floor(now() / 1000);
     const trips = new Map();
     const tripOf = (tripId) => {
@@ -350,18 +379,26 @@ function createTransitData({
     if (stop) {
       const found = await findStops({ query: stop, route, limit: 10 });
       const wanted = placeKey(stop);
-      const exactName = found.filter((m) => placeKey(m.place) === wanted || placeKey(m.name) === wanted);
-      let matches = exactName.length > 0 ? exactName : found;
-      const places = new Set(matches.map((m) => placeKey(m.place)));
-      const parentId = matches[0]?.parentId;
-      if (places.size === 1 && parentId && matches.every((m) => m.parentId === parentId)) {
+      // Prefer exact names, then names starting with the query ("Milton GO" -> "Milton GO Station",
+      // not "Drew Centre at Milton GO Station"), then any match.
+      const keysOf = (m) => [placeKey(m.place), placeKey(m.name)];
+      const exactName = found.filter((m) => keysOf(m).includes(wanted));
+      const prefixed = found.filter((m) => keysOf(m).some((k) => k.startsWith(`${wanted} `)));
+      let matches = [exactName, prefixed, found].find((list) => list.length > 0) || [];
+      const placeCount = countPlaces(matches);
+      if (placeCount === 1) {
+        // Pull in the rest of the station's stops (bays named after routes, not the station).
         const routeIds = route ? resolveRoutes(store, route) : null;
-        const children = store.childStops(parentId)
-          .filter((s) => !routeIds || store.stopRouteIds(s.id).some((id) => routeIds.includes(id)))
-          .map((s) => toStopResult(store, s));
-        if (children.length > 0) matches = children;
+        const byId = new Map(matches.map((m) => [m.stopId, m]));
+        for (const parentId of new Set(matches.map((m) => m.parentId).filter(Boolean))) {
+          for (const s of store.childStops(parentId)) {
+            if (byId.has(s.id) || (routeIds && !store.stopRouteIds(s.id).some((id) => routeIds.includes(id)))) continue;
+            byId.set(s.id, toStopResult(store, s));
+          }
+        }
+        matches = [...byId.values()].sort((a, b) => a.stopCode.localeCompare(b.stopCode, 'en', { numeric: true }));
       }
-      if (matches.length === 0 || places.size > 1) {
+      if (matches.length === 0 || placeCount > 1) {
         result.notes.push(matches.length === 0
           ? `No ${agency.name} stop matches "${stop}". Try a stop number or a nearby street name.`
           : `"${stop}" matches several places. Ask the rider which one, or pass its stopCode.`);
@@ -371,8 +408,8 @@ function createTransitData({
       selectedStops = matches;
       result.stop = {
         ...matches[0],
-        name: matches[0].parentId ? matches[0].place
-          : matches.length > 1 ? matches[0].name.replace(/\s+(platform|bay)\s+\S+$/i, '') : matches[0].name,
+        name: matches.find((m) => m.parentId)?.place
+          || (matches.length > 1 ? matches[0].name.replace(/\s+-?\s*(platform|bay)\s+\S+$/i, '') : matches[0].name),
         stopCodes: matches.map((m) => m.stopCode),
         locations: matches.map((m) => ({ stopCode: m.stopCode, latitude: m.latitude, longitude: m.longitude })),
       };
@@ -380,7 +417,9 @@ function createTransitData({
     const selectedStopIds = new Set((selectedStops || []).map((s) => s.stopId));
 
     const predictionsUsable = rt.tripUpdates.status === 'fresh';
-    if (!predictionsUsable) {
+    if (rt.tripUpdates.status === 'none') {
+      result.notes.push(`${agency.name} doesn't publish live bus data, so times shown are from the timetable.`);
+    } else if (!predictionsUsable) {
       const age = feedSummary(rt).predictionsAgeSeconds;
       const reason = rt.tripUpdates.status === 'stale' && age != null
         ? `Live predictions are ${Math.round(age / 60)} minutes old`
