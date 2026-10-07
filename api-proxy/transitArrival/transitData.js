@@ -166,6 +166,8 @@ function createTransitData({
       stopId: stop.id,
       stopCode: stop.code,
       name: stop.name,
+      place: stop.parentName || stop.name,
+      parentId: stop.parentId || null,
       latitude: stop.latitude,
       longitude: stop.longitude,
       routes: store.stopRouteIds(stop.id).map((id) => routeName(store, id))
@@ -342,14 +344,23 @@ function createTransitData({
       result.routes = routeIds.map((id) => describeRoute(store, id));
     }
 
-    // Stops sharing a name (both sides of the street, terminal platforms) are
-    // treated as one place so riders aren't asked to pick between them.
+    // Stops sharing a name (both sides of the street, terminal platforms) or a
+    // parent station are treated as one place so riders aren't asked to pick.
     let selectedStops = null;
     if (stop) {
       const found = await findStops({ query: stop, route, limit: 10 });
-      const exactName = found.filter((m) => placeKey(m.name) === placeKey(stop));
-      const matches = exactName.length > 0 ? exactName : found;
-      const places = new Set(matches.map((m) => placeKey(m.name)));
+      const wanted = placeKey(stop);
+      const exactName = found.filter((m) => placeKey(m.place) === wanted || placeKey(m.name) === wanted);
+      let matches = exactName.length > 0 ? exactName : found;
+      const places = new Set(matches.map((m) => placeKey(m.place)));
+      const parentId = matches[0]?.parentId;
+      if (places.size === 1 && parentId && matches.every((m) => m.parentId === parentId)) {
+        const routeIds = route ? resolveRoutes(store, route) : null;
+        const children = store.childStops(parentId)
+          .filter((s) => !routeIds || store.stopRouteIds(s.id).some((id) => routeIds.includes(id)))
+          .map((s) => toStopResult(store, s));
+        if (children.length > 0) matches = children;
+      }
       if (matches.length === 0 || places.size > 1) {
         result.notes.push(matches.length === 0
           ? `No ${agency.name} stop matches "${stop}". Try a stop number or a nearby street name.`
@@ -360,7 +371,8 @@ function createTransitData({
       selectedStops = matches;
       result.stop = {
         ...matches[0],
-        name: matches.length > 1 ? matches[0].name.replace(/\s+(platform|bay)\s+\S+$/i, '') : matches[0].name,
+        name: matches[0].parentId ? matches[0].place
+          : matches.length > 1 ? matches[0].name.replace(/\s+(platform|bay)\s+\S+$/i, '') : matches[0].name,
         stopCodes: matches.map((m) => m.stopCode),
         locations: matches.map((m) => ({ stopCode: m.stopCode, latitude: m.latitude, longitude: m.longitude })),
       };
@@ -434,8 +446,18 @@ function createTransitData({
         fromEpoch: nowSeconds - PAST_ARRIVAL_GRACE_SECONDS,
         toEpoch: nowSeconds + SCHEDULE_LOOKAHEAD_SECONDS,
       });
+      // A trip can serve two stops of one place (arrival and departure platforms), and
+      // merged feeds can repeat a trip under two ids (same route, destination and minute). List each once.
+      const seen = new Set();
+      const isNew = (a) => {
+        const keys = [a.tripId, `${a.routeId}|${a.headsign}|${Math.round(a.arrivalEpoch / 60)}`];
+        if (keys.some((k) => seen.has(k))) return false;
+        keys.forEach((k) => seen.add(k));
+        return true;
+      };
       result.arrivals = [...result.arrivals, ...scheduled.map(toArrival)]
         .sort((a, b) => a.arrivalEpoch - b.arrivalEpoch)
+        .filter(isNew)
         .slice(0, limit);
 
       if (result.arrivals.length === 0) {

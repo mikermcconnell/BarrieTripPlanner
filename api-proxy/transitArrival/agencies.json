@@ -32,5 +32,73 @@
     },
     "attribution": "Contains public transit Information made available under YRT's Open Data Licence.",
     "examples": { "stop": "Richmond Hill Centre", "route": "blue", "direction": "Newmarket" }
+  },
+  {
+    "id": "miway",
+    "name": "MiWay",
+    "region": "Mississauga, Ontario",
+    "aliases": ["miway", "mi way", "mississauga", "mississauga transit", "streetsville", "port credit", "meadowvale"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://www.miapp.ca/GTFS/google_transit.zip",
+    "vehiclePositionsUrl": "https://www.miapp.ca/GTFS_RT/Vehicle/VehiclePositions.pb",
+    "tripUpdatesUrl": "https://www.miapp.ca/GTFS_RT/TripUpdate/TripUpdates.pb",
+    "licence": {
+      "name": "City of Mississauga Terms of Use",
+      "url": "https://mississauga.ca/file/COM/CityOfMississaugaTermsOfUse.pdf"
+    },
+    "attribution": "MiWay transit data is publicly available from the City of Mississauga under its Terms of Use.",
+    "examples": { "stop": "City Centre Transit Terminal", "route": "109", "direction": "Islington" }
+  },
+  {
+    "id": "brampton",
+    "name": "Brampton Transit",
+    "region": "Brampton, Ontario",
+    "aliases": ["brampton", "brampton transit", "zum", "z m", "zoom", "bramalea"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://www.arcgis.com/sharing/rest/content/items/a355aabd5a8c490186bdce559c9c75fb/data",
+    "vehiclePositionsUrl": "https://gtfs-rt-merge.prod.bt-cadavl.com/BramptonTransit/GTFS/merged_VehiclePosition.pb",
+    "tripUpdatesUrl": "https://gtfs-rt-merge.prod.bt-cadavl.com/BramptonTransit/GTFS/merged_TripUpdate.pb",
+    "licence": {
+      "name": "Creative Commons Attribution 4.0 (City of Brampton)",
+      "url": "https://brampton.maps.arcgis.com/home/item.html?id=a355aabd5a8c490186bdce559c9c75fb"
+    },
+    "attribution": "Brampton Transit schedule and real-time data © City of Brampton, licensed under CC BY 4.0.",
+    "examples": { "stop": "Bramalea Terminal", "route": "501", "direction": "Bramalea" }
+  },
+  {
+    "id": "drt",
+    "name": "Durham Region Transit",
+    "region": "Durham Region, Ontario (Pickering, Ajax, Whitby, Oshawa, Clarington)",
+    "aliases": ["drt", "durham", "durham region", "durham region transit", "pulse", "pickering", "ajax", "whitby", "oshawa", "clarington", "courtice", "bowmanville", "uxbridge", "scugog", "port perry", "brock"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://maps.durham.ca/OpenDataGTFS/GTFS_Durham_TXT.zip",
+    "vehiclePositionsUrl": "https://drtonline.durhamregiontransit.com/gtfsrealtime/VehiclePositions",
+    "tripUpdatesUrl": "https://drtonline.durhamregiontransit.com/gtfsrealtime/TripUpdates",
+    "licence": {
+      "name": "Region of Durham Open Data Licence",
+      "url": "https://opendata.durham.ca/"
+    },
+    "attribution": "Contains public sector information made available under The Regional Municipality of Durham's Open Data Licence.",
+    "examples": { "stop": "Oshawa Centre", "route": "900", "direction": "Scarborough" }
+  },
+  {
+    "id": "hsr",
+    "name": "Hamilton Street Railway (HSR)",
+    "region": "Hamilton, Ontario",
+    "aliases": ["hsr", "hamilton", "hamilton street railway", "hamilton transit", "dundas", "ancaster", "stoney creek"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://opendata.hamilton.ca/GTFS-Static/google_transit.zip",
+    "vehiclePositionsUrl": "https://opendata.hamilton.ca/GTFS-RT/GTFS_VehiclePositions.pb",
+    "tripUpdatesUrl": "https://opendata.hamilton.ca/GTFS-RT/GTFS_TripUpdates.pb",
+    "licence": {
+      "name": "City of Hamilton Open Data Licence",
+      "url": "https://www.hamilton.ca/city-council/data-maps/open-data/open-data-licence-terms-and-conditions"
+    },
+    "attribution": "Contains public sector Data made available under the City of Hamilton's Open Data Licence.",
+    "examples": { "stop": "Eastgate Terminal", "route": "1", "direction": "Hamilton GO Centre" }
   }
 ]

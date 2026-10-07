@@ -39,7 +39,7 @@ Copy each field into the submission form at platform.openai.com. Character limit
 >
 > Use whatever you know: a stop name, an intersection, a landmark, or the stop number on the sign. If a name matches several stops, tap the right one on the map. The map keeps refreshing while it's on screen. When no bus is due soon, Transit Arrival tells you when the next one is scheduled.
 >
-> Transit Arrival currently covers Barrie Transit (Barrie, Ontario) and York Region Transit, including Viva (Vaughan, Markham, Richmond Hill, Newmarket, Aurora and the rest of York Region). More agencies are on the way. Mention your city if a stop or route name exists in more than one area, and Transit Arrival will ask if it isn't sure. No account or sign-in is needed, and it never asks for your location.
+> Transit Arrival currently covers six Ontario transit agencies: MiWay (Mississauga), Brampton Transit (including Züm), York Region Transit (including Viva), Durham Region Transit (including PULSE), Hamilton Street Railway (HSR), and Barrie Transit. More agencies are on the way. Mention your city if a stop or route name exists in more than one area, and Transit Arrival will ask if it isn't sure. No account or sign-in is needed, and it never asks for your location.
 >
 > Transit Arrival is an independent app and isn't affiliated with any transit agency or municipality it covers. Arrival times are estimates based on public transit data, used under each agency's open data licence.
 
@@ -83,8 +83,8 @@ All three tools are read-only lookups of public transit data:
 
 ## Release notes (0.1.0)
 
-First release: live bus map and arrival minutes for Barrie Transit and York Region Transit (including Viva); timetable
-fallback; stop search by name or number; route list; agency inferred from the stop or route when the rider doesn't say.
+First release: live bus map and arrival minutes for MiWay, Brampton Transit, York Region Transit, Durham Region Transit,
+HSR and Barrie Transit; timetable fallback; stop search by name or number; route list; agency inferred from the stop or route when the rider doesn't say.
 
 ## Demo video checklist
 

@@ -19,8 +19,13 @@ Static GTFS is kept on disk, not in memory, so RAM stays roughly flat as agencie
 - Realtime feeds are fetched only while someone is asking about that agency (cached 15 s), so idle agencies cost
   nothing.
 
-YRT (about 9x Barrie's size) builds in ~8 s into a 13 MB file. With both agencies queried, the process sits around
-150 MB RSS.
+Six agencies (Barrie, YRT, MiWay, Brampton, Durham, HSR) build in about 85 s total into ~110 MB of SQLite. RSS sits
+around 140 MB idle and peaks near 230 MB while several agencies are being queried.
+
+Adding an agency: check its licence, confirm its GTFS-RT trip ids match the static feed's `trips.txt` (Burlington's
+published zip ran a season ahead of its live feed), then add an `agencies.json` entry with a few aliases and examples.
+If a newly published zip doesn't cover today yet, the current timetable is kept until it does.
+Stops sharing a GTFS `parent_station` (terminals) are answered as one place.
 
 ## Tools
 | Tool | Purpose |

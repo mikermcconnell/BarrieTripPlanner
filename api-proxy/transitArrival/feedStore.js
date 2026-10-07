@@ -12,7 +12,7 @@ const JSZip = require('jszip');
 const { DatabaseSync } = require('node:sqlite');
 const { parseGtfsTimeToSeconds } = require('../gtfsLoader');
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 const SHAPE_TOLERANCE_METERS = 5;
 const PAGE_CACHE_KIB = 1024;
 const SHAPE_CACHE_LIMIT = 200;
@@ -22,8 +22,10 @@ const RETRY_DELAYS_MS = [2000, 5000];
 const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE routes (route_id TEXT PRIMARY KEY, short_name TEXT, long_name TEXT, color TEXT, sort_order INTEGER);
-CREATE TABLE stops (stop_id TEXT PRIMARY KEY, code TEXT, name TEXT, search_name TEXT, lat REAL, lon REAL);
+CREATE TABLE stops (stop_id TEXT PRIMARY KEY, code TEXT, name TEXT, search_name TEXT, lat REAL, lon REAL, parent TEXT);
 CREATE INDEX stops_code ON stops(code);
+CREATE INDEX stops_parent ON stops(parent);
+CREATE TABLE stations (stop_id TEXT PRIMARY KEY, name TEXT);
 CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT, service_id TEXT, headsign TEXT, shape_id TEXT, start_seconds INTEGER);
 CREATE INDEX trips_route ON trips(route_id, start_seconds);
 CREATE TABLE stop_times (stop_id TEXT, seconds INTEGER, trip_id TEXT, PRIMARY KEY (stop_id, seconds, trip_id)) WITHOUT ROWID;
@@ -137,18 +139,33 @@ async function buildAgencyDb(zipBuffer, outPath) {
         Number.isFinite(sortOrder) ? sortOrder : null);
     });
 
-    const insertStop = db.prepare('INSERT OR REPLACE INTO stops VALUES (?, ?, ?, ?, ?, ?)');
+    // search_name also carries the parent station's name, so "Bramalea Terminal"
+    // finds stops named "Route 8 Stop" inside it.
+    const insertStop = db.prepare('INSERT OR REPLACE INTO stops VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const insertStation = db.prepare('INSERT OR REPLACE INTO stations VALUES (?, ?)');
     await forEachRow(zip, 'stops.txt', (r) => {
       const lat = Number.parseFloat(r.stop_lat);
       const lon = Number.parseFloat(r.stop_lon);
-      if (!r.stop_id || (r.location_type && r.location_type !== '0') || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
-      insertStop.run(r.stop_id, r.stop_code || r.stop_id, r.stop_name, normalizeText(r.stop_name), lat, lon);
+      if (!r.stop_id) return;
+      if (r.location_type === '1') { insertStation.run(r.stop_id, r.stop_name); return; }
+      if ((r.location_type && r.location_type !== '0') || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      insertStop.run(r.stop_id, r.stop_code || r.stop_id, r.stop_name, normalizeText(r.stop_name), lat, lon, r.parent_station || null);
     });
+    db.exec('UPDATE stops SET parent = NULL WHERE parent NOT IN (SELECT stop_id FROM stations)');
+    const setSearch = db.prepare("UPDATE stops SET search_name = search_name || ' ' || ? WHERE parent = ?");
+    for (const st of db.prepare('SELECT stop_id, name FROM stations').all()) setSearch.run(normalizeText(st.name), st.stop_id);
 
+    // Some agencies prefix headsigns with the route ("109 S Express ..."); the route is shown separately.
+    const shortNames = new Map(db.prepare('SELECT route_id, short_name FROM routes').all().map((r) => [r.route_id, r.short_name]));
+    const cleanHeadsign = (routeId, headsign) => {
+      const prefix = shortNames.get(routeId);
+      if (!headsign || !prefix || !headsign.toLowerCase().startsWith(`${prefix.toLowerCase()} `)) return headsign || null;
+      return headsign.slice(prefix.length).trim() || headsign;
+    };
     const insertTrip = db.prepare('INSERT OR REPLACE INTO trips VALUES (?, ?, ?, ?, ?, NULL)');
     await forEachRow(zip, 'trips.txt', (r) => {
       if (!r.trip_id || !r.route_id) return;
-      insertTrip.run(r.trip_id, r.route_id, r.service_id || null, r.trip_headsign || null, r.shape_id || null);
+      insertTrip.run(r.trip_id, r.route_id, r.service_id || null, cleanHeadsign(r.route_id, r.trip_headsign), r.shape_id || null);
     });
 
     const insertCalendar = db.prepare('INSERT OR REPLACE INTO calendar VALUES (?, ?, ?, ?)');
@@ -253,14 +270,19 @@ function openStore(dbPath) {
     calendarDatesByServiceId.get(row.service_id).set(row.date, row.exception_type);
   }
 
-  const toStop = (r) => r && ({ id: r.stop_id, code: r.code, name: r.name, latitude: r.lat, longitude: r.lon });
+  const toStop = (r) => r && ({
+    id: r.stop_id, code: r.code, name: r.name, latitude: r.lat, longitude: r.lon,
+    parentId: r.parent || null, parentName: r.parent_name || null,
+  });
+  const STOP_SELECT = 'SELECT s.*, st.name AS parent_name FROM stops s LEFT JOIN stations st ON st.stop_id = s.parent';
   const toTrip = (r) => r && ({
     tripId: r.trip_id, routeId: r.route_id, serviceId: r.service_id, headsign: r.headsign, shapeId: r.shape_id,
     startSeconds: r.start_seconds,
   });
   const q = {
-    stop: db.prepare('SELECT * FROM stops WHERE stop_id = ?'),
-    stopByCode: db.prepare('SELECT * FROM stops WHERE code = ? OR stop_id = ? ORDER BY code = ? DESC'),
+    stop: db.prepare(`${STOP_SELECT} WHERE s.stop_id = ?`),
+    stopByCode: db.prepare(`${STOP_SELECT} WHERE s.code = ? OR s.stop_id = ? ORDER BY s.code = ? DESC`),
+    children: db.prepare(`${STOP_SELECT} WHERE s.parent = ? ORDER BY s.code`),
     stopRoutes: db.prepare('SELECT route_id FROM stop_routes WHERE stop_id = ?'),
     trip: db.prepare('SELECT * FROM trips WHERE trip_id = ?'),
     stopTimes: db.prepare('SELECT trip_id, seconds FROM stop_times WHERE stop_id = ? AND seconds BETWEEN ? AND ?'),
@@ -278,18 +300,19 @@ function openStore(dbPath) {
     routesById: new Map(routes.map((r) => [r.routeId, r])),
     scheduleIndex: { calendarByServiceId, calendarDatesByServiceId },
     getStop: (stopId) => toStop(q.stop.get(stopId)),
+    childStops: (parentId) => q.children.all(parentId).map(toStop),
     stopByCode: (code) => toStop(q.stopByCode.get(code, code, code)),
     stopRouteIds: (stopId) => q.stopRoutes.all(stopId).map((r) => r.route_id),
     getTrip: (tripId) => toTrip(q.trip.get(tripId)),
     // All tokens must appear in the stop name; shortest names first.
     searchStops(tokens, { routeIds = null, limit = 5 } = {}) {
-      const where = tokens.map(() => 'search_name LIKE ?');
+      const where = tokens.map(() => 's.search_name LIKE ?');
       const params = tokens.map((t) => `%${t}%`);
       if (routeIds) {
-        where.push(`stop_id IN (SELECT stop_id FROM stop_routes WHERE route_id IN (${routeIds.map(() => '?').join(',')}))`);
+        where.push(`s.stop_id IN (SELECT stop_id FROM stop_routes WHERE route_id IN (${routeIds.map(() => '?').join(',')}))`);
         params.push(...routeIds);
       }
-      const sql = `SELECT * FROM stops WHERE ${where.join(' AND ')} ORDER BY length(name), name LIMIT ?`;
+      const sql = `${STOP_SELECT} WHERE ${where.join(' AND ')} ORDER BY length(s.name), s.name LIMIT ?`;
       return db.prepare(sql).all(...params, limit).map(toStop);
     },
     stopTimes: (stopId, fromSeconds, toSeconds) => q.stopTimes.all(stopId, fromSeconds, toSeconds),
@@ -348,6 +371,28 @@ function openStopIndex(indexPath) {
     },
     close: () => db.close(),
   };
+}
+
+// True if any service in the feed runs on today's local date.
+function servesToday(dbFile, timeZone, nowMs) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long',
+  }).formatToParts(new Date(nowMs)).map((p) => [p.type, p.value]));
+  const date = `${parts.year}${parts.month}${parts.day}`;
+  const dayIndex = WEEKDAY_COLUMNS.indexOf(parts.weekday.toLowerCase()) + 1;
+  const db = new DatabaseSync(dbFile, { readOnly: true });
+  try {
+    return Boolean(db.prepare(`
+      SELECT 1 FROM calendar_dates WHERE date = ? AND exception_type = 1
+      UNION ALL
+      SELECT 1 FROM calendar c
+      WHERE ? BETWEEN c.start_date AND c.end_date AND substr(c.days, ?, 1) = '1'
+        AND NOT EXISTS (SELECT 1 FROM calendar_dates d WHERE d.service_id = c.service_id AND d.date = ? AND d.exception_type = 2)
+      LIMIT 1
+    `).get(date, date, dayIndex, date));
+  } finally {
+    db.close();
+  }
 }
 
 function searchTokens(query) {
@@ -428,6 +473,14 @@ function createFeedManager({
     }
     const tmp = `${dbPath(id)}.building`;
     const counts = await buildAgencyDb(result.buffer, tmp);
+    // Some agencies publish next season's timetable before it starts. Keep the
+    // current one until the new file actually covers today (re-checked daily).
+    if (hasDb && !force && !servesToday(tmp, agency.timeZone, now()) && servesToday(dbPath(id), agency.timeZone, now())) {
+      fs.rmSync(tmp, { force: true });
+      writeState(id, { ...state, checkedAt });
+      log.log(`[transitArrival] ${id}: new timetable doesn't start yet; keeping the current one`);
+      return { id, changed: false, deferred: true };
+    }
     stores.get(id)?.close();
     stores.delete(id);
     fs.renameSync(tmp, dbPath(id));
@@ -466,12 +519,13 @@ function createFeedManager({
   async function refreshStale() {
     for (const agency of agencies) {
       const checkedAt = Date.parse(readState(agency.id).checkedAt || '') || 0;
-      if (fs.existsSync(dbPath(agency.id)) && now() - checkedAt < maxAgeMs) {
-        try { if (!stores.has(agency.id)) open(agency.id); } catch { /* rebuilt on next request */ }
-        continue;
+      let unreadable = false;
+      if (fs.existsSync(dbPath(agency.id)) && !stores.has(agency.id)) {
+        try { open(agency.id); } catch { unreadable = true; } // old schema or corrupt
       }
+      if (!unreadable && stores.has(agency.id) && now() - checkedAt < maxAgeMs) continue;
       try {
-        await refresh(agency.id);
+        await refresh(agency.id, { force: unreadable });
       } catch (err) {
         log.error(`[transitArrival] refresh ${agency.id} failed: ${err.message}`);
       }

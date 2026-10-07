@@ -107,15 +107,16 @@ const yrtZip = () => zipOf({
     ['10', '10', 'RICHMOND HILL CENTRE', 43.8402, -79.4256, 1, ''],
     ['9820', '9820', 'RICHMOND HILL CENTRE PLATFORM 1', 43.8402, -79.4256, 0, '10'],
     ['9821', '9821', 'RICHMOND HILL CENTRE PLATFORM 2', 43.8401, -79.4257, 0, '10'],
+    ['9822', '9822', 'BUS LOOP ARRIVALS', 43.8403, -79.4255, 0, '10'],
     ['1', '1', '"YONGE / MAJOR MACKENZIE"', 43.8746, -79.4398, 0, ''],
   ]),
   'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,shape_id', [
-    ['8', 'weekday', 'y8', 'Kennedy - SB', ''],
+    ['8', 'weekday', 'y8', '008 Kennedy - SB', ''],
     ['601', 'weekday', 'yblue', 'Newmarket Terminal - NB', ''],
     ['60102', 'weekday', 'yblueb', 'Newmarket Terminal - NB', ''],
   ]),
   'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence', [
-    ['y8', ` ${at(3)}`, ` ${at(3)}`, '9820', 1], ['y8', at(9), at(9), '1', 2],
+    ['y8', at(2), at(2), '9822', 1], ['y8', ` ${at(3)}`, ` ${at(3)}`, '9820', 2], ['y8', at(9), at(9), '1', 3],
     ['yblue', at(6), at(6), '9821', 1],
     ['yblueb', at(30), at(30), '9821', 1],
   ]),
@@ -136,10 +137,11 @@ const AGENCIES = [
 let dataDir;
 let feedManager;
 let downloads = 0;
+let zips;
 
 beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'transit-arrival-test-'));
-  const zips = { 'https://example.test/barrie.zip': await barrieZip(), 'https://example.test/yrt.zip': await yrtZip() };
+  zips = { 'https://example.test/barrie.zip': await barrieZip(), 'https://example.test/yrt.zip': await yrtZip() };
   feedManager = createFeedManager({
     agencies: AGENCIES,
     dataDir,
@@ -223,6 +225,19 @@ describe('feed store', () => {
     const before = downloads;
     expect(await feedManager.refresh('yrt')).toEqual({ id: 'yrt', changed: false });
     expect(downloads).toBe(before + 1);
+  });
+
+  it('keeps the current timetable when a new one has not started yet', async () => {
+    const current = zips['https://example.test/barrie.zip'];
+    const next = await JSZip.loadAsync(current);
+    next.file('calendar.txt', CALENDAR.replace(/20260101,20261231/g, '20270101,20271231'));
+    zips['https://example.test/barrie.zip'] = await next.generateAsync({ type: 'nodebuffer' });
+    try {
+      expect(await feedManager.refresh('barrie')).toMatchObject({ changed: false, deferred: true });
+      expect((await feedManager.getStore('barrie')).getStop('440').name).toBe('Georgian Mall');
+    } finally {
+      zips['https://example.test/barrie.zip'] = current;
+    }
   });
 
   it('keeps only boardable stops, not parent stations', async () => {
@@ -379,9 +394,11 @@ describe('multi-agency network', () => {
   it('infers the agency from the stop and treats terminal platforms as one place', async () => {
     const status = await createNetwork().getStatus({ stop: 'Richmond Hill Centre' });
     expect(status.agency.id).toBe('yrt');
-    expect(status.stop).toMatchObject({ name: 'RICHMOND HILL CENTRE', stopCodes: ['9820', '9821'] });
-    expect(status.arrivals.map((a) => [a.routeName, a.minutes, a.realtime])).toEqual([
-      ['8', 3, false], ['blue', 6, false], ['blue B', 30, false],
+    // The arrivals bay has an unrelated name but the same parent station.
+    expect(status.stop).toMatchObject({ name: 'RICHMOND HILL CENTRE', stopCodes: ['9820', '9821', '9822'] });
+    // y8 serves two of the terminal's stops but is listed once, without the route number in its headsign.
+    expect(status.arrivals.map((a) => [a.routeName, a.headsign, a.minutes])).toEqual([
+      ['8', 'Kennedy - SB', 2], ['blue', 'Newmarket Terminal - NB', 6], ['blue B', 'Newmarket Terminal - NB', 30],
     ]);
   });
 
