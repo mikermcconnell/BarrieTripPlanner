@@ -5,6 +5,7 @@ const { z } = require('zod');
 const { APP_NAME, APP_SLUG, APP_VERSION } = require('./config');
 const {
   WIDGET_URI,
+  LEGACY_WIDGET_URIS,
   WIDGET_MIME_TYPE,
   WIDGET_RESOURCE_META,
   WIDGET_TOOL_META,
@@ -60,14 +61,16 @@ function createMcpServer({ network, widgetHtml }) {
   const examples = network.agencies.map((a) => a.examples).filter(Boolean);
   const exampleList = (key) => examples.map((e) => `"${e[key]}"`).join(', ');
 
-  server.registerResource('transit-map', WIDGET_URI, {
-    title: `${APP_NAME} map`,
-    description: 'Live vehicle map with arrival times',
-    mimeType: WIDGET_MIME_TYPE,
-    _meta: WIDGET_RESOURCE_META,
-  }, async () => ({
-    contents: [{ uri: WIDGET_URI, mimeType: WIDGET_MIME_TYPE, text: widgetHtml, _meta: WIDGET_RESOURCE_META }],
-  }));
+  [WIDGET_URI, ...LEGACY_WIDGET_URIS].forEach((uri, i) => {
+    server.registerResource(i === 0 ? 'transit-map' : `transit-map-legacy-${i}`, uri, {
+      title: `${APP_NAME} map`,
+      description: 'Live vehicle map with arrival times',
+      mimeType: WIDGET_MIME_TYPE,
+      _meta: WIDGET_RESOURCE_META,
+    }, async () => ({
+      contents: [{ uri, mimeType: WIDGET_MIME_TYPE, text: widgetHtml, _meta: WIDGET_RESOURCE_META }],
+    }));
+  });
 
   server.registerTool('get_transit_status', {
     title: 'Get live transit status',

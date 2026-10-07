@@ -415,6 +415,9 @@ describe('map widget', () => {
     const resource = await client.readResource({ uri: WIDGET_URI });
     expect(resource.contents[0]).toMatchObject({ mimeType: 'text/html;profile=mcp-app', text: '<html>widget</html>' });
     expect(resource.contents[0]._meta.ui.csp.resourceDomains).toContain('https://a.basemaps.cartocdn.com');
+    // Hosts that cached an older widget URI still get the current widget.
+    const legacy = await client.readResource({ uri: 'ui://transit-arrival/map-v2.html' });
+    expect(legacy.contents[0].text).toBe('<html>widget</html>');
 
     const result = await client.callTool({ name: 'get_transit_status', arguments: { stop: 'Georgian Mall' } });
     expect(result.structuredContent.map).toBeUndefined();

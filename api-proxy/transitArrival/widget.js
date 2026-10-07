@@ -6,6 +6,8 @@ const { APP_NAME, APP_SLUG, APP_VERSION, MAP_DEFAULT_VIEW } = require('./config'
 
 // Bump the version segment when the widget changes; hosts cache by URI.
 const WIDGET_URI = `ui://${APP_SLUG}/map-v3.html`;
+// Hosts keep requesting the URI they cached until the connector is refreshed, so old URIs keep serving the current widget.
+const LEGACY_WIDGET_URIS = [`ui://${APP_SLUG}/map-v2.html`];
 const WIDGET_MIME_TYPE = 'text/html;profile=mcp-app';
 const WIDGET_REFRESH_MS = 20 * 1000;
 
@@ -65,6 +67,7 @@ const WIDGET_TOOL_META = {
 
 module.exports = {
   WIDGET_URI,
+  LEGACY_WIDGET_URIS,
   WIDGET_MIME_TYPE,
   WIDGET_RESOURCE_META,
   WIDGET_TOOL_META,

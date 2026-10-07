@@ -44,7 +44,8 @@ MCP Apps `postMessage` bridge (falling back to `window.openai`) and does the fol
 - follows the host's light/dark theme and can expand to fullscreen
 
 If you change `widget/map.html` in a way that matters to hosts, bump the `map-vN` segment of `WIDGET_URI` in `widget.js`
-(hosts cache by URI).
+(hosts cache by URI), and move the old URI into `LEGACY_WIDGET_URIS`. ChatGPT keeps requesting the cached URI until
+the connector is refreshed, and shows "Failed to fetch template" if it's gone.
 
 ## Public website
 The same service serves the pages required for app directory review: `/` (product page), `/support`, `/privacy`,
