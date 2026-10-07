@@ -5,12 +5,13 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { createMcpServer } = require('./mcpServer');
-const { createTransitData } = require('./transitData');
+const { createFeedManager } = require('./feedStore');
+const { createTransitNetwork } = require('./network');
 const { buildWidgetHtml } = require('./widget');
 const { pages } = require('./site/pages');
-const { APP_NAME, APP_VERSION } = require('./config');
+const { APP_NAME, APP_VERSION, AGENCIES, DATA_DIR } = require('./config');
 
-function createTransitArrivalApp({ transitData = createTransitData(), widgetHtml = buildWidgetHtml() } = {}) {
+function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
   const app = express();
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '100kb' }));
@@ -48,7 +49,7 @@ function createTransitArrivalApp({ transitData = createTransitData(), widgetHtml
 
   // Stateless Streamable HTTP: a fresh server + transport per request.
   app.post('/mcp', async (req, res) => {
-    const server = createMcpServer({ transitData, widgetHtml });
+    const server = createMcpServer({ network, widgetHtml });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => {
       transport.close();
@@ -73,19 +74,23 @@ function createTransitArrivalApp({ transitData = createTransitData(), widgetHtml
   app.get('/mcp', methodNotAllowed);
   app.delete('/mcp', methodNotAllowed);
 
-  return { app, transitData };
+  return { app, network };
 }
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8787;
-  const { app, transitData } = createTransitArrivalApp();
+  const feedManager = createFeedManager({ agencies: AGENCIES, dataDir: DATA_DIR });
+  const network = createTransitNetwork({ agencies: AGENCIES, feedManager });
+  const { app } = createTransitArrivalApp({ network });
   app.listen(port, () => {
     console.log(`[transitArrival] ${APP_NAME} MCP server listening on :${port}/mcp`);
     if (!process.env.TRANSIT_ARRIVAL_OPERATOR_NAME || !process.env.TRANSIT_ARRIVAL_SUPPORT_EMAIL) {
       console.warn('[transitArrival] TRANSIT_ARRIVAL_OPERATOR_NAME / TRANSIT_ARRIVAL_SUPPORT_EMAIL unset; public pages show placeholders.');
     }
-    // Warm the GTFS cache so the first rider request isn't slow.
-    transitData.listRoutes().catch((err) => console.error('[transitArrival] GTFS warm-up failed:', err.message));
+    // Build any missing or day-old feeds one at a time, then re-check hourly.
+    feedManager.refreshStale()
+      .catch((err) => console.error('[transitArrival] feed refresh failed:', err.message))
+      .finally(() => feedManager.startScheduler());
   });
 }
 

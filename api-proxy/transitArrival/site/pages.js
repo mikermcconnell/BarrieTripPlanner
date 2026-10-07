@@ -4,11 +4,19 @@
 // support, privacy policy, and terms. Served from the app's own domain.
 // Keep the privacy policy in step with what the server actually does.
 
-const { APP_NAME, APP_TAGLINE, OPERATOR } = require('../config');
+const { APP_NAME, APP_TAGLINE, OPERATOR, AGENCIES } = require('../config');
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
+
+const agencyNames = AGENCIES.map((a) => a.name);
+const joinWith = (items, word) => (items.length <= 1 ? items.join('')
+  : `${items.slice(0, -1).join(', ')}${items.length > 2 ? ',' : ''} ${word} ${items[items.length - 1]}`);
+const listText = (items) => joinWith(items, 'and');
+const orText = (items) => joinWith(items, 'or');
+const coverageList = () => `<ul>${AGENCIES.map((a) => `<li><strong>${esc(a.name)}</strong>: ${esc(a.region)}</li>`).join('')}</ul>`;
+const attributionList = () => `<ul>${AGENCIES.map((a) => `<li>${esc(a.attribution)} <a href="${esc(a.licence.url)}">${esc(a.licence.name)}</a></li>`).join('')}</ul>`;
 
 function layout(title, body) {
   return `<!doctype html>
@@ -49,7 +57,7 @@ function layout(title, body) {
 ${body}
 <footer>
   ${esc(APP_NAME)} is an independent project operated by ${esc(OPERATOR.name)}. It is not affiliated with, endorsed by,
-  or sponsored by the City of Barrie, Barrie Transit, or OpenAI. Map data &copy; OpenStreetMap contributors &copy; CARTO.
+  or sponsored by ${esc(orText([...agencyNames, 'OpenAI']))}, or any municipality they serve. Map data &copy; OpenStreetMap contributors &copy; CARTO.
 </footer>
 </main>
 </body>
@@ -61,7 +69,8 @@ const home = () => layout(`${APP_NAME}: ${APP_TAGLINE}`, `
 <p class="muted">${esc(APP_TAGLINE)}.</p>
 <p>Ask ChatGPT <em>"When's the next bus at Georgian Mall?"</em> or <em>"Where's the route 8 bus?"</em>
 and ${esc(APP_NAME)} shows a live map of the buses with how many minutes until each one arrives.
-It currently covers buses in Barrie, Ontario.</p>
+It covers these transit agencies:</p>
+${coverageList()}
 <img class="shot" src="/screenshot-map.png" alt="A live map of buses near Georgian Mall with arrival times in minutes">
 <h2>What it does</h2>
 <ul>
@@ -74,7 +83,7 @@ It currently covers buses in Barrie, Ontario.</p>
 <h2>How to use it</h2>
 <ol>
   <li>In ChatGPT, open the Apps directory and add <strong>${esc(APP_NAME)}</strong>.</li>
-  <li>Ask about a stop or a route in Barrie, for example "next bus at Downtown Hub" or "where is route 100".</li>
+  <li>Ask about a stop or a route, for example "next bus at Downtown Hub in Barrie" or "where is the Viva Blue".</li>
 </ol>
 <p class="muted">No account, no sign-in, and no location access needed.</p>
 `);
@@ -85,7 +94,9 @@ const support = () => layout(`Support · ${APP_NAME}`, `
 <a href="mailto:${esc(OPERATOR.email)}">${esc(OPERATOR.email)}</a>. Include the stop or route and roughly when you asked,
 and we'll look into it.</p>
 <h2>Common questions</h2>
-<p><strong>Which cities are covered?</strong> Barrie, Ontario. More may follow.</p>
+<p><strong>Which areas are covered?</strong></p>
+${coverageList()}
+<p>More are on the way.</p>
 <p><strong>What's the difference between "live" and "scheduled" times?</strong> Live times come from the bus's real-time
 prediction. Scheduled times come from the published timetable and are used when a bus isn't being tracked yet, for example
 before it starts its trip, or if the real-time feed is temporarily unavailable.</p>
@@ -95,8 +106,8 @@ next trip is scheduled.</p>
 the stop sign.</p>
 <p><strong>Are times guaranteed?</strong> No. They're estimates based on data published by the transit agency and can be
 affected by traffic, detours, and data delays. Allow extra time when it matters.</p>
-<p><strong>Service alerts and fares:</strong> for official information, contact Barrie Transit directly. ${esc(APP_NAME)}
-is not operated by Barrie Transit.</p>
+<p><strong>Service alerts and fares:</strong> for official information, contact the transit agency directly. ${esc(APP_NAME)}
+is not operated by any transit agency.</p>
 `);
 
 const privacy = () => layout(`Privacy Policy · ${APP_NAME}`, `
@@ -130,8 +141,8 @@ We don't use cookies, advertising, analytics trackers, or profiling.</p>
   privacy policy.</li>
   <li><strong>Our hosting provider</strong> (Railway) runs our servers and processes request data on our behalf.</li>
 </ul>
-<p>We don't sell or share personal information for advertising. Transit data comes from Barrie Transit's public feeds; we
-send them nothing about you.</p>
+<p>We don't sell or share personal information for advertising. Transit data comes from the public feeds of the
+agencies we cover (${esc(listText(agencyNames))}); we send them nothing about you.</p>
 
 <h2>Retention</h2>
 <p>Transit questions are not stored. Rate-limiting data is discarded within one minute. Error logs and hosting request logs
@@ -156,8 +167,8 @@ const terms = () => layout(`Terms of Service · ${APP_NAME}`, `
 to them.</p>
 
 <h2>The service</h2>
-<p>${esc(APP_NAME)} shows transit vehicle locations and estimated arrival times inside ChatGPT, currently for buses in
-Barrie, Ontario. It's provided free of charge.</p>
+<p>${esc(APP_NAME)} shows transit vehicle locations and estimated arrival times inside ChatGPT, for the transit
+agencies listed on our home page. It's provided free of charge.</p>
 
 <h2>Estimates only</h2>
 <p>Arrival times, vehicle positions, and schedules are estimates based on data published by the transit agency. They may be
@@ -165,9 +176,10 @@ late, early, incomplete, or wrong, and buses may be detoured or cancelled withou
 where timing is critical, and check official sources for service alerts.</p>
 
 <h2>Not affiliated</h2>
-<p>${esc(APP_NAME)} is independent. It is not affiliated with, endorsed by, or sponsored by the City of Barrie, Barrie
-Transit, or OpenAI. Transit data is used under Barrie Transit's open data licence. Barrie Transit provides that data
-"as is" and may change or withdraw it at any time.</p>
+<p>${esc(APP_NAME)} is independent. It is not affiliated with, endorsed by, or sponsored by
+${esc(orText([...agencyNames, 'OpenAI']))}, or any municipality they serve. Transit data is used under each agency's open data
+licence, and agencies provide that data "as is" and may change or withdraw it at any time:</p>
+${attributionList()}
 
 <h2>Acceptable use</h2>
 <p>Don't misuse the service: no attempts to disrupt it, overload it, scrape it at scale, or access it other than through

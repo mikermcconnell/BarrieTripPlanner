@@ -1,0 +1,36 @@
+[
+  {
+    "id": "barrie",
+    "name": "Barrie Transit",
+    "region": "Barrie, Ontario",
+    "aliases": ["barrie", "barrie transit", "myride", "myride barrie"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://www.myridebarrie.ca/gtfs/Google_transit.zip",
+    "vehiclePositionsUrl": "https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb",
+    "tripUpdatesUrl": "https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb",
+    "licence": {
+      "name": "Barrie Transit open data licence",
+      "url": "https://www.barrie.ca/services-payments/transportation-parking/barrie-transit/barrie-gtfs"
+    },
+    "attribution": "Transit data from Barrie Transit, used under its open data licence.",
+    "examples": { "stop": "Georgian Mall", "route": "8", "direction": "Park Place" }
+  },
+  {
+    "id": "yrt",
+    "name": "York Region Transit",
+    "region": "York Region, Ontario (Vaughan, Markham, Richmond Hill, Newmarket, Aurora)",
+    "aliases": ["yrt", "viva", "york region", "york region transit", "yrt viva", "vaughan", "markham", "richmond hill", "newmarket", "aurora", "east gwillimbury", "georgina", "king", "whitchurch-stouffville", "stouffville"],
+    "mode": "bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://www.yrt.ca/google/google_transit.zip",
+    "vehiclePositionsUrl": "https://rtu.york.ca/gtfsrealtime/VehiclePositions",
+    "tripUpdatesUrl": "https://rtu.york.ca/gtfsrealtime/TripUpdates",
+    "licence": {
+      "name": "YRT Open Data Licence",
+      "url": "https://www.yrt.ca/en/about-us/open-data-licence-agreement.aspx"
+    },
+    "attribution": "Contains public transit Information made available under YRT's Open Data Licence.",
+    "examples": { "stop": "Richmond Hill Centre", "route": "blue", "direction": "Newmarket" }
+  }
+]

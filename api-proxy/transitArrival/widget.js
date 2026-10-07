@@ -2,10 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { APP_NAME, APP_SLUG, APP_VERSION, AGENCY } = require('./config');
+const { APP_NAME, APP_SLUG, APP_VERSION, MAP_DEFAULT_VIEW } = require('./config');
 
 // Bump the version segment when the widget changes; hosts cache by URI.
-const WIDGET_URI = `ui://${APP_SLUG}/map-v2.html`;
+const WIDGET_URI = `ui://${APP_SLUG}/map-v3.html`;
 const WIDGET_MIME_TYPE = 'text/html;profile=mcp-app';
 const WIDGET_REFRESH_MS = 20 * 1000;
 
@@ -31,7 +31,7 @@ function buildWidgetHtml({ env = process.env } = {}) {
     appName: APP_NAME,
     appSlug: APP_SLUG,
     version: APP_VERSION,
-    center: AGENCY.center,
+    view: MAP_DEFAULT_VIEW,
     refreshMs: WIDGET_REFRESH_MS,
     tiles: tileConfig(env),
   };

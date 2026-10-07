@@ -1,11 +1,17 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const JSZip = require('jszip');
 const { createTransitData } = require('../transitArrival/transitData');
+const { createFeedManager, simplify } = require('../transitArrival/feedStore');
+const { createTransitNetwork } = require('../transitArrival/network');
 const { parseTripUpdates } = require('../transitArrival/tripUpdatesParser');
 const { summarizeStatus, createMcpServer } = require('../transitArrival/mcpServer');
 const { buildWidgetHtml, WIDGET_URI } = require('../transitArrival/widget');
 
-const NOW_MS = Date.UTC(2026, 9, 5, 17, 30, 0);
+const NOW_MS = Date.UTC(2026, 9, 5, 17, 30, 0); // Monday 13:30 America/Toronto
 const NOW_S = NOW_MS / 1000;
-const LOCAL_SECONDS_NOW = 13.5 * 3600; // 13:30 America/Toronto
+const LOCAL_SECONDS_NOW = 13.5 * 3600;
 
 // --- minimal protobuf encoder for building GTFS-RT fixtures ---
 const varint = (n) => {
@@ -40,101 +46,149 @@ function encodeFeed({ headerTimestamp, trips }) {
   return new Uint8Array([...bytesField(1, header), ...entities.flat()]).buffer;
 }
 
-function buildStaticData() {
-  const stops = [
-    { id: '440', code: '440', name: 'Georgian Mall', latitude: 44.4106, longitude: -79.7064, locationType: 0 },
-    { id: '441', code: '441', name: 'Georgian Mall', latitude: 44.4110, longitude: -79.7051, locationType: 0 },
-    { id: '77', code: '77', name: 'Georgian Mall North Entrance', latitude: 44.4130, longitude: -79.7094, locationType: 0 },
-    { id: '1', code: '1', name: 'Downtown Hub', latitude: 44.3875, longitude: -79.6903, locationType: 0 },
-  ];
-  return {
-    lastRefresh: 1,
-    stopsById: new Map(stops.map((s) => [s.id, s])),
-    shapes: new Map([
-      ['s8a', [{ latitude: 44.387588123, longitude: -79.690372456 }, { latitude: 44.4106, longitude: -79.7064 }]],
-      ['s8b', [{ latitude: 44.4110, longitude: -79.7051 }, { latitude: 44.4130, longitude: -79.7094 }]],
-    ]),
-    routeShapeMapping: new Map([['8A', ['s8a']], ['8B', ['s8b']], ['80', []]]),
-    tripMapping: new Map([
-      ['t8a', { routeId: '8A', headsign: 'RVH/YONGE to Park Place', shapeId: 's8a' }],
-      ['t8b', { routeId: '8B', headsign: 'Crosstown/Essa to Georgian College', shapeId: 's8b' }],
-      ['t8a-later', { routeId: '8A', headsign: 'RVH/YONGE to Park Place', shapeId: 's8a' }],
-      ['t8a-saturday', { routeId: '8A', headsign: 'RVH/YONGE to Park Place', shapeId: 's8a' }],
-      ['t8b-tomorrow', { routeId: '8B', headsign: 'Crosstown/Essa to Georgian College', shapeId: 's8b' }],
-      ['t80', { routeId: '80', headsign: 'Eighty' }],
-    ]),
-    // Timetable: t8a and t8b also have live predictions; t8a-later runs later today;
-    // t8a-saturday only runs on Saturdays; t8b-tomorrow is an early-morning trip.
-    stopTimesByStop: new Map([
-      ['440', [
-        { tripId: 't8a', seconds: LOCAL_SECONDS_NOW + 4 * 60 },
-        { tripId: 't8a-saturday', seconds: LOCAL_SECONDS_NOW + 10 * 60 },
-        { tripId: 't8a-later', seconds: LOCAL_SECONDS_NOW + 20 * 60 },
-      ]],
-      ['441', [
-        { tripId: 't8b-tomorrow', seconds: 5 * 3600 + 45 * 60 },
-        { tripId: 't8b', seconds: LOCAL_SECONDS_NOW + 2 * 60 },
-      ]],
-    ]),
-    scheduleIndex: {
-      tripsByRouteId: new Map([
-        ['8A', [
-          { tripId: 't8a', serviceId: 'weekday', startTimeSeconds: LOCAL_SECONDS_NOW - 10 * 60 },
-          { tripId: 't8a-saturday', serviceId: 'saturday', startTimeSeconds: LOCAL_SECONDS_NOW },
-          { tripId: 't8a-later', serviceId: 'weekday', startTimeSeconds: LOCAL_SECONDS_NOW + 10 * 60 },
-        ]],
-        ['8B', [
-          { tripId: 't8b-tomorrow', serviceId: 'weekday', startTimeSeconds: 5 * 3600 + 30 * 60 },
-          { tripId: 't8b', serviceId: 'weekday', startTimeSeconds: LOCAL_SECONDS_NOW - 5 * 60 },
-        ]],
-      ]),
-      calendarByServiceId: new Map([
-        ['weekday', { monday: true, tuesday: true, wednesday: true, thursday: true, friday: true,
-          saturday: false, sunday: false, startDate: '20260101', endDate: '20261231' }],
-        ['saturday', { monday: false, tuesday: false, wednesday: false, thursday: false, friday: false,
-          saturday: true, sunday: false, startDate: '20260101', endDate: '20261231' }],
-      ]),
-      calendarDatesByServiceId: new Map(),
-    },
-    routesById: new Map([
-      ['8A', { id: '8A', shortName: '8A', longName: 'RVH/YONGE' }],
-      ['8B', { id: '8B', shortName: '8B', longName: 'Crosstown/Essa' }],
-      ['80', { id: '80', shortName: '80', longName: 'Eighty' }],
-    ]),
-    routeColors: new Map([['8A', '#000000']]),
-    routeStopSequencesMapping: {
-      '8A': { __default__: ['1', '440'] },
-      '8B': { __default__: ['441', '77'] },
-      '80': { __default__: ['1'] },
-    },
-  };
+// --- GTFS fixtures ---
+const hms = (seconds) => [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+  .map((n) => String(n).padStart(2, '0')).join(':');
+const at = (minutesFromNow) => hms(LOCAL_SECONDS_NOW + minutesFromNow * 60);
+const csv = (header, rows) => [header, ...rows.map((r) => r.join(','))].join('\n');
+const CALENDAR = csv('service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date', [
+  ['weekday', 1, 1, 1, 1, 1, 0, 0, '20260101', '20261231'],
+  ['saturday', 0, 0, 0, 0, 0, 1, 0, '20260101', '20261231'],
+]);
+
+async function zipOf(files) {
+  const zip = new JSZip();
+  for (const [name, text] of Object.entries(files)) zip.file(name, text);
+  return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-function createFixture({ feedStatus = 'fresh', updates, vehicles = [] } = {}) {
+// Barrie-like: 8A/8B variants, an "80" that must not match "8", two same-name stops.
+const barrieZip = () => zipOf({
+  'routes.txt': csv('route_id,route_short_name,route_long_name,route_color', [
+    ['8A', '8A', 'RVH/YONGE', '000000'], ['8B', '8B', 'Crosstown/Essa', ''], ['80', '80', 'Eighty', ''],
+  ]),
+  'stops.txt': csv('stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type', [
+    ['440', '440', 'Georgian Mall', 44.4106, -79.7064, 0],
+    ['441', '441', 'Georgian Mall', 44.4110, -79.7051, 0],
+    ['77', '77', 'Georgian Mall North Entrance', 44.4130, -79.7094, 0],
+    ['1', '1', 'Downtown Hub', 44.3875, -79.6903, 0],
+  ]),
+  'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,shape_id', [
+    ['8A', 'weekday', 't8a', 'RVH/YONGE to Park Place', 's8a'],
+    ['8B', 'weekday', 't8b', 'Crosstown/Essa to Georgian College', 's8b'],
+    ['8A', 'weekday', 't8a-later', 'RVH/YONGE to Park Place', 's8a'],
+    ['8A', 'saturday', 't8a-saturday', 'RVH/YONGE to Park Place', 's8a'],
+    ['8B', 'weekday', 't8b-tomorrow', 'Crosstown/Essa to Georgian College', 's8b'],
+    ['80', 'weekday', 't80', 'Eighty', ''],
+  ]),
+  // t8a and t8b also have live predictions; t8a-later runs later today;
+  // t8a-saturday only runs on Saturdays; t8b-tomorrow is an early-morning trip.
+  'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence', [
+    ['t8a', at(-10), at(-10), '1', 1], ['t8a', at(4), at(4), '440', 2],
+    ['t8a-saturday', at(0), at(0), '1', 1], ['t8a-saturday', at(10), at(10), '440', 2],
+    ['t8a-later', at(10), at(10), '1', 1], ['t8a-later', at(20), at(20), '440', 2],
+    ['t8b', at(-5), at(-5), '77', 1], ['t8b', at(2), at(2), '441', 2],
+    ['t8b-tomorrow', '05:30:00', '05:30:00', '77', 1], ['t8b-tomorrow', '05:45:00', '05:45:00', '441', 2],
+    ['t80', '06:00:00', '06:00:00', '1', 1],
+  ]),
+  'shapes.txt': csv('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence', [
+    ['s8a', 44.387588123, -79.690372456, 1], ['s8a', 44.4106, -79.7064, 2],
+    ['s8b', 44.4110, -79.7051, 1], ['s8b', 44.4130, -79.7094, 2],
+  ]),
+  'calendar.txt': CALENDAR,
+});
+
+// YRT-like: zero-padded and named routes, terminal platforms, a stop code shared with Barrie.
+const yrtZip = () => zipOf({
+  'routes.txt': csv('route_id,route_short_name,route_long_name,route_color', [
+    ['8', '008', 'KENNEDY', ''], ['601', 'blue', 'VIVA BLUE', '009CDB'], ['60102', 'blue B', 'VIVA BLUE B', ''],
+  ]),
+  'stops.txt': csv('stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type,parent_station', [
+    ['10', '10', 'RICHMOND HILL CENTRE', 43.8402, -79.4256, 1, ''],
+    ['9820', '9820', 'RICHMOND HILL CENTRE PLATFORM 1', 43.8402, -79.4256, 0, '10'],
+    ['9821', '9821', 'RICHMOND HILL CENTRE PLATFORM 2', 43.8401, -79.4257, 0, '10'],
+    ['1', '1', '"YONGE / MAJOR MACKENZIE"', 43.8746, -79.4398, 0, ''],
+  ]),
+  'trips.txt': csv('route_id,service_id,trip_id,trip_headsign,shape_id', [
+    ['8', 'weekday', 'y8', 'Kennedy - SB', ''],
+    ['601', 'weekday', 'yblue', 'Newmarket Terminal - NB', ''],
+    ['60102', 'weekday', 'yblueb', 'Newmarket Terminal - NB', ''],
+  ]),
+  'stop_times.txt': csv('trip_id,arrival_time,departure_time,stop_id,stop_sequence', [
+    ['y8', ` ${at(3)}`, ` ${at(3)}`, '9820', 1], ['y8', at(9), at(9), '1', 2],
+    ['yblue', at(6), at(6), '9821', 1],
+    ['yblueb', at(30), at(30), '9821', 1],
+  ]),
+  'calendar.txt': CALENDAR,
+});
+
+const AGENCIES = [
+  {
+    id: 'barrie', name: 'Barrie Transit', region: 'Barrie, Ontario', aliases: ['barrie'], timeZone: 'America/Toronto',
+    staticUrl: 'https://example.test/barrie.zip',
+  },
+  {
+    id: 'yrt', name: 'York Region Transit', region: 'York Region, Ontario', aliases: ['yrt', 'viva', 'markham'],
+    timeZone: 'America/Toronto', staticUrl: 'https://example.test/yrt.zip',
+  },
+];
+
+let dataDir;
+let feedManager;
+let downloads = 0;
+
+beforeAll(async () => {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'transit-arrival-test-'));
+  const zips = { 'https://example.test/barrie.zip': await barrieZip(), 'https://example.test/yrt.zip': await yrtZip() };
+  feedManager = createFeedManager({
+    agencies: AGENCIES,
+    dataDir,
+    log: { log() {}, warn() {}, error() {} },
+    fetchImpl: async (url) => {
+      downloads++;
+      const body = zips[url];
+      return { ok: true, status: 200, headers: new Map(), arrayBuffer: async () => body };
+    },
+  });
+  await feedManager.refreshStale();
+});
+
+afterAll(() => {
+  feedManager.close();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
+const DEFAULT_UPDATES = [
+  {
+    tripId: 't8a', routeId: '8A', scheduleRelationship: 'SCHEDULED',
+    stopTimeUpdates: [
+      { stopId: '1', arrival: { time: NOW_S - 120 }, scheduleRelationship: 'SCHEDULED' },
+      { stopId: '440', arrival: { time: NOW_S + 300, delay: 60 }, scheduleRelationship: 'SCHEDULED' },
+    ],
+  },
+  {
+    tripId: 't8b', routeId: '8B', scheduleRelationship: 'SCHEDULED',
+    stopTimeUpdates: [{ stopId: '441', arrival: { time: NOW_S + 120 }, scheduleRelationship: 'SCHEDULED' }],
+  },
+];
+
+function agencyData(agency, { feedStatus = 'fresh', updates, vehicles = [] } = {}) {
   const tripUpdates = {
     status: feedStatus,
     ageMs: feedStatus === 'stale' ? 10 * 60 * 1000 : 5000,
-    updates: updates || [
-      {
-        tripId: 't8a', routeId: '8A', scheduleRelationship: 'SCHEDULED',
-        stopTimeUpdates: [
-          { stopId: '1', arrival: { time: NOW_S - 120 }, scheduleRelationship: 'SCHEDULED' },
-          { stopId: '440', arrival: { time: NOW_S + 300, delay: 60 }, scheduleRelationship: 'SCHEDULED' },
-        ],
-      },
-      {
-        tripId: 't8b', routeId: '8B', scheduleRelationship: 'SCHEDULED',
-        stopTimeUpdates: [{ stopId: '441', arrival: { time: NOW_S + 120 }, scheduleRelationship: 'SCHEDULED' }],
-      },
-    ],
+    updates: updates || (agency.id === 'barrie' ? DEFAULT_UPDATES : []),
   };
   return createTransitData({
-    getStaticData: async () => buildStaticData(),
+    agency,
+    getStore: () => feedManager.getStore(agency.id),
     fetchTripUpdates: async () => tripUpdates,
     fetchVehicles: async () => vehicles,
     now: () => NOW_MS,
   });
 }
+
+const createFixture = (options) => agencyData(AGENCIES[0], options);
+const createNetwork = () => createTransitNetwork({ agencies: AGENCIES, feedManager, createAgencyData: (a) => agencyData(a) });
 
 describe('tripUpdatesParser', () => {
   it('decodes trips, stop time updates, negative delays and skipped stops', () => {
@@ -164,6 +218,25 @@ describe('tripUpdatesParser', () => {
   });
 });
 
+describe('feed store', () => {
+  it('skips the rebuild when the published zip is unchanged', async () => {
+    const before = downloads;
+    expect(await feedManager.refresh('yrt')).toEqual({ id: 'yrt', changed: false });
+    expect(downloads).toBe(before + 1);
+  });
+
+  it('keeps only boardable stops, not parent stations', async () => {
+    const store = await feedManager.getStore('yrt');
+    expect(store.getStop('10')).toBeUndefined();
+    expect(store.getStop('1').name).toBe('YONGE / MAJOR MACKENZIE');
+  });
+
+  it('simplifies shapes while keeping their ends', () => {
+    const line = Array.from({ length: 50 }, (_, i) => [44 + i * 1e-5, -79]);
+    expect(simplify(line)).toEqual([line[0], line[49]]);
+  });
+});
+
 describe('transitData', () => {
   it('expands a bare route number to its lettered variants but not longer numbers', async () => {
     const status = await createFixture().getStatus({ route: 'Route 8' });
@@ -172,7 +245,7 @@ describe('transitData', () => {
 
   it('merges same-name stops and returns arrivals across them in time order', async () => {
     const status = await createFixture().getStatus({ stop: 'georgian mall' });
-    expect(status.stop.stopCodes).toEqual(['440', '441']);
+    expect([...status.stop.stopCodes].sort()).toEqual(['440', '441']);
     expect(status.arrivals.map((a) => [a.routeId, a.minutes, a.stopCode, a.realtime])).toEqual([
       ['8B', 2, '441', true],
       ['8A', 5, '440', true],
@@ -201,8 +274,7 @@ describe('transitData', () => {
     expect(none.arrivals).toEqual([]);
     expect(none.notes.join(' ')).toMatch(/No service is scheduled/);
 
-    const fixture = createFixture({ updates: [] });
-    const later = await fixture.getStatus({ stop: '441' });
+    const later = await createFixture({ updates: [] }).getStatus({ stop: '441' });
     expect(later.arrivals.map((a) => a.tripId)).toEqual(['t8b']);
   });
 
@@ -260,6 +332,59 @@ describe('transitData', () => {
   });
 });
 
+describe('multi-agency network', () => {
+  it('uses the named agency and shows riders unpadded route names', async () => {
+    const status = await createNetwork().getStatus({ agency: 'YRT', route: '8' });
+    expect(status.agency).toEqual({ id: 'yrt', name: 'York Region Transit' });
+    expect(status.routes.map((r) => [r.routeId, r.name])).toEqual([['8', '8']]);
+  });
+
+  it('matches named routes exactly before their variants', async () => {
+    const status = await createNetwork().getStatus({ agency: 'viva', route: 'blue' });
+    expect(status.routes.map((r) => r.routeId)).toEqual(['601']);
+  });
+
+  it('infers the agency from a route only one agency has', async () => {
+    const status = await createNetwork().getStatus({ route: 'viva blue' });
+    expect(status.agency.id).toBe('yrt');
+    expect(status.routes.map((r) => r.routeId)).toEqual(['601', '60102']);
+  });
+
+  it('asks which area when a route exists in several agencies', async () => {
+    const status = await createNetwork().getStatus({ route: '8' });
+    expect(status.agency).toBeNull();
+    expect(status.agencyCandidates.map((a) => a.id)).toEqual(['barrie', 'yrt']);
+    expect(status.notes[0]).toMatch(/more than one area/);
+  });
+
+  it('infers the agency from the stop and treats terminal platforms as one place', async () => {
+    const status = await createNetwork().getStatus({ stop: 'Richmond Hill Centre' });
+    expect(status.agency.id).toBe('yrt');
+    expect(status.stop).toMatchObject({ name: 'RICHMOND HILL CENTRE', stopCodes: ['9820', '9821'] });
+    expect(status.arrivals.map((a) => [a.routeName, a.minutes, a.realtime])).toEqual([
+      ['8', 3, false], ['blue', 6, false], ['blue B', 30, false],
+    ]);
+  });
+
+  it('offers stops from each agency when a stop number is ambiguous', async () => {
+    const status = await createNetwork().getStatus({ stop: '1' });
+    expect(status.stopCandidates.map((s) => [s.agencyId, s.name])).toEqual([
+      ['barrie', 'Downtown Hub'], ['yrt', 'YONGE / MAJOR MACKENZIE'],
+    ]);
+  });
+
+  it('says so when asked about an agency it does not cover', async () => {
+    const status = await createNetwork().getStatus({ agency: 'TTC', stop: 'Union' });
+    expect(status.notes[0]).toMatch(/isn't a covered transit agency/);
+  });
+
+  it('lists covered agencies when routes are requested without one', async () => {
+    const network = createNetwork();
+    expect((await network.listRoutes()).coveredAgencies.map((a) => a.id)).toEqual(['barrie', 'yrt']);
+    expect((await network.listRoutes({ agency: 'markham' })).routes.map((r) => r.name)).toEqual(['8', 'blue', 'blue B']);
+  });
+});
+
 describe('map widget', () => {
   it('inlines Leaflet and config with no leftover placeholders', () => {
     const html = buildWidgetHtml({ env: { CARTO_BASEMAP_API_KEY: 'k&y' } });
@@ -271,7 +396,7 @@ describe('map widget', () => {
   it('registers the widget and keeps map geometry out of model-visible content', async () => {
     const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
     const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
-    const server = createMcpServer({ transitData: createFixture(), widgetHtml: '<html>widget</html>' });
+    const server = createMcpServer({ network: createNetwork(), widgetHtml: '<html>widget</html>' });
     const client = new Client({ name: 'test', version: '1' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -280,11 +405,12 @@ describe('map widget', () => {
     const statusTool = tools.find((t) => t.name === 'get_transit_status');
     expect(statusTool._meta.ui.resourceUri).toBe(WIDGET_URI);
     expect(statusTool._meta['openai/outputTemplate']).toBe(WIDGET_URI);
+    expect(statusTool.description).toContain('York Region Transit');
     for (const tool of tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: true });
     }
     const findStopsTool = tools.find((t) => t.name === 'find_stops');
-    expect(Object.keys(findStopsTool.inputSchema.properties)).toEqual(['query', 'route']);
+    expect(Object.keys(findStopsTool.inputSchema.properties)).toEqual(['query', 'route', 'agency']);
 
     const resource = await client.readResource({ uri: WIDGET_URI });
     expect(resource.contents[0]).toMatchObject({ mimeType: 'text/html;profile=mcp-app', text: '<html>widget</html>' });
@@ -292,20 +418,31 @@ describe('map widget', () => {
 
     const result = await client.callTool({ name: 'get_transit_status', arguments: { stop: 'Georgian Mall' } });
     expect(result.structuredContent.map).toBeUndefined();
+    expect(result.structuredContent.agency.id).toBe('barrie');
     expect(result._meta.map.shapes.length).toBeGreaterThan(0);
     expect(result.content[0].text).toContain('Stop: Georgian Mall');
     await client.close();
   });
 });
+
 describe('public website', () => {
   const request = require('supertest');
   const { createTransitArrivalApp } = require('../transitArrival/server');
-  const { app } = createTransitArrivalApp({ transitData: createFixture(), widgetHtml: '<html></html>' });
+  let app;
+  beforeAll(() => {
+    ({ app } = createTransitArrivalApp({ network: createNetwork(), widgetHtml: '<html></html>' }));
+  });
 
   it.each(['/', '/support', '/privacy', '/terms'])('serves %s with the not-affiliated notice', async (route) => {
     const res = await request(app).get(route);
     expect(res.status).toBe(200);
     expect(res.text).toContain('not affiliated with');
+  });
+
+  it('lists every covered agency and its licence on the terms page', async () => {
+    const res = await request(app).get('/terms');
+    expect(res.text).toContain('YRT Open Data Licence');
+    expect(res.text).toContain('Barrie Transit open data licence');
   });
 
   it('serves the logo but not the page source', async () => {

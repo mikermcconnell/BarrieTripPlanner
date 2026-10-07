@@ -151,9 +151,9 @@
     const shape = ((state.mapData && state.mapData.shapes) || []).find((s) => s.routeId === routeId);
     return (route && route.color) || (shape && shape.color) || DEFAULT_COLOR;
   }
-  function badge(routeId) {
+  function badge(routeId, label) {
     const bg = routeColor(routeId);
-    return '<span class="badge" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(routeId) + '</span>';
+    return '<span class="badge" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(label || routeId) + '</span>';
   }
   function minutesUntil(epochSeconds) {
     return Math.max(0, Math.round((epochSeconds * 1000 - Date.now()) / 60000));
@@ -165,7 +165,7 @@
   }
 
   // ---------- map ----------
-  const map = L.map('map', { zoomControl: true, attributionControl: true }).setView(CONFIG.center, 13);
+  const map = L.map('map', { zoomControl: true, attributionControl: true }).setView(CONFIG.view.center, CONFIG.view.zoom);
   let tiles = null;
   function setTiles(dark) {
     if (tiles) map.removeLayer(tiles);
@@ -184,7 +184,7 @@
     return L.divIcon({
       className: 'bus-icon',
       iconSize: [0, 0],
-      html: '<div class="bus' + focus + '" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(vehicle.routeId) + '</div>',
+      html: '<div class="bus' + focus + '" style="background:' + esc(bg) + ';color:' + textColorFor(bg) + '">' + esc(vehicle.routeName || vehicle.routeId) + '</div>',
     });
   }
 
@@ -212,7 +212,7 @@
       L.circleMarker([candidate.latitude, candidate.longitude], {
         radius: 8, color: '#111827', weight: 2, fillColor: '#fbbf24', fillOpacity: 1,
       }).bindTooltip(esc(candidate.name) + ' · stop ' + esc(candidate.stopCode))
-        .on('click', () => selectStop(candidate.stopCode))
+        .on('click', () => selectStop(candidate.stopCode, candidate.agencyId))
         .addTo(stopLayer);
       bounds.push([candidate.latitude, candidate.longitude]);
     }
@@ -233,7 +233,7 @@
         vehicleMarkers.set(vehicle.vehicleId, marker);
       }
       const next = vehicle.nextStop ? '<br>Next: ' + esc(vehicle.nextStop.name) : '';
-      marker.bindTooltip('<b>' + esc(vehicle.routeId) + '</b> ' + esc(vehicle.headsign || '') + next);
+      marker.bindTooltip('<b>' + esc(vehicle.routeName || vehicle.routeId) + '</b> ' + esc(vehicle.headsign || '') + next);
     }
     for (const [id, marker] of vehicleMarkers) {
       if (!seen.has(id)) { map.removeLayer(marker); vehicleMarkers.delete(id); }
@@ -270,8 +270,8 @@
         const late = a.delayMinutes > 0 ? ' · ' + a.delayMinutes + ' min late' : (a.delayMinutes < 0 ? ' · ' + (-a.delayMinutes) + ' min early' : '');
         const where = a.vehicle && a.vehicle.nextStop ? ' · near ' + esc(a.vehicle.nextStop.name) : '';
         html += '<li class="row' + (vid && vid === state.focusId ? ' active' : '') + '" data-vehicle="' + esc(vid || '') + '">' +
-          badge(a.routeId) +
-          '<div class="main"><div class="head">' + esc(a.headsign || 'Route ' + a.routeId) + '</div>' +
+          badge(a.routeId, a.routeName) +
+          '<div class="main"><div class="head">' + esc(a.headsign || 'Route ' + (a.routeName || a.routeId)) + '</div>' +
           '<div class="detail">' + (a.realtime ? '' : '<span class="tag">Scheduled</span>') +
           'Stop ' + esc(a.stopCode) + ' · ' + esc(a.arrivalTime) + esc(late) + where + '</div></div>' +
           etaHtml(minutesUntil(a.arrivalEpoch), !a.realtime) + '</li>';
@@ -279,9 +279,9 @@
     } else if (data.stopCandidates && data.stopCandidates.length) {
       html += '<li class="empty">Which stop? Tap one on the map or below.</li>';
       for (const s of data.stopCandidates) {
-        html += '<li class="row" data-stop="' + esc(s.stopCode) + '"><span class="badge" style="background:#fbbf24;color:#111">' +
+        html += '<li class="row" data-stop="' + esc(s.stopCode) + '" data-agency="' + esc(s.agencyId || '') + '"><span class="badge" style="background:#fbbf24;color:#111">' +
           esc(s.stopCode) + '</span><div class="main"><div class="head">' + esc(s.name) + '</div>' +
-          '<div class="detail">Routes ' + esc((s.routes || []).join(', ')) + '</div></div></li>';
+          '<div class="detail">' + (s.agencyName ? esc(s.agencyName) + ' · ' : '') + 'Routes ' + esc((s.routes || []).join(', ')) + '</div></div></li>';
       }
     } else {
       for (const v of data.vehicles || []) {
@@ -291,8 +291,8 @@
           where = mins <= 0 ? 'Arriving at ' + esc(v.nextStop.name) : 'Next stop ' + esc(v.nextStop.name) + ' in ' + mins + ' min';
         }
         html += '<li class="row' + (v.vehicleId === state.focusId ? ' active' : '') + '" data-vehicle="' + esc(v.vehicleId) + '">' +
-          badge(v.routeId) +
-          '<div class="main"><div class="head">' + esc(v.headsign || 'Route ' + v.routeId) + '</div>' +
+          badge(v.routeId, v.routeName) +
+          '<div class="main"><div class="head">' + esc(v.headsign || 'Route ' + (v.routeName || v.routeId)) + '</div>' +
           '<div class="detail">' + where + '</div></div></li>';
       }
     }
@@ -301,16 +301,16 @@
     list.querySelectorAll('li[data-vehicle]').forEach((li) => {
       if (li.dataset.vehicle) li.addEventListener('click', () => focusVehicle(li.dataset.vehicle));
     });
-    list.querySelectorAll('li[data-stop]').forEach((li) => li.addEventListener('click', () => selectStop(li.dataset.stop)));
+    list.querySelectorAll('li[data-stop]').forEach((li) => li.addEventListener('click', () => selectStop(li.dataset.stop, li.dataset.agency)));
   }
 
   function renderHeader() {
     const data = state.data || {};
     let title = CONFIG.appName;
-    let sub = data.agency || '';
+    let sub = (data.agency && data.agency.name) || '';
     if (data.stop) {
       title = data.stop.name;
-      sub = 'Stop ' + (data.stop.stopCodes || [data.stop.stopCode]).join(' / ') + ' · next arrivals';
+      sub = 'Stop ' + (data.stop.stopCodes || [data.stop.stopCode]).join(' / ') + ' · ' + (data.agency ? data.agency.name : 'next arrivals');
     } else if (data.stopCandidates && data.stopCandidates.length) {
       title = 'Choose a stop';
       sub = data.stopCandidates.length + ' stops match "' + ((state.args && state.args.stop) || '') + '"';
@@ -337,6 +337,12 @@
     const structured = result.structuredContent || result;
     if (!structured || typeof structured !== 'object') return;
     state.data = structured;
+    // Pin the agency the server settled on so refreshes don't re-infer it.
+    if (structured.agency && structured.agency.id && state.args && !state.args.agency) {
+      const framedThisQuestion = state.fitKey === JSON.stringify(state.args);
+      state.args = Object.assign({}, state.args, { agency: structured.agency.id });
+      if (framedThisQuestion) state.fitKey = JSON.stringify(state.args);
+    }
     state.mapData = (result._meta && result._meta.map) || state.mapData;
     state.receivedAt = Date.now();
     renderHeader();
@@ -361,15 +367,16 @@
     }
   }
 
-  async function selectStop(stopCode) {
-    const candidate = ((state.data && state.data.stopCandidates) || []).find((s) => s.stopCode === String(stopCode));
-    state.args = Object.assign({}, state.args || {}, { stop: String(stopCode) });
+  async function selectStop(stopCode, agencyId) {
+    const candidate = ((state.data && state.data.stopCandidates) || [])
+      .find((s) => s.stopCode === String(stopCode) && (!agencyId || s.agencyId === agencyId));
+    state.args = Object.assign({}, state.args || {}, { stop: String(stopCode) }, agencyId ? { agency: agencyId } : {});
     state.focusId = null;
     await refresh();
     // Let the model know which stop the rider picked so follow-up questions use it.
     if (state.mode === 'mcp' && candidate) {
       bridge.request('ui/update-model-context', {
-        content: [{ type: 'text', text: 'The rider selected stop ' + candidate.stopCode + ' (' + candidate.name + ') in the map.' }],
+        content: [{ type: 'text', text: 'The rider selected stop ' + candidate.stopCode + ' (' + candidate.name + (candidate.agencyName ? ', ' + candidate.agencyName : '') + ') in the map.' }],
       }).catch(() => {});
     }
   }

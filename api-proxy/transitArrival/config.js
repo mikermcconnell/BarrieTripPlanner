@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+
 // Single source for user-facing branding so a rename is a one-line change.
 const APP_NAME = 'Transit Arrival';
 const APP_SLUG = 'transit-arrival';
@@ -14,13 +16,14 @@ const OPERATOR = {
   policiesUpdated: '2026-10-05',
 };
 
-const AGENCY = {
-  name: 'Barrie Transit',
-  timeZone: 'America/Toronto',
-  center: [44.3894, -79.6903],
-  tripUpdatesUrl: 'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb',
-};
+const AGENCIES = require('./agencies.json');
+const DATA_DIR = process.env.TRANSIT_ARRIVAL_DATA_DIR || path.join(__dirname, '.data');
+
+// Initial map view before results arrive; the map then fits to what's shown.
+const MAP_DEFAULT_VIEW = { center: [44.1, -79.55], zoom: 9 };
 
 const REALTIME_CACHE_MS = 15 * 1000;
 
-module.exports = { APP_NAME, APP_SLUG, APP_VERSION, APP_TAGLINE, OPERATOR, AGENCY, REALTIME_CACHE_MS };
+module.exports = {
+  APP_NAME, APP_SLUG, APP_VERSION, APP_TAGLINE, OPERATOR, AGENCIES, DATA_DIR, MAP_DEFAULT_VIEW, REALTIME_CACHE_MS,
+};

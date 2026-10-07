@@ -1,14 +1,35 @@
 # Transit Arrival — ChatGPT app (MCP server)
 
-Live vehicle locations and real-time arrival minutes for Barrie Transit, exposed to
-ChatGPT as an MCP server (Apps SDK). Branding lives in `config.js`.
+Live vehicle locations and real-time arrival minutes for several transit agencies, exposed to
+ChatGPT as an MCP server (Apps SDK). Branding lives in `config.js`; covered agencies live in `agencies.json`.
+
+## Agencies and cost
+Each agency is one entry in `agencies.json` (id, name, region, aliases, time zone, static GTFS URL, GTFS-RT
+vehicle-positions and trip-updates URLs, licence, attribution, example prompts). Adding an agency is a registry entry,
+not code. Check its licence first.
+
+Static GTFS is kept on disk, not in memory, so RAM stays roughly flat as agencies are added:
+- `feedStore.js` streams each agency's zip into `<DATA_DIR>/<id>.sqlite` (stops, routes, trips, stop times indexed
+  by stop, calendars, shapes simplified to ~5 m). Queries read only the rows they need.
+- `<DATA_DIR>/stops-index.sqlite` is a cross-agency trigram index used to infer the agency when the rider doesn't
+  say (`network.js`). If several agencies match, the result lists `agencyCandidates` / `stopCandidates` and the
+  model asks.
+- At startup, and then hourly, the server rebuilds any feed not checked in 20 hours, one agency at a time. Unchanged
+  zips (ETag, Last-Modified, or SHA-256) are skipped.
+- Realtime feeds are fetched only while someone is asking about that agency (cached 15 s), so idle agencies cost
+  nothing.
+
+YRT (about 9x Barrie's size) builds in ~8 s into a 13 MB file. With both agencies queried, the process sits around
+150 MB RSS.
 
 ## Tools
 | Tool | Purpose |
 |---|---|
-| `get_transit_status` | `stop` → next arrivals; `route` → where its vehicles are; both → filtered arrivals. Optional `direction`. |
+| `get_transit_status` | `stop` → next arrivals; `route` → where its vehicles are; both → filtered arrivals. Optional `direction` and `agency`. |
 | `find_stops` | Stops by name, intersection, landmark, or stop number. (No location input: ChatGPT's guidelines bar apps from asking for precise location in tool inputs.) |
-| `list_routes` | All routes with destinations. |
+| `list_routes` | An agency's routes with destinations; without `agency`, the covered agencies. |
+
+Every tool takes an optional `agency` (id, name, or city alias from `agencies.json`).
 
 `get_transit_status` renders the **live map widget** (`widget/map.html`, an MCP Apps
 `text/html;profile=mcp-app` resource). Each result has three parts:
@@ -69,6 +90,7 @@ Environment variables:
 | `TRANSIT_ARRIVAL_RATE_LIMIT_PER_MIN` | no | Abuse ceiling for `/mcp` (default 1500/min/IP; ChatGPT shares egress IPs). |
 | `TRANSIT_ARRIVAL_OPERATOR_NAME`, `TRANSIT_ARRIVAL_SUPPORT_EMAIL` | **yes** | Operator name and contact shown on the website, privacy policy, and terms. The server warns at startup if they're unset. |
 | `TRANSIT_ARRIVAL_DEV_HOST` | no | `true` serves the `/dev` preview host. Leave unset in production. |
+| `TRANSIT_ARRIVAL_DATA_DIR` | recommended | Where feed databases live (default `transitArrival/.data`). Point it at a Railway volume so feeds survive redeploys; without one they're rebuilt at each boot (~30 s). |
 
 `PORT` is provided by Railway. Transit feeds are public.
 
@@ -85,5 +107,9 @@ OpenAI's Apps SDK docs if they don't match.
   timetable, so the two sources can't contradict each other.
 - When nothing is due within 90 minutes, the result names the next scheduled trip (up to 36 hours ahead).
   Service calendars and holiday exceptions use the detour code's `isServiceActive`.
-- Stops that share a name (both sides of a street) are merged into one place.
+- Stops that share a name (both sides of a street, or a terminal's numbered platforms and bays) are merged into one place.
+- A bare number is treated as a stop number and only matches stop codes.
+- Route names are shown without zero padding (YRT `008` → `8`). A bare route matches exact names first, then
+  single-letter variants (`8` → `8A`, `8B`, but not `80`), then long names (`viva blue`).
+- Uses the built-in `node:sqlite` (Node 22.13+), so there's no native dependency.
 - The TripUpdates decoder is a CommonJS port of `src/services/arrivalService.js`; keep them in sync.

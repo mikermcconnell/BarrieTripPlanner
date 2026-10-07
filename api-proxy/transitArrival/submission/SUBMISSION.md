@@ -39,9 +39,9 @@ Copy each field into the submission form at platform.openai.com. Character limit
 >
 > Use whatever you know: a stop name, an intersection, a landmark, or the stop number on the sign. If a name matches several stops, tap the right one on the map. The map keeps refreshing while it's on screen. When no bus is due soon, Transit Arrival tells you when the next one is scheduled.
 >
-> Transit Arrival currently covers buses in Barrie, Ontario, Canada. No account or sign-in is needed, and it never asks for your location.
+> Transit Arrival currently covers Barrie Transit (Barrie, Ontario) and York Region Transit, including Viva (Vaughan, Markham, Richmond Hill, Newmarket, Aurora and the rest of York Region). More agencies are on the way. Mention your city if a stop or route name exists in more than one area, and Transit Arrival will ask if it isn't sure. No account or sign-in is needed, and it never asks for your location.
 >
-> Transit Arrival is an independent app and isn't affiliated with the City of Barrie or Barrie Transit. Arrival times are estimates based on public transit data.
+> Transit Arrival is an independent app and isn't affiliated with any transit agency or municipality it covers. Arrival times are estimates based on public transit data, used under each agency's open data licence.
 
 ## Positive test cases (≥5)
 
@@ -56,12 +56,15 @@ All tests can run at any time of day. Outside service hours, the expected result
 | 5 | Ambiguous stop name | "Next bus on Bayfield" | `get_transit_status` (`stop: "Bayfield"`) | The app lists several Bayfield stops and shows them on the map, and ChatGPT asks which one. Tapping a stop on the map loads its arrivals. |
 | 6 | Route list | "What bus routes are there in Barrie?" | `list_routes` | Text list of all routes with their destinations. |
 | 7 | Find a stop | "What stop numbers are at the Downtown Hub?" | `find_stops` (`query: "Downtown Hub"`) | Stops 1 and 2 with the routes serving each. |
+| 8 | Second agency, inferred from the stop | "Next bus at Richmond Hill Centre" | `get_transit_status` (`stop: "Richmond Hill Centre"`) | York Region Transit arrivals across the terminal's platforms, including Viva routes, with the map centred on the terminal. |
+| 9 | Second agency, named route | "Where are the Viva Blue buses?" | `get_transit_status` (`route: "viva blue"`, optionally `agency: "yrt"`) | Map of Viva Blue and Blue B buses along Yonge Street, each with its next stop. |
+| 10 | Route in more than one area | "Where is the route 8 bus?" with no city given | `get_transit_status` (`route: "8"`) | The result lists Barrie Transit and York Region Transit as candidates, and ChatGPT asks which city. After the answer, the call is repeated with `agency`. |
 
 ## Negative test cases (≥3)
 
 | # | Scenario | User prompt | Expected behaviour |
 |---|---|---|---|
-| 1 | Unsupported city | "When's the next TTC streetcar at Queen and Spadina?" | Transit Arrival is not used, or it says the stop isn't found. It doesn't invent Toronto times. ChatGPT explains the app covers Barrie only. |
+| 1 | Unsupported city | "When's the next OC Transpo bus at Rideau Centre in Ottawa?" | Transit Arrival is not used, or it says Ottawa isn't covered. It doesn't invent Ottawa times. ChatGPT explains which areas the app covers. |
 | 2 | Not a transit question | "What's the weather in Barrie today?" | Transit Arrival is not called. |
 | 3 | Purchase or account action | "Buy me a Barrie Transit bus pass." | Transit Arrival is not called. It has no purchase or account tools. |
 | 4 | Non-existent route | "Where is Barrie route 99?" | `get_transit_status` returns "No route matches", and ChatGPT says there's no route 99 rather than making one up. |
@@ -80,8 +83,8 @@ All three tools are read-only lookups of public transit data:
 
 ## Release notes (0.1.0)
 
-First release: live bus map and arrival minutes for Barrie, Ontario; timetable fallback; stop search by name or number;
-route list.
+First release: live bus map and arrival minutes for Barrie Transit and York Region Transit (including Viva); timetable
+fallback; stop search by name or number; route list; agency inferred from the stop or route when the rider doesn't say.
 
 ## Demo video checklist
 
@@ -90,6 +93,7 @@ Record in ChatGPT with developer mode and the connector added, 60–90 seconds:
 2. Tap an arrival row to highlight its bus on the map.
 3. "Where is the route 8 bus?" Show the route view.
 4. "Next bus on Bayfield." Tap a stop on the map to choose it.
+4b. "Next bus at Richmond Hill Centre." Show the York Region Transit map.
 5. Expand to fullscreen and back.
 
 Upload it unlisted (for example on YouTube or Google Drive with link access) and paste the URL.

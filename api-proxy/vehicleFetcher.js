@@ -320,6 +320,8 @@ module.exports = {
   STALE_THRESHOLD_SECONDS,
   MAX_FUTURE_SKEW_SECONDS,
   buildVehicleFeedStatus,
+  decodeGTFSRT,
+  hasUsablePosition,
   fetchVehicles,
   getVehicleFeedStatus,
   isFreshVehicle,

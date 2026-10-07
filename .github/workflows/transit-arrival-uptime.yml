@@ -50,9 +50,11 @@ jobs:
           const widget = await mcp('resources/read', { uri });
           if (!widget.contents?.[0]?.text?.includes('L.map(')) throw new Error(`widget ${uri} did not load`);
 
-          const result = await mcp('tools/call', { name: 'get_transit_status', arguments: { stop: 'Downtown Hub' } });
-          if (result.isError || !result.structuredContent?.stop) {
-            throw new Error(`live query failed: ${JSON.stringify(result).slice(0, 300)}`);
+          for (const args of [{ agency: 'barrie', stop: 'Downtown Hub' }, { agency: 'yrt', stop: 'Richmond Hill Centre' }]) {
+            const result = await mcp('tools/call', { name: 'get_transit_status', arguments: args });
+            if (result.isError || !result.structuredContent?.stop) {
+              throw new Error(`live query ${JSON.stringify(args)} failed: ${JSON.stringify(result).slice(0, 300)}`);
+            }
+            console.log(result.content[0].text);
           }
-          console.log(result.content[0].text);
           JS
