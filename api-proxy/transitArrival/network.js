@@ -71,13 +71,17 @@ function createTransitNetwork({
       const name = normalizeText(s.stop.name);
       return name === wanted || name.startsWith(`${wanted} `) || wanted.startsWith(`${name} `);
     });
-    if (closeName.length > 0) parts = closeName;
+    const nearest = (a, b) => Math.min(...a.stop.locations.flatMap((x) => b.stop.locations.map((y) => metersBetween(x, y))));
+    // ...but keep other agencies' stops beside them, whatever they're called
+    // (Brampton's "Mississauga CC Terminal" is MiWay's City Centre Transit Terminal).
+    if (closeName.length > 0) {
+      parts = parts.filter((s) => closeName.includes(s) || closeName.some((c) => nearest(c, s) <= SAME_PLACE_METERS));
+    }
     // If only one agency resolves the name to a single place, that's the answer.
     if (parts.length === 1) return parts[0];
     // Agencies name shared stops differently ("City Centre Transit Terminal" vs "Mississauga CC Terminal"),
     // so "same place" means within walking distance of each other.
     const [first, ...rest] = parts;
-    const nearest = (a, b) => Math.min(...a.stop.locations.flatMap((x) => b.stop.locations.map((y) => metersBetween(x, y))));
     if (parts.length < 2 || !rest.every((s) => nearest(first, s) <= SAME_PLACE_METERS)) return null;
     const withAgency = (s, item) => ({ ...item, agencyId: s.agency.id, agencyName: s.agency.name });
     return {

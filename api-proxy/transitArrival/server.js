@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
@@ -10,6 +11,21 @@ const { createTransitNetwork } = require('./network');
 const { buildWidgetHtml } = require('./widget');
 const { pages } = require('./site/pages');
 const { APP_NAME, APP_VERSION, AGENCIES, DATA_DIR, PREBUILT_FEEDS_URL } = require('./config');
+
+// Hosting is billed on memory, and the container total includes reclaimable file cache from
+// the feed databases, so report the process's own memory and the cgroup's split separately.
+function memoryReport() {
+  const mb = (bytes) => Math.round(bytes / 1e6);
+  const { rss, heapUsed } = process.memoryUsage();
+  const report = { rssMb: mb(rss), heapMb: mb(heapUsed) };
+  try {
+    const stat = Object.fromEntries(fs.readFileSync('/sys/fs/cgroup/memory.stat', 'utf8')
+      .trim().split('\n').map((line) => line.split(' ')));
+    report.containerAnonMb = mb(Number(stat.anon));
+    report.containerFileCacheMb = mb(Number(stat.file));
+  } catch { /* not running under cgroup v2 */ }
+  return report;
+}
 
 function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
   const app = express();
@@ -39,7 +55,7 @@ function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
     app.get('/dev', (req, res) => res.sendFile(path.join(__dirname, 'dev', 'host.html')));
   }
 
-  app.get('/health', (req, res) => res.json({ ok: true, app: APP_NAME, version: APP_VERSION }));
+  app.get('/health', (req, res) => res.json({ ok: true, app: APP_NAME, version: APP_VERSION, memory: memoryReport() }));
 
   // Public website: product page, support, privacy policy, terms, logo.
   for (const [route, render] of Object.entries(pages)) {
