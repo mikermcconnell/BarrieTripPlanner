@@ -1,0 +1,59 @@
+name: Transit Arrival feeds
+
+# Builds each agency's timetable database and publishes them to the
+# `transit-feeds` release. The Transit Arrival server downloads these instead
+# of parsing GTFS itself, so big feeds (TTC, GO) don't spike its memory.
+on:
+  schedule:
+    - cron: '15 7 * * *' # ~03:15 Toronto
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - api-proxy/transitArrival/agencies.json
+      - api-proxy/transitArrival/feedStore.js
+      - api-proxy/transitArrival/buildFeeds.js
+
+permissions:
+  contents: write
+
+concurrency:
+  group: transit-feeds
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: transit-feeds
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api-proxy/package-lock.json
+      - name: Install
+        working-directory: api-proxy
+        run: npm ci --omit=dev
+      - name: Fetch the previous build
+        run: gh release download "$RELEASE" --dir prev || echo "No previous build"
+      - name: Build
+        id: build
+        working-directory: api-proxy
+        run: node transitArrival/buildFeeds.js --out ../out --previous ../prev
+        continue-on-error: true
+      - name: Publish
+        run: |
+          test -f out/manifest.json
+          gh release view "$RELEASE" > /dev/null 2>&1 || gh release create "$RELEASE" --prerelease \
+            --title "Transit Arrival feed databases" \
+            --notes "Built nightly by .github/workflows/transit-feeds.yml. See NOTICE.md for each agency's licence."
+          gh release upload "$RELEASE" out/* --clobber
+      - name: Report build failures
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "Some agencies failed to build; their previous databases were kept. See the Build step log."
+          exit 1

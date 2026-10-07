@@ -28,7 +28,7 @@ function summarizeStatus(status) {
   if (status.stop) {
     lines.push(`Stop: ${status.stop.name} (stop ${status.stop.stopCodes.join('/')})`);
     for (const a of status.arrivals) {
-      const where = a.vehicle?.nextStop ? `, bus is near ${a.vehicle.nextStop.name}` : '';
+      const where = a.vehicle?.nextStop ? `, vehicle is near ${a.vehicle.nextStop.name}` : '';
       const source = a.realtime ? 'live' : 'scheduled';
       const by = a.agencyName ? ` (${a.agencyName})` : '';
       lines.push(`- Route ${routeLabel(a)}${by} ${a.headsign || ''}: ${formatMinutes(a.minutes)} (${a.arrivalTime}, ${source}${where})`);
@@ -78,7 +78,7 @@ function createMcpServer({ network, widgetHtml }) {
     title: 'Get live transit status',
     description:
       `Live vehicle locations and real-time arrival estimates (in minutes) for these transit agencies: ${coverage}. ` +
-      'Use when the rider asks where their bus is or when it will arrive. ' +
+      'Use when the rider asks where their bus or train is or when it will arrive. ' +
       'Pass a stop (name or stop number) for next arrivals there, a route for where its vehicles are, or both. ' +
       'Arrivals marked live come from real-time predictions; scheduled ones come from the timetable. ' +
       'The result renders as a live map the rider can see, so summarize briefly instead of repeating every row. ' +

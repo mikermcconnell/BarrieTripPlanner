@@ -14,12 +14,17 @@ Static GTFS is kept on disk, not in memory, so RAM stays roughly flat as agencie
 - `<DATA_DIR>/stops-index.sqlite` is a cross-agency trigram index used to infer the agency when the rider doesn't
   say (`network.js`). If several agencies match, the result lists `agencyCandidates` / `stopCandidates` and the
   model asks.
-- At startup, and then hourly, the server rebuilds any feed not checked in 20 hours, one agency at a time. Unchanged
-  zips (ETag, Last-Modified, or SHA-256) are skipped.
+- In production the databases are built by `.github/workflows/transit-feeds.yml` (nightly, and when `agencies.json` or
+  the builder changes) using `buildFeeds.js`, and published gzipped with a `manifest.json` and `NOTICE.md` to the
+  `transit-feeds` release. With `TRANSIT_ARRIVAL_PREBUILT_URL` set, the server only downloads changed files (checked
+  every 2 hours), so big feeds like the TTC (6 min to build, ~300 MB peak) never run on Railway. The workflow skips
+  agencies whose source zip is unchanged and keeps the previous build when a source fails to download.
+- Without `TRANSIT_ARRIVAL_PREBUILT_URL` (local dev, tests) the server builds feeds itself: at startup, then hourly for
+  any feed not checked in 20 hours, one agency at a time, skipping unchanged zips (ETag, Last-Modified, or SHA-256).
 - Realtime feeds are fetched only while someone is asking about that agency (cached 15 s), so idle agencies cost
   nothing.
 
-Eight agencies (Barrie, YRT, MiWay, Brampton, Durham, HSR, Milton, Oakville) build in about 90 s total into ~115 MB of SQLite. RSS sits
+Ten agencies (Barrie, YRT, MiWay, Brampton, Durham, HSR, Milton, Oakville, TTC, GO) total ~330 MB of SQLite on the volume. RSS sits
 around 140 MB idle and peaks near 230 MB while several agencies are being queried.
 
 Adding an agency: check its licence, confirm its GTFS-RT trip ids match the static feed's `trips.txt` (Burlington's
@@ -31,6 +36,12 @@ Stops sharing a GTFS `parent_station` (terminals) are answered as one place.
 - Set `sharedRealtimeFeed: true` when one GTFS-RT feed covers several agencies (Metrolinx's tmix.se hosting, used by
   Milton, Orillia, Simcoe County LINX and others); only trips in that agency's timetable are used.
 - Search tokens must start a word of the stop name, so "milton" doesn't match "Hamilton".
+- `apiKey: { env, param }` adds a key from the environment to realtime URLs (GO: `METROLINX_API_KEY` as `key`). If
+  the variable is unset the agency falls back to its timetable.
+- `realtimeStopMatch: "sequence"` resolves live stops by trip and `stop_sequence` instead of `stop_id`. The TTC's
+  live feed uses stop ids that don't match (and sometimes collide with) the City's merged GTFS, which is the timetable
+  whose trip ids do match the live feed.
+- Stops several agencies share (within 300 m and named like the question) are answered together, labelled by agency.
 
 ## Tools
 | Tool | Purpose |
@@ -101,6 +112,8 @@ Environment variables:
 | `TRANSIT_ARRIVAL_RATE_LIMIT_PER_MIN` | no | Abuse ceiling for `/mcp` (default 1500/min/IP; ChatGPT shares egress IPs). |
 | `TRANSIT_ARRIVAL_OPERATOR_NAME`, `TRANSIT_ARRIVAL_SUPPORT_EMAIL` | **yes** | Operator name and contact shown on the website, privacy policy, and terms. The server warns at startup if they're unset. |
 | `TRANSIT_ARRIVAL_DEV_HOST` | no | `true` serves the `/dev` preview host. Leave unset in production. |
+| `TRANSIT_ARRIVAL_PREBUILT_URL` | recommended | `https://github.com/mikermcconnell/BarrieTripPlanner/releases/download/transit-feeds`. Download feed databases built by the workflow instead of building them on the server. |
+| `METROLINX_API_KEY` | for GO live data | Metrolinx Open Data API key. Without it GO answers from the timetable. |
 | `TRANSIT_ARRIVAL_DATA_DIR` | recommended | Where feed databases live (default `transitArrival/.data`). Point it at a Railway volume so feeds survive redeploys; without one they're rebuilt at each boot (~30 s). |
 
 `PORT` is provided by Railway. Transit feeds are public.
