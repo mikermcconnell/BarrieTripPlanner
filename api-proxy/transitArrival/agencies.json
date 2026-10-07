@@ -133,5 +133,41 @@
     },
     "attribution": "Contains information licensed under the Open Government Licence — Town of Oakville.",
     "examples": { "stop": "Oakville GO Station", "route": "5", "direction": "Oakville GO" }
+  },
+  {
+    "id": "ttc",
+    "name": "Toronto Transit Commission (TTC)",
+    "region": "Toronto, Ontario (live buses and streetcars; subway times are from the timetable)",
+    "aliases": ["ttc", "toronto", "toronto transit commission", "toronto transit", "subway", "streetcar", "scarborough", "etobicoke", "north york", "east york"],
+    "mode": "bus, streetcar, subway",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/b811ead4-6eaf-4adb-8408-d389fb5a069c/resource/c920e221-7a1c-488b-8c5b-6d8cd4e85eaf/download/completegtfs.zip",
+    "vehiclePositionsUrl": "https://bustime.ttc.ca/gtfsrt/vehicles",
+    "tripUpdatesUrl": "https://bustime.ttc.ca/gtfsrt/trips",
+    "realtimeStopMatch": "sequence",
+    "licence": {
+      "name": "Open Government Licence – Toronto",
+      "url": "https://open.toronto.ca/open-data-license/"
+    },
+    "attribution": "Contains information licensed under the Open Government Licence – Toronto.",
+    "examples": { "stop": "Union Station", "route": "504", "direction": "Broadview" }
+  },
+  {
+    "id": "go",
+    "name": "GO Transit",
+    "region": "Greater Toronto and Hamilton Area regional trains and buses (all GO lines, e.g. Barrie, Lakeshore, Kitchener)",
+    "aliases": ["go", "go transit", "go train", "go bus", "metrolinx"],
+    "mode": "train, bus",
+    "timeZone": "America/Toronto",
+    "staticUrl": "https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/GO-GTFS.zip",
+    "vehiclePositionsUrl": "https://api.openmetrolinx.com/OpenDataAPI/api/V1/Gtfs.proto/Feed/VehiclePosition",
+    "tripUpdatesUrl": "https://api.openmetrolinx.com/OpenDataAPI/api/V1/Gtfs.proto/Feed/TripUpdates",
+    "apiKey": { "env": "METROLINX_API_KEY", "param": "key" },
+    "licence": {
+      "name": "Open Government Licence – Ontario – Metrolinx",
+      "url": "https://assets.metrolinx.com/image/upload/v1663237565/Documents/Metrolinx/Open-Government-Licence-Ontario-Metrolinx.pdf"
+    },
+    "attribution": "Data used in this product or service is provided with the permission of Metrolinx.",
+    "examples": { "stop": "Union Station", "route": "Barrie", "direction": "Allandale Waterfront" }
   }
 ]

@@ -242,6 +242,45 @@ describe('feed store', () => {
     }
   });
 
+  it('installs databases built by the feeds workflow instead of building locally', async () => {
+    const zlib = require('zlib');
+    const { buildAgencyDb, SCHEMA_VERSION } = require('../transitArrival/feedStore');
+    const built = path.join(dataDir, 'prebuilt-barrie.sqlite');
+    await buildAgencyDb(zips['https://example.test/barrie.zip'], built);
+    const gz = zlib.gzipSync(fs.readFileSync(built));
+    const files = {
+      'https://feeds.test/manifest.json': Buffer.from(JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        agencies: { barrie: { file: 'barrie.sqlite.gz', sha256: 'abc', builtAt: '2026-10-07T07:15:00Z', counts: { stops: 5 } } },
+      })),
+      'https://feeds.test/barrie.sqlite.gz': gz,
+    };
+    const fetched = [];
+    const prebuiltDir = fs.mkdtempSync(path.join(os.tmpdir(), 'transit-arrival-prebuilt-'));
+    const manager = createFeedManager({
+      agencies: AGENCIES,
+      dataDir: prebuiltDir,
+      prebuiltUrl: 'https://feeds.test',
+      log: { log() {}, warn() {}, error() {} },
+      fetchImpl: async (url) => {
+        fetched.push(url);
+        const body = files[url];
+        if (!body) return { ok: false, status: 404 };
+        return { ok: true, status: 200, json: async () => JSON.parse(body), body: new Blob([body]).stream() };
+      },
+    });
+    try {
+      expect(await manager.refresh('barrie')).toEqual({ id: 'barrie', changed: true });
+      expect((await manager.getStore('barrie')).getStop('440').name).toBe('Georgian Mall');
+      expect(await manager.refresh('barrie')).toEqual({ id: 'barrie', changed: false });
+      await expect(manager.refresh('yrt')).rejects.toThrow(/isn't in the prebuilt feeds yet/);
+      expect(fetched.filter((u) => u.endsWith('.gz'))).toHaveLength(1);
+    } finally {
+      manager.close();
+      fs.rmSync(prebuiltDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps only boardable stops, not parent stations', async () => {
     const store = await feedManager.getStore('yrt');
     expect(store.getStop('10')).toBeUndefined();
@@ -420,6 +459,19 @@ describe('multi-agency network', () => {
     const status = await scheduleOnly.getStatus({ stop: 'Richmond Hill Centre' });
     expect(status.arrivals.every((a) => !a.realtime)).toBe(true);
     expect(status.notes[0]).toBe("York Region Transit doesn't publish live bus data, so times shown are from the timetable.");
+  });
+
+  it('matches live stops by trip position for feeds whose stop ids differ from the timetable', async () => {
+    const updates = [{
+      tripId: 'y8', routeId: '8', scheduleRelationship: 'SCHEDULED',
+      stopTimeUpdates: [
+        { stopSequence: 2, stopId: 'live-only-id', arrival: { time: NOW_S + 4 * 60 }, scheduleRelationship: 'SCHEDULED' },
+        { stopSequence: 3, stopId: '9820', arrival: { time: NOW_S + 10 * 60 }, scheduleRelationship: 'SCHEDULED' },
+      ],
+    }];
+    const status = await agencyData({ ...AGENCIES[1], realtimeStopMatch: 'sequence' }, { updates }).getStatus({ stop: 'Richmond Hill Centre' });
+    // Position 2 is platform 9820 in the timetable; the colliding id "9820" at position 3 is ignored.
+    expect(status.arrivals[0]).toMatchObject({ tripId: 'y8', realtime: true, minutes: 4, stopCode: '9820' });
   });
 
   it("ignores other agencies' buses in a shared realtime feed", async () => {

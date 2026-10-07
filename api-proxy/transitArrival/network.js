@@ -5,18 +5,10 @@
 // or the route, and ask only when several agencies genuinely match.
 
 const { normalizeText } = require('./feedStore');
-const { createTransitData } = require('./transitData');
+const { createTransitData, metersBetween, SAME_PLACE_METERS } = require('./transitData');
 
 const CANDIDATES_PER_AGENCY = 5;
 const SHARED_STOP_ARRIVAL_LIMIT = 8;
-const SHARED_STOP_RADIUS_METERS = 300;
-
-function metersBetween(a, b) {
-  const rad = Math.PI / 180;
-  const x = (b.longitude - a.longitude) * rad * Math.cos(((a.latitude + b.latitude) / 2) * rad);
-  const y = (b.latitude - a.latitude) * rad;
-  return Math.hypot(x, y) * 6371000;
-}
 
 function createTransitNetwork({
   agencies,
@@ -72,13 +64,21 @@ function createTransitNetwork({
   // A stop several agencies serve under the same name (e.g. Mississauga's City Centre terminal,
   // used by MiWay and Brampton Transit) is one place: show every agency's arrivals together.
   async function sharedStopStatus(candidates, query) {
-    const parts = (await Promise.all(candidates.map((a) => dataFor(a).getStatus(query)))).filter((s) => s.stop);
+    let parts = (await Promise.all(candidates.map((a) => dataFor(a).getStatus(query)))).filter((s) => s.stop);
+    // Prefer agencies whose stop is named like the question ("Union Station" over "Unionville GO Station").
+    const wanted = normalizeText(query.stop);
+    const closeName = parts.filter((s) => {
+      const name = normalizeText(s.stop.name);
+      return name === wanted || name.startsWith(`${wanted} `) || wanted.startsWith(`${name} `);
+    });
+    if (closeName.length > 0) parts = closeName;
     // If only one agency resolves the name to a single place, that's the answer.
     if (parts.length === 1) return parts[0];
     // Agencies name shared stops differently ("City Centre Transit Terminal" vs "Mississauga CC Terminal"),
     // so "same place" means within walking distance of each other.
     const [first, ...rest] = parts;
-    if (parts.length < 2 || !rest.every((s) => metersBetween(first.stop, s.stop) <= SHARED_STOP_RADIUS_METERS)) return null;
+    const nearest = (a, b) => Math.min(...a.stop.locations.flatMap((x) => b.stop.locations.map((y) => metersBetween(x, y))));
+    if (parts.length < 2 || !rest.every((s) => nearest(first, s) <= SAME_PLACE_METERS)) return null;
     const withAgency = (s, item) => ({ ...item, agencyId: s.agency.id, agencyName: s.agency.name });
     return {
       agency: null,

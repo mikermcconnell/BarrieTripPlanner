@@ -24,6 +24,17 @@ const placeKey = (name) => normalizeText(name)
   .replace(/ (platform|bay) [a-z0-9]+$/, '')
   .replace(/ (arrivals?|departures?|drop off)$/, '');
 
+function metersBetween(a, b) {
+  const rad = Math.PI / 180;
+  const x = (b.longitude - a.longitude) * rad * Math.cos(((a.latitude + b.latitude) / 2) * rad);
+  const y = (b.latitude - a.latitude) * rad;
+  return Math.hypot(x, y) * 6371000;
+}
+const SAME_PLACE_METERS = 300;
+// Within one agency, stops named like the question can be a little further apart (Union Station's
+// GO train platforms and the GO bus terminal across Bay Street).
+const SAME_NAMED_PLACE_METERS = 500;
+
 // Stops are one place if linked by a shared name (ignoring platform/bay) or a shared parent station.
 function countPlaces(stops) {
   const link = new Map();
@@ -129,15 +140,27 @@ function resolveRoutes(store, query) {
   return sorted(store.routes.filter((r) => routeKey(r.longName).includes(wanted)));
 }
 
+// Adds the agency's API key (e.g. Metrolinx's `key` query parameter) from the environment.
+function realtimeUrl(agency, url) {
+  if (!url || !agency.apiKey) return url || null;
+  const key = process.env[agency.apiKey.env];
+  if (!key) return null;
+  const withKey = new URL(url);
+  withKey.searchParams.set(agency.apiKey.param, key);
+  return withKey.toString();
+}
+
 // One agency's arrivals, vehicles and stops, read from its feed store.
 function createTransitData({
   agency,
   getStore,
-  // Agencies without live feeds are served from the timetable alone.
-  fetchTripUpdates = agency.tripUpdatesUrl
-    ? () => realtimeFeeds.fetchTripUpdates(agency.tripUpdatesUrl)
+  // Agencies without live feeds (or whose API key isn't configured) are served from the timetable alone.
+  fetchTripUpdates = realtimeUrl(agency, agency.tripUpdatesUrl)
+    ? () => realtimeFeeds.fetchTripUpdates(realtimeUrl(agency, agency.tripUpdatesUrl))
     : async () => ({ updates: [], status: 'none', ageMs: null }),
-  fetchVehicles = agency.vehiclePositionsUrl ? () => realtimeFeeds.fetchVehicles(agency.vehiclePositionsUrl) : async () => [],
+  fetchVehicles = realtimeUrl(agency, agency.vehiclePositionsUrl)
+    ? () => realtimeFeeds.fetchVehicles(realtimeUrl(agency, agency.vehiclePositionsUrl))
+    : async () => [],
   now = () => Date.now(),
   realtimeCacheMs = REALTIME_CACHE_MS,
 }) {
@@ -319,6 +342,10 @@ function createTransitData({
     };
     const stopName = (stopId) => store.getStop(stopId)?.name || stopId;
     const stopCode = (stopId) => store.getStop(stopId)?.code || stopId;
+    // Some feeds (TTC) use stop ids that don't match their published timetable, but their
+    // stop_sequence does, so those stops are resolved by trip and position instead.
+    const bySequence = agency.realtimeStopMatch === 'sequence';
+    const stuStopId = (update, stu) => (bySequence ? store.stopAtSequence(update.tripId, stu.stopSequence) : stu.stopId);
 
     function nextStopForUpdate(update) {
       const upcoming = update?.stopTimeUpdates.find((stu) => {
@@ -327,9 +354,10 @@ function createTransitData({
       });
       if (!upcoming) return null;
       const time = upcoming.arrival?.time || upcoming.departure?.time;
+      const stopId = stuStopId(update, upcoming);
       return {
-        stopId: upcoming.stopId,
-        name: stopName(upcoming.stopId),
+        stopId,
+        name: stopName(stopId),
         minutes: Math.max(0, Math.round((time - nowSeconds) / 60)),
         time: formatClock(time),
         epoch: time,
@@ -387,7 +415,12 @@ function createTransitData({
       const exactName = found.filter((m) => keysOf(m).includes(wanted));
       const prefixed = found.filter((m) => keysOf(m).some((k) => k.startsWith(`${wanted} `)));
       let matches = [exactName, prefixed, found].find((list) => list.length > 0) || [];
-      const placeCount = countPlaces(matches);
+      let placeCount = countPlaces(matches);
+      // Names that all match the query closely and sit together ("Union Station GO", "Union Station Bus
+      // Terminal") are one place too.
+      if (placeCount > 1 && matches !== found && matches.every((m) => metersBetween(matches[0], m) <= SAME_NAMED_PLACE_METERS)) {
+        placeCount = 1;
+      }
       if (placeCount === 1) {
         // Pull in the rest of the station's stops (bays named after routes, not the station).
         const routeIds = route ? resolveRoutes(store, route) : null;
@@ -411,16 +444,28 @@ function createTransitData({
       result.stop = {
         ...matches[0],
         name: matches.find((m) => m.parentId)?.place
-          || (matches.length > 1 ? matches[0].name.replace(/\s+-?\s*(platform|bay)\s+\S+$/i, '') : matches[0].name),
+          || matches.map((m) => m.name.replace(/\s+-?\s*(platform|bay)\s+\S+$/i, '')).sort((a, b) => a.length - b.length)[0],
         stopCodes: matches.map((m) => m.stopCode),
         locations: matches.map((m) => ({ stopCode: m.stopCode, latitude: m.latitude, longitude: m.longitude })),
       };
     }
     const selectedStopIds = new Set((selectedStops || []).map((s) => s.stopId));
+    // trip|sequence pairs at the selected stops, for feeds matched by position.
+    const selectedVisits = new Map();
+    if (bySequence) {
+      for (const stopId of selectedStopIds) {
+        for (const row of store.stopTimes(stopId, 0, 48 * 3600)) selectedVisits.set(`${row.trip_id}|${row.seq}`, stopId);
+      }
+    }
+    const selectedStopFor = (update, stu) => (bySequence
+      ? selectedVisits.get(`${update.tripId}|${stu.stopSequence}`)
+      : (selectedStopIds.has(stu.stopId) ? stu.stopId : undefined));
 
     const predictionsUsable = rt.tripUpdates.status === 'fresh';
     if (rt.tripUpdates.status === 'none') {
-      result.notes.push(`${agency.name} doesn't publish live bus data, so times shown are from the timetable.`);
+      result.notes.push(agency.tripUpdatesUrl
+        ? `Live ${agency.name} data isn't available right now, so times shown are from the timetable.`
+        : `${agency.name} doesn't publish live bus data, so times shown are from the timetable.`);
     } else if (!predictionsUsable) {
       const age = feedSummary(rt).predictionsAgeSeconds;
       const reason = rt.tripUpdates.status === 'stale' && age != null
@@ -435,7 +480,7 @@ function createTransitData({
     if (selectedStops && predictionsUsable) {
       for (const update of rt.tripUpdates.updates) {
         if (update.scheduleRelationship === 'CANCELED' || update.scheduleRelationship === 'DELETED') continue;
-        const stu = update.stopTimeUpdates.find((s) => selectedStopIds.has(s.stopId) && s.scheduleRelationship !== 'SKIPPED');
+        const stu = update.stopTimeUpdates.find((s) => selectedStopFor(update, s) && s.scheduleRelationship !== 'SKIPPED');
         const time = stu && (stu.arrival?.time || stu.departure?.time);
         if (!time || time < nowSeconds - PAST_ARRIVAL_GRACE_SECONDS) continue;
         const trip = tripOf(update.tripId);
@@ -449,7 +494,7 @@ function createTransitData({
           routeId,
           routeName: routeName(store, routeId),
           headsign: trip?.headsign || null,
-          stopCode: stopCode(stu.stopId),
+          stopCode: stopCode(selectedStopFor(update, stu)),
           minutes: Math.max(0, Math.round((time - nowSeconds) / 60)),
           arrivalTime: formatClock(time),
           arrivalEpoch: time,
@@ -559,4 +604,4 @@ function createTransitData({
   return { agency: agencyInfo, listRoutes, findStops, getStatus, hasRoute };
 }
 
-module.exports = { createTransitData, resolveRoutes, displayRouteName, shapeBearing };
+module.exports = { createTransitData, resolveRoutes, displayRouteName, shapeBearing, metersBetween, SAME_PLACE_METERS };

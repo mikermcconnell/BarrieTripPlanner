@@ -9,7 +9,7 @@ const { createFeedManager } = require('./feedStore');
 const { createTransitNetwork } = require('./network');
 const { buildWidgetHtml } = require('./widget');
 const { pages } = require('./site/pages');
-const { APP_NAME, APP_VERSION, AGENCIES, DATA_DIR } = require('./config');
+const { APP_NAME, APP_VERSION, AGENCIES, DATA_DIR, PREBUILT_FEEDS_URL } = require('./config');
 
 function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
   const app = express();
@@ -79,7 +79,7 @@ function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8787;
-  const feedManager = createFeedManager({ agencies: AGENCIES, dataDir: DATA_DIR });
+  const feedManager = createFeedManager({ agencies: AGENCIES, dataDir: DATA_DIR, prebuiltUrl: PREBUILT_FEEDS_URL });
   const network = createTransitNetwork({ agencies: AGENCIES, feedManager });
   const { app } = createTransitArrivalApp({ network });
   app.listen(port, () => {

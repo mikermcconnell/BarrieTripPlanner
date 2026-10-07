@@ -18,6 +18,8 @@ const OPERATOR = {
 
 const AGENCIES = require('./agencies.json');
 const DATA_DIR = process.env.TRANSIT_ARRIVAL_DATA_DIR || path.join(__dirname, '.data');
+// Release assets published by .github/workflows/transit-feeds.yml; unset means build feeds locally.
+const PREBUILT_FEEDS_URL = process.env.TRANSIT_ARRIVAL_PREBUILT_URL || null;
 
 // Initial map view before results arrive; the map then fits to what's shown.
 const MAP_DEFAULT_VIEW = { center: [44.1, -79.55], zoom: 9 };
@@ -25,5 +27,5 @@ const MAP_DEFAULT_VIEW = { center: [44.1, -79.55], zoom: 9 };
 const REALTIME_CACHE_MS = 15 * 1000;
 
 module.exports = {
-  APP_NAME, APP_SLUG, APP_VERSION, APP_TAGLINE, OPERATOR, AGENCIES, DATA_DIR, MAP_DEFAULT_VIEW, REALTIME_CACHE_MS,
+  APP_NAME, APP_SLUG, APP_VERSION, APP_TAGLINE, OPERATOR, AGENCIES, DATA_DIR, PREBUILT_FEEDS_URL, MAP_DEFAULT_VIEW, REALTIME_CACHE_MS,
 };

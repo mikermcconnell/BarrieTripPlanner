@@ -7,12 +7,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const readline = require('readline');
 const JSZip = require('jszip');
 const { DatabaseSync } = require('node:sqlite');
 const { parseGtfsTimeToSeconds } = require('../gtfsLoader');
 
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 const SHAPE_TOLERANCE_METERS = 5;
 const PAGE_CACHE_KIB = 1024;
 const SHAPE_CACHE_LIMIT = 200;
@@ -28,7 +31,7 @@ CREATE INDEX stops_parent ON stops(parent);
 CREATE TABLE stations (stop_id TEXT PRIMARY KEY, name TEXT);
 CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT, service_id TEXT, headsign TEXT, shape_id TEXT, start_seconds INTEGER);
 CREATE INDEX trips_route ON trips(route_id, start_seconds);
-CREATE TABLE stop_times (stop_id TEXT, seconds INTEGER, trip_id TEXT, PRIMARY KEY (stop_id, seconds, trip_id)) WITHOUT ROWID;
+CREATE TABLE stop_times (stop_id TEXT, seconds INTEGER, trip_id TEXT, seq INTEGER, PRIMARY KEY (stop_id, seconds, trip_id)) WITHOUT ROWID;
 CREATE TABLE stop_routes (stop_id TEXT, route_id TEXT, PRIMARY KEY (stop_id, route_id)) WITHOUT ROWID;
 CREATE TABLE route_shapes (route_id TEXT, shape_id TEXT, PRIMARY KEY (route_id, shape_id)) WITHOUT ROWID;
 CREATE TABLE shapes (shape_id TEXT PRIMARY KEY, points TEXT);
@@ -181,17 +184,17 @@ async function buildAgencyDb(zipBuffer, outPath) {
       insertCalendarDate.run(r.service_id, r.date, Number.parseInt(r.exception_type, 10));
     });
 
-    const insertStopTime = db.prepare('INSERT OR IGNORE INTO stop_times VALUES (?, ?, ?)');
+    const insertStopTime = db.prepare('INSERT OR IGNORE INTO stop_times VALUES (?, ?, ?, ?)');
     const tripStart = new Map();
     const tripLastStop = new Map();
     await forEachRow(zip, 'stop_times.txt', (r) => {
       const seconds = parseGtfsTimeToSeconds(r.arrival_time || r.departure_time);
       if (!r.stop_id || !r.trip_id || !Number.isFinite(seconds)) return;
-      insertStopTime.run(r.stop_id, seconds, r.trip_id);
+      const sequence = Number(r.stop_sequence);
+      insertStopTime.run(r.stop_id, seconds, r.trip_id, Number.isFinite(sequence) ? sequence : null);
       const departure = parseGtfsTimeToSeconds(r.departure_time || r.arrival_time);
       const start = tripStart.get(r.trip_id);
       if (Number.isFinite(departure) && (start == null || departure < start)) tripStart.set(r.trip_id, departure);
-      const sequence = Number(r.stop_sequence);
       const last = tripLastStop.get(r.trip_id);
       if (!last || sequence > last[0]) tripLastStop.set(r.trip_id, [sequence, r.stop_id]);
     });
@@ -230,6 +233,7 @@ async function buildAgencyDb(zipBuffer, outPath) {
     db.exec(`
       INSERT INTO stop_routes SELECT DISTINCT st.stop_id, t.route_id FROM stop_times st JOIN trips t USING (trip_id);
       INSERT INTO route_shapes SELECT DISTINCT route_id, shape_id FROM trips WHERE shape_id IS NOT NULL;
+      CREATE INDEX stop_times_trip ON stop_times(trip_id, seq);
     `);
     const insertMeta = db.prepare('INSERT INTO meta VALUES (?, ?)');
     insertMeta.run('schema_version', SCHEMA_VERSION);
@@ -296,7 +300,8 @@ function openStore(dbPath) {
     children: db.prepare(`${STOP_SELECT} WHERE s.parent = ? ORDER BY s.code`),
     stopRoutes: db.prepare('SELECT route_id FROM stop_routes WHERE stop_id = ?'),
     trip: db.prepare('SELECT * FROM trips WHERE trip_id = ?'),
-    stopTimes: db.prepare('SELECT trip_id, seconds FROM stop_times WHERE stop_id = ? AND seconds BETWEEN ? AND ?'),
+    stopTimes: db.prepare('SELECT trip_id, seconds, seq FROM stop_times WHERE stop_id = ? AND seconds BETWEEN ? AND ?'),
+    stopAtSequence: db.prepare('SELECT stop_id FROM stop_times WHERE trip_id = ? AND seq = ?'),
     tripsStarting: db.prepare(
       'SELECT * FROM trips WHERE route_id = ? AND start_seconds BETWEEN ? AND ? ORDER BY start_seconds'
     ),
@@ -327,6 +332,7 @@ function openStore(dbPath) {
       return db.prepare(sql).all(...params, limit).map(toStop);
     },
     stopTimes: (stopId, fromSeconds, toSeconds) => q.stopTimes.all(stopId, fromSeconds, toSeconds),
+    stopAtSequence: (tripId, seq) => q.stopAtSequence.get(tripId, seq)?.stop_id ?? null,
     tripsStarting: (routeId, fromSeconds, toSeconds) => q.tripsStarting.all(routeId, fromSeconds, toSeconds).map(toTrip),
     routeShapeIds: (routeId) => q.routeShapes.all(routeId).map((r) => r.shape_id),
     shapePoints(shapeId) {
@@ -422,7 +428,10 @@ function createFeedManager({
   agencies,
   dataDir,
   fetchImpl = (...args) => fetch(...args),
-  maxAgeMs = 20 * 60 * 60 * 1000,
+  // Base URL of databases built by the transit-feeds GitHub Actions workflow. When set, the
+  // server downloads finished files instead of parsing GTFS itself (no CPU/memory spikes).
+  prebuiltUrl = null,
+  maxAgeMs = prebuiltUrl ? 2 * 60 * 60 * 1000 : 20 * 60 * 60 * 1000,
   now = () => Date.now(),
   log = console,
 }) {
@@ -471,7 +480,54 @@ function createFeedManager({
     throw new Error(`${agency.id} GTFS download failed: ${lastError.message}`);
   }
 
-  async function refreshNow(id, { force = false } = {}) {
+  // Swaps a finished database into place and reindexes its stops.
+  function install(id, tmp, state) {
+    stores.get(id)?.close();
+    stores.delete(id);
+    fs.renameSync(tmp, dbPath(id));
+    const store = openStore(dbPath(id));
+    stores.set(id, store);
+    index.replaceAgency(id, store);
+    writeState(id, state);
+  }
+
+  let manifestCache = null;
+  async function prebuiltManifest() {
+    if (manifestCache && now() - manifestCache.fetchedAt < 10 * 60 * 1000) return manifestCache.manifest;
+    const res = await fetchImpl(`${prebuiltUrl}/manifest.json`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`prebuilt manifest HTTP ${res.status}`);
+    manifestCache = { fetchedAt: now(), manifest: await res.json() };
+    return manifestCache.manifest;
+  }
+
+  async function refreshPrebuilt(id, { force = false } = {}) {
+    const manifest = await prebuiltManifest();
+    const entry = manifest.agencies?.[id];
+    if (manifest.schemaVersion !== SCHEMA_VERSION || !entry) {
+      throw new Error(`${id} isn't in the prebuilt feeds yet (schema ${manifest.schemaVersion}, need ${SCHEMA_VERSION})`);
+    }
+    const hasDb = fs.existsSync(dbPath(id));
+    const state = readState(id);
+    const checkedAt = new Date(now()).toISOString();
+    if (hasDb && !force && entry.sha256 === state.sha256) {
+      writeState(id, { ...state, checkedAt });
+      return { id, changed: false };
+    }
+    const res = await fetchImpl(`${prebuiltUrl}/${entry.file}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`${id} prebuilt download HTTP ${res.status}`);
+    const tmp = `${dbPath(id)}.download`;
+    await pipeline(Readable.fromWeb(res.body), zlib.createGunzip(), fs.createWriteStream(tmp));
+    openStore(tmp).close(); // verify before swapping in
+    install(id, tmp, { checkedAt, sha256: entry.sha256, builtAt: entry.builtAt, source: 'prebuilt', ...entry.counts });
+    log.log(`[transitArrival] installed prebuilt ${id} (built ${entry.builtAt})`);
+    return { id, changed: true };
+  }
+
+  async function refreshNow(id, options = {}) {
+    return prebuiltUrl ? refreshPrebuilt(id, options) : buildLocally(id, options);
+  }
+
+  async function buildLocally(id, { force = false } = {}) {
     const agency = byId.get(id);
     const hasDb = fs.existsSync(dbPath(id));
     const state = hasDb && !force ? readState(id) : {};
@@ -496,13 +552,7 @@ function createFeedManager({
       log.log(`[transitArrival] ${id}: new timetable doesn't start yet; keeping the current one`);
       return { id, changed: false, deferred: true };
     }
-    stores.get(id)?.close();
-    stores.delete(id);
-    fs.renameSync(tmp, dbPath(id));
-    const store = openStore(dbPath(id));
-    stores.set(id, store);
-    index.replaceAgency(id, store);
-    writeState(id, { checkedAt, sha256, etag: result.etag, lastModified: result.lastModified, builtAt: checkedAt, ...counts });
+    install(id, tmp, { checkedAt, sha256, etag: result.etag, lastModified: result.lastModified, builtAt: checkedAt, ...counts });
     log.log(`[transitArrival] built ${id}: ${counts.routes} routes, ${counts.stops} stops, ${counts.trips} trips`);
     return { id, changed: true, ...counts };
   }
@@ -565,4 +615,6 @@ function createFeedManager({
   };
 }
 
-module.exports = { buildAgencyDb, openStore, createFeedManager, normalizeText, searchTokens, simplify };
+module.exports = {
+  SCHEMA_VERSION, buildAgencyDb, openStore, servesToday, createFeedManager, normalizeText, searchTokens, simplify,
+};
