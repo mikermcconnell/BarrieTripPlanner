@@ -49,13 +49,14 @@ const decodeFloat = (buffer, offset) => {
 
 const decodePosition = (buffer) => {
   let offset = 0;
-  const position = { latitude: null, longitude: null };
+  const position = { latitude: null, longitude: null, bearing: null };
   while (offset < buffer.length) {
     const { value: fieldTag, bytesRead: tagBytes } = decodeVarint(buffer, offset);
     offset += tagBytes;
     const fieldNumber = fieldTag >> 3, wireType = fieldTag & 0x7;
     if (fieldNumber === 1 && wireType === 5) { position.latitude = decodeFloat(buffer, offset); offset += 4; }
     else if (fieldNumber === 2 && wireType === 5) { position.longitude = decodeFloat(buffer, offset); offset += 4; }
+    else if (fieldNumber === 3 && wireType === 5) { position.bearing = decodeFloat(buffer, offset); offset += 4; }
     else offset = skipField(buffer, offset, wireType);
   }
   return position;
@@ -155,6 +156,7 @@ const decodeVehiclePosition = (buffer) => {
       const pos = decodePosition(buffer.slice(offset, offset + length));
       vehicle.latitude = pos.latitude;
       vehicle.longitude = pos.longitude;
+      vehicle.bearing = pos.bearing;
       offset += length;
     } else if (fieldNumber === 5 && wireType === 0) {
       const { value, bytesRead } = decodeVarint(buffer, offset);
@@ -312,6 +314,7 @@ function mapVehicleEntity(entity, tripMapping = {}) {
     directionId: v.directionId ?? tripData?.directionId ?? null,
     tripScheduleRelationship: v.tripScheduleRelationship ?? null,
     coordinate: { latitude: v.latitude, longitude: v.longitude },
+    bearing: Number.isFinite(v.bearing) ? v.bearing : null,
     timestamp: v.timestamp,
   };
 }

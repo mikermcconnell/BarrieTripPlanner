@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const JSZip = require('jszip');
-const { createTransitData } = require('../transitArrival/transitData');
+const { createTransitData, shapeBearing } = require('../transitArrival/transitData');
 const { createFeedManager, simplify } = require('../transitArrival/feedStore');
 const { createTransitNetwork } = require('../transitArrival/network');
 const { parseTripUpdates } = require('../transitArrival/tripUpdatesParser');
@@ -313,6 +313,25 @@ describe('transitData', () => {
       nextStop: expect.objectContaining({ stopId: '440', name: 'Georgian Mall', minutes: 5 }),
     })]);
     expect(summarizeStatus(status)).toContain('next stop Georgian Mall in 5 min');
+  });
+
+  it('uses the feed heading when there is one, and the route shape when there is not', async () => {
+    const vehicles = [
+      { id: 'reported', tripId: 't8a', routeId: '8A', coordinate: { latitude: 44.4, longitude: -79.7 }, timestamp: NOW_S - 20, bearing: 95.6 },
+      { id: 'derived', tripId: 't8b', routeId: '8B', coordinate: { latitude: 44.412, longitude: -79.707 }, timestamp: NOW_S - 20 },
+    ];
+    const status = await createFixture({ vehicles }).getStatus({ route: '8' });
+    const bearings = Object.fromEntries(status.vehicles.map((v) => [v.vehicleId, v.bearing]));
+    expect(bearings.reported).toBe(96);
+    expect(bearings.derived).toBeGreaterThan(270); // s8b runs north-west
+    expect(bearings.derived).toBeLessThan(360);
+  });
+
+  it('picks the shape direction heading toward the next stop where a route doubles back', () => {
+    const outAndBack = [[44, -79], [44.01, -79], [44, -79]]; // north, then back south on the same street
+    const here = { latitude: 44.005, longitude: -79 };
+    expect(shapeBearing(outAndBack, here.latitude, here.longitude, { latitude: 44.02, longitude: -79 })).toBe(0);
+    expect(shapeBearing(outAndBack, here.latitude, here.longitude, { latitude: 43.99, longitude: -79 })).toBe(180);
   });
 
   it('finds stops by name and by stop number', async () => {

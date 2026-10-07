@@ -48,6 +48,40 @@ function serviceDaysAround(nowMs, timeZone) {
   });
 }
 
+const toRad = (deg) => (deg * Math.PI) / 180;
+const compass = (dx, dy) => (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+const angleBetween = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+const SEGMENT_TIE_METERS = 25;
+
+// Heading for feeds that don't report one: the direction of the trip's shape
+// where the vehicle is. Out-and-back shapes overlap themselves, so among
+// near-equal segments prefer the one pointing toward the next stop.
+function shapeBearing(points, latitude, longitude, toward) {
+  if (!points || points.length < 2) return null;
+  const kx = 111320 * Math.cos(toRad(latitude));
+  const ky = 110540;
+  const segments = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [ax, ay] = [(points[i][1] - longitude) * kx, (points[i][0] - latitude) * ky];
+    const [bx, by] = [(points[i + 1][1] - longitude) * kx, (points[i + 1][0] - latitude) * ky];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) continue;
+    const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    segments.push({ dist: Math.hypot(ax + t * dx, ay + t * dy), bearing: compass(dx, dy) });
+  }
+  if (segments.length === 0) return null;
+  const nearest = Math.min(...segments.map((s) => s.dist));
+  const close = segments.filter((s) => s.dist <= nearest + SEGMENT_TIE_METERS);
+  let best = close.find((s) => s.dist === nearest);
+  if (toward && close.length > 1) {
+    const target = compass((toward.longitude - longitude) * kx, (toward.latitude - latitude) * ky);
+    best = close.reduce((a, b) => (angleBetween(b.bearing, target) < angleBetween(a.bearing, target) ? b : a));
+  }
+  return Math.round(best.bearing);
+}
+
 function matchesDirection(headsign, direction) {
   if (!direction) return true;
   return normalizeText(headsign).includes(normalizeText(direction));
@@ -269,9 +303,17 @@ function createTransitData({
       };
     }
 
+    function vehicleBearing(vehicle, trip, nextStop) {
+      if (Number.isFinite(vehicle.bearing)) return Math.round(vehicle.bearing) % 360;
+      if (!trip?.shapeId) return null;
+      const toward = nextStop ? store.getStop(nextStop.stopId) : null;
+      return shapeBearing(store.shapePoints(trip.shapeId), vehicle.coordinate.latitude, vehicle.coordinate.longitude, toward);
+    }
+
     function toVehicleResult(vehicle, update) {
       const trip = tripOf(vehicle.tripId);
       const routeId = trip?.routeId || vehicle.routeId;
+      const nextStop = update ? nextStopForUpdate(update) : null;
       return {
         vehicleId: vehicle.id,
         tripId: vehicle.tripId || null,
@@ -280,8 +322,9 @@ function createTransitData({
         headsign: trip?.headsign || null,
         latitude: vehicle.coordinate.latitude,
         longitude: vehicle.coordinate.longitude,
+        bearing: vehicleBearing(vehicle, trip, nextStop),
         lastUpdateSecondsAgo: Math.max(0, nowSeconds - Number(vehicle.timestamp)),
-        nextStop: update ? nextStopForUpdate(update) : null,
+        nextStop,
       };
     }
 
@@ -453,4 +496,4 @@ function createTransitData({
   return { agency: agencyInfo, listRoutes, findStops, getStatus, hasRoute };
 }
 
-module.exports = { createTransitData, resolveRoutes, displayRouteName };
+module.exports = { createTransitData, resolveRoutes, displayRouteName, shapeBearing };
