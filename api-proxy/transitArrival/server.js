@@ -57,6 +57,13 @@ function createTransitArrivalApp({ network, widgetHtml = buildWidgetHtml() }) {
 
   app.get('/health', (req, res) => res.json({ ok: true, app: APP_NAME, version: APP_VERSION, memory: memoryReport() }));
 
+  // OpenAI plugin portal domain verification: echo the token it issued.
+  app.get('/.well-known/openai-apps-challenge', (req, res) => {
+    const token = (process.env.TRANSIT_ARRIVAL_APPS_CHALLENGE || '').trim();
+    if (!token) return res.status(404).type('text').send('Not configured');
+    res.type('text').send(token);
+  });
+
   // Public website: product page, support, privacy policy, terms, logo.
   for (const [route, render] of Object.entries(pages)) {
     app.get(route, (req, res) => res.type('html').send(render()));
