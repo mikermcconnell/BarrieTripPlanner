@@ -77,8 +77,11 @@ function createMcpServer({ network, widgetHtml }) {
   server.registerTool('get_transit_status', {
     title: 'Get live transit status',
     description:
-      `Live vehicle locations and real-time arrival estimates (in minutes) for these transit agencies: ${coverage}. ` +
-      'Use when the rider asks where their bus or train is or when it will arrive. ' +
+      'Real-time public transit: live vehicle locations and arrival estimates in minutes for buses, streetcars, subways and trains. ' +
+      `Covered agencies: ${coverage}. ` +
+      'Use this whenever the rider asks things like "where\'s my bus?", "when\'s the next bus/train/streetcar?", ' +
+      '"is my bus late?", "how long until the 504 comes?" or "next departures from Union Station". ' +
+      'If they ask "where\'s my bus?" without a stop or route, call it anyway and then ask which stop or route. ' +
       'Pass a stop (name or stop number) for next arrivals there, a route for where its vehicles are, or both. ' +
       'Arrivals marked live come from real-time predictions; scheduled ones come from the timetable. ' +
       'The result renders as a live map the rider can see, so summarize briefly instead of repeating every row. ' +

@@ -1,6 +1,6 @@
 # Transit Arrival: ChatGPT app directory submission
 
-Copy each field into the submission form at platform.openai.com. Character limits are from OpenAI's submission docs.
+The portal now takes a plugin ZIP. `node transitArrival/submission/build-plugin-zip.js --demo-url <url>` (run from `api-proxy/`) builds it into ~/Downloads, reading the long description and release notes from this file. The submitted test cases live in that script. Character limits are from OpenAI's submission docs.
 
 ## Identity and URLs
 
@@ -8,7 +8,7 @@ Copy each field into the submission form at platform.openai.com. Character limit
 |---|---|
 | App name (identifier, ≤64, lowercase-hyphen) | `transit-arrival` |
 | Display name (≤30) | `Transit Arrival` |
-| Subtitle (≤30) | `Live bus times and map` |
+| Subtitle (≤30) | `Live transit times and map` |
 | Developer name (≤80) | *Your verified name or business name* |
 | Category | Travel (or Navigation / Lifestyle if Travel isn't offered) |
 | Version | `0.1.0` |
@@ -30,18 +30,30 @@ Copy each field into the submission form at platform.openai.com. Character limit
 
 ## Long description (≤4000)
 
-> Transit Arrival answers "where's my bus?" with a live map, right in the conversation.
+> Transit Arrival answers "Where's my bus?" with a live map, right in your chat.
 >
-> Ask about a stop or a route, such as "When's the next bus at Georgian Mall?" or "Where is the route 8 bus?", and Transit Arrival shows:
-> - **A live map** with each bus heading your way, its route line, and your stop.
-> - **Arrival times in minutes**, from real-time predictions when the bus is being tracked and from the published timetable when it isn't. Every time is labelled as live or scheduled, so you know which is which.
-> - **Where each bus is now**, including its next stop.
+> Ask in your own words about a stop, a route or a station, such as "When's the next train at Union Station?" or "Is the 504 streetcar running late?". Transit Arrival shows:
+> - A live map with each vehicle heading your way, its route and your stop.
+> - Arrival times in minutes. Times come from real-time tracking when it's available and from the published timetable when it isn't, and each one is labelled live or scheduled.
+> - Where each vehicle is right now, and its next stop.
 >
-> Use whatever you know: a stop name, an intersection, a landmark, or the stop number on the sign. If a name matches several stops, tap the right one on the map. The map keeps refreshing while it's on screen. When no bus is due soon, Transit Arrival tells you when the next one is scheduled.
+> Use whatever you know: a stop name, an intersection, a landmark, or the stop number on the sign. If a name matches more than one stop, tap the right one on the map. The map keeps updating while it's on screen. When nothing is due soon, Transit Arrival tells you when the next trip is scheduled.
 >
-> Transit Arrival currently covers ten Ontario transit agencies: the TTC (Toronto: live buses and streetcars, subway from the timetable), GO Transit (trains and buses across the region), MiWay (Mississauga), Brampton Transit (including Züm), York Region Transit (including Viva), Durham Region Transit (including PULSE), Hamilton Street Railway (HSR), Milton Transit, Oakville Transit (timetable only, as Oakville doesn't publish live bus data), and Barrie Transit. More agencies are on the way. Mention your city if a stop or route name exists in more than one area, and Transit Arrival will ask if it isn't sure. No account or sign-in is needed, and it never asks for your location.
+> Transit Arrival works with buses, streetcars, subways and trains, and it is designed for any transit system that publishes open data. It launches with 10 transit agencies in Ontario, Canada:
+> - Toronto Transit Commission (TTC): live buses and streetcars, subway from the timetable
+> - GO Transit: trains and buses across the Greater Toronto and Hamilton Area
+> - MiWay (Mississauga)
+> - Brampton Transit, including Züm
+> - York Region Transit, including Viva
+> - Durham Region Transit, including PULSE
+> - Hamilton Street Railway (HSR)
+> - Milton Transit
+> - Oakville Transit (timetable only)
+> - Barrie Transit
 >
-> Transit Arrival is an independent app and isn't affiliated with any transit agency or municipality it covers. Arrival times are estimates based on public transit data, used under each agency's open data licence.
+> More cities and agencies are being added. If a stop or route name exists in more than one place, mention your city, and Transit Arrival will ask if it isn't sure. No account or sign-in is needed, and it never asks for your location.
+>
+> Transit Arrival is an independent app and isn't affiliated with any transit agency or municipality. Arrival times are estimates based on public transit data, used under each agency's open data licence.
 
 ## Positive test cases (≥5)
 

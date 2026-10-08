@@ -1,10 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <title>Transit Arrival</title>
-  <rect width="512" height="512" rx="112" fill="#111827"/>
-  <!-- Map pin: "where" -->
-  <path d="M256 440C256 440 132 306 132 222a124 124 0 1 1 248 0c0 84-124 218-124 218z" fill="#F59E0B"/>
-  <!-- Clock face inside the pin: "when" -->
-  <circle cx="256" cy="222" r="68" fill="#111827"/>
-  <path d="M256 222V176M256 222l34 20" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" fill="none"/>
-  <circle cx="256" cy="222" r="10" fill="#FFFFFF"/>
+  <rect width="512" height="512" rx="112" fill="#F59E0B"/>
+  <rect x="80" y="132" width="352" height="248" rx="60" fill="#111827"/>
+  <path d="M173 215A36 27 0 1 1 206 253A42 32 0 1 1 168 299" stroke="#FBBF24" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M286 326V286M286 300A12 12 0 0 1 310 300V326M310 300A12 12 0 0 1 334 300V326M354 326V290M374 326V286M374 302A14 14 0 0 1 402 302V326" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="354" cy="268" r="9" fill="#FFFFFF"/>
+  <circle cx="384" cy="182" r="18" fill="#22C55E"/>
 </svg>
